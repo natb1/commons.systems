@@ -9,16 +9,16 @@ Set up an isolated git worktree for working on a GitHub issue. Each issue gets i
 
 ## 1. Determine Issue Number
 
-If the user provides an issue number, use it. Otherwise, auto-select using these prioritization rules (in order):
+If the user provides an issue number, use it. Otherwise, auto-select using these prioritization rules. Only select from issues assigned to the current GitHub user (`--assignee @me`). Then prioritize in order:
 
-**Priority 1**: Issues assigned to the current user with "Todo" status in a project:
+**Priority 1**: Issues tracked in a project with "Todo" status:
 
 ```bash
 gh issue list --assignee @me --json number,title,projectItems,labels \
   --jq '[.[] | select(.projectItems[]?.status.name == "Todo")] | first'
 ```
 
-**Priority 2**: Issues assigned to the current user with the "enhancement" label and not in any project:
+**Priority 2**: Issues with the "enhancement" label that are not assigned to any project:
 
 ```bash
 gh issue list --assignee @me --json number,title,projectItems,labels \
