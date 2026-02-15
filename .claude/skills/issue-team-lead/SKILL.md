@@ -86,7 +86,7 @@ Wait for user confirmation that QA passes before proceeding.
 Create a PR that closes all issues implemented in the plan:
 
 ```bash
-gh pr create --title "PR title" --body "$(cat <<'EOF'
+gh pr create --draft --title "PR title" --body "$(cat <<'EOF'
 ## Summary
 ...
 
@@ -144,14 +144,16 @@ Enter plan mode. The plan must include:
 If the security review identifies issues:
 1. Enter plan mode to address the review findings. Include verbatim issue bodies, aggregated work completed so far, step to re-invoke the /security-review skill, and the PR comment step.
 2. Implement the fixes.
-3. The last step of the plan must re-invoke the `/security-review` skill.
+3. Re-invoke the `/security-review` skill.
 
 Repeat until the security review passes with no issues, then execute the PR comment step.
 
 ## 11. Completion
 
-Prompt the user to merge the PR. Provide the merge command:
+Mark the PR as ready for review:
 
 ```bash
-gh pr merge $PR_NUM --merge
+gh pr ready $PR_NUM
 ```
+
+Prompt the user to review and merge the PR
