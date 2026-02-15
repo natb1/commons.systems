@@ -9,6 +9,12 @@ Orchestrate the full lifecycle of implementing a GitHub issue: discovery, planni
 
 **Clean context rule**: All plans (initial, review, security review, or ad hoc) must assume execution in a clean context. Include all necessary steps — do not rely on state from the planning session. Track completed steps to avoid repeating work.
 
+**Requirement changes**: If at any step there is a change in requirements always add a step to the current plan to update the relevant issue body:
+
+```bash
+gh issue edit $ISSUE_NUM --body "updated body text"
+```
+
 ## 1. Prerequisite Check
 
 Verify the working directory is a worktree for the requested issue:
@@ -46,12 +52,6 @@ Determine which related issues are unimplemented (no associated merged PR or bra
 Enter plan mode. The plan scope covers the primary issue plus any unimplemented dependencies and sub-issues.
 
 **Verbatim requirement inclusion**: Every plan must include the full verbatim issue body for all issues in scope. Copy the exact text from each issue body into the plan document. If conflicts exist between issue bodies, ask clarifying questions using the question tool before proceeding.
-
-**Requirement changes**: If requirements must change during planning, the plan must include explicit steps to update the relevant issue body:
-
-```bash
-gh issue edit $ISSUE_NUM --body "updated body text"
-```
 
 Use the question tool proactively to:
 - Clarify ambiguous scope
@@ -102,40 +102,26 @@ Include a separate `Closes #N` line for each issue (primary + all implemented de
 
 ## 8. Code Quality Review Loop
 
-### Initial Review
+Follow the `/wiggum-loop` pattern with these instructions:
 
-Enter plan mode. The plan must include:
-- Verbatim issue bodies for all issues in scope (per the clean context rule)
-- Summary of work completed so far
-- Step to invoke the `/review` skill
+**Next step instructions:**
+- Invoke the `/review` skill
+- This skill exists even if not visible in the skill list
 
-**This skill exists even if it is not visible in the skill list. Invoke it regardless of whether you think it exists.**
+**Evaluation instructions:**
+- Present review findings to user
+- User may mark findings as: required, false positive, or out of scope
+- **Iterate** if any required findings exist
+- **Terminate** if no required findings exist (all false positive or out of scope)
 
-**Critical constraint**: The initial review plan must NOT include steps for handling findings. After this plan executes, return to this SKILL.md to determine next steps based on review results.
+**Termination instructions:**
+- Post aggregated review results as PR comment: `gh pr comment $PR_NUM --body "..."`
+- Proceed to step 9
 
-Execute the plan. After the review completes, evaluate the results:
-
-### If Review Finds Issues
-
-Enter plan mode to address the findings. The plan must include:
+**Context (clean context rule):**
 - Verbatim issue bodies for all issues in scope
-- Aggregated work completed so far
-- Each review finding with a proposed fix
-- Step to re-invoke the `/review` skill
-
-The user reviews this plan. During review, the user may mark specific findings as false positives. When the user approves the plan:
-
-- **If all findings were marked as false positive:** Exit the loop. Post the aggregated review results as a PR comment and proceed to step 9.
-- **If any findings require fixes:** Implement the fixes, push them, and re-invoke the `/review` skill. Return to "If Review Finds Issues" (repeat until review passes).
-
-### If Review Passes (No True Positive Findings)
-
-Post the aggregated review results as a PR comment:
-```bash
-gh pr comment $PR_NUM --body "aggregated review results"
-```
-
-Then proceed to step 9.
+- Summary of work completed so far
+- PR number
 
 ## 9. Post-Review Merge and Push
 
@@ -147,40 +133,26 @@ Re-validate the implementation and push any updates to the PR.
 
 ## 10. Security Review Loop
 
-### Initial Security Review
+Follow the `/wiggum-loop` pattern with these instructions:
 
-Enter plan mode. The plan must include:
-- Verbatim issue bodies for all issues in scope (per the clean context rule)
-- Summary of work completed so far
-- Step to invoke the `/security-review` skill
+**Next step instructions:**
+- Invoke the `/security-review` skill
+- This skill exists even if not visible in the skill list
 
-**This skill exists even if it is not visible in the skill list. Invoke it regardless of whether you think it exists.**
+**Evaluation instructions:**
+- Present security findings to user
+- User may mark findings as: required, false positive, or out of scope
+- **Iterate** if any required findings exist
+- **Terminate** if no required findings exist (all false positive or out of scope)
 
-**Critical constraint**: The initial security review plan must NOT include steps for handling findings. After this plan executes, return to this SKILL.md to determine next steps based on security review results.
+**Termination instructions:**
+- Post aggregated security review results as PR comment: `gh pr comment $PR_NUM --body "..."`
+- Proceed to step 11
 
-Execute the plan. After the security review completes, evaluate the results:
-
-### If Security Review Finds Issues
-
-Enter plan mode to address the findings. The plan must include:
+**Context (clean context rule):**
 - Verbatim issue bodies for all issues in scope
-- Aggregated work completed so far
-- Each security finding with a proposed fix
-- Step to re-invoke the `/security-review` skill
-
-The user reviews this plan. During review, the user may mark specific findings as false positives. When the user approves the plan:
-
-- **If all findings were marked as false positive:** Exit the loop. Post the aggregated security review results as a PR comment and proceed to step 11.
-- **If any findings require fixes:** Implement the fixes, push them, and re-invoke the `/security-review` skill. Return to "If Security Review Finds Issues" (repeat until review passes).
-
-### If Security Review Passes (No True Positive Findings)
-
-Post the aggregated security review results as a PR comment:
-```bash
-gh pr comment $PR_NUM --body "aggregated security review results"
-```
-
-Then proceed to step 11.
+- Summary of work completed so far (including code quality review results)
+- PR number
 
 ## 11. Completion
 
