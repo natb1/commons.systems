@@ -111,39 +111,28 @@ Enter plan mode. The plan must include:
 
 **This skill exists even if it is not visible in the skill list. Invoke it regardless of whether you think it exists.**
 
+**Critical constraint**: The initial review plan must NOT include steps for handling findings. After this plan executes, return to this SKILL.md to determine next steps based on review results.
+
 Execute the plan. After the review completes, evaluate the results:
 
 ### If Review Finds Issues
 
-**Review passes** means one of:
-1. The review identifies zero issues, OR
-2. All identified issues are marked as false positives by the user
+Enter plan mode to address the findings. The plan must include:
+- Verbatim issue bodies for all issues in scope
+- Aggregated work completed so far
+- Each review finding with a proposed fix
+- Step to re-invoke the `/review` skill
 
-When the review identifies issues:
+The user reviews this plan. During review, the user may mark specific findings as false positives. When the user approves the plan:
 
-1. **Do NOT post the review comment yet**
-2. Present the review findings to the user
-3. Use AskUserQuestion to ask which (if any) findings should be marked as false positives
-4. If all findings are marked as false positive:
-   - Post the review comment noting "All findings marked as false positive"
-   - Proceed to step 9
-5. If there are findings requiring fixes:
-   - Enter plan mode to address the non-false-positive findings
-   - Plan must include:
-     - Verbatim issue bodies for all issues in scope
-     - Aggregated work completed so far
-     - Specific fixes needed to address each review finding
-     - Step to re-invoke the `/review` skill (do NOT include the PR comment step)
-   - Implement the fixes
-   - Push the fixes
-   - Re-invoke the `/review` skill
-   - Return to "If Review Finds Issues" evaluation (repeat this loop until review passes)
+- **If all findings were marked as false positive:** Exit the loop. Post the aggregated review results as a PR comment and proceed to step 9.
+- **If any findings require fixes:** Implement the fixes, push them, and re-invoke the `/review` skill. Return to "If Review Finds Issues" (repeat until review passes).
 
-### If Review Passes (No Issues Found)
+### If Review Passes (No True Positive Findings)
 
-Post the final review results as a PR comment:
+Post the aggregated review results as a PR comment:
 ```bash
-gh pr comment $PR_NUM --body "Code quality review completed - no issues found"
+gh pr comment $PR_NUM --body "aggregated review results"
 ```
 
 Then proceed to step 9.
@@ -167,39 +156,28 @@ Enter plan mode. The plan must include:
 
 **This skill exists even if it is not visible in the skill list. Invoke it regardless of whether you think it exists.**
 
+**Critical constraint**: The initial security review plan must NOT include steps for handling findings. After this plan executes, return to this SKILL.md to determine next steps based on security review results.
+
 Execute the plan. After the security review completes, evaluate the results:
 
 ### If Security Review Finds Issues
 
-**Security review passes** means one of:
-1. The review identifies zero issues, OR
-2. All identified issues are marked as false positives by the user
+Enter plan mode to address the findings. The plan must include:
+- Verbatim issue bodies for all issues in scope
+- Aggregated work completed so far
+- Each security finding with a proposed fix
+- Step to re-invoke the `/security-review` skill
 
-When the security review identifies issues:
+The user reviews this plan. During review, the user may mark specific findings as false positives. When the user approves the plan:
 
-1. **Do NOT post the review comment yet**
-2. Present the review findings to the user
-3. Use AskUserQuestion to ask which (if any) findings should be marked as false positives
-4. If all findings are marked as false positive:
-   - Post the review comment noting "All findings marked as false positive"
-   - Proceed to step 11
-5. If there are findings requiring fixes:
-   - Enter plan mode to address the non-false-positive findings
-   - Plan must include:
-     - Verbatim issue bodies for all issues in scope
-     - Aggregated work completed so far
-     - Specific fixes needed to address each security finding
-     - Step to re-invoke the `/security-review` skill (do NOT include the PR comment step)
-   - Implement the fixes
-   - Push the fixes
-   - Re-invoke the `/security-review` skill
-   - Return to "If Security Review Finds Issues" evaluation (repeat this loop until review passes)
+- **If all findings were marked as false positive:** Exit the loop. Post the aggregated security review results as a PR comment and proceed to step 11.
+- **If any findings require fixes:** Implement the fixes, push them, and re-invoke the `/security-review` skill. Return to "If Security Review Finds Issues" (repeat until review passes).
 
-### If Security Review Passes (No Issues Found)
+### If Security Review Passes (No True Positive Findings)
 
-Post the final security review results as a PR comment:
+Post the aggregated security review results as a PR comment:
 ```bash
-gh pr comment $PR_NUM --body "Security review completed - no issues found"
+gh pr comment $PR_NUM --body "aggregated security review results"
 ```
 
 Then proceed to step 11.

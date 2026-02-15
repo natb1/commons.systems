@@ -15,7 +15,7 @@ If the user provides an issue number, use it. Otherwise, auto-select using these
 
 ```bash
 gh issue list --assignee @me --json number,title,projectItems,labels \
-  --jq '[.[] | select(.projectItems[]?.status.name == "Todo")] | first'
+  --jq '[.[] | select(.projectItems[]?.status.name | ascii_downcase == "todo")] | first'
 ```
 
 **Priority 2**: Issues with the "enhancement" label that are not assigned to any project:
@@ -32,7 +32,7 @@ If no issue is found, inform the user that no eligible issues exist.
 Determine the repo root and check if a worktree already exists for this issue:
 
 ```bash
-REPO_ROOT=$(git rev-parse --show-toplevel)
+REPO_ROOT=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
 git worktree list --porcelain
 ```
 
@@ -71,16 +71,16 @@ Format: `$ISSUE_NUM-$SANITIZED_TITLE`
 
 ## 4. Create Worktree
 
-Ensure the local `main` ref is current before branching:
+Fetch the latest `main` branch:
 
 ```bash
-git fetch origin main && git merge origin/main --ff-only
+git fetch origin main
 ```
 
-Then create the worktree:
+Then create the worktree branching from `origin/main`:
 
 ```bash
-git worktree add -b $BRANCH_NAME $REPO_ROOT/worktrees/$BRANCH_NAME main
+git worktree add -b $BRANCH_NAME $REPO_ROOT/worktrees/$BRANCH_NAME origin/main
 ```
 
 After creation, prompt the user to close Claude and run:
