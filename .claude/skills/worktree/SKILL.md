@@ -65,11 +65,19 @@ Sanitize the title:
 2. Replace non-alphanumeric characters with dashes
 3. Collapse consecutive dashes into one
 4. Strip leading and trailing dashes
-5. Truncate so total branch name (`$ISSUE_NUM-$SANITIZED_TITLE`) is at most 32 characters
+5. Summarize and/or truncate so total branch name (`$ISSUE_NUM-$SANITIZED_TITLE`) is at most 32 characters
 
 Format: `$ISSUE_NUM-$SANITIZED_TITLE`
 
 ## 4. Create Worktree
+
+Ensure the local `main` ref is current before branching:
+
+```bash
+git fetch origin main && git merge origin/main --ff-only
+```
+
+Then create the worktree:
 
 ```bash
 git worktree add -b $BRANCH_NAME $REPO_ROOT/worktrees/$BRANCH_NAME main

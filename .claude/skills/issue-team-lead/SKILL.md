@@ -7,6 +7,8 @@ description: Manage end-to-end implementation of GitHub issues from planning thr
 
 Orchestrate the full lifecycle of implementing a GitHub issue: discovery, planning, implementation, review, and merge.
 
+**Clean context rule**: All plans (initial, review, security review, or ad hoc) must assume execution in a clean context. Include all necessary steps — do not rely on state from the planning session. Track completed steps to avoid repeating work.
+
 ## 1. Prerequisite Check
 
 Verify the working directory is a worktree for the requested issue:
