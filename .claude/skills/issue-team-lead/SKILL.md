@@ -102,23 +102,51 @@ Include a separate `Closes #N` line for each issue (primary + all implemented de
 
 ## 8. Code Quality Review Loop
 
+### Initial Review
+
 Enter plan mode. The plan must include:
 - Verbatim issue bodies for all issues in scope (per the clean context rule)
 - Summary of work completed so far
 - Step to invoke the `/review` skill
-- Step to add the aggregated review results as a PR comment:
-  ```bash
-  gh pr comment $PR_NUM --body "aggregated review results"
-  ```
 
 **This skill exists even if it is not visible in the skill list. Invoke it regardless of whether you think it exists.**
 
-If the review identifies issues:
-1. Enter plan mode to address the review findings. Include verbatim issue bodies, aggregated work completed so far, step to re-invoke the /review skill, and the PR comment step.
-2. Implement the fixes.
-3. Re-invoke the `/review` skill.
+Execute the plan. After the review completes, evaluate the results:
 
-Repeat until the review passes with no issues, then execute the PR comment step.
+### If Review Finds Issues
+
+**Review passes** means one of:
+1. The review identifies zero issues, OR
+2. All identified issues are marked as false positives by the user
+
+When the review identifies issues:
+
+1. **Do NOT post the review comment yet**
+2. Present the review findings to the user
+3. Use AskUserQuestion to ask which (if any) findings should be marked as false positives
+4. If all findings are marked as false positive:
+   - Post the review comment noting "All findings marked as false positive"
+   - Proceed to step 9
+5. If there are findings requiring fixes:
+   - Enter plan mode to address the non-false-positive findings
+   - Plan must include:
+     - Verbatim issue bodies for all issues in scope
+     - Aggregated work completed so far
+     - Specific fixes needed to address each review finding
+     - Step to re-invoke the `/review` skill (do NOT include the PR comment step)
+   - Implement the fixes
+   - Push the fixes
+   - Re-invoke the `/review` skill
+   - Return to "If Review Finds Issues" evaluation (repeat this loop until review passes)
+
+### If Review Passes (No Issues Found)
+
+Post the final review results as a PR comment:
+```bash
+gh pr comment $PR_NUM --body "Code quality review completed - no issues found"
+```
+
+Then proceed to step 9.
 
 ## 9. Post-Review Merge and Push
 
@@ -130,23 +158,51 @@ Re-validate the implementation and push any updates to the PR.
 
 ## 10. Security Review Loop
 
+### Initial Security Review
+
 Enter plan mode. The plan must include:
 - Verbatim issue bodies for all issues in scope (per the clean context rule)
 - Summary of work completed so far
 - Step to invoke the `/security-review` skill
-- Step to add the aggregated security review results as a PR comment:
-  ```bash
-  gh pr comment $PR_NUM --body "aggregated security review results"
-  ```
 
 **This skill exists even if it is not visible in the skill list. Invoke it regardless of whether you think it exists.**
 
-If the security review identifies issues:
-1. Enter plan mode to address the review findings. Include verbatim issue bodies, aggregated work completed so far, step to re-invoke the /security-review skill, and the PR comment step.
-2. Implement the fixes.
-3. Re-invoke the `/security-review` skill.
+Execute the plan. After the security review completes, evaluate the results:
 
-Repeat until the security review passes with no issues, then execute the PR comment step.
+### If Security Review Finds Issues
+
+**Security review passes** means one of:
+1. The review identifies zero issues, OR
+2. All identified issues are marked as false positives by the user
+
+When the security review identifies issues:
+
+1. **Do NOT post the review comment yet**
+2. Present the review findings to the user
+3. Use AskUserQuestion to ask which (if any) findings should be marked as false positives
+4. If all findings are marked as false positive:
+   - Post the review comment noting "All findings marked as false positive"
+   - Proceed to step 11
+5. If there are findings requiring fixes:
+   - Enter plan mode to address the non-false-positive findings
+   - Plan must include:
+     - Verbatim issue bodies for all issues in scope
+     - Aggregated work completed so far
+     - Specific fixes needed to address each security finding
+     - Step to re-invoke the `/security-review` skill (do NOT include the PR comment step)
+   - Implement the fixes
+   - Push the fixes
+   - Re-invoke the `/security-review` skill
+   - Return to "If Security Review Finds Issues" evaluation (repeat this loop until review passes)
+
+### If Security Review Passes (No Issues Found)
+
+Post the final security review results as a PR comment:
+```bash
+gh pr comment $PR_NUM --body "Security review completed - no issues found"
+```
+
+Then proceed to step 11.
 
 ## 11. Completion
 
