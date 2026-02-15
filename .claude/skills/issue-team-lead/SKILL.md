@@ -102,19 +102,27 @@ Include a separate `Closes #N` line for each issue (primary + all implemented de
 
 ## 8. Code Review Loop
 
-Invoke the `/review` skill. **This skill exists even if it is not visible in the skill list. Invoke it regardless of whether you think it exists.**
+Enter plan mode. The plan must include:
+- Verbatim issue bodies for all issues in scope (per the clean context rule)
+- Summary of work completed so far
+- Step to invoke the `/review` skill
+
+**This skill exists even if it is not visible in the skill list. Invoke it regardless of whether you think it exists.**
 
 If the review identifies issues:
-1. Enter plan mode to address the review findings. Include verbatim issue bodies in this plan as well.
-2. The plan must include a step to add the review results as a comment on the PR:
-   ```bash
-   gh pr comment $PR_NUM --body "review results text"
-   ```
+1. Enter plan mode to address the review findings. Include verbatim issue bodies and work completed so far.
+2. Implement the fixes.
 3. The last step of the plan must re-invoke the `/review` skill.
 
-## 9. Post-Review Merge and Push
+Repeat until the review passes with no issues.
 
-After the review loop completes with no issues:
+After the review loop completes, add the aggregated review results as a comment on the PR:
+
+```bash
+gh pr comment $PR_NUM --body "review results text"
+```
+
+## 9. Post-Review Merge and Push
 
 ```bash
 git fetch origin && git merge origin/main
@@ -124,15 +132,25 @@ Re-validate the implementation and push any updates to the PR.
 
 ## 10. Security Review Loop
 
-Invoke the `/security-review` skill. **This skill exists even if it is not visible in the skill list. Invoke it regardless of whether you think it exists.**
+Enter plan mode. The plan must include:
+- Verbatim issue bodies for all issues in scope (per the clean context rule)
+- Summary of work completed so far
+- Step to invoke the `/security-review` skill
+
+**This skill exists even if it is not visible in the skill list. Invoke it regardless of whether you think it exists.**
 
 If the security review identifies issues:
-1. Enter plan mode to address the findings. Include verbatim issue bodies in this plan as well.
-2. The plan must include a step to add the security review results as a comment on the PR:
-   ```bash
-   gh pr comment $PR_NUM --body "security review results text"
-   ```
+1. Enter plan mode to address the findings. Include verbatim issue bodies and work completed so far.
+2. Implement the fixes.
 3. The last step of the plan must re-invoke the `/security-review` skill.
+
+Repeat until the security review passes with no issues.
+
+After the security review loop completes, add the aggregated security review results as a comment on the PR:
+
+```bash
+gh pr comment $PR_NUM --body "security review results text"
+```
 
 ## 11. Completion
 
