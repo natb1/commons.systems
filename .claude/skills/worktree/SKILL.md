@@ -40,14 +40,14 @@ Look for a worktree whose branch name starts with `$ISSUE_NUM-`.
 
 ### Edge Case: Worktree exists and is the current directory
 
-Invoke the `/issue-team-lead` skill with the issue number. Stop here.
+Invoke the `/issue-workflow` skill with the issue number. Stop here.
 
 ### Edge Case: Worktree exists but is not the current directory
 
 Prompt the user to close Claude and run:
 
 ```
-cd $REPO_ROOT/worktrees/$BRANCH_NAME && claude "/issue-team-lead #$ISSUE_NUM"
+cd $REPO_ROOT/worktrees/$BRANCH_NAME && claude "/issue-workflow #$ISSUE_NUM"
 ```
 
 Stop here.
@@ -86,5 +86,5 @@ git worktree add -b $BRANCH_NAME $REPO_ROOT/worktrees/$BRANCH_NAME origin/main
 After creation, prompt the user to close Claude and run:
 
 ```
-cd $REPO_ROOT/worktrees/$BRANCH_NAME && claude "/issue-team-lead #$ISSUE_NUM"
+cd $REPO_ROOT/worktrees/$BRANCH_NAME && claude "/issue-workflow #$ISSUE_NUM"
 ```

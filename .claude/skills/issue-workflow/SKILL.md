@@ -1,5 +1,5 @@
 ---
-name: issue-team-lead
+name: issue-workflow
 description: Manage end-to-end implementation of GitHub issues from planning through review
 ---
 
@@ -102,7 +102,7 @@ Include a separate `Closes #N` line for each issue (primary + all implemented de
 
 ## 8. Code Quality Review Loop
 
-Follow the `/wiggum-loop` pattern with these instructions:
+Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
 
 **Next step instructions:**
 - Invoke the `/review` skill
@@ -115,13 +115,39 @@ Follow the `/wiggum-loop` pattern with these instructions:
 - **Terminate** if no required findings exist (all false positive or out of scope)
 
 **Termination instructions:**
-- Post aggregated review results as PR comment: `gh pr comment $PR_NUM --body "..."`
+- Post full review audit log as PR comment using this structure:
+  ```bash
+  gh pr comment $PR_NUM --body "[MARKDOWN COMMENT WITH SECTIONS:]
+
+  # Code Quality Review - Complete ✓
+
+  **Reviewer**: Claude Code (via /review skill)
+  **Date**: [Current date]
+  **Outcome**: [Summary of result]
+
+  ## Review Output (Full Audit Log)
+
+  [PASTE COMPLETE VERBATIM OUTPUT FROM REVIEW SKILL]
+
+  ## User Classification Decisions
+
+  [For each finding, show title and classification:]
+  - Finding 1: [title] → [required/false positive/out of scope] - [rationale if provided]
+  - Finding 2: [title] → [required/false positive/out of scope] - [rationale if provided]
+  ...
+
+  ## Conclusion
+
+  [Final assessment and next steps]
+  "
+  ```
 - Proceed to step 9
 
 **Context (clean context rule):**
 - Verbatim issue bodies for all issues in scope
 - Summary of work completed so far
 - PR number
+- Complete review output from the review skill (preserve for audit log)
 
 ## 9. Post-Review Merge and Push
 
@@ -133,7 +159,7 @@ Re-validate the implementation and push any updates to the PR.
 
 ## 10. Security Review Loop
 
-Follow the `/wiggum-loop` pattern with these instructions:
+Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
 
 **Next step instructions:**
 - Invoke the `/security-review` skill
@@ -146,13 +172,39 @@ Follow the `/wiggum-loop` pattern with these instructions:
 - **Terminate** if no required findings exist (all false positive or out of scope)
 
 **Termination instructions:**
-- Post aggregated security review results as PR comment: `gh pr comment $PR_NUM --body "..."`
+- Post full security review audit log as PR comment using this structure:
+  ```bash
+  gh pr comment $PR_NUM --body "[MARKDOWN COMMENT WITH SECTIONS:]
+
+  # Security Review - Complete ✓
+
+  **Reviewer**: Claude Code (via /security-review skill)
+  **Date**: [Current date]
+  **Outcome**: [Summary of result]
+
+  ## Review Output (Full Audit Log)
+
+  [PASTE COMPLETE VERBATIM OUTPUT FROM SECURITY-REVIEW SKILL]
+
+  ## User Classification Decisions
+
+  [For each finding, show title and classification:]
+  - Finding 1: [title] → [required/false positive/out of scope] - [rationale if provided]
+  - Finding 2: [title] → [required/false positive/out of scope] - [rationale if provided]
+  ...
+
+  ## Conclusion
+
+  [Final assessment and next steps]
+  "
+  ```
 - Proceed to step 11
 
 **Context (clean context rule):**
 - Verbatim issue bodies for all issues in scope
 - Summary of work completed so far (including code quality review results)
 - PR number
+- Complete security review output from the security-review skill (preserve for audit log)
 
 ## 11. Completion
 
