@@ -6,14 +6,9 @@ context: fork
 
 # Overview
 
-Maintain single source of truth in CLAUDE.local.md by syncing with GitHub PR, issue, and commit data.
+Sync CLAUDE.local.md with GitHub PR, issue, and commit data. Supports full sync or targeted partial updates.
 
-# Usage
-
-- No arguments: Full sync of entire PR Context section
-- With arguments: Partial update of specific subsection (e.g., "issue body #42", "PR comments", "commit log")
-
-# Scope Determination
+# Scope Determination Reference
 
 ## Primary Issue
 Extract from branch name (e.g., `36-claude-local-md` → #36)
@@ -34,7 +29,7 @@ gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" --jq '.[].number'
 - Open issues: Include full body and comments
 - Closed issues: Include title only
 
-# Data Collection
+# Data Collection Reference
 
 ```bash
 # Extract branch and issue number
@@ -60,7 +55,7 @@ gh pr view --json title,body,comments,number,state 2>/dev/null
 git log origin/main..HEAD --format="%H%n%an%n%ae%n%at%n%s%n%b%n---COMMIT-END---"
 ```
 
-# CLAUDE.local.md Template
+# Template Specification
 
 ```markdown
 ## PR Context
@@ -118,14 +113,75 @@ When arguments specify target subsection:
 - **Partial update target not in scope**: Error clearly, suggest full sync
 - **Empty comments**: Render "Comments: None"
 
-# Implementation Steps
+# Algorithm
 
-1. Parse arguments (if any) to determine full vs partial sync
-2. Extract branch name and issue number
-3. Fetch primary issue data
-4. Use GitHub API to fetch dependencies and sub-issues
-5. Fetch related issue data (filtering by open/closed status)
-6. Check for PR and fetch if exists
-7. Fetch commit log
-8. Render template (full or partial)
-9. Write/update CLAUDE.local.md
+Arguments available via `$ARGUMENTS` variable. Empty = full sync, non-empty = partial update of specified subsection.
+
+## Step 1: Determine Scope
+
+If `$ARGUMENTS` is empty: Update entire "## PR Context" section.
+If `$ARGUMENTS` has value: Update only specified subsection (value indicates target, e.g., "commit log").
+
+Extract branch name and issue number:
+```bash
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+ISSUE_NUM=$(echo "$CURRENT_BRANCH" | grep -oE '^[0-9]+')
+```
+
+Error if branch doesn't match `N-*` pattern: "Branch doesn't match issue pattern. Run `/worktree` skill."
+
+## Step 2: Fetch GitHub Data
+
+Fetch primary issue:
+```bash
+gh issue view "$ISSUE_NUM" --json title,body,comments,number,state
+```
+
+Fetch dependencies (blocked_by):
+```bash
+gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number'
+```
+
+For each dependency number, fetch full details:
+```bash
+gh issue view <num> --json title,body,comments,number,state
+```
+
+Fetch sub-issues:
+```bash
+gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" --jq '.[].number'
+```
+
+For each sub-issue number, fetch full details:
+```bash
+gh issue view <num> --json title,body,comments,number,state
+```
+
+Fetch PR if exists:
+```bash
+gh pr view --json title,body,comments,number,state 2>/dev/null
+```
+
+Fetch commit log:
+```bash
+git log origin/main..HEAD --format="commit %H%nAuthor: %an <%ae>%nDate: %ad%n%n%s%n%n%b"
+```
+
+## Step 3: Render Template
+
+Build CLAUDE.local.md content following Template Specification section below.
+
+Apply status filtering:
+- **Open issues**: Include title, body, and comments
+- **Closed issues**: Include title only
+
+Render empty comments as "Comments: None"
+
+For partial sync: Identify target subsection and prepare only that content.
+
+## Step 4: Write CLAUDE.local.md
+
+Write rendered content to `/home/n8/natb1/commons.systems/worktrees/36-claude-local-md/CLAUDE.local.md`
+
+For full sync: Replace entire "## PR Context" section (or create if missing).
+For partial sync: Read file, replace target subsection, write back.
