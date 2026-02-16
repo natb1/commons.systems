@@ -31,7 +31,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 - [agent shell multiplexing #26](https://github.com/natb1/commons.systems/issues/26)
 
 ## Usage and Contributing
-[![CC-BY-SA](https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png)](https://creativecommons.org/licenses/by-sa/4.0/)
+<a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>
 
 For using and/or extending the artifacts in this repo: forking is encouraged. To better understand the agentic coding artifacts a demo is available as a Claude Code [plugin](https://code.claude.com/docs/en/plugins).
 
