@@ -19,10 +19,16 @@ Maintain single source of truth in CLAUDE.local.md by syncing with GitHub PR, is
 Extract from branch name (e.g., `36-claude-local-md` → #36)
 
 ## Dependencies
-Parse primary issue body for "blocked by #N" or "depends on #N"
+Use GitHub API to fetch explicit blocked_by relationships:
+```bash
+gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number'
+```
 
 ## Sub-issues
-Parse primary issue body for other #N references (ignore `(TODO: #N)` patterns)
+Use GitHub API to fetch explicit sub-issues:
+```bash
+gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" --jq '.[].number'
+```
 
 ## Status Filtering
 - Open issues: Include full body and comments
@@ -38,7 +44,13 @@ ISSUE_NUM=$(echo "$CURRENT_BRANCH" | grep -oE '^[0-9]+')
 # Primary issue
 gh issue view "$ISSUE_NUM" --json title,body,comments,number,state
 
-# Related issues (after parsing dependencies and sub-issues)
+# Dependencies (blocked_by)
+gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number'
+
+# Sub-issues
+gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" --jq '.[].number'
+
+# Related issues (after fetching dependencies and sub-issues)
 gh issue view <num> --json title,body,comments,number,state
 
 # PR (if exists)
@@ -111,7 +123,7 @@ When arguments specify target subsection:
 1. Parse arguments (if any) to determine full vs partial sync
 2. Extract branch name and issue number
 3. Fetch primary issue data
-4. Parse primary issue body for dependencies and sub-issues
+4. Use GitHub API to fetch dependencies and sub-issues
 5. Fetch related issue data (filtering by open/closed status)
 6. Check for PR and fetch if exists
 7. Fetch commit log

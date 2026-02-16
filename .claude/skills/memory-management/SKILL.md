@@ -37,6 +37,72 @@ Step 2: Execute review
 ...
 ```
 
+# GitHub Issue Relationships
+
+GitHub issues support explicit relationships via REST API: dependencies (blocked_by/blocking) and sub-issues. Use these API features instead of text parsing.
+
+## Critical: Issue ID vs Issue Number
+
+- **Issue Number**: The `#N` in URLs (e.g., #36)
+- **Issue ID**: Internal GraphQL ID (e.g., "I_kwDORO1as87rHEqL")
+
+Most endpoints accept issue numbers in the URL path, but request bodies require issue IDs.
+
+**Get both values:**
+```bash
+gh issue view 36 --json id,number
+```
+
+## Dependencies (Blocked By / Blocking)
+
+**List what blocks this issue:**
+```bash
+gh api "/repos/{owner}/{repo}/issues/36/dependencies/blocked_by" --jq '.[].number'
+```
+
+**List what this issue blocks:**
+```bash
+gh api "/repos/{owner}/{repo}/issues/36/dependencies/blocking" --jq '.[].number'
+```
+
+**Add dependency (this issue is blocked by #42):**
+```bash
+BLOCKER_ID=$(gh issue view 42 --json id --jq '.id')
+gh api -X POST "/repos/{owner}/{repo}/issues/36/dependencies/blocked_by" -f issue_id="$BLOCKER_ID"
+```
+
+**Remove dependency:**
+```bash
+BLOCKER_ID=$(gh issue view 42 --json id --jq '.id')
+gh api -X DELETE "/repos/{owner}/{repo}/issues/36/dependencies/blocked_by/$BLOCKER_ID"
+```
+
+## Sub-Issues
+
+**List sub-issues:**
+```bash
+gh api "/repos/{owner}/{repo}/issues/36/sub_issues" --jq '.[].number'
+```
+
+**Get parent issue:**
+```bash
+gh api "/repos/{owner}/{repo}/issues/42/parent" --jq '.number'
+```
+
+**Add sub-issue (#42 becomes a sub-issue of #36):**
+```bash
+SUB_ID=$(gh issue view 42 --json id --jq '.id')
+gh api -X POST "/repos/{owner}/{repo}/issues/36/sub_issues" -f sub_issue_id="$SUB_ID"
+```
+
+**Remove sub-issue:**
+```bash
+SUB_ID=$(gh issue view 42 --json id --jq '.id')
+gh api -X DELETE "/repos/{owner}/{repo}/issues/36/sub_issue" -f sub_issue_id="$SUB_ID"
+```
+
+Note: The `{owner}` and `{repo}` placeholders are auto-populated by `gh api` from the current repository.
+
 # Commit Guidelines
 
 When writing commits:
