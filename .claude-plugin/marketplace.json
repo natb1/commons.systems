@@ -1,0 +1,59 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "commons-systems",
+  "description": "Agentic coding workflow patterns and skills for managing GitHub issues, worktrees, and iterative development loops",
+  "owner": {
+    "name": "Nate",
+    "email": "nathan@natb1.com"
+  },
+  "plugins": [
+    {
+      "name": "worktree",
+      "description": "Initialize work on new issues in git worktrees",
+      "version": "1.0.0",
+      "author": {
+        "name": "Nate",
+        "email": "nathan@natb1.com"
+      },
+      "source": "./.claude/skills/worktree",
+      "category": "development",
+      "tags": ["git", "workflow", "github"]
+    },
+    {
+      "name": "wiggum-loop",
+      "description": "Generic iterative loop pattern with evaluation and convergence",
+      "version": "1.0.0",
+      "author": {
+        "name": "Nate",
+        "email": "nathan@natb1.com"
+      },
+      "source": "./.claude/skills/wiggum-loop",
+      "category": "development",
+      "tags": ["iteration", "loops", "workflow"]
+    },
+    {
+      "name": "issue-workflow",
+      "description": "Manage end-to-end implementation of GitHub issues from planning through review",
+      "version": "1.0.0",
+      "author": {
+        "name": "Nate",
+        "email": "nathan@natb1.com"
+      },
+      "source": "./.claude/skills/issue-workflow",
+      "category": "development",
+      "tags": ["github", "workflow", "automation"]
+    },
+    {
+      "name": "write-instructions",
+      "description": "Invoke when editing Claude configuration files (CLAUDE.md, .claude/rules/*.md, .claude/agents/*.md, .claude/skills/*/SKILL.md) to ensure instructions follow best practices",
+      "version": "1.0.0",
+      "author": {
+        "name": "Nate",
+        "email": "nathan@natb1.com"
+      },
+      "source": "./.claude/skills/write-instructions",
+      "category": "development",
+      "tags": ["documentation", "instructions", "best-practices"]
+    }
+  ]
+}
