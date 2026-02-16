@@ -31,13 +31,11 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 - [agent shell multiplexing #26](https://github.com/natb1/commons.systems/issues/26)
 
 ## Usage and Contributing
+[![CC-BY-SA](https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png)](https://creativecommons.org/licenses/by-sa/4.0/)
+
 For using and/or extending the artifacts in this repo: forking is encouraged. To better understand the agentic coding artifacts a demo is available as a Claude Code marketplace.
 
-### Adding this Marketplace
-
-To add this marketplace to your Claude Code installation, use the GitHub repository as the marketplace source. The skills will then be available via the `/plugin` command.
-
-For example, to use the issue-workflow skill:
-```bash
-/plugin install issue-workflow@commons-systems
+```
+/plugin install issue-workflow-bundle@commons-systems
+/worktree <issue-number>
 ```

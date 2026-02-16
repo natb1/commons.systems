@@ -15,7 +15,7 @@
         "name": "Nate",
         "email": "nathan@natb1.com"
       },
-      "source": "./.claude/skills/worktree",
+      "source": "./.claude-plugin/issue-workflow-bundle/worktree",
       "category": "development",
       "tags": ["git", "workflow", "github"]
     },
@@ -27,7 +27,7 @@
         "name": "Nate",
         "email": "nathan@natb1.com"
       },
-      "source": "./.claude/skills/wiggum-loop",
+      "source": "./.claude-plugin/issue-workflow-bundle/wiggum-loop",
       "category": "development",
       "tags": ["iteration", "loops", "workflow"]
     },
@@ -39,9 +39,21 @@
         "name": "Nate",
         "email": "nathan@natb1.com"
       },
-      "source": "./.claude/skills/issue-workflow",
+      "source": "./.claude-plugin/issue-workflow-bundle/issue-workflow",
       "category": "development",
       "tags": ["github", "workflow", "automation"]
+    },
+    {
+      "name": "issue-workflow-bundle",
+      "description": "Complete GitHub issue workflow bundle including worktree setup, iterative development loops, and end-to-end issue management. Includes: worktree, wiggum-loop, and issue-workflow skills.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Nate",
+        "email": "nathan@natb1.com"
+      },
+      "source": "./.claude-plugin/issue-workflow-bundle",
+      "category": "development",
+      "tags": ["github", "workflow", "automation", "bundle", "git", "iteration"]
     },
     {
       "name": "write-instructions",
