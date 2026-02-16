@@ -63,7 +63,7 @@
         "name": "Nate",
         "email": "nathan@natb1.com"
       },
-      "source": "./.claude/skills/write-instructions",
+      "source": "./.claude-plugin/issue-workflow-bundle/write-instructions",
       "category": "development",
       "tags": ["documentation", "instructions", "best-practices"]
     }
