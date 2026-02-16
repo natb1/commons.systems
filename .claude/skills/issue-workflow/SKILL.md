@@ -3,7 +3,7 @@ name: issue-workflow
 description: Manage end-to-end implementation of GitHub issues from planning through review
 ---
 
-# Issue Team Lead
+# Issue Workflow
 
 Orchestrate the full lifecycle of implementing a GitHub issue: discovery, planning, implementation, review, and merge.
 
@@ -12,7 +12,7 @@ Orchestrate the full lifecycle of implementing a GitHub issue: discovery, planni
 **Requirement changes**: If at any step there is a change in requirements always add a step to the current plan to update the relevant issue body:
 
 ```bash
-gh issue edit $ISSUE_NUM --body "updated body text"
+gh issue edit <issue-num> --body "updated body text"
 ```
 
 ## 1. Prerequisite Check
@@ -30,7 +30,7 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 Read the primary issue and identify all related issues:
 
 ```bash
-gh issue view $ISSUE_NUM --json body,title,number
+gh issue view <issue-num> --json body,title,number
 ```
 
 Parse the issue body for:
@@ -42,7 +42,7 @@ Parse the issue body for:
 For each dependency and sub-issue found, read its body:
 
 ```bash
-gh issue view $RELATED_ISSUE --json body,title,number
+gh issue view <related-issue> --json body,title,number
 ```
 
 Determine which related issues are unimplemented (no associated merged PR or branch with completed work).
@@ -90,9 +90,9 @@ gh pr create --draft --title "PR title" --body "$(cat <<'EOF'
 ## Summary
 ...
 
-Closes #$PRIMARY_ISSUE
-Closes #$RELATED_ISSUE_1
-Closes #$RELATED_ISSUE_2
+Closes #<primary-issue>
+Closes #<related-issue-1>
+Closes #<related-issue-2>
 
 EOF
 )"
@@ -117,8 +117,7 @@ Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
 **Termination instructions:**
 - Post full review audit log as PR comment using this structure:
   ```bash
-  gh pr comment $PR_NUM --body "[MARKDOWN COMMENT WITH SECTIONS:]
-
+  gh pr comment <pr-num> --body "$(cat <<'EOF'
   # Code Quality Review - Complete ✓
 
   **Reviewer**: Claude Code (via /review skill)
@@ -139,7 +138,8 @@ Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
   ## Conclusion
 
   [Final assessment and next steps]
-  "
+  EOF
+  )"
   ```
 - Proceed to step 9
 
@@ -174,8 +174,7 @@ Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
 **Termination instructions:**
 - Post full security review audit log as PR comment using this structure:
   ```bash
-  gh pr comment $PR_NUM --body "[MARKDOWN COMMENT WITH SECTIONS:]
-
+  gh pr comment <pr-num> --body "$(cat <<'EOF'
   # Security Review - Complete ✓
 
   **Reviewer**: Claude Code (via /security-review skill)
@@ -196,7 +195,8 @@ Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
   ## Conclusion
 
   [Final assessment and next steps]
-  "
+  EOF
+  )"
   ```
 - Proceed to step 11
 
@@ -211,7 +211,7 @@ Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
 Mark the PR as ready for review:
 
 ```bash
-gh pr ready $PR_NUM
+gh pr ready <pr-num>
 ```
 
 Prompt the user to review and merge the PR

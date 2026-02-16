@@ -36,7 +36,7 @@ REPO_ROOT=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
 git worktree list --porcelain
 ```
 
-Look for a worktree whose branch name starts with `$ISSUE_NUM-`.
+Look for a worktree whose branch name starts with `<issue-num>-`.
 
 ### Edge Case: Worktree exists and is the current directory
 
@@ -47,7 +47,7 @@ Invoke the `/issue-workflow` skill with the issue number. Stop here.
 Prompt the user to close Claude and run:
 
 ```
-cd $REPO_ROOT/worktrees/$BRANCH_NAME && claude "/issue-workflow #$ISSUE_NUM"
+cd <repo-root>/worktrees/<branch-name> && claude "/issue-workflow #<issue-num>"
 ```
 
 Stop here.
@@ -57,7 +57,7 @@ Stop here.
 Get the issue title and create a sanitized branch name:
 
 ```bash
-TITLE=$(gh issue view $ISSUE_NUM --json title --jq '.title')
+TITLE=$(gh issue view <issue-num> --json title --jq '.title')
 ```
 
 Sanitize the title:
@@ -65,9 +65,9 @@ Sanitize the title:
 2. Replace non-alphanumeric characters with dashes
 3. Collapse consecutive dashes into one
 4. Strip leading and trailing dashes
-5. Summarize and/or truncate so total branch name (`$ISSUE_NUM-$SANITIZED_TITLE`) is at most 32 characters
+5. Summarize and/or truncate so total branch name (`<issue-num>-<sanitized-title>`) is at most 32 characters
 
-Format: `$ISSUE_NUM-$SANITIZED_TITLE`
+Format: `<issue-num>-<sanitized-title>`
 
 ## 4. Create Worktree
 
@@ -80,11 +80,11 @@ git fetch origin main
 Then create the worktree branching from `origin/main`:
 
 ```bash
-git worktree add -b $BRANCH_NAME $REPO_ROOT/worktrees/$BRANCH_NAME origin/main
+git worktree add -b <branch-name> <repo-root>/worktrees/<branch-name> origin/main
 ```
 
 After creation, prompt the user to close Claude and run:
 
 ```
-cd $REPO_ROOT/worktrees/$BRANCH_NAME && claude "/issue-workflow #$ISSUE_NUM"
+cd <repo-root>/worktrees/<branch-name> && claude "/issue-workflow #<issue-num>"
 ```
