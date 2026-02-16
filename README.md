@@ -13,6 +13,9 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 - Agentic patterns for both augmented and delegated coding workflows.
 - Augmented workflows focus on requirements management and design, while delegated workflows focus on implementation.
 - Delegated workflows have well defined break points for human quality control (QC).
+- Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts due to portability and ease of maintenance.
+- Separate "reference" skills from "task" skills with "ref-" naming convention. This enables more powerful (sub-agent-like) context management for skills when combined with `ref-memory-management` skill.
+- Agent scope is persisted in git commit log, github issues and PR using `pr-sync` skill.
 
 ## Agentic Coding Workflow
 
