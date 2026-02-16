@@ -19,11 +19,37 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 After verification, invoke the `/memory-management` skill to load commit and context sync guidelines.
 
-## 2. Context Sync
+## 2. Position Detection
 
-Invoke `/pr-context` to sync CLAUDE.local.md with current PR and issue context.
+Determine where to resume in the workflow by checking CLAUDE.local.md (automatically loaded into context) for PR and audit log markers.
 
-## 3. Planning Phase
+**Detection logic:**
+
+1. **Check for PR context**: Look for "## PR Context" section with "### Current PR" subsection
+2. **If no PR context found**: Invoke `/pr-context` to sync latest state from GitHub
+3. **Check for audit log comments** in PR (if PR exists):
+   - "# QA Review - Complete ✓"
+   - "# Code Quality Review - Complete ✓"
+   - "# Security Review - Complete ✓"
+4. **Check commit log** in CLAUDE.local.md for implementation commits
+
+**Resume logic:**
+
+- **No "Current PR" section**:
+  - If implementation commits exist in commit log → Resume at Step 7 (PR Creation)
+  - If no implementation commits → Resume at Step 4 (Planning Phase)
+- **PR exists, no QA audit log** → Resume at Step 8 (QA Review Loop)
+- **PR exists, QA complete, no code quality log** → Resume at Step 9 (Code Quality Review)
+- **PR exists, QA and code quality complete, no security log** → Resume at Step 11 (Security Review)
+- **All audit logs exist** → Resume at Step 12 (Completion)
+
+Inform the user where the workflow is resuming and proceed to that step.
+
+## 3. Context Sync
+
+Invoke `/pr-context` to sync CLAUDE.local.md with current PR and issue context (if not already invoked in position detection).
+
+## 4. Planning Phase
 
 Enter plan mode. The plan scope covers the primary issue plus any unimplemented dependencies and sub-issues.
 
@@ -31,29 +57,20 @@ CLAUDE.local.md contains full context (loaded automatically). Use the question t
 - Clarify ambiguous scope
 - Suggest alternatives that achieve the desired effect in a better way
 
-## 4. Implementation
+## 5. Implementation
 
 After the user approves the plan, implement it.
 
 - Create separate commits for each issue implemented (at minimum one commit per issue).
 - Push each commit immediately after creation.
 
-## 5. Merge and Validate
+## 6. Merge and Validate
 
 ```bash
 git fetch origin && git merge origin/main
 ```
 
 Re-run any validation steps (tests, linting, build) to confirm the implementation is correct after the merge.
-
-## 6. QA Prompt
-
-Prompt the user with a testing checklist covering:
-- Key behaviors to verify
-- Edge cases to test
-- Expected outcomes
-
-Wait for user confirmation that QA passes before proceeding.
 
 ## 7. PR Creation
 
@@ -74,7 +91,73 @@ EOF
 
 Include a separate `Closes #N` line for each issue (primary + all implemented dependencies and sub-issues).
 
-## 8. Code Quality Review Loop
+## 8. QA Review Loop
+
+Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
+
+**Next step instructions:**
+- Present testing checklist to user covering:
+  - Key behaviors to verify
+  - Edge cases to test
+  - Expected outcomes
+- Wait for user to complete testing
+
+**Evaluation instructions:**
+- Ask user for QA results
+- User reports either: "passed" (no issues found) or lists issues found
+- **Iterate** if user reports issues
+- **Terminate** if user reports all tests passed
+
+**Iteration instructions:**
+- Enter plan mode to fix reported issues
+- Include commit instructions in the plan
+- After implementation, present testing checklist again
+- Aggregate QA work done so far in plan context
+
+**Termination instructions:**
+- Post full QA audit log as PR comment using this structure:
+  ```bash
+  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  # QA Review - Complete ✓
+
+  **Reviewer**: [User name from git config]
+  **Date**: [Current date]
+  **Tested By**: Human QA with Claude Code facilitation
+
+  ## Testing Checklist
+
+  [Original checklist presented to user]
+
+  ## QA Iterations
+
+  [For each iteration, document:]
+  - Iteration 1: [Issues found] → [Fixes implemented] (commits: [hashes])
+  - Iteration 2: [Issues found] → [Fixes implemented] (commits: [hashes])
+  ...
+  - Final iteration: All tests passed
+
+  ## QA Summary
+
+  - Total test cycles: [N]
+  - Key behaviors verified: [list]
+  - Edge cases tested: [list]
+  - Total issues found and resolved: [N]
+
+  ## Conclusion
+
+  All test cases passed. PR approved for code quality review.
+  EOF
+  )"
+  ```
+- Proceed to step 9
+
+**Context (see /memory-management clean context rule):**
+- Summary of work completed so far
+- PR number
+- Complete history of QA iterations (issues found, fixes made, commits)
+- Testing checklist
+
+## 9. Code Quality Review Loop
 
 Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
 
@@ -115,14 +198,14 @@ Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
   EOF
   )"
   ```
-- Proceed to step 9
+- Proceed to step 10
 
 **Context (see /memory-management clean context rule):**
 - Summary of work completed so far
 - PR number
 - Complete review output from the review skill (preserve for audit log)
 
-## 9. Post-Review Merge and Push
+## 10. Post-Review Merge and Push
 
 ```bash
 git fetch origin && git merge origin/main
@@ -130,7 +213,7 @@ git fetch origin && git merge origin/main
 
 Re-validate the implementation and push any updates to the PR.
 
-## 10. Security Review Loop
+## 11. Security Review Loop
 
 Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
 
@@ -171,14 +254,14 @@ Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
   EOF
   )"
   ```
-- Proceed to step 11
+- Proceed to step 12
 
 **Context (see /memory-management clean context rule):**
-- Summary of work completed so far (including code quality review results)
+- Summary of work completed so far (including code quality and QA review results)
 - PR number
 - Complete security review output from the security-review skill (preserve for audit log)
 
-## 11. Completion
+## 12. Completion
 
 Mark the PR as ready for review:
 
