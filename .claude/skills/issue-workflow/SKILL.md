@@ -7,13 +7,7 @@ description: Manage end-to-end implementation of GitHub issues from planning thr
 
 Orchestrate the full lifecycle of implementing a GitHub issue: discovery, planning, implementation, review, and merge.
 
-**Clean context rule**: All plans (initial, review, security review, or ad hoc) must assume execution in a clean context. Include all necessary steps — do not rely on state from the planning session. Track completed steps to avoid repeating work.
-
-**Requirement changes**: If at any step there is a change in requirements always add a step to the current plan to update the relevant issue body:
-
-```bash
-gh issue edit <issue-num> --body "updated body text"
-```
+**Clean context rule**: All plans (initial, review, security review, or ad hoc) must assume execution in a clean context. Include all necessary steps — do not rely on state from the planning session.
 
 ## 1. Prerequisite Check
 
@@ -25,35 +19,17 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 - If no issue number was provided, or `$CURRENT_BRANCH` does not start with the requested issue number followed by `-`: invoke the `/worktree` skill instead. Stop here.
 
-## 2. Issue Discovery
+After verification, invoke the `/tracking` skill to load commit and context sync guidelines.
 
-Read the primary issue and identify all related issues:
+## 2. Context Sync
 
-```bash
-gh issue view <issue-num> --json body,title,number
-```
-
-Parse the issue body for:
-- **Dependencies**: lines containing "blocked by #N" or similar references
-- **Sub-issues**: issue numbers referenced in the body
-
-**Ignore** issue numbers inside TODO comments (e.g., `(TODO: #32)`). These are human reference only, not implementation scope. Keep the rest of the line as requirements.
-
-For each dependency and sub-issue found, read its body:
-
-```bash
-gh issue view <related-issue> --json body,title,number
-```
-
-Determine which related issues are unimplemented (no associated merged PR or branch with completed work).
+Invoke `/pr-context` to sync CLAUDE.local.md with current PR and issue context.
 
 ## 3. Planning Phase
 
 Enter plan mode. The plan scope covers the primary issue plus any unimplemented dependencies and sub-issues.
 
-**Verbatim requirement inclusion**: Every plan must include the full verbatim issue body for all issues in scope. Copy the exact text from each issue body into the plan document. If conflicts exist between issue bodies, ask clarifying questions using the question tool before proceeding.
-
-Use the question tool proactively to:
+CLAUDE.local.md contains full context (loaded automatically). Use the question tool proactively to:
 - Clarify ambiguous scope
 - Suggest alternatives that achieve the desired effect in a better way
 
@@ -144,7 +120,6 @@ Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
 - Proceed to step 9
 
 **Context (clean context rule):**
-- Verbatim issue bodies for all issues in scope
 - Summary of work completed so far
 - PR number
 - Complete review output from the review skill (preserve for audit log)
@@ -201,7 +176,6 @@ Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
 - Proceed to step 11
 
 **Context (clean context rule):**
-- Verbatim issue bodies for all issues in scope
 - Summary of work completed so far (including code quality review results)
 - PR number
 - Complete security review output from the security-review skill (preserve for audit log)

@@ -29,3 +29,4 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 
 ## Cross Cutting Artifacts
 - [agent shell multiplexing #26](https://github.com/natb1/commons.systems/issues/26)
+- [context management with CLAUDE.local.md #36](https://github.com/natb1/commons.systems/issues/36)

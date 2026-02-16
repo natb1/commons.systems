@@ -13,10 +13,11 @@ Generic iterative loop pattern. The calling agent provides three instruction set
 
 ## Loop Algorithm
 
+Invoke `/tracking` skill to load commit and context sync guidelines.
+
 ### Step 0 — Initialize
 
 Enter plan mode. The plan must include:
-- Verbatim issues and work summary (clean context rule)
 - The generate next step instructions
 
 ### Step 1 — Execute Next Step
@@ -34,9 +35,9 @@ Determine outcome:
 ### Step 3 — Iterate
 
 Enter plan mode. The plan must include:
-- Verbatim issues and work summary (clean context rule)
 - Output from step 1, as modified by evaluation in step 2
 - The generate next step instructions
+- Commit instructions (to commit after work is done)
 
 Return to step 1.
 
