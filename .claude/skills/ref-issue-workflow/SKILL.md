@@ -75,15 +75,19 @@ Include a separate `Closes #N` for each issue (primary + all implemented depende
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Present testing checklist covering:
+- Create a comprehensive QA testing plan for the user to execute
+- Include testing checklist covering:
   - Key behaviors to verify
+  - Test steps for each behavior
   - Edge cases to test
   - Expected outcomes
-- Wait for user to complete testing
+- Present the plan to the user
+- **CRITICAL**: The user performs the actual testing (not Claude)
+- Wait for the user to test and report results
 
 **Evaluation instructions:**
 - User reports "passed"/"approved" → **Terminate**
-- User reports issues → **Iterate**
+- User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
 
 **Termination instructions:**
 - Post QA audit log as PR comment:
