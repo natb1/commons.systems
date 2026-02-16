@@ -115,12 +115,12 @@ When arguments specify target subsection:
 
 # Algorithm
 
-Arguments available via `$ARGUMENTS` variable. Empty = full sync, non-empty = partial update of specified subsection.
+Arguments are passed when the skill is invoked. Empty arguments = full sync, non-empty = partial update of specified subsection.
 
 ## Step 1: Determine Scope
 
-If `$ARGUMENTS` is empty: Update entire "## PR Context" section.
-If `$ARGUMENTS` has value: Update only specified subsection (value indicates target, e.g., "commit log").
+If no arguments provided: Update entire "## PR Context" section.
+If arguments provided: Update only specified subsection (arguments indicate target, e.g., "commit log").
 
 Extract branch name and issue number:
 ```bash
