@@ -7,8 +7,6 @@ description: Manage end-to-end implementation of GitHub issues from planning thr
 
 Orchestrate the full lifecycle of implementing a GitHub issue: discovery, planning, implementation, review, and merge.
 
-**Clean context rule**: All plans (initial, review, security review, or ad hoc) must assume execution in a clean context. Include all necessary steps — do not rely on state from the planning session.
-
 ## 1. Prerequisite Check
 
 Verify the working directory is a worktree for the requested issue:
@@ -19,7 +17,7 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 - If no issue number was provided, or `$CURRENT_BRANCH` does not start with the requested issue number followed by `-`: invoke the `/worktree` skill instead. Stop here.
 
-After verification, invoke the `/tracking` skill to load commit and context sync guidelines.
+After verification, invoke the `/memory-management` skill to load commit and context sync guidelines.
 
 ## 2. Context Sync
 
@@ -119,7 +117,7 @@ Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
   ```
 - Proceed to step 9
 
-**Context (clean context rule):**
+**Context (see /memory-management clean context rule):**
 - Summary of work completed so far
 - PR number
 - Complete review output from the review skill (preserve for audit log)
@@ -175,7 +173,7 @@ Start the `/wiggum-loop` skill at Step 0. Pass these instruction sets:
   ```
 - Proceed to step 11
 
-**Context (clean context rule):**
+**Context (see /memory-management clean context rule):**
 - Summary of work completed so far (including code quality review results)
 - PR number
 - Complete security review output from the security-review skill (preserve for audit log)

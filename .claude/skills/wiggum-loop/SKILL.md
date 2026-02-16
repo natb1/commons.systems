@@ -13,7 +13,7 @@ Generic iterative loop pattern. The calling agent provides three instruction set
 
 ## Loop Algorithm
 
-Invoke `/tracking` skill to load commit and context sync guidelines.
+Invoke `/memory-management` skill to load commit and context sync guidelines.
 
 ### Step 0 — Initialize
 
