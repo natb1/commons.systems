@@ -13,6 +13,9 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 - Agentic patterns for both augmented and delegated coding workflows.
 - Augmented workflows focus on requirements management and design, while delegated workflows focus on implementation.
 - Delegated workflows have well defined break points for human quality control (QC).
+- Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts due to portability and ease of maintenance.
+- Separate "reference" skills from "task" skills with "ref-" naming convention. This enables more powerful (sub-agent-like) context management for skills when combined with `ref-memory-management` skill.
+- Agent scope is persisted in git commit log, github issues and PR using [dynamic content](https://code.claude.com/docs/en/skills#inject-dynamic-context) in skills.
 
 ## Agentic Coding Workflow
 
@@ -29,6 +32,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 
 ## Cross Cutting Artifacts
 - [agent shell multiplexing #26](https://github.com/natb1/commons.systems/issues/26)
+- [context management with CLAUDE.local.md #36](https://github.com/natb1/commons.systems/issues/36)
 
 ## Usage and Contributing
 <a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>
@@ -36,6 +40,6 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 For using and/or extending the artifacts in this repo: forking is encouraged. To better understand the agentic coding artifacts a demo is available as a Claude Code [plugin](https://code.claude.com/docs/en/plugins).
 
 ```
-/plugin install issue-workflow-bundle@commons-systems
+/plugin install pr-workflow-bundle@commons-systems
 /worktree <issue-number>
 ```

@@ -8,9 +8,5 @@
       "Bash(git merge:*)",
       "Bash(gh issue view:*)"
     ]
-  },
-  "sandbox": {
-    "enabled": true,
-    "autoAllowBashIfSandboxed": true
   }
 }
