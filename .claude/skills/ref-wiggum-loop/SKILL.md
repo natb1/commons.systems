@@ -15,8 +15,7 @@ Callers provide three instruction sets:
 
 ## Step 0. Initialize
 
-Enter plan mode. The plan must include:
-- The next step instructions
+Enter plan mode. Write a complete new plan from scratch — do not edit or patch any existing plan file. The plan must include the next step instructions.
 
 ## Step 1. Execute Next Step
 

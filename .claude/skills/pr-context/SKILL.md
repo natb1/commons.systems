@@ -10,6 +10,9 @@ Sync CLAUDE.local.md with GitHub PR, issue, and commit data.
 - None: Full sync of entire "## PR Context" section
 - Target specified (e.g., "commit log", "issue body #42"): Partial sync. Update only that subsection
 
+# Algorithm
+When this skill is invoked, execute these steps:
+
 ## Step 1: Extract Issue Number
 
 ```bash

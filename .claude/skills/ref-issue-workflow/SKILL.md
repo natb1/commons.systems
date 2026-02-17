@@ -124,6 +124,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
+- Invoke /pr-context PR comment
 - Proceed to Step 8
 
 ## Step 8. Code Quality Review Loop
@@ -166,6 +167,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
+- Invoke /pr-context PR comment
 - Proceed to Step 9
 
 ## Step 9. Security Review Loop
@@ -208,6 +210,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
+- Invoke /pr-context PR comment
 - Proceed to Step 10
 
 ## Step 10. Completion
