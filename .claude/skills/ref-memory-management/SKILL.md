@@ -8,7 +8,7 @@ description: Load when planning work, writing commits, changing requirements, or
 When creating any plan (issue implementation, review, security review, or ad hoc):
 - All plans must assume execution in a clean context. Include all necessary steps — do not rely on state from the planning session.
 - Check the conversation for all active reference skills (names begin with "ref-"). If any are active, add this line to the plan preface: `**Before executing this plan:** Invoke /ref-X and /ref-Y`. The line **must** include the **explicit** instruction to invoke the reference skills before executing the plan.
-- If plan is being created as part of a multi-step process (eg. issue-workflow, or wiggum-loop), the plan must record which step of the process is active in the preface of the plan.
+- If plan is being created as part of a multi-step process (eg. pr-workflow, or wiggum-loop), the plan must record which step of the process is active in the preface of the plan.
 
 # Commit Guidelines
 

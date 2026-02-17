@@ -1,9 +1,9 @@
 ---
-name: issue-workflow
+name: pr-workflow
 description: Manage end-to-end implementation of GitHub issues from planning through review
 ---
 
-# Issue Workflow
+# PR Workflow
 
 1. Verify this is a worktree for the requested issue:
    ```bash
@@ -11,6 +11,6 @@ description: Manage end-to-end implementation of GitHub issues from planning thr
    ```
    If no issue number provided, or `$CURRENT_BRANCH` doesn't start with the issue number followed by `-`: invoke `/worktree` instead. Stop.
 
-2. Invoke `/ref-memory-management` and `/ref-issue-workflow`.
+2. Invoke `/ref-memory-management` and `/ref-pr-workflow`.
 
-3. If the current plan has an active step recorded, resume at that step. Otherwise, apply **Resume Logic** from ref-issue-workflow to determine the starting step.
+3. If the current plan has an active step recorded, resume at that step. Otherwise, apply **Resume Logic** from ref-pr-workflow to determine the starting step.

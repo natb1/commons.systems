@@ -1,5 +1,5 @@
 ---
-name: ref-issue-workflow
+name: ref-pr-workflow
 description: Complete workflow documentation for issue implementation lifecycle — resume from any step after context loss
 ---
 

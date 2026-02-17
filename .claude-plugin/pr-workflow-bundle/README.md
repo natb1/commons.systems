@@ -40,6 +40,6 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 For using and/or extending the artifacts in this repo: forking is encouraged. To better understand the agentic coding artifacts a demo is available as a Claude Code [plugin](https://code.claude.com/docs/en/plugins).
 
 ```
-/plugin install issue-workflow-bundle@commons-systems
+/plugin install pr-workflow-bundle@commons-systems
 /worktree <issue-number>
 ```
