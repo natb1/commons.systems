@@ -4,7 +4,8 @@ description: Complete workflow documentation for issue implementation lifecycle 
 allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
-# Current Context
+# Current PR Scope and Status
+The purpose of this conversation is to create and manage a PR with the following scope.
 
 - Current branch: !`git rev-parse --abbrev-ref HEAD`
 - PR status: !`gh pr view --json title,body,comments,number,state 2>/dev/null || echo "No PR"`
@@ -21,17 +22,17 @@ Reference only. Do not execute this workflow until directed to do so (eg., by `/
 
 ## Resume Logic
 
-Determine starting step using the **Current Context** section above.
+Determine starting step using the **Current PR Scope and Status** section above.
 
 Decision tree:
 
 - **No PR**:
   - Implementation commits in commit log → Step 5
   - No implementation commits → Step 2
-- **PR exists, no QA audit log comment** → Step 6
-- **PR exists, QA complete, no code quality log** → Step 7
-- **PR exists, QA + code quality complete, no security log** → Step 8
-- **All audit logs exist** → Step 9
+- **PR exists, no QA audit log comment** → Step 7
+- **PR exists, QA complete, no code quality log** → Step 8
+- **PR exists, QA + code quality complete, no security log** → Step 9
+- **All audit logs exist** → Step 10
 
 ## Step 1. Prerequisite Check
 
@@ -45,13 +46,18 @@ If no issue number provided, or `$CURRENT_BRANCH` doesn't start with the issue n
 
 ## Step 2. Planning Phase
 
-Enter plan mode. Scope defined by the **Current Context** section above. Use the question tool to:
+Enter plan mode. Scope defined by the **Current PR Scope and Status** section above. Use the question tool to:
 - Clarify ambiguous scope
 - Suggest better alternatives
+
+Plan must include:
+- Unit test strategy: what to test, test framework, test file locations
 
 ## Step 3. Implementation
 
 Implement the approved plan. Create separate commits for each issue (minimum one commit per issue).
+
+Use the Task tool to launch a general-purpose subagent to write unit tests based on the plan. Run concurrently with main implementation.
 
 ## Step 4. Merge and Validate
 
@@ -61,9 +67,24 @@ git fetch origin && git merge origin/main
 
 Re-run validation (tests, linting, build) to confirm correctness after merge.
 
-## Step 5. PR Creation
+## Step 5. Unit Test Loop
 
-Create a PR closing all implemented issues from the **Current Context** section:
+Start `/wiggum-loop` at Step 0 with these instruction sets:
+
+**Next step instructions:**
+- Merge `origin/main` if not already merged
+- Run unit tests and linting
+
+**Evaluation instructions:**
+- All pass → **Terminate**
+- Failures → **Iterate** (fix, re-run)
+
+**Termination instructions:**
+- No action. Proceed to Step 6.
+
+## Step 6. PR Creation
+
+Create a PR closing all implemented issues from the **Current PR Scope and Status** section:
 
 ```bash
 gh pr create --draft --title "PR title" --body "$(cat <<'EOF'
@@ -80,7 +101,7 @@ EOF
 
 Include a separate `Closes #N` for each issue (primary + all implemented dependencies and sub-issues).
 
-## Step 6. QA Review Loop
+## Step 7. QA Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -134,9 +155,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 7
+- Proceed to Step 8
 
-## Step 7. Code Quality Review Loop
+## Step 8. Code Quality Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -176,9 +197,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 8
+- Proceed to Step 9
 
-## Step 8. Security Review Loop
+## Step 9. Security Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -218,9 +239,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 9
+- Proceed to Step 10
 
-## Step 9. Completion
+## Step 10. Completion
 
 ```bash
 gh pr ready <pr-num>
