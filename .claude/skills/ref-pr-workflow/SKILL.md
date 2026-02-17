@@ -29,10 +29,11 @@ Decision tree:
 - **No PR**:
   - Implementation commits in commit log → Step 5
   - No implementation commits → Step 2
-- **PR exists, no QA audit log comment** → Step 7
-- **PR exists, QA complete, no code quality log** → Step 8
-- **PR exists, QA + code quality complete, no security log** → Step 9
-- **All audit logs exist** → Step 10
+- **PR exists, no acceptance test summary comment** → Step 7
+- **PR exists, acceptance test complete, no QA audit log comment** → Step 8
+- **PR exists, QA complete, no code quality log** → Step 9
+- **PR exists, QA + code quality complete, no security log** → Step 10
+- **All audit logs exist** → Step 11
 
 ## Step 1. Prerequisite Check
 
@@ -52,12 +53,17 @@ Enter plan mode. Scope defined by the **Current PR Scope and Status** section ab
 
 Plan must include:
 - Unit test strategy: what to test, test framework, test file locations
+- Acceptance test strategy: user flows to test with Playwright against Firebase emulators
 
 ## Step 3. Implementation
 
 Implement the approved plan. Create separate commits for each issue (minimum one commit per issue).
 
-Use the Task tool to launch a general-purpose subagent to write unit tests based on the plan. Run concurrently with main implementation.
+Use the Task tool to launch parallel general-purpose subagents:
+- Subagent 1: Write unit tests based on the plan
+- Subagent 2: Write acceptance tests based on the plan
+
+Both run concurrently with main implementation.
 
 ## Step 4. Merge and Validate
 
@@ -101,7 +107,54 @@ EOF
 
 Include a separate `Closes #N` for each issue (primary + all implemented dependencies and sub-issues).
 
-## Step 7. QA Review Loop
+## Step 7. Acceptance Test Loop
+
+Start `/wiggum-loop` at Step 0 with these instruction sets:
+
+**Next step instructions:**
+- Check acceptance test GitHub Action results on PR branch:
+  ```bash
+  gh run list --branch <branch> --limit 5
+  gh run view <run-id>
+  ```
+- If run is in progress, wait for completion
+
+**Evaluation instructions:**
+- All pass → **Terminate**
+- Test failures → **Iterate** (fix, commit, push, wait for re-run)
+- Infrastructure failures → present to user for resolution
+
+**Termination instructions:**
+- Post audit log as PR comment:
+  ```bash
+  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  # Acceptance Test Review - Complete ✓
+
+  **Date**: [Current date]
+  **Branch**: [branch name]
+
+  ## Test Results
+
+  - Run ID: [run-id]
+  - Status: Passed
+  - Tests executed: [count]
+
+  ## Iterations
+
+  [For each iteration:]
+  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
+  ...
+  - Final iteration: All tests passed
+
+  ## Conclusion
+
+  All acceptance tests passed. PR approved for QA review.
+  EOF
+  )"
+  ```
+- Proceed to Step 8
+
+## Step 8. QA Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -155,9 +208,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 8
+- Proceed to Step 9
 
-## Step 8. Code Quality Review Loop
+## Step 9. Code Quality Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -197,9 +250,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 9
+- Proceed to Step 10
 
-## Step 9. Security Review Loop
+## Step 10. Security Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -239,9 +292,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 10
+- Proceed to Step 11
 
-## Step 10. Completion
+## Step 11. Completion
 
 ```bash
 gh pr ready <pr-num>
