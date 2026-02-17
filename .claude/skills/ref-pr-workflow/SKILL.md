@@ -1,18 +1,23 @@
 ---
 name: ref-pr-workflow
 description: Complete workflow documentation for issue implementation lifecycle — resume from any step after context loss
+allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # Current Context
 
 - Current branch: !`git rev-parse --abbrev-ref HEAD`
 - PR status: !`gh pr view --json title,body,comments,number,state 2>/dev/null || echo "No PR"`
-- Primary issue: !`ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+') && gh issue view "$ISSUE_NUM" --json title,body,comments,number,state`
-- Blocking issues: !`ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+') && for dep in $(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number' 2>/dev/null); do gh issue view "$dep" --json title,body,comments,number,state; done`
-- Sub-issues: !`ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+') && for sub in $(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" --jq '.[].number' 2>/dev/null); do gh issue view "$sub" --json title,body,comments,number,state; done`
+- Primary issue: !`$CLAUDE_PLUGIN_ROOT/scripts/issue-primary 2>/dev/null || .claude/skills/ref-pr-workflow/scripts/issue-primary`
+- Blocking issues: !`$CLAUDE_PLUGIN_ROOT/scripts/issue-blocking 2>/dev/null || .claude/skills/ref-pr-workflow/scripts/issue-blocking`
+- Sub-issues: !`$CLAUDE_PLUGIN_ROOT/scripts/issue-sub-issues 2>/dev/null || .claude/skills/ref-pr-workflow/scripts/issue-sub-issues`
 - Commit log: !`git log origin/main..HEAD --format="commit %H%nAuthor: %an <%ae>%nDate: %ad%n%n%s%n%n%b"`
 
+# Dependencies
+Invoke `/ref-memory-management` if not already active. 
+
 # Issue Workflow Reference
+Reference only. Do not execute this workflow until directed to do so (eg., by `/pr-workflow`).
 
 ## Resume Logic
 
