@@ -7,7 +7,7 @@ description: Load when planning work, writing commits, changing requirements, or
 
 When creating any plan (issue implementation, review, security review, or ad hoc):
 - All plans must assume execution in a clean context. Include all necessary steps — do not rely on state from the planning session.
-- Check the conversation for all active reference skills. Reference skills have names that begin with "ref-". If there are any loaded reference skills, include an initialization step in the plan to reload each active reference skill.
+- Check the conversation for all active reference skills (names begin with "ref-"). If any are active, preface the plan with an **Active reference skills** list, and make **Step 1** of the plan invoke each active reference skill.
 - If plan is being created as part of a multi-step process (eg. issue-workflow, or wiggum-loop), the plan must record which step of the process is active.
 
 # Commit Guidelines
