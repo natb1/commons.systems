@@ -3,21 +3,30 @@ name: ref-issue-workflow
 description: Complete workflow documentation for issue implementation lifecycle — resume from any step after context loss
 ---
 
+# Current Context
+
+- Current branch: !`git rev-parse --abbrev-ref HEAD`
+- PR status: !`gh pr view --json title,body,comments,number,state 2>/dev/null || echo "No PR"`
+- Primary issue: !`ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+') && gh issue view "$ISSUE_NUM" --json title,body,comments,number,state`
+- Blocking issues: !`ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+') && for dep in $(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number' 2>/dev/null); do gh issue view "$dep" --json title,body,comments,number,state; done`
+- Sub-issues: !`ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+') && for sub in $(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" --jq '.[].number' 2>/dev/null); do gh issue view "$sub" --json title,body,comments,number,state; done`
+- Commit log: !`git log origin/main..HEAD --format="commit %H%nAuthor: %an <%ae>%nDate: %ad%n%n%s%n%n%b"`
+
 # Issue Workflow Reference
 
 ## Resume Logic
 
-Determine starting step by checking CLAUDE.local.md for `## PR Context`. If absent, invoke `/pr-context` first.
+Determine starting step using the **Current Context** section above.
 
 Decision tree:
 
-- **No `### Current PR` section**:
-  - Implementation commits in commit log → Step 6
-  - No implementation commits → Step 3
-- **PR exists, no QA audit log comment** → Step 7
-- **PR exists, QA complete, no code quality log** → Step 8
-- **PR exists, QA + code quality complete, no security log** → Step 9
-- **All audit logs exist** → Step 10
+- **No PR**:
+  - Implementation commits in commit log → Step 5
+  - No implementation commits → Step 2
+- **PR exists, no QA audit log comment** → Step 6
+- **PR exists, QA complete, no code quality log** → Step 7
+- **PR exists, QA + code quality complete, no security log** → Step 8
+- **All audit logs exist** → Step 9
 
 ## Step 1. Prerequisite Check
 
@@ -29,21 +38,17 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 If no issue number provided, or `$CURRENT_BRANCH` doesn't start with the issue number followed by `-`: invoke `/worktree` instead. Stop.
 
-## Step 2. Context Sync
+## Step 2. Planning Phase
 
-Invoke `/pr-context` to sync CLAUDE.local.md with GitHub data.
-
-## Step 3. Planning Phase
-
-Enter plan mode. Scope defined by `## PR Context` in CLAUDE.local.md. Use the question tool to:
+Enter plan mode. Scope defined by the **Current Context** section above. Use the question tool to:
 - Clarify ambiguous scope
 - Suggest better alternatives
 
-## Step 4. Implementation
+## Step 3. Implementation
 
 Implement the approved plan. Create separate commits for each issue (minimum one commit per issue).
 
-## Step 5. Merge and Validate
+## Step 4. Merge and Validate
 
 ```bash
 git fetch origin && git merge origin/main
@@ -51,9 +56,9 @@ git fetch origin && git merge origin/main
 
 Re-run validation (tests, linting, build) to confirm correctness after merge.
 
-## Step 6. PR Creation
+## Step 5. PR Creation
 
-Create a PR closing all implemented issues from `## PR Context`:
+Create a PR closing all implemented issues from the **Current Context** section:
 
 ```bash
 gh pr create --draft --title "PR title" --body "$(cat <<'EOF'
@@ -70,7 +75,7 @@ EOF
 
 Include a separate `Closes #N` for each issue (primary + all implemented dependencies and sub-issues).
 
-## Step 7. QA Review Loop
+## Step 6. QA Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -124,10 +129,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Invoke /pr-context PR comment
-- Proceed to Step 8
+- Proceed to Step 7
 
-## Step 8. Code Quality Review Loop
+## Step 7. Code Quality Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -167,10 +171,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Invoke /pr-context PR comment
-- Proceed to Step 9
+- Proceed to Step 8
 
-## Step 9. Security Review Loop
+## Step 8. Security Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -210,10 +213,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Invoke /pr-context PR comment
-- Proceed to Step 10
+- Proceed to Step 9
 
-## Step 10. Completion
+## Step 9. Completion
 
 ```bash
 gh pr ready <pr-num>

@@ -15,7 +15,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 - Delegated workflows have well defined break points for human quality control (QC).
 - Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts due to portability and ease of maintenance.
 - Separate "reference" skills from "task" skills with "ref-" naming convention. This enables more powerful (sub-agent-like) context management for skills when combined with `ref-memory-management` skill.
-- Agent scope is persisted in git commit log, github issues and PR using `pr-context` skill.
+- Agent scope is persisted in git commit log, github issues and PR using [dynamic content](https://code.claude.com/docs/en/skills#inject-dynamic-context) in skills.
 
 ## Agentic Coding Workflow
 

@@ -25,13 +25,6 @@ When current branch is NOT main:
 - Enter plan mode (if not already in plan mode)
 - Update plan to include step to edit relevant issue body with new requirement
 
-## Context Sync
-After committing, editing, or commenting on PR or in-scope issues:
-- Invoke `/pr-context` with target subsection (e.g., "issue body #42", "PR comments", "commit log")
-- Do not include content—it will be pulled from GitHub
-
-ONLY invoke the pr-context skill when given explicit instructions (like above). Do not invoke pr-context proactively.
-
 # GitHub Issue Relationships
 
 GitHub issues support explicit relationships via REST API: dependencies (blocked_by/blocking) and sub-issues. Use these API features instead of text parsing.
