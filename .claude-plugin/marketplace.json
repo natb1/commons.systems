@@ -45,7 +45,7 @@
     },
     {
       "name": "pr-workflow-bundle",
-      "description": "Complete GitHub issue workflow bundle including worktree setup, iterative development loops, and end-to-end issue management. Includes: worktree, wiggum-loop, and pr-workflow skills.",
+      "description": "Complete PR workflow bundle including worktree setup, iterative development loops, and end-to-end PR lifecycle management. Includes: worktree, wiggum-loop, and pr-workflow skills.",
       "version": "1.0.0",
       "author": {
         "name": "Nate",
