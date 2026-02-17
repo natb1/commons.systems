@@ -66,7 +66,7 @@ Empty comments: Render "Comments: None"
 
 ## Step 4: Write CLAUDE.local.md
 
-Path: `/home/n8/natb1/commons.systems/worktrees/36-claude-local-md/CLAUDE.local.md`
+Path: `$(git rev-parse --show-toplevel)/CLAUDE.local.md`
 
 **Full sync:** Replace entire "## PR Context" section.
 **Partial sync:** Read file, replace target subsection, write back.

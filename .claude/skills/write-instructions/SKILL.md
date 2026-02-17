@@ -1,5 +1,5 @@
 ---
-name: ref-write-instructions
+name: write-instructions
 description: Invoke when editing Claude configuration files (CLAUDE.md, .claude/rules/*.md, .claude/agents/*.md, .claude/skills/*/SKILL.md) to ensure instructions follow best practices
 ---
 
