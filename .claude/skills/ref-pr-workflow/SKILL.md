@@ -27,13 +27,13 @@ Determine starting step using the **Current PR Scope and Status** section above.
 Decision tree:
 
 - **No PR**:
-  - Implementation commits in commit log → Step 5
+  - Implementation commits in commit log → Step 4
   - No implementation commits → Step 2
-- **PR exists, no acceptance test summary comment** → Step 7
-- **PR exists, acceptance test complete, no QA audit log comment** → Step 8
-- **PR exists, QA complete, no code quality log** → Step 9
-- **PR exists, QA + code quality complete, no security log** → Step 10
-- **All audit logs exist** → Step 11
+- **PR exists, no acceptance test summary comment** → Step 6
+- **PR exists, acceptance test complete, no QA audit log comment** → Step 7
+- **PR exists, QA complete, no code quality log** → Step 8
+- **PR exists, QA + code quality complete, no security log** → Step 9
+- **All audit logs exist** → Step 10
 
 ## Step 1. Prerequisite Check
 
@@ -65,20 +65,12 @@ Use the Task tool to launch parallel general-purpose subagents:
 
 Both run concurrently with main implementation.
 
-## Step 4. Merge and Validate
-
-```bash
-git fetch origin && git merge origin/main
-```
-
-Re-run validation (tests, linting, build) to confirm correctness after merge.
-
-## Step 5. Unit Test Loop
+## Step 4. Unit Test Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Merge `origin/main` if not already merged
+- Merge `origin/main`
 - Run unit tests and linting
 
 **Evaluation instructions:**
@@ -86,9 +78,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Failures → **Iterate** (fix, re-run)
 
 **Termination instructions:**
-- No action. Proceed to Step 6.
+- No action. Proceed to Step 5.
 
-## Step 6. PR Creation
+## Step 5. PR Creation
 
 Create a PR closing all implemented issues from the **Current PR Scope and Status** section:
 
@@ -107,7 +99,7 @@ EOF
 
 Include a separate `Closes #N` for each issue (primary + all implemented dependencies and sub-issues).
 
-## Step 7. Acceptance Test Loop
+## Step 6. Acceptance Test Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -152,9 +144,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 8
+- Proceed to Step 7
 
-## Step 8. QA Review Loop
+## Step 7. QA Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -210,9 +202,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 9
+- Proceed to Step 8
 
-## Step 9. Code Quality Review Loop
+## Step 8. Code Quality Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -252,9 +244,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 10
+- Proceed to Step 9
 
-## Step 10. Security Review Loop
+## Step 9. Security Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -294,9 +286,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 11
+- Proceed to Step 10
 
-## Step 11. Completion
+## Step 10. Completion
 
 ```bash
 gh pr ready <pr-num>
