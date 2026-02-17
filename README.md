@@ -1,1 +1,1 @@
-.claude-plugin/issue-workflow-bundle/README.md
+.claude-plugin/pr-workflow-bundle/README.md
