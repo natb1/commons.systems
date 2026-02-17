@@ -159,6 +159,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
+- If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files): start Vite dev server with hot reload in background, include local URL in QA testing plan
 - Create a comprehensive QA testing plan for the user to execute
 - Include testing checklist covering:
   - Key behaviors to verify
@@ -174,6 +175,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
 
 **Termination instructions:**
+- Stop the Vite dev server if started
 - Post QA audit log as PR comment:
   ```bash
   gh pr comment <pr-num> --body "$(cat <<'EOF'
