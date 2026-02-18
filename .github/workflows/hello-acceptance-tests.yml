@@ -1,0 +1,24 @@
+name: Hello — Acceptance Tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "hello/**"
+      - "pkg/**"
+      - "firebase.json"
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+      - name: Run acceptance tests
+        run: pkg/cicd/run-acceptance-tests.sh hello

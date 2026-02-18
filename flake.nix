@@ -17,7 +17,12 @@
         default = pkgs.mkShell {
           packages = with pkgs; [
             nodejs_22
+            openjdk
+            playwright-driver.browsers
           ];
+          shellHook = ''
+            export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+          '';
         };
       });
     };
