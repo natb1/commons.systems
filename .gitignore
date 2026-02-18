@@ -1,2 +1,6 @@
 worktrees/
 CLAUDE.local.md
+node_modules/
+dist/
+.firebase/
+.direnv/
