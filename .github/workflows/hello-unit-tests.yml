@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - "hello/**"
-      - "pkg/**"
+      - ".claude/skills/ref-pr-workflow/scripts/**"
 
 jobs:
   test:
@@ -17,6 +17,6 @@ jobs:
         with:
           node-version: "22"
       - name: Run unit tests
-        run: pkg/cicd/run-unit-tests.sh hello
+        run: .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh hello
       - name: Run lint
-        run: pkg/cicd/run-lint.sh hello
+        run: .claude/skills/ref-pr-workflow/scripts/run-lint.sh hello

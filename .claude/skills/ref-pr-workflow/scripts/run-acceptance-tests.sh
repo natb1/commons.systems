@@ -3,20 +3,20 @@ set -euo pipefail
 
 APP_DIR="${1:?Usage: run-acceptance-tests.sh <app-dir>}"
 
-# Resolve absolute path for temp firebase.json
-APP_DIR_ABS="$(cd "$APP_DIR" && pwd)"
+# Remember repo root (script must be invoked from repo root)
+REPO_ROOT="$(pwd)"
 
 # Build the app
 cd "$APP_DIR"
 npm ci
 npm run build
-cd - > /dev/null
+cd "$REPO_ROOT"
 
 # Install Playwright browsers (skip if nix provides them via PLAYWRIGHT_BROWSERS_PATH)
 if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
   cd "$APP_DIR"
   npx playwright install --with-deps chromium
-  cd - > /dev/null
+  cd "$REPO_ROOT"
 fi
 
 # Find an available port
@@ -25,12 +25,13 @@ PORT=$(node -e "
   s.listen(0, () => { console.log(s.address().port); s.close(); });
 ")
 
-# Generate temporary firebase.json with dynamic port and absolute dist path
-TEMP_FIREBASE_JSON=$(mktemp /tmp/firebase-acceptance-XXXXXX.json)
+# Generate temporary firebase.json in repo root with relative path to dist.
+# Firebase emulator resolves public dir relative to the config file location.
+TEMP_FIREBASE_JSON="${REPO_ROOT}/.firebase-acceptance-$$.json"
 cat > "$TEMP_FIREBASE_JSON" <<EOF
 {
   "hosting": {
-    "public": "${APP_DIR_ABS}/dist",
+    "public": "${APP_DIR}/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
   },
   "emulators": {
@@ -56,10 +57,12 @@ trap cleanup EXIT
 npx firebase-tools emulators:start --only hosting --config "$TEMP_FIREBASE_JSON" --project commons-systems &
 EMULATOR_PID=$!
 
-# Poll until emulator responds (30s timeout)
+# Poll until emulator serves content (30s timeout).
+# Use -o /dev/null without -f so any HTTP response (including 404 during startup) counts,
+# but verify we get a 200 for the index page.
 TIMEOUT=30
 ELAPSED=0
-until curl -sf "http://localhost:${PORT}" > /dev/null 2>&1; do
+until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${PORT}/" 2>/dev/null | grep -q '^200$'; do
   if [ $ELAPSED -ge $TIMEOUT ]; then
     echo "ERROR: Firebase hosting emulator did not start within ${TIMEOUT}s" >&2
     exit 1

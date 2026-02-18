@@ -3,4 +3,6 @@ CLAUDE.local.md
 node_modules/
 dist/
 .firebase/
+.firebase-acceptance-*
+test-results/
 .direnv/

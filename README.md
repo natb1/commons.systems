@@ -1,10 +1,10 @@
 # commons.systems: Agentic Coding Workflow
 
-This repository serves as a monorepo for Nate's agentic coding workflows and proof-of-concept (POC) applications.
+This repository serves as a monorepo for Nate's agentic coding workflows and proof-of-concept (POC) applications. This can be used as an example for bootstrapping an agentic coding workflow.
 
 ## Pre-requisites
 
-- **Project Management** (github): Created a project.
+- **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
 - **Version Control** (git): Created a repo.
 - **Agentic Coding Tools** (Claude Code): Manually Installed TODO([Bootstrap Claude Code with nix home manager #2](https://github.com/natb1/commons.systems/issues/2))
 
@@ -13,9 +13,9 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 - Agentic patterns for both augmented and delegated coding workflows.
 - Augmented workflows focus on requirements management and design, while delegated workflows focus on implementation.
 - Delegated workflows have well defined break points for human quality control (QC).
-- Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts due to portability and ease of maintenance.
-- Separate "reference" skills from "task" skills with "ref-" naming convention. This enables more powerful (sub-agent-like) context management for skills when combined with `ref-memory-management` skill.
-- Agent scope is persisted in git commit log, github issues and PR using [dynamic content](https://code.claude.com/docs/en/skills#inject-dynamic-context) in skills.
+- Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts (system instructions, hooks, sub-agents, agent teams, etc.) due to portability and ease of maintenance.
+- Separate "reference" skills from "task" skills with "ref-" naming convention. This enables more powerful (sub-agent-like) context management for skills when combined with [ref-memory-management](.claude/skills/ref-memory-management/SKILL.md) skill.
+- Conversation scope is persisted in git commit log, github issues and PR using [dynamic content](https://code.claude.com/docs/en/skills#inject-dynamic-context) in [pr-workflow](.claude/skills/ref-pr-workflow) skills.
 
 ## Agentic Coding Workflow
 

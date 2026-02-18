@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - "hello/**"
-      - "pkg/**"
+      - ".claude/skills/ref-pr-workflow/scripts/**"
       - "firebase.json"
 
 jobs:
@@ -21,4 +21,4 @@ jobs:
           distribution: "temurin"
           java-version: "21"
       - name: Run acceptance tests
-        run: pkg/cicd/run-acceptance-tests.sh hello
+        run: .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh hello
