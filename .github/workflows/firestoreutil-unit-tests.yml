@@ -1,11 +1,10 @@
-name: Hello — Unit Tests & Lint
+name: Firestoreutil — Unit Tests & Lint
 
 on:
   push:
     branches-ignore:
       - main
     paths:
-      - "hello/**"
       - "firestoreutil/**"
       - ".claude/skills/ref-pr-workflow/scripts/**"
 
@@ -18,6 +17,6 @@ jobs:
         with:
           node-version: "22"
       - name: Run unit tests
-        run: .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh hello
+        run: .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh firestoreutil
       - name: Run lint
-        run: .claude/skills/ref-pr-workflow/scripts/run-lint.sh hello
+        run: .claude/skills/ref-pr-workflow/scripts/run-lint.sh firestoreutil

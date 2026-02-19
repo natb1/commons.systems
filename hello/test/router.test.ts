@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createRouter, Route } from "../src/router";
 
 describe("createRouter", () => {
@@ -14,23 +14,45 @@ describe("createRouter", () => {
     location.hash = "";
   });
 
-  it("renders the default route when there is no hash", () => {
+  it("renders the default route when there is no hash", async () => {
     createRouter(outlet, routes);
-    expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
   });
 
   it("navigates to the correct route on hash change", async () => {
     createRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
 
     location.hash = "#/about";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
 
-    expect(outlet.innerHTML).toBe("<h2>About</h2>");
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>About</h2>");
+    });
   });
 
-  it("falls back to the first route for an unknown hash", () => {
+  it("falls back to the first route for an unknown hash", async () => {
     location.hash = "#/nonexistent";
     createRouter(outlet, routes);
-    expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+  });
+
+  it("supports async render functions", async () => {
+    const asyncRoutes: Route[] = [
+      {
+        path: "/",
+        render: async () => "<h2>Async Home</h2>",
+      },
+    ];
+    createRouter(outlet, asyncRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Async Home</h2>");
+    });
   });
 });

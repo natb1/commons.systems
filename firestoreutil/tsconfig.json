@@ -9,8 +9,7 @@
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "noEmit": true,
-    "types": ["vite/client"]
+    "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src", "seeds", "bin", "test"]
 }

@@ -5,8 +5,10 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - "hello/**"
+      - "firestoreutil/**"
       - ".claude/skills/ref-pr-workflow/scripts/**"
       - "firebase.json"
+      - "firestore.rules"
 
 jobs:
   acceptance:
