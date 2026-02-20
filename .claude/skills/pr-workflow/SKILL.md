@@ -5,12 +5,10 @@ description: Manage end-to-end implementation of GitHub issues from planning thr
 
 # PR Workflow
 
-1. Verify this is a worktree for the requested issue:
-   ```bash
-   CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   ```
-   If no issue number provided, or `$CURRENT_BRANCH` doesn't start with the issue number followed by `-`: invoke `/worktree` instead. Stop.
+1. Verify the primary issue for this worktree:
+   Run `` !`git rev-parse --abbrev-ref HEAD` `` to get the current branch.
+   If the current branch doesn't start with an issue number followed by `-`: notify the user that there is no primary issue for the current worktree. Stop.
 
-2. Invoke `/ref-memory-management` and `/ref-pr-workflow`.
+2. Invoke `/ref-pr-workflow`.
 
 3. If the current plan has an active step recorded, resume at that step. Otherwise, apply **Resume Logic** from ref-pr-workflow to determine the starting step.

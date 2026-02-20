@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+')
+gh issue view "$ISSUE_NUM" --json title,body,comments,number,state

@@ -1,0 +1,22 @@
+{
+  "name": "@commons-systems/authutil",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./seed": "./src/seed.ts",
+    "./seeds/hello": "./seeds/hello.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.19.0",
+    "eslint": "^9.19.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.22.0",
+    "vitest": "^3.0.5"
+  }
+}

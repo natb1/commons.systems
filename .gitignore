@@ -1,2 +1,10 @@
 worktrees/
 CLAUDE.local.md
+node_modules/
+dist/
+.firebase/
+.firebase-acceptance-*
+test-results/
+firestore-debug.log
+ui-debug.log
+.direnv/

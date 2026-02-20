@@ -13,6 +13,10 @@ Callers provide three instruction sets:
 - **Evaluation instructions**: Determine iterate vs terminate (e.g., user classifies review findings)
 - **Termination instructions**: Execute when loop ends (e.g., post audit log as PR comment)
 
+## Rules
+
+Plan mode is mandatory at Steps 0 and 3, regardless of loop complexity.
+
 ## Step 0. Initialize
 
 Enter plan mode. Write a complete new plan from scratch — do not edit or patch any existing plan file. The plan must include the next step instructions.
