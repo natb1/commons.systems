@@ -13,10 +13,24 @@ if grep -q '"firebase"' "$APP_PKG" 2>/dev/null; then
   USES_FIRESTORE=true
 fi
 
+# Detect auth usage
+USES_AUTH=false
+if grep -rq '"firebase/auth"' "$REPO_ROOT/$APP_DIR/src/" 2>/dev/null; then
+  USES_AUTH=true
+fi
+
 # Install firestoreutil if app depends on it (file: dependency)
 if grep -q '"@commons-systems/firestoreutil"' "$APP_PKG" 2>/dev/null; then
   echo "Installing firestoreutil dependency..."
   cd "$REPO_ROOT/firestoreutil"
+  npm ci
+  cd "$REPO_ROOT"
+fi
+
+# Install authutil if app depends on it or uses auth
+if grep -q '"@commons-systems/authutil"' "$APP_PKG" 2>/dev/null || [ "$USES_AUTH" = true ]; then
+  echo "Installing authutil dependency..."
+  cd "$REPO_ROOT/authutil"
   npm ci
   cd "$REPO_ROOT"
 fi
@@ -38,11 +52,28 @@ if [ "$USES_FIRESTORE" = true ]; then
     s.listen(0, () => { console.log(s.address().port); s.close(); });
   ")
   echo "Firestore emulator will use port $FIRESTORE_PORT"
+fi
 
-  # Build with Firestore env vars
-  VITE_FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
-  VITE_FIRESTORE_NAMESPACE="emulator" \
-  npm run build
+AUTH_PORT=""
+if [ "$USES_AUTH" = true ]; then
+  AUTH_PORT=$(node -e "
+    const s = require('net').createServer();
+    s.listen(0, () => { console.log(s.address().port); s.close(); });
+  ")
+  echo "Auth emulator will use port $AUTH_PORT"
+fi
+
+# Build with emulator env vars
+BUILD_ENV=""
+if [ "$USES_FIRESTORE" = true ]; then
+  BUILD_ENV="VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT} VITE_FIRESTORE_NAMESPACE=emulator"
+fi
+if [ "$USES_AUTH" = true ]; then
+  BUILD_ENV="$BUILD_ENV VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}"
+fi
+
+if [ -n "$BUILD_ENV" ]; then
+  eval "$BUILD_ENV npm run build"
 else
   npm run build
 fi
@@ -60,41 +91,24 @@ fi
 # Firebase emulator resolves public dir relative to the config file location.
 TEMP_FIREBASE_JSON="${REPO_ROOT}/.firebase-acceptance-$$.json"
 
+# Build emulators config
+EMULATORS_JSON="{\"hosting\": {\"port\": ${HOSTING_PORT}}"
 if [ "$USES_FIRESTORE" = true ]; then
-  cat > "$TEMP_FIREBASE_JSON" <<EOF
-{
-  "hosting": {
-    "public": "${APP_DIR}/dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
-  },
-  "firestore": {
-    "rules": "firestore.rules"
-  },
-  "emulators": {
-    "hosting": {
-      "port": ${HOSTING_PORT}
-    },
-    "firestore": {
-      "port": ${FIRESTORE_PORT}
-    }
-  }
-}
-EOF
-else
-  cat > "$TEMP_FIREBASE_JSON" <<EOF
-{
-  "hosting": {
-    "public": "${APP_DIR}/dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
-  },
-  "emulators": {
-    "hosting": {
-      "port": ${HOSTING_PORT}
-    }
-  }
-}
-EOF
+  EMULATORS_JSON="$EMULATORS_JSON, \"firestore\": {\"port\": ${FIRESTORE_PORT}}"
 fi
+if [ "$USES_AUTH" = true ]; then
+  EMULATORS_JSON="$EMULATORS_JSON, \"auth\": {\"port\": ${AUTH_PORT}}"
+fi
+EMULATORS_JSON="$EMULATORS_JSON}"
+
+# Build top-level config
+CONFIG_JSON="{\"hosting\": {\"public\": \"${APP_DIR}/dist\", \"ignore\": [\"firebase.json\", \"**/.*\", \"**/node_modules/**\"]}"
+if [ "$USES_FIRESTORE" = true ]; then
+  CONFIG_JSON="$CONFIG_JSON, \"firestore\": {\"rules\": \"firestore.rules\"}"
+fi
+CONFIG_JSON="$CONFIG_JSON, \"emulators\": $EMULATORS_JSON}"
+
+echo "$CONFIG_JSON" > "$TEMP_FIREBASE_JSON"
 
 # Cleanup on exit: kill emulator, remove temp file
 EMULATOR_PID=""
@@ -110,7 +124,10 @@ trap cleanup EXIT
 # Start Firebase emulators in background
 EMULATORS="hosting"
 if [ "$USES_FIRESTORE" = true ]; then
-  EMULATORS="hosting,firestore"
+  EMULATORS="$EMULATORS,firestore"
+fi
+if [ "$USES_AUTH" = true ]; then
+  EMULATORS="$EMULATORS,auth"
 fi
 
 npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project commons-systems &
@@ -148,6 +165,24 @@ if [ "$USES_FIRESTORE" = true ]; then
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
   FIRESTORE_NAMESPACE="emulator" \
   npx tsx firestoreutil/bin/run-seed.ts
+fi
+
+# Poll until Auth emulator is ready (if used)
+if [ "$USES_AUTH" = true ]; then
+  ELAPSED=0
+  until curl -s "http://localhost:${AUTH_PORT}/identitytoolkit.googleapis.com/v1/projects" >/dev/null 2>&1; do
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+      echo "ERROR: Auth emulator did not start within ${TIMEOUT}s" >&2
+      exit 1
+    fi
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+  done
+  echo "Firebase Auth emulator ready on port ${AUTH_PORT}"
+
+  # Seed auth user
+  echo "Seeding auth user..."
+  AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
 fi
 
 # Run Playwright acceptance tests

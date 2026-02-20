@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - "hello/**"
+      - "authutil/**"
       - "firestoreutil/**"
       - ".claude/skills/ref-pr-workflow/scripts/**"
       - "firebase.json"

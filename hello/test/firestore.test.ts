@@ -17,7 +17,7 @@ vi.mock("../src/firebase.js", () => ({
   NAMESPACE: "test-ns",
 }));
 
-import { getMessages } from "../src/firestore";
+import { getMessages, getNotes } from "../src/firestore";
 
 describe("getMessages", () => {
   beforeEach(() => {
@@ -81,6 +81,70 @@ describe("getMessages", () => {
         id: "greeting-2",
         text: "Hello",
         author: "system",
+        createdAt: "2026-01-01T00:01:00Z",
+      },
+    ]);
+  });
+});
+
+describe("getNotes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+    mockOrderBy.mockReturnValue("mock-order");
+    mockQuery.mockReturnValue("mock-query");
+  });
+
+  it("queries the correct namespaced collection path", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+
+    await getNotes();
+
+    expect(mockCollection).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "ns/test-ns/notes",
+    );
+  });
+
+  it("orders results by createdAt", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+
+    await getNotes();
+
+    expect(mockOrderBy).toHaveBeenCalledWith("createdAt");
+  });
+
+  it("maps Firestore documents to Note objects", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [
+        {
+          id: "note-1",
+          data: () => ({
+            text: "First note",
+            createdAt: "2026-01-01T00:00:00Z",
+          }),
+        },
+        {
+          id: "note-2",
+          data: () => ({
+            text: "Second note",
+            createdAt: "2026-01-01T00:01:00Z",
+          }),
+        },
+      ],
+    });
+
+    const notes = await getNotes();
+
+    expect(notes).toEqual([
+      {
+        id: "note-1",
+        text: "First note",
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "note-2",
+        text: "Second note",
         createdAt: "2026-01-01T00:01:00Z",
       },
     ]);

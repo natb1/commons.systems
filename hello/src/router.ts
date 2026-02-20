@@ -3,7 +3,10 @@ export interface Route {
   render: () => string | Promise<string>;
 }
 
-export function createRouter(outlet: HTMLElement, routes: Route[]): void {
+export function createRouter(
+  outlet: HTMLElement,
+  routes: Route[],
+): () => void {
   async function navigate(): Promise<void> {
     const hash = location.hash.slice(1) || "/";
     const route = routes.find((r) => r.path === hash) ?? routes[0];
@@ -13,4 +16,6 @@ export function createRouter(outlet: HTMLElement, routes: Route[]): void {
 
   window.addEventListener("hashchange", () => void navigate());
   void navigate();
+
+  return () => void navigate();
 }

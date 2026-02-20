@@ -24,5 +24,24 @@ export const helloSeed: SeedSpec = {
         },
       ],
     },
+    {
+      name: "notes",
+      documents: [
+        {
+          id: "note-1",
+          data: {
+            text: "This note is only visible when signed in.",
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        },
+        {
+          id: "note-2",
+          data: {
+            text: "Auth-gated content works.",
+            createdAt: "2026-01-01T00:01:00Z",
+          },
+        },
+      ],
+    },
   ],
 };

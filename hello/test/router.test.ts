@@ -55,4 +55,20 @@ describe("createRouter", () => {
       expect(outlet.innerHTML).toBe("<h2>Async Home</h2>");
     });
   });
+
+  it("returns a refresh function that re-renders the current route", async () => {
+    let count = 0;
+    const dynamicRoutes: Route[] = [
+      { path: "/", render: () => `<h2>Count ${++count}</h2>` },
+    ];
+    const refresh = createRouter(outlet, dynamicRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Count 1</h2>");
+    });
+
+    refresh();
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Count 2</h2>");
+    });
+  });
 });
