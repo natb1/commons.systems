@@ -49,7 +49,10 @@ test.describe("auth", () => {
     await signIn(page);
     await page.locator("#sign-out").click();
     await page.waitForSelector("#sign-in");
-    await page.goto("/#/notes");
+    // Wait for auth state change to finish re-rendering home page
+    // before navigating, to avoid concurrent async navigate() calls
+    await expect(page.locator("#messages li")).toHaveCount(2);
+    await page.evaluate(() => { window.location.hash = '#/notes'; });
     await expect(page.locator("#notes-auth-required")).toBeVisible();
   });
 

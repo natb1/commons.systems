@@ -12,6 +12,7 @@ test.describe("messages", () => {
   test("messages appear in chronological order", async ({ page }) => {
     await page.goto("/");
     const messages = page.locator("#messages li");
+    await expect(messages).toHaveCount(2);
     const texts = await messages.allTextContents();
     expect(texts).toEqual([
       "Welcome to commons.systems",
