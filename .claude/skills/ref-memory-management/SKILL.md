@@ -25,7 +25,9 @@ When current branch is NOT main:
 - Enter plan mode (if not already in plan mode)
 - Update plan to include step to edit relevant issue body with new requirement
 
-# GitHub Issue Relationships
+# Git & GitHub Skills
+
+Do not use -C for basic git commands.
 
 GitHub issues support explicit relationships via REST API: dependencies (blocked_by/blocking) and sub-issues. Use these API features instead of text parsing.
 

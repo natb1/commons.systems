@@ -1,0 +1,22 @@
+name: Authutil — Unit Tests & Lint
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - "authutil/**"
+      - ".claude/skills/ref-pr-workflow/scripts/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run unit tests
+        run: .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh authutil
+      - name: Run lint
+        run: .claude/skills/ref-pr-workflow/scripts/run-lint.sh authutil

@@ -1,0 +1,24 @@
+name: Hello — Unit Tests & Lint
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - "hello/**"
+      - "authutil/**"
+      - "firestoreutil/**"
+      - ".claude/skills/ref-pr-workflow/scripts/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run unit tests
+        run: .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh hello
+      - name: Run lint
+        run: .claude/skills/ref-pr-workflow/scripts/run-lint.sh hello

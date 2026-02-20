@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+')
+for dep in $(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number' 2>/dev/null); do
+  gh issue view "$dep" --json title,body,comments,number,state
+done

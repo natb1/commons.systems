@@ -1,32 +1,39 @@
 ---
 name: ref-pr-workflow
 description: Complete workflow documentation for issue implementation lifecycle — resume from any step after context loss
+allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
-# Current Context
+# Current PR Scope and Status
+The purpose of this conversation is to create and manage a PR with the following scope.
 
 - Current branch: !`git rev-parse --abbrev-ref HEAD`
 - PR status: !`gh pr view --json title,body,comments,number,state 2>/dev/null || echo "No PR"`
-- Primary issue: !`ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+') && gh issue view "$ISSUE_NUM" --json title,body,comments,number,state`
-- Blocking issues: !`ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+') && for dep in $(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number' 2>/dev/null); do gh issue view "$dep" --json title,body,comments,number,state; done`
-- Sub-issues: !`ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+') && for sub in $(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" --jq '.[].number' 2>/dev/null); do gh issue view "$sub" --json title,body,comments,number,state; done`
+- Primary issue: !`$CLAUDE_PLUGIN_ROOT/scripts/issue-primary 2>/dev/null || .claude/skills/ref-pr-workflow/scripts/issue-primary`
+- Blocking issues: !`$CLAUDE_PLUGIN_ROOT/scripts/issue-blocking 2>/dev/null || .claude/skills/ref-pr-workflow/scripts/issue-blocking`
+- Sub-issues: !`$CLAUDE_PLUGIN_ROOT/scripts/issue-sub-issues 2>/dev/null || .claude/skills/ref-pr-workflow/scripts/issue-sub-issues`
 - Commit log: !`git log origin/main..HEAD --format="commit %H%nAuthor: %an <%ae>%nDate: %ad%n%n%s%n%n%b"`
 
+# Dependencies
+Invoke `/ref-memory-management` if not already active. 
+
 # Issue Workflow Reference
+Reference only. Do not execute this workflow until directed to do so (eg., by `/pr-workflow`).
 
 ## Resume Logic
 
-Determine starting step using the **Current Context** section above.
+Determine starting step using the **Current PR Scope and Status** section above.
 
 Decision tree:
 
 - **No PR**:
-  - Implementation commits in commit log → Step 5
+  - Implementation commits in commit log → Step 4
   - No implementation commits → Step 2
-- **PR exists, no QA audit log comment** → Step 6
-- **PR exists, QA complete, no code quality log** → Step 7
-- **PR exists, QA + code quality complete, no security log** → Step 8
-- **All audit logs exist** → Step 9
+- **PR exists, no acceptance test summary comment** → Step 6
+- **PR exists, acceptance test complete, no QA audit log comment** → Step 7
+- **PR exists, QA complete, no code quality log** → Step 8
+- **PR exists, QA + code quality complete, no security log** → Step 9
+- **All audit logs exist** → Step 10
 
 ## Step 1. Prerequisite Check
 
@@ -40,25 +47,42 @@ If no issue number provided, or `$CURRENT_BRANCH` doesn't start with the issue n
 
 ## Step 2. Planning Phase
 
-Enter plan mode. Scope defined by the **Current Context** section above. Use the question tool to:
+Enter plan mode. Scope defined by the **Current PR Scope and Status** section above. Use the question tool to:
 - Clarify ambiguous scope
 - Suggest better alternatives
+
+Plan must include:
+- Unit test strategy: what to test, test framework, test file locations
+- Acceptance test strategy: user flows to test with Playwright against Firebase emulators
 
 ## Step 3. Implementation
 
 Implement the approved plan. Create separate commits for each issue (minimum one commit per issue).
 
-## Step 4. Merge and Validate
+Use the Task tool to launch parallel general-purpose subagents:
+- Subagent 1: Write unit tests based on the plan
+- Subagent 2: Write acceptance tests based on the plan
 
-```bash
-git fetch origin && git merge origin/main
-```
+Both run concurrently with main implementation.
 
-Re-run validation (tests, linting, build) to confirm correctness after merge.
+## Step 4. Unit Test Loop
+
+Start `/wiggum-loop` at Step 0 with these instruction sets:
+
+**Next step instructions:**
+- Merge `origin/main`
+- Run unit tests and linting
+
+**Evaluation instructions:**
+- All pass → **Terminate**
+- Failures → **Iterate** (fix, re-run)
+
+**Termination instructions:**
+- No action. Proceed to Step 5.
 
 ## Step 5. PR Creation
 
-Create a PR closing all implemented issues from the **Current Context** section:
+Create a PR closing all implemented issues from the **Current PR Scope and Status** section:
 
 ```bash
 gh pr create --draft --title "PR title" --body "$(cat <<'EOF'
@@ -75,11 +99,59 @@ EOF
 
 Include a separate `Closes #N` for each issue (primary + all implemented dependencies and sub-issues).
 
-## Step 6. QA Review Loop
+## Step 6. Acceptance Test Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
+- Check acceptance test GitHub Action results on PR branch:
+  ```bash
+  gh run list --branch <branch> --limit 5
+  gh run view <run-id>
+  ```
+- If run is in progress, wait for completion
+
+**Evaluation instructions:**
+- All pass → **Terminate**
+- Test failures → **Iterate** (fix, commit, push, wait for re-run)
+- Infrastructure failures → present to user for resolution
+
+**Termination instructions:**
+- Post audit log as PR comment:
+  ```bash
+  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  # Acceptance Test Review - Complete ✓
+
+  **Date**: [Current date]
+  **Branch**: [branch name]
+
+  ## Test Results
+
+  - Run ID: [run-id]
+  - Status: Passed
+  - Tests executed: [count]
+
+  ## Iterations
+
+  [For each iteration:]
+  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
+  ...
+  - Final iteration: All tests passed
+
+  ## Conclusion
+
+  All acceptance tests passed. PR approved for QA review.
+  EOF
+  )"
+  ```
+- Proceed to Step 7
+
+## Step 7. QA Review Loop
+
+Start `/wiggum-loop` at Step 0 with these instruction sets:
+
+**Next step instructions:**
+- If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files): start Vite dev server with hot reload in background, include local URL in QA testing plan
 - Create a comprehensive QA testing plan for the user to execute
 - Include testing checklist covering:
   - Key behaviors to verify
@@ -95,6 +167,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
 
 **Termination instructions:**
+- Stop the Vite dev server if started
 - Post QA audit log as PR comment:
   ```bash
   gh pr comment <pr-num> --body "$(cat <<'EOF'
@@ -129,9 +202,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 7
+- Proceed to Step 8
 
-## Step 7. Code Quality Review Loop
+## Step 8. Code Quality Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -171,9 +244,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 8
+- Proceed to Step 9
 
-## Step 8. Security Review Loop
+## Step 9. Security Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -213,9 +286,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 9
+- Proceed to Step 10
 
-## Step 9. Completion
+## Step 10. Completion
 
 ```bash
 gh pr ready <pr-num>
