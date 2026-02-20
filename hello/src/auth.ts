@@ -19,14 +19,14 @@ if (authEmulatorHost) {
   });
   // Exposed only in emulator builds — Playwright tests can't interact with
   // the emulator's redirect account picker, so they sign in programmatically
-  (window as Record<string, unknown>).__signIn = (
-    email: string,
-    password: string,
-  ) => signInWithEmailAndPassword(auth, email, password);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__signIn = (email: string, password: string) =>
+    signInWithEmailAndPassword(auth, email, password);
 }
 
-// Handle redirect result on page load (user returning from GitHub OAuth / emulator picker)
-void getRedirectResult(auth);
+// Handle redirect result on page load (user returning from GitHub OAuth / emulator picker).
+// Catch errors to prevent unhandled rejections from blocking app initialization.
+getRedirectResult(auth).catch(() => {});
 
 const provider = new GithubAuthProvider();
 
