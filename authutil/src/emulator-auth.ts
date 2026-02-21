@@ -26,7 +26,7 @@ export function fakeCustomToken(uid: string): string {
 }
 
 /**
- * Connect to the auth emulator and expose a `window.__signIn(uid)` helper
+ * Connect to the auth emulator and expose a `globalThis.__signIn(uid)` helper
  * for Playwright tests. Playwright can't interact with the emulator's
  * redirect account picker, so tests sign in programmatically using a
  * custom token that the emulator accepts without signature validation.
