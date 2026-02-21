@@ -18,7 +18,7 @@ REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 COMMENT_ID=$(
   gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
     --paginate \
-    --jq "[.[] | select(.body | split(\"\\n\")[0] | contains(\"${HEADER_PATTERN}\"))][0].id // empty"
+    --jq --arg pattern "$HEADER_PATTERN" '[.[] | select(.body | split("\n")[0] | contains($pattern))][0].id // empty'
 )
 
 if [ -n "$COMMENT_ID" ]; then

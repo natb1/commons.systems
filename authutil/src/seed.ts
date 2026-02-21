@@ -10,16 +10,17 @@ export async function seedAuthUser(
   projectId: string,
 ): Promise<void> {
   const baseUrl = `http://${emulatorHost}/identitytoolkit.googleapis.com/v1`;
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: "Bearer owner",
+  };
 
   // Step 1: Create user via the admin API (emulator accepts "Bearer owner")
   const createRes = await fetch(
     `${baseUrl}/projects/${projectId}/accounts`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer owner",
-      },
+      headers,
       body: JSON.stringify({
         localId: user.localId,
         email: user.email,
@@ -41,10 +42,7 @@ export async function seedAuthUser(
     `${baseUrl}/projects/${projectId}/accounts:update`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer owner",
-      },
+      headers,
       body: JSON.stringify({
         localId: user.localId,
         linkProviderUserInfo: {

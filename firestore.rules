@@ -2,7 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Messages are publicly readable (no auth yet — Phase 5)
+    // Messages are publicly readable; notes require authentication (see below)
     match /ns/{namespace}/messages/{messageId} {
       allow read: if true;
       allow write: if false;
