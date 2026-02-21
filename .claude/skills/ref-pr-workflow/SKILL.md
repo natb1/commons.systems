@@ -151,14 +151,19 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files): start Vite dev server with hot reload in background, include local URL in QA testing plan
+- If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files):
+  1. Start the QA server using `run-qa-server.sh <app-dir>` in background
+  2. Parse the App URL from the script's output
+  3. Run acceptance tests as a smoke check: `BASE_URL=<url> npx playwright test --config e2e/playwright.config.ts`
+  4. If smoke tests fail → fix issues and re-run before involving the user
+  5. Once smoke tests pass, proceed to create QA testing plan
 - Create a comprehensive QA testing plan for the user to execute
 - Include testing checklist covering:
   - Key behaviors to verify
   - Test steps for each behavior
   - Edge cases to test
   - Expected outcomes
-- Present the plan to the user
+- Present the plan and the App URL to the user
 - **CRITICAL**: The user performs the actual testing (not Claude)
 - Wait for the user to test and report results
 
@@ -167,7 +172,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
 
 **Termination instructions:**
-- Stop the Vite dev server if started
+- Stop the QA server (run-qa-server.sh) if started
 - Post QA audit log as PR comment:
   ```bash
   gh pr comment <pr-num> --body "$(cat <<'EOF'
