@@ -264,10 +264,20 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Invoke `/review` (exists even if not visible in skill list)
+- Launch 7 review tasks in parallel using the Task tool:
+  1. **`/review` skill** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "review"`. Include the PR diff context in the prompt.
+  2. **`pr-review-toolkit:code-reviewer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:code-reviewer"`.
+  3. **`pr-review-toolkit:code-simplifier`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:code-simplifier"`.
+  4. **`pr-review-toolkit:comment-analyzer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:comment-analyzer"`.
+  5. **`pr-review-toolkit:pr-test-analyzer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:pr-test-analyzer"`.
+  6. **`pr-review-toolkit:silent-failure-hunter`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:silent-failure-hunter"`.
+  7. **`pr-review-toolkit:type-design-analyzer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:type-design-analyzer"`.
+- All 7 tasks MUST be launched in a single message (parallel execution)
+- If any pr-review-toolkit agent fails to launch (e.g. plugin not installed), log a warning but continue — `/review` results alone are sufficient to proceed
+- Collect all returned results verbatim — do NOT summarize or paraphrase agent output
 
 **Evaluation instructions:**
-- Present findings to user
+- Present findings from ALL agents to user
 - User classifies each as: required, false positive, or out of scope
 - Any required findings → **Iterate**
 - No required findings → **Terminate**
@@ -278,13 +288,37 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   gh pr comment <pr-num> --body "$(cat <<'EOF'
   # Code Quality Review - Complete ✓
 
-  **Reviewer**: Claude Code (via /review skill)
+  **Reviewer**: Claude Code (via /review skill + pr-review-toolkit agents)
   **Date**: [Current date]
   **Outcome**: [Summary of result]
 
-  ## Review Output (Full Audit Log)
+  ## /review Output (Verbatim)
 
-  [PASTE COMPLETE VERBATIM OUTPUT FROM REVIEW SKILL]
+  [PASTE COMPLETE VERBATIM OUTPUT FROM /review SKILL]
+
+  ## pr-review-toolkit: code-reviewer (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
+
+  ## pr-review-toolkit: code-simplifier (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
+
+  ## pr-review-toolkit: comment-analyzer (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
+
+  ## pr-review-toolkit: pr-test-analyzer (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
+
+  ## pr-review-toolkit: silent-failure-hunter (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
+
+  ## pr-review-toolkit: type-design-analyzer (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
 
   ## User Classification Decisions
 
