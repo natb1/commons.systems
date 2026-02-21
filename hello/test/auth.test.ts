@@ -5,7 +5,7 @@ const mockConnectAuthEmulator = vi.fn();
 const mockSignInWithRedirect = vi.fn();
 const mockGetRedirectResult = vi.fn();
 const mockFirebaseSignOut = vi.fn();
-const mockSignInWithEmailAndPassword = vi.fn();
+const mockSignInWithCustomToken = vi.fn();
 const mockOnAuthStateChanged = vi.fn();
 
 class MockGithubAuthProvider {}
@@ -17,11 +17,11 @@ vi.mock("firebase/auth", () => ({
   GithubAuthProvider: MockGithubAuthProvider,
   signInWithRedirect: (...args: unknown[]) =>
     mockSignInWithRedirect(...args),
+  signInWithCustomToken: (...args: unknown[]) =>
+    mockSignInWithCustomToken(...args),
   getRedirectResult: (...args: unknown[]) =>
     mockGetRedirectResult(...args),
   signOut: (...args: unknown[]) => mockFirebaseSignOut(...args),
-  signInWithEmailAndPassword: (...args: unknown[]) =>
-    mockSignInWithEmailAndPassword(...args),
   onAuthStateChanged: (...args: unknown[]) =>
     mockOnAuthStateChanged(...args),
 }));

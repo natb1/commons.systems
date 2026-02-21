@@ -198,9 +198,8 @@ echo ""
 echo "  App URL:  http://localhost:${VITE_PORT}"
 if [ "$USES_AUTH" = true ]; then
   echo ""
-  echo "  Test credentials:"
-  echo "    Email:    test@example.com"
-  echo "    Password: testpassword"
+  echo "  Auth: Sign in via GitHub (emulator fake account picker)"
+  echo "  Seeded user: test@example.com (Test User)"
 fi
 if [ "$USES_FIRESTORE" = true ]; then
   echo ""

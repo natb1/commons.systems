@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 async function signIn(page: import("@playwright/test").Page) {
   await page.evaluate(() =>
-    (window as any).__signIn("test@example.com", "testpassword"),
+    (window as any).__signIn("test-github-user"),
   );
   await page.waitForSelector("#sign-out");
 }

@@ -5,8 +5,8 @@ test.describe("messages", () => {
     await page.goto("/");
     const messages = page.locator("#messages li");
     await expect(messages).toHaveCount(2);
-    await expect(messages.nth(0)).toHaveText("Welcome to commons.systems");
-    await expect(messages.nth(1)).toHaveText("Hello from the prototype");
+    await expect(messages.nth(0)).toContainText("Welcome to commons.systems");
+    await expect(messages.nth(1)).toContainText("Hello from the prototype");
   });
 
   test("messages appear in chronological order", async ({ page }) => {
@@ -14,10 +14,14 @@ test.describe("messages", () => {
     const messages = page.locator("#messages li");
     await expect(messages).toHaveCount(2);
     const texts = await messages.allTextContents();
-    expect(texts).toEqual([
-      "Welcome to commons.systems",
-      "Hello from the prototype",
-    ]);
+    expect(texts[0]).toContain("Welcome to commons.systems");
+    expect(texts[1]).toContain("Hello from the prototype");
+  });
+
+  test("messages display timestamps", async ({ page }) => {
+    await page.goto("/");
+    const timestamps = page.locator("#messages li time");
+    await expect(timestamps).toHaveCount(2);
   });
 
   test("about page does not show messages", async ({ page }) => {
