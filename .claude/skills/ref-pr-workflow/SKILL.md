@@ -30,10 +30,11 @@ Decision tree:
   - Implementation commits in commit log → Step 4
   - No implementation commits → Step 2
 - **PR exists, no acceptance test summary comment** → Step 6
-- **PR exists, acceptance test complete, no QA audit log comment** → Step 7
-- **PR exists, QA complete, no code quality log** → Step 8
-- **PR exists, QA + code quality complete, no security log** → Step 9
-- **All audit logs exist** → Step 10
+- **PR exists, acceptance test complete, no smoke test summary comment** → Step 7
+- **PR exists, acceptance test + smoke test complete, no QA audit log comment** → Step 8
+- **PR exists, QA complete, no code quality log** → Step 9
+- **PR exists, QA + code quality complete, no security log** → Step 10
+- **All audit logs exist** → Step 11
 
 ## Step 1. Prerequisite Check
 
@@ -54,6 +55,7 @@ Enter plan mode. Scope defined by the **Current PR Scope and Status** section ab
 Plan must include:
 - Unit test strategy: what to test, test framework, test file locations
 - Acceptance test strategy: user flows to test with Playwright against Firebase emulators
+- Smoke test strategy: minimal health checks for preview deployments
 
 ## Step 3. Implementation
 
@@ -62,8 +64,9 @@ Implement the approved plan. Create separate commits for each issue (minimum one
 Use the Task tool to launch parallel general-purpose subagents:
 - Subagent 1: Write unit tests based on the plan
 - Subagent 2: Write acceptance tests based on the plan
+- Subagent 3: Write smoke tests based on the plan
 
-Both run concurrently with main implementation.
+All run concurrently with main implementation.
 
 ## Step 4. Unit Test Loop
 
@@ -146,7 +149,54 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Proceed to Step 7
 
-## Step 7. QA Review Loop
+## Step 7. Smoke Test Loop
+
+Start `/wiggum-loop` at Step 0 with these instruction sets:
+
+**Next step instructions:**
+- Check smoke test + preview deploy CI results:
+  ```bash
+  gh run list --branch <branch> --limit 5
+  gh run view <run-id>
+  ```
+- If run is in progress, wait for completion
+
+**Evaluation instructions:**
+- All pass → **Terminate**
+- Smoke test failures → **Iterate** (fix, commit, push, wait for re-run)
+- Deploy failures → present to user for resolution
+
+**Termination instructions:**
+- Post audit log as PR comment:
+  ```bash
+  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  # Smoke Test Review - Complete ✓
+
+  **Date**: [Current date]
+  **Branch**: [branch name]
+
+  ## Results
+
+  - Preview URL: [url]
+  - Run ID: [run-id]
+  - Smoke tests executed: [count]
+
+  ## Iterations
+
+  [For each iteration:]
+  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
+  ...
+  - Final iteration: All tests passed
+
+  ## Conclusion
+
+  Smoke tests passed. Preview deployment verified.
+  EOF
+  )"
+  ```
+- Proceed to Step 8
+
+## Step 8. QA Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -207,9 +257,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 8
+- Proceed to Step 9
 
-## Step 8. Code Quality Review Loop
+## Step 9. Code Quality Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -249,9 +299,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 9
+- Proceed to Step 10
 
-## Step 9. Security Review Loop
+## Step 10. Security Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -291,9 +341,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 10
+- Proceed to Step 11
 
-## Step 10. Completion
+## Step 11. Completion
 
 ```bash
 gh pr ready <pr-num>

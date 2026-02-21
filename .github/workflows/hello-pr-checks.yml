@@ -1,0 +1,73 @@
+name: Hello — PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "hello/**"
+      - "authutil/**"
+      - "firestoreutil/**"
+      - ".claude/skills/ref-pr-workflow/scripts/**"
+      - "firebase.json"
+      - "firestore.rules"
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+      - name: Run acceptance tests
+        run: .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh hello
+
+  preview-deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      preview_url: ${{ steps.deploy.outputs.preview_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Authenticate with Firebase
+        run: |
+          CREDS_FILE=$(mktemp)
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$CREDS_FILE"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE" >> "$GITHUB_ENV"
+          echo "CREDS_FILE=$CREDS_FILE" >> "$GITHUB_ENV"
+      - name: Deploy to preview channel
+        id: deploy
+        run: |
+          OUTPUT=$(.claude/skills/ref-pr-workflow/scripts/run-preview-deploy.sh hello "pr-${{ github.event.pull_request.number }}")
+          echo "$OUTPUT"
+          PREVIEW_URL=$(echo "$OUTPUT" | grep '^PREVIEW_URL=' | cut -d= -f2-)
+          echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+      - name: Comment preview URL on PR
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --body "Preview deployed: ${{ steps.deploy.outputs.preview_url }}"
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f "$CREDS_FILE"
+
+  smoke-tests:
+    needs: preview-deploy
+    if: needs.preview-deploy.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run smoke tests
+        run: .claude/skills/ref-pr-workflow/scripts/run-smoke-tests.sh hello "${{ needs.preview-deploy.outputs.preview_url }}"

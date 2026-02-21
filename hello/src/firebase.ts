@@ -3,7 +3,7 @@ import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 
 const app = initializeApp({
   projectId: "commons-systems",
-  apiKey: "fake-api-key",
+  apiKey: "AIzaSyCeT2nQbB_RCtu2Ybt9D3828okcodri4wc",
   authDomain: "commons-systems.firebaseapp.com",
 });
 const db = getFirestore(app);
