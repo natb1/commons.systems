@@ -34,7 +34,8 @@ export async function seedAuthUser(
     }
   }
 
-  // Step 2: Link GitHub provider via admin update endpoint
+  // Step 2: Link GitHub provider via admin update endpoint.
+  // The field name is "linkProviderUserInfo" (singular object), not "providerUserInfo".
   const updateRes = await fetch(
     `${baseUrl}/projects/commons-systems/accounts:update`,
     {
@@ -45,14 +46,12 @@ export async function seedAuthUser(
       },
       body: JSON.stringify({
         localId: user.localId,
-        providerUserInfo: [
-          {
-            providerId: "github.com",
-            rawId: user.localId,
-            email: user.email,
-            displayName: user.displayName,
-          },
-        ],
+        linkProviderUserInfo: {
+          providerId: "github.com",
+          rawId: user.localId,
+          email: user.email,
+          displayName: user.displayName,
+        },
       }),
     },
   );

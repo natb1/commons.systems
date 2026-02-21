@@ -39,6 +39,11 @@ a:hover {
   text-decoration-thickness: 2px;
 }
 
+nav {
+  display: flex;
+  align-items: baseline;
+}
+
 nav a {
   margin-right: 1rem;
 }
