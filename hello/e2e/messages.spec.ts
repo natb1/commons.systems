@@ -3,9 +3,9 @@ import { test, expect } from "@playwright/test";
 test.describe("messages", () => {
   test("Firestore connectivity @smoke", async ({ page }) => {
     await page.goto("/");
-    await page.waitForSelector("#messages, p:has-text('No messages yet')", {
-      timeout: 10000,
-    });
+    // renderHome() is async (awaits Firestore query) and returns heading +
+    // messages atomically — heading appearing proves Firestore responded
+    await expect(page.locator("main h2")).toHaveText("Home", { timeout: 30000 });
     await expect(page.locator("#messages-error")).toHaveCount(0);
   });
 

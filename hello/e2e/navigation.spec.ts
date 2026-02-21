@@ -25,6 +25,9 @@ test.describe("navigation", () => {
 
   test("clicking About nav link shows About heading @smoke", async ({ page }) => {
     await page.goto("/");
+    // Wait for initial async render (renderHome awaits Firestore) to complete
+    // before clicking — otherwise the pending render overwrites the About page
+    await expect(page.locator("main h2")).toHaveText("Home", { timeout: 30000 });
     await page.click('nav a[href="#/about"]');
     await expect(page.locator("main h2")).toHaveText("About");
     await expect(page.locator("main p")).toContainText(
