@@ -1,11 +1,8 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { firebaseConfig } from "@commons-systems/firebaseutil/config";
 
-const app = initializeApp({
-  projectId: "commons-systems",
-  apiKey: "AIzaSyCeT2nQbB_RCtu2Ybt9D3828okcodri4wc",
-  authDomain: "commons-systems.firebaseapp.com",
-});
+const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const emulatorHost = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST;

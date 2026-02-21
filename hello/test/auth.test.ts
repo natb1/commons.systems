@@ -1,29 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockGetAuth = vi.fn();
-const mockConnectAuthEmulator = vi.fn();
 const mockSignInWithRedirect = vi.fn();
 const mockGetRedirectResult = vi.fn();
 const mockFirebaseSignOut = vi.fn();
-const mockSignInWithCustomToken = vi.fn();
 const mockOnAuthStateChanged = vi.fn();
+const mockSetupAuthEmulator = vi.fn();
 
 class MockGithubAuthProvider {}
 
 vi.mock("firebase/auth", () => ({
   getAuth: (...args: unknown[]) => mockGetAuth(...args),
-  connectAuthEmulator: (...args: unknown[]) =>
-    mockConnectAuthEmulator(...args),
   GithubAuthProvider: MockGithubAuthProvider,
   signInWithRedirect: (...args: unknown[]) =>
     mockSignInWithRedirect(...args),
-  signInWithCustomToken: (...args: unknown[]) =>
-    mockSignInWithCustomToken(...args),
   getRedirectResult: (...args: unknown[]) =>
     mockGetRedirectResult(...args),
   signOut: (...args: unknown[]) => mockFirebaseSignOut(...args),
   onAuthStateChanged: (...args: unknown[]) =>
     mockOnAuthStateChanged(...args),
+}));
+
+vi.mock("@commons-systems/authutil/emulator-auth", () => ({
+  setupAuthEmulator: (...args: unknown[]) =>
+    mockSetupAuthEmulator(...args),
 }));
 
 vi.mock("../src/firebase.js", () => ({
@@ -76,13 +76,12 @@ describe("auth module", () => {
       vi.stubEnv("VITE_AUTH_EMULATOR_HOST", "localhost:9099");
     });
 
-    it("calls connectAuthEmulator", async () => {
+    it("calls setupAuthEmulator", async () => {
       await import("../src/auth");
 
-      expect(mockConnectAuthEmulator).toHaveBeenCalledWith(
+      expect(mockSetupAuthEmulator).toHaveBeenCalledWith(
         { type: "mock-auth" },
-        "http://localhost:9099",
-        { disableWarnings: true },
+        "localhost:9099",
       );
     });
   });
@@ -92,10 +91,10 @@ describe("auth module", () => {
       vi.stubEnv("VITE_AUTH_EMULATOR_HOST", "");
     });
 
-    it("does not call connectAuthEmulator", async () => {
+    it("does not call setupAuthEmulator", async () => {
       await import("../src/auth");
 
-      expect(mockConnectAuthEmulator).not.toHaveBeenCalled();
+      expect(mockSetupAuthEmulator).not.toHaveBeenCalled();
     });
   });
 });

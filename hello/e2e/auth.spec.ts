@@ -1,11 +1,5 @@
 import { test, expect } from "@playwright/test";
-
-async function signIn(page: import("@playwright/test").Page) {
-  await page.evaluate(() =>
-    (window as any).__signIn("test-github-user"),
-  );
-  await page.waitForSelector("#sign-out");
-}
+import { signIn } from "@commons-systems/authutil/e2e/sign-in";
 
 test.describe("auth", () => {
   test("notes page shows auth-required when not signed in", async ({
