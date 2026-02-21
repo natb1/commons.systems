@@ -29,12 +29,12 @@ Decision tree:
 - **No PR**:
   - Implementation commits in commit log → Step 4
   - No implementation commits → Step 2
-- **PR exists, no acceptance test summary comment** → Step 6
-- **PR exists, acceptance test complete, no smoke test summary comment** → Step 7
-- **PR exists, acceptance test + smoke test complete, no QA audit log comment** → Step 8
-- **PR exists, QA complete, no code quality log** → Step 9
-- **PR exists, QA + code quality complete, no security log** → Step 10
-- **All audit logs exist** → Step 11
+- **PR exists, no acceptance test comment with "Complete" in header** → Step 6
+- **PR exists, acceptance test complete, no smoke test comment with "Complete" in header** → Step 7
+- **PR exists, acceptance test + smoke test complete, no QA comment with "Complete" in header** → Step 8
+- **PR exists, QA complete, no code quality comment with "Complete" in header** → Step 9
+- **PR exists, QA + code quality complete, no security comment with "Complete" in header** → Step 10
+- **All audit logs exist (all have "Complete" in header)** → Step 11
 
 ## Step 1. Prerequisite Check
 
@@ -119,10 +119,35 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Test failures → **Iterate** (fix, commit, push, wait for re-run)
 - Infrastructure failures → present to user for resolution
 
-**Termination instructions:**
-- Post audit log as PR comment:
+**Progress report instructions:**
+- Update PR comment with current status:
   ```bash
-  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  upsert-pr-comment.sh <pr-num> "# Acceptance Test Review" "$(cat <<'EOF'
+  # Acceptance Test Review - In Progress
+
+  **Date**: [Current date]
+  **Branch**: [branch name]
+  **Status**: Iteration [N]
+
+  ## Latest Run
+
+  - Run ID: [run-id]
+  - Status: [Failed/In progress]
+  - Failures: [list]
+
+  ## Iterations So Far
+
+  [For each iteration:]
+  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
+  ...
+  EOF
+  )"
+  ```
+
+**Termination instructions:**
+- Post final audit log (edits the in-progress comment):
+  ```bash
+  upsert-pr-comment.sh <pr-num> "# Acceptance Test Review" "$(cat <<'EOF'
   # Acceptance Test Review - Complete ✓
 
   **Date**: [Current date]
@@ -166,10 +191,36 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Smoke test failures → **Iterate** (fix, commit, push, wait for re-run)
 - Deploy failures → present to user for resolution
 
-**Termination instructions:**
-- Post audit log as PR comment:
+**Progress report instructions:**
+- Update PR comment with current status:
   ```bash
-  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  upsert-pr-comment.sh <pr-num> "# Smoke Test Review" "$(cat <<'EOF'
+  # Smoke Test Review - In Progress
+
+  **Date**: [Current date]
+  **Branch**: [branch name]
+  **Status**: Iteration [N]
+
+  ## Latest Run
+
+  - Preview URL: [url]
+  - Run ID: [run-id]
+  - Status: [Failed/In progress]
+  - Failures: [list]
+
+  ## Iterations So Far
+
+  [For each iteration:]
+  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
+  ...
+  EOF
+  )"
+  ```
+
+**Termination instructions:**
+- Post final audit log (edits the in-progress comment):
+  ```bash
+  upsert-pr-comment.sh <pr-num> "# Smoke Test Review" "$(cat <<'EOF'
   # Smoke Test Review - Complete ✓
 
   **Date**: [Current date]
@@ -221,11 +272,39 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - User reports "passed"/"approved" → **Terminate**
 - User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
 
+**Progress report instructions:**
+- Update PR comment with current status:
+  ```bash
+  upsert-pr-comment.sh <pr-num> "# QA Review" "$(cat <<'EOF'
+  # QA Review - In Progress
+
+  **Reviewer**: [User name from git config]
+  **Date**: [Current date]
+  **Tested By**: Human QA with Claude Code facilitation
+  **Status**: Iteration [N]
+
+  ## Testing Checklist
+
+  [Original checklist presented to user]
+
+  ## QA Iterations So Far
+
+  [For each iteration:]
+  - Iteration 1: [Issues found] → [Fixes implemented] (commits: [hashes])
+  ...
+
+  ## Latest Issues
+
+  [Issues reported in current iteration]
+  EOF
+  )"
+  ```
+
 **Termination instructions:**
 - Stop the QA server (run-qa-server.sh) if started
-- Post QA audit log as PR comment:
+- Post final QA audit log (edits the in-progress comment):
   ```bash
-  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  upsert-pr-comment.sh <pr-num> "# QA Review" "$(cat <<'EOF'
   # QA Review - Complete ✓
 
   **Reviewer**: [User name from git config]
@@ -282,10 +361,39 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Any required findings → **Iterate**
 - No required findings → **Terminate**
 
-**Termination instructions:**
-- Post review audit log as PR comment:
+**Progress report instructions:**
+- Update PR comment with current status:
   ```bash
-  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  upsert-pr-comment.sh <pr-num> "# Code Quality Review" "$(cat <<'EOF'
+  # Code Quality Review - In Progress
+
+  **Reviewer**: Claude Code (via /review skill + pr-review-toolkit agents)
+  **Date**: [Current date]
+  **Status**: Iteration [N]
+
+  ## Latest Findings
+
+  [Summary of findings from current iteration]
+
+  ## User Classification Decisions So Far
+
+  [For each finding classified:]
+  - Finding 1: [title] → [required/false positive/out of scope] - [rationale]
+  ...
+
+  ## Iterations So Far
+
+  [For each iteration:]
+  - Iteration 1: [Findings count] → [Required fixes] (commits: [hashes])
+  ...
+  EOF
+  )"
+  ```
+
+**Termination instructions:**
+- Post final review audit log (edits the in-progress comment):
+  ```bash
+  upsert-pr-comment.sh <pr-num> "# Code Quality Review" "$(cat <<'EOF'
   # Code Quality Review - Complete ✓
 
   **Reviewer**: Claude Code (via /review skill + pr-review-toolkit agents)
@@ -348,10 +456,39 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Any required findings → **Iterate**
 - No required findings → **Terminate**
 
-**Termination instructions:**
-- Post security audit log as PR comment:
+**Progress report instructions:**
+- Update PR comment with current status:
   ```bash
-  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  upsert-pr-comment.sh <pr-num> "# Security Review" "$(cat <<'EOF'
+  # Security Review - In Progress
+
+  **Reviewer**: Claude Code (via /security-review skill)
+  **Date**: [Current date]
+  **Status**: Iteration [N]
+
+  ## Latest Findings
+
+  [Summary of findings from current iteration]
+
+  ## User Classification Decisions So Far
+
+  [For each finding classified:]
+  - Finding 1: [title] → [required/false positive/out of scope] - [rationale]
+  ...
+
+  ## Iterations So Far
+
+  [For each iteration:]
+  - Iteration 1: [Findings count] → [Required fixes] (commits: [hashes])
+  ...
+  EOF
+  )"
+  ```
+
+**Termination instructions:**
+- Post final security audit log (edits the in-progress comment):
+  ```bash
+  upsert-pr-comment.sh <pr-num> "# Security Review" "$(cat <<'EOF'
   # Security Review - Complete ✓
 
   **Reviewer**: Claude Code (via /security-review skill)
