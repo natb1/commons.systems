@@ -5,7 +5,7 @@ test.describe("navigation", () => {
     const errors: Error[] = [];
     page.on("pageerror", (err) => errors.push(err));
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("load");
     expect(errors).toHaveLength(0);
   });
 

@@ -44,8 +44,7 @@ jobs:
       - name: Deploy to preview channel
         id: deploy
         run: |
-          OUTPUT=$(.claude/skills/ref-pr-workflow/scripts/run-preview-deploy.sh hello "pr-${{ github.event.pull_request.number }}")
-          echo "$OUTPUT"
+          OUTPUT=$(.claude/skills/ref-pr-workflow/scripts/run-preview-deploy.sh hello "pr-${{ github.event.pull_request.number }}" | tee /dev/stderr)
           PREVIEW_URL=$(echo "$OUTPUT" | grep '^PREVIEW_URL=' | cut -d= -f2-)
           echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
       - name: Comment preview URL on PR
