@@ -6,7 +6,9 @@ on:
     paths:
       - "hello/**"
       - "authutil/**"
+      - "firebaseutil/**"
       - "firestoreutil/**"
+      - "style/**"
       - ".claude/skills/ref-pr-workflow/scripts/**"
       - "firebase.json"
       - "firestore.rules"

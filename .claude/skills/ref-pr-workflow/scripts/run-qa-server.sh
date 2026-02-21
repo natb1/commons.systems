@@ -6,34 +6,13 @@ APP_DIR="${1:?Usage: run-qa-server.sh <app-dir>}"
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
 APP_PKG="$REPO_ROOT/$APP_DIR/package.json"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Check if app uses Firestore (has firebase dependency)
-USES_FIRESTORE=false
-if grep -q '"firebase"' "$APP_PKG" 2>/dev/null; then
-  USES_FIRESTORE=true
-fi
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
 
-# Detect auth usage
-USES_AUTH=false
-if grep -rq '"firebase/auth"' "$REPO_ROOT/$APP_DIR/src/" 2>/dev/null; then
-  USES_AUTH=true
-fi
-
-# Install firestoreutil if app depends on it (file: dependency)
-if grep -q '"@commons-systems/firestoreutil"' "$APP_PKG" 2>/dev/null; then
-  echo "Installing firestoreutil dependency..."
-  cd "$REPO_ROOT/firestoreutil"
-  npm ci
-  cd "$REPO_ROOT"
-fi
-
-# Install authutil if app depends on it or uses auth
-if grep -q '"@commons-systems/authutil"' "$APP_PKG" 2>/dev/null || [ "$USES_AUTH" = true ]; then
-  echo "Installing authutil dependency..."
-  cd "$REPO_ROOT/authutil"
-  npm ci
-  cd "$REPO_ROOT"
-fi
+detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
+install_local_deps "$REPO_ROOT" "$APP_PKG"
 
 # Install app dependencies
 cd "$REPO_ROOT/$APP_DIR"
@@ -41,26 +20,17 @@ npm ci
 cd "$REPO_ROOT"
 
 # Find available ports
-VITE_PORT=$(node -e "
-  const s = require('net').createServer();
-  s.listen(0, () => { console.log(s.address().port); s.close(); });
-")
+VITE_PORT=$(find_available_port)
 
 FIRESTORE_PORT=""
 if [ "$USES_FIRESTORE" = true ]; then
-  FIRESTORE_PORT=$(node -e "
-    const s = require('net').createServer();
-    s.listen(0, () => { console.log(s.address().port); s.close(); });
-  ")
+  FIRESTORE_PORT=$(find_available_port)
   echo "Firestore emulator will use port $FIRESTORE_PORT"
 fi
 
 AUTH_PORT=""
 if [ "$USES_AUTH" = true ]; then
-  AUTH_PORT=$(node -e "
-    const s = require('net').createServer();
-    s.listen(0, () => { console.log(s.address().port); s.close(); });
-  ")
+  AUTH_PORT=$(find_available_port)
   echo "Auth emulator will use port $AUTH_PORT"
 fi
 
@@ -115,7 +85,7 @@ trap cleanup EXIT
 
 # Start Firebase emulators in background (if any emulators needed)
 if [ -n "$EMULATOR_LIST" ]; then
-  npx firebase-tools emulators:start --only "$EMULATOR_LIST" --config "$TEMP_FIREBASE_JSON" --project commons-systems &
+  npx firebase-tools emulators:start --only "$EMULATOR_LIST" --config "$TEMP_FIREBASE_JSON" --project "$FIREBASE_PROJECT_ID" &
   EMULATOR_PID=$!
 fi
 
@@ -160,18 +130,18 @@ if [ "$USES_AUTH" = true ]; then
 fi
 
 # Build Vite env vars
-VITE_ENV=""
+VITE_ARGS=()
 if [ "$USES_FIRESTORE" = true ]; then
-  VITE_ENV="VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT} VITE_FIRESTORE_NAMESPACE=qa"
+  VITE_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=qa")
 fi
 if [ "$USES_AUTH" = true ]; then
-  VITE_ENV="$VITE_ENV VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}"
+  VITE_ARGS+=("VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}")
 fi
 
 # Start Vite dev server
 cd "$REPO_ROOT/$APP_DIR"
-if [ -n "$VITE_ENV" ]; then
-  eval "$VITE_ENV npx vite --port ${VITE_PORT} --strictPort" &
+if [ ${#VITE_ARGS[@]} -gt 0 ]; then
+  env "${VITE_ARGS[@]}" npx vite --port "${VITE_PORT}" --strictPort &
 else
   npx vite --port "${VITE_PORT}" --strictPort &
 fi

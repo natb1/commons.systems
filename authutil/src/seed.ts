@@ -7,12 +7,13 @@ export interface AuthUser {
 export async function seedAuthUser(
   emulatorHost: string,
   user: AuthUser,
+  projectId: string,
 ): Promise<void> {
   const baseUrl = `http://${emulatorHost}/identitytoolkit.googleapis.com/v1`;
 
   // Step 1: Create user via the admin API (emulator accepts "Bearer owner")
   const createRes = await fetch(
-    `${baseUrl}/projects/commons-systems/accounts`,
+    `${baseUrl}/projects/${projectId}/accounts`,
     {
       method: "POST",
       headers: {
@@ -37,7 +38,7 @@ export async function seedAuthUser(
   // Step 2: Link GitHub provider via admin update endpoint.
   // The field name is "linkProviderUserInfo" (singular object), not "providerUserInfo".
   const updateRes = await fetch(
-    `${baseUrl}/projects/commons-systems/accounts:update`,
+    `${baseUrl}/projects/${projectId}/accounts:update`,
     {
       method: "POST",
       headers: {

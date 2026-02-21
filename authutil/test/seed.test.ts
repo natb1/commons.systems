@@ -6,6 +6,7 @@ vi.stubGlobal("fetch", mockFetch);
 
 describe("seedAuthUser", () => {
   const emulatorHost = "localhost:9099";
+  const projectId = "test-project";
   const user: AuthUser = {
     localId: "test-user-id",
     email: "test@example.com",
@@ -22,14 +23,14 @@ describe("seedAuthUser", () => {
       json: async () => ({}),
     });
 
-    await seedAuthUser(emulatorHost, user);
+    await seedAuthUser(emulatorHost, user, projectId);
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
 
     // First call: create user
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
-      `http://${emulatorHost}/identitytoolkit.googleapis.com/v1/projects/commons-systems/accounts`,
+      `http://${emulatorHost}/identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts`,
       {
         method: "POST",
         headers: {
@@ -47,7 +48,7 @@ describe("seedAuthUser", () => {
     // Second call: link GitHub provider
     expect(mockFetch).toHaveBeenNthCalledWith(
       2,
-      `http://${emulatorHost}/identitytoolkit.googleapis.com/v1/projects/commons-systems/accounts:update`,
+      `http://${emulatorHost}/identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:update`,
       {
         method: "POST",
         headers: {
@@ -78,7 +79,9 @@ describe("seedAuthUser", () => {
         json: async () => ({}),
       });
 
-    await expect(seedAuthUser(emulatorHost, user)).resolves.toBeUndefined();
+    await expect(
+      seedAuthUser(emulatorHost, user, projectId),
+    ).resolves.toBeUndefined();
   });
 
   it("throws a descriptive error for create failures", async () => {
@@ -87,9 +90,9 @@ describe("seedAuthUser", () => {
       json: async () => ({ error: { message: "INVALID_EMAIL" } }),
     });
 
-    await expect(seedAuthUser(emulatorHost, user)).rejects.toThrow(
-      "Failed to create auth user",
-    );
+    await expect(
+      seedAuthUser(emulatorHost, user, projectId),
+    ).rejects.toThrow("Failed to create auth user");
   });
 
   it("throws a descriptive error for link provider failures", async () => {
@@ -103,8 +106,8 @@ describe("seedAuthUser", () => {
         json: async () => ({ error: { message: "USER_NOT_FOUND" } }),
       });
 
-    await expect(seedAuthUser(emulatorHost, user)).rejects.toThrow(
-      "Failed to link GitHub provider",
-    );
+    await expect(
+      seedAuthUser(emulatorHost, user, projectId),
+    ).rejects.toThrow("Failed to link GitHub provider");
   });
 });

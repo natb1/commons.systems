@@ -7,28 +7,13 @@ CHANNEL_ID="${2:?Usage: run-preview-deploy.sh <app-dir> <channel-id>}"
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
 APP_PKG="$REPO_ROOT/$APP_DIR/package.json"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Check if app uses Firestore (has firebase dependency)
-USES_FIRESTORE=false
-if grep -q '"firebase"' "$APP_PKG" 2>/dev/null; then
-  USES_FIRESTORE=true
-fi
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
 
-# Install firestoreutil if app depends on it (file: dependency)
-if grep -q '"@commons-systems/firestoreutil"' "$APP_PKG" 2>/dev/null; then
-  echo "Installing firestoreutil dependency..."
-  cd "$REPO_ROOT/firestoreutil"
-  npm ci
-  cd "$REPO_ROOT"
-fi
-
-# Install authutil if app depends on it
-if grep -q '"@commons-systems/authutil"' "$APP_PKG" 2>/dev/null; then
-  echo "Installing authutil dependency..."
-  cd "$REPO_ROOT/authutil"
-  npm ci
-  cd "$REPO_ROOT"
-fi
+detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
+install_local_deps "$REPO_ROOT" "$APP_PKG"
 
 # Install app dependencies and build (no emulator env vars — production build)
 cd "$REPO_ROOT/$APP_DIR"
@@ -38,12 +23,12 @@ cd "$REPO_ROOT"
 
 # Delete existing channel if present (ignore errors if it doesn't exist)
 echo "Cleaning up existing preview channel '$CHANNEL_ID'..."
-npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --force --project commons-systems 2>/dev/null || true
+npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --force --project "$FIREBASE_PROJECT_ID" 2>/dev/null || true
 
 # Deploy new hosting channel
 echo "Deploying to preview channel '$CHANNEL_ID'..."
 DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
-  --project commons-systems \
+  --project "$FIREBASE_PROJECT_ID" \
   --expires 7d \
   --json)
 
@@ -74,5 +59,11 @@ PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | node -e "
     }
   });
 ")
+
+if [ -z "$PREVIEW_URL" ]; then
+  echo "ERROR: Could not extract preview URL from deploy output" >&2
+  echo "Deploy output: $DEPLOY_OUTPUT" >&2
+  exit 1
+fi
 
 echo "PREVIEW_URL=$PREVIEW_URL"

@@ -1,3 +1,4 @@
+import { escapeHtml } from "../escape-html.js";
 import { getMessages } from "../firestore.js";
 
 export async function renderHome(): Promise<string> {
@@ -15,7 +16,7 @@ export async function renderHome(): Promise<string> {
             day: "numeric",
             year: "numeric",
           });
-          return `<li>${m.text} <time datetime="${m.createdAt}">${formatted}</time></li>`;
+          return `<li>${escapeHtml(m.text)} <time datetime="${escapeHtml(m.createdAt)}">${escapeHtml(formatted)}</time></li>`;
         })
         .join("\n        ");
       messagesHtml = `<ul id="messages">\n        ${items}\n      </ul>`;
