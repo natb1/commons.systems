@@ -33,14 +33,8 @@ fi
 # Install app dependencies and build (no emulator env vars — production build)
 cd "$REPO_ROOT/$APP_DIR"
 npm ci
-npm run build
+VITE_FIRESTORE_NAMESPACE="preview-${CHANNEL_ID}" npm run build
 cd "$REPO_ROOT"
-
-# Deploy Firestore rules (ensures rules match the PR branch)
-if [ "$USES_FIRESTORE" = true ]; then
-  echo "Deploying Firestore rules..."
-  npx firebase-tools deploy --only firestore:rules --project commons-systems
-fi
 
 # Delete existing channel if present (ignore errors if it doesn't exist)
 echo "Cleaning up existing preview channel '$CHANNEL_ID'..."
@@ -55,8 +49,8 @@ DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
 
 # Seed Firestore (idempotent — uses doc.set() with fixed IDs)
 if [ "$USES_FIRESTORE" = true ]; then
-  echo "Seeding Firestore (namespace: prod)..."
-  FIRESTORE_NAMESPACE=prod npx tsx firestoreutil/bin/run-seed.ts
+  echo "Seeding Firestore (namespace: preview-${CHANNEL_ID})..."
+  FIRESTORE_NAMESPACE="preview-${CHANNEL_ID}" npx tsx firestoreutil/bin/run-seed.ts
 fi
 
 # Extract preview URL from deploy output
