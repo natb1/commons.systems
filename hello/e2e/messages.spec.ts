@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("messages", () => {
-  test("Firestore connectivity", async ({ page }) => {
+  test("Firestore connectivity @smoke", async ({ page }) => {
     await page.goto("/");
     // renderHome() is async (awaits Firestore query) and returns heading +
     // messages atomically — heading appearing proves Firestore responded
