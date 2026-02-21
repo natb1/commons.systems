@@ -133,8 +133,9 @@ fi
 npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project commons-systems &
 EMULATOR_PID=$!
 
-# Poll until hosting emulator serves content (30s timeout).
-TIMEOUT=30
+# Poll until hosting emulator serves content.
+# Timeout must cover npx download (~20s) + emulator startup (~15s).
+TIMEOUT=120
 ELAPSED=0
 until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${HOSTING_PORT}/" 2>/dev/null | grep -q '^200$'; do
   if [ $ELAPSED -ge $TIMEOUT ]; then
