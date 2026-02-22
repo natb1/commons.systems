@@ -1,0 +1,74 @@
+:root {
+  --font-body: "IBM Plex Mono", ui-monospace, "Cascadia Code", "Source Code Pro",
+    Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --font-heading: var(--font-body);
+
+  --fg: light-dark(#1a1a1a, #e0d8c8);
+  --bg: light-dark(#f5f0e8, #1a1714);
+  --accent: light-dark(#b8600a, #e8943a);
+  --muted: light-dark(#6b5e4f, #8a7d6e);
+  --border: light-dark(#c4b8a4, #3d3529);
+  --surface: light-dark(#ece5d8, #252017);
+
+  color-scheme: light dark;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--fg);
+  background: var(--bg);
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 0.4em var(--accent);
+}
+
+a {
+  color: var(--accent);
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+nav {
+  display: flex;
+  align-items: baseline;
+}
+
+nav a {
+  margin-right: 1rem;
+}
+
+header {
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 1rem;
+  margin-bottom: 2rem;
+}
+
+footer {
+  border-top: 2px solid var(--border);
+  padding-top: 1rem;
+  margin-top: 2rem;
+  color: var(--muted);
+}
+
+*,
+*::before,
+*::after {
+  border-radius: 0;
+}
+
+main {
+  background: var(--surface);
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+}

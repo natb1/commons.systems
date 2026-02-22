@@ -1,27 +1,19 @@
 import {
   getAuth,
-  connectAuthEmulator,
   GithubAuthProvider,
   signInWithRedirect,
   getRedirectResult,
   signOut as firebaseSignOut,
-  signInWithEmailAndPassword,
   onAuthStateChanged,
 } from "firebase/auth";
+import { setupAuthEmulator } from "@commons-systems/authutil/emulator-auth";
 import { app } from "./firebase.js";
 
 export const auth = getAuth(app);
 
 const authEmulatorHost = import.meta.env.VITE_AUTH_EMULATOR_HOST;
 if (authEmulatorHost) {
-  connectAuthEmulator(auth, `http://${authEmulatorHost}`, {
-    disableWarnings: true,
-  });
-  // Exposed only in emulator builds — Playwright tests can't interact with
-  // the emulator's redirect account picker, so they sign in programmatically
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).__signIn = (email: string, password: string) =>
-    signInWithEmailAndPassword(auth, email, password);
+  setupAuthEmulator(auth, authEmulatorHost);
 }
 
 // Handle redirect result on page load (user returning from GitHub OAuth / emulator picker).

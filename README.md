@@ -45,6 +45,7 @@ For using and/or extending the artifacts in this repo: forking is encouraged. To
 
 > Plugin distribution is WIP. If you encounter errors you can attempt to clone and load pr-workflow skills from this repo.
 ```
+/plugin marketplace add natb1/commons.systems
 /plugin install pr-workflow-bundle@commons-systems
 /worktree <issue-number>
 ```

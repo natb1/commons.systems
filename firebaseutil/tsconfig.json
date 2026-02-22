@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "seeds", "bin", "test", "e2e"]
+  "include": ["src", "test"]
 }

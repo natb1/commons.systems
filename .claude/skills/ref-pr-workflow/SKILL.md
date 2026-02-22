@@ -29,11 +29,12 @@ Decision tree:
 - **No PR**:
   - Implementation commits in commit log → Step 4
   - No implementation commits → Step 2
-- **PR exists, no acceptance test summary comment** → Step 6
-- **PR exists, acceptance test complete, no QA audit log comment** → Step 7
-- **PR exists, QA complete, no code quality log** → Step 8
-- **PR exists, QA + code quality complete, no security log** → Step 9
-- **All audit logs exist** → Step 10
+- **PR exists, no acceptance test comment with "Complete" in header** → Step 6
+- **PR exists, acceptance test complete, no smoke test comment with "Complete" in header** → Step 7
+- **PR exists, acceptance test + smoke test complete, no QA comment with "Complete" in header** → Step 8
+- **PR exists, QA complete, no code quality comment with "Complete" in header** → Step 9
+- **PR exists, QA + code quality complete, no security comment with "Complete" in header** → Step 10
+- **All audit logs exist (all have "Complete" in header)** → Step 11
 
 ## Step 1. Prerequisite Check
 
@@ -54,6 +55,7 @@ Enter plan mode. Scope defined by the **Current PR Scope and Status** section ab
 Plan must include:
 - Unit test strategy: what to test, test framework, test file locations
 - Acceptance test strategy: user flows to test with Playwright against Firebase emulators
+- Smoke test strategy: minimal health checks for preview deployments
 
 ## Step 3. Implementation
 
@@ -62,8 +64,9 @@ Implement the approved plan. Create separate commits for each issue (minimum one
 Use the Task tool to launch parallel general-purpose subagents:
 - Subagent 1: Write unit tests based on the plan
 - Subagent 2: Write acceptance tests based on the plan
+- Subagent 3: Write smoke tests based on the plan
 
-Both run concurrently with main implementation.
+All run concurrently with main implementation.
 
 ## Step 4. Unit Test Loop
 
@@ -116,10 +119,35 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Test failures → **Iterate** (fix, commit, push, wait for re-run)
 - Infrastructure failures → present to user for resolution
 
-**Termination instructions:**
-- Post audit log as PR comment:
+**Progress report instructions:**
+- Update PR comment with current status:
   ```bash
-  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  upsert-pr-comment.sh <pr-num> "# Acceptance Test Review" "$(cat <<'EOF'
+  # Acceptance Test Review - In Progress
+
+  **Date**: [Current date]
+  **Branch**: [branch name]
+  **Status**: Iteration [N]
+
+  ## Latest Run
+
+  - Run ID: [run-id]
+  - Status: [Failed/In progress]
+  - Failures: [list]
+
+  ## Iterations So Far
+
+  [For each iteration:]
+  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
+  ...
+  EOF
+  )"
+  ```
+
+**Termination instructions:**
+- Post final audit log (edits the in-progress comment):
+  ```bash
+  upsert-pr-comment.sh <pr-num> "# Acceptance Test Review" "$(cat <<'EOF'
   # Acceptance Test Review - Complete ✓
 
   **Date**: [Current date]
@@ -146,19 +174,97 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Proceed to Step 7
 
-## Step 7. QA Review Loop
+## Step 7. Smoke Test Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files): start Vite dev server with hot reload in background, include local URL in QA testing plan
+- Check smoke test + preview deploy CI results:
+  ```bash
+  gh run list --branch <branch> --limit 5
+  gh run view <run-id>
+  ```
+- If run is in progress, wait for completion
+
+**Evaluation instructions:**
+- All pass → **Terminate**
+- Smoke test failures → **Iterate** (fix, commit, push, wait for re-run)
+- Deploy failures → present to user for resolution
+
+**Progress report instructions:**
+- Update PR comment with current status:
+  ```bash
+  upsert-pr-comment.sh <pr-num> "# Smoke Test Review" "$(cat <<'EOF'
+  # Smoke Test Review - In Progress
+
+  **Date**: [Current date]
+  **Branch**: [branch name]
+  **Status**: Iteration [N]
+
+  ## Latest Run
+
+  - Preview URL: [url]
+  - Run ID: [run-id]
+  - Status: [Failed/In progress]
+  - Failures: [list]
+
+  ## Iterations So Far
+
+  [For each iteration:]
+  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
+  ...
+  EOF
+  )"
+  ```
+
+**Termination instructions:**
+- Post final audit log (edits the in-progress comment):
+  ```bash
+  upsert-pr-comment.sh <pr-num> "# Smoke Test Review" "$(cat <<'EOF'
+  # Smoke Test Review - Complete ✓
+
+  **Date**: [Current date]
+  **Branch**: [branch name]
+
+  ## Results
+
+  - Preview URL: [url]
+  - Run ID: [run-id]
+  - Smoke tests executed: [count]
+
+  ## Iterations
+
+  [For each iteration:]
+  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
+  ...
+  - Final iteration: All tests passed
+
+  ## Conclusion
+
+  Smoke tests passed. Preview deployment verified.
+  EOF
+  )"
+  ```
+- Proceed to Step 8
+
+## Step 8. QA Review Loop
+
+Start `/wiggum-loop` at Step 0 with these instruction sets:
+
+**Next step instructions:**
+- If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files):
+  1. Start the QA server using `run-qa-server.sh <app-dir>` in background
+  2. Parse the App URL from the script's output
+  3. Run acceptance tests as a smoke check: `BASE_URL=<url> npx playwright test --config e2e/playwright.config.ts`
+  4. If smoke tests fail → fix issues and re-run before involving the user
+  5. Once smoke tests pass, proceed to create QA testing plan
 - Create a comprehensive QA testing plan for the user to execute
 - Include testing checklist covering:
   - Key behaviors to verify
   - Test steps for each behavior
   - Edge cases to test
   - Expected outcomes
-- Present the plan to the user
+- Present the plan and the App URL to the user
 - **CRITICAL**: The user performs the actual testing (not Claude)
 - Wait for the user to test and report results
 
@@ -166,11 +272,39 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - User reports "passed"/"approved" → **Terminate**
 - User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
 
-**Termination instructions:**
-- Stop the Vite dev server if started
-- Post QA audit log as PR comment:
+**Progress report instructions:**
+- Update PR comment with current status:
   ```bash
-  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  upsert-pr-comment.sh <pr-num> "# QA Review" "$(cat <<'EOF'
+  # QA Review - In Progress
+
+  **Reviewer**: [User name from git config]
+  **Date**: [Current date]
+  **Tested By**: Human QA with Claude Code facilitation
+  **Status**: Iteration [N]
+
+  ## Testing Checklist
+
+  [Original checklist presented to user]
+
+  ## QA Iterations So Far
+
+  [For each iteration:]
+  - Iteration 1: [Issues found] → [Fixes implemented] (commits: [hashes])
+  ...
+
+  ## Latest Issues
+
+  [Issues reported in current iteration]
+  EOF
+  )"
+  ```
+
+**Termination instructions:**
+- Stop the QA server (run-qa-server.sh) if started
+- Post final QA audit log (edits the in-progress comment):
+  ```bash
+  upsert-pr-comment.sh <pr-num> "# QA Review" "$(cat <<'EOF'
   # QA Review - Complete ✓
 
   **Reviewer**: [User name from git config]
@@ -202,34 +336,97 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 8
+- Proceed to Step 9
 
-## Step 8. Code Quality Review Loop
+## Step 9. Code Quality Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Invoke `/review` (exists even if not visible in skill list)
+- Launch 7 review tasks in parallel using the Task tool:
+  1. **`/review` skill** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "review"`. Include the PR diff context in the prompt.
+  2. **`pr-review-toolkit:code-reviewer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:code-reviewer"`.
+  3. **`pr-review-toolkit:code-simplifier`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:code-simplifier"`.
+  4. **`pr-review-toolkit:comment-analyzer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:comment-analyzer"`.
+  5. **`pr-review-toolkit:pr-test-analyzer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:pr-test-analyzer"`.
+  6. **`pr-review-toolkit:silent-failure-hunter`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:silent-failure-hunter"`.
+  7. **`pr-review-toolkit:type-design-analyzer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:type-design-analyzer"`.
+- All 7 tasks MUST be launched in a single message (parallel execution)
+- If any pr-review-toolkit agent fails to launch (e.g. plugin not installed), log a warning but continue — `/review` results alone are sufficient to proceed
+- Collect all returned results verbatim — do NOT summarize or paraphrase agent output
 
 **Evaluation instructions:**
-- Present findings to user
+- Present findings from ALL agents to user
 - User classifies each as: required, false positive, or out of scope
 - Any required findings → **Iterate**
 - No required findings → **Terminate**
 
-**Termination instructions:**
-- Post review audit log as PR comment:
+**Progress report instructions:**
+- Update PR comment with current status:
   ```bash
-  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  upsert-pr-comment.sh <pr-num> "# Code Quality Review" "$(cat <<'EOF'
+  # Code Quality Review - In Progress
+
+  **Reviewer**: Claude Code (via /review skill + pr-review-toolkit agents)
+  **Date**: [Current date]
+  **Status**: Iteration [N]
+
+  ## Latest Findings
+
+  [Summary of findings from current iteration]
+
+  ## User Classification Decisions So Far
+
+  [For each finding classified:]
+  - Finding 1: [title] → [required/false positive/out of scope] - [rationale]
+  ...
+
+  ## Iterations So Far
+
+  [For each iteration:]
+  - Iteration 1: [Findings count] → [Required fixes] (commits: [hashes])
+  ...
+  EOF
+  )"
+  ```
+
+**Termination instructions:**
+- Post final review audit log (edits the in-progress comment):
+  ```bash
+  upsert-pr-comment.sh <pr-num> "# Code Quality Review" "$(cat <<'EOF'
   # Code Quality Review - Complete ✓
 
-  **Reviewer**: Claude Code (via /review skill)
+  **Reviewer**: Claude Code (via /review skill + pr-review-toolkit agents)
   **Date**: [Current date]
   **Outcome**: [Summary of result]
 
-  ## Review Output (Full Audit Log)
+  ## /review Output (Verbatim)
 
-  [PASTE COMPLETE VERBATIM OUTPUT FROM REVIEW SKILL]
+  [PASTE COMPLETE VERBATIM OUTPUT FROM /review SKILL]
+
+  ## pr-review-toolkit: code-reviewer (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
+
+  ## pr-review-toolkit: code-simplifier (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
+
+  ## pr-review-toolkit: comment-analyzer (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
+
+  ## pr-review-toolkit: pr-test-analyzer (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
+
+  ## pr-review-toolkit: silent-failure-hunter (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
+
+  ## pr-review-toolkit: type-design-analyzer (Verbatim)
+
+  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
 
   ## User Classification Decisions
 
@@ -244,9 +441,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 9
+- Proceed to Step 10
 
-## Step 9. Security Review Loop
+## Step 10. Security Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
@@ -259,10 +456,39 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Any required findings → **Iterate**
 - No required findings → **Terminate**
 
-**Termination instructions:**
-- Post security audit log as PR comment:
+**Progress report instructions:**
+- Update PR comment with current status:
   ```bash
-  gh pr comment <pr-num> --body "$(cat <<'EOF'
+  upsert-pr-comment.sh <pr-num> "# Security Review" "$(cat <<'EOF'
+  # Security Review - In Progress
+
+  **Reviewer**: Claude Code (via /security-review skill)
+  **Date**: [Current date]
+  **Status**: Iteration [N]
+
+  ## Latest Findings
+
+  [Summary of findings from current iteration]
+
+  ## User Classification Decisions So Far
+
+  [For each finding classified:]
+  - Finding 1: [title] → [required/false positive/out of scope] - [rationale]
+  ...
+
+  ## Iterations So Far
+
+  [For each iteration:]
+  - Iteration 1: [Findings count] → [Required fixes] (commits: [hashes])
+  ...
+  EOF
+  )"
+  ```
+
+**Termination instructions:**
+- Post final security audit log (edits the in-progress comment):
+  ```bash
+  upsert-pr-comment.sh <pr-num> "# Security Review" "$(cat <<'EOF'
   # Security Review - Complete ✓
 
   **Reviewer**: Claude Code (via /security-review skill)
@@ -286,9 +512,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   EOF
   )"
   ```
-- Proceed to Step 10
+- Proceed to Step 11
 
-## Step 10. Completion
+## Step 11. Completion
 
 ```bash
 gh pr ready <pr-num>

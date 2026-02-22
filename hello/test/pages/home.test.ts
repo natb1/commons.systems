@@ -22,15 +22,17 @@ describe("renderHome", () => {
     expect(html).toContain("Welcome to the commons.systems hello app.");
   });
 
-  it("renders messages from Firestore", async () => {
+  it("renders messages with timestamps from Firestore", async () => {
     mockGetMessages.mockResolvedValue([
-      { id: "1", text: "Hello world", author: "system", createdAt: "2026-01-01" },
-      { id: "2", text: "Second message", author: "system", createdAt: "2026-01-02" },
+      { id: "1", text: "Hello world", author: "system", createdAt: "2026-01-01T00:00:00Z" },
+      { id: "2", text: "Second message", author: "system", createdAt: "2026-01-02T00:00:00Z" },
     ]);
     const html = await renderHome();
     expect(html).toContain('<ul id="messages">');
-    expect(html).toContain("<li>Hello world</li>");
-    expect(html).toContain("<li>Second message</li>");
+    expect(html).toContain("Hello world");
+    expect(html).toContain("Second message");
+    expect(html).toContain('<time datetime="2026-01-01T00:00:00Z">');
+    expect(html).toContain('<time datetime="2026-01-02T00:00:00Z">');
   });
 
   it("renders error fallback when Firestore fails", async () => {

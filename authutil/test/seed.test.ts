@@ -6,9 +6,10 @@ vi.stubGlobal("fetch", mockFetch);
 
 describe("seedAuthUser", () => {
   const emulatorHost = "localhost:9099";
+  const projectId = "test-project";
   const user: AuthUser = {
+    localId: "test-user-id",
     email: "test@example.com",
-    password: "secret123",
     displayName: "Test User",
   };
 
@@ -16,45 +17,97 @@ describe("seedAuthUser", () => {
     vi.clearAllMocks();
   });
 
-  it("POSTs user data to the emulator signUp endpoint", async () => {
+  it("creates user via admin API then links GitHub provider", async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({}),
     });
 
-    await seedAuthUser(emulatorHost, user);
+    await seedAuthUser(emulatorHost, user, projectId);
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      `http://${emulatorHost}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key`,
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    // First call: create user
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      `http://${emulatorHost}/identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(user),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer owner",
+        },
+        body: JSON.stringify({
+          localId: user.localId,
+          email: user.email,
+          displayName: user.displayName,
+        }),
+      },
+    );
+
+    // Second call: link GitHub provider
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      `http://${emulatorHost}/identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:update`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer owner",
+        },
+        body: JSON.stringify({
+          localId: user.localId,
+          linkProviderUserInfo: {
+            providerId: "github.com",
+            rawId: user.localId,
+            email: user.email,
+            displayName: user.displayName,
+          },
+        }),
       },
     );
   });
 
-  it("silently ignores EMAIL_EXISTS errors (idempotent)", async () => {
-    mockFetch.mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: { message: "EMAIL_EXISTS" } }),
-    });
+  it("silently ignores DUPLICATE_LOCAL_ID errors (idempotent)", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: { message: "DUPLICATE_LOCAL_ID" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({}),
+      });
 
-    await expect(seedAuthUser(emulatorHost, user)).resolves.toBeUndefined();
+    await expect(
+      seedAuthUser(emulatorHost, user, projectId),
+    ).resolves.toBeUndefined();
   });
 
-  it("throws a descriptive error for other failures", async () => {
-    const errorBody = { error: { message: "INVALID_EMAIL" } };
+  it("throws a descriptive error for create failures", async () => {
     mockFetch.mockResolvedValue({
       ok: false,
-      json: async () => errorBody,
+      json: async () => ({ error: { message: "INVALID_EMAIL" } }),
     });
 
-    await expect(seedAuthUser(emulatorHost, user)).rejects.toThrow(
-      "Failed to seed auth user",
-    );
-    await expect(seedAuthUser(emulatorHost, user)).rejects.toThrow(
-      "INVALID_EMAIL",
-    );
+    await expect(
+      seedAuthUser(emulatorHost, user, projectId),
+    ).rejects.toThrow("Failed to create auth user");
+  });
+
+  it("throws a descriptive error for link provider failures", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({}),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: { message: "USER_NOT_FOUND" } }),
+      });
+
+    await expect(
+      seedAuthUser(emulatorHost, user, projectId),
+    ).rejects.toThrow("Failed to link GitHub provider");
   });
 });

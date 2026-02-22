@@ -7,6 +7,16 @@ description: Initialize work on new issues in git worktrees
 
 Set up an isolated git worktree for working on a GitHub issue. Each issue gets its own worktree directory and branch.
 
+## Handoff command
+
+When a worktree exists but is not the current directory, prompt the user to close Claude and run:
+
+```
+cd <repo-root>/worktrees/<branch-name> && direnv allow && claude "/pr-workflow #<issue-num>"
+```
+
+Stop here.
+
 ## 1. Determine Issue Number
 
 If the user provides an issue number, use it. Otherwise, auto-select using these prioritization rules. Only select from issues assigned to the current GitHub user (`--assignee @me`). Then prioritize in order:
@@ -44,13 +54,7 @@ Invoke the `/pr-workflow` skill with the issue number. Stop here.
 
 ### Edge Case: Worktree exists but is not the current directory
 
-Prompt the user to close Claude and run:
-
-```
-cd <repo-root>/worktrees/<branch-name> && claude "/pr-workflow #<issue-num>"
-```
-
-Stop here.
+Follow the **Handoff command**.
 
 ## 3. Generate Branch Name
 
@@ -83,8 +87,4 @@ Then create the worktree branching from `origin/main`:
 git worktree add -b <branch-name> <repo-root>/worktrees/<branch-name> origin/main
 ```
 
-After creation, prompt the user to close Claude and run:
-
-```
-cd <repo-root>/worktrees/<branch-name> && claude "/pr-workflow #<issue-num>"
-```
+After creation, follow the **Handoff command**.

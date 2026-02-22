@@ -7,5 +7,7 @@ if (!host) {
   process.exit(1);
 }
 
-await seedAuthUser(host, helloTestUser);
+const projectId = process.env.FIREBASE_PROJECT_ID ?? "commons-systems";
+
+await seedAuthUser(host, helloTestUser, projectId);
 console.log(`Auth user seeded: ${helloTestUser.email}`);
