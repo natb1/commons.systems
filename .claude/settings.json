@@ -8,7 +8,30 @@
       "Bash(git merge:*)",
       "Bash(gh issue view:*)",
       "Bash(gh pr view:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(.claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh:*)",
+      "Bash(.claude/skills/ref-pr-workflow/scripts/run-cleanup-preview.sh:*)",
+      "Bash(.claude/skills/ref-pr-workflow/scripts/run-lint.sh:*)",
+      "Bash(.claude/skills/ref-pr-workflow/scripts/run-preview-deploy.sh:*)",
+      "Bash(.claude/skills/ref-pr-workflow/scripts/run-prod-deploy.sh:*)",
+      "Bash(.claude/skills/ref-pr-workflow/scripts/run-qa-server.sh:*)",
+      "Bash(.claude/skills/ref-pr-workflow/scripts/run-smoke-tests.sh:*)",
+      "Bash(.claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh:*)",
+      "Bash(.claude/skills/ref-pr-workflow/scripts/upsert-pr-comment.sh:*)",
+      "Skill(ref-pr-workflow)",
+      "Bash(npm ci:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm test:*)",
+      "Bash(npx vitest run)",
+      "Bash(npm run lint:*)",
+      "Bash(npx eslint:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run watch:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh issue list:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)"
     ]
   }
 }

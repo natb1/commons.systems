@@ -1,17 +1,10 @@
 {
-  "name": "@commons-systems/authutil",
+  "name": "@commons-systems/firebaseutil",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    "./seed": "./src/seed.ts",
-    "./seeds/hello": "./seeds/hello.ts",
-    "./emulator-auth": "./src/emulator-auth.ts",
-    "./e2e/sign-in": "./e2e/sign-in.ts"
-  },
-  "peerDependencies": {
-    "firebase": ">=12",
-    "@playwright/test": ">=1.50"
+    "./config": "./src/config.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -20,9 +13,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
-    "@playwright/test": "1.57.0",
     "eslint": "^9.19.0",
-    "firebase": "^12.9.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.22.0",
     "vitest": "^3.0.5"

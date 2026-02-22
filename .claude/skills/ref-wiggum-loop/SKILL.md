@@ -7,11 +7,12 @@ description: Complete loop documentation for iterative evaluate-and-converge pat
 
 ## Instruction Set Interface
 
-Callers provide three instruction sets:
+Callers provide three instruction sets, plus one optional:
 
 - **Next step instructions**: Generate next steps (e.g., invoke a review skill)
 - **Evaluation instructions**: Determine iterate vs terminate (e.g., user classifies review findings)
 - **Termination instructions**: Execute when loop ends (e.g., post audit log as PR comment)
+- **Progress report instructions** (optional): Execute after each evaluation to report intermediate results (e.g., update a PR comment with current iteration status)
 
 ## Rules
 
@@ -32,6 +33,8 @@ Execute evaluation instructions against Step 1 output. This may involve user int
 Determine outcome:
 - **Iterate** → proceed to Step 3
 - **Terminate** → proceed to Step 4
+
+If progress report instructions are provided, execute them now (regardless of outcome).
 
 ## Step 3. Iterate
 

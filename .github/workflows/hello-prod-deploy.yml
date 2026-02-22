@@ -1,0 +1,76 @@
+name: Hello — Production Deploy
+
+on:
+  pull_request:
+    types: [closed]
+    paths:
+      - "hello/**"
+      - "authutil/**"
+      - "firebaseutil/**"
+      - "firestoreutil/**"
+      - "style/**"
+      - ".claude/skills/ref-pr-workflow/scripts/**"
+      - "firebase.json"
+      - "firestore.rules"
+
+permissions:
+  contents: read
+
+jobs:
+  prod-deploy:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Authenticate with Firebase
+        run: |
+          CREDS_FILE=$(mktemp --suffix=.json)
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$CREDS_FILE"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE" >> "$GITHUB_ENV"
+          echo "CREDS_FILE=$CREDS_FILE" >> "$GITHUB_ENV"
+      - name: Deploy to production
+        run: .claude/skills/ref-pr-workflow/scripts/run-prod-deploy.sh hello
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f "$CREDS_FILE"
+
+  smoke-tests:
+    needs: prod-deploy
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run smoke tests
+        run: .claude/skills/ref-pr-workflow/scripts/run-smoke-tests.sh hello "https://commons-systems.web.app"
+
+  cleanup-preview:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Authenticate with Firebase
+        run: |
+          CREDS_FILE=$(mktemp --suffix=.json)
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$CREDS_FILE"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE" >> "$GITHUB_ENV"
+          echo "CREDS_FILE=$CREDS_FILE" >> "$GITHUB_ENV"
+      - name: Cleanup preview resources
+        run: .claude/skills/ref-pr-workflow/scripts/run-cleanup-preview.sh hello "${{ github.event.pull_request.number }}"
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f "$CREDS_FILE"

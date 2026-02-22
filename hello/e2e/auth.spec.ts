@@ -1,11 +1,5 @@
 import { test, expect } from "@playwright/test";
-
-async function signIn(page: import("@playwright/test").Page) {
-  await page.evaluate(() =>
-    (window as any).__signIn("test@example.com", "testpassword"),
-  );
-  await page.waitForSelector("#sign-out");
-}
+import { signIn } from "@commons-systems/authutil/e2e/sign-in";
 
 test.describe("auth", () => {
   test("notes page shows auth-required when not signed in", async ({
@@ -49,9 +43,6 @@ test.describe("auth", () => {
     await signIn(page);
     await page.locator("#sign-out").click();
     await page.waitForSelector("#sign-in");
-    // Wait for auth state change to finish re-rendering home page
-    // before navigating, to avoid concurrent async navigate() calls
-    await expect(page.locator("#messages li")).toHaveCount(2);
     await page.evaluate(() => { window.location.hash = '#/notes'; });
     await expect(page.locator("#notes-auth-required")).toBeVisible();
   });

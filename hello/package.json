@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@commons-systems/authutil": "file:../authutil",
+    "@commons-systems/firebaseutil": "file:../firebaseutil",
     "@commons-systems/firestoreutil": "file:../firestoreutil",
+    "@commons-systems/style": "file:../style",
     "firebase": "^12.9.0",
     "missing.css": "^1.1.3"
   },

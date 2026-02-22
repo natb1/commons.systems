@@ -1,7 +1,7 @@
 import type { SeedSpec } from "../src/seed.js";
 
 export const helloSeed: SeedSpec = {
-  namespace: "", // Set by CLI runner from env var
+  namespace: "",
   collections: [
     {
       name: "messages",

@@ -56,6 +56,38 @@ describe("createRouter", () => {
     });
   });
 
+  it("discards stale async render when a newer navigation starts", async () => {
+    let resolveSlowRoute!: (html: string) => void;
+    const slowRoute: Route = {
+      path: "/",
+      render: () =>
+        new Promise<string>((resolve) => {
+          resolveSlowRoute = resolve;
+        }),
+    };
+    const fastRoute: Route = {
+      path: "/fast",
+      render: () => "<h2>Fast</h2>",
+    };
+
+    createRouter(outlet, [slowRoute, fastRoute]);
+
+    // Initial navigate() is pending on slowRoute
+    // Trigger a second navigation to the fast route
+    location.hash = "#/fast";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Fast</h2>");
+    });
+
+    // Now resolve the slow route — it should be discarded
+    resolveSlowRoute("<h2>Slow</h2>");
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(outlet.innerHTML).toBe("<h2>Fast</h2>");
+  });
+
   it("returns a refresh function that re-renders the current route", async () => {
     let count = 0;
     const dynamicRoutes: Route[] = [
