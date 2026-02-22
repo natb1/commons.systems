@@ -6,7 +6,8 @@
   "main": "src/namespace.ts",
   "exports": {
     "./namespace": "./src/namespace.ts",
-    "./seed": "./src/seed.ts"
+    "./seed": "./src/seed.ts",
+    "./delete-namespace": "./src/delete-namespace.ts"
   },
   "scripts": {
     "test": "vitest run",
