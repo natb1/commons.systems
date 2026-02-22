@@ -13,6 +13,9 @@ on:
       - "firebase.json"
       - "firestore.rules"
 
+permissions:
+  contents: read
+
 jobs:
   prod-deploy:
     if: github.event.pull_request.merged == true
