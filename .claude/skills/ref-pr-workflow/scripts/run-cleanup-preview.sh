@@ -25,10 +25,11 @@ npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --site "$HOSTING_SITE" -
 
 # Delete namespaced Firestore data
 if [ "$USES_FIRESTORE" = true ]; then
-  echo "Deleting Firestore namespace '${APP_NAME}-preview-${CHANNEL_ID}'..."
+  NAMESPACE=$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")
+  echo "Deleting Firestore namespace '${NAMESPACE}'..."
   install_local_deps "$REPO_ROOT" "$APP_PKG"
   (cd "$REPO_ROOT/firestoreutil" && npm ci)
-  FIRESTORE_NAMESPACE="${APP_NAME}-preview-${CHANNEL_ID}" npx tsx firestoreutil/bin/run-delete-namespace.ts
+  FIRESTORE_NAMESPACE="$NAMESPACE" npx tsx firestoreutil/bin/run-delete-namespace.ts
 fi
 
 echo "Preview cleanup complete."

@@ -25,6 +25,11 @@ func Create(repoRoot, appName string, templateFS fs.FS) error {
 		return err
 	}
 
+	projectID, err := ReadProjectID(repoRoot)
+	if err != nil {
+		return err
+	}
+
 	siteName, err := GenerateSiteName(appName)
 	if err != nil {
 		return fmt.Errorf("generating site name: %w", err)
@@ -32,7 +37,7 @@ func Create(repoRoot, appName string, templateFS fs.FS) error {
 
 	// Create Firebase hosting site
 	fmt.Printf("Creating Firebase hosting site %q...\n", siteName)
-	cmd := exec.Command("npx", "firebase-tools", "hosting:sites:create", siteName, "--project", "commons-systems")
+	cmd := exec.Command("npx", "firebase-tools", "hosting:sites:create", siteName, "--project", projectID)
 	cmd.Dir = repoRoot
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -50,12 +55,14 @@ func Create(repoRoot, appName string, templateFS fs.FS) error {
 	// Render app templates
 	fmt.Printf("Rendering app templates into %s/...\n", appName)
 	if err := renderTemplates(templateFS, repoRoot, "templates/app", appName, data); err != nil {
+		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return fmt.Errorf("rendering app templates: %w", err)
 	}
 
 	// Render workflow templates
 	fmt.Println("Rendering workflow templates...")
 	if err := renderTemplates(templateFS, repoRoot, "templates/workflows", filepath.Join(".github", "workflows"), data); err != nil {
+		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return fmt.Errorf("rendering workflow templates: %w", err)
 	}
 
@@ -63,10 +70,15 @@ func Create(repoRoot, appName string, templateFS fs.FS) error {
 	fmt.Println("Updating firebase.json...")
 	config, err := ReadFirebaseConfig(repoRoot)
 	if err != nil {
+		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return err
 	}
-	AddHostingEntry(config, appName)
+	if err := AddHostingEntry(config, appName); err != nil {
+		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
+		return err
+	}
 	if err := WriteFirebaseConfig(repoRoot, config); err != nil {
+		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return err
 	}
 
@@ -74,10 +86,15 @@ func Create(repoRoot, appName string, templateFS fs.FS) error {
 	fmt.Println("Adding deploy target to .firebaserc...")
 	rc, err := ReadFirebaseRC(repoRoot)
 	if err != nil {
+		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return err
 	}
-	AddHostingTarget(rc, appName, siteName)
+	if err := AddHostingTarget(rc, appName, siteName); err != nil {
+		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
+		return err
+	}
 	if err := WriteFirebaseRC(repoRoot, rc); err != nil {
+		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return err
 	}
 
@@ -98,11 +115,18 @@ func Create(repoRoot, appName string, templateFS fs.FS) error {
 }
 
 func renderTemplates(templateFS fs.FS, repoRoot, templateDir, outputDir string, data AppData) error {
-	return walkDir(templateFS, templateDir, func(embedPath string, isDir bool) error {
-		// Compute relative path from template dir
-		relPath, _ := filepath.Rel(templateDir, embedPath)
+	return fs.WalkDir(templateFS, templateDir, func(embedPath string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 
-		// Process template variables in directory/file names
+		// Compute relative path from template dir
+		relPath, err := filepath.Rel(templateDir, embedPath)
+		if err != nil {
+			return fmt.Errorf("computing relative path for %s: %w", embedPath, err)
+		}
+
+		// Replace {{.AppName}} in directory/file names
 		relPath = strings.ReplaceAll(relPath, "{{.AppName}}", data.AppName)
 
 		// Strip .tmpl extension
@@ -110,7 +134,7 @@ func renderTemplates(templateFS fs.FS, repoRoot, templateDir, outputDir string, 
 
 		outPath := filepath.Join(repoRoot, outputDir, relPath)
 
-		if isDir {
+		if d.IsDir() {
 			return os.MkdirAll(outPath, 0o755)
 		}
 
@@ -138,27 +162,4 @@ func renderTemplates(templateFS fs.FS, repoRoot, templateDir, outputDir string, 
 		}
 		return os.WriteFile(outPath, content, 0o644)
 	})
-}
-
-func walkDir(fsys fs.FS, root string, fn func(path string, isDir bool) error) error {
-	entries, err := fs.ReadDir(fsys, root)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		path := root + "/" + entry.Name()
-		if entry.IsDir() {
-			if err := fn(path, true); err != nil {
-				return err
-			}
-			if err := walkDir(fsys, path, fn); err != nil {
-				return err
-			}
-		} else {
-			if err := fn(path, false); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }

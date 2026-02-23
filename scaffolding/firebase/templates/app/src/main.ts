@@ -1,9 +1,9 @@
-import { createRouter } from "./router";
-import { renderHome } from "./pages/home";
-import { renderAbout } from "./pages/about";
-import { renderNotes } from "./pages/notes";
-import { renderNav } from "./components/nav";
-import { auth, signIn, signOut, onAuthStateChanged } from "./auth";
+import { createRouter } from "./router.js";
+import { renderHome } from "./pages/home.js";
+import { renderAbout } from "./pages/about.js";
+import { renderNotes } from "./pages/notes.js";
+import { renderNav } from "./components/nav.js";
+import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
 
 const nav = document.getElementById("nav");
 const app = document.getElementById("app");

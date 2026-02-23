@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 func Cleanup(repoRoot, appName string) error {
@@ -13,25 +14,39 @@ func Cleanup(repoRoot, appName string) error {
 	}
 
 	appDir := filepath.Join(repoRoot, appName)
-	if _, err := os.Stat(appDir); os.IsNotExist(err) {
-		return fmt.Errorf("app directory %q does not exist", appDir)
+	if info, err := os.Stat(appDir); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("app directory %q does not exist", appDir)
+		}
+		return fmt.Errorf("checking app directory %q: %w", appDir, err)
+	} else if !info.IsDir() {
+		return fmt.Errorf("%q is not a directory", appDir)
 	}
+
+	projectID, err := ReadProjectID(repoRoot)
+	if err != nil {
+		return err
+	}
+
+	warnings := 0
 
 	// Read hosting site from .firebaserc deploy targets
 	siteName, err := FindHostingSite(repoRoot, appName)
 	if err != nil {
 		fmt.Printf("WARNING: %v\n", err)
+		warnings++
 	}
 
 	// Delete Firebase hosting site
 	if siteName != "" {
 		fmt.Printf("Deleting Firebase hosting site %q...\n", siteName)
-		cmd := exec.Command("npx", "firebase-tools", "hosting:sites:delete", siteName, "--force", "--project", "commons-systems")
+		cmd := exec.Command("npx", "firebase-tools", "hosting:sites:delete", siteName, "--force", "--project", projectID)
 		cmd.Dir = repoRoot
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			fmt.Printf("WARNING: failed to delete hosting site: %v\n", err)
+			warnings++
 		}
 	}
 
@@ -44,6 +59,7 @@ func Cleanup(repoRoot, appName string) error {
 	nsCmd.Stderr = os.Stderr
 	if err := nsCmd.Run(); err != nil {
 		fmt.Printf("WARNING: failed to delete Firestore namespace: %v\n", err)
+		warnings++
 	}
 
 	// Remove hosting entry from firebase.json
@@ -63,7 +79,9 @@ func Cleanup(repoRoot, appName string) error {
 	if err != nil {
 		return err
 	}
-	RemoveHostingTarget(rc, appName)
+	if err := RemoveHostingTarget(rc, appName); err != nil {
+		return err
+	}
 	if err := WriteFirebaseRC(repoRoot, rc); err != nil {
 		return fmt.Errorf("updating .firebaserc: %w", err)
 	}
@@ -72,13 +90,21 @@ func Cleanup(repoRoot, appName string) error {
 	fmt.Println("Removing workflow files...")
 	workflowDir := filepath.Join(repoRoot, ".github", "workflows")
 	entries, err := os.ReadDir(workflowDir)
-	if err == nil {
+	if err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Printf("WARNING: could not read workflow directory: %v\n", err)
+			warnings++
+		}
+	} else {
 		prefix := appName + "-"
 		for _, entry := range entries {
-			if !entry.IsDir() && len(entry.Name()) > len(prefix) && entry.Name()[:len(prefix)] == prefix {
+			if !entry.IsDir() && strings.HasPrefix(entry.Name(), prefix) {
 				path := filepath.Join(workflowDir, entry.Name())
 				fmt.Printf("  Removing %s\n", entry.Name())
-				os.Remove(path)
+				if err := os.Remove(path); err != nil {
+					fmt.Printf("WARNING: failed to remove %s: %v\n", entry.Name(), err)
+					warnings++
+				}
 			}
 		}
 	}
@@ -90,7 +116,11 @@ func Cleanup(repoRoot, appName string) error {
 	}
 
 	fmt.Println()
-	fmt.Println("Cleanup complete!")
+	if warnings > 0 {
+		fmt.Printf("Cleanup complete with %d warning(s).\n", warnings)
+	} else {
+		fmt.Println("Cleanup complete!")
+	}
 	fmt.Printf("  Removed: %s/\n", appName)
 	if siteName != "" {
 		fmt.Printf("  Deleted hosting site: %s\n", siteName)

@@ -33,8 +33,9 @@ npx firebase-tools deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID
 
 # Seed Firestore (idempotent — uses doc.set() with fixed IDs)
 if [ "$USES_FIRESTORE" = true ]; then
-  echo "Seeding Firestore (namespace: ${APP_NAME}-prod)..."
-  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="${APP_NAME}-prod" npx tsx firestoreutil/bin/run-seed.ts
+  NAMESPACE=$(get_firestore_namespace "$APP_NAME" "prod")
+  echo "Seeding Firestore (namespace: ${NAMESPACE})..."
+  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="$NAMESPACE" npx tsx firestoreutil/bin/run-seed.ts
 fi
 
 echo "Production deployment complete."

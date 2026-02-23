@@ -37,8 +37,12 @@ func ValidateAppName(name string) error {
 
 func ValidateAppNotExists(repoRoot, name string) error {
 	appDir := filepath.Join(repoRoot, name)
-	if _, err := os.Stat(appDir); err == nil {
+	_, err := os.Stat(appDir)
+	if err == nil {
 		return fmt.Errorf("directory %q already exists", appDir)
 	}
-	return nil
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return fmt.Errorf("checking directory %q: %w", appDir, err)
 }

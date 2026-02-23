@@ -13,9 +13,16 @@ export function createRouter(
     const id = ++navigationId;
     const hash = location.hash.slice(1) || "/";
     const route = routes.find((r) => r.path === hash) ?? routes[0];
-    const html = await route.render();
-    if (id === navigationId) {
-      outlet.innerHTML = html;
+    try {
+      const html = await route.render();
+      if (id === navigationId) {
+        outlet.innerHTML = html;
+      }
+    } catch (error) {
+      console.error("Navigation error:", error);
+      if (id === navigationId) {
+        outlet.innerHTML = "<p>Something went wrong. Please try again.</p>";
+      }
     }
   }
 

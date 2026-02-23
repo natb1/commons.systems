@@ -106,11 +106,12 @@ if [ "$USES_FIRESTORE" = true ]; then
   done
   echo "Firebase Firestore emulator ready on port ${FIRESTORE_PORT}"
 
-  # Seed Firestore with "qa" namespace
-  echo "Seeding Firestore (namespace: qa)..."
+  # Seed Firestore with qa namespace
+  NAMESPACE=$(get_firestore_namespace "$APP_NAME" "qa")
+  echo "Seeding Firestore (namespace: ${NAMESPACE})..."
   APP_NAME="$APP_NAME" \
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
-  FIRESTORE_NAMESPACE="${APP_NAME}-qa" \
+  FIRESTORE_NAMESPACE="$NAMESPACE" \
   npx tsx firestoreutil/bin/run-seed.ts
 fi
 
@@ -135,7 +136,7 @@ fi
 # Build Vite env vars
 VITE_ARGS=()
 if [ "$USES_FIRESTORE" = true ]; then
-  VITE_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=${APP_NAME}-qa")
+  VITE_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=$(get_firestore_namespace "$APP_NAME" "qa")")
 fi
 if [ "$USES_AUTH" = true ]; then
   VITE_ARGS+=("VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}")

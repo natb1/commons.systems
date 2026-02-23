@@ -10,7 +10,8 @@ export async function renderNotes(): Promise<string> {
     const notes = await getNotes();
     const items = notes.map((n) => `<li>${escapeHtml(n.text)}</li>`).join("");
     return `<h2>Notes</h2><ul id="notes-list">${items}</ul>`;
-  } catch {
+  } catch (error) {
+    console.error("Failed to load notes:", error);
     return `<h2>Notes</h2><p id="notes-error">Failed to load notes.</p>`;
   }
 }

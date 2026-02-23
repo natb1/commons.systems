@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,7 @@ func TestGenerateSiteName(t *testing.T) {
 		t.Errorf("expected length 12, got %d (%q)", len(name), name)
 	}
 
-	// Uniqueness: generate two and verify they differ
+	// Uniqueness: check if they differ (collision is possible but unlikely)
 	name2, _ := GenerateSiteName("demo")
 	if name == name2 {
 		t.Log("WARNING: two generated names are identical (unlikely but possible)")
@@ -60,12 +61,19 @@ func TestAddAndRemoveHostingEntry(t *testing.T) {
 		},
 	}
 
-	AddHostingEntry(config, "demo")
+	if err := AddHostingEntry(config, "demo"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(config.Hosting) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(config.Hosting))
 	}
 	if config.Hosting[1].Target != "demo" {
 		t.Errorf("expected target demo, got %q", config.Hosting[1].Target)
+	}
+
+	// Adding duplicate should error
+	if err := AddHostingEntry(config, "demo"); err == nil {
+		t.Error("expected error for duplicate target, got nil")
 	}
 
 	RemoveHostingEntry(config, "demo")
@@ -150,13 +158,17 @@ func TestAddAndRemoveHostingTarget(t *testing.T) {
 		},
 	}
 
-	AddHostingTarget(rc, "demo", "cs-demo-a1b2")
+	if err := AddHostingTarget(rc, "demo", "cs-demo-a1b2"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	sites := rc.Targets["commons-systems"]["hosting"]["demo"]
 	if len(sites) != 1 || sites[0] != "cs-demo-a1b2" {
 		t.Errorf("expected [cs-demo-a1b2], got %v", sites)
 	}
 
-	RemoveHostingTarget(rc, "demo")
+	if err := RemoveHostingTarget(rc, "demo"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if _, ok := rc.Targets["commons-systems"]["hosting"]["demo"]; ok {
 		t.Error("expected demo target to be removed")
 	}
@@ -192,5 +204,137 @@ func TestReadFirebaseConfigFromFile(t *testing.T) {
 	}
 	if config.Firestore.Rules != "firestore.rules" {
 		t.Errorf("expected firestore.rules, got %q", config.Firestore.Rules)
+	}
+}
+
+func TestFirebaseConfigPreservesUnknownFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	content := `{
+  "hosting": [
+    {
+      "target": "hello",
+      "public": "hello/dist",
+      "ignore": ["firebase.json"]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "emulators": {
+    "firestore": { "port": 8080 }
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}
+`
+	os.WriteFile(filepath.Join(tmpDir, "firebase.json"), []byte(content), 0o644)
+
+	config, err := ReadFirebaseConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("read error: %v", err)
+	}
+
+	if err := WriteFirebaseConfig(tmpDir, config); err != nil {
+		t.Fatalf("write error: %v", err)
+	}
+
+	// Re-read and verify unknown fields survived
+	data, err := os.ReadFile(filepath.Join(tmpDir, "firebase.json"))
+	if err != nil {
+		t.Fatalf("read file error: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	if _, ok := raw["emulators"]; !ok {
+		t.Error("expected 'emulators' key to be preserved")
+	}
+	if _, ok := raw["storage"]; !ok {
+		t.Error("expected 'storage' key to be preserved")
+	}
+}
+
+func TestFirebaseRCPreservesUnknownFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	content := `{
+  "projects": {
+    "default": "commons-systems"
+  },
+  "targets": {
+    "commons-systems": {
+      "hosting": {
+        "hello": ["cs-hello-5b22"]
+      }
+    }
+  },
+  "etags": {
+    "commons-systems": "abc123"
+  }
+}
+`
+	os.WriteFile(filepath.Join(tmpDir, ".firebaserc"), []byte(content), 0o644)
+
+	rc, err := ReadFirebaseRC(tmpDir)
+	if err != nil {
+		t.Fatalf("read error: %v", err)
+	}
+
+	if err := WriteFirebaseRC(tmpDir, rc); err != nil {
+		t.Fatalf("write error: %v", err)
+	}
+
+	// Re-read and verify unknown fields survived
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".firebaserc"))
+	if err != nil {
+		t.Fatalf("read file error: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	if _, ok := raw["etags"]; !ok {
+		t.Error("expected 'etags' key to be preserved")
+	}
+}
+
+func TestAddHostingTargetEmptyProject(t *testing.T) {
+	rc := &FirebaseRC{
+		Projects: map[string]string{},
+	}
+	if err := AddHostingTarget(rc, "demo", "cs-demo-1234"); err == nil {
+		t.Error("expected error for empty project, got nil")
+	}
+}
+
+func TestRemoveHostingTargetEmptyProject(t *testing.T) {
+	rc := &FirebaseRC{
+		Projects: map[string]string{},
+	}
+	if err := RemoveHostingTarget(rc, "demo"); err == nil {
+		t.Error("expected error for empty project, got nil")
+	}
+}
+
+func TestReadProjectID(t *testing.T) {
+	tmpDir := t.TempDir()
+	rc := &FirebaseRC{
+		Projects: map[string]string{"default": "my-project"},
+	}
+	if err := WriteFirebaseRC(tmpDir, rc); err != nil {
+		t.Fatalf("write error: %v", err)
+	}
+
+	projectID, err := ReadProjectID(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if projectID != "my-project" {
+		t.Errorf("expected my-project, got %q", projectID)
 	}
 }

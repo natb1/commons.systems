@@ -7,8 +7,13 @@ const db = getFirestore(app);
 
 const emulatorHost = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST;
 if (emulatorHost) {
-  const [host, portStr] = emulatorHost.split(":");
-  connectFirestoreEmulator(db, host, parseInt(portStr, 10));
+  const parts = emulatorHost.split(":");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error(
+      `Invalid VITE_FIRESTORE_EMULATOR_HOST: "${emulatorHost}" (expected "host:port")`,
+    );
+  }
+  connectFirestoreEmulator(db, parts[0], parseInt(parts[1], 10));
 }
 
 export const NAMESPACE =

@@ -14,9 +14,19 @@ if (!namespace) {
   process.exit(1);
 }
 
-const { default: appSeed } = (await import(
-  `../../${appName}/seeds/firestore.js`
-)) as { default: SeedSpec };
+let appSeed: SeedSpec;
+try {
+  const mod = (await import(`../../${appName}/seeds/firestore.js`)) as {
+    default: SeedSpec;
+  };
+  appSeed = mod.default;
+} catch (err) {
+  console.error(
+    `Failed to import seed module for app "${appName}": ${err instanceof Error ? err.message : err}`,
+  );
+  console.error(`Ensure ${appName}/seeds/firestore.ts exists and exports a default SeedSpec.`);
+  process.exit(1);
+}
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
 

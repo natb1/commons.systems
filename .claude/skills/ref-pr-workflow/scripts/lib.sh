@@ -50,15 +50,41 @@ get_app_name() {
 }
 
 # Read the hosting site ID for an app from .firebaserc deploy targets.
+# Exits with code 1 if no hosting target is found.
 # Args: $1 = repo root, $2 = app name (e.g. "hello")
 get_hosting_site() {
-  local repo_root="$1" app_name="$2"
-  node -e "
-    const rc = JSON.parse(require('fs').readFileSync('${repo_root}/.firebaserc','utf8'));
-    const sites = rc.targets?.['commons-systems']?.hosting?.['${app_name}'];
-    if (!sites || !sites[0]) { process.exit(1); }
+  local repo_root="$1"
+  local app_name="$2"
+  local rc_path="${repo_root}/.firebaserc"
+
+  if [ ! -f "$rc_path" ]; then
+    echo "ERROR: .firebaserc not found at ${rc_path}" >&2
+    return 1
+  fi
+
+  local site
+  site=$(RC_PATH="$rc_path" PROJECT_ID="$FIREBASE_PROJECT_ID" APP_NAME="$app_name" node -e "
+    const rc = JSON.parse(require('fs').readFileSync(process.env.RC_PATH, 'utf8'));
+    const projectId = process.env.PROJECT_ID;
+    const appName = process.env.APP_NAME;
+    const sites = rc.targets?.[projectId]?.hosting?.[appName];
+    if (!sites || !sites[0]) {
+      process.stderr.write('ERROR: no hosting target \"' + appName + '\" found for project \"' + projectId + '\" in .firebaserc\n');
+      process.exit(1);
+    }
     console.log(sites[0]);
-  "
+  " 2>&1) || {
+    echo "$site" >&2
+    return 1
+  }
+
+  echo "$site"
+}
+
+# Build the Firestore namespace for an app and environment.
+# Args: $1 = app name, $2 = environment suffix (e.g. "prod", "qa", "preview-pr-5")
+get_firestore_namespace() {
+  echo "${1}-${2}"
 }
 
 # Find an available TCP port by binding to port 0 and reading the assigned port.

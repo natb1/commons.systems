@@ -21,7 +21,7 @@ install_local_deps "$REPO_ROOT" "$APP_PKG"
 # Install app dependencies and build (no emulator env vars — production build)
 cd "$REPO_ROOT/$APP_DIR"
 npm ci
-VITE_FIRESTORE_NAMESPACE="${APP_NAME}-preview-${CHANNEL_ID}" npm run build
+VITE_FIRESTORE_NAMESPACE="$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")" npm run build
 cd "$REPO_ROOT"
 
 # Delete existing channel if present (ignore errors if it doesn't exist)
@@ -46,8 +46,9 @@ fi
 
 # Seed Firestore (idempotent — uses doc.set() with fixed IDs)
 if [ "$USES_FIRESTORE" = true ]; then
-  echo "Seeding Firestore (namespace: ${APP_NAME}-preview-${CHANNEL_ID})..."
-  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="${APP_NAME}-preview-${CHANNEL_ID}" npx tsx firestoreutil/bin/run-seed.ts
+  NAMESPACE=$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")
+  echo "Seeding Firestore (namespace: ${NAMESPACE})..."
+  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="$NAMESPACE" npx tsx firestoreutil/bin/run-seed.ts
 fi
 
 # Extract preview URL from deploy output

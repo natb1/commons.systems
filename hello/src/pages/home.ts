@@ -21,7 +21,8 @@ export async function renderHome(): Promise<string> {
         .join("\n        ");
       messagesHtml = `<ul id="messages">\n        ${items}\n      </ul>`;
     }
-  } catch {
+  } catch (error) {
+    console.error("Failed to load messages:", error);
     messagesHtml = '<p id="messages-error">Could not load messages</p>';
   }
 

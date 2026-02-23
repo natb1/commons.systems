@@ -12,9 +12,19 @@ if (!host) {
   process.exit(1);
 }
 
-const { default: testUser } = (await import(
-  `../../${appName}/seeds/auth.js`
-)) as { default: AuthUser };
+let testUser: AuthUser;
+try {
+  const mod = (await import(`../../${appName}/seeds/auth.js`)) as {
+    default: AuthUser;
+  };
+  testUser = mod.default;
+} catch (err) {
+  console.error(
+    `Failed to import auth seed for app "${appName}": ${err instanceof Error ? err.message : err}`,
+  );
+  console.error(`Ensure ${appName}/seeds/auth.ts exists and exports a default AuthUser.`);
+  process.exit(1);
+}
 
 const projectId = process.env.FIREBASE_PROJECT_ID ?? "commons-systems";
 

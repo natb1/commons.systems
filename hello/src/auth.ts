@@ -18,7 +18,11 @@ if (authEmulatorHost) {
 
 // Handle redirect result on page load (user returning from GitHub OAuth / emulator picker).
 // Catch errors to prevent unhandled rejections from blocking app initialization.
-getRedirectResult(auth).catch(() => {});
+getRedirectResult(auth).catch((error) => {
+  if (error?.code !== "auth/popup-closed-by-user") {
+    console.error("Auth redirect error:", error);
+  }
+});
 
 const provider = new GithubAuthProvider();
 
