@@ -40,7 +40,11 @@ atomic_write() {
     rm -f "$tmp"
     return 1
   fi
-  mv "$tmp" "$STATE_FILE"
+  if ! mv "$tmp" "$STATE_FILE"; then
+    echo "[save-skill-state] ERROR: failed to write $STATE_FILE (mv failed)" >&2
+    rm -f "$tmp"
+    return 1
+  fi
 }
 
 case "${1:-}" in

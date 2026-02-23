@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SessionStart hook (compact matcher): restores skill/workflow state after auto-compaction.
+# This hook MUST exit 0 in all error cases -- a non-zero exit would block session recovery,
+# which is worse than losing state. Warnings go to stderr for diagnostics.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"

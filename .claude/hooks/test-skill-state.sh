@@ -243,16 +243,10 @@ assert_eq "skills preserved" "ref-memory-management,ref-pr-workflow" "$skills"
 assert_eq "stack cleared" "0" "$stack"
 teardown
 
-# Test 18: atomic_write failure reports error to stderr
-echo "Test 18: atomic_write failure reports error on bad jq filter"
+# Test 18: no leftover .tmp file after successful write
+echo "Test 18: no leftover .tmp file after successful write"
 setup
 "$SAVE_T" skill ref-memory-management
-# Make the tmp file path a directory so mv will fail after jq succeeds
-# Instead, we test by calling save with a workflow that triggers jq on valid state
-# but we corrupt state after init_state runs — use a subshell trick
-# Simplest: verify that a direct jq failure (bad filter) is caught
-# We can't easily trigger this through the CLI, so verify the .tmp cleanup behavior
-# by checking that .tmp doesn't exist after a successful write
 assert_eq "no leftover .tmp file" "no" "$([ -f "${STATE}.tmp" ] && echo yes || echo no)"
 teardown
 
