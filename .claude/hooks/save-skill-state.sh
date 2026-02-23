@@ -45,6 +45,7 @@ atomic_write() {
     rm -f "$tmp"
     return 1
   fi
+  sync 2>/dev/null || true
 }
 
 case "${1:-}" in
