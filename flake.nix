@@ -18,6 +18,7 @@
           packages = with pkgs; [
             nodejs_22
             openjdk
+            go
             playwright-driver.browsers
           ];
           shellHook = ''

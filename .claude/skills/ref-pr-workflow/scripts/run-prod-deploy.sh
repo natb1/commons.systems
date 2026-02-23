@@ -11,18 +11,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
+APP_NAME=$(get_app_name "$APP_DIR")
+HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_DIR")
+
 detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
-# Install app dependencies and build (no VITE_ env vars — defaults to "prod" namespace)
+# Install app dependencies and build
 cd "$REPO_ROOT/$APP_DIR"
 npm ci
 npm run build
 cd "$REPO_ROOT"
 
-# Deploy hosting to production
-echo "Deploying hosting to production..."
-npx firebase-tools deploy --only hosting --project "$FIREBASE_PROJECT_ID"
+# Deploy hosting to production (target specific site)
+echo "Deploying hosting to production (site: $HOSTING_SITE)..."
+npx firebase-tools deploy --only "hosting:$HOSTING_SITE" --project "$FIREBASE_PROJECT_ID"
 
 # Deploy Firestore rules
 echo "Deploying Firestore rules..."
@@ -30,8 +33,8 @@ npx firebase-tools deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID
 
 # Seed Firestore (idempotent — uses doc.set() with fixed IDs)
 if [ "$USES_FIRESTORE" = true ]; then
-  echo "Seeding Firestore (namespace: prod)..."
-  FIRESTORE_NAMESPACE="prod" npx tsx firestoreutil/bin/run-seed.ts
+  echo "Seeding Firestore (namespace: ${APP_NAME}-prod)..."
+  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="${APP_NAME}-prod" npx tsx firestoreutil/bin/run-seed.ts
 fi
 
 echo "Production deployment complete."

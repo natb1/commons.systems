@@ -1,6 +1,6 @@
-import type { SeedSpec } from "../src/seed.js";
+import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
-export const helloSeed: SeedSpec = {
+const helloSeed: SeedSpec = {
   namespace: "",
   collections: [
     {
@@ -45,3 +45,5 @@ export const helloSeed: SeedSpec = {
     },
   ],
 };
+
+export default helloSeed;

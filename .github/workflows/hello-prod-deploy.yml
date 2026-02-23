@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: "22"
       - name: Run smoke tests
-        run: .claude/skills/ref-pr-workflow/scripts/run-smoke-tests.sh hello "https://commons-systems.web.app"
+        run: .claude/skills/ref-pr-workflow/scripts/run-smoke-tests.sh hello "https://cs-hello-5b22.web.app"
 
   cleanup-preview:
     if: github.event.pull_request.merged == true

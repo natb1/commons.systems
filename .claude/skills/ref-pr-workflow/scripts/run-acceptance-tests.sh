@@ -11,6 +11,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
+APP_NAME=$(get_app_name "$APP_DIR")
+
 detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
@@ -36,7 +38,7 @@ fi
 # Build with emulator env vars
 BUILD_ARGS=()
 if [ "$USES_FIRESTORE" = true ]; then
-  BUILD_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=emulator")
+  BUILD_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=${APP_NAME}-emulator")
 fi
 if [ "$USES_AUTH" = true ]; then
   BUILD_ARGS+=("VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}")
@@ -133,8 +135,9 @@ if [ "$USES_FIRESTORE" = true ]; then
 
   # Seed Firestore
   echo "Seeding Firestore..."
+  APP_NAME="$APP_NAME" \
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
-  FIRESTORE_NAMESPACE="emulator" \
+  FIRESTORE_NAMESPACE="${APP_NAME}-emulator" \
   npx tsx firestoreutil/bin/run-seed.ts
 fi
 
@@ -153,7 +156,7 @@ if [ "$USES_AUTH" = true ]; then
 
   # Seed auth user
   echo "Seeding auth user..."
-  AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
+  APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
 fi
 
 # Run Playwright acceptance tests

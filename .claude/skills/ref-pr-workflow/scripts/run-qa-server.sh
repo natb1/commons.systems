@@ -11,6 +11,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
+APP_NAME=$(get_app_name "$APP_DIR")
+
 detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
@@ -106,8 +108,9 @@ if [ "$USES_FIRESTORE" = true ]; then
 
   # Seed Firestore with "qa" namespace
   echo "Seeding Firestore (namespace: qa)..."
+  APP_NAME="$APP_NAME" \
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
-  FIRESTORE_NAMESPACE="qa" \
+  FIRESTORE_NAMESPACE="${APP_NAME}-qa" \
   npx tsx firestoreutil/bin/run-seed.ts
 fi
 
@@ -126,13 +129,13 @@ if [ "$USES_AUTH" = true ]; then
 
   # Seed auth user
   echo "Seeding auth user..."
-  AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
+  APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
 fi
 
 # Build Vite env vars
 VITE_ARGS=()
 if [ "$USES_FIRESTORE" = true ]; then
-  VITE_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=qa")
+  VITE_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=${APP_NAME}-qa")
 fi
 if [ "$USES_AUTH" = true ]; then
   VITE_ARGS+=("VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}")
@@ -174,7 +177,7 @@ fi
 if [ "$USES_FIRESTORE" = true ]; then
   echo ""
   echo "  Firestore emulator: localhost:${FIRESTORE_PORT}"
-  echo "  Firestore namespace: qa"
+  echo "  Firestore namespace: ${APP_NAME}-qa"
 fi
 if [ "$USES_AUTH" = true ]; then
   echo "  Auth emulator:      localhost:${AUTH_PORT}"

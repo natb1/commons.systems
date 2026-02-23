@@ -4,6 +4,7 @@ node_modules/
 dist/
 .firebase/
 .firebase-acceptance-*
+.firebase-qa-*
 test-results/
 firestore-debug.log
 ui-debug.log

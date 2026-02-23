@@ -12,6 +12,6 @@ if (emulatorHost) {
 }
 
 export const NAMESPACE =
-  (import.meta.env.VITE_FIRESTORE_NAMESPACE as string) || "prod";
+  (import.meta.env.VITE_FIRESTORE_NAMESPACE as string) || "hello-prod";
 
 export { db, app };

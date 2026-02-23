@@ -43,6 +43,24 @@ install_local_deps() {
   fi
 }
 
+# Extract the app name from the app directory path.
+# Args: $1 = app directory (e.g. "hello" or "/path/to/hello")
+get_app_name() {
+  basename "$1"
+}
+
+# Read the hosting site name for an app from firebase.json.
+# Args: $1 = repo root, $2 = app directory (relative, e.g. "hello")
+get_hosting_site() {
+  local repo_root="$1" app_dir="$2"
+  node -e "
+    const c = JSON.parse(require('fs').readFileSync('${repo_root}/firebase.json','utf8'));
+    const h = Array.isArray(c.hosting) ? c.hosting : [c.hosting];
+    const e = h.find(x => x.public === '${app_dir}/dist');
+    if(!e||!e.site){process.exit(1)} console.log(e.site);
+  "
+}
+
 # Find an available TCP port by binding to port 0 and reading the assigned port.
 find_available_port() {
   node -e "
