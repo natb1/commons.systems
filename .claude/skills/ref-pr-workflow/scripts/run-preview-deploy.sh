@@ -31,7 +31,7 @@ npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --site "$HOSTING_SITE" -
 # Deploy new hosting channel
 echo "Deploying to preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
 DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
-  --site "$HOSTING_SITE" \
+  --only "hosting:$HOSTING_SITE" \
   --project "$FIREBASE_PROJECT_ID" \
   --expires 7d \
   --json)
