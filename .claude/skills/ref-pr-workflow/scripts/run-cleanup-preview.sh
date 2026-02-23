@@ -19,9 +19,13 @@ detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
 
 CHANNEL_ID="pr-${PR_NUMBER}"
 
+# Create single-site config for channel operations (multi-site not supported)
+CHANNEL_CONFIG=$(make_single_site_config "$REPO_ROOT" "$HOSTING_SITE")
+trap 'rm -f "$CHANNEL_CONFIG"' EXIT
+
 # Delete preview hosting channel (ignore errors if already deleted)
 echo "Deleting preview channel '${CHANNEL_ID}' from site '$HOSTING_SITE'..."
-npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --site "$HOSTING_SITE" --force --project "$FIREBASE_PROJECT_ID" 2>/dev/null || true
+npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --config "$CHANNEL_CONFIG" --force --project "$FIREBASE_PROJECT_ID" 2>/dev/null || true
 
 # Delete namespaced Firestore data
 if [ "$USES_FIRESTORE" = true ]; then

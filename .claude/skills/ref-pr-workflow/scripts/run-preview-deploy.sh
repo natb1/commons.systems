@@ -24,14 +24,18 @@ npm ci
 VITE_FIRESTORE_NAMESPACE="${APP_NAME}-preview-${CHANNEL_ID}" npm run build
 cd "$REPO_ROOT"
 
+# Create single-site config for channel operations (multi-site not supported)
+CHANNEL_CONFIG=$(make_single_site_config "$REPO_ROOT" "$HOSTING_SITE")
+trap 'rm -f "$CHANNEL_CONFIG"' EXIT
+
 # Delete existing channel if present (ignore errors if it doesn't exist)
 echo "Cleaning up existing preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
-npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --site "$HOSTING_SITE" --force --project "$FIREBASE_PROJECT_ID" 2>/dev/null || true
+npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --config "$CHANNEL_CONFIG" --force --project "$FIREBASE_PROJECT_ID" 2>/dev/null || true
 
 # Deploy new hosting channel
 echo "Deploying to preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
 DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
-  --only "hosting:$HOSTING_SITE" \
+  --config "$CHANNEL_CONFIG" \
   --project "$FIREBASE_PROJECT_ID" \
   --expires 7d \
   --json)
