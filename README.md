@@ -8,7 +8,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 
 - **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
 - **Version Control** (git): Created a repo.
-- **Agentic Coding Tools** (Claude Code): Manually Installed TODO([Bootstrap Claude Code with nix home manager #2](https://github.com/natb1/commons.systems/issues/2))
+- **Agentic Coding Tools** (Claude Code): `home-manager switch --flake .#default --impure`
 
 ## Design Principles
 
