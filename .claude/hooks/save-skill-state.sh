@@ -5,29 +5,42 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 STATE_FILE="$PROJECT_ROOT/tmp/skill-state.json"
 
-mkdir -p "$(dirname "$STATE_FILE")"
+timestamp() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
 
-init_state() {
-  if [ ! -f "$STATE_FILE" ]; then
-    cat > "$STATE_FILE" <<'INIT'
+write_fresh_state() {
+  if ! mkdir -p "$(dirname "$STATE_FILE")"; then
+    echo "[save-skill-state] ERROR: cannot create directory $(dirname "$STATE_FILE")" >&2
+    exit 1
+  fi
+  cat > "$STATE_FILE" <<INIT
 {
   "version": 1,
-  "updated_at": "",
+  "updated_at": "$(timestamp)",
   "active_skills": [],
   "workflow_stack": []
 }
 INIT
+}
+
+init_state() {
+  if [ ! -f "$STATE_FILE" ]; then
+    write_fresh_state
+  elif ! jq empty "$STATE_FILE" 2>/dev/null; then
+    echo "[save-skill-state] WARNING: $STATE_FILE contains invalid JSON -- reinitializing" >&2
+    write_fresh_state
   fi
 }
 
-# Usage: atomic_write [jq args...] 'filter'
 atomic_write() {
   local tmp="${STATE_FILE}.tmp"
-  jq "$@" "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
-}
-
-timestamp() {
-  date -u +"%Y-%m-%dT%H:%M:%SZ"
+  if ! jq "$@" "$STATE_FILE" > "$tmp"; then
+    echo "[save-skill-state] ERROR: jq failed to update $STATE_FILE" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+  mv "$tmp" "$STATE_FILE"
 }
 
 case "${1:-}" in
@@ -53,7 +66,7 @@ case "${1:-}" in
     fi
     name="$1"; step="$2"; shift 2; label="$*"
     if ! [[ "$step" =~ ^[0-9]+$ ]]; then
-      echo "Error: step must be a positive integer, got '$step'" >&2
+      echo "Error: step must be a non-negative integer, got '$step'" >&2
       exit 1
     fi
     init_state
@@ -76,6 +89,9 @@ case "${1:-}" in
     fi
     name="$1"
     init_state
+    if ! jq -e --arg name "$name" '(.workflow_stack | map(.name) | index($name)) != null' "$STATE_FILE" >/dev/null 2>&1; then
+      echo "[save-skill-state] WARNING: workflow '$name' not in stack" >&2
+    fi
     atomic_write \
       --arg name "$name" \
       --arg ts "$(timestamp)" \
