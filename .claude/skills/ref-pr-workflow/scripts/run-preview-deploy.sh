@@ -30,11 +30,19 @@ npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --site "$HOSTING_SITE" -
 
 # Deploy new hosting channel (uses deploy target from .firebaserc)
 echo "Deploying to preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
+set +e
 DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
   --only "hosting:$APP_NAME" \
   --project "$FIREBASE_PROJECT_ID" \
   --expires 7d \
-  --json)
+  --json 2>&1)
+DEPLOY_EXIT=$?
+set -e
+if [ "$DEPLOY_EXIT" -ne 0 ]; then
+  echo "Deploy failed with exit code $DEPLOY_EXIT" >&2
+  echo "Output: $DEPLOY_OUTPUT" >&2
+  exit 1
+fi
 
 # Seed Firestore (idempotent — uses doc.set() with fixed IDs)
 if [ "$USES_FIRESTORE" = true ]; then
