@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Resolve script directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 SAVE="$SCRIPT_DIR/save-skill-state.sh"
 RESTORE="$SCRIPT_DIR/restore-skill-state.sh"
+CLEAR="$SCRIPT_DIR/clear-skill-state.sh"
 
 PASS=0
 FAIL=0
@@ -17,10 +17,13 @@ setup() {
   mkdir -p "$TMPDIR_TEST/.claude/hooks" "$TMPDIR_TEST/tmp"
   cp "$SAVE" "$TMPDIR_TEST/.claude/hooks/save-skill-state.sh"
   cp "$RESTORE" "$TMPDIR_TEST/.claude/hooks/restore-skill-state.sh"
+  cp "$CLEAR" "$TMPDIR_TEST/.claude/hooks/clear-skill-state.sh"
   chmod +x "$TMPDIR_TEST/.claude/hooks/save-skill-state.sh"
   chmod +x "$TMPDIR_TEST/.claude/hooks/restore-skill-state.sh"
+  chmod +x "$TMPDIR_TEST/.claude/hooks/clear-skill-state.sh"
   SAVE_T="$TMPDIR_TEST/.claude/hooks/save-skill-state.sh"
   RESTORE_T="$TMPDIR_TEST/.claude/hooks/restore-skill-state.sh"
+  CLEAR_T="$TMPDIR_TEST/.claude/hooks/clear-skill-state.sh"
   STATE="$TMPDIR_TEST/tmp/skill-state.json"
 }
 
@@ -154,19 +157,57 @@ teardown
 echo "Test 9: restore exits 0 with no state file"
 setup
 rm -f "$STATE"
-output=$("$RESTORE_T" 2>&1 || true)
 exit_code=0
-"$RESTORE_T" > /dev/null 2>&1 || exit_code=$?
+output=$("$RESTORE_T" 2>&1) || exit_code=$?
 assert_eq "exit code is 0" "0" "$exit_code"
 assert_eq "output is empty" "" "$output"
 teardown
 
-# Test 10: restore exits 0 on invalid JSON (graceful degradation)
+# Test 10: restore exits 0 on invalid JSON with stderr warning
 echo "Test 10: restore exits 0 on invalid JSON"
 setup
 echo "not valid json{{{" > "$STATE"
 exit_code=0
-"$RESTORE_T" > /dev/null 2>&1 || exit_code=$?
+output=$("$RESTORE_T" 2>&1) || exit_code=$?
+assert_eq "exit code is 0" "0" "$exit_code"
+assert_contains "warns about invalid JSON" "invalid JSON" "$output"
+teardown
+
+# Test 11: workflow rejects non-numeric step
+echo "Test 11: workflow rejects non-numeric step"
+setup
+exit_code=0
+output=$("$SAVE_T" workflow pr-workflow abc Implementation 2>&1) || exit_code=$?
+assert_eq "exit code is 1" "1" "$exit_code"
+assert_contains "shows step error" "positive integer" "$output"
+teardown
+
+# Test 12: restore warns on unknown version
+echo "Test 12: restore warns on unknown version"
+setup
+echo '{"version": 99, "active_skills": ["x"], "workflow_stack": []}' > "$STATE"
+exit_code=0
+output=$("$RESTORE_T" 2>&1) || exit_code=$?
+assert_eq "exit code is 0" "0" "$exit_code"
+assert_contains "warns about version" "unknown state version" "$output"
+teardown
+
+# Test 13: clear-skill-state.sh removes state file
+echo "Test 13: clear removes state file"
+setup
+"$SAVE_T" skill ref-memory-management
+"$SAVE_T" workflow pr-workflow 3 Implementation
+assert_eq "state file exists before clear" "yes" "$([ -f "$STATE" ] && echo yes || echo no)"
+"$CLEAR_T"
+assert_eq "state file removed after clear" "no" "$([ -f "$STATE" ] && echo yes || echo no)"
+teardown
+
+# Test 14: clear-skill-state.sh exits 0 when no state file
+echo "Test 14: clear exits 0 with no state file"
+setup
+rm -f "$STATE"
+exit_code=0
+"$CLEAR_T" 2>&1 || exit_code=$?
 assert_eq "exit code is 0" "0" "$exit_code"
 teardown
 

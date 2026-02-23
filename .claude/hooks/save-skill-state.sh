@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Resolve project root from script location (portable, follows symlinks)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 STATE_FILE="$PROJECT_ROOT/tmp/skill-state.json"
 
 mkdir -p "$(dirname "$STATE_FILE")"
 
-# Initialize state file if missing
 init_state() {
   if [ ! -f "$STATE_FILE" ]; then
     cat > "$STATE_FILE" <<'INIT'
@@ -22,7 +20,6 @@ INIT
   fi
 }
 
-# Atomic write: jq output -> tmp file -> mv
 # Usage: atomic_write [jq args...] 'filter'
 atomic_write() {
   local tmp="${STATE_FILE}.tmp"
@@ -41,7 +38,6 @@ case "${1:-}" in
       exit 1
     fi
     init_state
-    # Build jq array from arguments
     skills_json=$(printf '%s\n' "$@" | jq -R . | jq -s .)
     atomic_write \
       --argjson new "$skills_json" \
@@ -56,6 +52,10 @@ case "${1:-}" in
       exit 1
     fi
     name="$1"; step="$2"; shift 2; label="$*"
+    if ! [[ "$step" =~ ^[0-9]+$ ]]; then
+      echo "Error: step must be a positive integer, got '$step'" >&2
+      exit 1
+    fi
     init_state
     atomic_write \
       --arg name "$name" \
