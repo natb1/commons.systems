@@ -49,35 +49,16 @@ get_app_name() {
   basename "$1"
 }
 
-# Read the hosting site name for an app from firebase.json.
-# Args: $1 = repo root, $2 = app directory (relative, e.g. "hello")
+# Read the hosting site ID for an app from .firebaserc deploy targets.
+# Args: $1 = repo root, $2 = app name (e.g. "hello")
 get_hosting_site() {
-  local repo_root="$1" app_dir="$2"
+  local repo_root="$1" app_name="$2"
   node -e "
-    const c = JSON.parse(require('fs').readFileSync('${repo_root}/firebase.json','utf8'));
-    const h = Array.isArray(c.hosting) ? c.hosting : [c.hosting];
-    const e = h.find(x => x.public === '${app_dir}/dist');
-    if(!e||!e.site){process.exit(1)} console.log(e.site);
+    const rc = JSON.parse(require('fs').readFileSync('${repo_root}/.firebaserc','utf8'));
+    const sites = rc.targets?.['commons-systems']?.hosting?.['${app_name}'];
+    if (!sites || !sites[0]) { process.exit(1); }
+    console.log(sites[0]);
   "
-}
-
-# Create a temporary firebase.json with only the specified site's hosting entry.
-# Needed because hosting:channel:deploy doesn't support --site or --only flags
-# for multi-site configs. Returns the temp file path via stdout.
-# Args: $1 = repo root, $2 = hosting site name (e.g. "cs-hello-5b22")
-make_single_site_config() {
-  local repo_root="$1" site_name="$2"
-  local tmp_config
-  tmp_config=$(mktemp --suffix=.json)
-  node -e "
-    const c = JSON.parse(require('fs').readFileSync('${repo_root}/firebase.json','utf8'));
-    const h = Array.isArray(c.hosting) ? c.hosting : [c.hosting];
-    const entry = h.find(x => x.site === '${site_name}');
-    if (!entry) { console.error('Site ${site_name} not found in firebase.json'); process.exit(1); }
-    const config = { hosting: entry, firestore: c.firestore };
-    console.log(JSON.stringify(config, null, 2));
-  " > "$tmp_config"
-  echo "$tmp_config"
 }
 
 # Find an available TCP port by binding to port 0 and reading the assigned port.

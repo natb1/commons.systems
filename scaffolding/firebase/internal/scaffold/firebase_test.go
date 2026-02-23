@@ -31,7 +31,7 @@ func TestFirebaseConfigRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	initial := &FirebaseConfig{
 		Hosting: []HostingEntry{
-			{Site: "cs-hello-5b22", Public: "hello/dist", Ignore: []string{"firebase.json", "**/.*", "**/node_modules/**"}},
+			{Target: "hello", Public: "hello/dist", Ignore: []string{"firebase.json", "**/.*", "**/node_modules/**"}},
 		},
 		Firestore: FirestoreConfig{Rules: "firestore.rules"},
 	}
@@ -48,48 +48,121 @@ func TestFirebaseConfigRoundTrip(t *testing.T) {
 	if len(loaded.Hosting) != 1 {
 		t.Fatalf("expected 1 hosting entry, got %d", len(loaded.Hosting))
 	}
-	if loaded.Hosting[0].Site != "cs-hello-5b22" {
-		t.Errorf("expected site cs-hello-5b22, got %q", loaded.Hosting[0].Site)
+	if loaded.Hosting[0].Target != "hello" {
+		t.Errorf("expected target hello, got %q", loaded.Hosting[0].Target)
 	}
 }
 
 func TestAddAndRemoveHostingEntry(t *testing.T) {
 	config := &FirebaseConfig{
 		Hosting: []HostingEntry{
-			{Site: "cs-hello-5b22", Public: "hello/dist"},
+			{Target: "hello", Public: "hello/dist"},
 		},
 	}
 
-	AddHostingEntry(config, "cs-demo-a1b2", "demo")
+	AddHostingEntry(config, "demo")
 	if len(config.Hosting) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(config.Hosting))
 	}
-	if config.Hosting[1].Site != "cs-demo-a1b2" {
-		t.Errorf("expected site cs-demo-a1b2, got %q", config.Hosting[1].Site)
+	if config.Hosting[1].Target != "demo" {
+		t.Errorf("expected target demo, got %q", config.Hosting[1].Target)
 	}
 
 	RemoveHostingEntry(config, "demo")
 	if len(config.Hosting) != 1 {
 		t.Fatalf("expected 1 entry after remove, got %d", len(config.Hosting))
 	}
-	if config.Hosting[0].Site != "cs-hello-5b22" {
-		t.Errorf("expected remaining site cs-hello-5b22, got %q", config.Hosting[0].Site)
+	if config.Hosting[0].Target != "hello" {
+		t.Errorf("expected remaining target hello, got %q", config.Hosting[0].Target)
 	}
 }
 
 func TestFindHostingSite(t *testing.T) {
-	config := &FirebaseConfig{
-		Hosting: []HostingEntry{
-			{Site: "cs-hello-5b22", Public: "hello/dist"},
-			{Site: "cs-demo-a1b2", Public: "demo/dist"},
+	tmpDir := t.TempDir()
+
+	// Create .firebaserc with targets
+	rc := &FirebaseRC{
+		Projects: map[string]string{"default": "commons-systems"},
+		Targets: map[string]map[string]Targets{
+			"commons-systems": {
+				"hosting": {
+					"hello": []string{"cs-hello-5b22"},
+					"demo":  []string{"cs-demo-a1b2"},
+				},
+			},
+		},
+	}
+	if err := WriteFirebaseRC(tmpDir, rc); err != nil {
+		t.Fatalf("write error: %v", err)
+	}
+
+	site, err := FindHostingSite(tmpDir, "demo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if site != "cs-demo-a1b2" {
+		t.Errorf("expected cs-demo-a1b2, got %q", site)
+	}
+
+	_, err = FindHostingSite(tmpDir, "nonexistent")
+	if err == nil {
+		t.Error("expected error for nonexistent app, got nil")
+	}
+}
+
+func TestFirebaseRCRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	initial := &FirebaseRC{
+		Projects: map[string]string{"default": "commons-systems"},
+		Targets: map[string]map[string]Targets{
+			"commons-systems": {
+				"hosting": {
+					"hello": []string{"cs-hello-5b22"},
+				},
+			},
 		},
 	}
 
-	if site := FindHostingSite(config, "demo"); site != "cs-demo-a1b2" {
-		t.Errorf("expected cs-demo-a1b2, got %q", site)
+	if err := WriteFirebaseRC(tmpDir, initial); err != nil {
+		t.Fatalf("write error: %v", err)
 	}
-	if site := FindHostingSite(config, "nonexistent"); site != "" {
-		t.Errorf("expected empty string, got %q", site)
+
+	loaded, err := ReadFirebaseRC(tmpDir)
+	if err != nil {
+		t.Fatalf("read error: %v", err)
+	}
+
+	sites := loaded.Targets["commons-systems"]["hosting"]["hello"]
+	if len(sites) != 1 || sites[0] != "cs-hello-5b22" {
+		t.Errorf("expected [cs-hello-5b22], got %v", sites)
+	}
+}
+
+func TestAddAndRemoveHostingTarget(t *testing.T) {
+	rc := &FirebaseRC{
+		Projects: map[string]string{"default": "commons-systems"},
+		Targets: map[string]map[string]Targets{
+			"commons-systems": {
+				"hosting": {
+					"hello": []string{"cs-hello-5b22"},
+				},
+			},
+		},
+	}
+
+	AddHostingTarget(rc, "demo", "cs-demo-a1b2")
+	sites := rc.Targets["commons-systems"]["hosting"]["demo"]
+	if len(sites) != 1 || sites[0] != "cs-demo-a1b2" {
+		t.Errorf("expected [cs-demo-a1b2], got %v", sites)
+	}
+
+	RemoveHostingTarget(rc, "demo")
+	if _, ok := rc.Targets["commons-systems"]["hosting"]["demo"]; ok {
+		t.Error("expected demo target to be removed")
+	}
+	// hello should still exist
+	if _, ok := rc.Targets["commons-systems"]["hosting"]["hello"]; !ok {
+		t.Error("expected hello target to still exist")
 	}
 }
 
@@ -98,7 +171,7 @@ func TestReadFirebaseConfigFromFile(t *testing.T) {
 	content := `{
   "hosting": [
     {
-      "site": "cs-hello-5b22",
+      "target": "hello",
       "public": "hello/dist",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
     }

@@ -1,7 +1,7 @@
 {
   "hosting": [
     {
-      "site": "cs-hello-5b22",
+      "target": "hello",
       "public": "hello/dist",
       "ignore": [
         "firebase.json",

@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 APP_NAME=$(get_app_name "$APP_DIR")
-HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_DIR")
+HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
 
 detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
@@ -25,7 +25,7 @@ cd "$REPO_ROOT"
 
 # Deploy hosting to production (target specific site)
 echo "Deploying hosting to production (site: $HOSTING_SITE)..."
-npx firebase-tools deploy --only "hosting:$HOSTING_SITE" --project "$FIREBASE_PROJECT_ID"
+npx firebase-tools deploy --only "hosting:$APP_NAME" --project "$FIREBASE_PROJECT_ID"
 
 # Deploy Firestore rules
 echo "Deploying Firestore rules..."

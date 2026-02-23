@@ -65,8 +65,19 @@ func Create(repoRoot, appName string, templateFS fs.FS) error {
 	if err != nil {
 		return err
 	}
-	AddHostingEntry(config, siteName, appName)
+	AddHostingEntry(config, appName)
 	if err := WriteFirebaseConfig(repoRoot, config); err != nil {
+		return err
+	}
+
+	// Add deploy target to .firebaserc
+	fmt.Println("Adding deploy target to .firebaserc...")
+	rc, err := ReadFirebaseRC(repoRoot)
+	if err != nil {
+		return err
+	}
+	AddHostingTarget(rc, appName, siteName)
+	if err := WriteFirebaseRC(repoRoot, rc); err != nil {
 		return err
 	}
 

@@ -17,15 +17,10 @@ func Cleanup(repoRoot, appName string) error {
 		return fmt.Errorf("app directory %q does not exist", appDir)
 	}
 
-	// Read hosting site from firebase.json
-	config, err := ReadFirebaseConfig(repoRoot)
+	// Read hosting site from .firebaserc deploy targets
+	siteName, err := FindHostingSite(repoRoot, appName)
 	if err != nil {
-		return err
-	}
-
-	siteName := FindHostingSite(config, appName)
-	if siteName == "" {
-		fmt.Printf("WARNING: no hosting entry found for %q in firebase.json\n", appName)
+		fmt.Printf("WARNING: %v\n", err)
 	}
 
 	// Delete Firebase hosting site
@@ -52,12 +47,25 @@ func Cleanup(repoRoot, appName string) error {
 	}
 
 	// Remove hosting entry from firebase.json
-	if siteName != "" {
-		fmt.Println("Removing hosting entry from firebase.json...")
-		RemoveHostingEntry(config, appName)
-		if err := WriteFirebaseConfig(repoRoot, config); err != nil {
-			return fmt.Errorf("updating firebase.json: %w", err)
-		}
+	fmt.Println("Removing hosting entry from firebase.json...")
+	config, err := ReadFirebaseConfig(repoRoot)
+	if err != nil {
+		return err
+	}
+	RemoveHostingEntry(config, appName)
+	if err := WriteFirebaseConfig(repoRoot, config); err != nil {
+		return fmt.Errorf("updating firebase.json: %w", err)
+	}
+
+	// Remove deploy target from .firebaserc
+	fmt.Println("Removing deploy target from .firebaserc...")
+	rc, err := ReadFirebaseRC(repoRoot)
+	if err != nil {
+		return err
+	}
+	RemoveHostingTarget(rc, appName)
+	if err := WriteFirebaseRC(repoRoot, rc); err != nil {
+		return fmt.Errorf("updating .firebaserc: %w", err)
 	}
 
 	// Remove workflow files

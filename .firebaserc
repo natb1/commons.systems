@@ -1,5 +1,14 @@
 {
   "projects": {
     "default": "commons-systems"
+  },
+  "targets": {
+    "commons-systems": {
+      "hosting": {
+        "hello": [
+          "cs-hello-5b22"
+        ]
+      }
+    }
   }
 }

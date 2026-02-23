@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 APP_NAME=$(get_app_name "$APP_DIR")
-HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_DIR")
+HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
 
 detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
@@ -24,18 +24,14 @@ npm ci
 VITE_FIRESTORE_NAMESPACE="${APP_NAME}-preview-${CHANNEL_ID}" npm run build
 cd "$REPO_ROOT"
 
-# Create single-site config for channel operations (multi-site not supported)
-CHANNEL_CONFIG=$(make_single_site_config "$REPO_ROOT" "$HOSTING_SITE")
-trap 'rm -f "$CHANNEL_CONFIG"' EXIT
-
 # Delete existing channel if present (ignore errors if it doesn't exist)
 echo "Cleaning up existing preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
-npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --config "$CHANNEL_CONFIG" --force --project "$FIREBASE_PROJECT_ID" 2>/dev/null || true
+npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --site "$HOSTING_SITE" --force --project "$FIREBASE_PROJECT_ID" 2>/dev/null || true
 
-# Deploy new hosting channel
+# Deploy new hosting channel (uses deploy target from .firebaserc)
 echo "Deploying to preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
 DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
-  --config "$CHANNEL_CONFIG" \
+  --only "hosting:$APP_NAME" \
   --project "$FIREBASE_PROJECT_ID" \
   --expires 7d \
   --json)
