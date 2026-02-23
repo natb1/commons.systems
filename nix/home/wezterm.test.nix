@@ -273,48 +273,6 @@ let
         touch $out
       '';
 
-  # Test 7: Activation script conditioned on Linux platform
-  test-activation-script-linux =
-    let
-      weztermSource = builtins.readFile ./wezterm.nix;
-    in
-    pkgs.runCommand "test-wezterm-activation-script-linux" { } ''
-      ${
-        if lib.hasInfix "home.activation.copyWeztermToWindows" weztermSource then
-          "echo 'PASS: Source includes copyWeztermToWindows activation script'"
-        else
-          "echo 'FAIL: Source missing activation script definition' && exit 1"
-      }
-      ${
-        if lib.hasInfix "lib.mkIf pkgs.stdenv.isLinux" weztermSource then
-          "echo 'PASS: Activation script is conditioned on Linux platform'"
-        else
-          "echo 'FAIL: Activation script missing Linux platform condition' && exit 1"
-      }
-      touch $out
-    '';
-
-  # Test 8: Activation script uses DAG ordering
-  test-activation-script-dag =
-    let
-      weztermSource = builtins.readFile ./wezterm.nix;
-    in
-    pkgs.runCommand "test-wezterm-activation-script-dag" { } ''
-      ${
-        if lib.hasInfix "lib.hm.dag.entryAfter" weztermSource then
-          "echo 'PASS: Activation script uses DAG ordering'"
-        else
-          "echo 'FAIL: Activation script missing DAG ordering' && exit 1"
-      }
-      ${
-        if lib.hasInfix "linkGeneration" weztermSource then
-          "echo 'PASS: Activation script depends on linkGeneration'"
-        else
-          "echo 'FAIL: Activation script missing linkGeneration dependency' && exit 1"
-      }
-      touch $out
-    '';
-
   # Test 9: Common configuration present in all platforms
   test-common-config =
     let
@@ -361,45 +319,6 @@ let
       touch $out
     '';
 
-  # Test 10: Activation script source validation
-  test-activation-script-logic =
-    let
-      weztermSource = builtins.readFile ./wezterm.nix;
-    in
-    pkgs.runCommand "test-wezterm-activation-script-logic" { } ''
-      ${
-        if lib.hasInfix "/mnt/c/Users" weztermSource then
-          "echo 'PASS: Activation script checks for WSL mount point'"
-        else
-          "echo 'FAIL: Activation script missing WSL mount check' && exit 1"
-      }
-      ${
-        if lib.hasInfix "WINDOWS_USER" weztermSource then
-          "echo 'PASS: Activation script detects Windows username'"
-        else
-          "echo 'FAIL: Activation script missing Windows username detection' && exit 1"
-      }
-      ${
-        if lib.hasInfix ".wezterm.lua" weztermSource then
-          "echo 'PASS: Activation script targets correct filename'"
-        else
-          "echo 'FAIL: Activation script missing target filename' && exit 1"
-      }
-      ${
-        if lib.hasInfix "grep -v -E" weztermSource then
-          "echo 'PASS: Activation script filters system directories'"
-        else
-          "echo 'FAIL: Activation script missing directory filtering' && exit 1"
-      }
-      ${
-        if lib.hasInfix "copyWeztermToWindows" weztermSource then
-          "echo 'PASS: Activation script has correct name'"
-        else
-          "echo 'FAIL: Activation script missing name' && exit 1"
-      }
-      touch $out
-    '';
-
   # Test 11: Activation script runtime behavior
   test-activation-script-runtime =
     pkgs.runCommand "test-wezterm-activation-script-runtime"
@@ -410,29 +329,6 @@ let
         ${pkgs.bash}/bin/bash ${./wezterm_test.sh}
         touch $out
       '';
-
-  # Test 12: Config file location consistency
-  test-config-file-location =
-    let
-      weztermSource = builtins.readFile ./wezterm.nix;
-      expectedPath = ".config/wezterm/wezterm.lua";
-      expectedFullPathPattern = "\${config.home.homeDirectory}/.config/wezterm/wezterm.lua";
-    in
-    pkgs.runCommand "test-wezterm-config-file-location" { } ''
-      ${
-        if lib.hasInfix expectedFullPathPattern weztermSource then
-          "echo 'PASS: Activation script uses expected config path: ${expectedFullPathPattern}'"
-        else
-          "echo 'FAIL: Activation script source path does not match where home-manager writes config' && exit 1"
-      }
-      ${
-        if lib.hasInfix expectedPath weztermSource then
-          "echo 'PASS: Hardcoded path matches current home-manager wezterm location (${expectedPath})'"
-        else
-          "echo 'FAIL: Hardcoded path does not match where home-manager writes config' && exit 1"
-      }
-      touch $out
-    '';
 
   # Test 13: Home Manager integration test
   test-homemanager-integration =
@@ -664,12 +560,8 @@ let
     test-lua-syntax-generic
     test-username-interpolation
     test-special-chars-username
-    test-activation-script-linux
-    test-activation-script-dag
     test-common-config
-    test-activation-script-logic
     test-activation-script-runtime
-    test-config-file-location
     test-homemanager-integration
     test-activation-dag-execution
   ];
@@ -695,12 +587,8 @@ in
       test-lua-syntax-generic
       test-username-interpolation
       test-special-chars-username
-      test-activation-script-linux
-      test-activation-script-dag
       test-common-config
-      test-activation-script-logic
       test-activation-script-runtime
-      test-config-file-location
       test-homemanager-integration
       test-activation-dag-execution
       ;

@@ -32,8 +32,6 @@ let
   # Primary key (default for most operations)
   primaryKeyFile = "${sshDir}/id_ed25519";
 
-  # Optional: Generate service-specific keys
-  githubKeyFile = "${sshDir}/id_ed25519_github";
 in
 {
   # Generate primary SSH key if it doesn't exist
@@ -62,29 +60,4 @@ in
     fi
   '';
 
-  # Optional: Generate GitHub-specific key
-  # Uncomment this block if you want separate keys for GitHub
-  # home.activation.generateGithubSshKey = lib.hm.dag.entryAfter ["writeBoundary"] ''
-  #   if [ ! -f "${githubKeyFile}" ]; then
-  #     echo "Generating GitHub-specific SSH key at ${githubKeyFile}..."
-  #     $DRY_RUN_CMD ${pkgs.openssh}/bin/ssh-keygen \
-  #       -t ed25519 \
-  #       -C "github-$(whoami)@$(${pkgs.nettools}/bin/hostname)" \
-  #       -N "" \
-  #       -f "${githubKeyFile}"
-  #
-  #     echo "✓ GitHub SSH key generated!"
-  #     echo "Add this key to https://github.com/settings/keys"
-  #     echo ""
-  #     $DRY_RUN_CMD cat "${githubKeyFile}.pub"
-  #     echo ""
-  #   fi
-  # '';
-
-  # Ensure SSH directory exists with correct permissions
-  # Note: SSH keys are generated with correct permissions by ssh-keygen
-  # The .ssh directory permissions are managed by Home Manager
-  home.file.".ssh/.permissions" = {
-    text = "# This file ensures .ssh directory is created with correct permissions\n";
-  };
 }
