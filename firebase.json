@@ -8,15 +8,6 @@
         "**/.*",
         "**/node_modules/**"
       ]
-    },
-    {
-      "site": "cs-demo-8b40",
-      "public": "demo/dist",
-      "ignore": [
-        "firebase.json",
-        "**/.*",
-        "**/node_modules/**"
-      ]
     }
   ],
   "firestore": {
