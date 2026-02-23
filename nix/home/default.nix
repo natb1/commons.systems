@@ -78,6 +78,10 @@
       "/home/${config.home.username}"
   );
 
+  home.packages = [
+    pkgs.jq
+  ];
+
   # Let Home Manager manage itself
   programs.home-manager.enable = true;
 
