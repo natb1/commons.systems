@@ -8,3 +8,4 @@ test-results/
 firestore-debug.log
 ui-debug.log
 .direnv/
+tmp/
