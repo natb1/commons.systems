@@ -1,5 +1,10 @@
 {
   "projects": {
     "default": "commons-systems"
+  },
+  "targets": {
+    "commons-systems": {
+      "hosting": {}
+    }
   }
 }

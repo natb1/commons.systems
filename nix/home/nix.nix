@@ -22,7 +22,7 @@
         "flakes"
       ];
 
-      # Warn about dirty Git trees
+      # Suppress warnings about uncommitted changes in flake Git trees
       warn-dirty = false;
     };
   };

@@ -11,10 +11,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
-detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
+APP_NAME=$(get_app_name "$APP_DIR")
+
+detect_features "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
-# Install app dependencies
 cd "$REPO_ROOT/$APP_DIR"
 npm ci
 
@@ -35,8 +36,10 @@ fi
 
 # Build with emulator env vars
 BUILD_ARGS=()
+EMULATOR_NAMESPACE=""
 if [ "$USES_FIRESTORE" = true ]; then
-  BUILD_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=emulator")
+  EMULATOR_NAMESPACE=$(get_firestore_namespace "$APP_NAME" "emulator")
+  BUILD_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=${EMULATOR_NAMESPACE}")
 fi
 if [ "$USES_AUTH" = true ]; then
   BUILD_ARGS+=("VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}")
@@ -104,7 +107,7 @@ npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_
 EMULATOR_PID=$!
 
 # Poll until hosting emulator serves content.
-# Timeout must cover npx download (~20s) + emulator startup (~15s).
+# Timeout allows headroom for slow CI (npx download + emulator startup can take 30-60s).
 TIMEOUT=120
 ELAPSED=0
 until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${HOSTING_PORT}/" 2>/dev/null | grep -q '^200$'; do
@@ -133,8 +136,9 @@ if [ "$USES_FIRESTORE" = true ]; then
 
   # Seed Firestore
   echo "Seeding Firestore..."
+  APP_NAME="$APP_NAME" \
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
-  FIRESTORE_NAMESPACE="emulator" \
+  FIRESTORE_NAMESPACE="${EMULATOR_NAMESPACE}" \
   npx tsx firestoreutil/bin/run-seed.ts
 fi
 
@@ -153,7 +157,7 @@ if [ "$USES_AUTH" = true ]; then
 
   # Seed auth user
   echo "Seeding auth user..."
-  AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
+  APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
 fi
 
 # Run Playwright acceptance tests

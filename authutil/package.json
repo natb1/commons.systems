@@ -5,7 +5,6 @@
   "type": "module",
   "exports": {
     "./seed": "./src/seed.ts",
-    "./seeds/hello": "./seeds/hello.ts",
     "./emulator-auth": "./src/emulator-auth.ts",
     "./e2e/sign-in": "./e2e/sign-in.ts"
   },
