@@ -30,17 +30,26 @@ Execute the next step instructions from the plan.
 
 Execute evaluation instructions against Step 1 output. This may involve user interaction (e.g., presenting findings for classification).
 
+If progress report instructions are provided, execute them now (regardless of outcome).
+
 Determine outcome:
 - **Iterate** → proceed to Step 3
 - **Terminate** → proceed to Step 4
 
-If progress report instructions are provided, execute them now (regardless of outcome).
-
 ## Step 3. Iterate
 
-Enter plan mode. The plan must include:
-- Output from Step 1, as modified by evaluation in Step 2
+**Phase A — Handle findings:**
+
+Enter plan mode. Plan must include:
+- Findings from Step 2 (retrieved from persistent storage if needed, e.g., the progress report written in Step 2)
+- Steps to address the findings
 - Commit instructions (commit after work is done)
+
+Execute Phase A plan.
+
+**Phase B — Prepare next step:**
+
+Enter plan mode. Plan must include:
 - The next step instructions
 
 Return to Step 1.
