@@ -26,29 +26,19 @@ cd "$REPO_ROOT"
 
 # Delete existing channel if present
 echo "Cleaning up existing preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
-DELETE_OUTPUT=$(npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --site "$HOSTING_SITE" --force --project "$FIREBASE_PROJECT_ID" 2>&1) || {
-  if echo "$DELETE_OUTPUT" | grep -qi "not found\|does not exist\|NOT_FOUND"; then
-    echo "Preview channel already deleted."
-  else
-    echo "WARNING: Failed to delete preview channel: $DELETE_OUTPUT" >&2
-  fi
-}
+delete_preview_channel "$CHANNEL_ID" "$HOSTING_SITE"
 
 # Deploy new hosting channel (uses deploy target from .firebaserc)
 echo "Deploying to preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
-set +e
 DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
   --only "$APP_NAME" \
   --project "$FIREBASE_PROJECT_ID" \
   --expires 7d \
-  --json 2>&1)
-DEPLOY_EXIT=$?
-set -e
-if [ "$DEPLOY_EXIT" -ne 0 ]; then
-  echo "Deploy failed with exit code $DEPLOY_EXIT" >&2
-  echo "Output: $DEPLOY_OUTPUT" >&2
+  --json 2>&1) || {
+  echo "Deploy failed:" >&2
+  echo "$DEPLOY_OUTPUT" >&2
   exit 1
-fi
+}
 
 # Seed Firestore (idempotent — uses doc.set() with fixed IDs)
 if [ "$USES_FIRESTORE" = true ]; then
@@ -58,15 +48,21 @@ if [ "$USES_FIRESTORE" = true ]; then
 fi
 
 # Extract preview URL from deploy output
+JQ_STDERR=$(mktemp)
 PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | jq -r '
   (.result // .) | to_entries[] | select(.value.url) | .value.url
-' 2>/dev/null | head -1)
+' 2>"$JQ_STDERR" | head -1) || true
 
 if [ -z "$PREVIEW_URL" ]; then
   echo "ERROR: Could not extract preview URL from deploy output." >&2
+  if [ -s "$JQ_STDERR" ]; then
+    echo "jq error: $(cat "$JQ_STDERR")" >&2
+  fi
   echo "Expected JSON with .result.<site>.url structure, got:" >&2
   echo "$DEPLOY_OUTPUT" >&2
+  rm -f "$JQ_STDERR"
   exit 1
 fi
+rm -f "$JQ_STDERR"
 
 echo "PREVIEW_URL=$PREVIEW_URL"

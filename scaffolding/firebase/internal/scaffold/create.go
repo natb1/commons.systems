@@ -22,17 +22,17 @@ func (d AppData) Title() string { return strings.ToUpper(d.AppName[:1]) + d.AppN
 func (d AppData) ProductionURL() string { return "https://" + d.SiteName + ".web.app" }
 
 // NewAppData creates an AppData with the given app and site names.
-func NewAppData(appName, siteName string) AppData {
+func NewAppData(appName, siteName string) (AppData, error) {
 	if len(appName) == 0 {
-		panic("NewAppData: appName must not be empty")
+		return AppData{}, fmt.Errorf("NewAppData: appName must not be empty")
 	}
 	return AppData{
 		AppName:  appName,
 		SiteName: siteName,
-	}
+	}, nil
 }
 
-func Create(repoRoot, appName string, templateFS fs.FS) (err error) {
+func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error) {
 	if err := ValidateAppName(appName); err != nil {
 		return err
 	}
@@ -51,75 +51,103 @@ func Create(repoRoot, appName string, templateFS fs.FS) (err error) {
 	}
 
 	// Create Firebase hosting site
-	fmt.Printf("Creating Firebase hosting site %q...\n", siteName)
-	cmd := exec.Command("npx", "firebase-tools", "hosting:sites:create", siteName, "--project", projectID)
-	cmd.Dir = repoRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("creating Firebase hosting site: %w", err)
+	if dryRun {
+		fmt.Printf("[dry-run] Would create Firebase hosting site %q in project %q\n", siteName, projectID)
+	} else {
+		fmt.Printf("Creating Firebase hosting site %q...\n", siteName)
+		cmd := exec.Command("npx", "firebase-tools", "hosting:sites:create", siteName, "--project", projectID)
+		cmd.Dir = repoRoot
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("creating Firebase hosting site: %w", err)
+		}
 	}
 
-	var siteCreated bool
-	siteCreated = true
+	siteCreated := !dryRun
 	defer func() {
 		if err != nil && siteCreated {
 			fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		}
 	}()
 
-	data := NewAppData(appName, siteName)
+	data, err := NewAppData(appName, siteName)
+	if err != nil {
+		return err
+	}
 
 	// Render app templates
-	fmt.Printf("Rendering app templates into %s/...\n", appName)
-	if err := renderTemplates(templateFS, repoRoot, "templates/app", appName, data); err != nil {
-		return fmt.Errorf("rendering app templates: %w", err)
+	if dryRun {
+		fmt.Printf("[dry-run] Would render app templates into %s/\n", appName)
+	} else {
+		fmt.Printf("Rendering app templates into %s/...\n", appName)
+		if err := renderTemplates(templateFS, repoRoot, "templates/app", appName, data); err != nil {
+			return fmt.Errorf("rendering app templates: %w", err)
+		}
 	}
 
 	// Render workflow templates
-	fmt.Println("Rendering workflow templates...")
-	if err := renderTemplates(templateFS, repoRoot, "templates/workflows", filepath.Join(".github", "workflows"), data); err != nil {
-		return fmt.Errorf("rendering workflow templates: %w", err)
+	if dryRun {
+		fmt.Printf("[dry-run] Would render workflow templates into .github/workflows/\n")
+	} else {
+		fmt.Println("Rendering workflow templates...")
+		if err := renderTemplates(templateFS, repoRoot, "templates/workflows", filepath.Join(".github", "workflows"), data); err != nil {
+			return fmt.Errorf("rendering workflow templates: %w", err)
+		}
 	}
 
 	// Update firebase.json
-	fmt.Println("Updating firebase.json...")
-	config, err := ReadFirebaseConfig(repoRoot)
-	if err != nil {
-		return err
-	}
-	if err := AddHostingEntry(config, appName); err != nil {
-		return err
-	}
-	if err := WriteFirebaseConfig(repoRoot, config); err != nil {
-		return err
+	if dryRun {
+		fmt.Printf("[dry-run] Would add hosting entry for %q to firebase.json\n", appName)
+	} else {
+		fmt.Println("Updating firebase.json...")
+		config, err := ReadFirebaseConfig(repoRoot)
+		if err != nil {
+			return err
+		}
+		if err := AddHostingEntry(config, appName); err != nil {
+			return err
+		}
+		if err := WriteFirebaseConfig(repoRoot, config); err != nil {
+			return err
+		}
 	}
 
 	// Add deploy target to .firebaserc
-	fmt.Println("Adding deploy target to .firebaserc...")
-	rc, err := ReadFirebaseRC(repoRoot)
-	if err != nil {
-		return err
-	}
-	if err := AddHostingTarget(rc, appName, siteName); err != nil {
-		return err
-	}
-	if err := WriteFirebaseRC(repoRoot, rc); err != nil {
-		return err
+	if dryRun {
+		fmt.Printf("[dry-run] Would add hosting target %q → %q to .firebaserc\n", appName, siteName)
+	} else {
+		fmt.Println("Adding deploy target to .firebaserc...")
+		rc, err := ReadFirebaseRC(repoRoot)
+		if err != nil {
+			return err
+		}
+		if err := AddHostingTarget(rc, appName, siteName); err != nil {
+			return err
+		}
+		if err := WriteFirebaseRC(repoRoot, rc); err != nil {
+			return err
+		}
 	}
 
 	fmt.Println()
-	fmt.Println("App created successfully!")
+	if dryRun {
+		fmt.Println("[dry-run] App creation plan complete. No changes were made.")
+	} else {
+		fmt.Println("App created successfully!")
+	}
 	fmt.Println()
 	fmt.Printf("  App directory:  %s/\n", appName)
 	fmt.Printf("  Hosting site:   %s\n", siteName)
 	fmt.Printf("  Production URL: %s\n", data.ProductionURL())
 	fmt.Println()
-	fmt.Println("Next steps:")
-	fmt.Printf("  cd %s && npm install\n", appName)
-	fmt.Printf("  # Run unit tests:       .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh %s\n", appName)
-	fmt.Printf("  # Run acceptance tests:  .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh %s\n", appName)
-	fmt.Println()
+	if !dryRun {
+		fmt.Println("Next steps:")
+		fmt.Printf("  cd %s && npm install\n", appName)
+		fmt.Printf("  # Run unit tests:       .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh %s\n", appName)
+		fmt.Printf("  # Run acceptance tests:  .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh %s\n", appName)
+		fmt.Println()
+	}
 
 	return nil
 }
@@ -167,9 +195,15 @@ func renderTemplates(templateFS fs.FS, repoRoot, templateDir, outputDir string, 
 			content = []byte(buf.String())
 		}
 
+		// Preserve executable bit from source; default to 0o644 for non-executable files.
+		mode := fs.FileMode(0o644)
+		if info, err := d.Info(); err == nil && info.Mode()&0o111 != 0 {
+			mode = 0o755
+		}
+
 		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 			return err
 		}
-		return os.WriteFile(outPath, content, 0o644)
+		return os.WriteFile(outPath, content, mode)
 	})
 }

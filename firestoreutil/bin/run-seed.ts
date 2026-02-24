@@ -7,6 +7,10 @@ if (!appName) {
   console.error("APP_NAME env var is required");
   process.exit(1);
 }
+if (!/^[a-z][a-z0-9-]*$/.test(appName)) {
+  console.error(`Invalid APP_NAME: "${appName}" (must match ^[a-z][a-z0-9-]*$)`);
+  process.exit(1);
+}
 
 const namespace = process.env.FIRESTORE_NAMESPACE;
 if (!namespace) {
@@ -28,11 +32,12 @@ try {
   process.exit(1);
 }
 
+const projectId = process.env.FIREBASE_PROJECT_ID ?? "commons-systems";
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
 
 if (emulatorHost) {
   // When using the emulator, initialize without credentials
-  initializeApp({ projectId: "commons-systems" });
+  initializeApp({ projectId });
 } else {
   // Production: use application default credentials or service account
   const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -46,7 +51,7 @@ if (emulatorHost) {
       "No GOOGLE_APPLICATION_CREDENTIALS set — using application default credentials. " +
         "Ensure ADC is configured (e.g. via `gcloud auth application-default login`).",
     );
-    initializeApp({ projectId: "commons-systems" });
+    initializeApp({ projectId });
   }
 }
 

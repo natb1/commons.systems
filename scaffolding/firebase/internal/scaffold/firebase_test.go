@@ -21,10 +21,18 @@ func TestGenerateSiteName(t *testing.T) {
 		t.Errorf("expected length 12, got %d (%q)", len(name), name)
 	}
 
-	// Uniqueness: check if they differ (collision is possible but unlikely)
-	name2, _ := GenerateSiteName("demo")
-	if name == name2 {
-		t.Log("WARNING: two generated names are identical (unlikely but possible)")
+	// Uniqueness: generate 10 names and verify at least 2 are distinct.
+	// With 2 bytes of randomness (65536 possibilities), all-same in 10 tries is near-impossible.
+	seen := make(map[string]bool)
+	for i := 0; i < 10; i++ {
+		n, err := GenerateSiteName("demo")
+		if err != nil {
+			t.Fatalf("unexpected error on iteration %d: %v", i, err)
+		}
+		seen[n] = true
+	}
+	if len(seen) < 2 {
+		t.Errorf("expected at least 2 distinct names from 10 generations, got %d", len(seen))
 	}
 }
 
@@ -97,7 +105,7 @@ func TestAddAndRemoveHostingEntry(t *testing.T) {
 func TestFindHostingSite(t *testing.T) {
 	rc := &FirebaseRC{
 		Projects: map[string]string{"default": "commons-systems"},
-		Targets: map[string]map[string]HostingSiteMap{
+		Targets: map[string]ProjectTargets{
 			"commons-systems": {
 				"hosting": {
 					"hello": []string{"cs-hello-5b22"},
@@ -125,7 +133,7 @@ func TestFirebaseRCRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	initial := &FirebaseRC{
 		Projects: map[string]string{"default": "commons-systems"},
-		Targets: map[string]map[string]HostingSiteMap{
+		Targets: map[string]ProjectTargets{
 			"commons-systems": {
 				"hosting": {
 					"hello": []string{"cs-hello-5b22"},
@@ -152,7 +160,7 @@ func TestFirebaseRCRoundTrip(t *testing.T) {
 func TestAddAndRemoveHostingTarget(t *testing.T) {
 	rc := &FirebaseRC{
 		Projects: map[string]string{"default": "commons-systems"},
-		Targets: map[string]map[string]HostingSiteMap{
+		Targets: map[string]ProjectTargets{
 			"commons-systems": {
 				"hosting": {
 					"hello": []string{"cs-hello-5b22"},
@@ -184,7 +192,7 @@ func TestAddAndRemoveHostingTarget(t *testing.T) {
 func TestAddHostingTargetDuplicate(t *testing.T) {
 	rc := &FirebaseRC{
 		Projects: map[string]string{"default": "commons-systems"},
-		Targets: map[string]map[string]HostingSiteMap{
+		Targets: map[string]ProjectTargets{
 			"commons-systems": {
 				"hosting": {
 					"hello": []string{"cs-hello-5b22"},

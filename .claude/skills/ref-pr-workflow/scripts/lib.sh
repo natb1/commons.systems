@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared functions for PR workflow scripts
 
-FIREBASE_PROJECT_ID="commons-systems"
+export FIREBASE_PROJECT_ID="commons-systems"
 
 # Detect what Firebase features the app uses.
 # Sets global variables: USES_FIRESTORE, USES_AUTH
@@ -50,7 +50,7 @@ get_app_name() {
 }
 
 # Read the hosting site ID for an app from .firebaserc deploy targets.
-# Exits with code 1 if no hosting target is found.
+# Returns code 1 if no hosting target is found.
 # Args: $1 = repo root, $2 = app name (e.g. "hello")
 get_hosting_site() {
   local repo_root="$1"
@@ -63,15 +63,8 @@ get_hosting_site() {
   fi
 
   local site
-  local stderr_file
-  stderr_file=$(mktemp)
   site=$(jq -r --arg pid "$FIREBASE_PROJECT_ID" --arg app "$app_name" \
-    '.targets[$pid].hosting[$app][0] // empty' "$rc_path" 2>"$stderr_file") || {
-    cat "$stderr_file" >&2
-    rm -f "$stderr_file"
-    return 1
-  }
-  rm -f "$stderr_file"
+    '.targets[$pid].hosting[$app][0] // empty' "$rc_path") || return 1
 
   if [ -z "$site" ]; then
     echo "ERROR: no hosting target \"${app_name}\" found for project \"${FIREBASE_PROJECT_ID}\" in .firebaserc" >&2
@@ -84,7 +77,27 @@ get_hosting_site() {
 # Build the Firestore namespace for an app and environment.
 # Args: $1 = app name, $2 = environment suffix (e.g. "prod", "qa", "preview-pr-5")
 get_firestore_namespace() {
-  echo "${1}-${2}"
+  if [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
+    printf "ERROR: get_firestore_namespace requires two non-empty arguments (got app='%s', env='%s')\n" "${1:-}" "${2:-}" >&2
+    return 1
+  fi
+  printf '%s-%s' "$1" "$2"
+}
+
+# Delete a Firebase Hosting preview channel.
+# Silently succeeds if the channel does not exist.
+# Args: $1 = channel ID, $2 = hosting site name
+delete_preview_channel() {
+  local channel_id="$1"
+  local hosting_site="$2"
+
+  DELETE_OUTPUT=$(npx firebase-tools hosting:channel:delete "$channel_id" --site "$hosting_site" --force --project "$FIREBASE_PROJECT_ID" 2>&1) || {
+    if echo "$DELETE_OUTPUT" | grep -qi "not found\|does not exist\|NOT_FOUND"; then
+      echo "Preview channel already deleted."
+    else
+      echo "WARNING: Failed to delete preview channel: $DELETE_OUTPUT" >&2
+    fi
+  }
 }
 
 # Find an available TCP port by binding to port 0 and reading the assigned port.

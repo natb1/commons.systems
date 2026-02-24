@@ -133,7 +133,6 @@ if [ "$USES_AUTH" = true ]; then
   APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
 fi
 
-# Build Vite env vars
 VITE_ARGS=()
 if [ "$USES_FIRESTORE" = true ]; then
   VITE_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=$(get_firestore_namespace "$APP_NAME" "qa")")
@@ -178,7 +177,7 @@ fi
 if [ "$USES_FIRESTORE" = true ]; then
   echo ""
   echo "  Firestore emulator: localhost:${FIRESTORE_PORT}"
-  echo "  Firestore namespace: ${APP_NAME}-qa"
+  echo "  Firestore namespace: ${NAMESPACE}"
 fi
 if [ "$USES_AUTH" = true ]; then
   echo "  Auth emulator:      localhost:${AUTH_PORT}"

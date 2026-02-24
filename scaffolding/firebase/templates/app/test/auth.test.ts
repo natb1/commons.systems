@@ -36,6 +36,7 @@ describe("auth module", () => {
     vi.resetModules();
     mockGetAuth.mockReturnValue({ type: "mock-auth" });
     mockGetRedirectResult.mockResolvedValue(null);
+    mockSignInWithRedirect.mockResolvedValue(undefined);
   });
 
   it("calls getRedirectResult on module load", async () => {

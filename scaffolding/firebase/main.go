@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,13 +17,21 @@ import (
 var templateFS embed.FS
 
 func main() {
-	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "Usage: scaffold <create|cleanup> <app-name>")
+	dryRun := flag.Bool("dry-run", false, "Print what would happen without executing")
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: scaffold [--dry-run] <create|cleanup> <app-name>")
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) < 2 {
+		flag.Usage()
 		os.Exit(1)
 	}
 
-	cmd := os.Args[1]
-	appName := os.Args[2]
+	cmd := args[0]
+	appName := args[1]
 
 	repoRoot, err := findRepoRoot()
 	if err != nil {
@@ -32,17 +41,17 @@ func main() {
 
 	switch cmd {
 	case "create":
-		if err := scaffold.Create(repoRoot, appName, templateFS); err != nil {
+		if err := scaffold.Create(repoRoot, appName, templateFS, *dryRun); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 	case "cleanup":
-		if err := scaffold.Cleanup(repoRoot, appName); err != nil {
+		if err := scaffold.Cleanup(repoRoot, appName, *dryRun); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\nUsage: scaffold <create|cleanup> <app-name>\n", cmd)
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\nUsage: scaffold [--dry-run] <create|cleanup> <app-name>\n", cmd)
 		os.Exit(1)
 	}
 }

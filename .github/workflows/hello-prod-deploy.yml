@@ -21,7 +21,7 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: main
       - uses: actions/setup-node@v4
@@ -44,20 +44,23 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: main
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
       - name: Run smoke tests
-        run: .claude/skills/ref-pr-workflow/scripts/run-smoke-tests.sh hello "https://cs-hello-5b22.web.app"
+        run: |
+          source .claude/skills/ref-pr-workflow/scripts/lib.sh
+          SITE=$(get_hosting_site "$(pwd)" hello)
+          .claude/skills/ref-pr-workflow/scripts/run-smoke-tests.sh hello "https://${SITE}.web.app"
 
   cleanup-preview:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: main
       - uses: actions/setup-node@v4

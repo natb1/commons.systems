@@ -18,7 +18,7 @@ detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
 # Install app dependencies and build.
-# Production build uses the app's compiled-in fallback namespace ({appname}-prod).
+# Production build uses the app's compiled-in fallback namespace (e.g. "hello-prod" from firebase.ts).
 cd "$REPO_ROOT/$APP_DIR"
 npm ci
 npm run build

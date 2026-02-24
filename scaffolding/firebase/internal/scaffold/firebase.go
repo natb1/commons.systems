@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 )
 
+const hostingTargetType = "hosting"
+
 type HostingEntry struct {
 	Target string   `json:"target"`
 	Public string   `json:"public"`
@@ -24,6 +26,11 @@ type FirebaseConfig struct {
 	// extra preserves unknown JSON keys during round-trip read/write.
 	extra map[string]json.RawMessage
 }
+
+// UnmarshalJSON and MarshalJSON use the alias-and-raw-map pattern to preserve
+// unknown JSON keys during round-trip. FirebaseConfig and FirebaseRC both need
+// this, and the implementations are intentionally similar. Go generics cannot
+// easily abstract over struct-specific known/unknown field separation.
 
 func (c *FirebaseConfig) UnmarshalJSON(data []byte) error {
 	// Unmarshal known fields via alias to avoid infinite recursion.
@@ -68,9 +75,12 @@ func (c FirebaseConfig) MarshalJSON() ([]byte, error) {
 	return json.Marshal(obj)
 }
 
+// ProjectTargets maps target types (e.g. "hosting") to their app-site mappings.
+type ProjectTargets map[string]HostingSiteMap
+
 type FirebaseRC struct {
-	Projects map[string]string                        `json:"projects"`
-	Targets  map[string]map[string]HostingSiteMap `json:"targets,omitempty"`
+	Projects map[string]string          `json:"projects"`
+	Targets  map[string]ProjectTargets  `json:"targets,omitempty"`
 	// extra preserves unknown JSON keys during round-trip read/write.
 	extra map[string]json.RawMessage
 }
@@ -114,7 +124,8 @@ func (rc FirebaseRC) MarshalJSON() ([]byte, error) {
 	return json.Marshal(obj)
 }
 
-// HostingSiteMap maps app names to their hosting site IDs.
+// HostingSiteMap maps app names to their hosting site IDs ([]string).
+// Each app may have multiple sites; the first element is the primary site.
 type HostingSiteMap map[string][]string
 
 // DefaultProjectID returns the default project ID from .firebaserc.
@@ -205,7 +216,7 @@ func FindHostingSite(rc *FirebaseRC, appName string) (string, error) {
 	}
 	if rc.Targets != nil {
 		if projectTargets, ok := rc.Targets[projectID]; ok {
-			if hosting, ok := projectTargets["hosting"]; ok {
+			if hosting, ok := projectTargets[hostingTargetType]; ok {
 				if sites, ok := hosting[appName]; ok && len(sites) > 0 {
 					return sites[0], nil
 				}
@@ -246,18 +257,18 @@ func AddHostingTarget(rc *FirebaseRC, appName, siteName string) error {
 		return err
 	}
 	if rc.Targets == nil {
-		rc.Targets = make(map[string]map[string]HostingSiteMap)
+		rc.Targets = make(map[string]ProjectTargets)
 	}
 	if rc.Targets[projectID] == nil {
-		rc.Targets[projectID] = make(map[string]HostingSiteMap)
+		rc.Targets[projectID] = make(ProjectTargets)
 	}
-	if rc.Targets[projectID]["hosting"] == nil {
-		rc.Targets[projectID]["hosting"] = make(HostingSiteMap)
+	if rc.Targets[projectID][hostingTargetType] == nil {
+		rc.Targets[projectID][hostingTargetType] = make(HostingSiteMap)
 	}
-	if _, exists := rc.Targets[projectID]["hosting"][appName]; exists {
+	if _, exists := rc.Targets[projectID][hostingTargetType][appName]; exists {
 		return fmt.Errorf("hosting target %q already exists in .firebaserc", appName)
 	}
-	rc.Targets[projectID]["hosting"][appName] = []string{siteName}
+	rc.Targets[projectID][hostingTargetType][appName] = []string{siteName}
 	return nil
 }
 
@@ -266,8 +277,8 @@ func RemoveHostingTarget(rc *FirebaseRC, appName string) error {
 	if err != nil {
 		return err
 	}
-	if rc.Targets != nil && rc.Targets[projectID] != nil && rc.Targets[projectID]["hosting"] != nil {
-		delete(rc.Targets[projectID]["hosting"], appName)
+	if rc.Targets != nil && rc.Targets[projectID] != nil && rc.Targets[projectID][hostingTargetType] != nil {
+		delete(rc.Targets[projectID][hostingTargetType], appName)
 	}
 	return nil
 }

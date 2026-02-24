@@ -16,7 +16,6 @@ APP_NAME=$(get_app_name "$APP_DIR")
 detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
-# Install app dependencies
 cd "$REPO_ROOT/$APP_DIR"
 npm ci
 

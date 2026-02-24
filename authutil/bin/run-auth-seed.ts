@@ -5,6 +5,10 @@ if (!appName) {
   console.error("APP_NAME env var is required");
   process.exit(1);
 }
+if (!/^[a-z][a-z0-9-]*$/.test(appName)) {
+  console.error(`Invalid APP_NAME: "${appName}" (must match ^[a-z][a-z0-9-]*$)`);
+  process.exit(1);
+}
 
 const host = process.env.AUTH_EMULATOR_HOST;
 if (!host) {

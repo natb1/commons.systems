@@ -35,7 +35,10 @@ export function signIn(): void {
 }
 
 export function signOut(): Promise<void> {
-  return firebaseSignOut(auth);
+  return firebaseSignOut(auth).catch((error) => {
+    console.error("Sign-out failed:", error);
+    throw error;
+  });
 }
 
 export { onAuthStateChanged };

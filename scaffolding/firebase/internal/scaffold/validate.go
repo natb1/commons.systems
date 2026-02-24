@@ -17,6 +17,7 @@ var reservedNames = map[string]bool{
 	"scaffolding":   true,
 	"node_modules":  true,
 	"dist":          true,
+	"nix":           true,
 }
 
 func ValidateAppName(name string) error {
