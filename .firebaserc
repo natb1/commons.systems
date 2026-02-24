@@ -4,11 +4,7 @@
   },
   "targets": {
     "commons-systems": {
-      "hosting": {
-        "hello": [
-          "cs-hello-5b22"
-        ]
-      }
+      "hosting": {}
     }
   }
 }

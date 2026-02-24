@@ -1,15 +1,5 @@
 {
-  "hosting": [
-    {
-      "target": "hello",
-      "public": "hello/dist",
-      "ignore": [
-        "firebase.json",
-        "**/.*",
-        "**/node_modules/**"
-      ]
-    }
-  ],
+  "hosting": [],
   "firestore": {
     "rules": "firestore.rules"
   }
