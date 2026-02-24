@@ -11,13 +11,28 @@ import (
 )
 
 type AppData struct {
-	AppName       string
-	Title         string
-	SiteName      string
-	ProductionURL string
+	AppName  string
+	SiteName string
 }
 
-func Create(repoRoot, appName string, templateFS fs.FS) error {
+// Title returns the app name with the first letter capitalized.
+func (d AppData) Title() string { return strings.ToUpper(d.AppName[:1]) + d.AppName[1:] }
+
+// ProductionURL returns the production URL for the app's hosting site.
+func (d AppData) ProductionURL() string { return "https://" + d.SiteName + ".web.app" }
+
+// NewAppData creates an AppData with the given app and site names.
+func NewAppData(appName, siteName string) AppData {
+	if len(appName) == 0 {
+		panic("NewAppData: appName must not be empty")
+	}
+	return AppData{
+		AppName:  appName,
+		SiteName: siteName,
+	}
+}
+
+func Create(repoRoot, appName string, templateFS fs.FS) (err error) {
 	if err := ValidateAppName(appName); err != nil {
 		return err
 	}
@@ -45,24 +60,25 @@ func Create(repoRoot, appName string, templateFS fs.FS) error {
 		return fmt.Errorf("creating Firebase hosting site: %w", err)
 	}
 
-	data := AppData{
-		AppName:       appName,
-		Title:         strings.ToUpper(appName[:1]) + appName[1:],
-		SiteName:      siteName,
-		ProductionURL: "https://" + siteName + ".web.app",
-	}
+	var siteCreated bool
+	siteCreated = true
+	defer func() {
+		if err != nil && siteCreated {
+			fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
+		}
+	}()
+
+	data := NewAppData(appName, siteName)
 
 	// Render app templates
 	fmt.Printf("Rendering app templates into %s/...\n", appName)
 	if err := renderTemplates(templateFS, repoRoot, "templates/app", appName, data); err != nil {
-		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return fmt.Errorf("rendering app templates: %w", err)
 	}
 
 	// Render workflow templates
 	fmt.Println("Rendering workflow templates...")
 	if err := renderTemplates(templateFS, repoRoot, "templates/workflows", filepath.Join(".github", "workflows"), data); err != nil {
-		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return fmt.Errorf("rendering workflow templates: %w", err)
 	}
 
@@ -70,15 +86,12 @@ func Create(repoRoot, appName string, templateFS fs.FS) error {
 	fmt.Println("Updating firebase.json...")
 	config, err := ReadFirebaseConfig(repoRoot)
 	if err != nil {
-		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return err
 	}
 	if err := AddHostingEntry(config, appName); err != nil {
-		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return err
 	}
 	if err := WriteFirebaseConfig(repoRoot, config); err != nil {
-		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return err
 	}
 
@@ -86,15 +99,12 @@ func Create(repoRoot, appName string, templateFS fs.FS) error {
 	fmt.Println("Adding deploy target to .firebaserc...")
 	rc, err := ReadFirebaseRC(repoRoot)
 	if err != nil {
-		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return err
 	}
 	if err := AddHostingTarget(rc, appName, siteName); err != nil {
-		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return err
 	}
 	if err := WriteFirebaseRC(repoRoot, rc); err != nil {
-		fmt.Printf("HINT: hosting site %q was created but subsequent steps failed. Run `scaffold cleanup %s` to clean up.\n", siteName, appName)
 		return err
 	}
 
@@ -103,7 +113,7 @@ func Create(repoRoot, appName string, templateFS fs.FS) error {
 	fmt.Println()
 	fmt.Printf("  App directory:  %s/\n", appName)
 	fmt.Printf("  Hosting site:   %s\n", siteName)
-	fmt.Printf("  Production URL: %s\n", data.ProductionURL)
+	fmt.Printf("  Production URL: %s\n", data.ProductionURL())
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Printf("  cd %s && npm install\n", appName)

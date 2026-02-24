@@ -1,7 +1,6 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
-const helloSeed: SeedSpec = {
-  namespace: "",
+const helloSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
       name: "messages",

@@ -88,6 +88,21 @@ describe("createRouter", () => {
     expect(outlet.innerHTML).toBe("<h2>Fast</h2>");
   });
 
+  it("shows error message when render throws", async () => {
+    const errorRoutes: Route[] = [
+      {
+        path: "/",
+        render: () => {
+          throw new Error("boom");
+        },
+      },
+    ];
+    createRouter(outlet, errorRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toContain("Something went wrong");
+    });
+  });
+
   it("returns a refresh function that re-renders the current route", async () => {
     let count = 0;
     const dynamicRoutes: Route[] = [

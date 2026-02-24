@@ -29,7 +29,9 @@ const provider = new GithubAuthProvider();
 export function signIn(): void {
   // In emulator mode, redirects to the emulator's fake GitHub account picker.
   // In production, redirects to real GitHub OAuth.
-  void signInWithRedirect(auth, provider);
+  signInWithRedirect(auth, provider).catch((error) => {
+    console.error("Sign-in redirect failed:", error);
+  });
 }
 
 export function signOut(): Promise<void> {

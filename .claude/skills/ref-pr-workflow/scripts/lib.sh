@@ -63,20 +63,20 @@ get_hosting_site() {
   fi
 
   local site
-  site=$(RC_PATH="$rc_path" PROJECT_ID="$FIREBASE_PROJECT_ID" APP_NAME="$app_name" node -e "
-    const rc = JSON.parse(require('fs').readFileSync(process.env.RC_PATH, 'utf8'));
-    const projectId = process.env.PROJECT_ID;
-    const appName = process.env.APP_NAME;
-    const sites = rc.targets?.[projectId]?.hosting?.[appName];
-    if (!sites || !sites[0]) {
-      process.stderr.write('ERROR: no hosting target \"' + appName + '\" found for project \"' + projectId + '\" in .firebaserc\n');
-      process.exit(1);
-    }
-    console.log(sites[0]);
-  " 2>&1) || {
-    echo "$site" >&2
+  local stderr_file
+  stderr_file=$(mktemp)
+  site=$(jq -r --arg pid "$FIREBASE_PROJECT_ID" --arg app "$app_name" \
+    '.targets[$pid].hosting[$app][0] // empty' "$rc_path" 2>"$stderr_file") || {
+    cat "$stderr_file" >&2
+    rm -f "$stderr_file"
     return 1
   }
+  rm -f "$stderr_file"
+
+  if [ -z "$site" ]; then
+    echo "ERROR: no hosting target \"${app_name}\" found for project \"${FIREBASE_PROJECT_ID}\" in .firebaserc" >&2
+    return 1
+  fi
 
   echo "$site"
 }

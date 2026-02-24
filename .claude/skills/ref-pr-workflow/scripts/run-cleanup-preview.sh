@@ -19,9 +19,15 @@ detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
 
 CHANNEL_ID="pr-${PR_NUMBER}"
 
-# Delete preview hosting channel (ignore errors if already deleted)
+# Delete preview hosting channel
 echo "Deleting preview channel '${CHANNEL_ID}' from site '$HOSTING_SITE'..."
-npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --site "$HOSTING_SITE" --force --project "$FIREBASE_PROJECT_ID" 2>/dev/null || true
+DELETE_OUTPUT=$(npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --site "$HOSTING_SITE" --force --project "$FIREBASE_PROJECT_ID" 2>&1) || {
+  if echo "$DELETE_OUTPUT" | grep -qi "not found\|does not exist\|NOT_FOUND"; then
+    echo "Preview channel already deleted."
+  else
+    echo "WARNING: Failed to delete preview channel: $DELETE_OUTPUT" >&2
+  fi
+}
 
 # Delete namespaced Firestore data
 if [ "$USES_FIRESTORE" = true ]; then

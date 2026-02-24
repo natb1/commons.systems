@@ -18,15 +18,21 @@ HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
 detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
-# Install app dependencies and build (no emulator env vars — production build)
+# Install app dependencies and build (uses preview namespace, no emulator)
 cd "$REPO_ROOT/$APP_DIR"
 npm ci
 VITE_FIRESTORE_NAMESPACE="$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")" npm run build
 cd "$REPO_ROOT"
 
-# Delete existing channel if present (ignore errors if it doesn't exist)
+# Delete existing channel if present
 echo "Cleaning up existing preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
-npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --site "$HOSTING_SITE" --force --project "$FIREBASE_PROJECT_ID" 2>/dev/null || true
+DELETE_OUTPUT=$(npx firebase-tools hosting:channel:delete "$CHANNEL_ID" --site "$HOSTING_SITE" --force --project "$FIREBASE_PROJECT_ID" 2>&1) || {
+  if echo "$DELETE_OUTPUT" | grep -qi "not found\|does not exist\|NOT_FOUND"; then
+    echo "Preview channel already deleted."
+  else
+    echo "WARNING: Failed to delete preview channel: $DELETE_OUTPUT" >&2
+  fi
+}
 
 # Deploy new hosting channel (uses deploy target from .firebaserc)
 echo "Deploying to preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
@@ -52,30 +58,14 @@ if [ "$USES_FIRESTORE" = true ]; then
 fi
 
 # Extract preview URL from deploy output
-PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | node -e "
-  const chunks = [];
-  process.stdin.on('data', c => chunks.push(c));
-  process.stdin.on('end', () => {
-    const data = JSON.parse(chunks.join(''));
-    const hosting = data.result || data;
-    // URL is in result.<site-id>.url or result.<site-id>
-    const keys = Object.keys(hosting);
-    for (const key of keys) {
-      if (hosting[key] && hosting[key].url) {
-        console.log(hosting[key].url);
-        return;
-      }
-    }
-    // Fallback: look for url field directly
-    if (hosting.url) {
-      console.log(hosting.url);
-    }
-  });
-")
+PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | jq -r '
+  (.result // .) | to_entries[] | select(.value.url) | .value.url
+' 2>/dev/null | head -1)
 
 if [ -z "$PREVIEW_URL" ]; then
-  echo "ERROR: Could not extract preview URL from deploy output" >&2
-  echo "Deploy output: $DEPLOY_OUTPUT" >&2
+  echo "ERROR: Could not extract preview URL from deploy output." >&2
+  echo "Expected JSON with .result.<site>.url structure, got:" >&2
+  echo "$DEPLOY_OUTPUT" >&2
   exit 1
 fi
 

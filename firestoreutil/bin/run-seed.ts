@@ -14,10 +14,10 @@ if (!namespace) {
   process.exit(1);
 }
 
-let appSeed: SeedSpec;
+let appSeed: Omit<SeedSpec, "namespace">;
 try {
   const mod = (await import(`../../${appName}/seeds/firestore.js`)) as {
-    default: SeedSpec;
+    default: Omit<SeedSpec, "namespace">;
   };
   appSeed = mod.default;
 } catch (err) {
@@ -42,12 +42,16 @@ if (emulatorHost) {
     ).default as ServiceAccount;
     initializeApp({ credential: cert(serviceAccount) });
   } else {
+    console.warn(
+      "No GOOGLE_APPLICATION_CREDENTIALS set — using application default credentials. " +
+        "Ensure ADC is configured (e.g. via `gcloud auth application-default login`).",
+    );
     initializeApp({ projectId: "commons-systems" });
   }
 }
 
 const db = getFirestore();
-const spec = { ...appSeed, namespace };
+const spec: SeedSpec = { ...appSeed, namespace };
 
 console.log(`Seeding Firestore namespace "${namespace}" for app "${appName}"...`);
 if (emulatorHost) {

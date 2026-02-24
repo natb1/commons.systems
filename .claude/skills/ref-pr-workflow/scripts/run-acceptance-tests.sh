@@ -106,7 +106,7 @@ npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_
 EMULATOR_PID=$!
 
 # Poll until hosting emulator serves content.
-# Timeout must cover npx download (~20s) + emulator startup (~15s).
+# Timeout allows headroom for slow CI (npx download + emulator startup can take 30-60s).
 TIMEOUT=120
 ELAPSED=0
 until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${HOSTING_PORT}/" 2>/dev/null | grep -q '^200$'; do

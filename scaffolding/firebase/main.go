@@ -10,7 +10,7 @@ import (
 )
 
 // all: prefix includes files starting with . and _ that embed normally skips.
-// This is needed because templates contain dotfiles (e.g. .eslintrc).
+// Ensures any dotfiles or _-prefixed files in templates are not silently omitted.
 //
 //go:embed all:templates
 var templateFS embed.FS

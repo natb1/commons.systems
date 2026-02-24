@@ -30,14 +30,21 @@ func Cleanup(repoRoot, appName string) error {
 
 	warnings := 0
 
+	// Read .firebaserc once for both FindHostingSite and RemoveHostingTarget.
+	rc, err := ReadFirebaseRC(repoRoot)
+	if err != nil {
+		return err
+	}
+
 	// Read hosting site from .firebaserc deploy targets
-	siteName, err := FindHostingSite(repoRoot, appName)
+	siteName, err := FindHostingSite(rc, appName)
 	if err != nil {
 		fmt.Printf("WARNING: %v\n", err)
 		warnings++
 	}
 
 	// Delete Firebase hosting site
+	var hostingDeleted bool
 	if siteName != "" {
 		fmt.Printf("Deleting Firebase hosting site %q...\n", siteName)
 		cmd := exec.Command("npx", "firebase-tools", "hosting:sites:delete", siteName, "--force", "--project", projectID)
@@ -47,10 +54,15 @@ func Cleanup(repoRoot, appName string) error {
 		if err := cmd.Run(); err != nil {
 			fmt.Printf("WARNING: failed to delete hosting site: %v\n", err)
 			warnings++
+		} else {
+			hostingDeleted = true
 		}
 	}
 
-	// Delete Firestore production namespace
+	// Delete Firestore production namespace.
+	// Preview namespaces are cleaned by the PR close workflow (run-cleanup-preview.sh),
+	// so only the prod namespace needs cleanup here.
+	var firestoreDeleted bool
 	fmt.Printf("Deleting Firestore namespace %q...\n", appName+"-prod")
 	nsCmd := exec.Command("npx", "tsx", "firestoreutil/bin/run-delete-namespace.ts")
 	nsCmd.Dir = repoRoot
@@ -60,6 +72,8 @@ func Cleanup(repoRoot, appName string) error {
 	if err := nsCmd.Run(); err != nil {
 		fmt.Printf("WARNING: failed to delete Firestore namespace: %v\n", err)
 		warnings++
+	} else {
+		firestoreDeleted = true
 	}
 
 	// Remove hosting entry from firebase.json
@@ -75,10 +89,6 @@ func Cleanup(repoRoot, appName string) error {
 
 	// Remove deploy target from .firebaserc
 	fmt.Println("Removing deploy target from .firebaserc...")
-	rc, err := ReadFirebaseRC(repoRoot)
-	if err != nil {
-		return err
-	}
 	if err := RemoveHostingTarget(rc, appName); err != nil {
 		return err
 	}
@@ -122,10 +132,16 @@ func Cleanup(repoRoot, appName string) error {
 		fmt.Println("Cleanup complete!")
 	}
 	fmt.Printf("  Removed: %s/\n", appName)
-	if siteName != "" {
+	if hostingDeleted {
 		fmt.Printf("  Deleted hosting site: %s\n", siteName)
+	} else if siteName != "" {
+		fmt.Printf("  SKIPPED hosting site deletion (see warnings above)\n")
 	}
-	fmt.Printf("  Deleted Firestore namespace: %s-prod\n", appName)
+	if firestoreDeleted {
+		fmt.Printf("  Deleted Firestore namespace: %s-prod\n", appName)
+	} else {
+		fmt.Printf("  SKIPPED Firestore namespace deletion (see warnings above)\n")
+	}
 	fmt.Println()
 
 	return nil

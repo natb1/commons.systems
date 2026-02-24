@@ -16,7 +16,13 @@ if (emulatorHost) {
   connectFirestoreEmulator(db, parts[0], parseInt(parts[1], 10));
 }
 
-export const NAMESPACE =
-  (import.meta.env.VITE_FIRESTORE_NAMESPACE as string) || "{{.AppName}}-prod";
+const envNamespace = import.meta.env.VITE_FIRESTORE_NAMESPACE as string;
+if (!envNamespace && import.meta.env.MODE !== "production") {
+  console.warn(
+    "VITE_FIRESTORE_NAMESPACE not set — using default production namespace. " +
+      "This is expected in production builds but may indicate misconfiguration in dev/preview.",
+  );
+}
+export const NAMESPACE = envNamespace || "{{.AppName}}-prod";
 
 export { db, app };

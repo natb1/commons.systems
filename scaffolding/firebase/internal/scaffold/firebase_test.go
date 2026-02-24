@@ -76,22 +76,28 @@ func TestAddAndRemoveHostingEntry(t *testing.T) {
 		t.Error("expected error for duplicate target, got nil")
 	}
 
-	RemoveHostingEntry(config, "demo")
+	removed := RemoveHostingEntry(config, "demo")
+	if !removed {
+		t.Error("expected RemoveHostingEntry to return true")
+	}
 	if len(config.Hosting) != 1 {
 		t.Fatalf("expected 1 entry after remove, got %d", len(config.Hosting))
 	}
 	if config.Hosting[0].Target != "hello" {
 		t.Errorf("expected remaining target hello, got %q", config.Hosting[0].Target)
 	}
+
+	// Removing nonexistent entry returns false
+	removed = RemoveHostingEntry(config, "nonexistent")
+	if removed {
+		t.Error("expected RemoveHostingEntry to return false for nonexistent entry")
+	}
 }
 
 func TestFindHostingSite(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create .firebaserc with targets
 	rc := &FirebaseRC{
 		Projects: map[string]string{"default": "commons-systems"},
-		Targets: map[string]map[string]Targets{
+		Targets: map[string]map[string]HostingSiteMap{
 			"commons-systems": {
 				"hosting": {
 					"hello": []string{"cs-hello-5b22"},
@@ -100,11 +106,8 @@ func TestFindHostingSite(t *testing.T) {
 			},
 		},
 	}
-	if err := WriteFirebaseRC(tmpDir, rc); err != nil {
-		t.Fatalf("write error: %v", err)
-	}
 
-	site, err := FindHostingSite(tmpDir, "demo")
+	site, err := FindHostingSite(rc, "demo")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -112,7 +115,7 @@ func TestFindHostingSite(t *testing.T) {
 		t.Errorf("expected cs-demo-a1b2, got %q", site)
 	}
 
-	_, err = FindHostingSite(tmpDir, "nonexistent")
+	_, err = FindHostingSite(rc, "nonexistent")
 	if err == nil {
 		t.Error("expected error for nonexistent app, got nil")
 	}
@@ -122,7 +125,7 @@ func TestFirebaseRCRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	initial := &FirebaseRC{
 		Projects: map[string]string{"default": "commons-systems"},
-		Targets: map[string]map[string]Targets{
+		Targets: map[string]map[string]HostingSiteMap{
 			"commons-systems": {
 				"hosting": {
 					"hello": []string{"cs-hello-5b22"},
@@ -149,7 +152,7 @@ func TestFirebaseRCRoundTrip(t *testing.T) {
 func TestAddAndRemoveHostingTarget(t *testing.T) {
 	rc := &FirebaseRC{
 		Projects: map[string]string{"default": "commons-systems"},
-		Targets: map[string]map[string]Targets{
+		Targets: map[string]map[string]HostingSiteMap{
 			"commons-systems": {
 				"hosting": {
 					"hello": []string{"cs-hello-5b22"},
@@ -175,6 +178,31 @@ func TestAddAndRemoveHostingTarget(t *testing.T) {
 	// hello should still exist
 	if _, ok := rc.Targets["commons-systems"]["hosting"]["hello"]; !ok {
 		t.Error("expected hello target to still exist")
+	}
+}
+
+func TestAddHostingTargetDuplicate(t *testing.T) {
+	rc := &FirebaseRC{
+		Projects: map[string]string{"default": "commons-systems"},
+		Targets: map[string]map[string]HostingSiteMap{
+			"commons-systems": {
+				"hosting": {
+					"hello": []string{"cs-hello-5b22"},
+				},
+			},
+		},
+	}
+
+	if err := AddHostingTarget(rc, "demo", "cs-demo-a1b2"); err != nil {
+		t.Fatalf("first add: unexpected error: %v", err)
+	}
+
+	err := AddHostingTarget(rc, "demo", "cs-demo-xxxx")
+	if err == nil {
+		t.Error("expected error for duplicate hosting target, got nil")
+	}
+	if err != nil && !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("expected 'already exists' error, got: %v", err)
 	}
 }
 
@@ -336,5 +364,24 @@ func TestReadProjectID(t *testing.T) {
 	}
 	if projectID != "my-project" {
 		t.Errorf("expected my-project, got %q", projectID)
+	}
+}
+
+func TestDefaultProjectID(t *testing.T) {
+	rc := &FirebaseRC{
+		Projects: map[string]string{"default": "my-project"},
+	}
+	pid, err := rc.DefaultProjectID()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pid != "my-project" {
+		t.Errorf("expected my-project, got %q", pid)
+	}
+
+	rcEmpty := &FirebaseRC{Projects: map[string]string{}}
+	_, err = rcEmpty.DefaultProjectID()
+	if err == nil {
+		t.Error("expected error for empty project, got nil")
 	}
 }

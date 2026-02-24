@@ -21,8 +21,8 @@ type FirestoreConfig struct {
 type FirebaseConfig struct {
 	Hosting   []HostingEntry  `json:"hosting"`
 	Firestore FirestoreConfig `json:"firestore"`
-	// Extra preserves unknown JSON keys during round-trip read/write.
-	Extra map[string]json.RawMessage `json:"-"`
+	// extra preserves unknown JSON keys during round-trip read/write.
+	extra map[string]json.RawMessage
 }
 
 func (c *FirebaseConfig) UnmarshalJSON(data []byte) error {
@@ -42,19 +42,19 @@ func (c *FirebaseConfig) UnmarshalJSON(data []byte) error {
 	delete(raw, "hosting")
 	delete(raw, "firestore")
 	if len(raw) > 0 {
-		c.Extra = raw
+		c.extra = raw
 	}
 	return nil
 }
 
 func (c FirebaseConfig) MarshalJSON() ([]byte, error) {
-	// Marshal known fields via alias.
+	// Marshal known fields via alias to avoid infinite recursion.
 	type Alias FirebaseConfig
 	data, err := json.Marshal(Alias(c))
 	if err != nil {
 		return nil, err
 	}
-	if len(c.Extra) == 0 {
+	if len(c.extra) == 0 {
 		return data, nil
 	}
 	// Merge extra keys into the JSON object.
@@ -62,17 +62,17 @@ func (c FirebaseConfig) MarshalJSON() ([]byte, error) {
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return nil, err
 	}
-	for k, v := range c.Extra {
+	for k, v := range c.extra {
 		obj[k] = v
 	}
 	return json.Marshal(obj)
 }
 
 type FirebaseRC struct {
-	Projects map[string]string             `json:"projects"`
-	Targets  map[string]map[string]Targets `json:"targets,omitempty"`
-	// Extra preserves unknown JSON keys during round-trip read/write.
-	Extra map[string]json.RawMessage `json:"-"`
+	Projects map[string]string                        `json:"projects"`
+	Targets  map[string]map[string]HostingSiteMap `json:"targets,omitempty"`
+	// extra preserves unknown JSON keys during round-trip read/write.
+	extra map[string]json.RawMessage
 }
 
 func (rc *FirebaseRC) UnmarshalJSON(data []byte) error {
@@ -90,7 +90,7 @@ func (rc *FirebaseRC) UnmarshalJSON(data []byte) error {
 	delete(raw, "projects")
 	delete(raw, "targets")
 	if len(raw) > 0 {
-		rc.Extra = raw
+		rc.extra = raw
 	}
 	return nil
 }
@@ -101,20 +101,30 @@ func (rc FirebaseRC) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(rc.Extra) == 0 {
+	if len(rc.extra) == 0 {
 		return data, nil
 	}
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return nil, err
 	}
-	for k, v := range rc.Extra {
+	for k, v := range rc.extra {
 		obj[k] = v
 	}
 	return json.Marshal(obj)
 }
 
-type Targets map[string][]string
+// HostingSiteMap maps app names to their hosting site IDs.
+type HostingSiteMap map[string][]string
+
+// DefaultProjectID returns the default project ID from .firebaserc.
+func (rc *FirebaseRC) DefaultProjectID() (string, error) {
+	pid := rc.Projects["default"]
+	if pid == "" {
+		return "", fmt.Errorf("no default project in .firebaserc")
+	}
+	return pid, nil
+}
 
 func GenerateSiteName(appName string) (string, error) {
 	b := make([]byte, 2)
@@ -130,11 +140,7 @@ func ReadProjectID(repoRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	projectID := rc.Projects["default"]
-	if projectID == "" {
-		return "", fmt.Errorf("no default project in .firebaserc")
-	}
-	return projectID, nil
+	return rc.DefaultProjectID()
 }
 
 func ReadFirebaseConfig(repoRoot string) (*FirebaseConfig, error) {
@@ -156,7 +162,11 @@ func WriteFirebaseConfig(repoRoot string, config *FirebaseConfig) error {
 		return fmt.Errorf("marshaling firebase.json: %w", err)
 	}
 	data = append(data, '\n')
-	return os.WriteFile(filepath.Join(repoRoot, "firebase.json"), data, 0o644)
+	path := filepath.Join(repoRoot, "firebase.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing firebase.json: %w", err)
+	}
+	return nil
 }
 
 func AddHostingEntry(config *FirebaseConfig, appName string) error {
@@ -173,24 +183,25 @@ func AddHostingEntry(config *FirebaseConfig, appName string) error {
 	return nil
 }
 
-func RemoveHostingEntry(config *FirebaseConfig, appName string) {
+// RemoveHostingEntry removes the hosting entry for appName and returns true
+// if an entry was actually removed.
+func RemoveHostingEntry(config *FirebaseConfig, appName string) bool {
 	filtered := make([]HostingEntry, 0, len(config.Hosting))
 	for _, h := range config.Hosting {
 		if h.Target != appName {
 			filtered = append(filtered, h)
 		}
 	}
+	removed := len(filtered) < len(config.Hosting)
 	config.Hosting = filtered
+	return removed
 }
 
-func FindHostingSite(repoRoot, appName string) (string, error) {
-	rc, err := ReadFirebaseRC(repoRoot)
+// FindHostingSite looks up the hosting site ID for appName in the given FirebaseRC.
+func FindHostingSite(rc *FirebaseRC, appName string) (string, error) {
+	projectID, err := rc.DefaultProjectID()
 	if err != nil {
 		return "", err
-	}
-	projectID := rc.Projects["default"]
-	if projectID == "" {
-		return "", fmt.Errorf("no default project in .firebaserc")
 	}
 	if rc.Targets != nil {
 		if projectTargets, ok := rc.Targets[projectID]; ok {
@@ -222,31 +233,38 @@ func WriteFirebaseRC(repoRoot string, rc *FirebaseRC) error {
 		return fmt.Errorf("marshaling .firebaserc: %w", err)
 	}
 	data = append(data, '\n')
-	return os.WriteFile(filepath.Join(repoRoot, ".firebaserc"), data, 0o644)
+	path := filepath.Join(repoRoot, ".firebaserc")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing .firebaserc: %w", err)
+	}
+	return nil
 }
 
 func AddHostingTarget(rc *FirebaseRC, appName, siteName string) error {
-	projectID := rc.Projects["default"]
-	if projectID == "" {
-		return fmt.Errorf("no default project in .firebaserc")
+	projectID, err := rc.DefaultProjectID()
+	if err != nil {
+		return err
 	}
 	if rc.Targets == nil {
-		rc.Targets = make(map[string]map[string]Targets)
+		rc.Targets = make(map[string]map[string]HostingSiteMap)
 	}
 	if rc.Targets[projectID] == nil {
-		rc.Targets[projectID] = make(map[string]Targets)
+		rc.Targets[projectID] = make(map[string]HostingSiteMap)
 	}
 	if rc.Targets[projectID]["hosting"] == nil {
-		rc.Targets[projectID]["hosting"] = make(Targets)
+		rc.Targets[projectID]["hosting"] = make(HostingSiteMap)
+	}
+	if _, exists := rc.Targets[projectID]["hosting"][appName]; exists {
+		return fmt.Errorf("hosting target %q already exists in .firebaserc", appName)
 	}
 	rc.Targets[projectID]["hosting"][appName] = []string{siteName}
 	return nil
 }
 
 func RemoveHostingTarget(rc *FirebaseRC, appName string) error {
-	projectID := rc.Projects["default"]
-	if projectID == "" {
-		return fmt.Errorf("no default project in .firebaserc")
+	projectID, err := rc.DefaultProjectID()
+	if err != nil {
+		return err
 	}
 	if rc.Targets != nil && rc.Targets[projectID] != nil && rc.Targets[projectID]["hosting"] != nil {
 		delete(rc.Targets[projectID]["hosting"], appName)
