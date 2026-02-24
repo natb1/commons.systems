@@ -13,15 +13,10 @@ When creating any plan (issue implementation, review, security review, or ad hoc
 
 # Skill State Persistence Rule
 
-Persist skill and workflow state to disk so it survives auto-compaction. Use the dual-path pattern (`$CLAUDE_PLUGIN_ROOT` for plugin installs, `.claude/` for direct project use):
+Persist skill and workflow state to disk so it survives auto-compaction. Use the project path in direct project use, or the plugin path when installed as a plugin:
 
-```bash
-if [ -x "${CLAUDE_PLUGIN_ROOT:-}/hooks/save-skill-state.sh" ]; then
-  "$CLAUDE_PLUGIN_ROOT/hooks/save-skill-state.sh" "$@"
-else
-  .claude/hooks/save-skill-state.sh "$@"
-fi
-```
+- **Project context:** `.claude/hooks/save-skill-state.sh <subcommand> [args...]`
+- **Plugin context:** `$CLAUDE_PLUGIN_ROOT/hooks/save-skill-state.sh <subcommand> [args...]`
 
 - **When loading ref-skills:** call `save-skill-state.sh skill <names...>` with all active ref-skills
 - **When entering a workflow step:** call `save-skill-state.sh workflow <name> <step> <label>` (pushes or updates in stack)
