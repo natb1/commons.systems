@@ -10,8 +10,10 @@ timestamp() {
 }
 
 write_fresh_state() {
-  if ! mkdir -p "$(dirname "$STATE_FILE")"; then
-    echo "[save-skill-state] ERROR: cannot create directory $(dirname "$STATE_FILE")" >&2
+  local state_dir
+  state_dir="$(dirname "$STATE_FILE")"
+  if ! mkdir -p "$state_dir"; then
+    echo "[save-skill-state] ERROR: cannot create directory $state_dir" >&2
     exit 1
   fi
   cat > "$STATE_FILE" <<INIT
@@ -45,7 +47,9 @@ atomic_write() {
     rm -f "$tmp"
     return 1
   fi
-  sync 2>/dev/null || true
+  if ! sync 2>/dev/null; then
+    echo "[save-skill-state] WARNING: sync failed -- state may not survive a system crash" >&2
+  fi
 }
 
 case "${1:-}" in
@@ -69,9 +73,12 @@ case "${1:-}" in
       echo "Usage: save-skill-state.sh workflow <name> <step> <label>" >&2
       exit 1
     fi
-    name="$1"; step="$2"; shift 2; label="$*"
+    name="$1"
+    step="$2"
+    shift 2
+    label="$*"
     if ! [[ "$step" =~ ^[0-9]+$ ]]; then
-      echo "Error: step must be a non-negative integer, got '$step'" >&2
+      echo "[save-skill-state] ERROR: step must be a non-negative integer, got '$step'" >&2
       exit 1
     fi
     init_state

@@ -3,7 +3,7 @@
 # This hook MUST exit 0 in all error cases -- a non-zero exit would block session recovery,
 # which is worse than losing state. Warnings go to stderr for diagnostics.
 set -uo pipefail
-trap 'exit 0' ERR
+trap 'echo "[restore-skill-state] WARNING: unexpected error on line $LINENO -- skill state NOT restored" >&2; exit 0' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
