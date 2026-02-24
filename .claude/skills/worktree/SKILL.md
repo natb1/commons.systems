@@ -12,8 +12,12 @@ Set up an isolated git worktree for working on a GitHub issue. Each issue gets i
 When a worktree exists but is not the current directory, prompt the user to close Claude and run:
 
 ```
-cd <repo-root>/worktrees/<branch-name> && direnv allow && claude "/pr-workflow #<issue-num>"
+cd <project-root>/worktrees/<branch-name> && claude "/pr-workflow #<issue-num>"
 ```
+
+`<project-root>` is:
+- **Bare layout**: parent directory of `.bare/` (e.g. `commons.systems/`)
+- **Classic layout**: the repo root (unchanged from previous behavior)
 
 Stop here.
 
@@ -37,16 +41,29 @@ gh issue list --assignee @me --json number,title,projectItems,labels \
 
 If no issue is found, inform the user that no eligible issues exist.
 
-## 2. Check for Existing Worktree
+## 2. Detect Layout and Check for Existing Worktree
 
-Determine the repo root and check if a worktree already exists for this issue:
+Detect whether the repo uses the bare layout or classic layout, then compute `PROJECT_ROOT`:
 
 ```bash
-REPO_ROOT=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
-git worktree list --porcelain
+SECOND_LINE=$(git worktree list --porcelain | sed -n '2p')
+if [ "$SECOND_LINE" = "bare" ]; then
+  LAYOUT="bare"
+  GIT_DIR=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
+  PROJECT_ROOT=$(dirname "$GIT_DIR")
+else
+  LAYOUT="classic"
+  PROJECT_ROOT=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
+fi
 ```
 
-Look for a worktree whose branch name starts with `<issue-num>-`.
+`PROJECT_ROOT` is used for all path construction. In the bare layout it is the parent of `.bare/`; in the classic layout it is the repo root (same as the old `REPO_ROOT`).
+
+Then list all worktrees and look for one whose branch name starts with `<issue-num>-`:
+
+```bash
+git worktree list --porcelain
+```
 
 ### Edge Case: Worktree exists and is the current directory
 
@@ -55,6 +72,46 @@ Invoke the `/pr-workflow` skill with the issue number. Stop here.
 ### Edge Case: Worktree exists but is not the current directory
 
 Follow the **Handoff command**.
+
+## 2.5. Offer Bare Layout Initialization (Classic Layout Only)
+
+If `LAYOUT="classic"`, offer to convert the repo to the bare layout before proceeding.
+
+Explain that the bare layout keeps the git repo in `.bare/` and all checkouts under `worktrees/`, which avoids cluttering the project root with working-tree files.
+
+If the user declines, continue with the classic layout — skip to Section 3.
+
+If the user confirms, run the following steps in order:
+
+1. Clone locally into `.bare/`:
+   ```bash
+   git clone --local --bare . .bare
+   ```
+
+2. Fix the remote URL in `.bare/` to point to the original origin (not the local clone path):
+   ```bash
+   ORIGINAL_REMOTE=$(git remote get-url origin)
+   git -C .bare remote set-url origin "$ORIGINAL_REMOTE"
+   ```
+
+3. Add the `main` worktree:
+   ```bash
+   git --git-dir=.bare worktree add worktrees/main main
+   ```
+
+4. For each existing worktree besides HEAD, add it under `worktrees/`:
+   ```bash
+   git --git-dir=.bare worktree add -b <branch> worktrees/<branch> <branch>
+   ```
+
+5. Inform the user: the old working-tree files in the project root (everything except `.bare/` and `worktrees/`) should be removed manually after verifying the new worktrees work correctly.
+
+After conversion, update variables:
+```bash
+LAYOUT="bare"
+GIT_DIR="$PROJECT_ROOT/.bare"
+PROJECT_ROOT=$(dirname "$GIT_DIR")
+```
 
 ## 3. Generate Branch Name
 
@@ -84,7 +141,15 @@ git fetch origin main
 Then create the worktree branching from `origin/main`:
 
 ```bash
-git worktree add -b <branch-name> <repo-root>/worktrees/<branch-name> origin/main
+git worktree add -b <branch-name> "$PROJECT_ROOT/worktrees/<branch-name>" origin/main
+```
+
+`PROJECT_ROOT` was computed in Section 2 and already accounts for the layout (bare or classic). No `--git-dir` flag is needed — `git worktree add` finds the git dir from the current worktree context.
+
+Then run `direnv allow` for the new directory:
+
+```bash
+direnv allow "$PROJECT_ROOT/worktrees/<branch-name>"
 ```
 
 After creation, follow the **Handoff command**.
