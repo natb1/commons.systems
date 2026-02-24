@@ -12,7 +12,7 @@ Set up an isolated git worktree for working on a GitHub issue. Each issue gets i
 When a worktree exists but is not the current directory, prompt the user to close Claude and run:
 
 ```
-cd <project-root>/worktrees/<branch-name> && direnv allow && claude "/pr-workflow #<issue-num>"
+cd <project-root>/worktrees/<branch-name> && claude "/pr-workflow #<issue-num>"
 ```
 
 `<project-root>` is:
@@ -145,5 +145,11 @@ git worktree add -b <branch-name> "$PROJECT_ROOT/worktrees/<branch-name>" origin
 ```
 
 `PROJECT_ROOT` was computed in Section 2 and already accounts for the layout (bare or classic). No `--git-dir` flag is needed — `git worktree add` finds the git dir from the current worktree context.
+
+Then run `direnv allow` for the new directory:
+
+```bash
+direnv allow "$PROJECT_ROOT/worktrees/<branch-name>"
+```
 
 After creation, follow the **Handoff command**.
