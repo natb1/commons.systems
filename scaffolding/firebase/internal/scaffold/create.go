@@ -22,14 +22,11 @@ func (d AppData) Title() string { return strings.ToUpper(d.AppName[:1]) + d.AppN
 func (d AppData) ProductionURL() string { return "https://" + d.SiteName + ".web.app" }
 
 // NewAppData creates an AppData with the given app and site names.
-func NewAppData(appName, siteName string) (AppData, error) {
-	if len(appName) == 0 {
-		return AppData{}, fmt.Errorf("NewAppData: appName must not be empty")
-	}
+func NewAppData(appName, siteName string) AppData {
 	return AppData{
 		AppName:  appName,
 		SiteName: siteName,
-	}, nil
+	}
 }
 
 func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error) {
@@ -71,10 +68,7 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 		}
 	}()
 
-	data, err := NewAppData(appName, siteName)
-	if err != nil {
-		return err
-	}
+	data := NewAppData(appName, siteName)
 
 	// Render app templates
 	if dryRun {

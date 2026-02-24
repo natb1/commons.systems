@@ -151,12 +151,12 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 	fmt.Println()
 	if dryRun {
 		fmt.Println("[dry-run] Cleanup plan complete. No changes were made.")
-	} else if warnings > 0 {
-		fmt.Printf("Cleanup completed with %d warning(s).\n", warnings)
 	} else {
-		fmt.Println("Cleanup complete!")
-	}
-	if !dryRun {
+		if warnings > 0 {
+			fmt.Printf("Cleanup completed with %d warning(s).\n", warnings)
+		} else {
+			fmt.Println("Cleanup complete!")
+		}
 		fmt.Printf("  Removed: %s/\n", appName)
 		if hostingDeleted {
 			fmt.Printf("  Deleted hosting site: %s\n", siteName)

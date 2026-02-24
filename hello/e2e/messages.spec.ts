@@ -3,8 +3,9 @@ import { test, expect } from "@playwright/test";
 test.describe("messages", () => {
   test("Firestore connectivity @smoke", async ({ page }) => {
     await page.goto("/");
-    // renderHome() is async (awaits Firestore query) and returns heading +
-    // messages atomically — heading appearing proves Firestore responded
+    // renderHome() awaits a Firestore query before rendering. The heading always
+    // appears (even on error), so the second assertion (no #messages-error) is
+    // what proves Firestore actually responded.
     await expect(page.locator("main h2")).toHaveText("Home", { timeout: 30000 });
     await expect(page.locator("#messages-error")).toHaveCount(0);
   });

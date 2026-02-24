@@ -11,7 +11,7 @@ detect_features() {
   local app_src_dir="$2"
 
   USES_FIRESTORE=false
-  if grep -q '"firebase"' "$app_pkg" 2>/dev/null; then
+  if grep -rq '"firebase/firestore"' "$app_src_dir" 2>/dev/null; then
     USES_FIRESTORE=true
   fi
 

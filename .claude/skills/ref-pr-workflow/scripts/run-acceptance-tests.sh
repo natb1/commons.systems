@@ -36,8 +36,10 @@ fi
 
 # Build with emulator env vars
 BUILD_ARGS=()
+EMULATOR_NAMESPACE=""
 if [ "$USES_FIRESTORE" = true ]; then
-  BUILD_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=$(get_firestore_namespace "$APP_NAME" "emulator")")
+  EMULATOR_NAMESPACE=$(get_firestore_namespace "$APP_NAME" "emulator")
+  BUILD_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=${EMULATOR_NAMESPACE}")
 fi
 if [ "$USES_AUTH" = true ]; then
   BUILD_ARGS+=("VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}")
@@ -136,7 +138,7 @@ if [ "$USES_FIRESTORE" = true ]; then
   echo "Seeding Firestore..."
   APP_NAME="$APP_NAME" \
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
-  FIRESTORE_NAMESPACE="$(get_firestore_namespace "$APP_NAME" "emulator")" \
+  FIRESTORE_NAMESPACE="${EMULATOR_NAMESPACE}" \
   npx tsx firestoreutil/bin/run-seed.ts
 fi
 

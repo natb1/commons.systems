@@ -214,14 +214,10 @@ func FindHostingSite(rc *FirebaseRC, appName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if rc.Targets != nil {
-		if projectTargets, ok := rc.Targets[projectID]; ok {
-			if hosting, ok := projectTargets[hostingTargetType]; ok {
-				if sites, ok := hosting[appName]; ok && len(sites) > 0 {
-					return sites[0], nil
-				}
-			}
-		}
+	// Indexing a nil map returns the zero value in Go, so no nil guards needed.
+	hosting := rc.Targets[projectID][hostingTargetType]
+	if sites := hosting[appName]; len(sites) > 0 {
+		return sites[0], nil
 	}
 	return "", fmt.Errorf("no hosting target %q found in .firebaserc", appName)
 }
@@ -277,8 +273,8 @@ func RemoveHostingTarget(rc *FirebaseRC, appName string) error {
 	if err != nil {
 		return err
 	}
-	if rc.Targets != nil && rc.Targets[projectID] != nil && rc.Targets[projectID][hostingTargetType] != nil {
-		delete(rc.Targets[projectID][hostingTargetType], appName)
+	if hosting := rc.Targets[projectID][hostingTargetType]; hosting != nil {
+		delete(hosting, appName)
 	}
 	return nil
 }

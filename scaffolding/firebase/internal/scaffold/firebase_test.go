@@ -129,6 +129,16 @@ func TestFindHostingSite(t *testing.T) {
 	}
 }
 
+func TestFindHostingSiteNilTargets(t *testing.T) {
+	rc := &FirebaseRC{
+		Projects: map[string]string{"default": "commons-systems"},
+	}
+	_, err := FindHostingSite(rc, "demo")
+	if err == nil {
+		t.Error("expected error for nil targets, got nil")
+	}
+}
+
 func TestFirebaseRCRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	initial := &FirebaseRC{
@@ -348,12 +358,34 @@ func TestAddHostingTargetEmptyProject(t *testing.T) {
 	}
 }
 
+func TestAddHostingTargetNilTargets(t *testing.T) {
+	rc := &FirebaseRC{
+		Projects: map[string]string{"default": "commons-systems"},
+	}
+	if err := AddHostingTarget(rc, "demo", "cs-demo-1234"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sites := rc.Targets["commons-systems"]["hosting"]["demo"]
+	if len(sites) != 1 || sites[0] != "cs-demo-1234" {
+		t.Errorf("expected [cs-demo-1234], got %v", sites)
+	}
+}
+
 func TestRemoveHostingTargetEmptyProject(t *testing.T) {
 	rc := &FirebaseRC{
 		Projects: map[string]string{},
 	}
 	if err := RemoveHostingTarget(rc, "demo"); err == nil {
 		t.Error("expected error for empty project, got nil")
+	}
+}
+
+func TestRemoveHostingTargetNilTargets(t *testing.T) {
+	rc := &FirebaseRC{
+		Projects: map[string]string{"default": "commons-systems"},
+	}
+	if err := RemoveHostingTarget(rc, "demo"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

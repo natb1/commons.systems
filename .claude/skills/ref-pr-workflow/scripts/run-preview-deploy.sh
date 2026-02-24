@@ -18,10 +18,12 @@ HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
 detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
+PREVIEW_NAMESPACE=$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")
+
 # Install app dependencies and build (uses preview namespace, no emulator)
 cd "$REPO_ROOT/$APP_DIR"
 npm ci
-VITE_FIRESTORE_NAMESPACE="$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")" npm run build
+VITE_FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" npm run build
 cd "$REPO_ROOT"
 
 # Delete existing channel if present
@@ -42,27 +44,20 @@ DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
 
 # Seed Firestore (idempotent — uses doc.set() with fixed IDs)
 if [ "$USES_FIRESTORE" = true ]; then
-  NAMESPACE=$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")
-  echo "Seeding Firestore (namespace: ${NAMESPACE})..."
-  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="$NAMESPACE" npx tsx firestoreutil/bin/run-seed.ts
+  echo "Seeding Firestore (namespace: ${PREVIEW_NAMESPACE})..."
+  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" npx tsx firestoreutil/bin/run-seed.ts
 fi
 
 # Extract preview URL from deploy output
-JQ_STDERR=$(mktemp)
 PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | jq -r '
   (.result // .) | to_entries[] | select(.value.url) | .value.url
-' 2>"$JQ_STDERR" | head -1) || true
+' 2>/dev/null | head -1) || true
 
 if [ -z "$PREVIEW_URL" ]; then
   echo "ERROR: Could not extract preview URL from deploy output." >&2
-  if [ -s "$JQ_STDERR" ]; then
-    echo "jq error: $(cat "$JQ_STDERR")" >&2
-  fi
   echo "Expected JSON with .result.<site>.url structure, got:" >&2
   echo "$DEPLOY_OUTPUT" >&2
-  rm -f "$JQ_STDERR"
   exit 1
 fi
-rm -f "$JQ_STDERR"
 
 echo "PREVIEW_URL=$PREVIEW_URL"

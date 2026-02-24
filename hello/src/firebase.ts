@@ -13,7 +13,13 @@ if (emulatorHost) {
       `Invalid VITE_FIRESTORE_EMULATOR_HOST: "${emulatorHost}" (expected "host:port")`,
     );
   }
-  connectFirestoreEmulator(db, parts[0], parseInt(parts[1], 10));
+  const port = parseInt(parts[1], 10);
+  if (Number.isNaN(port)) {
+    throw new Error(
+      `Invalid port in VITE_FIRESTORE_EMULATOR_HOST: "${parts[1]}" is not a number`,
+    );
+  }
+  connectFirestoreEmulator(db, parts[0], port);
 }
 
 const envNamespace = import.meta.env.VITE_FIRESTORE_NAMESPACE as string;

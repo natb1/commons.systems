@@ -9,10 +9,7 @@ import (
 )
 
 func TestRenderTemplates(t *testing.T) {
-	data, err := NewAppData("demo", "cs-demo-1234")
-	if err != nil {
-		t.Fatalf("NewAppData error: %v", err)
-	}
+	data := NewAppData("demo", "cs-demo-1234")
 	outDir := t.TempDir()
 
 	fs := fstest.MapFS{
