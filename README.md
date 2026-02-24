@@ -23,7 +23,8 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 
 ## Cross Cutting Artifacts
 - [pr-workflow skill](.claude/skills/pr-workflow/SKILL.md): manages PR workflow using state stored in git commit log, github issues and PR.
-- [ref-memory-management](.claude/skill/ref-memory-management/SKILL.md): smart management of the conversation context using skills and ["plan mode"](https://code.claude.com/docs/en/how-claude-code-works#explore-before-implementing).
+- [ref-memory-management](.claude/skills/ref-memory-management/SKILL.md): smart management of the conversation context using skills and ["plan mode"](https://code.claude.com/docs/en/how-claude-code-works#explore-before-implementing).
+- [compaction recovery hooks](.claude/hooks/): restores active skill and workflow state after auto-compaction
 - [agent shell multiplexing #26](https://github.com/natb1/commons.systems/issues/26)
 
 ## Workflow
