@@ -41,7 +41,6 @@ func (c *FirebaseConfig) UnmarshalJSON(data []byte) error {
 	}
 	*c = FirebaseConfig(alias)
 
-	// Capture all keys into a raw map, then remove the known ones.
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -64,7 +63,6 @@ func (c FirebaseConfig) MarshalJSON() ([]byte, error) {
 	if len(c.extra) == 0 {
 		return data, nil
 	}
-	// Merge extra keys into the JSON object.
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return nil, err
@@ -75,7 +73,8 @@ func (c FirebaseConfig) MarshalJSON() ([]byte, error) {
 	return json.Marshal(obj)
 }
 
-// ProjectTargets maps target types (e.g. "hosting") to their app-site mappings.
+// ProjectTargets maps target types to their app-site mappings.
+// Currently only "hosting" targets are used.
 type ProjectTargets map[string]HostingSiteMap
 
 type FirebaseRC struct {
@@ -125,7 +124,7 @@ func (rc FirebaseRC) MarshalJSON() ([]byte, error) {
 }
 
 // HostingSiteMap maps app names to their hosting site IDs ([]string).
-// Each app may have multiple sites; the first element is the primary site.
+// The .firebaserc format supports multiple sites per app, but this tool uses only the first.
 type HostingSiteMap map[string][]string
 
 // DefaultProjectID returns the default project ID from .firebaserc.
@@ -145,7 +144,6 @@ func GenerateSiteName(appName string) (string, error) {
 	return fmt.Sprintf("cs-%s-%x", appName, b), nil
 }
 
-// ReadProjectID reads the default project ID from .firebaserc.
 func ReadProjectID(repoRoot string) (string, error) {
 	rc, err := ReadFirebaseRC(repoRoot)
 	if err != nil {
@@ -214,7 +212,8 @@ func FindHostingSite(rc *FirebaseRC, appName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Indexing a nil map returns the zero value in Go, so no nil guards needed.
+	// Indexing nil maps returns zero values in Go, so this chain safely handles
+	// missing Targets, project, or hosting entries without nil guards.
 	hosting := rc.Targets[projectID][hostingTargetType]
 	if sites := hosting[appName]; len(sites) > 0 {
 		return sites[0], nil

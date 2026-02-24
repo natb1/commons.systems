@@ -24,9 +24,9 @@ if (emulatorHost) {
 
 const envNamespace = import.meta.env.VITE_FIRESTORE_NAMESPACE as string;
 if (!envNamespace && import.meta.env.MODE !== "production") {
-  console.warn(
-    "VITE_FIRESTORE_NAMESPACE not set — using default production namespace. " +
-      "This is expected in production builds but may indicate misconfiguration in dev/preview.",
+  throw new Error(
+    "VITE_FIRESTORE_NAMESPACE is required in dev/preview mode. " +
+      "Set it in your .env or build command to avoid writing to production data.",
   );
 }
 export const NAMESPACE = envNamespace || "hello-prod";

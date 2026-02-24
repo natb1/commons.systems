@@ -14,18 +14,19 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 	}
 
 	appDir := filepath.Join(repoRoot, appName)
-	if info, err := os.Stat(appDir); err != nil {
+	info, err := os.Stat(appDir)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("app directory %q does not exist", appDir)
 		}
 		return fmt.Errorf("checking app directory %q: %w", appDir, err)
-	} else if !info.IsDir() {
+	}
+	if !info.IsDir() {
 		return fmt.Errorf("%q is not a directory", appDir)
 	}
 
 	warnings := 0
 
-	// Read .firebaserc once for FindHostingSite, RemoveHostingTarget, and DefaultProjectID.
 	rc, err := ReadFirebaseRC(repoRoot)
 	if err != nil {
 		return err
@@ -36,7 +37,6 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 		return err
 	}
 
-	// Read hosting site from .firebaserc deploy targets
 	siteName, err := FindHostingSite(rc, appName)
 	if err != nil {
 		fmt.Printf("WARNING: %v\n", err)

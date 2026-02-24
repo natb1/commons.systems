@@ -3,12 +3,16 @@
 
 export FIREBASE_PROJECT_ID="commons-systems"
 
-# Detect what Firebase features the app uses.
+# Detect what Firebase features the app uses by searching source imports.
 # Sets global variables: USES_FIRESTORE, USES_AUTH
-# Args: $1 = path to app package.json, $2 = path to app src/ directory
+# Args: $1 = path to app src/ directory
 detect_features() {
-  local app_pkg="$1"
-  local app_src_dir="$2"
+  local app_src_dir="$1"
+
+  if [ ! -d "$app_src_dir" ]; then
+    echo "ERROR: app source directory not found: $app_src_dir" >&2
+    return 1
+  fi
 
   USES_FIRESTORE=false
   if grep -rq '"firebase/firestore"' "$app_src_dir" 2>/dev/null; then
@@ -49,8 +53,8 @@ get_app_name() {
   basename "$1"
 }
 
-# Read the hosting site ID for an app from .firebaserc deploy targets.
-# Returns code 1 if no hosting target is found.
+# Print the hosting site ID for an app from .firebaserc deploy targets.
+# Returns code 1 (with stderr message) if no hosting target is found.
 # Args: $1 = repo root, $2 = app name (e.g. "hello")
 get_hosting_site() {
   local repo_root="$1"
@@ -85,7 +89,7 @@ get_firestore_namespace() {
 }
 
 # Delete a Firebase Hosting preview channel.
-# Silently succeeds if the channel does not exist.
+# Succeeds without error if the channel does not exist.
 # Args: $1 = channel ID, $2 = hosting site name
 delete_preview_channel() {
   local channel_id="$1"

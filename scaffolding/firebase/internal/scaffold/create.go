@@ -16,7 +16,12 @@ type AppData struct {
 }
 
 // Title returns the app name with the first letter capitalized.
-func (d AppData) Title() string { return strings.ToUpper(d.AppName[:1]) + d.AppName[1:] }
+func (d AppData) Title() string {
+	if len(d.AppName) == 0 {
+		return ""
+	}
+	return strings.ToUpper(d.AppName[:1]) + d.AppName[1:]
+}
 
 // ProductionURL returns the production URL for the app's hosting site.
 func (d AppData) ProductionURL() string { return "https://" + d.SiteName + ".web.app" }
@@ -152,16 +157,11 @@ func renderTemplates(templateFS fs.FS, repoRoot, templateDir, outputDir string, 
 			return err
 		}
 
-		// Compute relative path from template dir
 		relPath, err := filepath.Rel(templateDir, embedPath)
 		if err != nil {
 			return fmt.Errorf("computing relative path for %s: %w", embedPath, err)
 		}
-
-		// Replace {{.AppName}} in directory/file names
 		relPath = strings.ReplaceAll(relPath, "{{.AppName}}", data.AppName)
-
-		// Strip .tmpl extension
 		relPath = strings.TrimSuffix(relPath, ".tmpl")
 
 		outPath := filepath.Join(repoRoot, outputDir, relPath)
@@ -170,13 +170,11 @@ func renderTemplates(templateFS fs.FS, repoRoot, templateDir, outputDir string, 
 			return os.MkdirAll(outPath, 0o755)
 		}
 
-		// Read template content
 		content, err := fs.ReadFile(templateFS, embedPath)
 		if err != nil {
 			return fmt.Errorf("reading template %s: %w", embedPath, err)
 		}
 
-		// If it's a .tmpl file, process as template
 		if strings.HasSuffix(embedPath, ".tmpl") {
 			tmpl, err := template.New(filepath.Base(embedPath)).Parse(string(content))
 			if err != nil {

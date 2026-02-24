@@ -13,7 +13,7 @@ source "$SCRIPT_DIR/lib.sh"
 
 APP_NAME=$(get_app_name "$APP_DIR")
 
-detect_features "$APP_PKG" "$REPO_ROOT/$APP_DIR/src/"
+detect_features "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
 # Install app dependencies
@@ -24,6 +24,7 @@ cd "$REPO_ROOT"
 # Find available ports
 VITE_PORT=$(find_available_port)
 
+NAMESPACE=""
 FIRESTORE_PORT=""
 if [ "$USES_FIRESTORE" = true ]; then
   FIRESTORE_PORT=$(find_available_port)
