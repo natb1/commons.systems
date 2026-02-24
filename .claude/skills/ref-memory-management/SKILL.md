@@ -1,6 +1,7 @@
 ---
 name: ref-memory-management
 description: Load when planning work, writing commits, changing requirements, or editing/commenting on issues/PR
+allowed-tools: Bash(.claude/hooks/save-skill-state.sh:*), Bash($CLAUDE_PLUGIN_ROOT/hooks/save-skill-state.sh:*)
 ---
 
 # Clean Context Planning Rule
@@ -9,6 +10,18 @@ When creating any plan (issue implementation, review, security review, or ad hoc
 - All plans must assume execution in a clean context. Include all necessary steps — do not rely on state from the planning session.
 - Check the conversation for all active reference skills (names begin with "ref-"). If any are active, add this line to the plan preface: `**Before executing this plan:** Invoke /ref-X and /ref-Y`. The line **must** include the **explicit** instruction to invoke the reference skills before executing the plan.
 - If plan is being created as part of a multi-step process (eg. pr-workflow, or wiggum-loop), the plan must record which step of the process is active in the preface of the plan.
+
+# Skill State Persistence Rule
+
+Persist skill and workflow state to disk so it survives auto-compaction. Use the project path in direct project use, or the plugin path when installed as a plugin:
+
+- **Project context:** `.claude/hooks/save-skill-state.sh <subcommand> [args...]`
+- **Plugin context:** `$CLAUDE_PLUGIN_ROOT/hooks/save-skill-state.sh <subcommand> [args...]`
+
+- **When loading ref-skills:** call `save-skill-state.sh skill <names...>` with all active ref-skills
+- **When entering a workflow step:** call `save-skill-state.sh workflow <name> <step> <label>` (pushes or updates in stack)
+- **When a nested workflow completes:** call `save-skill-state.sh workflow-pop <name>` (removes from stack)
+- **When the outermost workflow completes:** call `save-skill-state.sh clear-workflow`
 
 # Commit Guidelines
 
@@ -92,4 +105,3 @@ gh api -X DELETE "/repos/{owner}/{repo}/issues/36/sub_issue" -f sub_issue_id="$S
 ```
 
 Note: The `{owner}` and `{repo}` placeholders are auto-populated by `gh api` from the current repository.
-
