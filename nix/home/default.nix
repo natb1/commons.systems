@@ -80,6 +80,7 @@
 
   home.packages = [
     pkgs.jq
+    pkgs.google-cloud-sdk
   ];
 
   # Let Home Manager manage itself
