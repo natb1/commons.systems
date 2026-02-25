@@ -107,12 +107,17 @@ Include a separate `Closes #N` for each issue (primary + all implemented depende
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Check acceptance test GitHub Action results on PR branch:
+- Run the following in a Task, capturing all output verbatim to `/tmp/acceptance-output-<N>.txt`:
   ```bash
   gh run list --branch <branch> --limit 5
   gh run view <run-id>
   ```
-- If run is in progress, wait for completion
+- If run is in progress, wait for completion before writing the file
+- After the Task completes, create a PR comment from the output file:
+  ```bash
+  COMMENT_ID=$(write-pr-comment.sh <pr-num> /tmp/acceptance-output-<N>.txt)
+  ```
+- Record `COMMENT_ID` in the plan for use in the progress report step
 
 **Evaluation instructions:**
 - All pass → **Terminate**
@@ -120,44 +125,19 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Infrastructure failures → present to user for resolution
 
 **Progress report instructions:**
-- Update PR comment with current status:
+- Write evaluation results to `/tmp/acceptance-eval-<N>.txt`
+- Append to the iteration comment:
   ```bash
-  upsert-pr-comment.sh <pr-num> "# Acceptance Test Review" "$(cat <<'EOF'
-  # Acceptance Test Review - In Progress
-
-  **Date**: [Current date]
-  **Branch**: [branch name]
-  **Status**: Iteration [N]
-
-  ## Latest Run
-
-  - Run ID: [run-id]
-  - Status: [Failed/In progress]
-  - Failures: [list]
-
-  ## Iterations So Far
-
-  [For each iteration:]
-  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
-  ...
-  EOF
-  )"
+  append-pr-comment.sh "$COMMENT_ID" /tmp/acceptance-eval-<N>.txt
   ```
 
 **Termination instructions:**
-- Post final audit log (edits the in-progress comment):
-  ```bash
-  upsert-pr-comment.sh <pr-num> "# Acceptance Test Review" "$(cat <<'EOF'
+- Write final summary to `/tmp/acceptance-final.txt` (header must be `# Acceptance Test Review - Complete ✓`):
+  ```
   # Acceptance Test Review - Complete ✓
 
   **Date**: [Current date]
   **Branch**: [branch name]
-
-  ## Test Results
-
-  - Run ID: [run-id]
-  - Status: Passed
-  - Tests executed: [count]
 
   ## Iterations
 
@@ -169,8 +149,10 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ## Conclusion
 
   All acceptance tests passed. PR approved for QA review.
-  EOF
-  )"
+  ```
+- Create final comment:
+  ```bash
+  write-pr-comment.sh <pr-num> /tmp/acceptance-final.txt
   ```
 - Proceed to Step 7
 
@@ -179,12 +161,17 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Check smoke test + preview deploy CI results:
+- Run the following in a Task, capturing all output verbatim to `/tmp/smoke-output-<N>.txt`:
   ```bash
   gh run list --branch <branch> --limit 5
   gh run view <run-id>
   ```
-- If run is in progress, wait for completion
+- If run is in progress, wait for completion before writing the file
+- After the Task completes, create a PR comment from the output file:
+  ```bash
+  COMMENT_ID=$(write-pr-comment.sh <pr-num> /tmp/smoke-output-<N>.txt)
+  ```
+- Record `COMMENT_ID` in the plan for use in the progress report step
 
 **Evaluation instructions:**
 - All pass → **Terminate**
@@ -192,45 +179,19 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Deploy failures → present to user for resolution
 
 **Progress report instructions:**
-- Update PR comment with current status:
+- Write evaluation results to `/tmp/smoke-eval-<N>.txt`
+- Append to the iteration comment:
   ```bash
-  upsert-pr-comment.sh <pr-num> "# Smoke Test Review" "$(cat <<'EOF'
-  # Smoke Test Review - In Progress
-
-  **Date**: [Current date]
-  **Branch**: [branch name]
-  **Status**: Iteration [N]
-
-  ## Latest Run
-
-  - Preview URL: [url]
-  - Run ID: [run-id]
-  - Status: [Failed/In progress]
-  - Failures: [list]
-
-  ## Iterations So Far
-
-  [For each iteration:]
-  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
-  ...
-  EOF
-  )"
+  append-pr-comment.sh "$COMMENT_ID" /tmp/smoke-eval-<N>.txt
   ```
 
 **Termination instructions:**
-- Post final audit log (edits the in-progress comment):
-  ```bash
-  upsert-pr-comment.sh <pr-num> "# Smoke Test Review" "$(cat <<'EOF'
+- Write final summary to `/tmp/smoke-final.txt` (header must be `# Smoke Test Review - Complete ✓`):
+  ```
   # Smoke Test Review - Complete ✓
 
   **Date**: [Current date]
   **Branch**: [branch name]
-
-  ## Results
-
-  - Preview URL: [url]
-  - Run ID: [run-id]
-  - Smoke tests executed: [count]
 
   ## Iterations
 
@@ -242,8 +203,10 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ## Conclusion
 
   Smoke tests passed. Preview deployment verified.
-  EOF
-  )"
+  ```
+- Create final comment:
+  ```bash
+  write-pr-comment.sh <pr-num> /tmp/smoke-final.txt
   ```
 - Proceed to Step 8
 
@@ -252,19 +215,24 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files):
-  1. Start the QA server using `run-qa-server.sh <app-dir>` in background
-  2. Parse the App URL from the script's output
-  3. Run acceptance tests as a smoke check: `BASE_URL=<url> npx playwright test --config e2e/playwright.config.ts`
-  4. If smoke tests fail → fix issues and re-run before involving the user
-  5. Once smoke tests pass, proceed to create QA testing plan
-- Create a comprehensive QA testing plan for the user to execute
-- Include testing checklist covering:
-  - Key behaviors to verify
-  - Test steps for each behavior
-  - Edge cases to test
-  - Expected outcomes
-- Present the plan and the App URL to the user
+- Run the following in a Task, capturing all output verbatim to `/tmp/qa-output-<N>.txt`:
+  - If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files):
+    1. Start the QA server using `run-qa-server.sh <app-dir>` in background
+    2. Parse the App URL from the script's output
+    3. Run acceptance tests as a smoke check: `BASE_URL=<url> npx playwright test --config e2e/playwright.config.ts`
+    4. If smoke tests fail → fix issues and re-run before involving the user
+    5. Once smoke tests pass, proceed to write the QA testing plan
+  - Write a comprehensive QA testing plan including:
+    - Key behaviors to verify
+    - Test steps for each behavior
+    - Edge cases to test
+    - Expected outcomes
+- After the Task completes, create a PR comment from the output file:
+  ```bash
+  COMMENT_ID=$(write-pr-comment.sh <pr-num> /tmp/qa-output-<N>.txt)
+  ```
+- Record `COMMENT_ID` in the plan for use in the progress report step
+- Present the plan and App URL (if applicable) to the user
 - **CRITICAL**: The user performs the actual testing (not Claude)
 - Wait for the user to test and report results
 
@@ -273,53 +241,26 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
 
 **Progress report instructions:**
-- Update PR comment with current status:
+- Write evaluation results to `/tmp/qa-eval-<N>.txt`
+- Append to the iteration comment:
   ```bash
-  upsert-pr-comment.sh <pr-num> "# QA Review" "$(cat <<'EOF'
-  # QA Review - In Progress
-
-  **Reviewer**: [User name from git config]
-  **Date**: [Current date]
-  **Tested By**: Human QA with Claude Code facilitation
-  **Status**: Iteration [N]
-
-  ## Testing Checklist
-
-  [Original checklist presented to user]
-
-  ## QA Iterations So Far
-
-  [For each iteration:]
-  - Iteration 1: [Issues found] → [Fixes implemented] (commits: [hashes])
-  ...
-
-  ## Latest Issues
-
-  [Issues reported in current iteration]
-  EOF
-  )"
+  append-pr-comment.sh "$COMMENT_ID" /tmp/qa-eval-<N>.txt
   ```
 
 **Termination instructions:**
 - Stop the QA server (run-qa-server.sh) if started
-- Post final QA audit log (edits the in-progress comment):
-  ```bash
-  upsert-pr-comment.sh <pr-num> "# QA Review" "$(cat <<'EOF'
+- Write final summary to `/tmp/qa-final.txt` (header must be `# QA Review - Complete ✓`):
+  ```
   # QA Review - Complete ✓
 
   **Reviewer**: [User name from git config]
   **Date**: [Current date]
   **Tested By**: Human QA with Claude Code facilitation
 
-  ## Testing Checklist
-
-  [Original checklist presented to user]
-
   ## QA Iterations
 
   [For each iteration:]
   - Iteration 1: [Issues found] → [Fixes implemented] (commits: [hashes])
-  - Iteration 2: [Issues found] → [Fixes implemented] (commits: [hashes])
   ...
   - Final iteration: All tests passed
 
@@ -333,8 +274,10 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ## Conclusion
 
   All test cases passed. PR approved for code quality review.
-  EOF
-  )"
+  ```
+- Create final comment:
+  ```bash
+  write-pr-comment.sh <pr-num> /tmp/qa-final.txt
   ```
 - Proceed to Step 9
 
@@ -343,7 +286,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Launch 7 review tasks in parallel using the Task tool:
+- Launch 7 review tasks in parallel using the Task tool. Collect all returned results verbatim — do NOT summarize or paraphrase agent output:
   1. **`/review` skill** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "review"`. Include the PR diff context in the prompt.
   2. **`pr-review-toolkit:code-reviewer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:code-reviewer"`.
   3. **`pr-review-toolkit:code-simplifier`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:code-simplifier"`.
@@ -353,7 +296,23 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   7. **`pr-review-toolkit:type-design-analyzer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:type-design-analyzer"`.
 - All 7 tasks MUST be launched in a single message (parallel execution)
 - If any pr-review-toolkit agent fails to launch (e.g. plugin not installed), log a warning but continue — `/review` results alone are sufficient to proceed
-- Collect all returned results verbatim — do NOT summarize or paraphrase agent output
+- Write all verbatim agent outputs to `/tmp/codequality-output-<N>.txt` under per-agent headings:
+  ```
+  ## /review Output
+
+  [verbatim output]
+
+  ## pr-review-toolkit: code-reviewer
+
+  [verbatim output — or "Agent unavailable (plugin not installed)"]
+
+  ...
+  ```
+- Create a PR comment from the output file:
+  ```bash
+  COMMENT_ID=$(write-pr-comment.sh <pr-num> /tmp/codequality-output-<N>.txt)
+  ```
+- Record `COMMENT_ID` in the plan for use in the progress report step
 
 **Evaluation instructions:**
 - Present findings from ALL agents to user
@@ -362,84 +321,34 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - No required findings → **Terminate**
 
 **Progress report instructions:**
-- Update PR comment with current status:
+- Write evaluation results (user classifications) to `/tmp/codequality-eval-<N>.txt`
+- Append to the iteration comment:
   ```bash
-  upsert-pr-comment.sh <pr-num> "# Code Quality Review" "$(cat <<'EOF'
-  # Code Quality Review - In Progress
-
-  **Reviewer**: Claude Code (via /review skill + pr-review-toolkit agents)
-  **Date**: [Current date]
-  **Status**: Iteration [N]
-
-  ## Latest Findings
-
-  [Summary of findings from current iteration]
-
-  ## User Classification Decisions So Far
-
-  [For each finding classified:]
-  - Finding 1: [title] → [required/false positive/out of scope] - [rationale]
-  ...
-
-  ## Iterations So Far
-
-  [For each iteration:]
-  - Iteration 1: [Findings count] → [Required fixes] (commits: [hashes])
-  ...
-  EOF
-  )"
+  append-pr-comment.sh "$COMMENT_ID" /tmp/codequality-eval-<N>.txt
   ```
 
 **Termination instructions:**
-- Post final review audit log (edits the in-progress comment):
-  ```bash
-  upsert-pr-comment.sh <pr-num> "# Code Quality Review" "$(cat <<'EOF'
+- Write final summary to `/tmp/codequality-final.txt` (header must be `# Code Quality Review - Complete ✓`):
+  ```
   # Code Quality Review - Complete ✓
 
   **Reviewer**: Claude Code (via /review skill + pr-review-toolkit agents)
   **Date**: [Current date]
   **Outcome**: [Summary of result]
 
-  ## /review Output (Verbatim)
-
-  [PASTE COMPLETE VERBATIM OUTPUT FROM /review SKILL]
-
-  ## pr-review-toolkit: code-reviewer (Verbatim)
-
-  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
-
-  ## pr-review-toolkit: code-simplifier (Verbatim)
-
-  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
-
-  ## pr-review-toolkit: comment-analyzer (Verbatim)
-
-  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
-
-  ## pr-review-toolkit: pr-test-analyzer (Verbatim)
-
-  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
-
-  ## pr-review-toolkit: silent-failure-hunter (Verbatim)
-
-  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
-
-  ## pr-review-toolkit: type-design-analyzer (Verbatim)
-
-  [PASTE COMPLETE VERBATIM OUTPUT — or "Agent unavailable (plugin not installed)" if it failed to launch]
-
   ## User Classification Decisions
 
   [For each finding:]
   - Finding 1: [title] → [required/false positive/out of scope] - [rationale]
-  - Finding 2: [title] → [required/false positive/out of scope] - [rationale]
   ...
 
   ## Conclusion
 
   [Final assessment and next steps]
-  EOF
-  )"
+  ```
+- Create final comment:
+  ```bash
+  write-pr-comment.sh <pr-num> /tmp/codequality-final.txt
   ```
 - Proceed to Step 10
 
@@ -448,7 +357,12 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Invoke `/security-review` (exists even if not visible in skill list)
+- Run `/security-review` in a Task (exists even if not visible in skill list), capturing all output verbatim to `/tmp/security-output-<N>.txt`
+- After the Task completes, create a PR comment from the output file:
+  ```bash
+  COMMENT_ID=$(write-pr-comment.sh <pr-num> /tmp/security-output-<N>.txt)
+  ```
+- Record `COMMENT_ID` in the plan for use in the progress report step
 
 **Evaluation instructions:**
 - Present findings to user
@@ -457,60 +371,34 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - No required findings → **Terminate**
 
 **Progress report instructions:**
-- Update PR comment with current status:
+- Write evaluation results (user classifications) to `/tmp/security-eval-<N>.txt`
+- Append to the iteration comment:
   ```bash
-  upsert-pr-comment.sh <pr-num> "# Security Review" "$(cat <<'EOF'
-  # Security Review - In Progress
-
-  **Reviewer**: Claude Code (via /security-review skill)
-  **Date**: [Current date]
-  **Status**: Iteration [N]
-
-  ## Latest Findings
-
-  [Summary of findings from current iteration]
-
-  ## User Classification Decisions So Far
-
-  [For each finding classified:]
-  - Finding 1: [title] → [required/false positive/out of scope] - [rationale]
-  ...
-
-  ## Iterations So Far
-
-  [For each iteration:]
-  - Iteration 1: [Findings count] → [Required fixes] (commits: [hashes])
-  ...
-  EOF
-  )"
+  append-pr-comment.sh "$COMMENT_ID" /tmp/security-eval-<N>.txt
   ```
 
 **Termination instructions:**
-- Post final security audit log (edits the in-progress comment):
-  ```bash
-  upsert-pr-comment.sh <pr-num> "# Security Review" "$(cat <<'EOF'
+- Write final summary to `/tmp/security-final.txt` (header must be `# Security Review - Complete ✓`):
+  ```
   # Security Review - Complete ✓
 
   **Reviewer**: Claude Code (via /security-review skill)
   **Date**: [Current date]
   **Outcome**: [Summary of result]
 
-  ## Review Output (Full Audit Log)
-
-  [PASTE COMPLETE VERBATIM OUTPUT FROM SECURITY-REVIEW SKILL]
-
   ## User Classification Decisions
 
   [For each finding:]
   - Finding 1: [title] → [required/false positive/out of scope] - [rationale]
-  - Finding 2: [title] → [required/false positive/out of scope] - [rationale]
   ...
 
   ## Conclusion
 
   [Final assessment and next steps]
-  EOF
-  )"
+  ```
+- Create final comment:
+  ```bash
+  write-pr-comment.sh <pr-num> /tmp/security-final.txt
   ```
 - Proceed to Step 11
 
