@@ -42,10 +42,6 @@ DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
   exit 1
 }
 
-# Deploy Firestore rules (idempotent — same rules across all branches)
-echo "Deploying Firestore rules..."
-npx firebase-tools deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID"
-
 # Seed Firestore (idempotent — uses doc.set() with fixed IDs)
 if [ "$USES_FIRESTORE" = true ]; then
   echo "Seeding Firestore (namespace: ${PREVIEW_NAMESPACE})..."
