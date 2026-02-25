@@ -14,6 +14,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Published posts are public; unpublished posts require authentication
+    match /ns/{namespace}/posts/{postId} {
+      allow read: if resource.data.published == true || request.auth != null;
+      allow write: if false;
+    }
+
     // Deny everything else by default
     match /{document=**} {
       allow read, write: if false;
