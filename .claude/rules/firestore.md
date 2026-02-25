@@ -1,11 +1,12 @@
 # Firestore Rules
 
-`firestore.rules` changes are deployed automatically by CI when a PR merges to `main`.
-Preview branch deploys do not deploy rules.
+`firestore.rules` changes are deployed by CI on every preview deploy AND on every
+production deploy (when a PR merges to `main`). Because preview deploys run rules
+deployment, feature branches do not require a separate standalone PR for rules changes.
 
-**Put rules changes in a standalone PR targeting `main`**, separate from feature work.
-Smoke tests on a feature branch will fail with permission-denied until the standalone
-rules PR merges and CI deploys the updated rules.
+**Keep rules changes in the same PR as the feature that needs them.** Smoke tests on
+the preview deployment will have the correct rules because the preview deploy script
+deploys rules before smoke tests run.
 
 ## List query compatibility
 
