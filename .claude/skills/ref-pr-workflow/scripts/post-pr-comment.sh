@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Create a new PR comment from output file (and optional eval file).
 # Usage: post-pr-comment.sh <pr-number> <output-file> [<eval-file>]
-# Prints the new comment ID (integer) to stdout on success.
-# Exits non-zero on invalid PR number, missing output/eval file, gh repo detection failure, empty repo result, or failed POST.
+# Prints the new comment ID to stdout. Exits non-zero on any error.
 set -euo pipefail
 
 PR_NUMBER="${1:-}"
@@ -24,6 +23,22 @@ if [ -n "$EVAL_FILE" ] && [ ! -f "$EVAL_FILE" ]; then
   exit 1
 fi
 
+_ALLOWED="${POST_PR_ALLOWED_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)/tmp}"
+if [ -n "${_ALLOWED}" ]; then
+  _REAL_OUT=$(realpath "$OUTPUT_FILE" 2>/dev/null || echo "$OUTPUT_FILE")
+  if [[ "${_REAL_OUT}" != "${_ALLOWED}"/* ]]; then
+    echo "error: output file must be within ${_ALLOWED}: ${OUTPUT_FILE}" >&2
+    exit 1
+  fi
+  if [ -n "$EVAL_FILE" ]; then
+    _REAL_EVAL=$(realpath "$EVAL_FILE" 2>/dev/null || echo "$EVAL_FILE")
+    if [[ "${_REAL_EVAL}" != "${_ALLOWED}"/* ]]; then
+      echo "error: eval file must be within ${_ALLOWED}: ${EVAL_FILE}" >&2
+      exit 1
+    fi
+  fi
+fi
+
 if ! REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null); then
   echo "error: could not determine repository name (gh repo view failed)" >&2
   exit 1
@@ -32,9 +47,14 @@ if [ -z "$REPO" ]; then
   echo "error: gh repo view returned empty repository name" >&2
   exit 1
 fi
-GH_ERR_FILE=$(mktemp) || { echo "error: could not create temporary file" >&2; exit 1; }
+if ! [[ "$REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+  echo "error: unexpected repository name format: '${REPO}'" >&2
+  exit 1
+fi
+GH_ERR_FILE=""
 TMPFILE=""
-trap 'rm -f "$GH_ERR_FILE" "${TMPFILE}"' EXIT
+trap '[ -n "${GH_ERR_FILE}" ] && rm -f "${GH_ERR_FILE}"; [ -n "${TMPFILE}" ] && rm -f "${TMPFILE}"' EXIT
+GH_ERR_FILE=$(mktemp) || { echo "error: could not create temporary file" >&2; exit 1; }
 
 if [ -n "$EVAL_FILE" ]; then
   TMPFILE=$(mktemp) || { echo "error: could not create temporary file" >&2; exit 1; }

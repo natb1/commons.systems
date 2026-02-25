@@ -7,6 +7,7 @@ POST_SCRIPT="$SCRIPT_DIR/post-pr-comment.sh"
 PASS=0
 FAIL=0
 TOTAL=0
+SAVED_PATH=""
 
 setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -75,13 +76,17 @@ exit 1
 STUB
   chmod +x "$TMPDIR_TEST/bin/gh"
 
+  SAVED_PATH="$PATH"
   export PATH="$TMPDIR_TEST/bin:$PATH"
+  export POST_PR_ALLOWED_DIR="$TMPDIR_TEST"
   POST_T="$TMPDIR_TEST/post-pr-comment.sh"
 }
 
 teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
+  export PATH="$SAVED_PATH"
+  unset POST_PR_ALLOWED_DIR
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
@@ -190,8 +195,6 @@ fi
 echo "Test 5: post-pr-comment.sh exits non-zero for missing output file"
 setup
 exit_code=0
-# Redirect order: 2>&1 sends stderr to the $() capture; >/dev/null discards stdout.
-# Reversing to >/dev/null 2>&1 would capture nothing — do not change the order.
 stderr=$("$POST_T" 99 "$TMPDIR_TEST/nonexistent.txt" 2>&1 >/dev/null) || exit_code=$?
 assert_eq "exits with code 1" "1" "$exit_code"
 assert_contains "error message mentions missing file" "output file not found" "$stderr"
@@ -201,8 +204,6 @@ echo "Test 6: post-pr-comment.sh exits non-zero for missing eval file"
 setup
 echo "output content" > "$TMPDIR_TEST/output.txt"
 exit_code=0
-# Redirect order: 2>&1 sends stderr to the $() capture; >/dev/null discards stdout.
-# Reversing to >/dev/null 2>&1 would capture nothing — do not change the order.
 stderr=$("$POST_T" 99 "$TMPDIR_TEST/output.txt" "$TMPDIR_TEST/nonexistent-eval.txt" 2>&1 >/dev/null) || exit_code=$?
 assert_eq "exits with code 1" "1" "$exit_code"
 assert_contains "error message mentions missing eval file" "eval file not found" "$stderr"
@@ -220,19 +221,20 @@ if [ "$exit_code" -ne 0 ]; then
   FAIL=$((FAIL + 1))
   TOTAL=$((TOTAL + 1))
   echo "  FAIL: script exited unexpectedly (exit $exit_code)"
+  teardown
 elif [ ! -d "$TMPDIR_TEST/mktemp-dir" ]; then
   FAIL=$((FAIL + 1))
   TOTAL=$((TOTAL + 1))
   echo "  FAIL: mktemp-dir does not exist — test precondition failed"
+  teardown
 else
   remaining=$(find "$TMPDIR_TEST/mktemp-dir" -maxdepth 1 -mindepth 1 | wc -l)
   # Strip leading whitespace from wc -l output
   remaining=$((remaining + 0))
   assert_eq "no new temp files left" "0" "$remaining"
+  teardown
 fi
-teardown
 
-# Summary
 echo ""
 echo "================================"
 echo "Results: $PASS/$TOTAL passed, $FAIL failed"

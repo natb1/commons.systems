@@ -232,7 +232,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt`
-- Post combined comment (where `qa-plan-<N>.txt` is the QA testing plan written during the next step):
+- Post combined comment (where `qa-plan-<N>.txt` is the QA testing plan written during the next step instructions above):
   ```bash
   post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/qa-plan-<N>.txt" "$(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt"
   ```
