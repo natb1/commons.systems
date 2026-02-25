@@ -23,15 +23,12 @@ test.describe("admin", () => {
     await expect(page.locator("#sign-in")).toBeVisible();
   });
 
-  test("after sign-in, admin page shows user info", async ({ page }) => {
+  test("after sign-in, non-natb1 user sees not-authorized on admin", async ({ page }) => {
     await page.goto("/");
     await signIn(page);
     await page.goto("/#/admin");
     await expect(page.locator("#sign-in")).not.toBeVisible();
-    await expect(
-      page.locator("#user-display, #sign-out").first(),
-    ).toBeVisible();
-    await expect(page.locator("main")).not.toContainText("not authorized");
+    await expect(page.locator("#not-authorized")).toBeVisible();
   });
 
   // The emulator creates a test user that is NOT natb1, so the following tests
