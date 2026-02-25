@@ -120,6 +120,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Infrastructure failures → present to user for resolution
 
 **Progress report instructions:**
+- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt`
 - Post combined comment using the Task's `output_file`:
   ```bash
@@ -127,6 +128,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 
 **Termination instructions:**
+- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write final summary to `$(git rev-parse --show-toplevel)/tmp/acceptance-final.txt` (header must be `# Acceptance Test Review - Complete ✓`):
   ```
   # Acceptance Test Review - Complete ✓
@@ -169,6 +171,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Deploy failures → present to user for resolution
 
 **Progress report instructions:**
+- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt`
 - Post combined comment using the Task's `output_file`:
   ```bash
@@ -176,6 +179,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 
 **Termination instructions:**
+- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write final summary to `$(git rev-parse --show-toplevel)/tmp/smoke-final.txt` (header must be `# Smoke Test Review - Complete ✓`):
   ```
   # Smoke Test Review - Complete ✓
@@ -226,6 +230,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
 
 **Progress report instructions:**
+- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt`
 - Post combined comment using the Task's `output_file`:
   ```bash
@@ -234,6 +239,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Termination instructions:**
 - Stop the QA server (run-qa-server.sh) if started
+- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write final summary to `$(git rev-parse --show-toplevel)/tmp/qa-final.txt` (header must be `# QA Review - Complete ✓`):
   ```
   # QA Review - Complete ✓
@@ -301,6 +307,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - No required findings → **Terminate**
 
 **Progress report instructions:**
+- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt`
 - Post combined comment:
   ```bash
@@ -308,6 +315,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 
 **Termination instructions:**
+- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write final summary to `$(git rev-parse --show-toplevel)/tmp/codequality-final.txt` (header must be `# Code Quality Review - Complete ✓`):
   ```
   # Code Quality Review - Complete ✓
@@ -346,6 +354,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - No required findings → **Terminate**
 
 **Progress report instructions:**
+- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/security-eval-<N>.txt`
 - Post combined comment using the Task's `output_file`:
   ```bash
@@ -353,6 +362,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 
 **Termination instructions:**
+- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write final summary to `$(git rev-parse --show-toplevel)/tmp/security-final.txt` (header must be `# Security Review - Complete ✓`):
   ```
   # Security Review - Complete ✓

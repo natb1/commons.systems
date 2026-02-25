@@ -30,7 +30,11 @@ Execute the next step instructions from the plan.
 
 Execute evaluation instructions against Step 1 output. This may involve user interaction (e.g., presenting findings for classification).
 
-If progress report instructions are provided, execute them now (regardless of outcome).
+**STOP. Execute progress report instructions before determining outcome.**
+
+Progress report instructions capture the evaluation result for the audit log. They must run before transitioning — regardless of whether the outcome is iterate or terminate.
+
+If progress report instructions are provided, execute them now.
 
 Determine outcome:
 - **Iterate** → proceed to Step 3
@@ -40,23 +44,16 @@ Determine outcome:
 
 **STOP. Do not implement anything yet.**
 
-User responses and finding classifications from Step 2 are inputs to plan mode — not authorization to skip it. Implement nothing until Phase A plan mode is complete.
-
-**Phase A — Handle findings:**
+User responses and finding classifications from Step 2 are inputs to plan mode — not authorization to skip it. Implement nothing until plan mode is complete.
 
 Enter plan mode. Plan must include:
 - Findings from Step 2 (retrieved from persistent storage if needed, e.g., the progress report written in Step 2)
 - Steps to address the findings
 - Commit instructions (commit after work is done)
 
-Execute Phase A plan.
+Execute plan.
 
-**Phase B — Prepare next step:**
-
-Enter plan mode. Plan must include:
-- The next step instructions
-
-Return to Step 1.
+Return to Step 0.
 
 ## Step 4. Terminate
 

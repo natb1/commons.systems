@@ -34,6 +34,7 @@ case "$1" in
     ;;
   "api")
     case "$2" in
+      # Hardcoded to PR 99 — all tests must use PR number 99 when calling post-pr-comment.sh
       "repos/owner/repo/issues/99/comments")
         shift 2
         jq_filter=""
@@ -50,13 +51,11 @@ case "$1" in
             *) shift ;;
           esac
         done
-        # Fail if @file was specified but doesn't exist
-        if [ -n "$file_field" ] && [ ! -f "$file_field" ]; then
-          echo "stub: file not found: $file_field" >&2
-          exit 1
-        fi
-        # Save posted body for inspection
-        if [ -n "$file_field" ] && [ -f "$file_field" ]; then
+        if [ -n "$file_field" ]; then
+          if [ ! -f "$file_field" ]; then
+            echo "stub: file not found: $file_field" >&2
+            exit 1
+          fi
           cp "$file_field" "$STUB_DIR/posted-body.txt"
         fi
         if [ -n "$jq_filter" ]; then
@@ -110,7 +109,6 @@ assert_contains() {
   fi
 }
 
-# Test 1: post-pr-comment.sh prints comment ID when given output file only
 echo "Test 1: post-pr-comment.sh prints comment ID (output file only)"
 setup
 echo "hello world" > "$TMPDIR_TEST/output.txt"
@@ -118,7 +116,6 @@ output=$("$POST_T" 99 "$TMPDIR_TEST/output.txt")
 assert_eq "prints comment ID" "12345" "$output"
 teardown
 
-# Test 2: post-pr-comment.sh posted body equals output file contents (no eval)
 echo "Test 2: post-pr-comment.sh posted body equals output file (no eval)"
 setup
 printf 'output content' > "$TMPDIR_TEST/output.txt"
@@ -127,7 +124,6 @@ posted=$(cat "$TMPDIR_TEST/stub/posted-body.txt")
 assert_eq "body equals output file" "output content" "$posted"
 teardown
 
-# Test 3: post-pr-comment.sh body contains output, separator, and eval when eval file given
 echo "Test 3: post-pr-comment.sh body contains output, separator, and eval"
 setup
 printf 'task output' > "$TMPDIR_TEST/output.txt"
@@ -139,7 +135,6 @@ assert_contains "contains separator" "---" "$posted"
 assert_contains "contains eval" "eval results" "$posted"
 teardown
 
-# Test 4: post-pr-comment.sh preserves order: output → separator → eval
 echo "Test 4: post-pr-comment.sh preserves order: output then separator then eval"
 setup
 printf 'first content' > "$TMPDIR_TEST/output.txt"
@@ -149,36 +144,41 @@ posted=$(cat "$TMPDIR_TEST/stub/posted-body.txt")
 out_pos=$(echo "$posted" | grep -n "first content" | head -1 | cut -d: -f1)
 sep_pos=$(echo "$posted" | grep -n "^---$" | head -1 | cut -d: -f1)
 eval_pos=$(echo "$posted" | grep -n "last content" | head -1 | cut -d: -f1)
-assert_eq "output before separator" "1" "$([ "$out_pos" -lt "$sep_pos" ] && echo 1 || echo 0)"
-assert_eq "separator before eval" "1" "$([ "$sep_pos" -lt "$eval_pos" ] && echo 1 || echo 0)"
+assert_eq "output before separator" "true" "$([ "$out_pos" -lt "$sep_pos" ] && echo true || echo false)"
+assert_eq "separator before eval" "true" "$([ "$sep_pos" -lt "$eval_pos" ] && echo true || echo false)"
 teardown
 
-# Test 5: post-pr-comment.sh exits non-zero when output file does not exist
 echo "Test 5: post-pr-comment.sh exits non-zero for missing output file"
 setup
 exit_code=0
-"$POST_T" 99 "$TMPDIR_TEST/nonexistent.txt" 2>/dev/null || exit_code=$?
-assert_eq "exits non-zero" "1" "$([ "$exit_code" -ne 0 ] && echo 1 || echo 0)"
+stderr=$("$POST_T" 99 "$TMPDIR_TEST/nonexistent.txt" 2>&1 >/dev/null) || exit_code=$?
+assert_eq "exits with code 1" "1" "$exit_code"
+assert_contains "error message mentions missing file" "output file not found" "$stderr"
 teardown
 
-# Test 6: post-pr-comment.sh exits non-zero when eval file does not exist (output exists)
 echo "Test 6: post-pr-comment.sh exits non-zero for missing eval file"
 setup
 echo "output content" > "$TMPDIR_TEST/output.txt"
 exit_code=0
-"$POST_T" 99 "$TMPDIR_TEST/output.txt" "$TMPDIR_TEST/nonexistent-eval.txt" 2>/dev/null || exit_code=$?
-assert_eq "exits non-zero" "1" "$([ "$exit_code" -ne 0 ] && echo 1 || echo 0)"
+stderr=$("$POST_T" 99 "$TMPDIR_TEST/output.txt" "$TMPDIR_TEST/nonexistent-eval.txt" 2>&1 >/dev/null) || exit_code=$?
+assert_eq "exits with code 1" "1" "$exit_code"
+assert_contains "error message mentions missing eval file" "eval file not found" "$stderr"
 teardown
 
-# Test 7: post-pr-comment.sh cleans up temp file after POST
 echo "Test 7: post-pr-comment.sh cleans up temp file after POST"
 setup
 echo "cleanup test" > "$TMPDIR_TEST/output.txt"
 # Direct mktemp into a controlled directory so we can check it without
 # interference from other processes creating files in /tmp
 TMPDIR="$TMPDIR_TEST/mktemp-dir" "$POST_T" 99 "$TMPDIR_TEST/output.txt" > /dev/null
-remaining=$(ls "$TMPDIR_TEST/mktemp-dir" 2>/dev/null | wc -l)
-assert_eq "no new temp files left" "0" "$remaining"
+if [ ! -d "$TMPDIR_TEST/mktemp-dir" ]; then
+  FAIL=$((FAIL + 1))
+  TOTAL=$((TOTAL + 1))
+  echo "  FAIL: mktemp-dir does not exist — test precondition failed"
+else
+  remaining=$(find "$TMPDIR_TEST/mktemp-dir" -maxdepth 1 -mindepth 1 | wc -l)
+  assert_eq "no new temp files left" "0" "$remaining"
+fi
 teardown
 
 # Summary
