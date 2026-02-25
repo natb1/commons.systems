@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, orderBy, query } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, orderBy, query, where } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db, NAMESPACE } from "./firebase.js";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
@@ -22,7 +22,9 @@ function isNatb1(user: User | null): boolean {
 
 export async function getPosts(user: User | null): Promise<PostMeta[]> {
   const path = nsCollectionPath(NAMESPACE, "posts");
-  const q = query(collection(db, path), orderBy("publishedAt"));
+  const q = isNatb1(user)
+    ? query(collection(db, path), orderBy("publishedAt"))
+    : query(collection(db, path), where("published", "==", true));
   const snapshot = await getDocs(q);
   const posts = snapshot.docs.map((d) => {
     const data = d.data();
@@ -35,7 +37,13 @@ export async function getPosts(user: User | null): Promise<PostMeta[]> {
     };
   });
   if (isNatb1(user)) return posts;
-  return posts.filter((p) => p.published);
+  return posts
+    .filter((p) => p.published)
+    .sort((a, b) => {
+      if (!a.publishedAt) return 1;
+      if (!b.publishedAt) return -1;
+      return a.publishedAt.localeCompare(b.publishedAt);
+    });
 }
 
 export async function getPostMeta(slug: string): Promise<PostMeta | null> {

@@ -6,6 +6,7 @@ const mockGetDoc = vi.fn();
 const mockCollection = vi.fn();
 const mockQuery = vi.fn();
 const mockOrderBy = vi.fn();
+const mockWhere = vi.fn();
 const mockDoc = vi.fn();
 
 vi.mock("firebase/firestore", () => ({
@@ -14,6 +15,7 @@ vi.mock("firebase/firestore", () => ({
   getDoc: (...args: unknown[]) => mockGetDoc(...args),
   query: (...args: unknown[]) => mockQuery(...args),
   orderBy: (...args: unknown[]) => mockOrderBy(...args),
+  where: (...args: unknown[]) => mockWhere(...args),
   doc: (...args: unknown[]) => mockDoc(...args),
 }));
 
@@ -64,6 +66,7 @@ describe("getPosts", () => {
     vi.clearAllMocks();
     mockCollection.mockReturnValue("mock-collection-ref");
     mockOrderBy.mockReturnValue("mock-order");
+    mockWhere.mockReturnValue("mock-where");
     mockQuery.mockReturnValue("mock-query");
   });
 
@@ -78,12 +81,22 @@ describe("getPosts", () => {
     );
   });
 
-  it("orders results by publishedAt", async () => {
+  it("uses where filter for non-admin queries", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
     await getPosts(null);
 
+    expect(mockWhere).toHaveBeenCalledWith("published", "==", true);
+    expect(mockOrderBy).not.toHaveBeenCalled();
+  });
+
+  it("orders results by publishedAt for admin", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+
+    await getPosts(natb1UserByScreenName);
+
     expect(mockOrderBy).toHaveBeenCalledWith("publishedAt");
+    expect(mockWhere).not.toHaveBeenCalled();
   });
 
   it("returns only published posts when user is null", async () => {
