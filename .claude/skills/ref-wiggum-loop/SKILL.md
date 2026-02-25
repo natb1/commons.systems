@@ -38,6 +38,10 @@ Determine outcome:
 
 ## Step 3. Iterate
 
+**STOP. Do not implement anything yet.**
+
+User responses and finding classifications from Step 2 are inputs to plan mode — not authorization to skip it. Implement nothing until Phase A plan mode is complete.
+
 **Phase A — Handle findings:**
 
 Enter plan mode. Plan must include:
