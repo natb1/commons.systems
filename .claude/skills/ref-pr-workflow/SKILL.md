@@ -121,10 +121,10 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt`
+- Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt` (`<N>` is the loop iteration number, starting at 1 and incrementing with each iterate cycle)
 - Post combined comment using the Task's `output_file`:
   ```bash
-  post-pr-comment.sh <pr-num> <output_file> $(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt
+  post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt"
   ```
 
 **Termination instructions:**
@@ -149,7 +149,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/acceptance-final.txt
+  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/acceptance-final.txt"
   ```
 - Proceed to Step 7
 
@@ -175,7 +175,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt`
 - Post combined comment using the Task's `output_file`:
   ```bash
-  post-pr-comment.sh <pr-num> <output_file> $(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt
+  post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt"
   ```
 
 **Termination instructions:**
@@ -200,7 +200,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/smoke-final.txt
+  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/smoke-final.txt"
   ```
 - Proceed to Step 8
 
@@ -234,7 +234,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt`
 - Post combined comment using the Task's `output_file`:
   ```bash
-  post-pr-comment.sh <pr-num> <output_file> $(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt
+  post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt"
   ```
 
 **Termination instructions:**
@@ -268,7 +268,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/qa-final.txt
+  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/qa-final.txt"
   ```
 - Proceed to Step 9
 
@@ -309,9 +309,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt`
-- Post combined comment:
+- Post combined comment (output file written by Claude directly, not a background Task's `output_file`):
   ```bash
-  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/codequality-output-<N>.txt $(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt
+  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/codequality-output-<N>.txt" "$(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt"
   ```
 
 **Termination instructions:**
@@ -336,7 +336,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/codequality-final.txt
+  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/codequality-final.txt"
   ```
 - Proceed to Step 10
 
@@ -358,7 +358,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/security-eval-<N>.txt`
 - Post combined comment using the Task's `output_file`:
   ```bash
-  post-pr-comment.sh <pr-num> <output_file> $(git rev-parse --show-toplevel)/tmp/security-eval-<N>.txt
+  post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/security-eval-<N>.txt"
   ```
 
 **Termination instructions:**
@@ -383,7 +383,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/security-final.txt
+  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/security-final.txt"
   ```
 - Proceed to Step 11
 

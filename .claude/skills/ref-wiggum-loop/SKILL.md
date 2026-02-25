@@ -30,11 +30,9 @@ Execute the next step instructions from the plan.
 
 Execute evaluation instructions against Step 1 output. This may involve user interaction (e.g., presenting findings for classification).
 
-**STOP. Execute progress report instructions before determining outcome.**
+**STOP. If progress report instructions are provided, execute them now before determining outcome.**
 
 Progress report instructions capture the evaluation result for the audit log. They must run before transitioning — regardless of whether the outcome is iterate or terminate.
-
-If progress report instructions are provided, execute them now.
 
 Determine outcome:
 - **Iterate** → proceed to Step 3
