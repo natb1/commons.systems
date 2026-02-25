@@ -113,11 +113,6 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   gh run view <run-id>
   ```
 - If run is in progress, wait for completion before writing the file
-- After the Task completes, create a PR comment from the output file:
-  ```bash
-  COMMENT_ID=$(write-pr-comment.sh <pr-num> /tmp/acceptance-output-<N>.txt)
-  ```
-- Record `COMMENT_ID` in the plan for use in the progress report step
 
 **Evaluation instructions:**
 - All pass → **Terminate**
@@ -126,9 +121,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Progress report instructions:**
 - Write evaluation results to `/tmp/acceptance-eval-<N>.txt`
-- Append to the iteration comment:
+- Post combined comment:
   ```bash
-  append-pr-comment.sh "$COMMENT_ID" /tmp/acceptance-eval-<N>.txt
+  post-pr-comment.sh <pr-num> /tmp/acceptance-output-<N>.txt /tmp/acceptance-eval-<N>.txt
   ```
 
 **Termination instructions:**
@@ -150,9 +145,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
   All acceptance tests passed. PR approved for QA review.
   ```
-- Create final comment:
+- Post:
   ```bash
-  write-pr-comment.sh <pr-num> /tmp/acceptance-final.txt
+  post-pr-comment.sh <pr-num> /tmp/acceptance-final.txt
   ```
 - Proceed to Step 7
 
@@ -167,11 +162,6 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   gh run view <run-id>
   ```
 - If run is in progress, wait for completion before writing the file
-- After the Task completes, create a PR comment from the output file:
-  ```bash
-  COMMENT_ID=$(write-pr-comment.sh <pr-num> /tmp/smoke-output-<N>.txt)
-  ```
-- Record `COMMENT_ID` in the plan for use in the progress report step
 
 **Evaluation instructions:**
 - All pass → **Terminate**
@@ -180,9 +170,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Progress report instructions:**
 - Write evaluation results to `/tmp/smoke-eval-<N>.txt`
-- Append to the iteration comment:
+- Post combined comment:
   ```bash
-  append-pr-comment.sh "$COMMENT_ID" /tmp/smoke-eval-<N>.txt
+  post-pr-comment.sh <pr-num> /tmp/smoke-output-<N>.txt /tmp/smoke-eval-<N>.txt
   ```
 
 **Termination instructions:**
@@ -204,9 +194,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
   Smoke tests passed. Preview deployment verified.
   ```
-- Create final comment:
+- Post:
   ```bash
-  write-pr-comment.sh <pr-num> /tmp/smoke-final.txt
+  post-pr-comment.sh <pr-num> /tmp/smoke-final.txt
   ```
 - Proceed to Step 8
 
@@ -227,11 +217,6 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
     - Test steps for each behavior
     - Edge cases to test
     - Expected outcomes
-- After the Task completes, create a PR comment from the output file:
-  ```bash
-  COMMENT_ID=$(write-pr-comment.sh <pr-num> /tmp/qa-output-<N>.txt)
-  ```
-- Record `COMMENT_ID` in the plan for use in the progress report step
 - Present the plan and App URL (if applicable) to the user
 - **CRITICAL**: The user performs the actual testing (not Claude)
 - Wait for the user to test and report results
@@ -242,9 +227,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Progress report instructions:**
 - Write evaluation results to `/tmp/qa-eval-<N>.txt`
-- Append to the iteration comment:
+- Post combined comment:
   ```bash
-  append-pr-comment.sh "$COMMENT_ID" /tmp/qa-eval-<N>.txt
+  post-pr-comment.sh <pr-num> /tmp/qa-output-<N>.txt /tmp/qa-eval-<N>.txt
   ```
 
 **Termination instructions:**
@@ -275,9 +260,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
   All test cases passed. PR approved for code quality review.
   ```
-- Create final comment:
+- Post:
   ```bash
-  write-pr-comment.sh <pr-num> /tmp/qa-final.txt
+  post-pr-comment.sh <pr-num> /tmp/qa-final.txt
   ```
 - Proceed to Step 9
 
@@ -308,12 +293,6 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
   ...
   ```
-- Create a PR comment from the output file:
-  ```bash
-  COMMENT_ID=$(write-pr-comment.sh <pr-num> /tmp/codequality-output-<N>.txt)
-  ```
-- Record `COMMENT_ID` in the plan for use in the progress report step
-
 **Evaluation instructions:**
 - Present findings from ALL agents to user
 - User classifies each as: required, false positive, or out of scope
@@ -322,9 +301,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Progress report instructions:**
 - Write evaluation results (user classifications) to `/tmp/codequality-eval-<N>.txt`
-- Append to the iteration comment:
+- Post combined comment:
   ```bash
-  append-pr-comment.sh "$COMMENT_ID" /tmp/codequality-eval-<N>.txt
+  post-pr-comment.sh <pr-num> /tmp/codequality-output-<N>.txt /tmp/codequality-eval-<N>.txt
   ```
 
 **Termination instructions:**
@@ -346,9 +325,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
   [Final assessment and next steps]
   ```
-- Create final comment:
+- Post:
   ```bash
-  write-pr-comment.sh <pr-num> /tmp/codequality-final.txt
+  post-pr-comment.sh <pr-num> /tmp/codequality-final.txt
   ```
 - Proceed to Step 10
 
@@ -358,12 +337,6 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
 - Run `/security-review` in a Task (exists even if not visible in skill list), capturing all output verbatim to `/tmp/security-output-<N>.txt`
-- After the Task completes, create a PR comment from the output file:
-  ```bash
-  COMMENT_ID=$(write-pr-comment.sh <pr-num> /tmp/security-output-<N>.txt)
-  ```
-- Record `COMMENT_ID` in the plan for use in the progress report step
-
 **Evaluation instructions:**
 - Present findings to user
 - User classifies each as: required, false positive, or out of scope
@@ -372,9 +345,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Progress report instructions:**
 - Write evaluation results (user classifications) to `/tmp/security-eval-<N>.txt`
-- Append to the iteration comment:
+- Post combined comment:
   ```bash
-  append-pr-comment.sh "$COMMENT_ID" /tmp/security-eval-<N>.txt
+  post-pr-comment.sh <pr-num> /tmp/security-output-<N>.txt /tmp/security-eval-<N>.txt
   ```
 
 **Termination instructions:**
@@ -396,9 +369,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
   [Final assessment and next steps]
   ```
-- Create final comment:
+- Post:
   ```bash
-  write-pr-comment.sh <pr-num> /tmp/security-final.txt
+  post-pr-comment.sh <pr-num> /tmp/security-final.txt
   ```
 - Proceed to Step 11
 

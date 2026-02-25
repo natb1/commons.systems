@@ -2,8 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-WRITE_SCRIPT="$SCRIPT_DIR/write-pr-comment.sh"
-APPEND_SCRIPT="$SCRIPT_DIR/append-pr-comment.sh"
+POST_SCRIPT="$SCRIPT_DIR/post-pr-comment.sh"
 
 PASS=0
 FAIL=0
@@ -13,15 +12,14 @@ setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/stub"
 
-  # Copy scripts under test into temp dir
-  cp "$WRITE_SCRIPT" "$TMPDIR_TEST/write-pr-comment.sh"
-  cp "$APPEND_SCRIPT" "$TMPDIR_TEST/append-pr-comment.sh"
-  chmod +x "$TMPDIR_TEST/write-pr-comment.sh" "$TMPDIR_TEST/append-pr-comment.sh"
+  # Copy script under test into temp dir
+  cp "$POST_SCRIPT" "$TMPDIR_TEST/post-pr-comment.sh"
+  chmod +x "$TMPDIR_TEST/post-pr-comment.sh"
 
   # Create gh stub
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
-# gh stub for testing write-pr-comment.sh and append-pr-comment.sh
+# gh stub for testing post-pr-comment.sh
 
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 
@@ -51,46 +49,15 @@ case "$1 $2" in
       echo "stub: file not found: $file_field" >&2
       exit 1
     fi
+    # Save posted body for inspection
+    if [ -n "$file_field" ] && [ -f "$file_field" ]; then
+      cp "$file_field" "$STUB_DIR/posted-body.txt"
+    fi
     if [ -n "$jq_filter" ]; then
       echo "12345"
     else
       echo '{"id": 12345}'
     fi
-    exit 0
-    ;;
-  "api repos/owner/repo/issues/comments/12345")
-    shift 2
-    method=""
-    jq_filter=""
-    file_field=""
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --method) method="$2"; shift 2 ;;
-        --jq)     jq_filter="$2"; shift 2 ;;
-        --field)
-          val="${2#body=@}"
-          file_field="$val"
-          shift 2
-          ;;
-        --silent) shift ;;
-        *) shift ;;
-      esac
-    done
-
-    if [ "$method" = "PATCH" ]; then
-      # Save patched body to stub dir for inspection
-      if [ -n "$file_field" ] && [ -f "$file_field" ]; then
-        cp "$file_field" "$STUB_DIR/patched-body.txt"
-      fi
-      exit 0
-    fi
-
-    # GET with --jq '.body'
-    if [ -n "$jq_filter" ]; then
-      echo "existing body"
-      exit 0
-    fi
-
     exit 0
     ;;
   *)
@@ -102,8 +69,7 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/gh"
 
   export PATH="$TMPDIR_TEST/bin:$PATH"
-  WRITE_T="$TMPDIR_TEST/write-pr-comment.sh"
-  APPEND_T="$TMPDIR_TEST/append-pr-comment.sh"
+  POST_T="$TMPDIR_TEST/post-pr-comment.sh"
 }
 
 teardown() {
@@ -138,107 +104,72 @@ assert_contains() {
   fi
 }
 
-# Test 1: write-pr-comment.sh prints comment ID from POST response
-echo "Test 1: write-pr-comment.sh prints comment ID"
+# Test 1: post-pr-comment.sh prints comment ID when given output file only
+echo "Test 1: post-pr-comment.sh prints comment ID (output file only)"
 setup
-echo "hello world" > "$TMPDIR_TEST/body.txt"
-output=$("$WRITE_T" 99 "$TMPDIR_TEST/body.txt")
+echo "hello world" > "$TMPDIR_TEST/output.txt"
+output=$("$POST_T" 99 "$TMPDIR_TEST/output.txt")
 assert_eq "prints comment ID" "12345" "$output"
 teardown
 
-# Test 2: write-pr-comment.sh exits non-zero when file does not exist
-echo "Test 2: write-pr-comment.sh exits non-zero for missing file"
+# Test 2: post-pr-comment.sh posted body equals output file contents (no eval)
+echo "Test 2: post-pr-comment.sh posted body equals output file (no eval)"
+setup
+printf 'output content' > "$TMPDIR_TEST/output.txt"
+"$POST_T" 99 "$TMPDIR_TEST/output.txt" > /dev/null
+posted=$(cat "$TMPDIR_TEST/stub/posted-body.txt")
+assert_eq "body equals output file" "output content" "$posted"
+teardown
+
+# Test 3: post-pr-comment.sh body contains output, separator, and eval when eval file given
+echo "Test 3: post-pr-comment.sh body contains output, separator, and eval"
+setup
+printf 'task output' > "$TMPDIR_TEST/output.txt"
+printf 'eval results' > "$TMPDIR_TEST/eval.txt"
+"$POST_T" 99 "$TMPDIR_TEST/output.txt" "$TMPDIR_TEST/eval.txt" > /dev/null
+posted=$(cat "$TMPDIR_TEST/stub/posted-body.txt")
+assert_contains "contains output" "task output" "$posted"
+assert_contains "contains separator" "---" "$posted"
+assert_contains "contains eval" "eval results" "$posted"
+teardown
+
+# Test 4: post-pr-comment.sh preserves order: output → separator → eval
+echo "Test 4: post-pr-comment.sh preserves order: output then separator then eval"
+setup
+printf 'first content' > "$TMPDIR_TEST/output.txt"
+printf 'last content' > "$TMPDIR_TEST/eval.txt"
+"$POST_T" 99 "$TMPDIR_TEST/output.txt" "$TMPDIR_TEST/eval.txt" > /dev/null
+posted=$(cat "$TMPDIR_TEST/stub/posted-body.txt")
+out_pos=$(echo "$posted" | grep -n "first content" | head -1 | cut -d: -f1)
+sep_pos=$(echo "$posted" | grep -n "^---$" | head -1 | cut -d: -f1)
+eval_pos=$(echo "$posted" | grep -n "last content" | head -1 | cut -d: -f1)
+assert_eq "output before separator" "1" "$([ "$out_pos" -lt "$sep_pos" ] && echo 1 || echo 0)"
+assert_eq "separator before eval" "1" "$([ "$sep_pos" -lt "$eval_pos" ] && echo 1 || echo 0)"
+teardown
+
+# Test 5: post-pr-comment.sh exits non-zero when output file does not exist
+echo "Test 5: post-pr-comment.sh exits non-zero for missing output file"
 setup
 exit_code=0
-"$WRITE_T" 99 "$TMPDIR_TEST/nonexistent.txt" 2>/dev/null || exit_code=$?
+"$POST_T" 99 "$TMPDIR_TEST/nonexistent.txt" 2>/dev/null || exit_code=$?
 assert_eq "exits non-zero" "1" "$([ "$exit_code" -ne 0 ] && echo 1 || echo 0)"
 teardown
 
-# Test 3: write-pr-comment.sh uses @file syntax (body read from file, not inline)
-echo "Test 3: write-pr-comment.sh uses @file body syntax"
+# Test 6: post-pr-comment.sh exits non-zero when eval file does not exist (output exists)
+echo "Test 6: post-pr-comment.sh exits non-zero for missing eval file"
 setup
-echo "test content" > "$TMPDIR_TEST/body.txt"
-# Capture what gh receives by logging the --field argument
-cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
-#!/usr/bin/env bash
-STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
-case "$1 $2" in
-  "repo view") echo "owner/repo"; exit 0 ;;
-  "api repos/owner/repo/issues/99/comments")
-    shift 2
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --field)
-          # Record the field value for inspection
-          echo "$2" > "$STUB_DIR/field-arg.txt"
-          shift 2 ;;
-        --jq) echo '{"id": 12345}' | jq -r "$2"; shift 2 ;;
-        *) shift ;;
-      esac
-    done
-    echo '{"id": 12345}'
-    exit 0 ;;
-  *) exit 1 ;;
-esac
-STUB
-chmod +x "$TMPDIR_TEST/bin/gh"
-"$WRITE_T" 99 "$TMPDIR_TEST/body.txt" > /dev/null
-field_arg=$(cat "$TMPDIR_TEST/stub/field-arg.txt")
-assert_contains "field uses @file syntax" "body=@" "$field_arg"
-teardown
-
-# Test 4: append-pr-comment.sh result contains original body, separator, and appended content
-echo "Test 4: append-pr-comment.sh result contains all parts"
-setup
-echo "appended content" > "$TMPDIR_TEST/append.txt"
-"$APPEND_T" 12345 "$TMPDIR_TEST/append.txt"
-patched=$(cat "$TMPDIR_TEST/stub/patched-body.txt")
-assert_contains "contains original body" "existing body" "$patched"
-assert_contains "contains separator" "---" "$patched"
-assert_contains "contains appended content" "appended content" "$patched"
-teardown
-
-# Test 5: append-pr-comment.sh preserves order: original -> separator -> appended
-echo "Test 5: append-pr-comment.sh preserves order"
-setup
-echo "new stuff" > "$TMPDIR_TEST/append.txt"
-"$APPEND_T" 12345 "$TMPDIR_TEST/append.txt"
-patched=$(cat "$TMPDIR_TEST/stub/patched-body.txt")
-orig_pos=$(echo "$patched" | grep -n "existing body" | head -1 | cut -d: -f1)
-sep_pos=$(echo "$patched" | grep -n "^---$" | head -1 | cut -d: -f1)
-new_pos=$(echo "$patched" | grep -n "new stuff" | head -1 | cut -d: -f1)
-assert_eq "original before separator" "1" "$([ "$orig_pos" -lt "$sep_pos" ] && echo 1 || echo 0)"
-assert_eq "separator before appended" "1" "$([ "$sep_pos" -lt "$new_pos" ] && echo 1 || echo 0)"
-teardown
-
-# Test 6: append-pr-comment.sh exits non-zero when comment ID unknown
-echo "Test 6: append-pr-comment.sh exits non-zero for unknown comment ID"
-setup
-# Override gh stub to fail on unknown comment ID
-cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
-#!/usr/bin/env bash
-case "$1 $2" in
-  "repo view") echo "owner/repo"; exit 0 ;;
-  "api repos/owner/repo/issues/comments/99999")
-    echo "Not Found" >&2; exit 1 ;;
-  *) exit 1 ;;
-esac
-STUB
-chmod +x "$TMPDIR_TEST/bin/gh"
-echo "content" > "$TMPDIR_TEST/append.txt"
+echo "output content" > "$TMPDIR_TEST/output.txt"
 exit_code=0
-"$APPEND_T" 99999 "$TMPDIR_TEST/append.txt" 2>/dev/null || exit_code=$?
+"$POST_T" 99 "$TMPDIR_TEST/output.txt" "$TMPDIR_TEST/nonexistent-eval.txt" 2>/dev/null || exit_code=$?
 assert_eq "exits non-zero" "1" "$([ "$exit_code" -ne 0 ] && echo 1 || echo 0)"
 teardown
 
-# Test 7: append-pr-comment.sh cleans up temp file after PATCH
-echo "Test 7: append-pr-comment.sh cleans up temp file"
+# Test 7: post-pr-comment.sh cleans up temp file after POST
+echo "Test 7: post-pr-comment.sh cleans up temp file after POST"
 setup
-echo "cleanup test" > "$TMPDIR_TEST/append.txt"
-# Intercept mktemp to track temp file path
-# We'll check /tmp for leftover files by counting before/after
+echo "cleanup test" > "$TMPDIR_TEST/output.txt"
 tmp_count_before=$(ls /tmp/tmp.* 2>/dev/null | wc -l || echo 0)
-"$APPEND_T" 12345 "$TMPDIR_TEST/append.txt"
+"$POST_T" 99 "$TMPDIR_TEST/output.txt" > /dev/null
 tmp_count_after=$(ls /tmp/tmp.* 2>/dev/null | wc -l || echo 0)
 assert_eq "no new temp files left" "$tmp_count_before" "$tmp_count_after"
 teardown
