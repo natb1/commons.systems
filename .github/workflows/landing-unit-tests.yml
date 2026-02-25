@@ -12,6 +12,9 @@ on:
       - "style/**"
       - ".claude/skills/ref-pr-workflow/scripts/**"
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
