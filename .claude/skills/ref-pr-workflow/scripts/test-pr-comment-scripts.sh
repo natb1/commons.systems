@@ -122,7 +122,10 @@ echo "hello world" > "$TMPDIR_TEST/output.txt"
 exit_code=0
 output=$("$POST_T" 99 "$TMPDIR_TEST/output.txt") || exit_code=$?
 if [ "$exit_code" -ne 0 ]; then
-  TOTAL=$((TOTAL+1)); FAIL=$((FAIL+1)); echo "  FAIL: script exited unexpectedly (exit $exit_code)"; teardown
+  TOTAL=$((TOTAL + 1))
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: script exited unexpectedly (exit $exit_code)"
+  teardown
 else
   assert_eq "prints comment ID" "12345" "$output"; teardown
 fi
@@ -133,7 +136,10 @@ printf 'output content' > "$TMPDIR_TEST/output.txt"
 exit_code=0
 "$POST_T" 99 "$TMPDIR_TEST/output.txt" > /dev/null || exit_code=$?
 if [ "$exit_code" -ne 0 ]; then
-  TOTAL=$((TOTAL+1)); FAIL=$((FAIL+1)); echo "  FAIL: script exited unexpectedly (exit $exit_code)"; teardown
+  TOTAL=$((TOTAL + 1))
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: script exited unexpectedly (exit $exit_code)"
+  teardown
 else
   posted=$(cat "$TMPDIR_TEST/stub/posted-body.txt")
   assert_eq "body equals output file" "output content" "$posted"
@@ -148,7 +154,10 @@ printf 'eval results' > "$TMPDIR_TEST/eval.txt"
 exit_code=0
 "$POST_T" 99 "$TMPDIR_TEST/output.txt" "$TMPDIR_TEST/eval.txt" > /dev/null || exit_code=$?
 if [ "$exit_code" -ne 0 ]; then
-  TOTAL=$((TOTAL+1)); FAIL=$((FAIL+1)); echo "  FAIL: script exited unexpectedly (exit $exit_code)"; teardown
+  TOTAL=$((TOTAL + 1))
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: script exited unexpectedly (exit $exit_code)"
+  teardown
 else
   posted=$(cat "$TMPDIR_TEST/stub/posted-body.txt")
   assert_contains "contains output" "task output" "$posted"
@@ -164,7 +173,10 @@ printf 'last content' > "$TMPDIR_TEST/eval.txt"
 exit_code=0
 "$POST_T" 99 "$TMPDIR_TEST/output.txt" "$TMPDIR_TEST/eval.txt" > /dev/null || exit_code=$?
 if [ "$exit_code" -ne 0 ]; then
-  TOTAL=$((TOTAL+1)); FAIL=$((FAIL+1)); echo "  FAIL: script exited unexpectedly (exit $exit_code)"; teardown
+  TOTAL=$((TOTAL + 1))
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: script exited unexpectedly (exit $exit_code)"
+  teardown
 else
   posted=$(cat "$TMPDIR_TEST/stub/posted-body.txt")
   out_pos=$(echo "$posted" | grep -n "first content" | head -1 | cut -d: -f1)
@@ -208,19 +220,17 @@ if [ "$exit_code" -ne 0 ]; then
   FAIL=$((FAIL + 1))
   TOTAL=$((TOTAL + 1))
   echo "  FAIL: script exited unexpectedly (exit $exit_code)"
-  teardown
+elif [ ! -d "$TMPDIR_TEST/mktemp-dir" ]; then
+  FAIL=$((FAIL + 1))
+  TOTAL=$((TOTAL + 1))
+  echo "  FAIL: mktemp-dir does not exist — test precondition failed"
 else
-  if [ ! -d "$TMPDIR_TEST/mktemp-dir" ]; then
-    FAIL=$((FAIL + 1))
-    TOTAL=$((TOTAL + 1))
-    echo "  FAIL: mktemp-dir does not exist — test precondition failed"
-  else
-    remaining=$(find "$TMPDIR_TEST/mktemp-dir" -maxdepth 1 -mindepth 1 | wc -l)
-    remaining=$((remaining + 0))
-    assert_eq "no new temp files left" "0" "$remaining"
-  fi
-  teardown
+  remaining=$(find "$TMPDIR_TEST/mktemp-dir" -maxdepth 1 -mindepth 1 | wc -l)
+  # Strip leading whitespace from wc -l output
+  remaining=$((remaining + 0))
+  assert_eq "no new temp files left" "0" "$remaining"
 fi
+teardown
 
 # Summary
 echo ""

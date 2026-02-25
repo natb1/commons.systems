@@ -51,7 +51,7 @@ Enter plan mode. Plan must include:
 
 Execute plan.
 
-Return to Step 0.
+Return to Step 0. (Step 0, not Step 1: each iteration requires a fresh plan for the next execution cycle.)
 
 ## Step 4. Terminate
 

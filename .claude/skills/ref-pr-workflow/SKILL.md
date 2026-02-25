@@ -122,7 +122,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt` (`<N>` is the loop iteration number, starting at 1 and incrementing with each iterate cycle)
-- Post combined comment using the Task's `output_file`:
+- Post combined comment (where `<output_file>` is the `output_file` path from the background Task result):
   ```bash
   post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt"
   ```
@@ -173,7 +173,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt`
-- Post combined comment using the Task's `output_file`:
+- Post combined comment (where `<output_file>` is the `output_file` path from the background Task result):
   ```bash
   post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt"
   ```
@@ -209,18 +209,18 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Run the following in a background Task (`run_in_background: true`). Note the `output_file` path from the Task result:
-  - If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files):
-    1. Start the QA server using `run-qa-server.sh <app-dir>` in background
-    2. Parse the App URL from the script's output
-    3. Run acceptance tests as a smoke check: `BASE_URL=<url> npx playwright test --config e2e/playwright.config.ts`
-    4. If smoke tests fail → fix issues and re-run before involving the user
-    5. Once smoke tests pass, proceed to write the QA testing plan
-  - Write a comprehensive QA testing plan including:
-    - Key behaviors to verify
-    - Test steps for each behavior
-    - Edge cases to test
-    - Expected outcomes
+- If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files):
+  1. Start the QA server using `run-qa-server.sh <app-dir>` in background
+  2. Parse the App URL from the script's output
+  3. Run acceptance tests as a smoke check: `BASE_URL=<url> npx playwright test --config e2e/playwright.config.ts`
+  4. If smoke tests fail → fix issues and re-run before involving the user
+  5. Once smoke tests pass, proceed to write the QA testing plan
+- Write a comprehensive QA testing plan including:
+  - Key behaviors to verify
+  - Test steps for each behavior
+  - Edge cases to test
+  - Expected outcomes
+- Write the QA testing plan to `"$(git rev-parse --show-toplevel)/tmp/qa-plan-<N>.txt"`
 - Present the plan and App URL (if applicable) to the user
 - **CRITICAL**: The user performs the actual testing (not Claude)
 - Wait for the user to test and report results
@@ -232,9 +232,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt`
-- Post combined comment using the Task's `output_file`:
+- Post combined comment (where `qa-plan-<N>.txt` is the QA testing plan written during the next step):
   ```bash
-  post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt"
+  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/qa-plan-<N>.txt" "$(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt"
   ```
 
 **Termination instructions:**
@@ -356,7 +356,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/security-eval-<N>.txt`
-- Post combined comment using the Task's `output_file`:
+- Post combined comment (where `<output_file>` is the `output_file` path from the background Task result):
   ```bash
   post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/security-eval-<N>.txt"
   ```
