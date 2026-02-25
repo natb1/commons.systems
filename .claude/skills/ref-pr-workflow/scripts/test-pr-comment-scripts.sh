@@ -10,7 +10,7 @@ TOTAL=0
 
 setup() {
   TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/stub"
+  mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/stub" "$TMPDIR_TEST/mktemp-dir"
 
   # Copy script under test into temp dir
   cp "$POST_SCRIPT" "$TMPDIR_TEST/post-pr-comment.sh"
@@ -23,48 +23,54 @@ setup() {
 
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 
-case "$1 $2" in
-  "repo view")
-    echo "owner/repo"
-    exit 0
+case "$1" in
+  "repo")
+    case "$2" in
+      "view")
+        echo "owner/repo"
+        exit 0
+        ;;
+    esac
     ;;
-  "api repos/owner/repo/issues/99/comments")
-    shift 2
-    jq_filter=""
-    file_field=""
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --method) shift 2 ;;
-        --jq) jq_filter="$2"; shift 2 ;;
-        --field)
-          val="${2#body=@}"
-          file_field="$val"
-          shift 2
-          ;;
-        *) shift ;;
-      esac
-    done
-    # Fail if @file was specified but doesn't exist
-    if [ -n "$file_field" ] && [ ! -f "$file_field" ]; then
-      echo "stub: file not found: $file_field" >&2
-      exit 1
-    fi
-    # Save posted body for inspection
-    if [ -n "$file_field" ] && [ -f "$file_field" ]; then
-      cp "$file_field" "$STUB_DIR/posted-body.txt"
-    fi
-    if [ -n "$jq_filter" ]; then
-      echo "12345"
-    else
-      echo '{"id": 12345}'
-    fi
-    exit 0
-    ;;
-  *)
-    echo "stub: unknown invocation: $*" >&2
-    exit 1
+  "api")
+    case "$2" in
+      "repos/owner/repo/issues/99/comments")
+        shift 2
+        jq_filter=""
+        file_field=""
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --method) shift 2 ;;
+            --jq) jq_filter="$2"; shift 2 ;;
+            --field)
+              val="${2#body=@}"
+              file_field="$val"
+              shift 2
+              ;;
+            *) shift ;;
+          esac
+        done
+        # Fail if @file was specified but doesn't exist
+        if [ -n "$file_field" ] && [ ! -f "$file_field" ]; then
+          echo "stub: file not found: $file_field" >&2
+          exit 1
+        fi
+        # Save posted body for inspection
+        if [ -n "$file_field" ] && [ -f "$file_field" ]; then
+          cp "$file_field" "$STUB_DIR/posted-body.txt"
+        fi
+        if [ -n "$jq_filter" ]; then
+          echo "12345"
+        else
+          echo '{"id": 12345}'
+        fi
+        exit 0
+        ;;
+    esac
     ;;
 esac
+echo "stub: unknown invocation: $*" >&2
+exit 1
 STUB
   chmod +x "$TMPDIR_TEST/bin/gh"
 
@@ -168,10 +174,11 @@ teardown
 echo "Test 7: post-pr-comment.sh cleans up temp file after POST"
 setup
 echo "cleanup test" > "$TMPDIR_TEST/output.txt"
-tmp_count_before=$(ls /tmp/tmp.* 2>/dev/null | wc -l || echo 0)
-"$POST_T" 99 "$TMPDIR_TEST/output.txt" > /dev/null
-tmp_count_after=$(ls /tmp/tmp.* 2>/dev/null | wc -l || echo 0)
-assert_eq "no new temp files left" "$tmp_count_before" "$tmp_count_after"
+# Direct mktemp into a controlled directory so we can check it without
+# interference from other processes creating files in /tmp
+TMPDIR="$TMPDIR_TEST/mktemp-dir" "$POST_T" 99 "$TMPDIR_TEST/output.txt" > /dev/null
+remaining=$(ls "$TMPDIR_TEST/mktemp-dir" 2>/dev/null | wc -l)
+assert_eq "no new temp files left" "0" "$remaining"
 teardown
 
 # Summary

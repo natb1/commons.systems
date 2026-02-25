@@ -15,7 +15,7 @@ The purpose of this conversation is to create and manage a PR with the following
 - Commit log: !`git log origin/main..HEAD --format="commit %H%nAuthor: %an <%ae>%nDate: %ad%n%n%s%n%n%b"`
 
 # Dependencies
-Invoke `/ref-memory-management` if not already active. 
+Invoke `/ref-memory-management` if not already active.
 
 # Issue Workflow Reference
 Reference only. Do not execute this workflow until directed to do so (eg., by `/pr-workflow`).
@@ -107,12 +107,12 @@ Include a separate `Closes #N` for each issue (primary + all implemented depende
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Run the following in a Task, capturing all output verbatim to `/tmp/acceptance-output-<N>.txt`:
+- Run the following in a background Task (`run_in_background: true`). Note the `output_file` path from the Task result:
   ```bash
   gh run list --branch <branch> --limit 5
   gh run view <run-id>
   ```
-- If run is in progress, wait for completion before writing the file
+  If the run is in progress, wait for it to complete before returning output.
 
 **Evaluation instructions:**
 - All pass → **Terminate**
@@ -120,14 +120,14 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Infrastructure failures → present to user for resolution
 
 **Progress report instructions:**
-- Write evaluation results to `/tmp/acceptance-eval-<N>.txt`
-- Post combined comment:
+- Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt`
+- Post combined comment using the Task's `output_file`:
   ```bash
-  post-pr-comment.sh <pr-num> /tmp/acceptance-output-<N>.txt /tmp/acceptance-eval-<N>.txt
+  post-pr-comment.sh <pr-num> <output_file> $(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt
   ```
 
 **Termination instructions:**
-- Write final summary to `/tmp/acceptance-final.txt` (header must be `# Acceptance Test Review - Complete ✓`):
+- Write final summary to `$(git rev-parse --show-toplevel)/tmp/acceptance-final.txt` (header must be `# Acceptance Test Review - Complete ✓`):
   ```
   # Acceptance Test Review - Complete ✓
 
@@ -147,7 +147,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> /tmp/acceptance-final.txt
+  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/acceptance-final.txt
   ```
 - Proceed to Step 7
 
@@ -156,12 +156,12 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Run the following in a Task, capturing all output verbatim to `/tmp/smoke-output-<N>.txt`:
+- Run the following in a background Task (`run_in_background: true`). Note the `output_file` path from the Task result:
   ```bash
   gh run list --branch <branch> --limit 5
   gh run view <run-id>
   ```
-- If run is in progress, wait for completion before writing the file
+  If the run is in progress, wait for it to complete before returning output.
 
 **Evaluation instructions:**
 - All pass → **Terminate**
@@ -169,14 +169,14 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Deploy failures → present to user for resolution
 
 **Progress report instructions:**
-- Write evaluation results to `/tmp/smoke-eval-<N>.txt`
-- Post combined comment:
+- Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt`
+- Post combined comment using the Task's `output_file`:
   ```bash
-  post-pr-comment.sh <pr-num> /tmp/smoke-output-<N>.txt /tmp/smoke-eval-<N>.txt
+  post-pr-comment.sh <pr-num> <output_file> $(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt
   ```
 
 **Termination instructions:**
-- Write final summary to `/tmp/smoke-final.txt` (header must be `# Smoke Test Review - Complete ✓`):
+- Write final summary to `$(git rev-parse --show-toplevel)/tmp/smoke-final.txt` (header must be `# Smoke Test Review - Complete ✓`):
   ```
   # Smoke Test Review - Complete ✓
 
@@ -196,7 +196,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> /tmp/smoke-final.txt
+  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/smoke-final.txt
   ```
 - Proceed to Step 8
 
@@ -205,7 +205,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Run the following in a Task, capturing all output verbatim to `/tmp/qa-output-<N>.txt`:
+- Run the following in a background Task (`run_in_background: true`). Note the `output_file` path from the Task result:
   - If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files):
     1. Start the QA server using `run-qa-server.sh <app-dir>` in background
     2. Parse the App URL from the script's output
@@ -226,15 +226,15 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
 
 **Progress report instructions:**
-- Write evaluation results to `/tmp/qa-eval-<N>.txt`
-- Post combined comment:
+- Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt`
+- Post combined comment using the Task's `output_file`:
   ```bash
-  post-pr-comment.sh <pr-num> /tmp/qa-output-<N>.txt /tmp/qa-eval-<N>.txt
+  post-pr-comment.sh <pr-num> <output_file> $(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt
   ```
 
 **Termination instructions:**
 - Stop the QA server (run-qa-server.sh) if started
-- Write final summary to `/tmp/qa-final.txt` (header must be `# QA Review - Complete ✓`):
+- Write final summary to `$(git rev-parse --show-toplevel)/tmp/qa-final.txt` (header must be `# QA Review - Complete ✓`):
   ```
   # QA Review - Complete ✓
 
@@ -262,7 +262,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> /tmp/qa-final.txt
+  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/qa-final.txt
   ```
 - Proceed to Step 9
 
@@ -272,16 +272,16 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
 - Launch 7 review tasks in parallel using the Task tool. Collect all returned results verbatim — do NOT summarize or paraphrase agent output:
-  1. **`/review` skill** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "review"`. Include the PR diff context in the prompt.
-  2. **`pr-review-toolkit:code-reviewer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:code-reviewer"`.
-  3. **`pr-review-toolkit:code-simplifier`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:code-simplifier"`.
-  4. **`pr-review-toolkit:comment-analyzer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:comment-analyzer"`.
-  5. **`pr-review-toolkit:pr-test-analyzer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:pr-test-analyzer"`.
-  6. **`pr-review-toolkit:silent-failure-hunter`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:silent-failure-hunter"`.
-  7. **`pr-review-toolkit:type-design-analyzer`** — Use a `general-purpose` subagent that invokes the Skill tool with `skill: "pr-review-toolkit:type-design-analyzer"`.
+  1. **`/review` skill** — Launch a Task with `subagent_type: "general-purpose"` that invokes the Skill tool with `skill: "review"`. Include the PR diff context in the prompt.
+  2. **`pr-review-toolkit:code-reviewer`** — Launch a Task with `subagent_type: "pr-review-toolkit:code-reviewer"`.
+  3. **`pr-review-toolkit:code-simplifier`** — Launch a Task with `subagent_type: "pr-review-toolkit:code-simplifier"`.
+  4. **`pr-review-toolkit:comment-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:comment-analyzer"`.
+  5. **`pr-review-toolkit:pr-test-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:pr-test-analyzer"`.
+  6. **`pr-review-toolkit:silent-failure-hunter`** — Launch a Task with `subagent_type: "pr-review-toolkit:silent-failure-hunter"`.
+  7. **`pr-review-toolkit:type-design-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:type-design-analyzer"`.
 - All 7 tasks MUST be launched in a single message (parallel execution)
-- If any pr-review-toolkit agent fails to launch (e.g. plugin not installed), log a warning but continue — `/review` results alone are sufficient to proceed
-- Write all verbatim agent outputs to `/tmp/codequality-output-<N>.txt` under per-agent headings:
+- If any pr-review-toolkit agent fails to launch, log a warning but continue — `/review` results alone are sufficient to proceed
+- Write all verbatim agent outputs to `$(git rev-parse --show-toplevel)/tmp/codequality-output-<N>.txt` under per-agent headings:
   ```
   ## /review Output
 
@@ -289,10 +289,11 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
   ## pr-review-toolkit: code-reviewer
 
-  [verbatim output — or "Agent unavailable (plugin not installed)"]
+  [verbatim output — or "Agent unavailable"]
 
   ...
   ```
+
 **Evaluation instructions:**
 - Present findings from ALL agents to user
 - User classifies each as: required, false positive, or out of scope
@@ -300,14 +301,14 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - No required findings → **Terminate**
 
 **Progress report instructions:**
-- Write evaluation results (user classifications) to `/tmp/codequality-eval-<N>.txt`
+- Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt`
 - Post combined comment:
   ```bash
-  post-pr-comment.sh <pr-num> /tmp/codequality-output-<N>.txt /tmp/codequality-eval-<N>.txt
+  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/codequality-output-<N>.txt $(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt
   ```
 
 **Termination instructions:**
-- Write final summary to `/tmp/codequality-final.txt` (header must be `# Code Quality Review - Complete ✓`):
+- Write final summary to `$(git rev-parse --show-toplevel)/tmp/codequality-final.txt` (header must be `# Code Quality Review - Complete ✓`):
   ```
   # Code Quality Review - Complete ✓
 
@@ -327,7 +328,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> /tmp/codequality-final.txt
+  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/codequality-final.txt
   ```
 - Proceed to Step 10
 
@@ -336,7 +337,8 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Run `/security-review` in a Task (exists even if not visible in skill list), capturing all output verbatim to `/tmp/security-output-<N>.txt`
+- Run `/security-review` in a background Task (`run_in_background: true`, exists even if not visible in skill list). Note the `output_file` path from the Task result.
+
 **Evaluation instructions:**
 - Present findings to user
 - User classifies each as: required, false positive, or out of scope
@@ -344,14 +346,14 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - No required findings → **Terminate**
 
 **Progress report instructions:**
-- Write evaluation results (user classifications) to `/tmp/security-eval-<N>.txt`
-- Post combined comment:
+- Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/security-eval-<N>.txt`
+- Post combined comment using the Task's `output_file`:
   ```bash
-  post-pr-comment.sh <pr-num> /tmp/security-output-<N>.txt /tmp/security-eval-<N>.txt
+  post-pr-comment.sh <pr-num> <output_file> $(git rev-parse --show-toplevel)/tmp/security-eval-<N>.txt
   ```
 
 **Termination instructions:**
-- Write final summary to `/tmp/security-final.txt` (header must be `# Security Review - Complete ✓`):
+- Write final summary to `$(git rev-parse --show-toplevel)/tmp/security-final.txt` (header must be `# Security Review - Complete ✓`):
   ```
   # Security Review - Complete ✓
 
@@ -371,7 +373,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> /tmp/security-final.txt
+  post-pr-comment.sh <pr-num> $(git rev-parse --show-toplevel)/tmp/security-final.txt
   ```
 - Proceed to Step 11
 
