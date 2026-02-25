@@ -1,6 +1,7 @@
 export interface Route {
   path: string | RegExp;
   render: (hash: string) => string | Promise<string>;
+  afterRender?: (outlet: HTMLElement, hash: string) => void;
 }
 
 export function createRouter(
@@ -20,6 +21,7 @@ export function createRouter(
       const html = await route.render(hash);
       if (id === navigationId) {
         outlet.innerHTML = html;
+        route.afterRender?.(outlet, hash);
       }
     } catch (error) {
       console.error("Navigation error:", error);

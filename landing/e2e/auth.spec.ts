@@ -11,6 +11,9 @@ test.describe("auth", () => {
   });
 
   test("nav does not show sign-in on home route", async ({ page }) => {
+    await page.route("https://raw.githubusercontent.com/**", (route) =>
+      route.fulfill({ body: "# Test\nContent." }),
+    );
     await page.goto("/");
     await expect(page.locator("#sign-in")).not.toBeAttached();
   });
@@ -18,6 +21,9 @@ test.describe("auth", () => {
   test("nav shows user display and sign-out after sign-in on admin route", async ({
     page,
   }) => {
+    await page.route("https://raw.githubusercontent.com/**", (route) =>
+      route.fulfill({ body: "# Test\nContent." }),
+    );
     await page.goto("/");
     await signIn(page);
     await page.goto("/#/admin");
@@ -28,6 +34,9 @@ test.describe("auth", () => {
   test("sign-out returns to unauthenticated state on admin route", async ({
     page,
   }) => {
+    await page.route("https://raw.githubusercontent.com/**", (route) =>
+      route.fulfill({ body: "# Test\nContent." }),
+    );
     await page.goto("/");
     await signIn(page);
     await page.goto("/#/admin");
@@ -37,9 +46,12 @@ test.describe("auth", () => {
   });
 
   test("home page shows published posts without auth", async ({ page }) => {
+    await page.route("https://raw.githubusercontent.com/**", (route) =>
+      route.fulfill({ body: "# Test\nContent." }),
+    );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
-    const posts = page.locator("#posts li");
+    const posts = page.locator("#posts article");
     expect(await posts.count()).toBeGreaterThanOrEqual(2);
   });
 });

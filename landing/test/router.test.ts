@@ -186,4 +186,61 @@ describe("createRouter", () => {
     });
     expect(receivedHashes).toContain("/");
   });
+
+  it("calls afterRender after setting innerHTML", async () => {
+    const afterRenderSpy = vi.fn();
+    const routesWithAfterRender: Route[] = [
+      {
+        path: "/",
+        render: () => "<h2>Home</h2>",
+        afterRender: afterRenderSpy,
+      },
+    ];
+    createRouter(outlet, routesWithAfterRender);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+    expect(afterRenderSpy).toHaveBeenCalledWith(outlet, "/");
+  });
+
+  it("does not call afterRender if navigation is stale", async () => {
+    const afterRenderSpy = vi.fn();
+    let resolveSlowRoute!: (html: string) => void;
+    const slowRoute: Route = {
+      path: "/",
+      render: () =>
+        new Promise<string>((resolve) => {
+          resolveSlowRoute = resolve;
+        }),
+      afterRender: afterRenderSpy,
+    };
+    const fastRoute: Route = {
+      path: "/fast",
+      render: () => "<h2>Fast</h2>",
+    };
+
+    createRouter(outlet, [slowRoute, fastRoute]);
+
+    location.hash = "#/fast";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Fast</h2>");
+    });
+
+    resolveSlowRoute("<h2>Slow</h2>");
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(afterRenderSpy).not.toHaveBeenCalled();
+  });
+
+  it("works without afterRender defined", async () => {
+    const routesNoAfterRender: Route[] = [
+      { path: "/", render: () => "<h2>No Hook</h2>" },
+    ];
+    createRouter(outlet, routesNoAfterRender);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>No Hook</h2>");
+    });
+  });
 });

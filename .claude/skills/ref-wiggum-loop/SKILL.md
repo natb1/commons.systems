@@ -20,7 +20,7 @@ Plan mode is mandatory at Steps 0 and 3, regardless of loop complexity.
 
 ## Step 0. Initialize
 
-Enter plan mode. Write a complete new plan from scratch — do not edit or patch any existing plan file. The plan must include the next step instructions.
+Enter plan mode. Write a complete new plan from scratch — do not edit or patch any existing plan file. The plan must include all instruction sets: next step, evaluation, termination, and progress report (if provided).
 
 ## Step 1. Execute Next Step
 

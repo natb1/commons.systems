@@ -1,16 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { User } from "firebase/auth";
 
-vi.mock("../../src/firestore.js", () => ({
-  getPosts: vi.fn(),
+vi.mock("../../src/github.js", () => ({
+  fetchPost: vi.fn(),
 }));
 
-import { renderHome } from "../../src/pages/home";
-import { getPosts } from "../../src/firestore";
+vi.mock("marked", () => ({
+  marked: { parse: vi.fn((md: string) => Promise.resolve(`<p>${md}</p>`)) },
+}));
 
-const mockGetPosts = vi.mocked(getPosts);
+import { renderHomeHtml, hydrateHome } from "../../src/pages/home";
+import { fetchPost } from "../../src/github";
+import type { PostMeta } from "../../src/firestore";
 
-const publishedPost = {
+const mockFetchPost = vi.mocked(fetchPost);
+
+const publishedPost: PostMeta = {
   id: "hello-world",
   title: "Hello World",
   published: true,
@@ -18,7 +22,7 @@ const publishedPost = {
   filename: "hello-world.md",
 };
 
-const draftPost = {
+const draftPost: PostMeta = {
   id: "draft-post",
   title: "Draft Post",
   published: false,
@@ -26,86 +30,120 @@ const draftPost = {
   filename: "draft-post.md",
 };
 
-describe("renderHome", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe("renderHomeHtml", () => {
+  it("returns articles with correct IDs", () => {
+    const html = renderHomeHtml([publishedPost]);
+    expect(html).toContain('id="post-hello-world"');
   });
 
-  it("returns HTML containing an h2 Home heading", async () => {
-    mockGetPosts.mockResolvedValue([]);
-    const html = await renderHome(null);
-    expect(html).toContain("<h2>Home</h2>");
+  it("returns a #posts container", () => {
+    const html = renderHomeHtml([publishedPost]);
+    expect(html).toContain('id="posts"');
   });
 
-  it("renders a post list element when there are posts", async () => {
-    mockGetPosts.mockResolvedValue([publishedPost]);
-    const html = await renderHome(null);
-    expect(html).toContain('<ul id="posts">');
+  it("renders post titles in h2 elements", () => {
+    const html = renderHomeHtml([publishedPost]);
+    expect(html).toContain("<h2>Hello World</h2>");
   });
 
-  it("renders post titles as links to #/post/<slug>", async () => {
-    mockGetPosts.mockResolvedValue([publishedPost]);
-    const html = await renderHome(null);
-    expect(html).toContain('href="#/post/hello-world"');
-    expect(html).toContain("Hello World");
+  it("renders publishedAt in a time element", () => {
+    const html = renderHomeHtml([publishedPost]);
+    expect(html).toContain('datetime="2026-01-01T00:00:00Z"');
   });
 
-  it("renders multiple posts", async () => {
-    const secondPost = {
-      id: "second-post",
-      title: "Second Post",
-      published: true,
-      publishedAt: "2026-02-01T00:00:00Z",
-      filename: "second-post.md",
-    };
-    mockGetPosts.mockResolvedValue([publishedPost, secondPost]);
-    const html = await renderHome(null);
-    expect(html).toContain('href="#/post/hello-world"');
-    expect(html).toContain('href="#/post/second-post"');
-    expect(html).toContain("Hello World");
-    expect(html).toContain("Second Post");
-  });
-
-  it("shows [draft] badge for unpublished posts", async () => {
-    mockGetPosts.mockResolvedValue([draftPost]);
-    const html = await renderHome(null);
+  it("shows [draft] badge for unpublished posts", () => {
+    const html = renderHomeHtml([draftPost]);
     expect(html).toContain("[draft]");
   });
 
-  it("does not show [draft] badge for published posts", async () => {
-    mockGetPosts.mockResolvedValue([publishedPost]);
-    const html = await renderHome(null);
+  it("does not show [draft] badge for published posts", () => {
+    const html = renderHomeHtml([publishedPost]);
     expect(html).not.toContain("[draft]");
   });
 
-  it("renders publishedAt in a time element", async () => {
-    mockGetPosts.mockResolvedValue([publishedPost]);
-    const html = await renderHome(null);
-    expect(html).toContain('<time datetime="2026-01-01T00:00:00Z">');
+  it("renders loading placeholder for each post", () => {
+    const html = renderHomeHtml([publishedPost]);
+    expect(html).toContain('id="post-content-hello-world"');
+    expect(html).toContain("Loading...");
   });
 
-  it("shows 'No posts yet.' when the post list is empty", async () => {
-    mockGetPosts.mockResolvedValue([]);
-    const html = await renderHome(null);
+  it("shows 'No posts yet.' when post list is empty", () => {
+    const html = renderHomeHtml([]);
     expect(html).toContain("No posts yet.");
   });
 
-  it("renders error fallback when getPosts throws", async () => {
-    mockGetPosts.mockRejectedValue(new Error("connection failed"));
-    const html = await renderHome(null);
-    expect(html).toContain("Could not load");
+  it("renders multiple articles", () => {
+    const html = renderHomeHtml([publishedPost, draftPost]);
+    expect(html).toContain('id="post-hello-world"');
+    expect(html).toContain('id="post-draft-post"');
+  });
+});
+
+describe("hydrateHome", () => {
+  let outlet: HTMLDivElement;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    outlet = document.createElement("div");
   });
 
-  it("passes the user argument through to getPosts", async () => {
-    mockGetPosts.mockResolvedValue([]);
-    const user = { uid: "user-1" } as unknown as User;
-    await renderHome(user);
-    expect(mockGetPosts).toHaveBeenCalledWith(user);
+  it("injects fetched content into the placeholder div", async () => {
+    outlet.innerHTML = renderHomeHtml([publishedPost]);
+    mockFetchPost.mockResolvedValue("# Hello");
+
+    hydrateHome(outlet, [publishedPost]);
+    await vi.waitFor(() => {
+      const content = outlet.querySelector("#post-content-hello-world");
+      expect(content?.innerHTML).toContain("<p>");
+      expect(content?.innerHTML).not.toContain("Loading...");
+    });
   });
 
-  it("passes null to getPosts when called with null", async () => {
-    mockGetPosts.mockResolvedValue([]);
-    await renderHome(null);
-    expect(mockGetPosts).toHaveBeenCalledWith(null);
+  it("shows error message when fetch fails", async () => {
+    outlet.innerHTML = renderHomeHtml([publishedPost]);
+    mockFetchPost.mockRejectedValue(new Error("network error"));
+
+    hydrateHome(outlet, [publishedPost]);
+    await vi.waitFor(() => {
+      const content = outlet.querySelector("#post-content-hello-world");
+      expect(content?.innerHTML).toContain("Could not load post content.");
+    });
+  });
+
+  it("does not write to DOM if outlet no longer contains the posts container", async () => {
+    outlet.innerHTML = renderHomeHtml([publishedPost]);
+    const originalContent =
+      outlet.querySelector("#post-content-hello-world")?.innerHTML;
+
+    // Simulate navigation away by clearing outlet
+    let resolveFetch!: (value: string) => void;
+    mockFetchPost.mockReturnValue(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+
+    hydrateHome(outlet, [publishedPost]);
+    outlet.innerHTML = "<p>Navigated away</p>";
+    resolveFetch("# Hello");
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(outlet.innerHTML).toBe("<p>Navigated away</p>");
+  });
+
+  it("scrolls to target article when scrollTo is provided", async () => {
+    outlet.innerHTML = renderHomeHtml([publishedPost]);
+    mockFetchPost.mockResolvedValue("# Hello");
+
+    const scrollSpy = vi.fn();
+    const article = outlet.querySelector("#post-hello-world");
+    if (article) {
+      article.scrollIntoView = scrollSpy;
+    }
+
+    hydrateHome(outlet, [publishedPost], "hello-world");
+    await vi.waitFor(() => {
+      expect(scrollSpy).toHaveBeenCalled();
+    });
   });
 });
