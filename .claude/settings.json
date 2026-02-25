@@ -35,6 +35,10 @@
       "Bash(find:*)"
     ]
   },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
   "hooks": {
     "SessionStart": [
       {
