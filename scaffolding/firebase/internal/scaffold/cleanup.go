@@ -8,6 +8,51 @@ import (
 	"strings"
 )
 
+// RemoveFirestoreRules removes the rules block for appName from firestore.rules.
+// If no block is found, it logs a note and returns nil (not an error).
+func RemoveFirestoreRules(repoRoot, appName string) error {
+	rulesPath := filepath.Join(repoRoot, "firestore.rules")
+	content, err := os.ReadFile(rulesPath)
+	if err != nil {
+		return fmt.Errorf("reading firestore.rules: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	beginMarker := "// BEGIN: " + appName
+	endMarker := "// END: " + appName
+
+	beginLine := -1
+	endLine := -1
+	for i, line := range lines {
+		if strings.Contains(line, beginMarker) {
+			beginLine = i
+		}
+		if strings.Contains(line, endMarker) {
+			endLine = i
+		}
+	}
+
+	if beginLine == -1 {
+		fmt.Printf("NOTE: no rules block for %q found in firestore.rules (may have been added manually)\n", appName)
+		return nil
+	}
+	if endLine == -1 {
+		return fmt.Errorf("found BEGIN marker but no END marker for %q in firestore.rules", appName)
+	}
+
+	// Include blank line before BEGIN if present
+	start := beginLine
+	if start > 0 && strings.TrimSpace(lines[start-1]) == "" {
+		start--
+	}
+
+	// Remove lines from start to endLine inclusive
+	updated := make([]string, 0, len(lines))
+	updated = append(updated, lines[:start]...)
+	updated = append(updated, lines[endLine+1:]...)
+	return os.WriteFile(rulesPath, []byte(strings.Join(updated, "\n")), 0o644)
+}
+
 func Cleanup(repoRoot, appName string, dryRun bool) error {
 	if err := ValidateAppName(appName); err != nil {
 		return err
@@ -81,6 +126,17 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 			warnings++
 		} else {
 			firestoreDeleted = true
+		}
+	}
+
+	// Remove app rules block from firestore.rules
+	if dryRun {
+		fmt.Printf("[dry-run] Would remove rules block for %q from firestore.rules\n", appName)
+	} else {
+		fmt.Println("Removing rules block from firestore.rules...")
+		if err := RemoveFirestoreRules(repoRoot, appName); err != nil {
+			fmt.Printf("WARNING: failed to remove Firestore rules block: %v\n", err)
+			warnings++
 		}
 	}
 

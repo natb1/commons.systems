@@ -2,6 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // BEGIN: landing
     // Messages are publicly readable; notes require authentication (see below)
     match /ns/{namespace}/messages/{messageId} {
       allow read: if true;
@@ -19,6 +20,7 @@ service cloud.firestore {
       allow read: if resource.data.published == true || request.auth != null;
       allow write: if false;
     }
+    // END: landing
 
     // Deny everything else by default
     match /{document=**} {

@@ -129,6 +129,16 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 		}
 	}
 
+	// Update firestore.rules with default rules block for this app
+	if dryRun {
+		fmt.Printf("[dry-run] Would insert rules block for %q into firestore.rules\n", appName)
+	} else {
+		fmt.Println("Updating firestore.rules...")
+		if err := InsertFirestoreRules(repoRoot, appName); err != nil {
+			return fmt.Errorf("inserting Firestore rules: %w", err)
+		}
+	}
+
 	fmt.Println()
 	if dryRun {
 		fmt.Println("[dry-run] App creation plan complete. No changes were made.")
@@ -149,6 +159,27 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 	}
 
 	return nil
+}
+
+// InsertFirestoreRules inserts a default rules block for appName into firestore.rules,
+// just before the deny-all catch-all rule.
+func InsertFirestoreRules(repoRoot, appName string) error {
+	rulesPath := filepath.Join(repoRoot, "firestore.rules")
+	content, err := os.ReadFile(rulesPath)
+	if err != nil {
+		return fmt.Errorf("reading firestore.rules: %w", err)
+	}
+
+	block := fmt.Sprintf("    // BEGIN: %s\n    match /ns/{namespace}/messages/{messageId} {\n      allow read: if true;\n      allow write: if false;\n    }\n\n    match /ns/{namespace}/notes/{noteId} {\n      allow read: if request.auth != null;\n      allow write: if false;\n    }\n    // END: %s\n\n", appName, appName)
+
+	catchAll := "    // Deny everything else by default"
+	idx := strings.Index(string(content), catchAll)
+	if idx == -1 {
+		return fmt.Errorf("could not find catch-all rule in firestore.rules")
+	}
+
+	updated := string(content[:idx]) + block + string(content[idx:])
+	return os.WriteFile(rulesPath, []byte(updated), 0o644)
 }
 
 func renderTemplates(templateFS fs.FS, repoRoot, templateDir, outputDir string, data AppData) error {

@@ -1,29 +1,39 @@
 # Firestore Rules
 
-`firestore.rules` changes are deployed automatically by CI when a PR merges to `main`.
+`firestore.rules` changes deploy automatically via `firestore-deploy.yml` when a PR
+merges to `main` — this workflow is independent of any app's prod-deploy workflow.
 Preview branch deploys do not deploy rules.
 
 **Put rules changes in a standalone PR targeting `main`**, separate from feature work.
 Smoke tests on a feature branch will fail with permission-denied until the standalone
-rules PR merges and CI deploys the updated rules.
+rules PR merges and the centralized workflow deploys the updated rules.
 
-**Important:** The production deploy workflow (`landing-prod-deploy.yml`) must already
-exist on `main` for CI to trigger on a rules PR merge. If it does not exist yet (e.g.
-the app is brand new), the standalone rules PR will merge but the rules will not deploy
-automatically. In that case, deploy rules manually (see below) while the feature PR is
-still in review.
+## Manual deployment (for debugging)
 
-## Manual rules deployment (for debugging or bootstrapping)
-
-If rules need to be tested or deployed before the prod-deploy workflow exists on `main`,
-ask the user to run:
+To test or deploy rules without merging:
 
 ```bash
 firebase deploy --only firestore:rules --project <project-id>
 ```
 
-Once the correct rule set is confirmed, include the rules in the declarative
-`firestore.rules` file and open a standalone PR targeting `main` for permanent deployment.
+Once the correct rule set is confirmed, commit to `firestore.rules` and open a
+standalone PR targeting `main`.
+
+## App-namespaced rules
+
+**Always wrap app-specific rules in `// BEGIN: <appName>` / `// END: <appName>` markers.**
+The scaffolding cleanup script uses these markers to remove rules when an app is deleted.
+
+```
+// BEGIN: myapp
+match /ns/{namespace}/posts/{postId} {
+  allow read: if resource.data.published == true || request.auth != null;
+  allow write: if false;
+}
+// END: myapp
+```
+
+The deny-all catch-all at the bottom of the file must remain outside any marker block.
 
 ## List query compatibility
 
