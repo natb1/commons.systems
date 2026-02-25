@@ -162,7 +162,8 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 }
 
 // InsertFirestoreRules inserts a default rules block for appName into firestore.rules,
-// just before the deny-all catch-all rule.
+// just before the deny-all catch-all rule. Rules use the literal app name as a
+// top-level path segment (e.g. match /myapp/{env}/messages/{messageId}).
 func InsertFirestoreRules(repoRoot, appName string) error {
 	rulesPath := filepath.Join(repoRoot, "firestore.rules")
 	content, err := os.ReadFile(rulesPath)
@@ -170,7 +171,16 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 		return fmt.Errorf("reading firestore.rules: %w", err)
 	}
 
-	block := fmt.Sprintf("    // BEGIN: %s\n    match /ns/{namespace}/messages/{messageId} {\n      allow read: if true;\n      allow write: if false;\n    }\n\n    match /ns/{namespace}/notes/{noteId} {\n      allow read: if request.auth != null;\n      allow write: if false;\n    }\n    // END: %s\n\n", appName, appName)
+	block := fmt.Sprintf(
+		"    match /%s/{env}/messages/{messageId} {\n"+
+			"      allow read: if true;\n"+
+			"      allow write: if false;\n"+
+			"    }\n\n"+
+			"    match /%s/{env}/notes/{noteId} {\n"+
+			"      allow read: if request.auth != null;\n"+
+			"      allow write: if false;\n"+
+			"    }\n\n",
+		appName, appName)
 
 	catchAll := "    // Deny everything else by default"
 	idx := strings.Index(string(content), catchAll)

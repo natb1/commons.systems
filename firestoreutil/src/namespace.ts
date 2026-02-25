@@ -8,5 +8,5 @@ export function nsCollectionPath(
   if (!collectionName) {
     throw new Error("collectionName must not be empty");
   }
-  return `ns/${namespace}/${collectionName}`;
+  return `${namespace}/${collectionName}`;
 }

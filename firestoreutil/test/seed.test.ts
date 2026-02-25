@@ -24,7 +24,7 @@ describe("seed", () => {
     const { db, mockDoc, mockSet } = createMockFirestore();
 
     const spec: SeedSpec = {
-      namespace: "emulator",
+      namespace: "app/emulator",
       collections: [
         {
           name: "messages",
@@ -39,8 +39,8 @@ describe("seed", () => {
     await seed(db, spec);
 
     expect(mockDoc).toHaveBeenCalledTimes(2);
-    expect(mockDoc).toHaveBeenCalledWith("ns/emulator/messages/msg-1");
-    expect(mockDoc).toHaveBeenCalledWith("ns/emulator/messages/msg-2");
+    expect(mockDoc).toHaveBeenCalledWith("app/emulator/messages/msg-1");
+    expect(mockDoc).toHaveBeenCalledWith("app/emulator/messages/msg-2");
     expect(mockSet).toHaveBeenCalledTimes(2);
     expect(mockSet).toHaveBeenCalledWith({ text: "Hello" });
     expect(mockSet).toHaveBeenCalledWith({ text: "World" });
@@ -50,7 +50,7 @@ describe("seed", () => {
     const { db, mockDoc } = createMockFirestore();
 
     const spec: SeedSpec = {
-      namespace: "test",
+      namespace: "app/test",
       collections: [
         {
           name: "messages",
@@ -65,15 +65,15 @@ describe("seed", () => {
 
     await seed(db, spec);
 
-    expect(mockDoc).toHaveBeenCalledWith("ns/test/messages/m1");
-    expect(mockDoc).toHaveBeenCalledWith("ns/test/users/u1");
+    expect(mockDoc).toHaveBeenCalledWith("app/test/messages/m1");
+    expect(mockDoc).toHaveBeenCalledWith("app/test/users/u1");
   });
 
   it("handles empty collections array", async () => {
     const { db, mockDoc } = createMockFirestore();
 
     const spec: SeedSpec = {
-      namespace: "empty",
+      namespace: "app/empty",
       collections: [],
     };
 

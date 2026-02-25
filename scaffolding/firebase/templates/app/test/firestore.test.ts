@@ -14,7 +14,7 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("../src/firebase.js", () => ({
   db: { type: "mock-firestore" },
-  NAMESPACE: "test-ns",
+  NAMESPACE: "app/test",
 }));
 
 import { getMessages, getNotes } from "../src/firestore";
@@ -34,7 +34,7 @@ describe("getMessages", () => {
 
     expect(mockCollection).toHaveBeenCalledWith(
       { type: "mock-firestore" },
-      "ns/test-ns/messages",
+      "app/test/messages",
     );
   });
 
@@ -102,7 +102,7 @@ describe("getNotes", () => {
 
     expect(mockCollection).toHaveBeenCalledWith(
       { type: "mock-firestore" },
-      "ns/test-ns/notes",
+      "app/test/notes",
     );
   });
 

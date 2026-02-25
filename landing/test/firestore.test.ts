@@ -21,7 +21,7 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("../src/firebase.js", () => ({
   db: { type: "mock-firestore" },
-  NAMESPACE: "test-ns",
+  NAMESPACE: "landing/test",
 }));
 
 import { getPosts, getPostMeta } from "../src/firestore";
@@ -77,7 +77,7 @@ describe("getPosts", () => {
 
     expect(mockCollection).toHaveBeenCalledWith(
       { type: "mock-firestore" },
-      "ns/test-ns/posts",
+      "landing/test/posts",
     );
   });
 
@@ -172,7 +172,7 @@ describe("getPostMeta", () => {
 
     expect(mockDoc).toHaveBeenCalledWith(
       { type: "mock-firestore" },
-      "ns/test-ns/posts",
+      "landing/test/posts",
       "hello-world",
     );
   });

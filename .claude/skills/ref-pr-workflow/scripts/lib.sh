@@ -85,7 +85,7 @@ get_firestore_namespace() {
     printf "ERROR: get_firestore_namespace requires two non-empty arguments (got app='%s', env='%s')\n" "${1:-}" "${2:-}" >&2
     return 1
   fi
-  printf '%s-%s' "$1" "$2"
+  printf '%s/%s' "$1" "$2"
 }
 
 # Delete a Firebase Hosting preview channel.

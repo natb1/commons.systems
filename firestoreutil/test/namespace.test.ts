@@ -2,19 +2,19 @@ import { describe, it, expect } from "vitest";
 import { nsCollectionPath } from "../src/namespace.js";
 
 describe("nsCollectionPath", () => {
-  it("returns ns/{namespace}/{collectionName}", () => {
-    expect(nsCollectionPath("emulator", "messages")).toBe(
-      "ns/emulator/messages",
+  it("returns {namespace}/{collectionName}", () => {
+    expect(nsCollectionPath("app/emulator", "messages")).toBe(
+      "app/emulator/messages",
     );
   });
 
   it("works with prod namespace", () => {
-    expect(nsCollectionPath("prod", "messages")).toBe("ns/prod/messages");
+    expect(nsCollectionPath("app/prod", "messages")).toBe("app/prod/messages");
   });
 
   it("works with preview namespace", () => {
-    expect(nsCollectionPath("preview-pr-42", "users")).toBe(
-      "ns/preview-pr-42/users",
+    expect(nsCollectionPath("app/preview-pr-42", "users")).toBe(
+      "app/preview-pr-42/users",
     );
   });
 

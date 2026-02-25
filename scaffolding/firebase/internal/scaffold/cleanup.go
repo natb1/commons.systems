@@ -8,8 +8,9 @@ import (
 	"strings"
 )
 
-// RemoveFirestoreRules removes the rules block for appName from firestore.rules.
-// If no block is found, it logs a note and returns nil (not an error).
+// RemoveFirestoreRules removes all rule blocks for appName from firestore.rules.
+// Rules are identified by path pattern (match /<appName>/...) rather than markers.
+// If no rules are found, it logs a note and returns nil (not an error).
 func RemoveFirestoreRules(repoRoot, appName string) error {
 	rulesPath := filepath.Join(repoRoot, "firestore.rules")
 	content, err := os.ReadFile(rulesPath)
@@ -18,39 +19,49 @@ func RemoveFirestoreRules(repoRoot, appName string) error {
 	}
 
 	lines := strings.Split(string(content), "\n")
-	beginMarker := "// BEGIN: " + appName
-	endMarker := "// END: " + appName
+	matchPrefix := "match /" + appName + "/"
 
-	beginLine := -1
-	endLine := -1
-	for i, line := range lines {
-		if strings.Contains(line, beginMarker) {
-			beginLine = i
+	var result []string
+	found := false
+	i := 0
+	for i < len(lines) {
+		if strings.Contains(lines[i], matchPrefix) {
+			found = true
+			// Remove preceding blank line if present
+			if len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {
+				result = result[:len(result)-1]
+			}
+			// Skip block by counting braces
+			depth := 0
+			for i < len(lines) {
+				for _, ch := range lines[i] {
+					if ch == '{' {
+						depth++
+					}
+					if ch == '}' {
+						depth--
+					}
+				}
+				i++
+				if depth == 0 {
+					break
+				}
+			}
+			// Skip trailing blank line after block
+			if i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+				i++
+			}
+			continue
 		}
-		if strings.Contains(line, endMarker) {
-			endLine = i
-		}
+		result = append(result, lines[i])
+		i++
 	}
 
-	if beginLine == -1 {
-		fmt.Printf("NOTE: no rules block for %q found in firestore.rules (may have been added manually)\n", appName)
+	if !found {
+		fmt.Printf("NOTE: no rules for %q found in firestore.rules\n", appName)
 		return nil
 	}
-	if endLine == -1 {
-		return fmt.Errorf("found BEGIN marker but no END marker for %q in firestore.rules", appName)
-	}
-
-	// Include blank line before BEGIN if present
-	start := beginLine
-	if start > 0 && strings.TrimSpace(lines[start-1]) == "" {
-		start--
-	}
-
-	// Remove lines from start to endLine inclusive
-	updated := make([]string, 0, len(lines))
-	updated = append(updated, lines[:start]...)
-	updated = append(updated, lines[endLine+1:]...)
-	return os.WriteFile(rulesPath, []byte(strings.Join(updated, "\n")), 0o644)
+	return os.WriteFile(rulesPath, []byte(strings.Join(result, "\n")), 0o644)
 }
 
 func Cleanup(repoRoot, appName string, dryRun bool) error {
@@ -113,12 +124,12 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 	// so only the prod namespace needs cleanup here.
 	var firestoreDeleted bool
 	if dryRun {
-		fmt.Printf("[dry-run] Would delete Firestore namespace %q\n", appName+"-prod")
+		fmt.Printf("[dry-run] Would delete Firestore namespace %q\n", appName+"/prod")
 	} else {
-		fmt.Printf("Deleting Firestore namespace %q...\n", appName+"-prod")
+		fmt.Printf("Deleting Firestore namespace %q...\n", appName+"/prod")
 		nsCmd := exec.Command("npx", "tsx", "firestoreutil/bin/run-delete-namespace.ts")
 		nsCmd.Dir = repoRoot
-		nsCmd.Env = append(os.Environ(), "FIRESTORE_NAMESPACE="+appName+"-prod")
+		nsCmd.Env = append(os.Environ(), "FIRESTORE_NAMESPACE="+appName+"/prod")
 		nsCmd.Stdout = os.Stdout
 		nsCmd.Stderr = os.Stderr
 		if err := nsCmd.Run(); err != nil {

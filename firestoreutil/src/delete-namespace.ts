@@ -7,8 +7,8 @@ export async function deleteNamespace(
   if (!namespace) {
     throw new Error("namespace must not be empty");
   }
-  if (namespace === "prod") {
-    throw new Error("refusing to delete the prod namespace");
+  if (!namespace.includes('/')) {
+    throw new Error("namespace must be in '{app}/{env}' format, e.g. 'landing/prod'");
   }
-  await db.recursiveDelete(db.doc(`ns/${namespace}`));
+  await db.recursiveDelete(db.doc(namespace));
 }

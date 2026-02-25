@@ -19,21 +19,30 @@ firebase deploy --only firestore:rules --project <project-id>
 Once the correct rule set is confirmed, commit to `firestore.rules` and open a
 standalone PR targeting `main`.
 
-## App-namespaced rules
+## Path schema
 
-**Always wrap app-specific rules in `// BEGIN: <appName>` / `// END: <appName>` markers.**
-The scaffolding cleanup script uses these markers to remove rules when an app is deleted.
+Each app owns a top-level Firestore collection matching its name. Environments are
+documents within that collection:
 
 ```
-// BEGIN: myapp
-match /ns/{namespace}/posts/{postId} {
+{appName}/{envSuffix}/{collection}/{docId}
+```
+
+Examples: `landing/prod/posts/abc123`, `landing/preview-pr-42/posts/abc123`
+
+Rules use the literal app name as a path segment:
+
+```
+match /landing/{env}/posts/{postId} {
   allow read: if resource.data.published == true || request.auth != null;
   allow write: if false;
 }
-// END: myapp
 ```
 
-The deny-all catch-all at the bottom of the file must remain outside any marker block.
+The scaffolding's `InsertFirestoreRules` and `RemoveFirestoreRules` functions manage
+rule blocks by matching the `match /<appName>/` path prefix — no markers needed.
+
+The deny-all catch-all at the bottom of the file must remain as the last rule.
 
 ## List query compatibility
 

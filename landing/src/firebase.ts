@@ -29,6 +29,6 @@ if (!envNamespace && import.meta.env.MODE !== "production") {
       "Set it in your .env or build command to avoid writing to production data.",
   );
 }
-export const NAMESPACE = envNamespace || "landing-prod";
+export const NAMESPACE = envNamespace || "landing/prod";
 
 export { db, app };
