@@ -17,7 +17,7 @@ test.describe("navigation", () => {
       route.fulfill({ body: "# Test\nContent." }),
     );
     await page.goto("/");
-    await expect(page.locator("header h1")).toHaveText("Landing");
+    await expect(page.locator("header h1")).toHaveText("commons.systems");
     await expect(page.locator("nav")).toBeVisible();
     await expect(page.locator("main")).toBeVisible();
     await expect(page.locator("footer")).toBeVisible();

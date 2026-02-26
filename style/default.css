@@ -73,6 +73,15 @@ main {
   border: 1px solid var(--border);
 }
 
+#posts article {
+  margin-top: 4rem;
+  scroll-margin-top: 1rem;
+}
+
+#posts article:first-child {
+  margin-top: 0;
+}
+
 .post-link {
   text-decoration: none;
   color: inherit;
