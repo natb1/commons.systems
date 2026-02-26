@@ -153,4 +153,58 @@ describe("getPosts", () => {
 
     expect(posts).toEqual([]);
   });
+
+  it("sorts published posts by publishedAt ascending for non-admin", async () => {
+    const jan = {
+      id: "jan",
+      data: () => ({
+        title: "January",
+        published: true,
+        publishedAt: "2026-01-15T00:00:00Z",
+        filename: "jan.md",
+      }),
+    };
+    const feb = {
+      id: "feb",
+      data: () => ({
+        title: "February",
+        published: true,
+        publishedAt: "2026-02-15T00:00:00Z",
+        filename: "feb.md",
+      }),
+    };
+    mockGetDocs.mockResolvedValue({ docs: [feb, jan] });
+
+    const posts = await getPosts(null);
+
+    expect(posts[0].id).toBe("jan");
+    expect(posts[1].id).toBe("feb");
+  });
+
+  it("sorts posts with null publishedAt to the end for non-admin", async () => {
+    const withDate = {
+      id: "dated",
+      data: () => ({
+        title: "Dated",
+        published: true,
+        publishedAt: "2026-01-01T00:00:00Z",
+        filename: "dated.md",
+      }),
+    };
+    const noDate = {
+      id: "no-date",
+      data: () => ({
+        title: "No Date",
+        published: true,
+        publishedAt: null,
+        filename: "no-date.md",
+      }),
+    };
+    mockGetDocs.mockResolvedValue({ docs: [noDate, withDate] });
+
+    const posts = await getPosts(null);
+
+    expect(posts[0].id).toBe("dated");
+    expect(posts[1].id).toBe("no-date");
+  });
 });

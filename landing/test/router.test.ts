@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRouter, Route } from "../src/router";
 
 describe("createRouter", () => {
   let outlet: HTMLDivElement;
   let routes: Route[];
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     outlet = document.createElement("div");
@@ -12,6 +13,11 @@ describe("createRouter", () => {
       { path: "/about", render: () => "<h2>About</h2>" },
     ];
     location.hash = "";
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
   });
 
   it("renders the default route when there is no hash", async () => {
@@ -242,5 +248,11 @@ describe("createRouter", () => {
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>No Hook</h2>");
     });
+  });
+
+  it("throws when routes array is empty", () => {
+    expect(() => createRouter(outlet, [])).toThrow(
+      "createRouter requires at least one route",
+    );
   });
 });
