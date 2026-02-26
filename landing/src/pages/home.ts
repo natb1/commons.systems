@@ -48,27 +48,28 @@ export function hydrateHome(
   const container = outlet.querySelector("#posts");
   if (!container) return;
 
-  for (const post of posts) {
+  const fetches = posts.map(async (post) => {
     const contentDiv = outlet.querySelector<HTMLElement>(
       `#post-content-${post.id}`,
     );
-    if (!contentDiv) continue;
+    if (!contentDiv) return;
 
-    void (async () => {
-      try {
-        const markdown = await fetchPost(post.filename);
-        const html = await marked.parse(markdown);
-        if (!outlet.contains(container)) return;
-        contentDiv.innerHTML = html;
-      } catch {
-        if (!outlet.contains(container)) return;
-        contentDiv.innerHTML = "<p>Could not load post content.</p>";
-      }
+    try {
+      const markdown = await fetchPost(post.filename);
+      const html = await marked.parse(markdown);
+      if (!outlet.contains(container)) return;
+      contentDiv.innerHTML = html;
+    } catch {
+      if (!outlet.contains(container)) return;
+      contentDiv.innerHTML = "<p>Could not load post content.</p>";
+    }
+  });
 
-      if (scrollTo === post.id) {
-        const article = outlet.querySelector(`#post-${post.id}`);
-        article?.scrollIntoView({ behavior: "smooth" });
-      }
-    })();
+  if (scrollTo) {
+    void Promise.allSettled(fetches).then(() => {
+      if (!outlet.contains(container)) return;
+      const article = outlet.querySelector(`#post-${scrollTo}`);
+      article?.scrollIntoView({ behavior: "smooth" });
+    });
   }
 }
