@@ -50,6 +50,17 @@ test.describe("blog", () => {
     ).toContainText("This is the post.", { timeout: 30000 });
   });
 
+  test("post content does not show error fallback", async ({ page }) => {
+    await page.route("https://raw.githubusercontent.com/**", (route) =>
+      route.fulfill({ body: "# Hello World\nThis is the post." }),
+    );
+    await page.goto("/");
+    await page.waitForSelector("#posts", { timeout: 30000 });
+    await expect(
+      page.locator("#post-content-hello-world"),
+    ).not.toContainText("Could not load post content.", { timeout: 30000 });
+  });
+
   test("post shows publication date", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
       route.fulfill({ body: "# Hello World\nThis is the post." }),

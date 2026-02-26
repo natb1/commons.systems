@@ -142,6 +142,9 @@ if [ "$USES_AUTH" = true ]; then
   VITE_ARGS+=("VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}")
 fi
 
+# Set GitHub branch for apps that fetch raw content from GitHub
+VITE_ARGS+=("VITE_GITHUB_BRANCH=$(git branch --show-current)")
+
 # Start Vite dev server
 cd "$REPO_ROOT/$APP_DIR"
 if [ ${#VITE_ARGS[@]} -gt 0 ]; then

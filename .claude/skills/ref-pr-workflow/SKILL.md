@@ -210,8 +210,8 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
 - If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files):
-  1. Start the QA server using `run-qa-server.sh <app-dir>` in background
-  2. Parse the App URL from the script's output
+  1. Check if a QA server from a previous iteration is still running (look for the background task or a listening Vite port). If running, reuse its App URL. If not, start the QA server using `run-qa-server.sh <app-dir>` in background.
+  2. Parse the App URL from the script's output (current or previous run)
   3. Run acceptance tests as a smoke check: `BASE_URL=<url> npx playwright test --config e2e/playwright.config.ts`
   4. If smoke tests fail → fix issues and re-run before involving the user
   5. Once smoke tests pass, proceed to write the QA testing plan
