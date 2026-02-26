@@ -49,8 +49,14 @@ nav a {
 }
 
 header {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
   border-bottom: 2px solid var(--border);
+  padding-top: 1rem;
   padding-bottom: 1rem;
+  margin-top: -1rem;
   margin-bottom: 2rem;
 }
 

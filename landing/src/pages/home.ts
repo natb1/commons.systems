@@ -70,7 +70,8 @@ export function hydrateHome(
       if (!outlet.contains(container)) return;
       const article = outlet.querySelector(`#post-${scrollTo}`);
       if (article) {
-        const y = article.getBoundingClientRect().top + window.scrollY - 16;
+        const headerHeight = document.querySelector('header')?.offsetHeight ?? 0;
+        const y = article.getBoundingClientRect().top + window.scrollY - headerHeight - 16;
         window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
       }
     });

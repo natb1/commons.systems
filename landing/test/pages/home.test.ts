@@ -134,6 +134,11 @@ describe("hydrateHome", () => {
   });
 
   it("scrolls to target article when scrollTo is provided", async () => {
+    // Add a header so hydrateHome can measure its height
+    const header = document.createElement("header");
+    Object.defineProperty(header, "offsetHeight", { value: 60, configurable: true });
+    document.body.appendChild(header);
+
     outlet.innerHTML = renderHomeHtml([publishedPost]);
     mockFetchPost.mockResolvedValue("# Hello");
 
@@ -144,6 +149,12 @@ describe("hydrateHome", () => {
       expect(scrollSpy).toHaveBeenCalled();
     });
 
+    // Verify header height is subtracted from scroll position
+    const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
+    expect(call.top).toBeLessThanOrEqual(0); // getBoundingClientRect().top is 0 in jsdom, so 0 + 0 - 60 - 16 = -76, clamped to 0
+    expect(call.behavior).toBe("smooth");
+
     scrollSpy.mockRestore();
+    document.body.removeChild(header);
   });
 });

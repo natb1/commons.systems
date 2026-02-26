@@ -46,6 +46,14 @@ test.describe("navigation", () => {
     await expect(page.locator("#posts")).toBeVisible({ timeout: 30000 });
   });
 
+  test("post content loads from GitHub without mocks @smoke", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector("#posts", { timeout: 30000 });
+    const firstContent = page.locator("#posts article .post-content, #posts article [id^='post-content-']").first();
+    await expect(firstContent).not.toContainText("Could not load post content.", { timeout: 30000 });
+    await expect(firstContent).not.toContainText("Loading...", { timeout: 30000 });
+  });
+
   test("unknown hash falls back to home page", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
       route.fulfill({ body: "# Test\nContent." }),

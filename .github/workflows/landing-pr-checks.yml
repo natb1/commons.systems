@@ -51,6 +51,8 @@ jobs:
           echo "CREDS_FILE=$CREDS_FILE" >> "$GITHUB_ENV"
       - name: Deploy to preview channel
         id: deploy
+        env:
+          VITE_GITHUB_BRANCH: ${{ github.head_ref }}
         run: |
           set -o pipefail
           OUTPUT=$(.claude/skills/ref-pr-workflow/scripts/run-preview-deploy.sh landing "pr-${{ github.event.pull_request.number }}" | tee /dev/stderr)
