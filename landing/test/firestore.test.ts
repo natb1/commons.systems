@@ -2,21 +2,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { User } from "firebase/auth";
 
 const mockGetDocs = vi.fn();
-const mockGetDoc = vi.fn();
 const mockCollection = vi.fn();
 const mockQuery = vi.fn();
 const mockOrderBy = vi.fn();
 const mockWhere = vi.fn();
-const mockDoc = vi.fn();
 
 vi.mock("firebase/firestore", () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
-  getDoc: (...args: unknown[]) => mockGetDoc(...args),
   query: (...args: unknown[]) => mockQuery(...args),
   orderBy: (...args: unknown[]) => mockOrderBy(...args),
   where: (...args: unknown[]) => mockWhere(...args),
-  doc: (...args: unknown[]) => mockDoc(...args),
 }));
 
 vi.mock("../src/firebase.js", () => ({
@@ -24,7 +20,7 @@ vi.mock("../src/firebase.js", () => ({
   NAMESPACE: "landing/test",
 }));
 
-import { getPosts, getPostMeta } from "../src/firestore";
+import { getPosts } from "../src/firestore";
 
 const publishedPost = {
   id: "hello-world",
@@ -156,72 +152,5 @@ describe("getPosts", () => {
     const posts = await getPosts(null);
 
     expect(posts).toEqual([]);
-  });
-});
-
-describe("getPostMeta", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockDoc.mockReturnValue("mock-doc-ref");
-  });
-
-  it("queries the correct namespaced document path", async () => {
-    mockGetDoc.mockResolvedValue({ exists: () => false });
-
-    await getPostMeta("hello-world");
-
-    expect(mockDoc).toHaveBeenCalledWith(
-      { type: "mock-firestore" },
-      "landing/test/posts",
-      "hello-world",
-    );
-  });
-
-  it("returns null when the document does not exist", async () => {
-    mockGetDoc.mockResolvedValue({ exists: () => false });
-
-    const result = await getPostMeta("nonexistent");
-
-    expect(result).toBeNull();
-  });
-
-  it("returns PostMeta when the document exists", async () => {
-    mockGetDoc.mockResolvedValue({
-      exists: () => true,
-      id: "hello-world",
-      data: () => ({
-        title: "Hello World",
-        published: true,
-        publishedAt: "2026-01-01T00:00:00Z",
-        filename: "hello-world.md",
-      }),
-    });
-
-    const result = await getPostMeta("hello-world");
-
-    expect(result).toEqual({
-      id: "hello-world",
-      title: "Hello World",
-      published: true,
-      publishedAt: "2026-01-01T00:00:00Z",
-      filename: "hello-world.md",
-    });
-  });
-
-  it("sets publishedAt to null when field is missing", async () => {
-    mockGetDoc.mockResolvedValue({
-      exists: () => true,
-      id: "draft-post",
-      data: () => ({
-        title: "Draft Post",
-        published: false,
-        filename: "draft-post.md",
-      }),
-    });
-
-    const result = await getPostMeta("draft-post");
-
-    expect(result).not.toBeNull();
-    expect(result!.publishedAt).toBeNull();
   });
 });

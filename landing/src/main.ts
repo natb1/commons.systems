@@ -3,8 +3,7 @@ import { renderHomeHtml, hydrateHome } from "./pages/home.js";
 import { renderAdmin } from "./pages/admin.js";
 import { renderNav } from "./components/nav.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
-import { getPosts } from "./firestore.js";
-import type { PostMeta } from "./firestore.js";
+import { getPosts, type PostMeta } from "./firestore.js";
 import type { User } from "firebase/auth";
 
 const nav = document.getElementById("nav");
