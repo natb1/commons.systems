@@ -59,7 +59,8 @@ export function hydrateHome(
       const html = await marked.parse(markdown);
       if (!outlet.contains(container)) return;
       contentDiv.innerHTML = html;
-    } catch {
+    } catch (error) {
+      console.error(`Failed to load post "${post.id}":`, error);
       if (!outlet.contains(container)) return;
       contentDiv.innerHTML = "<p>Could not load post content.</p>";
     }

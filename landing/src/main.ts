@@ -21,7 +21,7 @@ function updateNav(): void {
   nav.innerHTML = renderNav(currentUser, currentPath());
   document.getElementById("sign-in")?.addEventListener("click", (e) => {
     e.preventDefault();
-    signIn();
+    signIn().catch(() => {});
   });
   document.getElementById("sign-out")?.addEventListener("click", (e) => {
     e.preventDefault();

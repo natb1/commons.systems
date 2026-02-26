@@ -8,6 +8,9 @@ export function createRouter(
   outlet: HTMLElement,
   routes: Route[],
 ): () => void {
+  if (routes.length === 0) {
+    throw new Error("createRouter requires at least one route");
+  }
   let navigationId = 0;
 
   async function navigate(): Promise<void> {

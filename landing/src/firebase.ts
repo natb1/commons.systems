@@ -29,6 +29,11 @@ if (!envNamespace && import.meta.env.MODE !== "production") {
       "Set it in your .env or build command to avoid writing to production data.",
   );
 }
+if (envNamespace && !envNamespace.includes('/')) {
+  throw new Error(
+    `VITE_FIRESTORE_NAMESPACE must be in "{app}/{env}" format (got "${envNamespace}")`,
+  );
+}
 export const NAMESPACE = envNamespace || "landing/prod";
 
 export { db, app };

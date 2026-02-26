@@ -10,5 +10,8 @@ export async function deleteNamespace(
   if (!namespace.includes('/')) {
     throw new Error("namespace must be in '{app}/{env}' format, e.g. 'landing/prod'");
   }
+  if (namespace.endsWith('/prod')) {
+    throw new Error("refusing to delete production namespace: " + namespace);
+  }
   await db.recursiveDelete(db.doc(namespace));
 }

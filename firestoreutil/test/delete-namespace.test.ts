@@ -39,4 +39,12 @@ describe("deleteNamespace", () => {
       "namespace must be in '{app}/{env}' format",
     );
   });
+
+  it("rejects production namespace", async () => {
+    const { db } = createMockFirestore();
+
+    await expect(deleteNamespace(db, "landing/prod")).rejects.toThrow(
+      "refusing to delete production namespace: landing/prod",
+    );
+  });
 });
