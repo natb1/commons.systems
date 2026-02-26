@@ -3,6 +3,8 @@ import { escapeHtml } from "../escape-html.js";
 import { fetchPost } from "../github.js";
 import type { PostMeta } from "../firestore.js";
 
+marked.use({ renderer: { html: () => "" } });
+
 export function renderHomeHtml(posts: PostMeta[]): string {
   if (posts.length === 0) {
     return `
@@ -13,6 +15,7 @@ export function renderHomeHtml(posts: PostMeta[]): string {
 
   const articles = posts
     .map((p) => {
+      const safeId = escapeHtml(p.id);
       const dateHtml = p.publishedAt
         ? `<time datetime="${escapeHtml(p.publishedAt)}">${escapeHtml(
             new Date(p.publishedAt).toLocaleDateString("en-US", {
@@ -25,10 +28,10 @@ export function renderHomeHtml(posts: PostMeta[]): string {
       const draft = !p.published
         ? ` <span class="draft-badge">[draft]</span>`
         : "";
-      return `<article id="post-${escapeHtml(p.id)}">
-        <h2><a href="#/post/${escapeHtml(p.id)}" class="post-link"><span class="link-icon" aria-hidden="true">&#x1F517; </span>${escapeHtml(p.title)}</a>${draft}</h2>
+      return `<article id="post-${safeId}">
+        <h2><a href="#/post/${safeId}" class="post-link"><span class="link-icon" aria-hidden="true">&#x1F517; </span>${escapeHtml(p.title)}</a>${draft}</h2>
         ${dateHtml}
-        <div id="post-content-${escapeHtml(p.id)}"><p>Loading...</p></div>
+        <div id="post-content-${safeId}"><p>Loading...</p></div>
       </article>`;
     })
     .join("\n      ");
@@ -50,7 +53,7 @@ export function hydrateHome(
 
   const fetches = posts.map(async (post) => {
     const contentDiv = outlet.querySelector<HTMLElement>(
-      `#post-content-${post.id}`,
+      `#post-content-${CSS.escape(post.id)}`,
     );
     if (!contentDiv) return;
 
@@ -69,7 +72,7 @@ export function hydrateHome(
   if (scrollTo) {
     void Promise.allSettled(fetches).then(() => {
       if (!outlet.contains(container)) return;
-      const article = outlet.querySelector(`#post-${scrollTo}`);
+      const article = outlet.querySelector(`#post-${CSS.escape(scrollTo)}`);
       if (article) {
         const headerHeight = document.querySelector('header')?.offsetHeight ?? 0;
         const y = article.getBoundingClientRect().top + window.scrollY - headerHeight - 16;

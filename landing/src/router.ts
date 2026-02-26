@@ -1,3 +1,7 @@
+export function getHashPath(): string {
+  return location.hash.slice(1) || "/";
+}
+
 export interface Route {
   path: string | RegExp;
   render: (hash: string) => string | Promise<string>;
@@ -15,7 +19,7 @@ export function createRouter(
 
   async function navigate(): Promise<void> {
     const id = ++navigationId;
-    const hash = location.hash.slice(1) || "/";
+    const hash = getHashPath();
     const route =
       routes.find((r) =>
         typeof r.path === "string" ? r.path === hash : r.path.test(hash),
@@ -24,7 +28,11 @@ export function createRouter(
       const html = await route.render(hash);
       if (id === navigationId) {
         outlet.innerHTML = html;
-        route.afterRender?.(outlet, hash);
+        try {
+          route.afterRender?.(outlet, hash);
+        } catch (afterError) {
+          console.error("afterRender error:", afterError);
+        }
       }
     } catch (error) {
       console.error("Navigation error:", error);

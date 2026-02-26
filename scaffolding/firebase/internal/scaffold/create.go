@@ -182,7 +182,7 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 			"    }\n\n",
 		appName, appName)
 
-	catchAll := "    // Deny everything else by default"
+	catchAll := "    // Deny everything else by default (scaffolding uses this line as an insertion marker)"
 	idx := strings.Index(string(content), catchAll)
 	if idx == -1 {
 		return fmt.Errorf("could not find catch-all rule in firestore.rules")

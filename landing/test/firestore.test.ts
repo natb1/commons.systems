@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { User } from "firebase/auth";
+import { makeUser } from "./helpers/make-user";
 
 const mockGetDocs = vi.fn();
 const mockCollection = vi.fn();
@@ -42,20 +42,9 @@ const draftPost = {
   }),
 };
 
-const natb1UserByScreenName = {
-  reloadUserInfo: { screenName: "natb1" },
-  providerData: [],
-} as unknown as User;
-
-const natb1UserByProviderData = {
-  reloadUserInfo: {},
-  providerData: [{ uid: "natb1" }],
-} as unknown as User;
-
-const otherUser = {
-  reloadUserInfo: { screenName: "other" },
-  providerData: [{ uid: "other-uid" }],
-} as unknown as User;
+const natb1UserByScreenName = makeUser({ screenName: "natb1" });
+const natb1UserByProviderData = makeUser({ providerUid: "natb1" });
+const otherUser = makeUser({ screenName: "other", providerUid: "other-uid" });
 
 describe("getPosts", () => {
   beforeEach(() => {
@@ -179,6 +168,58 @@ describe("getPosts", () => {
 
     expect(posts[0].id).toBe("jan");
     expect(posts[1].id).toBe("feb");
+  });
+
+  it("filters out documents with missing title", async () => {
+    const noTitle = {
+      id: "no-title",
+      data: () => ({ published: true, publishedAt: null, filename: "f.md" }),
+    };
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockGetDocs.mockResolvedValue({ docs: [publishedPost, noTitle] });
+
+    const posts = await getPosts(natb1UserByScreenName);
+
+    expect(posts).toHaveLength(1);
+    expect(posts[0].id).toBe("hello-world");
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("no-title"),
+      expect.anything(),
+    );
+    consoleError.mockRestore();
+  });
+
+  it("filters out documents with missing filename", async () => {
+    const noFilename = {
+      id: "no-filename",
+      data: () => ({ title: "Title", published: true, publishedAt: null }),
+    };
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockGetDocs.mockResolvedValue({ docs: [noFilename] });
+
+    const posts = await getPosts(natb1UserByScreenName);
+
+    expect(posts).toHaveLength(0);
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("treats non-boolean published as false", async () => {
+    const badPublished = {
+      id: "bad-pub",
+      data: () => ({
+        title: "Bad",
+        published: "yes",
+        publishedAt: null,
+        filename: "bad.md",
+      }),
+    };
+    mockGetDocs.mockResolvedValue({ docs: [badPublished] });
+
+    const posts = await getPosts(natb1UserByScreenName);
+
+    expect(posts).toHaveLength(1);
+    expect(posts[0].published).toBe(false);
   });
 
   it("sorts posts with null publishedAt to the end for non-admin", async () => {

@@ -24,8 +24,14 @@ describe("nsCollectionPath", () => {
     );
   });
 
+  it("throws on namespace without slash", () => {
+    expect(() => nsCollectionPath("emulator", "messages")).toThrow(
+      'namespace must be in "{app}/{env}" format',
+    );
+  });
+
   it("throws on empty collectionName", () => {
-    expect(() => nsCollectionPath("emulator", "")).toThrow(
+    expect(() => nsCollectionPath("app/emulator", "")).toThrow(
       "collectionName must not be empty",
     );
   });

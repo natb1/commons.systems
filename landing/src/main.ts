@@ -1,4 +1,4 @@
-import { createRouter } from "./router.js";
+import { createRouter, getHashPath } from "./router.js";
 import { renderHomeHtml, hydrateHome } from "./pages/home.js";
 import { renderAdmin } from "./pages/admin.js";
 import { renderNav } from "./components/nav.js";
@@ -12,20 +12,16 @@ const app = document.getElementById("app");
 let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
 
-function currentPath(): string {
-  return location.hash.slice(1) || "/";
-}
-
 function updateNav(): void {
   if (!nav) return;
-  nav.innerHTML = renderNav(currentUser, currentPath());
+  nav.innerHTML = renderNav(currentUser, getHashPath());
   document.getElementById("sign-in")?.addEventListener("click", (e) => {
     e.preventDefault();
-    signIn().catch(() => {});
+    signIn().catch((err) => { console.error("Sign-in failed:", err); });
   });
   document.getElementById("sign-out")?.addEventListener("click", (e) => {
     e.preventDefault();
-    void signOut();
+    signOut().catch((err) => { console.error("Sign-out failed:", err); });
   });
 }
 
@@ -47,15 +43,10 @@ updateNav();
 if (app) {
   const navigate = createRouter(app, [
     {
-      path: "/",
-      render: () => loadPosts(),
-      afterRender: (outlet) => hydrateHome(outlet, cachedPosts),
-    },
-    {
-      path: /^\/post\//,
+      path: /^\/(?:post\/.*)?$/,
       render: () => loadPosts(),
       afterRender: (outlet, hash) => {
-        const slug = hash.replace(/^\/post\//, "");
+        const slug = hash.startsWith("/post/") ? hash.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, slug);
       },
     },

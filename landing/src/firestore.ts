@@ -12,13 +12,14 @@ export interface PostMeta {
   filename: string;
 }
 
-function toPostMeta(id: string, data: Record<string, unknown>): PostMeta {
+function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null {
   const title = typeof data.title === "string" ? data.title : "";
   const published = data.published === true;
   const publishedAt = typeof data.publishedAt === "string" ? data.publishedAt : null;
   const filename = typeof data.filename === "string" ? data.filename : "";
   if (!title || !filename) {
     console.error(`Post "${id}" has missing required fields:`, data);
+    return null;
   }
   return { id, title, published, publishedAt, filename };
 }
@@ -29,7 +30,7 @@ export async function getPosts(user: User | null): Promise<PostMeta[]> {
     ? query(collection(db, path), orderBy("publishedAt"))
     : query(collection(db, path), where("published", "==", true));
   const snapshot = await getDocs(q);
-  const posts = snapshot.docs.map((d) => toPostMeta(d.id, d.data()));
+  const posts = snapshot.docs.map((d) => toPostMeta(d.id, d.data())).filter((p): p is PostMeta => p !== null);
   if (isAuthorized(user)) return posts;
   return posts
     .filter((p) => p.published)

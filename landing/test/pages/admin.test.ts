@@ -1,20 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { User } from "firebase/auth";
 import { renderAdmin } from "../../src/pages/admin";
-
-function makeUser(overrides: {
-  screenName?: string;
-  providerUid?: string;
-  displayName?: string | null;
-}): User {
-  return {
-    displayName: overrides.displayName ?? null,
-    reloadUserInfo: { screenName: overrides.screenName },
-    providerData: overrides.providerUid
-      ? [{ uid: overrides.providerUid }]
-      : [],
-  } as unknown as User;
-}
+import { makeUser } from "../helpers/make-user";
 
 describe("renderAdmin", () => {
   it("returns sign-in prompt when user is null", () => {

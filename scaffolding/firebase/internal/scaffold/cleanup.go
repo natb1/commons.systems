@@ -47,6 +47,9 @@ func RemoveFirestoreRules(repoRoot, appName string) error {
 					break
 				}
 			}
+			if depth != 0 {
+				return fmt.Errorf("unbalanced braces in rules block for %q (depth %d)", appName, depth)
+			}
 			// Skip trailing blank line after block
 			if i < len(lines) && strings.TrimSpace(lines[i]) == "" {
 				i++

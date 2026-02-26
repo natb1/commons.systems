@@ -31,8 +31,8 @@ test.describe("admin", () => {
     await expect(page.locator("#not-authorized")).toBeVisible();
   });
 
-  // The emulator creates a test user that is NOT natb1, so the following tests
-  // require natb1-specific identity and cannot be verified in the emulator environment.
+  // The seed user (seeds/auth.ts) is not natb1, so these tests would need a
+  // natb1 seed to verify admin-only behavior.
 
   test.skip("[draft] badge visible for admin (aspirational - requires natb1 emulator user)", async ({
     page,

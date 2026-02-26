@@ -2,7 +2,6 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Messages are publicly readable; notes require authentication (see below)
     match /landing/{env}/messages/{messageId} {
       allow read: if true;
       allow write: if false;
@@ -20,7 +19,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Deny everything else by default
+    // Deny everything else by default (scaffolding uses this line as an insertion marker)
     match /{document=**} {
       allow read, write: if false;
     }

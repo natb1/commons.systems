@@ -5,7 +5,10 @@ vi.mock("../../src/github.js", () => ({
 }));
 
 vi.mock("marked", () => ({
-  marked: { parse: vi.fn((md: string) => Promise.resolve(`<p>${md}</p>`)) },
+  marked: {
+    parse: vi.fn((md: string) => Promise.resolve(`<p>${md}</p>`)),
+    use: vi.fn(),
+  },
 }));
 
 import { renderHomeHtml, hydrateHome } from "../../src/pages/home";
