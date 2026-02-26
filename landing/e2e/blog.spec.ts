@@ -8,7 +8,6 @@ test.describe("blog", () => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     const posts = page.locator("#posts article");
-    await expect(posts).toHaveCount(await posts.count());
     expect(await posts.count()).toBeGreaterThanOrEqual(2);
     await expect(page.locator("#posts")).toContainText("Hello World");
     await expect(page.locator("#posts")).toContainText(

@@ -231,7 +231,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 			fmt.Printf("  SKIPPED hosting site deletion (see warnings above)\n")
 		}
 		if firestoreDeleted {
-			fmt.Printf("  Deleted Firestore namespace: %s-prod\n", appName)
+			fmt.Printf("  Deleted Firestore namespace: %s/prod\n", appName)
 		} else {
 			fmt.Printf("  SKIPPED Firestore namespace deletion (see warnings above)\n")
 		}

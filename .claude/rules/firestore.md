@@ -51,7 +51,7 @@ condition. A rule like `allow read: if resource.data.published == true || reques
 rejects an unauthenticated `orderBy("publishedAt")` query even when all documents satisfy
 `published == true` — because no `where` clause restricts the query to published documents.
 
-Use `where("published", "==", true)` for unauthenticated list queries and sort client-side:
+Use `where("published", "==", true)` for unauthorized list queries and sort client-side:
 
 ```typescript
 const q = isNatb1(user)

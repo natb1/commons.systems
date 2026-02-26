@@ -4,7 +4,7 @@ This is an unpublished draft for testing admin visibility.
 
 ## Post Ideas
 
-- Deep dive into Firestore security rules
+- Detailed analysis of Firestore security rules
 - How to write effective Playwright tests
 - The cost of agentic coding (tokens, time, quality)
 - When to use a framework vs. vanilla TypeScript
