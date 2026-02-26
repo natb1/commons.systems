@@ -78,30 +78,3 @@ main {
   padding: 1.5rem;
   border: 1px solid var(--border);
 }
-
-#posts article {
-  margin-top: 4rem;
-}
-
-#posts article:first-child {
-  margin-top: 0;
-}
-
-.post-link {
-  text-decoration: none;
-  color: inherit;
-}
-
-.post-link:hover {
-  color: var(--accent);
-}
-
-.link-icon {
-  opacity: 0;
-  transition: opacity 0.15s;
-  font-size: 0.7em;
-}
-
-.post-link:hover .link-icon {
-  opacity: 1;
-}
