@@ -70,8 +70,8 @@ export function hydrateHome(
       if (!outlet.contains(container)) return;
       const article = outlet.querySelector(`#post-${scrollTo}`);
       if (article) {
-        const y = article.getBoundingClientRect().top + window.scrollY;
-        window.scrollTo({ top: y, behavior: "smooth" });
+        const y = article.getBoundingClientRect().top + window.scrollY - 16;
+        window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
       }
     });
   }
