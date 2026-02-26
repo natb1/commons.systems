@@ -41,9 +41,11 @@ describe("renderHomeHtml", () => {
     expect(html).toContain('id="posts"');
   });
 
-  it("renders post titles in h2 elements", () => {
+  it("renders post titles as links in h2 elements", () => {
     const html = renderHomeHtml([publishedPost]);
-    expect(html).toContain("<h2>Hello World</h2>");
+    expect(html).toContain('class="post-link"');
+    expect(html).toContain("Hello World</a>");
+    expect(html).toContain('href="#/post/hello-world"');
   });
 
   it("renders publishedAt in a time element", () => {
@@ -135,15 +137,13 @@ describe("hydrateHome", () => {
     outlet.innerHTML = renderHomeHtml([publishedPost]);
     mockFetchPost.mockResolvedValue("# Hello");
 
-    const scrollSpy = vi.fn();
-    const article = outlet.querySelector("#post-hello-world");
-    if (article) {
-      article.scrollIntoView = scrollSpy;
-    }
+    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
 
     hydrateHome(outlet, [publishedPost], "hello-world");
     await vi.waitFor(() => {
       expect(scrollSpy).toHaveBeenCalled();
     });
+
+    scrollSpy.mockRestore();
   });
 });
