@@ -69,7 +69,10 @@ export function hydrateHome(
     void Promise.allSettled(fetches).then(() => {
       if (!outlet.contains(container)) return;
       const article = outlet.querySelector(`#post-${scrollTo}`);
-      article?.scrollIntoView({ behavior: "smooth" });
+      if (article) {
+        const y = article.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({ top: y, behavior: "smooth" });
+      }
     });
   }
 }
