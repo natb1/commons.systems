@@ -61,6 +61,17 @@ test.describe("blog", () => {
     ).not.toContainText("Could not load post content.", { timeout: 30000 });
   });
 
+  test("post title has jump link to post URL", async ({ page }) => {
+    await page.route("https://raw.githubusercontent.com/**", (route) =>
+      route.fulfill({ body: "# Hello World\nThis is the post." }),
+    );
+    await page.goto("/");
+    await page.waitForSelector("#posts", { timeout: 30000 });
+    const link = page.locator('#post-hello-world h2 a.post-link');
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href", "#/post/hello-world");
+  });
+
   test("post shows publication date", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
       route.fulfill({ body: "# Hello World\nThis is the post." }),

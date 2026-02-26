@@ -26,7 +26,7 @@ export function renderHomeHtml(posts: PostMeta[]): string {
         ? ` <span class="draft-badge">[draft]</span>`
         : "";
       return `<article id="post-${escapeHtml(p.id)}">
-        <h2>${escapeHtml(p.title)}${draft}</h2>
+        <h2><a href="#/post/${escapeHtml(p.id)}" class="post-link">${escapeHtml(p.title)}<span class="link-icon" aria-hidden="true"> &#x1F517;</span></a>${draft}</h2>
         ${dateHtml}
         <div id="post-content-${escapeHtml(p.id)}"><p>Loading...</p></div>
       </article>`;
