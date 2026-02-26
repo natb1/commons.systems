@@ -75,7 +75,7 @@ main {
 
 #posts article {
   margin-top: 4rem;
-  scroll-margin-top: 1rem;
+  scroll-margin-top: 5rem;
 }
 
 #posts article:first-child {
