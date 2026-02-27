@@ -70,4 +70,22 @@ test.describe("navigation", () => {
     await page.click('nav a[href="#/"]');
     await expect(page.locator("main h2").first()).toBeVisible();
   });
+
+  test("#info-panel element exists in DOM @smoke", async ({ page }) => {
+    await page.route("https://raw.githubusercontent.com/**", (route) =>
+      route.fulfill({ body: "# Test\nContent." }),
+    );
+    await page.goto("/");
+    await expect(page.locator("#info-panel")).toBeAttached();
+  });
+
+  test("desktop: #info-panel is visible @smoke", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
+    await page.route("https://raw.githubusercontent.com/**", (route) =>
+      route.fulfill({ body: "# Test\nContent." }),
+    );
+    await page.goto("/");
+    await page.waitForSelector("#posts", { timeout: 30000 });
+    await expect(page.locator("#info-panel")).toBeVisible();
+  });
 });

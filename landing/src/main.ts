@@ -4,11 +4,14 @@ import { createRouter, getHashPath } from "./router.js";
 import { renderHomeHtml, hydrateHome } from "./pages/home.js";
 import { renderAdmin } from "./pages/admin.js";
 import { renderNav } from "./components/nav.js";
+import { renderInfoPanel, hydrateInfoPanel } from "./components/info-panel.js";
+import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { getPosts, type PostMeta } from "./firestore.js";
 
 const nav = document.getElementById("nav");
 const app = document.getElementById("app");
+const infoPanel = document.getElementById("info-panel");
 
 let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
@@ -25,6 +28,18 @@ function handleClick(action: () => Promise<void>, label: string): (e: Event) => 
   };
 }
 
+function updateInfoPanel(): void {
+  if (!infoPanel) return;
+  const links = [{ label: "GitHub", url: "https://github.com/natb1/commons.systems" }];
+  infoPanel.innerHTML = renderInfoPanel({
+    links,
+    topPosts: cachedPosts,
+    blogRoll: BLOG_ROLL_ENTRIES,
+  });
+  const strategies = createStrategies();
+  hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
+}
+
 function updateNav(): void {
   if (!nav) {
     console.error("updateNav: #nav element not found");
@@ -33,6 +48,13 @@ function updateNav(): void {
   nav.innerHTML = renderNav(currentUser, getHashPath());
   document.getElementById("sign-in")?.addEventListener("click", handleClick(signIn, "Sign-in"));
   document.getElementById("sign-out")?.addEventListener("click", handleClick(signOut, "Sign-out"));
+
+  const toggle = document.getElementById("panel-toggle");
+  toggle?.addEventListener("click", () => {
+    if (!infoPanel) return;
+    const isOpen = infoPanel.classList.toggle("open");
+    toggle.setAttribute("aria-expanded", String(isOpen));
+  });
 }
 
 async function loadPosts(): Promise<string> {
@@ -69,6 +91,7 @@ if (app) {
         afterRender: (outlet, hash) => {
           const slug = hash.startsWith("/post/") ? hash.slice(6) : undefined;
           hydrateHome(outlet, cachedPosts, slug);
+          updateInfoPanel();
         },
       },
       { path: "/admin", render: () => renderAdmin(currentUser, lastSkippedCount) },

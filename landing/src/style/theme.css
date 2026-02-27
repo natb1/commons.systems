@@ -1,5 +1,31 @@
 @import "@commons-systems/style/default.css";
 
+body {
+  max-width: 68rem;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .content-grid {
+    grid-template-columns: 1fr 16rem;
+  }
+
+  #info-panel {
+    position: sticky;
+    top: 5rem;
+    align-self: start;
+  }
+
+  .panel-toggle {
+    display: none;
+  }
+}
+
 #posts article {
   margin-top: 4rem;
 }
@@ -31,4 +57,83 @@
   width: 117px;
   height: 41px;
   vertical-align: middle;
+}
+
+/* Info panel */
+.panel-section {
+  margin-bottom: 1.5rem;
+}
+
+.panel-section h3 {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.panel-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.panel-list li {
+  margin-bottom: 0.4rem;
+}
+
+.panel-list a {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.blogroll-latest {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
+.blogroll-latest a {
+  color: var(--muted);
+}
+
+.panel-section details {
+  margin-bottom: 0.25rem;
+}
+
+.panel-section summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--fg);
+}
+
+.panel-section details details {
+  margin-left: 1rem;
+}
+
+/* Panel toggle button */
+.panel-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0.2rem 0.5rem;
+  margin-left: auto;
+  transition: transform 0.2s;
+}
+
+.panel-toggle[aria-expanded="true"] {
+  transform: rotate(180deg);
+}
+
+/* Mobile: hide panel by default */
+@media (max-width: 767px) {
+  #info-panel {
+    display: none;
+  }
+
+  #info-panel.open {
+    display: block;
+  }
 }

@@ -1,0 +1,371 @@
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { renderInfoPanel, hydrateInfoPanel } from "../../src/components/info-panel";
+import type { PostMeta } from "../../src/firestore";
+import type {
+  BlogRollEntry,
+  BlogRollStrategy,
+  LatestPost,
+} from "../../src/blog-roll/types";
+
+const mockPosts: PostMeta[] = [
+  {
+    id: "post-1",
+    title: "First Post",
+    published: true,
+    publishedAt: "2026-02-15T00:00:00Z",
+    filename: "post-1.md",
+  },
+  {
+    id: "post-2",
+    title: "Second Post",
+    published: true,
+    publishedAt: "2026-01-10T00:00:00Z",
+    filename: "post-2.md",
+  },
+  {
+    id: "draft-1",
+    title: "Draft Post",
+    published: false,
+    publishedAt: null,
+    filename: "draft.md",
+  },
+];
+
+const mockLinks = [
+  { label: "GitHub", url: "https://github.com/natb1/commons.systems" },
+];
+
+const mockBlogRoll: BlogRollEntry[] = [
+  { id: "test-blog", name: "Test Blog", url: "https://example.com" },
+];
+
+function defaultData() {
+  return {
+    links: mockLinks,
+    topPosts: mockPosts,
+    blogRoll: mockBlogRoll,
+  };
+}
+
+describe("renderInfoPanel", () => {
+  it("returns HTML with all four sections", () => {
+    const html = renderInfoPanel(defaultData());
+    expect(html).toContain("Links");
+    expect(html).toContain("Top Posts");
+    expect(html).toContain("Blog Roll");
+    expect(html).toContain("Archive");
+  });
+
+  it("links section contains anchor tags with correct URLs and labels", () => {
+    const html = renderInfoPanel(defaultData());
+    expect(html).toContain(
+      'href="https://github.com/natb1/commons.systems"',
+    );
+    expect(html).toContain("GitHub");
+  });
+
+  it("top posts section contains links to published posts", () => {
+    const html = renderInfoPanel(defaultData());
+    expect(html).toContain('href="#/post/post-1"');
+    expect(html).toContain("First Post");
+    expect(html).toContain('href="#/post/post-2"');
+    expect(html).toContain("Second Post");
+  });
+
+  it("top posts section filters out unpublished posts", () => {
+    const html = renderInfoPanel(defaultData());
+    expect(html).not.toContain('href="#/post/draft-1"');
+    expect(html).not.toContain("Draft Post");
+  });
+
+  it("blog roll section contains entries with correct names and URLs", () => {
+    const html = renderInfoPanel(defaultData());
+    expect(html).toContain('href="https://example.com"');
+    expect(html).toContain("Test Blog");
+  });
+
+  it("blog roll section has placeholder divs for latest post", () => {
+    const html = renderInfoPanel(defaultData());
+    expect(html).toContain('id="blogroll-latest-test-blog"');
+  });
+
+  it("escapes special characters in link labels", () => {
+    const xssLinks = [
+      { label: '<script>alert(1)</script>', url: "https://safe.com" },
+    ];
+    const html = renderInfoPanel({
+      links: xssLinks,
+      topPosts: [],
+      blogRoll: [],
+    });
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("escapes special characters in post titles", () => {
+    const xssPosts: PostMeta[] = [
+      {
+        id: "xss",
+        title: '<script>alert(1)</script>',
+        published: true,
+        publishedAt: "2026-02-01T00:00:00Z",
+        filename: "xss.md",
+      },
+    ];
+    const html = renderInfoPanel({
+      links: [],
+      topPosts: xssPosts,
+      blogRoll: [],
+    });
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("escapes special characters in blog roll names", () => {
+    const xssBlogRoll: BlogRollEntry[] = [
+      { id: "xss", name: '<script>alert(1)</script>', url: "https://safe.com" },
+    ];
+    const html = renderInfoPanel({
+      links: [],
+      topPosts: [],
+      blogRoll: xssBlogRoll,
+    });
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("handles empty arrays gracefully", () => {
+    const html = renderInfoPanel({
+      links: [],
+      topPosts: [],
+      blogRoll: [],
+    });
+    expect(html).toContain("Links");
+    expect(html).toContain("Top Posts");
+    expect(html).toContain("Blog Roll");
+    // Archive section is empty when no published posts
+    expect(html).not.toContain("Archive");
+  });
+
+  it("archive groups posts by year and month correctly", () => {
+    const html = renderInfoPanel(defaultData());
+    expect(html).toContain("2026");
+    expect(html).toContain("February");
+    expect(html).toContain("January");
+  });
+
+  it("archive current month (February 2026) is open by default", () => {
+    const html = renderInfoPanel(defaultData());
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const allDetails = container.querySelectorAll("details");
+    let foundOpen = false;
+    for (const details of allDetails) {
+      const summary = details.querySelector("summary");
+      if (summary?.textContent?.trim() === "February") {
+        expect(details.hasAttribute("open")).toBe(true);
+        foundOpen = true;
+      }
+    }
+    expect(foundOpen).toBe(true);
+  });
+
+  it("archive other months are collapsed", () => {
+    const html = renderInfoPanel(defaultData());
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const allDetails = container.querySelectorAll("details");
+    for (const details of allDetails) {
+      const summary = details.querySelector("summary");
+      if (
+        summary?.textContent?.trim() === "January"
+      ) {
+        expect(details.hasAttribute("open")).toBe(false);
+      }
+    }
+  });
+
+  it("archive years sorted descending, months sorted descending within year", () => {
+    const multiYearPosts: PostMeta[] = [
+      {
+        id: "p1",
+        title: "Old",
+        published: true,
+        publishedAt: "2025-03-01T00:00:00Z",
+        filename: "old.md",
+      },
+      {
+        id: "p2",
+        title: "Older",
+        published: true,
+        publishedAt: "2025-06-01T00:00:00Z",
+        filename: "older.md",
+      },
+      {
+        id: "p3",
+        title: "New",
+        published: true,
+        publishedAt: "2026-02-15T00:00:00Z",
+        filename: "new.md",
+      },
+    ];
+    const html = renderInfoPanel({
+      links: [],
+      topPosts: multiYearPosts,
+      blogRoll: [],
+    });
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    // Top-level details elements within the archive section are years.
+    // Use children instead of :scope > details for happy-dom compatibility.
+    const archiveSection = container.querySelector(
+      ".panel-section:last-child",
+    )!;
+    const yearDetails = [...archiveSection.children].filter(
+      (el) => el.tagName === "DETAILS",
+    );
+    const years = yearDetails.map(
+      (d) => d.querySelector("summary")!.textContent!.trim(),
+    );
+    expect(years).toEqual(["2026", "2025"]);
+
+    // Within 2025, months should be descending: June before March
+    const year2025 = yearDetails[1];
+    const monthDetails = [...year2025.children].filter(
+      (el) => el.tagName === "DETAILS",
+    );
+    const months = monthDetails.map(
+      (d) => d.querySelector("summary")!.textContent!.trim(),
+    );
+    expect(months).toEqual(["June", "March"]);
+  });
+
+  it("archive is empty when no published posts", () => {
+    const draftsOnly: PostMeta[] = [
+      {
+        id: "d1",
+        title: "Draft",
+        published: false,
+        publishedAt: null,
+        filename: "d.md",
+      },
+    ];
+    const html = renderInfoPanel({
+      links: [],
+      topPosts: draftsOnly,
+      blogRoll: [],
+    });
+    expect(html).not.toContain("Archive");
+  });
+});
+
+describe("hydrateInfoPanel", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function createPanel(blogRoll: BlogRollEntry[]): HTMLElement {
+    const container = document.createElement("div");
+    container.innerHTML = renderInfoPanel({
+      links: [],
+      topPosts: [],
+      blogRoll,
+    });
+    return container;
+  }
+
+  it("calls strategy.fetchLatestPost() for each blog roll entry", () => {
+    const entries: BlogRollEntry[] = [
+      { id: "blog-a", name: "Blog A", url: "https://a.com" },
+      { id: "blog-b", name: "Blog B", url: "https://b.com" },
+    ];
+    const panel = createPanel(entries);
+
+    const strategyA: BlogRollStrategy = {
+      fetchLatestPost: vi.fn().mockResolvedValue(null),
+    };
+    const strategyB: BlogRollStrategy = {
+      fetchLatestPost: vi.fn().mockResolvedValue(null),
+    };
+    const strategies = new Map<string, BlogRollStrategy>([
+      ["blog-a", strategyA],
+      ["blog-b", strategyB],
+    ]);
+
+    hydrateInfoPanel(panel, entries, strategies);
+
+    expect(strategyA.fetchLatestPost).toHaveBeenCalledOnce();
+    expect(strategyB.fetchLatestPost).toHaveBeenCalledOnce();
+  });
+
+  it("fills placeholder with latest post link when strategy succeeds", async () => {
+    const entries: BlogRollEntry[] = [
+      { id: "test-blog", name: "Test Blog", url: "https://example.com" },
+    ];
+    const panel = createPanel(entries);
+
+    const latest: LatestPost = {
+      title: "New Article",
+      url: "https://example.com/article",
+    };
+    const strategy: BlogRollStrategy = {
+      fetchLatestPost: vi.fn().mockResolvedValue(latest),
+    };
+    const strategies = new Map<string, BlogRollStrategy>([
+      ["test-blog", strategy],
+    ]);
+
+    hydrateInfoPanel(panel, entries, strategies);
+
+    await vi.waitFor(() => {
+      const placeholder = panel.querySelector("#blogroll-latest-test-blog");
+      expect(placeholder!.innerHTML).toContain("New Article");
+      expect(placeholder!.innerHTML).toContain(
+        'href="https://example.com/article"',
+      );
+    });
+  });
+
+  it("leaves placeholder empty when strategy returns null", async () => {
+    const entries: BlogRollEntry[] = [
+      { id: "test-blog", name: "Test Blog", url: "https://example.com" },
+    ];
+    const panel = createPanel(entries);
+
+    const strategy: BlogRollStrategy = {
+      fetchLatestPost: vi.fn().mockResolvedValue(null),
+    };
+    const strategies = new Map<string, BlogRollStrategy>([
+      ["test-blog", strategy],
+    ]);
+
+    hydrateInfoPanel(panel, entries, strategies);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const placeholder = panel.querySelector("#blogroll-latest-test-blog");
+    expect(placeholder!.innerHTML).toBe("");
+  });
+
+  it("leaves placeholder empty when strategy rejects", async () => {
+    const entries: BlogRollEntry[] = [
+      { id: "test-blog", name: "Test Blog", url: "https://example.com" },
+    ];
+    const panel = createPanel(entries);
+
+    const strategy: BlogRollStrategy = {
+      fetchLatestPost: vi.fn().mockRejectedValue(new Error("Network error")),
+    };
+    const strategies = new Map<string, BlogRollStrategy>([
+      ["test-blog", strategy],
+    ]);
+
+    hydrateInfoPanel(panel, entries, strategies);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const placeholder = panel.querySelector("#blogroll-latest-test-blog");
+    expect(placeholder!.innerHTML).toBe("");
+  });
+});
