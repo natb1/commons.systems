@@ -10,7 +10,7 @@ body {
   gap: 1.5rem;
 }
 
-.main-column {
+main {
   min-width: 0;
 }
 

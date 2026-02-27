@@ -13,18 +13,16 @@
     <link rel="stylesheet" href="/src/style/theme.css" />
   </head>
   <body>
+    <header>
+      <h1>{{.Title}}</h1>
+      <nav id="nav"></nav>
+    </header>
     <div class="content-grid">
-      <div class="main-column">
-        <header>
-          <h1>{{.Title}}</h1>
-          <nav id="nav"></nav>
-        </header>
-        <main id="app"></main>
-        <footer>
-          <p>Created with <a href="https://github.com/natb1/commons.systems" target="_blank">commons.systems</a> | &copy; 2026 RUMOR.ML <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" style="width: 117px; height: 41px; vertical-align: middle"></a></p>
-        </footer>
-      </div>
+      <main id="app"></main>
     </div>
+    <footer>
+      <p>Created with <a href="https://github.com/natb1/commons.systems" target="_blank">commons.systems</a> | &copy; 2026 RUMOR.ML <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" style="width: 117px; height: 41px; vertical-align: middle"></a></p>
+    </footer>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

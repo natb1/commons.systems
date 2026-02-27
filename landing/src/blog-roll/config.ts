@@ -1,5 +1,4 @@
 import type { BlogRollEntry, BlogRollStrategy } from "./types.js";
-import { HtmlScrapingStrategy } from "./html-scraping-strategy.js";
 import { StaticStrategy } from "./static-strategy.js";
 
 export const BLOG_ROLL_ENTRIES: BlogRollEntry[] = [
@@ -19,10 +18,10 @@ export function createStrategies(): Map<string, BlogRollStrategy> {
   const strategies = new Map<string, BlogRollStrategy>();
   strategies.set(
     "anthropic-engineering",
-    new HtmlScrapingStrategy(
-      "https://www.anthropic.com/engineering",
-      /^\/engineering\/.+/,
-    ),
+    new StaticStrategy({
+      title: "Quantifying infrastructure noise in agentic coding evals",
+      url: "https://www.anthropic.com/engineering/infrastructure-noise",
+    }),
   );
   strategies.set(
     "claude-code-blog",

@@ -4,12 +4,6 @@ test.beforeEach(async ({ page }) => {
   await page.route("https://raw.githubusercontent.com/**", (route) =>
     route.fulfill({ body: "# Test\nContent." }),
   );
-  await page.route("https://api.allorigins.win/**", (route) =>
-    route.fulfill({
-      contentType: "application/xml",
-      body: `<?xml version="1.0"?><rss version="2.0"><channel><item><title>Latest from Anthropic</title><link>https://www.anthropic.com/engineering/latest</link></item></channel></rss>`,
-    }),
-  );
 });
 
 test.describe("info panel — desktop", () => {
