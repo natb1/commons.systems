@@ -8,6 +8,70 @@ import (
 	"strings"
 )
 
+// RemoveFirestoreRules removes all rule blocks for appName from firestore.rules.
+// Rules are identified by path pattern (match /<appName>/...) rather than markers.
+// Each removed block also strips immediately preceding comment lines and adjacent blank lines.
+// If no rules are found, it logs a note and returns nil (not an error).
+func RemoveFirestoreRules(repoRoot, appName string) error {
+	rulesPath := filepath.Join(repoRoot, "firestore.rules")
+	content, err := os.ReadFile(rulesPath)
+	if err != nil {
+		return fmt.Errorf("reading firestore.rules: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	matchPrefix := "match /" + appName + "/"
+
+	var result []string
+	found := false
+	i := 0
+	for i < len(lines) {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), matchPrefix) {
+			found = true
+			// Pop preceding comment lines (e.g. "// Messages are publicly readable")
+			for len(result) > 0 && strings.HasPrefix(strings.TrimSpace(result[len(result)-1]), "//") {
+				result = result[:len(result)-1]
+			}
+			// Remove preceding blank line if present
+			if len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {
+				result = result[:len(result)-1]
+			}
+			// Skip block by counting braces
+			depth := 0
+			for i < len(lines) {
+				for _, ch := range lines[i] {
+					if ch == '{' {
+						depth++
+					}
+					if ch == '}' {
+						depth--
+					}
+				}
+				i++
+				if depth == 0 {
+					break
+				}
+			}
+			if depth != 0 {
+				return fmt.Errorf("unbalanced braces in rules block for %q (depth %d)", appName, depth)
+			}
+			// Skip trailing blank line after block
+			if i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+				i++
+			}
+			continue
+		}
+		result = append(result, lines[i])
+		i++
+	}
+
+	if !found {
+		fmt.Printf("NOTE: no rules for %q found in firestore.rules\n", appName)
+		return nil
+	}
+	return os.WriteFile(rulesPath, []byte(strings.Join(result, "\n")), 0o644)
+}
+
 func Cleanup(repoRoot, appName string, dryRun bool) error {
 	if err := ValidateAppName(appName); err != nil {
 		return err
@@ -39,7 +103,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 
 	siteName, err := FindHostingSite(rc, appName)
 	if err != nil {
-		fmt.Printf("WARNING: %v\n", err)
+		fmt.Fprintf(os.Stderr, "WARNING: %v\n", err)
 		warnings++
 	}
 
@@ -55,7 +119,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
-				fmt.Printf("WARNING: failed to delete hosting site: %v\n", err)
+				fmt.Fprintf(os.Stderr, "WARNING: failed to delete hosting site: %v\n", err)
 				warnings++
 			} else {
 				hostingDeleted = true
@@ -68,19 +132,30 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 	// so only the prod namespace needs cleanup here.
 	var firestoreDeleted bool
 	if dryRun {
-		fmt.Printf("[dry-run] Would delete Firestore namespace %q\n", appName+"-prod")
+		fmt.Printf("[dry-run] Would delete Firestore namespace %q\n", appName+"/prod")
 	} else {
-		fmt.Printf("Deleting Firestore namespace %q...\n", appName+"-prod")
+		fmt.Printf("Deleting Firestore namespace %q...\n", appName+"/prod")
 		nsCmd := exec.Command("npx", "tsx", "firestoreutil/bin/run-delete-namespace.ts")
 		nsCmd.Dir = repoRoot
-		nsCmd.Env = append(os.Environ(), "FIRESTORE_NAMESPACE="+appName+"-prod")
+		nsCmd.Env = append(os.Environ(), "FIRESTORE_NAMESPACE="+appName+"/prod")
 		nsCmd.Stdout = os.Stdout
 		nsCmd.Stderr = os.Stderr
 		if err := nsCmd.Run(); err != nil {
-			fmt.Printf("WARNING: failed to delete Firestore namespace: %v\n", err)
+			fmt.Fprintf(os.Stderr, "WARNING: failed to delete Firestore namespace: %v\n", err)
 			warnings++
 		} else {
 			firestoreDeleted = true
+		}
+	}
+
+	// Remove app rules block from firestore.rules
+	if dryRun {
+		fmt.Printf("[dry-run] Would remove rules block for %q from firestore.rules\n", appName)
+	} else {
+		fmt.Println("Removing rules block from firestore.rules...")
+		if err := RemoveFirestoreRules(repoRoot, appName); err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: failed to remove Firestore rules block: %v\n", err)
+			warnings++
 		}
 	}
 
@@ -117,7 +192,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 	entries, err := os.ReadDir(workflowDir)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			fmt.Printf("WARNING: could not read workflow directory: %v\n", err)
+			fmt.Fprintf(os.Stderr, "WARNING: could not read workflow directory: %v\n", err)
 			warnings++
 		}
 	} else {
@@ -130,7 +205,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 					path := filepath.Join(workflowDir, entry.Name())
 					fmt.Printf("  Removing %s\n", entry.Name())
 					if err := os.Remove(path); err != nil {
-						fmt.Printf("WARNING: failed to remove %s: %v\n", entry.Name(), err)
+						fmt.Fprintf(os.Stderr, "WARNING: failed to remove %s: %v\n", entry.Name(), err)
 						warnings++
 					}
 				}
@@ -164,7 +239,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 			fmt.Printf("  SKIPPED hosting site deletion (see warnings above)\n")
 		}
 		if firestoreDeleted {
-			fmt.Printf("  Deleted Firestore namespace: %s-prod\n", appName)
+			fmt.Printf("  Deleted Firestore namespace: %s/prod\n", appName)
 		} else {
 			fmt.Printf("  SKIPPED Firestore namespace deletion (see warnings above)\n")
 		}

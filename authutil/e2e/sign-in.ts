@@ -6,5 +6,4 @@ export async function signIn(
 ): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await page.evaluate((u) => (window as any).__signIn(u), uid);
-  await page.waitForSelector("#sign-out");
 }

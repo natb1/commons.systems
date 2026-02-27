@@ -1,5 +1,15 @@
 {
-  "hosting": [],
+  "hosting": [
+    {
+      "target": "landing",
+      "public": "landing/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ]
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules"
   }
