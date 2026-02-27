@@ -4,21 +4,20 @@ test.describe("responsive layout", () => {
   test("main content is visible", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("main")).toBeVisible();
-    await expect(page.locator("main h2")).toHaveText("Home");
+    await expect(page.locator("main h2")).toHaveText("Library");
   });
 
   test("nav links are accessible", async ({ page }) => {
     await page.goto("/");
-    const homeLink = page.locator('nav a[href="#/"]');
-    const aboutLink = page.locator('nav a[href="#/about"]');
+    const libraryLink = page.locator('nav a[href="#/"]');
 
-    await expect(homeLink).toBeVisible();
-    await expect(aboutLink).toBeVisible();
+    await expect(libraryLink).toBeVisible();
 
-    await aboutLink.click();
-    await expect(page.locator("main h2")).toHaveText("About");
+    // Navigate to admin and back to library
+    await page.goto("/#/admin");
+    await expect(page.locator("main h2")).toHaveText("Admin");
 
-    await homeLink.click();
-    await expect(page.locator("main h2")).toHaveText("Home");
+    await libraryLink.click();
+    await expect(page.locator("main h2")).toHaveText("Library");
   });
 });
