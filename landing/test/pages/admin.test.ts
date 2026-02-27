@@ -9,7 +9,7 @@ describe("renderAdmin", () => {
   });
 
   it("returns not-authorized message for non-natb1 user", () => {
-    const user = makeUser({ screenName: "other", providerUid: "other-uid" });
+    const user = makeUser({ screenName: "other", providerDisplayName: "other-name" });
     const html = renderAdmin(user);
     expect(html).toContain("not authorized");
     expect(html).toContain('id="not-authorized"');
@@ -22,8 +22,8 @@ describe("renderAdmin", () => {
     expect(html).toContain("Nat B");
   });
 
-  it("returns admin content when authorized via providerData uid", () => {
-    const user = makeUser({ providerUid: "natb1", displayName: "Nat" });
+  it("returns admin content when authorized via providerData displayName", () => {
+    const user = makeUser({ providerDisplayName: "natb1", displayName: "Nat" });
     const html = renderAdmin(user);
     expect(html).toContain("Signed in as");
   });

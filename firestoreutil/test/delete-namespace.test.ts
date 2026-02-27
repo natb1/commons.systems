@@ -36,7 +36,15 @@ describe("deleteNamespace", () => {
     const { db } = createMockFirestore();
 
     await expect(deleteNamespace(db, "prod")).rejects.toThrow(
-      "namespace must be in '{app}/{env}' format",
+      'namespace must be in "{app}/{env}" format',
+    );
+  });
+
+  it("rejects multi-slash namespace", async () => {
+    const { db } = createMockFirestore();
+
+    await expect(deleteNamespace(db, "a/b/c")).rejects.toThrow(
+      'namespace must be in "{app}/{env}" format',
     );
   });
 

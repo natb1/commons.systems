@@ -43,8 +43,8 @@ const draftPost = {
 };
 
 const natb1UserByScreenName = makeUser({ screenName: "natb1" });
-const natb1UserByProviderData = makeUser({ providerUid: "natb1" });
-const otherUser = makeUser({ screenName: "other", providerUid: "other-uid" });
+const natb1UserByProviderData = makeUser({ providerDisplayName: "natb1" });
+const otherUser = makeUser({ screenName: "other", providerDisplayName: "other-name" });
 
 describe("getPosts", () => {
   beforeEach(() => {
@@ -87,7 +87,7 @@ describe("getPosts", () => {
   it("returns only published posts when user is null", async () => {
     mockGetDocs.mockResolvedValue({ docs: [publishedPost, draftPost] });
 
-    const posts = await getPosts(null);
+    const { posts } = await getPosts(null);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].id).toBe("hello-world");
@@ -97,15 +97,15 @@ describe("getPosts", () => {
   it("returns all posts including drafts for natb1 user identified by screenName", async () => {
     mockGetDocs.mockResolvedValue({ docs: [publishedPost, draftPost] });
 
-    const posts = await getPosts(natb1UserByScreenName);
+    const { posts } = await getPosts(natb1UserByScreenName);
 
     expect(posts).toHaveLength(2);
   });
 
-  it("returns all posts including drafts for natb1 user identified by providerData uid", async () => {
+  it("returns all posts including drafts for natb1 user identified by providerData displayName", async () => {
     mockGetDocs.mockResolvedValue({ docs: [publishedPost, draftPost] });
 
-    const posts = await getPosts(natb1UserByProviderData);
+    const { posts } = await getPosts(natb1UserByProviderData);
 
     expect(posts).toHaveLength(2);
   });
@@ -113,7 +113,7 @@ describe("getPosts", () => {
   it("returns only published posts for a non-natb1 signed-in user", async () => {
     mockGetDocs.mockResolvedValue({ docs: [publishedPost, draftPost] });
 
-    const posts = await getPosts(otherUser);
+    const { posts } = await getPosts(otherUser);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].id).toBe("hello-world");
@@ -122,7 +122,7 @@ describe("getPosts", () => {
   it("maps Firestore documents to PostMeta objects", async () => {
     mockGetDocs.mockResolvedValue({ docs: [publishedPost] });
 
-    const posts = await getPosts(null);
+    const { posts } = await getPosts(null);
 
     expect(posts).toEqual([
       {
@@ -138,7 +138,7 @@ describe("getPosts", () => {
   it("returns empty array when there are no published posts and user is null", async () => {
     mockGetDocs.mockResolvedValue({ docs: [draftPost] });
 
-    const posts = await getPosts(null);
+    const { posts } = await getPosts(null);
 
     expect(posts).toEqual([]);
   });
@@ -164,7 +164,7 @@ describe("getPosts", () => {
     };
     mockGetDocs.mockResolvedValue({ docs: [feb, jan] });
 
-    const posts = await getPosts(null);
+    const { posts } = await getPosts(null);
 
     expect(posts[0].id).toBe("jan");
     expect(posts[1].id).toBe("feb");
@@ -178,10 +178,11 @@ describe("getPosts", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [publishedPost, noTitle] });
 
-    const posts = await getPosts(natb1UserByScreenName);
+    const { posts, skippedCount } = await getPosts(natb1UserByScreenName);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].id).toBe("hello-world");
+    expect(skippedCount).toBe(1);
     expect(consoleError).toHaveBeenCalledWith(
       expect.stringContaining("no-title"),
       expect.anything(),
@@ -197,9 +198,10 @@ describe("getPosts", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [noFilename] });
 
-    const posts = await getPosts(natb1UserByScreenName);
+    const { posts, skippedCount } = await getPosts(natb1UserByScreenName);
 
     expect(posts).toHaveLength(0);
+    expect(skippedCount).toBe(1);
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
   });
@@ -216,36 +218,33 @@ describe("getPosts", () => {
     };
     mockGetDocs.mockResolvedValue({ docs: [badPublished] });
 
-    const posts = await getPosts(natb1UserByScreenName);
+    const { posts } = await getPosts(natb1UserByScreenName);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].published).toBe(false);
   });
 
-  it("sorts posts with null publishedAt to the end for non-admin", async () => {
-    const withDate = {
-      id: "dated",
+  it("filters out published posts without publishedAt date", async () => {
+    const badPublished = {
+      id: "published-no-date",
       data: () => ({
-        title: "Dated",
-        published: true,
-        publishedAt: "2026-01-01T00:00:00Z",
-        filename: "dated.md",
-      }),
-    };
-    const noDate = {
-      id: "no-date",
-      data: () => ({
-        title: "No Date",
+        title: "Published No Date",
         published: true,
         publishedAt: null,
-        filename: "no-date.md",
+        filename: "bad.md",
       }),
     };
-    mockGetDocs.mockResolvedValue({ docs: [noDate, withDate] });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockGetDocs.mockResolvedValue({ docs: [badPublished] });
 
-    const posts = await getPosts(null);
+    const { posts, skippedCount } = await getPosts(natb1UserByScreenName);
 
-    expect(posts[0].id).toBe("dated");
-    expect(posts[1].id).toBe("no-date");
+    expect(posts).toHaveLength(0);
+    expect(skippedCount).toBe(1);
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("published-no-date"),
+      expect.anything(),
+    );
+    consoleError.mockRestore();
   });
 });

@@ -17,10 +17,16 @@ if (authEmulatorHost) {
 }
 
 // Handle redirect result on page load (user returning from GitHub OAuth / emulator picker).
-// Catch errors to prevent unhandled rejections from blocking app initialization.
+// Catch errors to avoid unhandled promise rejection warnings during startup.
 getRedirectResult(auth).catch((error) => {
-  if (error?.code !== "auth/popup-closed-by-user") {
-    console.error("Auth redirect error:", error);
+  if (error?.code === "auth/popup-closed-by-user") return;
+  console.error("Auth redirect error:", error);
+  const appEl = document.getElementById("app");
+  if (appEl) {
+    appEl.insertAdjacentHTML(
+      "afterbegin",
+      `<p class="auth-error">Login failed. Try again or refresh the page.</p>`,
+    );
   }
 });
 

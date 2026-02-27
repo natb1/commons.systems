@@ -3,7 +3,34 @@ import { escapeHtml } from "../escape-html.js";
 import { fetchPost } from "../github.js";
 import type { PostMeta } from "../firestore.js";
 
+// Strip raw HTML tags from markdown to prevent XSS in user-authored posts.
 marked.use({ renderer: { html: () => "" } });
+
+function formatDate(isoDate: string): string {
+  return new Date(isoDate).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function renderArticle(p: PostMeta): string {
+  const safeId = escapeHtml(p.id);
+  const dateHtml = p.publishedAt
+    ? `<time datetime="${escapeHtml(p.publishedAt)}">${escapeHtml(formatDate(p.publishedAt))}</time>`
+    : "";
+  const draftBadge = p.published
+    ? ""
+    : ` <span class="draft-badge">[draft]</span>`;
+  const linkHtml =
+    `<a href="#/post/${safeId}" class="post-link">` +
+    `<span class="link-icon" aria-hidden="true">&#x1F517; </span>${escapeHtml(p.title)}</a>`;
+  return `<article id="post-${safeId}">
+        <h2>${linkHtml}${draftBadge}</h2>
+        ${dateHtml}
+        <div id="post-content-${safeId}"><p>Loading...</p></div>
+      </article>`;
+}
 
 export function renderHomeHtml(posts: PostMeta[]): string {
   if (posts.length === 0) {
@@ -13,28 +40,7 @@ export function renderHomeHtml(posts: PostMeta[]): string {
   `;
   }
 
-  const articles = posts
-    .map((p) => {
-      const safeId = escapeHtml(p.id);
-      const dateHtml = p.publishedAt
-        ? `<time datetime="${escapeHtml(p.publishedAt)}">${escapeHtml(
-            new Date(p.publishedAt).toLocaleDateString("en-US", {
-              month: "long",
-              day: "numeric",
-              year: "numeric",
-            }),
-          )}</time>`
-        : "";
-      const draft = !p.published
-        ? ` <span class="draft-badge">[draft]</span>`
-        : "";
-      return `<article id="post-${safeId}">
-        <h2><a href="#/post/${safeId}" class="post-link"><span class="link-icon" aria-hidden="true">&#x1F517; </span>${escapeHtml(p.title)}</a>${draft}</h2>
-        ${dateHtml}
-        <div id="post-content-${safeId}"><p>Loading...</p></div>
-      </article>`;
-    })
-    .join("\n      ");
+  const articles = posts.map(renderArticle).join("\n      ");
 
   return `
     <div id="posts">
@@ -65,7 +71,7 @@ export function hydrateHome(
     } catch (error) {
       console.error(`Failed to load post "${post.id}":`, error);
       if (!outlet.contains(container)) return;
-      contentDiv.innerHTML = "<p>Could not load post content.</p>";
+      contentDiv.innerHTML = "<p>Could not load post content. Try refreshing.</p>";
     }
   });
 

@@ -2,6 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Messages are publicly readable
     match /landing/{env}/messages/{messageId} {
       allow read: if true;
       allow write: if false;
@@ -20,6 +21,7 @@ service cloud.firestore {
     }
 
     // Deny everything else by default (scaffolding uses this line as an insertion marker)
+    // DO NOT EDIT this comment — scaffolding/firebase/internal/scaffold/create.go matches it exactly.
     match /{document=**} {
       allow read, write: if false;
     }

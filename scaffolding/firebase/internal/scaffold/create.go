@@ -27,11 +27,15 @@ func (d AppData) Title() string {
 func (d AppData) ProductionURL() string { return "https://" + d.SiteName + ".web.app" }
 
 // NewAppData creates an AppData with the given app and site names.
-func NewAppData(appName, siteName string) AppData {
+// Returns an error if appName fails validation.
+func NewAppData(appName, siteName string) (AppData, error) {
+	if err := ValidateAppName(appName); err != nil {
+		return AppData{}, err
+	}
 	return AppData{
 		AppName:  appName,
 		SiteName: siteName,
-	}
+	}, nil
 }
 
 func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error) {
@@ -73,7 +77,10 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 		}
 	}()
 
-	data := NewAppData(appName, siteName)
+	data, err := NewAppData(appName, siteName)
+	if err != nil {
+		return err
+	}
 
 	// Render app templates
 	if dryRun {
@@ -161,6 +168,8 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 	return nil
 }
 
+const firestoreRulesCatchAll = "// Deny everything else by default (scaffolding uses this line as an insertion marker)"
+
 // InsertFirestoreRules inserts a default rules block for appName into firestore.rules,
 // just before the deny-all catch-all rule. Rules use the literal app name as a
 // top-level path segment (e.g. match /myapp/{env}/messages/{messageId}).
@@ -169,6 +178,11 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 	content, err := os.ReadFile(rulesPath)
 	if err != nil {
 		return fmt.Errorf("reading firestore.rules: %w", err)
+	}
+
+	if strings.Contains(string(content), "match /"+appName+"/") {
+		fmt.Printf("NOTE: rules for %q already exist in firestore.rules, skipping insertion\n", appName)
+		return nil
 	}
 
 	block := fmt.Sprintf(
@@ -182,7 +196,7 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 			"    }\n\n",
 		appName, appName)
 
-	catchAll := "    // Deny everything else by default (scaffolding uses this line as an insertion marker)"
+	catchAll := "    " + firestoreRulesCatchAll
 	idx := strings.Index(string(content), catchAll)
 	if idx == -1 {
 		return fmt.Errorf("could not find catch-all rule in firestore.rules")

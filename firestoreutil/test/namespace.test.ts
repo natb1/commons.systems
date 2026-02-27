@@ -1,5 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { nsCollectionPath } from "../src/namespace.js";
+import { nsCollectionPath, validateNamespace } from "../src/namespace.js";
+
+describe("validateNamespace", () => {
+  it("accepts valid namespace", () => {
+    expect(() => validateNamespace("app/prod")).not.toThrow();
+  });
+
+  it("throws on empty namespace", () => {
+    expect(() => validateNamespace("")).toThrow("namespace must not be empty");
+  });
+
+  it("throws on namespace without slash", () => {
+    expect(() => validateNamespace("emulator")).toThrow(
+      'namespace must be in "{app}/{env}" format',
+    );
+  });
+
+  it("throws on multi-slash namespace", () => {
+    expect(() => validateNamespace("a/b/c")).toThrow(
+      'namespace must be in "{app}/{env}" format',
+    );
+  });
+});
 
 describe("nsCollectionPath", () => {
   it("returns {namespace}/{collectionName}", () => {
@@ -26,6 +48,12 @@ describe("nsCollectionPath", () => {
 
   it("throws on namespace without slash", () => {
     expect(() => nsCollectionPath("emulator", "messages")).toThrow(
+      'namespace must be in "{app}/{env}" format',
+    );
+  });
+
+  it("throws on multi-slash namespace", () => {
+    expect(() => nsCollectionPath("a/b/c", "messages")).toThrow(
       'namespace must be in "{app}/{env}" format',
     );
   });

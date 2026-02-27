@@ -111,7 +111,7 @@ describe("hydrateHome", () => {
     hydrateHome(outlet, [publishedPost]);
     await vi.waitFor(() => {
       const content = outlet.querySelector("#post-content-hello-world");
-      expect(content?.innerHTML).toContain("Could not load post content.");
+      expect(content?.innerHTML).toContain("Could not load post content. Try refreshing.");
     });
   });
 

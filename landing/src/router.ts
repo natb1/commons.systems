@@ -11,6 +11,7 @@ export interface Route {
 export function createRouter(
   outlet: HTMLElement,
   routes: Route[],
+  options?: { onNavigate?: () => void },
 ): () => void {
   if (routes.length === 0) {
     throw new Error("createRouter requires at least one route");
@@ -18,6 +19,7 @@ export function createRouter(
   let navigationId = 0;
 
   async function navigate(): Promise<void> {
+    options?.onNavigate?.();
     const id = ++navigationId;
     const hash = getHashPath();
     const route =
@@ -32,12 +34,13 @@ export function createRouter(
           route.afterRender?.(outlet, hash);
         } catch (afterError) {
           console.error("afterRender error:", afterError);
+          outlet.insertAdjacentHTML("beforeend", "<p>Some content failed to load. Try refreshing.</p>");
         }
       }
     } catch (error) {
       console.error("Navigation error:", error);
       if (id === navigationId) {
-        outlet.innerHTML = "<p>Something went wrong. Please try again.</p>";
+        outlet.innerHTML = "<p>Something went wrong. Try refreshing the page.</p>";
       }
     }
   }

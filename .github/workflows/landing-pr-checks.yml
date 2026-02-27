@@ -63,7 +63,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} \
+          gh pr comment "${{ github.event.pull_request.number }}" \
             --repo ${{ github.repository }} \
             --body "Preview deployed: ${{ steps.deploy.outputs.preview_url }}"
       - name: Cleanup credentials

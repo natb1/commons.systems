@@ -1,15 +1,17 @@
 import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
 import type { User } from "firebase/auth";
-import { db, NAMESPACE } from "./firebase.js";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
+
+import { db, NAMESPACE } from "./firebase.js";
 import { isAuthorized } from "./is-authorized.js";
 
-export interface PostMeta {
-  id: string;
-  title: string;
-  published: boolean;
-  publishedAt: string | null;
-  filename: string;
+export type PostMeta =
+  | { id: string; title: string; published: true; publishedAt: string; filename: string }
+  | { id: string; title: string; published: false; publishedAt: null; filename: string };
+
+export interface GetPostsResult {
+  posts: PostMeta[];
+  skippedCount: number;
 }
 
 function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null {
@@ -21,22 +23,35 @@ function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null 
     console.error(`Post "${id}" has missing required fields:`, data);
     return null;
   }
-  return { id, title, published, publishedAt, filename };
+  if (published && publishedAt === null) {
+    console.error(`Post "${id}" is published but has no publishedAt date:`, data);
+    return null;
+  }
+  if (published) {
+    return { id, title, published: true, publishedAt: publishedAt!, filename };
+  }
+  return { id, title, published: false, publishedAt: null, filename };
 }
 
-export async function getPosts(user: User | null): Promise<PostMeta[]> {
+export async function getPosts(user: User | null): Promise<GetPostsResult> {
   const path = nsCollectionPath(NAMESPACE, "posts");
-  const q = isAuthorized(user)
+  const admin = isAuthorized(user);
+  const q = admin
     ? query(collection(db, path), orderBy("publishedAt"))
     : query(collection(db, path), where("published", "==", true));
   const snapshot = await getDocs(q);
-  const posts = snapshot.docs.map((d) => toPostMeta(d.id, d.data())).filter((p): p is PostMeta => p !== null);
-  if (isAuthorized(user)) return posts;
-  return posts
-    .filter((p) => p.published)
-    .sort((a, b) => {
-      if (!a.publishedAt) return 1;
-      if (!b.publishedAt) return -1;
-      return a.publishedAt.localeCompare(b.publishedAt);
-    });
+  const mapped = snapshot.docs.map((d) => toPostMeta(d.id, d.data()));
+  const skippedCount = mapped.filter((p) => p === null).length;
+  const posts = mapped.filter((p): p is PostMeta => p !== null);
+  if (admin) return { posts, skippedCount };
+  return {
+    posts: posts
+      .filter((p) => p.published)
+      .sort((a, b) => {
+        if (!a.publishedAt) return 1;
+        if (!b.publishedAt) return -1;
+        return a.publishedAt.localeCompare(b.publishedAt);
+      }),
+    skippedCount,
+  };
 }

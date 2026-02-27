@@ -9,7 +9,7 @@ test.describe("theme", () => {
       getComputedStyle(document.body).getPropertyValue("background-color"),
     );
 
-    // Dark theme --bg is #1a1714 which is rgb(26, 23, 20)
+    // --bg should resolve to a dark color (all RGB channels below 80)
     const match = bg.match(/\d+/g)?.map(Number) ?? [];
     expect(match.length).toBeGreaterThanOrEqual(3);
     // All RGB channels should be low (dark background)
@@ -26,7 +26,7 @@ test.describe("theme", () => {
       getComputedStyle(document.body).getPropertyValue("background-color"),
     );
 
-    // Light theme --bg is #f5f0e8 which is rgb(245, 240, 232)
+    // --bg should resolve to a light color (all RGB channels above 180)
     const match = bg.match(/\d+/g)?.map(Number) ?? [];
     expect(match.length).toBeGreaterThanOrEqual(3);
     // All RGB channels should be high (light background)

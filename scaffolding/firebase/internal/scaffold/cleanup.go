@@ -25,7 +25,7 @@ func RemoveFirestoreRules(repoRoot, appName string) error {
 	found := false
 	i := 0
 	for i < len(lines) {
-		if strings.Contains(lines[i], matchPrefix) {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), matchPrefix) {
 			found = true
 			// Remove preceding blank line if present
 			if len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {

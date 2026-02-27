@@ -12,18 +12,18 @@ describe("isAuthorized", () => {
     expect(isAuthorized(user)).toBe(true);
   });
 
-  it("returns true when providerData uid is natb1", () => {
-    const user = makeUser({ providerUid: "natb1" });
+  it("returns true when providerData displayName is natb1", () => {
+    const user = makeUser({ providerDisplayName: "natb1" });
     expect(isAuthorized(user)).toBe(true);
   });
 
   it("returns false when neither screenName nor providerData match", () => {
-    const user = makeUser({ screenName: "other", providerUid: "other-uid" });
+    const user = makeUser({ screenName: "other", providerDisplayName: "other-name" });
     expect(isAuthorized(user)).toBe(false);
   });
 
   it("falls through to providerData when reloadUserInfo is missing", () => {
-    const user = makeUser({ providerUid: "natb1" });
+    const user = makeUser({ providerDisplayName: "natb1" });
     // Remove reloadUserInfo to test fallback
     delete (user as Record<string, unknown>).reloadUserInfo;
     expect(isAuthorized(user)).toBe(true);

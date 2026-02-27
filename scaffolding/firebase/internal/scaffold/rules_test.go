@@ -60,6 +60,24 @@ func TestInsertFirestoreRules(t *testing.T) {
 		}
 	})
 
+	t.Run("skips insertion when rules already exist", func(t *testing.T) {
+		dir := writeRulesFile(t, t.TempDir(), baseRules)
+
+		if err := InsertFirestoreRules(dir, "myapp"); err != nil {
+			t.Fatalf("first insert error: %v", err)
+		}
+		afterFirst := readRulesFile(t, dir)
+
+		if err := InsertFirestoreRules(dir, "myapp"); err != nil {
+			t.Fatalf("second insert error: %v", err)
+		}
+		afterSecond := readRulesFile(t, dir)
+
+		if afterFirst != afterSecond {
+			t.Error("second insert should be a no-op but file changed")
+		}
+	})
+
 	t.Run("errors when catch-all not found", func(t *testing.T) {
 		dir := writeRulesFile(t, t.TempDir(), "rules_version = '2';\n")
 
@@ -71,6 +89,28 @@ func TestInsertFirestoreRules(t *testing.T) {
 			t.Errorf("error should mention catch-all, got: %v", err)
 		}
 	})
+}
+
+func TestInsertThenRemoveFirestoreRules(t *testing.T) {
+	dir := writeRulesFile(t, t.TempDir(), baseRules)
+
+	if err := InsertFirestoreRules(dir, "testapp"); err != nil {
+		t.Fatalf("insert error: %v", err)
+	}
+
+	got := readRulesFile(t, dir)
+	if !strings.Contains(got, "match /testapp/") {
+		t.Fatal("expected testapp rules after insert")
+	}
+
+	if err := RemoveFirestoreRules(dir, "testapp"); err != nil {
+		t.Fatalf("remove error: %v", err)
+	}
+
+	got = readRulesFile(t, dir)
+	if got != baseRules {
+		t.Errorf("after round-trip, rules should match baseRules.\ngot:\n%s\nwant:\n%s", got, baseRules)
+	}
 }
 
 func TestRemoveFirestoreRules(t *testing.T) {

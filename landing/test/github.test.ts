@@ -59,6 +59,29 @@ describe("fetchPost (default branch = main)", () => {
   });
 });
 
+describe("fetchPost caching", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("returns cached result on second call without re-fetching", async () => {
+    const mockFetch = makeFetchMock(true, "# Cached Content");
+    vi.stubGlobal("fetch", mockFetch);
+
+    const { fetchPost } = await import("../src/github");
+
+    await fetchPost("cached.md");
+    await fetchPost("cached.md");
+
+    expect(mockFetch).toHaveBeenCalledOnce();
+  });
+});
+
 describe("fetchPost (custom branch via VITE_GITHUB_BRANCH)", () => {
   beforeEach(() => {
     vi.resetModules();

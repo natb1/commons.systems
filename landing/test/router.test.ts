@@ -105,7 +105,7 @@ describe("createRouter", () => {
     ];
     createRouter(outlet, errorRoutes);
     await vi.waitFor(() => {
-      expect(outlet.innerHTML).toContain("Something went wrong");
+      expect(outlet.innerHTML).toContain("Something went wrong. Try refreshing the page.");
     });
   });
 
@@ -254,5 +254,23 @@ describe("createRouter", () => {
     expect(() => createRouter(outlet, [])).toThrow(
       "createRouter requires at least one route",
     );
+  });
+
+  it("calls onNavigate callback on each navigation", async () => {
+    const onNavigate = vi.fn();
+    createRouter(outlet, routes, { onNavigate });
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+    expect(onNavigate).toHaveBeenCalled();
+    const callsBefore = onNavigate.mock.calls.length;
+
+    location.hash = "#/about";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>About</h2>");
+    });
+    expect(onNavigate.mock.calls.length).toBeGreaterThan(callsBefore);
   });
 });
