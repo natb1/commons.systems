@@ -1,45 +1,53 @@
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
-import { db, NAMESPACE } from "./firebase.js";
+import { collection, doc, getDocs, query, updateDoc, where } from "firebase/firestore";
+import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
-export interface Message {
+import { db, NAMESPACE } from "./firebase.js";
+import { isAuthorized } from "./is-authorized.js";
+
+export interface Transaction {
   id: string;
-  text: string;
-  author: string;
-  createdAt: string;
+  institution: string;
+  account: string;
+  description: string;
+  amount: number;
+  note: string;
+  category: string;
+  reimbursement: number;
+  vacation: boolean;
+  uid?: string;
 }
 
-export interface Note {
-  id: string;
-  text: string;
-  createdAt: string;
-}
-
-export async function getMessages(): Promise<Message[]> {
-  const path = nsCollectionPath(NAMESPACE, "messages");
-  const q = query(collection(db, path), orderBy("createdAt"));
+export async function getTransactions(user: User | null): Promise<Transaction[]> {
+  const authorized = isAuthorized(user);
+  const collectionName = authorized ? "transactions" : "seed-transactions";
+  const path = nsCollectionPath(NAMESPACE, collectionName);
+  const q = authorized
+    ? query(collection(db, path), where("uid", "==", user!.uid))
+    : query(collection(db, path));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
+  return snapshot.docs.map((d) => {
+    const data = d.data();
     return {
-      id: doc.id,
-      text: data.text as string,
-      author: data.author as string,
-      createdAt: data.createdAt as string,
+      id: d.id,
+      institution: data.institution as string,
+      account: data.account as string,
+      description: data.description as string,
+      amount: data.amount as number,
+      note: data.note as string,
+      category: data.category as string,
+      reimbursement: data.reimbursement as number,
+      vacation: data.vacation as boolean,
+      ...(data.uid ? { uid: data.uid as string } : {}),
     };
   });
 }
 
-export async function getNotes(): Promise<Note[]> {
-  const path = nsCollectionPath(NAMESPACE, "notes");
-  const q = query(collection(db, path), orderBy("createdAt"));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      text: data.text as string,
-      createdAt: data.createdAt as string,
-    };
-  });
+export async function updateTransaction(
+  txnId: string,
+  fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "vacation">>,
+): Promise<void> {
+  const path = nsCollectionPath(NAMESPACE, "transactions");
+  const ref = doc(db, path, txnId);
+  await updateDoc(ref, fields);
 }
