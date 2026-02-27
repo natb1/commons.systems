@@ -10,6 +10,10 @@ body {
   gap: 1.5rem;
 }
 
+.main-column {
+  min-width: 0;
+}
+
 @media (min-width: 768px) {
   .content-grid {
     grid-template-columns: 1fr 16rem;
