@@ -1,45 +1,72 @@
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
-import { db, NAMESPACE } from "./firebase.js";
+import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
-export interface Message {
+import { db, NAMESPACE } from "./firebase.js";
+import { isAuthorized } from "./is-authorized.js";
+
+export type MediaType = "epub" | "pdf" | "cbz";
+
+export interface MediaMeta {
   id: string;
-  text: string;
-  author: string;
-  createdAt: string;
+  title: string;
+  mediaType: MediaType;
+  tags: Record<string, string>;
+  publicDomain: boolean;
+  sizeBytes: number;
 }
 
-export interface Note {
-  id: string;
-  text: string;
-  createdAt: string;
+export interface GetMediaResult {
+  items: MediaMeta[];
+  skippedCount: number;
 }
 
-export async function getMessages(): Promise<Message[]> {
-  const path = nsCollectionPath(NAMESPACE, "messages");
-  const q = query(collection(db, path), orderBy("createdAt"));
+const VALID_MEDIA_TYPES: ReadonlySet<string> = new Set(["epub", "pdf", "cbz"]);
+
+function toMediaMeta(id: string, data: Record<string, unknown>): MediaMeta | null {
+  const title = typeof data.title === "string" ? data.title : "";
+  const mediaType = typeof data.mediaType === "string" ? data.mediaType : "";
+  const publicDomain = data.publicDomain === true;
+  const sizeBytes = typeof data.sizeBytes === "number" ? data.sizeBytes : 0;
+  const tags =
+    data.tags && typeof data.tags === "object" && !Array.isArray(data.tags)
+      ? (data.tags as Record<string, string>)
+      : {};
+
+  if (!title || !VALID_MEDIA_TYPES.has(mediaType)) {
+    console.error(`Media "${id}" has missing or invalid required fields:`, data);
+    return null;
+  }
+
+  return {
+    id,
+    title,
+    mediaType: mediaType as MediaType,
+    tags,
+    publicDomain,
+    sizeBytes,
+  };
+}
+
+export async function getMedia(user: User | null): Promise<GetMediaResult> {
+  const path = nsCollectionPath(NAMESPACE, "media");
+  const admin = isAuthorized(user);
+  const q = admin
+    ? query(collection(db, path), orderBy("title"))
+    : query(collection(db, path), where("publicDomain", "==", true));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      text: data.text as string,
-      author: data.author as string,
-      createdAt: data.createdAt as string,
-    };
-  });
-}
-
-export async function getNotes(): Promise<Note[]> {
-  const path = nsCollectionPath(NAMESPACE, "notes");
-  const q = query(collection(db, path), orderBy("createdAt"));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      text: data.text as string,
-      createdAt: data.createdAt as string,
-    };
-  });
+  const items: MediaMeta[] = [];
+  let skippedCount = 0;
+  for (const d of snapshot.docs) {
+    const item = toMediaMeta(d.id, d.data());
+    if (item) {
+      items.push(item);
+    } else {
+      skippedCount++;
+    }
+  }
+  if (!admin) {
+    items.sort((a, b) => a.title.localeCompare(b.title));
+  }
+  return { items, skippedCount };
 }
