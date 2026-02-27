@@ -1,50 +1,122 @@
 import { describe, it, expect, vi } from "vitest";
 
 vi.mock("../../src/firestore.js", () => ({
-  getMessages: vi.fn(),
+  getTransactions: vi.fn(),
+}));
+
+vi.mock("../../src/is-authorized.js", () => ({
+  isAuthorized: vi.fn(),
 }));
 
 import { renderHome } from "../../src/pages/home";
-import { getMessages } from "../../src/firestore";
+import { getTransactions } from "../../src/firestore";
+import { isAuthorized } from "../../src/is-authorized";
 
-const mockGetMessages = vi.mocked(getMessages);
+const mockGetTransactions = vi.mocked(getTransactions);
+const mockIsAuthorized = vi.mocked(isAuthorized);
 
 describe("renderHome", () => {
-  it("returns HTML containing a Home heading", async () => {
-    mockGetMessages.mockResolvedValue([]);
+  it("returns HTML containing a Transactions heading", async () => {
+    mockIsAuthorized.mockReturnValue(false);
+    mockGetTransactions.mockResolvedValue([]);
     const html = await renderHome();
-    expect(html).toContain("<h2>Home</h2>");
+    expect(html).toContain("<h2>Transactions</h2>");
   });
 
-  it("returns HTML containing welcome text", async () => {
-    mockGetMessages.mockResolvedValue([]);
+  it("shows seed data notice for unauthorized users", async () => {
+    mockIsAuthorized.mockReturnValue(false);
+    mockGetTransactions.mockResolvedValue([]);
     const html = await renderHome();
-    expect(html).toContain("Welcome to the commons.systems budget app.");
+    expect(html).toContain('id="seed-data-notice"');
   });
 
-  it("renders messages with timestamps from Firestore", async () => {
-    mockGetMessages.mockResolvedValue([
-      { id: "1", text: "Hello world", author: "system", createdAt: "2026-01-01T00:00:00Z" },
-      { id: "2", text: "Second message", author: "system", createdAt: "2026-01-02T00:00:00Z" },
+  it("does not show seed data notice for authorized users", async () => {
+    mockIsAuthorized.mockReturnValue(true);
+    mockGetTransactions.mockResolvedValue([]);
+    const html = await renderHome();
+    expect(html).not.toContain('id="seed-data-notice"');
+  });
+
+  it("renders transaction table with data", async () => {
+    mockIsAuthorized.mockReturnValue(false);
+    mockGetTransactions.mockResolvedValue([
+      {
+        id: "txn-1",
+        institution: "Bank A",
+        account: "Checking",
+        description: "Grocery store",
+        amount: 52.30,
+        note: "weekly groceries",
+        category: "Food:Groceries",
+        reimbursement: 0,
+        vacation: false,
+      },
     ]);
     const html = await renderHome();
-    expect(html).toContain('<ul id="messages">');
-    expect(html).toContain("Hello world");
-    expect(html).toContain("Second message");
-    expect(html).toContain('<time datetime="2026-01-01T00:00:00Z">');
-    expect(html).toContain('<time datetime="2026-01-02T00:00:00Z">');
+    expect(html).toContain('id="transactions-table"');
+    expect(html).toContain("Bank A");
+    expect(html).toContain("Grocery store");
+    expect(html).toContain("52.30");
+    expect(html).toContain("Food &gt; Groceries");
   });
 
   it("renders error fallback when Firestore fails", async () => {
-    mockGetMessages.mockRejectedValue(new Error("connection failed"));
+    mockIsAuthorized.mockReturnValue(false);
+    mockGetTransactions.mockRejectedValue(new Error("connection failed"));
     const html = await renderHome();
-    expect(html).toContain("Could not load messages");
-    expect(html).toContain('id="messages-error"');
+    expect(html).toContain("Could not load transactions");
+    expect(html).toContain('id="transactions-error"');
   });
 
-  it("renders empty state when no messages", async () => {
-    mockGetMessages.mockResolvedValue([]);
+  it("renders empty state when no transactions", async () => {
+    mockIsAuthorized.mockReturnValue(false);
+    mockGetTransactions.mockResolvedValue([]);
     const html = await renderHome();
-    expect(html).toContain("No messages yet.");
+    expect(html).toContain("No transactions found.");
+  });
+
+  it("renders inline edit inputs for authorized users", async () => {
+    mockIsAuthorized.mockReturnValue(true);
+    mockGetTransactions.mockResolvedValue([
+      {
+        id: "txn-1",
+        institution: "Bank A",
+        account: "Checking",
+        description: "Grocery store",
+        amount: 52.30,
+        note: "weekly groceries",
+        category: "Food:Groceries",
+        reimbursement: 0,
+        vacation: false,
+        uid: "user-123",
+      },
+    ]);
+    const html = await renderHome();
+    expect(html).toContain('class="edit-note"');
+    expect(html).toContain('class="edit-category"');
+    expect(html).toContain('class="edit-reimbursement"');
+    expect(html).toContain('class="edit-vacation"');
+    expect(html).toContain('data-txn-id="txn-1"');
+  });
+
+  it("renders read-only cells for unauthorized users", async () => {
+    mockIsAuthorized.mockReturnValue(false);
+    mockGetTransactions.mockResolvedValue([
+      {
+        id: "txn-1",
+        institution: "Bank A",
+        account: "Checking",
+        description: "Grocery store",
+        amount: 52.30,
+        note: "weekly groceries",
+        category: "Food:Groceries",
+        reimbursement: 0,
+        vacation: false,
+      },
+    ]);
+    const html = await renderHome();
+    expect(html).not.toContain('class="edit-note"');
+    expect(html).not.toContain('class="edit-category"');
+    expect(html).toContain("weekly groceries");
   });
 });

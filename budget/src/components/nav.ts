@@ -9,7 +9,6 @@ export function renderNav(user: User | null): string {
   return `
     <a href="#/">Home</a>
     <a href="#/about">About</a>
-    <a href="#/notes">Notes</a>
     <span style="margin-left: auto">${auth}</span>
   `;
 }

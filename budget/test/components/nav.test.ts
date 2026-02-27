@@ -18,16 +18,6 @@ describe("renderNav", () => {
     expect(html).toContain('href="#/about"');
   });
 
-  it("includes a Notes link when signed out", () => {
-    const html = renderNav(null);
-    expect(html).toContain('href="#/notes"');
-  });
-
-  it("includes a Notes link when signed in", () => {
-    const html = renderNav(mockUser);
-    expect(html).toContain('href="#/notes"');
-  });
-
   it("shows sign-in link when user is null", () => {
     const html = renderNav(null);
     expect(html).toContain('id="sign-in"');
