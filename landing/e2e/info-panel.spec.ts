@@ -13,9 +13,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe("info panel — desktop", () => {
-  test.skip(({}, testInfo) => testInfo.project.name !== "desktop");
-
-  test("aside is visible with all sections", async ({ page }) => {
+  test("aside is visible with all sections", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     const panel = page.locator("#info-panel");
@@ -26,7 +25,8 @@ test.describe("info panel — desktop", () => {
     await expect(panel.locator("h3", { hasText: "Archive" })).toBeVisible();
   });
 
-  test("Links section contains GitHub link", async ({ page }) => {
+  test("Links section contains GitHub link", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     const link = page.locator(
@@ -36,10 +36,10 @@ test.describe("info panel — desktop", () => {
     await expect(link).toHaveText("GitHub");
   });
 
-  test("Top Posts section contains article links", async ({ page }) => {
+  test("Top Posts section contains article links", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
-    // Find the Top Posts section and verify it has at least one link
     const topPostsSection = page.locator(
       '.panel-section:has(h3:text("Top Posts"))',
     );
@@ -47,28 +47,30 @@ test.describe("info panel — desktop", () => {
     expect(await links.count()).toBeGreaterThanOrEqual(1);
   });
 
-  test("panel toggle button is hidden on desktop", async ({ page }) => {
+  test("panel toggle button is hidden on desktop", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
     await expect(page.locator("#panel-toggle")).toBeHidden();
   });
 });
 
 test.describe("info panel — mobile", () => {
-  test.skip(({}, testInfo) => testInfo.project.name !== "mobile");
-
-  test("aside is hidden by default", async ({ page }) => {
+  test("aside is hidden by default", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile");
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(page.locator("#info-panel")).toBeHidden();
   });
 
-  test("toggle button is visible", async ({ page }) => {
+  test("toggle button is visible", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile");
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(page.locator("#panel-toggle")).toBeVisible();
   });
 
-  test("clicking toggle shows and hides panel", async ({ page }) => {
+  test("clicking toggle shows and hides panel", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile");
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     const toggle = page.locator("#panel-toggle");
@@ -90,12 +92,10 @@ test.describe("info panel — mobile", () => {
 });
 
 test.describe("info panel — archive", () => {
-  test.skip(({}, testInfo) => testInfo.project.name !== "desktop");
-
-  test("current month is expanded by default", async ({ page }) => {
+  test("current month is expanded by default", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
-    // The archive section should have a details element with open attribute for the current month
     const archiveSection = page.locator(
       '.panel-section:has(h3:text("Archive"))',
     );
