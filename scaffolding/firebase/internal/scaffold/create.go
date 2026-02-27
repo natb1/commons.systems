@@ -27,14 +27,20 @@ func (d AppData) Title() string {
 func (d AppData) ProductionURL() string { return "https://" + d.SiteName + ".web.app" }
 
 // NewAppData creates an AppData with the given app and site names.
-func NewAppData(appName, siteName string) AppData {
+// Returns an error if appName fails validation.
+func NewAppData(appName, siteName string) (AppData, error) {
+	if err := ValidateAppName(appName); err != nil {
+		return AppData{}, err
+	}
 	return AppData{
 		AppName:  appName,
 		SiteName: siteName,
-	}
+	}, nil
 }
 
 func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error) {
+	// Validate early: must check before hosting site creation so we fail fast.
+	// NewAppData validates independently for external callers who skip Create.
 	if err := ValidateAppName(appName); err != nil {
 		return err
 	}
@@ -73,7 +79,10 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 		}
 	}()
 
-	data := NewAppData(appName, siteName)
+	data, err := NewAppData(appName, siteName)
+	if err != nil {
+		return err
+	}
 
 	// Render app templates
 	if dryRun {
@@ -129,6 +138,16 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 		}
 	}
 
+	// Update firestore.rules with default rules block for this app
+	if dryRun {
+		fmt.Printf("[dry-run] Would insert rules block for %q into firestore.rules\n", appName)
+	} else {
+		fmt.Println("Updating firestore.rules...")
+		if err := InsertFirestoreRules(repoRoot, appName); err != nil {
+			return fmt.Errorf("inserting Firestore rules: %w", err)
+		}
+	}
+
 	fmt.Println()
 	if dryRun {
 		fmt.Println("[dry-run] App creation plan complete. No changes were made.")
@@ -149,6 +168,46 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 	}
 
 	return nil
+}
+
+const firestoreRulesCatchAll = "// Deny everything else by default (scaffolding uses this line as an insertion marker)"
+
+// InsertFirestoreRules inserts a default rules block for appName into firestore.rules,
+// just before the deny-all catch-all rule. Rules use the literal app name as a
+// top-level path segment (e.g. match /myapp/{env}/messages/{messageId}).
+func InsertFirestoreRules(repoRoot, appName string) error {
+	rulesPath := filepath.Join(repoRoot, "firestore.rules")
+	raw, err := os.ReadFile(rulesPath)
+	if err != nil {
+		return fmt.Errorf("reading firestore.rules: %w", err)
+	}
+
+	content := string(raw)
+
+	if strings.Contains(content, "match /"+appName+"/") {
+		fmt.Printf("NOTE: rules for %q already exist in firestore.rules, skipping insertion\n", appName)
+		return nil
+	}
+
+	block := fmt.Sprintf(
+		"    match /%s/{env}/messages/{messageId} {\n"+
+			"      allow read: if true;\n"+
+			"      allow write: if false;\n"+
+			"    }\n\n"+
+			"    match /%s/{env}/notes/{noteId} {\n"+
+			"      allow read: if request.auth != null;\n"+
+			"      allow write: if false;\n"+
+			"    }\n\n",
+		appName, appName)
+
+	catchAll := "    " + firestoreRulesCatchAll
+	idx := strings.Index(content, catchAll)
+	if idx == -1 {
+		return fmt.Errorf("could not find catch-all rule in firestore.rules")
+	}
+
+	updated := content[:idx] + block + content[idx:]
+	return os.WriteFile(rulesPath, []byte(updated), 0o644)
 }
 
 func renderTemplates(templateFS fs.FS, repoRoot, templateDir, outputDir string, data AppData) error {

@@ -1,14 +1,13 @@
 import type { Firestore } from "firebase-admin/firestore";
+import { validateNamespace } from "./namespace.js";
 
 export async function deleteNamespace(
   db: Firestore,
   namespace: string,
 ): Promise<void> {
-  if (!namespace) {
-    throw new Error("namespace must not be empty");
+  validateNamespace(namespace);
+  if (namespace.split("/")[1] === "prod") {
+    throw new Error("refusing to delete production namespace: " + namespace);
   }
-  if (namespace === "prod") {
-    throw new Error("refusing to delete the prod namespace");
-  }
-  await db.recursiveDelete(db.doc(`ns/${namespace}`));
+  await db.recursiveDelete(db.doc(namespace));
 }

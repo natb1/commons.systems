@@ -20,6 +20,7 @@ export async function seed(db: Firestore, spec: SeedSpec): Promise<void> {
   for (const collection of spec.collections) {
     const path = nsCollectionPath(spec.namespace, collection.name);
     for (const doc of collection.documents) {
+      if (!doc.id) throw new Error(`seed document in "${collection.name}" has empty id`);
       await db.doc(`${path}/${doc.id}`).set(doc.data);
     }
   }

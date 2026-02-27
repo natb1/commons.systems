@@ -4,7 +4,11 @@
   },
   "targets": {
     "commons-systems": {
-      "hosting": {}
+      "hosting": {
+        "landing": [
+          "cs-landing-ce1d"
+        ]
+      }
     }
   }
 }

@@ -23,7 +23,9 @@ PREVIEW_NAMESPACE=$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")
 # Install app dependencies and build (uses preview namespace, no emulator)
 cd "$REPO_ROOT/$APP_DIR"
 npm ci
-VITE_FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" npm run build
+VITE_FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" \
+  VITE_GITHUB_BRANCH="${VITE_GITHUB_BRANCH:-main}" \
+  npm run build
 cd "$REPO_ROOT"
 
 # Delete existing channel if present
