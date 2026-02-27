@@ -4,7 +4,7 @@ test.describe("responsive layout", () => {
   test("main content is visible", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("main")).toBeVisible();
-    await expect(page.locator("main h2")).toHaveText("Home");
+    await expect(page.locator("main h2")).toHaveText("Transactions");
   });
 
   test("nav links are accessible", async ({ page }) => {
@@ -19,6 +19,6 @@ test.describe("responsive layout", () => {
     await expect(page.locator("main h2")).toHaveText("About");
 
     await homeLink.click();
-    await expect(page.locator("main h2")).toHaveText("Home");
+    await expect(page.locator("main h2")).toHaveText("Transactions");
   });
 });

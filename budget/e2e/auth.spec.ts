@@ -2,12 +2,11 @@ import { test, expect } from "@playwright/test";
 import { signIn } from "@commons-systems/authutil/e2e/sign-in";
 
 test.describe("auth", () => {
-  test("notes page shows auth-required when not signed in", async ({
-    page,
-  }) => {
-    await page.goto("/#/notes");
-    await expect(page.locator("#notes-auth-required")).toBeVisible();
-    await expect(page.locator("#notes-list")).not.toBeVisible();
+  test("seed data visible when not signed in", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#seed-data-notice")).toBeVisible();
+    const rows = page.locator("#transactions-table tbody tr");
+    await expect(rows).toHaveCount(3);
   });
 
   test("nav shows sign-in link when not signed in", async ({ page }) => {
@@ -22,34 +21,50 @@ test.describe("auth", () => {
     await page.goto("/");
     await signIn(page);
     await expect(page.locator("#sign-out")).toBeVisible();
-    await expect(page.locator("#user-display")).toContainText("Test User");
+    await expect(page.locator("#user-display")).toContainText("natb1");
   });
 
-  test("notes page shows notes list after sign-in", async ({ page }) => {
+  test("authorized user sees own transactions with inline editing", async ({
+    page,
+  }) => {
     await page.goto("/");
     await signIn(page);
-    await page.goto("/#/notes");
-    await page.waitForSelector("#notes-list");
-    const notes = page.locator("#notes-list li");
-    await expect(notes).toHaveCount(2);
-    await expect(notes.nth(0)).toHaveText(
-      "This note is only visible when signed in.",
-    );
-    await expect(notes.nth(1)).toHaveText("Auth-gated content works.");
+    await expect(page.locator("#transactions-table")).toBeVisible();
+    await expect(page.locator("#seed-data-notice")).toHaveCount(0);
+    const rows = page.locator("#transactions-table tbody tr");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText("Grocery Store");
+    await expect(rows.nth(1)).toContainText("Hotel Stay");
+    // Verify inline edit inputs are present
+    await expect(page.locator(".edit-note")).toHaveCount(2);
+    await expect(page.locator(".edit-category")).toHaveCount(2);
+    await expect(page.locator(".edit-reimbursement")).toHaveCount(2);
+    await expect(page.locator(".edit-vacation")).toHaveCount(2);
   });
 
-  test("sign-out returns to unauthenticated state", async ({ page }) => {
+  test("inline edit saves and persists", async ({ page }) => {
     await page.goto("/");
     await signIn(page);
+    await expect(page.locator("#transactions-table")).toBeVisible();
+    const noteInput = page.locator(".edit-note").first();
+    await noteInput.fill("test note update");
+    await noteInput.blur();
+    // Wait for the save to complete
+    await page.waitForTimeout(500);
+    // Reload and verify persistence
+    await page.reload();
+    await expect(page.locator("#transactions-table")).toBeVisible();
+    await expect(page.locator(".edit-note").first()).toHaveValue("test note update");
+  });
+
+  test("sign-out returns to seed data view", async ({ page }) => {
+    await page.goto("/");
+    await signIn(page);
+    await expect(page.locator("#sign-out")).toBeVisible();
     await page.locator("#sign-out").click();
     await page.waitForSelector("#sign-in");
-    await page.evaluate(() => { window.location.hash = '#/notes'; });
-    await expect(page.locator("#notes-auth-required")).toBeVisible();
-  });
-
-  test("public messages visible without auth", async ({ page }) => {
-    await page.goto("/");
-    const messages = page.locator("#messages li");
-    await expect(messages).toHaveCount(2);
+    await expect(page.locator("#seed-data-notice")).toBeVisible();
+    const rows = page.locator("#transactions-table tbody tr");
+    await expect(rows).toHaveCount(3);
   });
 });
