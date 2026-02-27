@@ -43,10 +43,13 @@ async function loadPosts(): Promise<string> {
     return renderHomeHtml(cachedPosts);
   } catch (error) {
     console.error("Failed to load posts:", error);
-    const msg =
-      error instanceof Error && "code" in error && (error as { code: string }).code === "permission-denied"
-        ? "Permission denied loading posts."
-        : "Could not load posts. Try refreshing the page.";
+    const isPermissionDenied =
+      error instanceof Error &&
+      "code" in error &&
+      (error as { code: string }).code === "permission-denied";
+    const msg = isPermissionDenied
+      ? "Permission denied loading posts."
+      : "Could not load posts. Try refreshing the page.";
     return `
     <h2>Home</h2>
     <p id="posts-error">${msg}</p>
@@ -72,6 +75,12 @@ if (app) {
     ],
     { onNavigate: updateNav },
   );
+
+  document.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest('a[href="#/"]')) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  });
 
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
