@@ -8,6 +8,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /budget/{env}/messages/{messageId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /budget/{env}/notes/{noteId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     // Deny everything else by default (scaffolding uses this line as an insertion marker)
     // DO NOT EDIT the line above — the scaffolding's InsertFirestoreRules depends on it.
     match /{document=**} {

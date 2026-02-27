@@ -8,6 +8,15 @@
         "**/.*",
         "**/node_modules/**"
       ]
+    },
+    {
+      "target": "budget",
+      "public": "budget/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ]
     }
   ],
   "firestore": {
