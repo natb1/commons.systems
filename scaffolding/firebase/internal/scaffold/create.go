@@ -39,6 +39,8 @@ func NewAppData(appName, siteName string) (AppData, error) {
 }
 
 func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error) {
+	// Validate early: must check before hosting site creation so we fail fast.
+	// NewAppData validates independently for external callers who skip Create.
 	if err := ValidateAppName(appName); err != nil {
 		return err
 	}
@@ -175,12 +177,14 @@ const firestoreRulesCatchAll = "// Deny everything else by default (scaffolding 
 // top-level path segment (e.g. match /myapp/{env}/messages/{messageId}).
 func InsertFirestoreRules(repoRoot, appName string) error {
 	rulesPath := filepath.Join(repoRoot, "firestore.rules")
-	content, err := os.ReadFile(rulesPath)
+	raw, err := os.ReadFile(rulesPath)
 	if err != nil {
 		return fmt.Errorf("reading firestore.rules: %w", err)
 	}
 
-	if strings.Contains(string(content), "match /"+appName+"/") {
+	content := string(raw)
+
+	if strings.Contains(content, "match /"+appName+"/") {
 		fmt.Printf("NOTE: rules for %q already exist in firestore.rules, skipping insertion\n", appName)
 		return nil
 	}
@@ -197,12 +201,12 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 		appName, appName)
 
 	catchAll := "    " + firestoreRulesCatchAll
-	idx := strings.Index(string(content), catchAll)
+	idx := strings.Index(content, catchAll)
 	if idx == -1 {
 		return fmt.Errorf("could not find catch-all rule in firestore.rules")
 	}
 
-	updated := string(content[:idx]) + block + string(content[idx:])
+	updated := content[:idx] + block + content[idx:]
 	return os.WriteFile(rulesPath, []byte(updated), 0o644)
 }
 

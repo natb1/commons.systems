@@ -85,7 +85,9 @@ describe("getPosts", () => {
   });
 
   it("returns only published posts when user is null", async () => {
-    mockGetDocs.mockResolvedValue({ docs: [publishedPost, draftPost] });
+    // Non-admin query uses where("published","==",true), so Firestore
+    // only returns published docs — mock reflects server-side filtering
+    mockGetDocs.mockResolvedValue({ docs: [publishedPost] });
 
     const { posts } = await getPosts(null);
 
@@ -111,7 +113,9 @@ describe("getPosts", () => {
   });
 
   it("returns only published posts for a non-natb1 signed-in user", async () => {
-    mockGetDocs.mockResolvedValue({ docs: [publishedPost, draftPost] });
+    // Non-admin query uses where("published","==",true), so Firestore
+    // only returns published docs — mock reflects server-side filtering
+    mockGetDocs.mockResolvedValue({ docs: [publishedPost] });
 
     const { posts } = await getPosts(otherUser);
 
@@ -136,7 +140,9 @@ describe("getPosts", () => {
   });
 
   it("returns empty array when there are no published posts and user is null", async () => {
-    mockGetDocs.mockResolvedValue({ docs: [draftPost] });
+    // Firestore where("published","==",true) returns nothing when
+    // all docs are drafts
+    mockGetDocs.mockResolvedValue({ docs: [] });
 
     const { posts } = await getPosts(null);
 

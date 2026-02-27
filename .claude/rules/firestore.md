@@ -39,8 +39,7 @@ match /landing/{env}/posts/{postId} {
 }
 ```
 
-The scaffolding's `InsertFirestoreRules` and `RemoveFirestoreRules` functions manage
-rule blocks by matching the `match /<appName>/` path prefix — no markers needed.
+The scaffolding's `RemoveFirestoreRules` function identifies rule blocks by matching the `match /<appName>/` path prefix. `InsertFirestoreRules` inserts new blocks immediately before the deny-all catch-all comment that serves as an insertion marker.
 
 The deny-all catch-all at the bottom of the file must remain as the last rule.
 
@@ -54,7 +53,7 @@ rejects an unauthenticated `orderBy("publishedAt")` query even when all document
 Use `where("published", "==", true)` for unauthorized list queries and sort client-side:
 
 ```typescript
-const q = isNatb1(user)
+const q = isAuthorized(user)
   ? query(collection(db, path), orderBy("publishedAt"))
   : query(collection(db, path), where("published", "==", true));
 ```

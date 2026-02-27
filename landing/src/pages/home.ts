@@ -55,7 +55,10 @@ export function hydrateHome(
   scrollTo?: string,
 ): void {
   const container = outlet.querySelector("#posts");
-  if (!container) return;
+  if (!container) {
+    console.error("hydrateHome: #posts container not found");
+    return;
+  }
 
   const fetches = posts.map(async (post) => {
     const contentDiv = outlet.querySelector<HTMLElement>(

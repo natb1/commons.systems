@@ -26,7 +26,10 @@ function handleClick(action: () => Promise<void>, label: string): (e: Event) => 
 }
 
 function updateNav(): void {
-  if (!nav) return;
+  if (!nav) {
+    console.error("updateNav: #nav element not found");
+    return;
+  }
   nav.innerHTML = renderNav(currentUser, getHashPath());
   document.getElementById("sign-in")?.addEventListener("click", handleClick(signIn, "Sign-in"));
   document.getElementById("sign-out")?.addEventListener("click", handleClick(signOut, "Sign-out"));
@@ -77,4 +80,6 @@ if (app) {
     updateNav();
     navigate();
   });
+} else {
+  console.error("Fatal: #app element not found");
 }

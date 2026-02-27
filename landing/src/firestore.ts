@@ -45,13 +45,7 @@ export async function getPosts(user: User | null): Promise<GetPostsResult> {
   const posts = mapped.filter((p): p is PostMeta => p !== null);
   if (admin) return { posts, skippedCount };
   return {
-    posts: posts
-      .filter((p) => p.published)
-      .sort((a, b) => {
-        if (!a.publishedAt) return 1;
-        if (!b.publishedAt) return -1;
-        return a.publishedAt.localeCompare(b.publishedAt);
-      }),
+    posts: posts.sort((a, b) => a.publishedAt!.localeCompare(b.publishedAt!)),
     skippedCount,
   };
 }

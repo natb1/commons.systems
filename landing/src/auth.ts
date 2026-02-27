@@ -49,4 +49,3 @@ export function signOut(): Promise<void> {
 }
 
 export { onAuthStateChanged };
-export type { User } from "firebase/auth";

@@ -27,6 +27,10 @@ func RemoveFirestoreRules(repoRoot, appName string) error {
 	for i < len(lines) {
 		if strings.HasPrefix(strings.TrimSpace(lines[i]), matchPrefix) {
 			found = true
+			// Pop preceding comment lines (e.g. "// Messages are publicly readable")
+			for len(result) > 0 && strings.HasPrefix(strings.TrimSpace(result[len(result)-1]), "//") {
+				result = result[:len(result)-1]
+			}
 			// Remove preceding blank line if present
 			if len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {
 				result = result[:len(result)-1]
@@ -98,7 +102,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 
 	siteName, err := FindHostingSite(rc, appName)
 	if err != nil {
-		fmt.Printf("WARNING: %v\n", err)
+		fmt.Fprintf(os.Stderr, "WARNING: %v\n", err)
 		warnings++
 	}
 
@@ -114,7 +118,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
-				fmt.Printf("WARNING: failed to delete hosting site: %v\n", err)
+				fmt.Fprintf(os.Stderr, "WARNING: failed to delete hosting site: %v\n", err)
 				warnings++
 			} else {
 				hostingDeleted = true
@@ -136,7 +140,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 		nsCmd.Stdout = os.Stdout
 		nsCmd.Stderr = os.Stderr
 		if err := nsCmd.Run(); err != nil {
-			fmt.Printf("WARNING: failed to delete Firestore namespace: %v\n", err)
+			fmt.Fprintf(os.Stderr, "WARNING: failed to delete Firestore namespace: %v\n", err)
 			warnings++
 		} else {
 			firestoreDeleted = true
@@ -149,7 +153,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 	} else {
 		fmt.Println("Removing rules block from firestore.rules...")
 		if err := RemoveFirestoreRules(repoRoot, appName); err != nil {
-			fmt.Printf("WARNING: failed to remove Firestore rules block: %v\n", err)
+			fmt.Fprintf(os.Stderr, "WARNING: failed to remove Firestore rules block: %v\n", err)
 			warnings++
 		}
 	}
@@ -187,7 +191,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 	entries, err := os.ReadDir(workflowDir)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			fmt.Printf("WARNING: could not read workflow directory: %v\n", err)
+			fmt.Fprintf(os.Stderr, "WARNING: could not read workflow directory: %v\n", err)
 			warnings++
 		}
 	} else {
@@ -200,7 +204,7 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 					path := filepath.Join(workflowDir, entry.Name())
 					fmt.Printf("  Removing %s\n", entry.Name())
 					if err := os.Remove(path); err != nil {
-						fmt.Printf("WARNING: failed to remove %s: %v\n", entry.Name(), err)
+						fmt.Fprintf(os.Stderr, "WARNING: failed to remove %s: %v\n", entry.Name(), err)
 						warnings++
 					}
 				}

@@ -1,4 +1,4 @@
-const BRANCH = import.meta.env.VITE_GITHUB_BRANCH ?? "main";
+const BRANCH = import.meta.env.VITE_GITHUB_BRANCH || "main";
 const BASE = `https://raw.githubusercontent.com/natb1/commons.systems/${BRANCH}/landing/post`;
 
 const cache = new Map<string, string>();
