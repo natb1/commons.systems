@@ -10,6 +10,7 @@ import (
 
 // RemoveFirestoreRules removes all rule blocks for appName from firestore.rules.
 // Rules are identified by path pattern (match /<appName>/...) rather than markers.
+// Each removed block also strips immediately preceding comment lines and adjacent blank lines.
 // If no rules are found, it logs a note and returns nil (not an error).
 func RemoveFirestoreRules(repoRoot, appName string) error {
 	rulesPath := filepath.Join(repoRoot, "firestore.rules")

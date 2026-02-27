@@ -4,6 +4,9 @@ const BASE = `https://raw.githubusercontent.com/natb1/commons.systems/${BRANCH}/
 const cache = new Map<string, string>();
 
 export async function fetchPost(filename: string): Promise<string> {
+  if (!/^[a-z0-9][-a-z0-9]*\.md$/.test(filename)) {
+    throw new Error(`Invalid post filename: ${filename}`);
+  }
   const cached = cache.get(filename);
   if (cached !== undefined) return cached;
   const response = await fetch(`${BASE}/${filename}`);

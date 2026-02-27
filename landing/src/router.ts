@@ -22,16 +22,19 @@ export function createRouter(
     options?.onNavigate?.();
     const id = ++navigationId;
     const hash = getHashPath();
-    const route =
-      routes.find((r) =>
-        typeof r.path === "string" ? r.path === hash : r.path.test(hash),
-      ) ?? routes[0];
+    const route = routes.find((r) =>
+      typeof r.path === "string" ? r.path === hash : r.path.test(hash),
+    );
+    if (!route) {
+      console.warn(`No route matched hash "${hash}", falling back to default route`);
+    }
+    const matched = route ?? routes[0];
     try {
-      const html = await route.render(hash);
+      const html = await matched.render(hash);
       if (id === navigationId) {
         outlet.innerHTML = html;
         try {
-          route.afterRender?.(outlet, hash);
+          matched.afterRender?.(outlet, hash);
         } catch (afterError) {
           console.error("afterRender error:", afterError);
           outlet.insertAdjacentHTML("beforeend", "<p>Some content failed to load. Try refreshing.</p>");

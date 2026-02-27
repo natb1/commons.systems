@@ -23,12 +23,12 @@ function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null 
     console.error(`Post "${id}" has missing required fields:`, data);
     return null;
   }
-  if (published && publishedAt === null) {
-    console.error(`Post "${id}" is published but has no publishedAt date:`, data);
-    return null;
+  if (published && publishedAt !== null) {
+    return { id, title, published: true, publishedAt, filename };
   }
   if (published) {
-    return { id, title, published: true, publishedAt: publishedAt!, filename };
+    console.error(`Post "${id}" is published but has no publishedAt date:`, data);
+    return null;
   }
   return { id, title, published: false, publishedAt: null, filename };
 }

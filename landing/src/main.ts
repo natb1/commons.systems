@@ -14,10 +14,6 @@ let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
 let lastSkippedCount = 0;
 
-function hasErrorCode(error: unknown, code: string): boolean {
-  return error instanceof Error && "code" in error && (error as { code: string }).code === code;
-}
-
 function handleClick(action: () => Promise<void>, label: string): (e: Event) => void {
   return function (e: Event): void {
     e.preventDefault();
@@ -44,17 +40,18 @@ async function loadPosts(): Promise<string> {
     const result = await getPosts(currentUser);
     cachedPosts = result.posts;
     lastSkippedCount = result.skippedCount;
+    return renderHomeHtml(cachedPosts);
   } catch (error) {
     console.error("Failed to load posts:", error);
-    const msg = hasErrorCode(error, "permission-denied")
-      ? "Permission denied loading posts."
-      : "Could not load posts. Try refreshing the page.";
+    const msg =
+      error instanceof Error && "code" in error && (error as { code: string }).code === "permission-denied"
+        ? "Permission denied loading posts."
+        : "Could not load posts. Try refreshing the page.";
     return `
     <h2>Home</h2>
     <p id="posts-error">${msg}</p>
   `;
   }
-  return renderHomeHtml(cachedPosts);
 }
 
 updateNav();

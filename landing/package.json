@@ -16,6 +16,7 @@
     "@commons-systems/firebaseutil": "file:../firebaseutil",
     "@commons-systems/firestoreutil": "file:../firestoreutil",
     "@commons-systems/style": "file:../style",
+    "dompurify": "^3.3.1",
     "firebase": "^12.9.0",
     "marked": "^15",
     "missing.css": "^1.1.3"
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@eslint/js": "^9.19.0",
     "@playwright/test": "1.57.0",
+    "@types/dompurify": "^3.0.5",
     "eslint": "^9.19.0",
     "happy-dom": "^17.4.4",
     "typescript": "^5.7.3",

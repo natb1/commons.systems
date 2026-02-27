@@ -2,18 +2,6 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Messages are publicly readable
-    match /landing/{env}/messages/{messageId} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    // Notes require authentication
-    match /landing/{env}/notes/{noteId} {
-      allow read: if request.auth != null;
-      allow write: if false;
-    }
-
     // Published posts are public; unpublished posts require authentication
     match /landing/{env}/posts/{postId} {
       allow read: if resource.data.published == true || request.auth != null;
@@ -21,7 +9,7 @@ service cloud.firestore {
     }
 
     // Deny everything else by default (scaffolding uses this line as an insertion marker)
-    // DO NOT EDIT this comment — scaffolding/firebase/internal/scaffold/create.go matches it exactly.
+    // DO NOT EDIT the line above — the scaffolding's InsertFirestoreRules depends on it.
     match /{document=**} {
       allow read, write: if false;
     }

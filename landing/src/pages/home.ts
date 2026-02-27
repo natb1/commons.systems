@@ -1,9 +1,12 @@
+import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { escapeHtml } from "../escape-html.js";
 import { fetchPost } from "../github.js";
 import type { PostMeta } from "../firestore.js";
 
-// Strip raw HTML tags from markdown so embedded HTML in post files does not render in the browser.
+const SCROLL_PADDING_PX = 16;
+
+// Strip raw HTML from markdown to prevent XSS from post file content.
 marked.use({ renderer: { html: () => "" } });
 
 function formatDate(isoDate: string): string {
@@ -70,7 +73,7 @@ export function hydrateHome(
       const markdown = await fetchPost(post.filename);
       const html = await marked.parse(markdown);
       if (!outlet.contains(container)) return;
-      contentDiv.innerHTML = html;
+      contentDiv.innerHTML = DOMPurify.sanitize(html);
     } catch (error) {
       console.error(`Failed to load post "${post.id}":`, error);
       if (!outlet.contains(container)) return;
@@ -84,7 +87,7 @@ export function hydrateHome(
       const article = outlet.querySelector(`#post-${CSS.escape(scrollTo)}`);
       if (article) {
         const headerHeight = document.querySelector('header')?.offsetHeight ?? 0;
-        const y = article.getBoundingClientRect().top + window.scrollY - headerHeight - 16;
+        const y = article.getBoundingClientRect().top + window.scrollY - headerHeight - SCROLL_PADDING_PX;
         window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
       }
     });
