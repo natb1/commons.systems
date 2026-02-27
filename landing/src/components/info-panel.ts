@@ -37,12 +37,13 @@ function renderArchive(posts: PostMeta[]): string {
   const sortedYears = [...grouped.keys()].sort((a, b) => b - a);
   const yearBlocks = sortedYears
     .map((year) => {
+      const isCurrentYear = year === currentYear;
       const months = grouped.get(year)!;
       const sortedMonths = [...months.keys()].sort((a, b) => b - a);
       const monthBlocks = sortedMonths
         .map((month) => {
           const monthPosts = months.get(month)!;
-          const isCurrentMonth = year === currentYear && month === currentMonth;
+          const isCurrentMonth = isCurrentYear && month === currentMonth;
           const items = monthPosts
             .map(
               (p) =>
@@ -55,7 +56,7 @@ function renderArchive(posts: PostMeta[]): string {
           </details>`;
         })
         .join("");
-      return `<details>
+      return `<details${isCurrentYear ? " open" : ""}>
         <summary>${year}</summary>
         ${monthBlocks}
       </details>`;
@@ -88,8 +89,10 @@ export function renderInfoPanel(data: InfoPanelData): string {
     .map(
       (b) =>
         `<li>
-        <a href="${escapeHtml(b.url)}" target="_blank" rel="noopener">${escapeHtml(b.name)}</a>
-        <div class="blogroll-latest" id="blogroll-latest-${escapeHtml(b.id)}"></div>
+        <a class="blogroll-entry" id="blogroll-entry-${escapeHtml(b.id)}" href="${escapeHtml(b.url)}" target="_blank" rel="noopener">
+          <span class="blogroll-name">${escapeHtml(b.name)}</span>
+          <span class="blogroll-latest" id="blogroll-latest-${escapeHtml(b.id)}"></span>
+        </a>
       </li>`,
     )
     .join("");
@@ -120,12 +123,14 @@ export function hydrateInfoPanel(
     const strategy = strategies.get(entry.id);
     if (!strategy) continue;
 
+    const entryLink = panel.querySelector(`#blogroll-entry-${CSS.escape(entry.id)}`);
     const placeholder = panel.querySelector(`#blogroll-latest-${CSS.escape(entry.id)}`);
-    if (!placeholder) continue;
+    if (!entryLink || !placeholder) continue;
 
     strategy.fetchLatestPost().then((post) => {
       if (post) {
-        placeholder.innerHTML = `<a href="${escapeHtml(post.url)}" target="_blank" rel="noopener">${escapeHtml(post.title)}</a>`;
+        placeholder.textContent = post.title;
+        entryLink.setAttribute("href", post.url);
       }
     }).catch(() => {
       // Silently handle failures — blog roll latest post is non-critical

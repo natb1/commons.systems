@@ -84,8 +84,9 @@ describe("renderInfoPanel", () => {
     expect(html).toContain("Test Blog");
   });
 
-  it("blog roll section has placeholder divs for latest post", () => {
+  it("blog roll section has entry link and latest post placeholder", () => {
     const html = renderInfoPanel(defaultData());
+    expect(html).toContain('id="blogroll-entry-test-blog"');
     expect(html).toContain('id="blogroll-latest-test-blog"');
   });
 
@@ -152,6 +153,57 @@ describe("renderInfoPanel", () => {
     expect(html).toContain("2026");
     expect(html).toContain("February");
     expect(html).toContain("January");
+  });
+
+  it("archive current year (2026) is open by default", () => {
+    const html = renderInfoPanel(defaultData());
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const allDetails = container.querySelectorAll("details");
+    let foundOpen = false;
+    for (const details of allDetails) {
+      const summary = details.querySelector("summary");
+      if (summary?.textContent?.trim() === "2026") {
+        expect(details.hasAttribute("open")).toBe(true);
+        foundOpen = true;
+      }
+    }
+    expect(foundOpen).toBe(true);
+  });
+
+  it("archive other years are collapsed", () => {
+    const multiYearPosts: PostMeta[] = [
+      {
+        id: "p1",
+        title: "Old",
+        published: true,
+        publishedAt: "2025-03-01T00:00:00Z",
+        filename: "old.md",
+      },
+      {
+        id: "p3",
+        title: "New",
+        published: true,
+        publishedAt: "2026-02-15T00:00:00Z",
+        filename: "new.md",
+      },
+    ];
+    const html = renderInfoPanel({
+      links: [],
+      topPosts: multiYearPosts,
+      blogRoll: [],
+    });
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const allDetails = container.querySelectorAll("details");
+    for (const details of allDetails) {
+      const summary = details.querySelector("summary");
+      if (summary?.textContent?.trim() === "2025") {
+        expect(details.hasAttribute("open")).toBe(false);
+      }
+    }
   });
 
   it("archive current month (February 2026) is open by default", () => {
@@ -301,7 +353,7 @@ describe("hydrateInfoPanel", () => {
     expect(strategyB.fetchLatestPost).toHaveBeenCalledOnce();
   });
 
-  it("fills placeholder with latest post link when strategy succeeds", async () => {
+  it("fills placeholder text and updates entry href when strategy succeeds", async () => {
     const entries: BlogRollEntry[] = [
       { id: "test-blog", name: "Test Blog", url: "https://example.com" },
     ];
@@ -322,10 +374,9 @@ describe("hydrateInfoPanel", () => {
 
     await vi.waitFor(() => {
       const placeholder = panel.querySelector("#blogroll-latest-test-blog");
-      expect(placeholder!.innerHTML).toContain("New Article");
-      expect(placeholder!.innerHTML).toContain(
-        'href="https://example.com/article"',
-      );
+      expect(placeholder!.textContent).toBe("New Article");
+      const entryLink = panel.querySelector("#blogroll-entry-test-blog");
+      expect(entryLink!.getAttribute("href")).toBe("https://example.com/article");
     });
   });
 
@@ -346,7 +397,7 @@ describe("hydrateInfoPanel", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     const placeholder = panel.querySelector("#blogroll-latest-test-blog");
-    expect(placeholder!.innerHTML).toBe("");
+    expect(placeholder!.textContent).toBe("");
   });
 
   it("leaves placeholder empty when strategy rejects", async () => {
@@ -366,6 +417,6 @@ describe("hydrateInfoPanel", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     const placeholder = panel.querySelector("#blogroll-latest-test-blog");
-    expect(placeholder!.innerHTML).toBe("");
+    expect(placeholder!.textContent).toBe("");
   });
 });

@@ -1,7 +1,7 @@
 @import "@commons-systems/style/default.css";
 
 body {
-  max-width: 68rem;
+  --main-max-width: 68rem;
 }
 
 .content-grid {
@@ -87,18 +87,26 @@ body {
   font-size: 0.85rem;
 }
 
+.blogroll-entry {
+  display: block;
+  text-decoration: none;
+}
+
+.blogroll-name {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
 .blogroll-latest {
   font-size: 0.75rem;
   color: var(--muted);
-  margin-top: 0.2rem;
-}
-
-.blogroll-latest a {
-  color: var(--muted);
+  display: block;
 }
 
 .panel-section details {
   margin-bottom: 0.25rem;
+  background: none;
+  border: none;
 }
 
 .panel-section summary {
@@ -127,10 +135,24 @@ body {
   transform: rotate(180deg);
 }
 
-/* Mobile: hide panel by default */
+/* Mobile: panel overlays content as dropdown */
 @media (max-width: 767px) {
+  .content-grid {
+    position: relative;
+  }
+
   #info-panel {
     display: none;
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 5;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 1rem;
+    width: 16rem;
+    max-height: 80vh;
+    overflow-y: auto;
   }
 
   #info-panel.open {
