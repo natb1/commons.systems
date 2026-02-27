@@ -8,14 +8,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /budget/{env}/messages/{messageId} {
+    match /budget/{env}/seed-transactions/{txnId} {
       allow read: if true;
       allow write: if false;
     }
 
-    match /budget/{env}/notes/{noteId} {
-      allow read: if request.auth != null;
-      allow write: if false;
+    match /budget/{env}/transactions/{txnId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['note', 'category', 'reimbursement', 'vacation']);
+      allow create, delete: if false;
     }
 
     // Deny everything else by default (scaffolding uses this line as an insertion marker)
