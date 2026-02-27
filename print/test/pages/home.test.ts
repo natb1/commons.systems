@@ -9,6 +9,7 @@ const publicEpub: MediaMeta = {
   publicDomain: true,
   sizeBytes: 500_000,
   tags: { genre: "philosophy" },
+  sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/phaedrus",
 };
 
 const privatePdf: MediaMeta = {
@@ -18,6 +19,7 @@ const privatePdf: MediaMeta = {
   publicDomain: false,
   sizeBytes: 1_200_000,
   tags: {},
+  sourceNotes: "Private GCS bucket: rml-media/print/private-book.pdf",
 };
 
 const largeCbz: MediaMeta = {
@@ -27,6 +29,7 @@ const largeCbz: MediaMeta = {
   publicDomain: true,
   sizeBytes: 2_500_000_000,
   tags: { publisher: "Marvel", era: "silver age" },
+  sourceNotes: "",
 };
 
 describe("renderHomeHtml", () => {
@@ -118,6 +121,7 @@ describe("renderHomeHtml", () => {
       publicDomain: true,
       sizeBytes: 512,
       tags: {},
+      sourceNotes: "",
     };
     const html = renderHomeHtml([tinyItem]);
 
@@ -132,6 +136,7 @@ describe("renderHomeHtml", () => {
       publicDomain: true,
       sizeBytes: 5_000,
       tags: {},
+      sourceNotes: "",
     };
     const html = renderHomeHtml([kbItem]);
 
@@ -167,6 +172,7 @@ describe("renderHomeHtml", () => {
       publicDomain: true,
       sizeBytes: 0,
       tags: {},
+      sourceNotes: "",
     };
     const html = renderHomeHtml([zeroSize]);
 
@@ -199,6 +205,7 @@ describe("renderHomeHtml", () => {
       publicDomain: true,
       sizeBytes: 100,
       tags: {},
+      sourceNotes: "",
     };
     const html = renderHomeHtml([xssItem]);
 

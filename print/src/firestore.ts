@@ -14,6 +14,7 @@ export interface MediaMeta {
   tags: Record<string, string>;
   publicDomain: boolean;
   sizeBytes: number;
+  sourceNotes: string;
 }
 
 export interface GetMediaResult {
@@ -28,6 +29,7 @@ function toMediaMeta(id: string, data: Record<string, unknown>): MediaMeta | nul
   const mediaType = typeof data.mediaType === "string" ? data.mediaType : "";
   const publicDomain = data.publicDomain === true;
   const sizeBytes = typeof data.sizeBytes === "number" ? data.sizeBytes : 0;
+  const sourceNotes = typeof data.sourceNotes === "string" ? data.sourceNotes : "";
   const tags =
     data.tags && typeof data.tags === "object" && !Array.isArray(data.tags)
       ? (data.tags as Record<string, string>)
@@ -45,6 +47,7 @@ function toMediaMeta(id: string, data: Record<string, unknown>): MediaMeta | nul
     tags,
     publicDomain,
     sizeBytes,
+    sourceNotes,
   };
 }
 

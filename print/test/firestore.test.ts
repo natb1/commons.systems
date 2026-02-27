@@ -39,6 +39,7 @@ const validEpub = {
     publicDomain: true,
     sizeBytes: 500_000,
     tags: { genre: "philosophy" },
+    sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/phaedrus",
   }),
 };
 
@@ -50,6 +51,7 @@ const validPdf = {
     publicDomain: true,
     sizeBytes: 1_200_000,
     tags: { genre: "philosophy", era: "classical" },
+    sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/republic",
   }),
 };
 
@@ -61,6 +63,7 @@ const validCbz = {
     publicDomain: false,
     sizeBytes: 25_000_000,
     tags: {},
+    sourceNotes: "Private GCS bucket: rml-media/print/comic-1.cbz",
   }),
 };
 
@@ -142,6 +145,7 @@ describe("getMedia", () => {
         publicDomain: true,
         sizeBytes: 500_000,
         tags: { genre: "philosophy" },
+        sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/phaedrus",
       },
     ]);
   });
@@ -367,6 +371,26 @@ describe("getMedia", () => {
 
     expect(items).toHaveLength(1);
     expect(items[0].tags).toEqual({});
+  });
+
+  it("defaults sourceNotes to empty string when missing", async () => {
+    vi.mocked(isAuthorized).mockReturnValue(true);
+    const noNotes = {
+      id: "no-notes",
+      data: () => ({
+        title: "No Notes",
+        mediaType: "epub",
+        publicDomain: true,
+        sizeBytes: 100,
+        tags: {},
+      }),
+    };
+    mockGetDocs.mockResolvedValue({ docs: [noNotes] });
+
+    const { items } = await getMedia(natb1User);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].sourceNotes).toBe("");
   });
 
   it("defaults tags to empty object when tags is an array", async () => {

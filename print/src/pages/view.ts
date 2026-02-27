@@ -25,6 +25,7 @@ export function renderView(item: MediaMeta | undefined): string {
         <tr><td>Media Type</td><td>${escapeHtml(item.mediaType)}</td></tr>
         <tr><td>Public Domain</td><td>${item.publicDomain ? "Yes" : "No"}</td></tr>
         <tr><td>Size</td><td>${item.sizeBytes} bytes</td></tr>
+        <tr><td>Source</td><td>${escapeHtml(item.sourceNotes)}</td></tr>
         ${tagsRows}
       </tbody>
     </table>

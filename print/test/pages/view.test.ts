@@ -9,6 +9,7 @@ const sampleItem: MediaMeta = {
   publicDomain: true,
   sizeBytes: 500_000,
   tags: { genre: "philosophy", era: "classical" },
+  sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/phaedrus",
 };
 
 const noTagsItem: MediaMeta = {
@@ -18,6 +19,7 @@ const noTagsItem: MediaMeta = {
   publicDomain: false,
   sizeBytes: 1_000,
   tags: {},
+  sourceNotes: "",
 };
 
 describe("renderView", () => {
@@ -113,6 +115,35 @@ describe("renderView", () => {
     expect(html).toContain('class="btn btn-download"');
   });
 
+  it("renders Source row in metadata table", () => {
+    const html = renderView(sampleItem);
+
+    expect(html).toContain("<td>Source</td>");
+    expect(html).toContain("Platonic Foundation: https://www.platonicfoundation.org/translation/phaedrus");
+  });
+
+  it("renders empty Source row when sourceNotes is empty", () => {
+    const html = renderView(noTagsItem);
+
+    expect(html).toContain("<td>Source</td><td></td>");
+  });
+
+  it("escapes HTML in sourceNotes", () => {
+    const xssSource: MediaMeta = {
+      id: "xss-source",
+      title: "Safe Title",
+      mediaType: "pdf",
+      publicDomain: true,
+      sizeBytes: 0,
+      tags: {},
+      sourceNotes: '<script>alert("xss")</script>',
+    };
+    const html = renderView(xssSource);
+
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
   it("escapes HTML in title", () => {
     const xssItem: MediaMeta = {
       id: "xss",
@@ -121,6 +152,7 @@ describe("renderView", () => {
       publicDomain: true,
       sizeBytes: 0,
       tags: {},
+      sourceNotes: "",
     };
     const html = renderView(xssItem);
 
@@ -136,6 +168,7 @@ describe("renderView", () => {
       publicDomain: true,
       sizeBytes: 0,
       tags: {},
+      sourceNotes: "",
     };
     const html = renderView(xssItem);
 
@@ -150,6 +183,7 @@ describe("renderView", () => {
       publicDomain: true,
       sizeBytes: 0,
       tags: { "<b>key</b>": "<i>value</i>" },
+      sourceNotes: "",
     };
     const html = renderView(xssItem);
 
