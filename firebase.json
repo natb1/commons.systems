@@ -8,9 +8,21 @@
         "**/.*",
         "**/node_modules/**"
       ]
+    },
+    {
+      "target": "print",
+      "public": "print/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ]
     }
   ],
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }

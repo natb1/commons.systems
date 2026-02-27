@@ -4,7 +4,7 @@
 export FIREBASE_PROJECT_ID="commons-systems"
 
 # Detect what Firebase features the app uses by searching source imports.
-# Sets global variables: USES_FIRESTORE, USES_AUTH
+# Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE
 # Args: $1 = path to app src/ directory
 detect_features() {
   local app_src_dir="$1"
@@ -22,6 +22,11 @@ detect_features() {
   USES_AUTH=false
   if grep -rq '"firebase/auth"' "$app_src_dir" 2>/dev/null; then
     USES_AUTH=true
+  fi
+
+  USES_STORAGE=false
+  if grep -rq '"firebase/storage"' "$app_src_dir" 2>/dev/null; then
+    USES_STORAGE=true
   fi
 }
 

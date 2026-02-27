@@ -8,6 +8,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Public domain media is public; private media requires authentication
+    match /print/{env}/media/{mediaId} {
+      allow read: if resource.data.publicDomain == true || request.auth != null;
+      allow write: if false;
+    }
+
     // Deny everything else by default (scaffolding uses this line as an insertion marker)
     // DO NOT EDIT the line above — the scaffolding's InsertFirestoreRules depends on it.
     match /{document=**} {
