@@ -33,8 +33,8 @@ test.describe("auth", () => {
     await expect(page.locator("#seed-data-notice")).toHaveCount(0);
     const rows = page.locator("#transactions-table .txn-row");
     await expect(rows).toHaveCount(2);
-    await expect(rows.nth(0)).toContainText("Grocery Store");
-    await expect(rows.nth(1)).toContainText("Hotel Stay");
+    await expect(rows.nth(0)).toContainText("Hotel Stay");
+    await expect(rows.nth(1)).toContainText("Grocery Store");
     // Verify inline edit inputs are present
     await expect(page.locator(".edit-note")).toHaveCount(2);
     await expect(page.locator(".edit-category")).toHaveCount(2);

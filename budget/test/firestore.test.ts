@@ -14,6 +14,7 @@ vi.mock("firebase/firestore", () => ({
   where: (...args: unknown[]) => mockWhere(...args),
   doc: (...args: unknown[]) => mockDoc(...args),
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
+  Timestamp: { fromDate: (d: Date) => ({ toDate: () => d, toMillis: () => d.getTime() }) },
 }));
 
 vi.mock("../src/firebase.js", () => ({
@@ -67,6 +68,7 @@ describe("getTransactions", () => {
 
   it("maps Firestore documents to Transaction objects", async () => {
     mockIsAuthorized.mockReturnValue(false);
+    const mockTimestamp = { toDate: () => new Date("2025-01-15"), toMillis: () => new Date("2025-01-15").getTime() };
     mockGetDocs.mockResolvedValue({
       docs: [
         {
@@ -80,6 +82,8 @@ describe("getTransactions", () => {
             category: "Food:Groceries",
             reimbursement: 0,
             budget: null,
+            timestamp: mockTimestamp,
+            statementId: "stmt-2025-01",
           }),
         },
       ],
@@ -98,6 +102,8 @@ describe("getTransactions", () => {
         category: "Food:Groceries",
         reimbursement: 0,
         budget: null,
+        timestamp: mockTimestamp,
+        statementId: "stmt-2025-01",
       },
     ]);
   });
@@ -117,6 +123,8 @@ describe("getTransactions", () => {
             category: "Food:Groceries",
             reimbursement: 0,
             budget: null,
+            timestamp: null,
+            statementId: null,
             uid: "user-123",
           }),
         },

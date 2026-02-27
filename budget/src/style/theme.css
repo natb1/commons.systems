@@ -5,7 +5,7 @@
 }
 
 .txn-header,
-.txn-summary {
+.txn-summary-content {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr auto;
   gap: 0.5rem;
@@ -61,11 +61,11 @@
   font-weight: bold;
 }
 
-.txn-summary .amount {
+.txn-summary-content .amount {
   text-align: right;
 }
 
-.txn-summary input {
+.txn-summary-content input {
   width: 100%;
   box-sizing: border-box;
 }

@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, query, updateDoc, where } from "firebase/firestore";
+import { collection, doc, getDocs, query, Timestamp, updateDoc, where } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
@@ -15,6 +15,8 @@ export interface Transaction {
   category: string;
   reimbursement: number;
   budget: string | null;
+  timestamp: Timestamp | null;
+  statementId: string | null;
   uid?: string;
 }
 
@@ -38,6 +40,8 @@ export async function getTransactions(user: User | null): Promise<Transaction[]>
       category: data.category as string,
       reimbursement: data.reimbursement as number,
       budget: (data.budget as string) ?? null,
+      timestamp: (data.timestamp as Timestamp) ?? null,
+      statementId: (data.statementId as string) ?? null,
       ...(data.uid ? { uid: data.uid as string } : {}),
     };
   });
