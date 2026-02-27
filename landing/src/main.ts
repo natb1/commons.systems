@@ -5,7 +5,7 @@ import { renderHomeHtml, hydrateHome } from "./pages/home.js";
 import { renderAdmin } from "./pages/admin.js";
 import { renderNav } from "./components/nav.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
-import { getPosts, type PostMeta, type GetPostsResult } from "./firestore.js";
+import { getPosts, type PostMeta } from "./firestore.js";
 
 const nav = document.getElementById("nav");
 const app = document.getElementById("app");
@@ -13,6 +13,10 @@ const app = document.getElementById("app");
 let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
 let lastSkippedCount = 0;
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return error instanceof Error && "code" in error && (error as { code: string }).code === code;
+}
 
 function handleClick(action: () => Promise<void>, label: string): (e: Event) => void {
   return function (e: Event): void {
@@ -37,17 +41,14 @@ function updateNav(): void {
 
 async function loadPosts(): Promise<string> {
   try {
-    const result: GetPostsResult = await getPosts(currentUser);
+    const result = await getPosts(currentUser);
     cachedPosts = result.posts;
     lastSkippedCount = result.skippedCount;
   } catch (error) {
     console.error("Failed to load posts:", error);
-    const msg =
-      error instanceof Error &&
-      "code" in error &&
-      (error as { code: string }).code === "permission-denied"
-        ? "Permission denied loading posts."
-        : "Could not load posts. Try refreshing the page.";
+    const msg = hasErrorCode(error, "permission-denied")
+      ? "Permission denied loading posts."
+      : "Could not load posts. Try refreshing the page.";
     return `
     <h2>Home</h2>
     <p id="posts-error">${msg}</p>

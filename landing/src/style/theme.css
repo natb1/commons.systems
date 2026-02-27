@@ -26,3 +26,9 @@
 .post-link:hover .link-icon {
   opacity: 1;
 }
+
+.cc-badge {
+  width: 117px;
+  height: 41px;
+  vertical-align: middle;
+}

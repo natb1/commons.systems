@@ -3,7 +3,7 @@ import { escapeHtml } from "../escape-html.js";
 import { fetchPost } from "../github.js";
 import type { PostMeta } from "../firestore.js";
 
-// Strip raw HTML tags from markdown to prevent XSS in user-authored posts.
+// Strip raw HTML tags from markdown so embedded HTML in post files does not render in the browser.
 marked.use({ renderer: { html: () => "" } });
 
 function formatDate(isoDate: string): string {

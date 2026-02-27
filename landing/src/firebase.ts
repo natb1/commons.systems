@@ -10,9 +10,12 @@ const emulatorHost = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST;
 if (emulatorHost) {
   const url = new URL(`http://${emulatorHost}`);
   const port = Number(url.port);
-  if (port > 0) {
-    connectFirestoreEmulator(db, url.hostname, port);
+  if (!(port > 0)) {
+    throw new Error(
+      `Invalid emulator port in VITE_FIRESTORE_EMULATOR_HOST: "${emulatorHost}"`,
+    );
   }
+  connectFirestoreEmulator(db, url.hostname, port);
 }
 
 const envNamespace = import.meta.env.VITE_FIRESTORE_NAMESPACE as string;

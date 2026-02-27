@@ -40,12 +40,18 @@ export async function getPosts(user: User | null): Promise<GetPostsResult> {
     ? query(collection(db, path), orderBy("publishedAt"))
     : query(collection(db, path), where("published", "==", true));
   const snapshot = await getDocs(q);
-  const mapped = snapshot.docs.map((d) => toPostMeta(d.id, d.data()));
-  const skippedCount = mapped.filter((p) => p === null).length;
-  const posts = mapped.filter((p): p is PostMeta => p !== null);
-  if (admin) return { posts, skippedCount };
-  return {
-    posts: posts.sort((a, b) => a.publishedAt!.localeCompare(b.publishedAt!)),
-    skippedCount,
-  };
+  const posts: PostMeta[] = [];
+  let skippedCount = 0;
+  for (const d of snapshot.docs) {
+    const post = toPostMeta(d.id, d.data());
+    if (post) {
+      posts.push(post);
+    } else {
+      skippedCount++;
+    }
+  }
+  if (!admin) {
+    posts.sort((a, b) => (a.publishedAt ?? "").localeCompare(b.publishedAt ?? ""));
+  }
+  return { posts, skippedCount };
 }
