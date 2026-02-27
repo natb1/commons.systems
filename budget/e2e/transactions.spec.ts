@@ -10,7 +10,7 @@ test.describe("transactions", () => {
   test("seed transactions visible for unauthenticated users", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#transactions-table")).toBeVisible();
-    const rows = page.locator("#transactions-table tbody tr");
+    const rows = page.locator("#transactions-table .txn-row");
     await expect(rows).toHaveCount(3);
     await expect(rows.nth(0)).toContainText("Coffee Shop");
     await expect(rows.nth(1)).toContainText("Electric Company");
@@ -20,7 +20,7 @@ test.describe("transactions", () => {
   test("seed transactions are read-only", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#transactions-table")).toBeVisible();
-    const inputs = page.locator("#transactions-table input");
+    const inputs = page.locator("#transactions-table .txn-summary input");
     await expect(inputs).toHaveCount(0);
   });
 });

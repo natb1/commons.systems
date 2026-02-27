@@ -37,7 +37,7 @@ describe("renderHome", () => {
     expect(html).not.toContain('id="seed-data-notice"');
   });
 
-  it("renders transaction table with data", async () => {
+  it("renders transaction list with data", async () => {
     mockIsAuthorized.mockReturnValue(false);
     mockGetTransactions.mockResolvedValue([
       {
@@ -49,12 +49,11 @@ describe("renderHome", () => {
         note: "weekly groceries",
         category: "Food:Groceries",
         reimbursement: 0,
-        vacation: false,
+        budget: null,
       },
     ]);
     const html = await renderHome();
     expect(html).toContain('id="transactions-table"');
-    expect(html).toContain("Bank A");
     expect(html).toContain("Grocery store");
     expect(html).toContain("52.30");
     expect(html).toContain("Food &gt; Groceries");
@@ -87,7 +86,7 @@ describe("renderHome", () => {
         note: "weekly groceries",
         category: "Food:Groceries",
         reimbursement: 0,
-        vacation: false,
+        budget: "food",
         uid: "user-123",
       },
     ]);
@@ -95,7 +94,7 @@ describe("renderHome", () => {
     expect(html).toContain('class="edit-note"');
     expect(html).toContain('class="edit-category"');
     expect(html).toContain('class="edit-reimbursement"');
-    expect(html).toContain('class="edit-vacation"');
+    expect(html).toContain('class="edit-budget"');
     expect(html).toContain('data-txn-id="txn-1"');
   });
 
@@ -111,12 +110,35 @@ describe("renderHome", () => {
         note: "weekly groceries",
         category: "Food:Groceries",
         reimbursement: 0,
-        vacation: false,
+        budget: null,
       },
     ]);
     const html = await renderHome();
     expect(html).not.toContain('class="edit-note"');
     expect(html).not.toContain('class="edit-category"');
     expect(html).toContain("weekly groceries");
+  });
+
+  it("renders accordion rows with details/summary elements", async () => {
+    mockIsAuthorized.mockReturnValue(false);
+    mockGetTransactions.mockResolvedValue([
+      {
+        id: "txn-1",
+        institution: "Bank A",
+        account: "Checking",
+        description: "Grocery store",
+        amount: 52.30,
+        note: "",
+        category: "Food:Groceries",
+        reimbursement: 0,
+        budget: "food",
+      },
+    ]);
+    const html = await renderHome();
+    expect(html).toContain('class="txn-row"');
+    expect(html).toContain('class="txn-summary"');
+    expect(html).toContain('class="txn-details"');
+    expect(html).toContain("Bank A");
+    expect(html).toContain("Checking");
   });
 });

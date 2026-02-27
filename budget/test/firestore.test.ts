@@ -79,7 +79,7 @@ describe("getTransactions", () => {
             note: "",
             category: "Food:Groceries",
             reimbursement: 0,
-            vacation: false,
+            budget: null,
           }),
         },
       ],
@@ -97,7 +97,7 @@ describe("getTransactions", () => {
         note: "",
         category: "Food:Groceries",
         reimbursement: 0,
-        vacation: false,
+        budget: null,
       },
     ]);
   });
@@ -116,7 +116,7 @@ describe("getTransactions", () => {
             note: "",
             category: "Food:Groceries",
             reimbursement: 0,
-            vacation: false,
+            budget: null,
             uid: "user-123",
           }),
         },
@@ -153,13 +153,13 @@ describe("updateTransaction", () => {
   it("passes multiple fields to updateDoc", async () => {
     await updateTransaction("txn-2", {
       category: "Food:Dining",
-      vacation: true,
+      budget: "food",
       reimbursement: 50,
     });
 
     expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", {
       category: "Food:Dining",
-      vacation: true,
+      budget: "food",
       reimbursement: 50,
     });
   });

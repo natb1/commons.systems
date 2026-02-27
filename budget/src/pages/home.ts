@@ -8,29 +8,41 @@ function formatCategory(category: string): string {
 }
 
 function renderReadOnlyRow(txn: Transaction): string {
-  return `<tr>
-    <td>${escapeHtml(txn.institution)}</td>
-    <td>${escapeHtml(txn.account)}</td>
-    <td>${escapeHtml(txn.description)}</td>
-    <td class="amount">${escapeHtml(txn.amount.toFixed(2))}</td>
-    <td>${escapeHtml(txn.note)}</td>
-    <td>${formatCategory(txn.category)}</td>
-    <td class="amount">${escapeHtml(txn.reimbursement.toString())}</td>
-    <td>${txn.vacation ? "Yes" : "No"}</td>
-  </tr>`;
+  return `<details class="txn-row">
+    <summary class="txn-summary">
+      <span>${escapeHtml(txn.description)}</span>
+      <span>${escapeHtml(txn.note)}</span>
+      <span>${formatCategory(txn.category)}</span>
+      <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
+    </summary>
+    <div class="txn-details">
+      <dl>
+        <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
+        <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
+        <dt>Reimbursement</dt><dd>${txn.reimbursement}%</dd>
+        <dt>Budget</dt><dd>${escapeHtml(txn.budget ?? "")}</dd>
+      </dl>
+    </div>
+  </details>`;
 }
 
 function renderEditableRow(txn: Transaction): string {
-  return `<tr data-txn-id="${escapeHtml(txn.id)}">
-    <td>${escapeHtml(txn.institution)}</td>
-    <td>${escapeHtml(txn.account)}</td>
-    <td>${escapeHtml(txn.description)}</td>
-    <td class="amount">${escapeHtml(txn.amount.toFixed(2))}</td>
-    <td><input type="text" class="edit-note" value="${escapeHtml(txn.note)}"></td>
-    <td><input type="text" class="edit-category" value="${escapeHtml(txn.category)}"></td>
-    <td><input type="number" class="edit-reimbursement" value="${txn.reimbursement}" min="0" max="100"></td>
-    <td><input type="checkbox" class="edit-vacation" ${txn.vacation ? "checked" : ""}></td>
-  </tr>`;
+  return `<details class="txn-row" data-txn-id="${escapeHtml(txn.id)}">
+    <summary class="txn-summary">
+      <span>${escapeHtml(txn.description)}</span>
+      <span><input type="text" class="edit-note" value="${escapeHtml(txn.note)}"></span>
+      <span><input type="text" class="edit-category" value="${escapeHtml(txn.category)}"></span>
+      <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
+    </summary>
+    <div class="txn-details">
+      <dl>
+        <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
+        <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
+        <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="${txn.reimbursement}" min="0" max="100"></dd>
+        <dt>Budget</dt><dd><input type="text" class="edit-budget" value="${escapeHtml(txn.budget ?? "")}"></dd>
+      </dl>
+    </div>
+  </details>`;
 }
 
 export async function renderHome(user?: User | null): Promise<string> {
@@ -46,23 +58,15 @@ export async function renderHome(user?: User | null): Promise<string> {
       const rows = transactions
         .map((txn) => authorized ? renderEditableRow(txn) : renderReadOnlyRow(txn))
         .join("\n");
-      tableHtml = `<table id="transactions-table">
-      <thead>
-        <tr>
-          <th>Institution</th>
-          <th>Account</th>
-          <th>Description</th>
-          <th>Amount</th>
-          <th>Note</th>
-          <th>Category</th>
-          <th>Reimbursement</th>
-          <th>Vacation</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows}
-      </tbody>
-    </table>`;
+      tableHtml = `<div id="transactions-table">
+      <div class="txn-header">
+        <span>Description</span>
+        <span>Note</span>
+        <span>Category</span>
+        <span class="amount">Amount</span>
+      </div>
+      ${rows}
+    </div>`;
     }
   } catch (error) {
     console.error("Failed to load transactions:", error);

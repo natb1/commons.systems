@@ -1,10 +1,18 @@
 import { updateTransaction } from "../firestore.js";
 
-export function hydrateTransactionTable(table: HTMLTableElement): void {
-  table.addEventListener("blur", async (e) => {
+export function hydrateTransactionTable(container: HTMLElement): void {
+  // Prevent accordion toggle when clicking inputs inside summary
+  container.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
-    const row = target.closest("tr");
-    const txnId = row?.dataset.txnId;
+    if (target.closest("summary") && target.closest("input")) {
+      e.preventDefault();
+    }
+  });
+
+  container.addEventListener("blur", async (e) => {
+    const target = e.target as HTMLElement;
+    const row = target.closest(".txn-row");
+    const txnId = (row as HTMLElement)?.dataset.txnId;
     if (!txnId) return;
 
     if (target.classList.contains("edit-note")) {
@@ -13,17 +21,9 @@ export function hydrateTransactionTable(table: HTMLTableElement): void {
       await updateTransaction(txnId, { category: (target as HTMLInputElement).value });
     } else if (target.classList.contains("edit-reimbursement")) {
       await updateTransaction(txnId, { reimbursement: Number((target as HTMLInputElement).value) });
+    } else if (target.classList.contains("edit-budget")) {
+      const value = (target as HTMLInputElement).value;
+      await updateTransaction(txnId, { budget: value || null });
     }
   }, true);
-
-  table.addEventListener("change", async (e) => {
-    const target = e.target as HTMLElement;
-    const row = target.closest("tr");
-    const txnId = row?.dataset.txnId;
-    if (!txnId) return;
-
-    if (target.classList.contains("edit-vacation")) {
-      await updateTransaction(txnId, { vacation: (target as HTMLInputElement).checked });
-    }
-  });
 }

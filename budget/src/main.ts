@@ -32,7 +32,7 @@ if (app) {
 
   // Hydrate transaction table when it appears in the DOM
   const observer = new MutationObserver(() => {
-    const table = app.querySelector("#transactions-table") as HTMLTableElement | null;
+    const table = app.querySelector("#transactions-table") as HTMLElement | null;
     if (table && !table.dataset.hydrated) {
       table.dataset.hydrated = "true";
       hydrateTransactionTable(table);

@@ -14,7 +14,7 @@ export interface Transaction {
   note: string;
   category: string;
   reimbursement: number;
-  vacation: boolean;
+  budget: string | null;
   uid?: string;
 }
 
@@ -37,7 +37,7 @@ export async function getTransactions(user: User | null): Promise<Transaction[]>
       note: data.note as string,
       category: data.category as string,
       reimbursement: data.reimbursement as number,
-      vacation: data.vacation as boolean,
+      budget: (data.budget as string) ?? null,
       ...(data.uid ? { uid: data.uid as string } : {}),
     };
   });
@@ -45,7 +45,7 @@ export async function getTransactions(user: User | null): Promise<Transaction[]>
 
 export async function updateTransaction(
   txnId: string,
-  fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "vacation">>,
+  fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget">>,
 ): Promise<void> {
   const path = nsCollectionPath(NAMESPACE, "transactions");
   const ref = doc(db, path, txnId);

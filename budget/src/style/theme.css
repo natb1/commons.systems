@@ -1,1 +1,72 @@
 @import "@commons-systems/style/default.css";
+
+#transactions-table {
+  overflow-wrap: break-word;
+}
+
+.txn-header,
+.txn-summary {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  align-items: center;
+}
+
+.txn-header {
+  font-weight: bold;
+  border-bottom: 2px solid var(--color-border, #ccc);
+}
+
+.txn-row {
+  border-bottom: 1px solid var(--color-border, #eee);
+}
+
+.txn-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.txn-summary::-webkit-details-marker {
+  display: none;
+}
+
+.txn-summary::before {
+  content: "▶";
+  font-size: 0.7em;
+  margin-right: 0.25rem;
+  transition: transform 0.15s;
+}
+
+.txn-row[open] > .txn-summary::before {
+  transform: rotate(90deg);
+}
+
+.txn-details {
+  padding: 0.5rem 1rem 1rem;
+}
+
+.txn-details dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+}
+
+.txn-details dt {
+  font-weight: bold;
+}
+
+.txn-summary .amount {
+  text-align: right;
+}
+
+.txn-summary input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.txn-details input {
+  width: 100%;
+  box-sizing: border-box;
+}

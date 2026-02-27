@@ -18,7 +18,7 @@ service cloud.firestore {
       allow update: if request.auth != null
         && request.auth.uid == resource.data.uid
         && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['note', 'category', 'reimbursement', 'vacation']);
+            .hasOnly(['note', 'category', 'reimbursement', 'budget']);
       allow create, delete: if false;
     }
 
