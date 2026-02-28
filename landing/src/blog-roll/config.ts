@@ -20,7 +20,7 @@ export function createStrategies(): Map<string, BlogRollStrategy> {
     "anthropic-engineering",
     new StaticStrategy({
       title: "Building a C compiler with a team of parallel Claudes",
-      url: "https://www.anthropic.com/engineering/building-a-c-compiler-with-parallel-claudes",
+      url: "https://www.anthropic.com/engineering/building-c-compiler",
       publishedAt: "2026-02-05",
     }),
   );
