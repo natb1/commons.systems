@@ -3,7 +3,11 @@ import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
 import { db, NAMESPACE } from "./firebase.js";
-import { isAuthorized } from "./is-authorized.js";
+
+export interface Group {
+  id: string;
+  name: string;
+}
 
 export interface Transaction {
   id: string;
@@ -17,15 +21,24 @@ export interface Transaction {
   budget: string | null;
   timestamp: Timestamp | null;
   statementId: string | null;
-  uid?: string;
+  groupId?: string;
+  groupName?: string;
 }
 
-export async function getTransactions(user: User | null): Promise<Transaction[]> {
-  const authorized = isAuthorized(user);
-  const collectionName = authorized ? "transactions" : "seed-transactions";
+export async function getUserGroup(user: User): Promise<Group | null> {
+  const path = nsCollectionPath(NAMESPACE, "groups");
+  const q = query(collection(db, path), where("members", "array-contains", user.uid));
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return null;
+  const d = snapshot.docs[0];
+  return { id: d.id, name: d.data().name as string };
+}
+
+export async function getTransactions(groupId: string | null): Promise<Transaction[]> {
+  const collectionName = groupId ? "transactions" : "seed-transactions";
   const path = nsCollectionPath(NAMESPACE, collectionName);
-  const q = authorized
-    ? query(collection(db, path), where("uid", "==", user!.uid))
+  const q = groupId
+    ? query(collection(db, path), where("groupId", "==", groupId))
     : query(collection(db, path));
   const snapshot = await getDocs(q);
   return snapshot.docs.map((d) => {
@@ -42,7 +55,8 @@ export async function getTransactions(user: User | null): Promise<Transaction[]>
       budget: (data.budget as string) ?? null,
       timestamp: (data.timestamp as Timestamp) ?? null,
       statementId: (data.statementId as string) ?? null,
-      ...(data.uid ? { uid: data.uid as string } : {}),
+      ...(data.groupId ? { groupId: data.groupId as string } : {}),
+      ...(data.groupName ? { groupName: data.groupName as string } : {}),
     };
   });
 }

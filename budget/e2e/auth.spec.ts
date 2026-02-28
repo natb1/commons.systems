@@ -76,6 +76,19 @@ test.describe("auth", () => {
     await expect(categoryInput).toHaveAttribute("list", "category-options");
   });
 
+  test("expanded details show group name for authorized user", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await signIn(page);
+    await expect(page.locator("#transactions-table")).toBeVisible();
+    // Open the first row
+    const firstRow = page.locator("#transactions-table .txn-row").first();
+    await firstRow.locator("summary").click();
+    // Verify group name is displayed
+    await expect(firstRow.locator(".txn-details")).toContainText("household");
+  });
+
   test("inline edit saves and persists", async ({ page }) => {
     await page.goto("/");
     await signIn(page);

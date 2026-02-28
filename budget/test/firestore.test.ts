@@ -22,14 +22,55 @@ vi.mock("../src/firebase.js", () => ({
   NAMESPACE: "app/test",
 }));
 
-vi.mock("../src/is-authorized.js", () => ({
-  isAuthorized: vi.fn(),
-}));
+import { getTransactions, getUserGroup, updateTransaction } from "../src/firestore";
 
-import { getTransactions, updateTransaction } from "../src/firestore";
-import { isAuthorized } from "../src/is-authorized";
+describe("getUserGroup", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+    mockQuery.mockReturnValue("mock-query");
+    mockWhere.mockReturnValue("mock-where");
+  });
 
-const mockIsAuthorized = vi.mocked(isAuthorized);
+  it("queries groups with array-contains on user uid", async () => {
+    mockGetDocs.mockResolvedValue({ empty: true, docs: [] });
+
+    const user = { uid: "user-123" } as import("firebase/auth").User;
+    await getUserGroup(user);
+
+    expect(mockCollection).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/groups",
+    );
+    expect(mockWhere).toHaveBeenCalledWith("members", "array-contains", "user-123");
+  });
+
+  it("returns Group when user is a member", async () => {
+    mockGetDocs.mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "household",
+          data: () => ({ name: "household", members: ["user-123"] }),
+        },
+      ],
+    });
+
+    const user = { uid: "user-123" } as import("firebase/auth").User;
+    const group = await getUserGroup(user);
+
+    expect(group).toEqual({ id: "household", name: "household" });
+  });
+
+  it("returns null when user is not a member of any group", async () => {
+    mockGetDocs.mockResolvedValue({ empty: true, docs: [] });
+
+    const user = { uid: "user-456" } as import("firebase/auth").User;
+    const group = await getUserGroup(user);
+
+    expect(group).toBeNull();
+  });
+});
 
 describe("getTransactions", () => {
   beforeEach(() => {
@@ -39,8 +80,7 @@ describe("getTransactions", () => {
     mockWhere.mockReturnValue("mock-where");
   });
 
-  it("queries seed-transactions for unauthorized users", async () => {
-    mockIsAuthorized.mockReturnValue(false);
+  it("queries seed-transactions when groupId is null", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
     await getTransactions(null);
@@ -52,22 +92,19 @@ describe("getTransactions", () => {
     expect(mockWhere).not.toHaveBeenCalled();
   });
 
-  it("queries transactions with uid filter for authorized users", async () => {
-    mockIsAuthorized.mockReturnValue(true);
+  it("queries transactions with groupId filter when groupId is provided", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    await getTransactions(user);
+    await getTransactions("household");
 
     expect(mockCollection).toHaveBeenCalledWith(
       { type: "mock-firestore" },
       "app/test/transactions",
     );
-    expect(mockWhere).toHaveBeenCalledWith("uid", "==", "user-123");
+    expect(mockWhere).toHaveBeenCalledWith("groupId", "==", "household");
   });
 
   it("maps Firestore documents to Transaction objects", async () => {
-    mockIsAuthorized.mockReturnValue(false);
     const mockTimestamp = { toDate: () => new Date("2025-01-15"), toMillis: () => new Date("2025-01-15").getTime() };
     mockGetDocs.mockResolvedValue({
       docs: [
@@ -108,8 +145,7 @@ describe("getTransactions", () => {
     ]);
   });
 
-  it("includes uid when present in document data", async () => {
-    mockIsAuthorized.mockReturnValue(true);
+  it("includes groupId and groupName when present in document data", async () => {
     mockGetDocs.mockResolvedValue({
       docs: [
         {
@@ -125,16 +161,17 @@ describe("getTransactions", () => {
             budget: null,
             timestamp: null,
             statementId: null,
-            uid: "user-123",
+            groupId: "household",
+            groupName: "household",
           }),
         },
       ],
     });
 
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    const transactions = await getTransactions(user);
+    const transactions = await getTransactions("household");
 
-    expect(transactions[0].uid).toBe("user-123");
+    expect(transactions[0].groupId).toBe("household");
+    expect(transactions[0].groupName).toBe("household");
   });
 });
 

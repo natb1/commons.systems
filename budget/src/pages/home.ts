@@ -1,8 +1,7 @@
 import type { User } from "firebase/auth";
 import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "../escape-html.js";
-import { isAuthorized } from "../is-authorized.js";
-import { getTransactions, type Transaction } from "../firestore.js";
+import { getUserGroup, getTransactions, type Transaction } from "../firestore.js";
 
 function formatTimestamp(ts: Timestamp | null): string {
   if (!ts) return "";
@@ -30,6 +29,7 @@ function renderReadOnlyRow(txn: Transaction): string {
         <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
         <dt>Reimbursement</dt><dd>${txn.reimbursement}%</dd>
         <dt>Budget</dt><dd>${escapeHtml(txn.budget ?? "")}</dd>
+        <dt>Group</dt><dd>${escapeHtml(txn.groupName ?? "")}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
       </dl>
     </div>
@@ -53,6 +53,7 @@ function renderEditableRow(txn: Transaction): string {
         <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
         <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="${txn.reimbursement}" min="0" max="100"></dd>
         <dt>Budget</dt><dd><input type="text" class="edit-budget" list="budget-options" value="${escapeHtml(txn.budget ?? "")}"></dd>
+        <dt>Group</dt><dd>${escapeHtml(txn.groupName ?? "")}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
       </dl>
     </div>
@@ -61,11 +62,12 @@ function renderEditableRow(txn: Transaction): string {
 
 export async function renderHome(user?: User | null): Promise<string> {
   const currentUser = user ?? null;
-  const authorized = isAuthorized(currentUser);
+  const group = currentUser ? await getUserGroup(currentUser) : null;
+  const authorized = group !== null;
 
   let tableHtml: string;
   try {
-    const transactions = await getTransactions(currentUser);
+    const transactions = await getTransactions(group?.id ?? null);
     transactions.sort((a, b) => {
       if (!a.timestamp && !b.timestamp) return 0;
       if (!a.timestamp) return 1;

@@ -3,6 +3,18 @@ import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
+      name: "groups",
+      documents: [
+        {
+          id: "household",
+          data: {
+            name: "household",
+            members: ["test-github-user"],
+          },
+        },
+      ],
+    },
+    {
       name: "seed-transactions",
       documents: [
         {
@@ -18,6 +30,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             budget: "food",
             timestamp: new Date("2025-01-15"),
             statementId: "stmt-2025-01",
+            groupId: "household",
+            groupName: "household",
           },
         },
         {
@@ -33,6 +47,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             budget: "housing",
             timestamp: new Date("2025-01-20"),
             statementId: "stmt-2025-01",
+            groupId: "household",
+            groupName: "household",
           },
         },
         {
@@ -48,6 +64,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             budget: "vacation",
             timestamp: new Date("2025-02-05"),
             statementId: "stmt-2025-02",
+            groupId: "household",
+            groupName: "household",
           },
         },
       ],
@@ -68,7 +86,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             budget: "food",
             timestamp: new Date("2025-02-10"),
             statementId: "stmt-2025-02",
-            uid: "test-github-user",
+            groupId: "household",
+            groupName: "household",
           },
         },
         {
@@ -84,7 +103,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             budget: null,
             timestamp: new Date("2025-02-15"),
             statementId: null,
-            uid: "test-github-user",
+            groupId: "household",
+            groupName: "household",
           },
         },
       ],
