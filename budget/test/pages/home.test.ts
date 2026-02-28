@@ -204,6 +204,104 @@ describe("renderHome", () => {
     expect(html).toContain("<dt>Statement</dt><dd></dd>");
   });
 
+  it("renders budget datalist with unique sorted options for authorized users", async () => {
+    mockIsAuthorized.mockReturnValue(true);
+    mockGetTransactions.mockResolvedValue([
+      {
+        id: "txn-1",
+        institution: "Bank A",
+        account: "Checking",
+        description: "Grocery store",
+        amount: 52.30,
+        note: "",
+        category: "Food",
+        reimbursement: 0,
+        budget: "food",
+        timestamp: mockTimestamp("2025-01-15"),
+        statementId: null,
+        uid: "user-123",
+      },
+      {
+        id: "txn-2",
+        institution: "Bank B",
+        account: "Savings",
+        description: "Hotel",
+        amount: 215,
+        note: "",
+        category: "Travel",
+        reimbursement: 0,
+        budget: "vacation",
+        timestamp: mockTimestamp("2025-02-01"),
+        statementId: null,
+        uid: "user-123",
+      },
+      {
+        id: "txn-3",
+        institution: "Bank A",
+        account: "Checking",
+        description: "Coffee",
+        amount: 5,
+        note: "",
+        category: "Food",
+        reimbursement: 0,
+        budget: "food",
+        timestamp: mockTimestamp("2025-01-20"),
+        statementId: null,
+        uid: "user-123",
+      },
+    ]);
+    const html = await renderHome();
+    expect(html).toContain('id="budget-options"');
+    expect(html).toContain('<option value="food">');
+    expect(html).toContain('<option value="vacation">');
+    // "food" appears only once despite two transactions having it
+    const foodCount = (html.match(/option value="food"/g) || []).length;
+    expect(foodCount).toBe(1);
+  });
+
+  it("budget input has list attribute linking to datalist", async () => {
+    mockIsAuthorized.mockReturnValue(true);
+    mockGetTransactions.mockResolvedValue([
+      {
+        id: "txn-1",
+        institution: "Bank A",
+        account: "Checking",
+        description: "Grocery store",
+        amount: 52.30,
+        note: "",
+        category: "Food",
+        reimbursement: 0,
+        budget: "food",
+        timestamp: mockTimestamp("2025-01-15"),
+        statementId: null,
+        uid: "user-123",
+      },
+    ]);
+    const html = await renderHome();
+    expect(html).toContain('list="budget-options"');
+  });
+
+  it("does not render budget datalist for unauthorized users", async () => {
+    mockIsAuthorized.mockReturnValue(false);
+    mockGetTransactions.mockResolvedValue([
+      {
+        id: "txn-1",
+        institution: "Bank A",
+        account: "Checking",
+        description: "Grocery store",
+        amount: 52.30,
+        note: "",
+        category: "Food",
+        reimbursement: 0,
+        budget: "food",
+        timestamp: mockTimestamp("2025-01-15"),
+        statementId: null,
+      },
+    ]);
+    const html = await renderHome();
+    expect(html).not.toContain('id="budget-options"');
+  });
+
   it("sorts transactions by timestamp descending with nulls last", async () => {
     mockIsAuthorized.mockReturnValue(false);
     mockGetTransactions.mockResolvedValue([

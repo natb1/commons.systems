@@ -42,6 +42,23 @@ test.describe("auth", () => {
     await expect(page.locator(".edit-budget")).toHaveCount(2);
   });
 
+  test("budget input has datalist with autocomplete options", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await signIn(page);
+    await expect(page.locator("#transactions-table")).toBeVisible();
+    // Datalist should exist with budget options
+    const datalist = page.locator("#budget-options");
+    await expect(datalist).toBeAttached();
+    const options = datalist.locator("option");
+    const count = await options.count();
+    expect(count).toBeGreaterThan(0);
+    // Budget input should reference the datalist
+    const budgetInput = page.locator(".edit-budget").first();
+    await expect(budgetInput).toHaveAttribute("list", "budget-options");
+  });
+
   test("inline edit saves and persists", async ({ page }) => {
     await page.goto("/");
     await signIn(page);

@@ -36,7 +36,7 @@ function renderReadOnlyRow(txn: Transaction): string {
   </details>`;
 }
 
-function renderEditableRow(txn: Transaction): string {
+function renderEditableRow(txn: Transaction, budgetOptions: string[]): string {
   return `<details class="txn-row" data-txn-id="${escapeHtml(txn.id)}">
     <summary class="txn-summary">
       <div class="txn-summary-content">
@@ -52,7 +52,7 @@ function renderEditableRow(txn: Transaction): string {
         <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
         <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
         <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="${txn.reimbursement}" min="0" max="100"></dd>
-        <dt>Budget</dt><dd><input type="text" class="edit-budget" value="${escapeHtml(txn.budget ?? "")}"></dd>
+        <dt>Budget</dt><dd><input type="text" class="edit-budget" list="budget-options" value="${escapeHtml(txn.budget ?? "")}"></dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
       </dl>
     </div>
@@ -75,9 +75,13 @@ export async function renderHome(user?: User | null): Promise<string> {
     if (transactions.length === 0) {
       tableHtml = "<p>No transactions found.</p>";
     } else {
+      const budgetOptions = [...new Set(transactions.map(t => t.budget).filter(Boolean))].sort() as string[];
       const rows = transactions
-        .map((txn) => authorized ? renderEditableRow(txn) : renderReadOnlyRow(txn))
+        .map((txn) => authorized ? renderEditableRow(txn, budgetOptions) : renderReadOnlyRow(txn))
         .join("\n");
+      const datalistHtml = authorized
+        ? `<datalist id="budget-options">${budgetOptions.map(b => `<option value="${escapeHtml(b)}">`).join("")}</datalist>`
+        : "";
       tableHtml = `<div id="transactions-table">
       <div class="txn-header">
         <span>Description</span>
@@ -86,6 +90,7 @@ export async function renderHome(user?: User | null): Promise<string> {
         <span class="amount">Amount</span>
       </div>
       ${rows}
+      ${datalistHtml}
     </div>`;
     }
   } catch (error) {
