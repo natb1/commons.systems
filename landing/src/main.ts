@@ -46,7 +46,7 @@ function updateInfoPanel(): void {
   }
   rssLink.href = rssBlobUrl;
 
-  const links = [{ label: "GitHub", url: "https://github.com/natb1/commons.systems" }];
+  const links = [{ label: "Source", url: "https://github.com/natb1/commons.systems" }];
   infoPanel.innerHTML = renderInfoPanel({
     links,
     topPosts: cachedPosts,

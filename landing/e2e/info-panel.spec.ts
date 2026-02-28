@@ -19,7 +19,7 @@ test.describe("info panel — desktop", () => {
     await expect(panel.locator("h3", { hasText: "Archive" })).toBeVisible();
   });
 
-  test("Links section contains GitHub link", async ({ page }, testInfo) => {
+  test("Links section contains Source link", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
@@ -27,7 +27,7 @@ test.describe("info panel — desktop", () => {
       '#info-panel a[href="https://github.com/natb1/commons.systems"]',
     );
     await expect(link).toBeVisible();
-    await expect(link).toHaveText("GitHub");
+    await expect(link).toHaveText("Source");
   });
 
   test("Top Posts section contains article links", async ({ page }, testInfo) => {

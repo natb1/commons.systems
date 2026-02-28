@@ -32,7 +32,7 @@ const mockPosts: PostMeta[] = [
 ];
 
 const mockLinks = [
-  { label: "GitHub", url: "https://github.com/natb1/commons.systems" },
+  { label: "Source", url: "https://github.com/natb1/commons.systems" },
 ];
 
 const mockBlogRoll: BlogRollEntry[] = [
@@ -61,7 +61,7 @@ describe("renderInfoPanel", () => {
     expect(html).toContain(
       'href="https://github.com/natb1/commons.systems"',
     );
-    expect(html).toContain("GitHub");
+    expect(html).toContain("Source");
   });
 
   it("top posts section contains links to published posts", () => {
