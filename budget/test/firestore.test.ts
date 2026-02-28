@@ -22,55 +22,7 @@ vi.mock("../src/firebase.js", () => ({
   NAMESPACE: "app/test",
 }));
 
-import { getTransactions, getUserGroup, getUserGroups, updateTransaction } from "../src/firestore";
-
-describe("getUserGroup", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockCollection.mockReturnValue("mock-collection-ref");
-    mockQuery.mockReturnValue("mock-query");
-    mockWhere.mockReturnValue("mock-where");
-  });
-
-  it("queries groups with array-contains on user uid", async () => {
-    mockGetDocs.mockResolvedValue({ empty: true, docs: [] });
-
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    await getUserGroup(user);
-
-    expect(mockCollection).toHaveBeenCalledWith(
-      { type: "mock-firestore" },
-      "app/test/groups",
-    );
-    expect(mockWhere).toHaveBeenCalledWith("members", "array-contains", "user-123");
-  });
-
-  it("returns Group when user is a member", async () => {
-    mockGetDocs.mockResolvedValue({
-      empty: false,
-      docs: [
-        {
-          id: "household",
-          data: () => ({ name: "household", members: ["user-123"] }),
-        },
-      ],
-    });
-
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    const group = await getUserGroup(user);
-
-    expect(group).toEqual({ id: "household", name: "household" });
-  });
-
-  it("returns null when user is not a member of any group", async () => {
-    mockGetDocs.mockResolvedValue({ empty: true, docs: [] });
-
-    const user = { uid: "user-456" } as import("firebase/auth").User;
-    const group = await getUserGroup(user);
-
-    expect(group).toBeNull();
-  });
-});
+import { getTransactions, getUserGroups, updateTransaction } from "../src/firestore";
 
 describe("getUserGroups", () => {
   beforeEach(() => {
@@ -204,7 +156,7 @@ describe("getTransactions", () => {
       ],
     });
 
-    const transactions = await getTransactions("household");
+    const transactions = await getTransactions("household", "user-123");
 
     expect(transactions[0].groupId).toBe("household");
   });

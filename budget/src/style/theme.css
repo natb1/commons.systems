@@ -98,6 +98,10 @@
   border-radius: 4px;
 }
 
+.nav-auth {
+  margin-left: auto;
+}
+
 .save-error {
   outline: 2px solid var(--color-error, #c00);
 }

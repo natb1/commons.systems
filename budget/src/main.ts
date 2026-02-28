@@ -7,6 +7,7 @@ import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js"
 import { getUserGroups, type Group } from "./firestore.js";
 
 const nav = document.getElementById("nav");
+if (!nav) console.error("Fatal: #nav element not found");
 const app = document.getElementById("app");
 
 let currentGroups: Group[] = [];
@@ -91,10 +92,6 @@ if (app) {
         console.error("Failed to fetch user groups:", error);
         currentGroups = [];
         currentGroupError = true;
-      }
-      // Default to first group if no valid group param
-      if (currentGroups.length > 0 && !selectedGroup()) {
-        setGroupParam(currentGroups[0].id);
       }
     } else {
       currentGroups = [];

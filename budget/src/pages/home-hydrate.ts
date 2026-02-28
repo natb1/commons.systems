@@ -27,6 +27,10 @@ function handleOutsideClick(e: Event): void {
   }
 }
 
+// Dismiss dropdown on scroll or outside click (one-time registration)
+window.addEventListener("scroll", removeDropdown, true);
+document.addEventListener("click", handleOutsideClick);
+
 function showDropdown(input: HTMLInputElement, options: string[]): void {
   removeDropdown();
   const value = input.value;
@@ -79,10 +83,6 @@ export function hydrateTransactionTable(container: HTMLElement): void {
   container.addEventListener("focus", handleAutocomplete, true);
   container.addEventListener("input", handleAutocomplete);
 
-  // Dismiss dropdown on scroll or outside click
-  window.addEventListener("scroll", removeDropdown, true);
-  document.addEventListener("click", handleOutsideClick);
-
   container.addEventListener("blur", async (e) => {
     const target = e.target as HTMLElement;
     removeDropdown();
@@ -102,7 +102,12 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         await updateTransaction(txnId, { category: input.value });
       } else if (input.classList.contains("edit-reimbursement")) {
         const reimbursement = Number(input.value);
-        if (!Number.isFinite(reimbursement)) return;
+        if (!Number.isFinite(reimbursement)) {
+          input.value = input.defaultValue;
+          input.classList.add("save-error");
+          setTimeout(() => input.classList.remove("save-error"), 2000);
+          return;
+        }
         await updateTransaction(txnId, { reimbursement });
       } else if (input.classList.contains("edit-budget")) {
         await updateTransaction(txnId, { budget: input.value || null });

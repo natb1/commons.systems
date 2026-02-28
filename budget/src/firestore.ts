@@ -35,15 +35,6 @@ function requireNumber(value: unknown, field: string): number {
   return value;
 }
 
-export async function getUserGroup(user: User): Promise<Group | null> {
-  const path = nsCollectionPath(NAMESPACE, "groups");
-  const q = query(collection(db, path), where("members", "array-contains", user.uid));
-  const snapshot = await getDocs(q);
-  if (snapshot.empty) return null;
-  const d = snapshot.docs[0];
-  return { id: d.id, name: requireString(d.data().name, "groups.name") };
-}
-
 export async function getUserGroups(user: User): Promise<Group[]> {
   const path = nsCollectionPath(NAMESPACE, "groups");
   const q = query(collection(db, path), where("members", "array-contains", user.uid));
@@ -54,6 +45,7 @@ export async function getUserGroups(user: User): Promise<Group[]> {
 }
 
 export async function getTransactions(groupId: string | null, uid?: string): Promise<Transaction[]> {
+  if (groupId && !uid) throw new Error("uid is required when querying by groupId");
   const collectionName = groupId ? "transactions" : "seed-transactions";
   const path = nsCollectionPath(NAMESPACE, collectionName);
   const q = groupId
@@ -72,7 +64,7 @@ export async function getTransactions(groupId: string | null, uid?: string): Pro
       category: requireString(data.category, "category"),
       reimbursement: requireNumber(data.reimbursement, "reimbursement"),
       budget: typeof data.budget === "string" ? data.budget : null,
-      timestamp: data.timestamp != null ? (data.timestamp as Timestamp) : null,
+      timestamp: data.timestamp != null && typeof (data.timestamp as Timestamp).toDate === "function" ? (data.timestamp as Timestamp) : null,
       statementId: typeof data.statementId === "string" ? data.statementId : null,
       ...(typeof data.groupId === "string" ? { groupId: data.groupId } : {}),
     };
@@ -84,7 +76,7 @@ export async function updateTransaction(
   fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget">>,
 ): Promise<void> {
   if (Object.keys(fields).length === 0) return;
-  if (fields.reimbursement !== undefined && (fields.reimbursement < 0 || fields.reimbursement > 100)) {
+  if (fields.reimbursement !== undefined && (!Number.isFinite(fields.reimbursement) || fields.reimbursement < 0 || fields.reimbursement > 100)) {
     throw new RangeError(`reimbursement must be between 0 and 100, got ${fields.reimbursement}`);
   }
   const path = nsCollectionPath(NAMESPACE, "transactions");

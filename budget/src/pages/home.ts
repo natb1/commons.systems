@@ -80,10 +80,12 @@ function renderTransactionTable(transactions: Transaction[], authorized: boolean
     .map((txn) => authorized ? renderEditableRow(txn, groupName) : renderReadOnlyRow(txn, groupName))
     .join("\n");
 
-  const dataAttrs = authorized
-    ? ` data-budget-options="${escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.budget))))}"` +
-      ` data-category-options="${escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))))}"`
-    : "";
+  let dataAttrs = "";
+  if (authorized) {
+    const budgetOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.budget))));
+    const categoryOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))));
+    dataAttrs = ` data-budget-options="${budgetOpts}" data-category-options="${categoryOpts}"`;
+  }
 
   return `<div id="transactions-table"${dataAttrs}>
       <div class="txn-header">

@@ -23,6 +23,6 @@ export function renderNav(user: User | null, groups: Group[] = [], selectedGroup
     <a href="#/">Home</a>
     <a href="#/about">About</a>
     ${groupSelect}
-    <span style="margin-left: auto">${auth}</span>
+    <span class="nav-auth">${auth}</span>
   `;
 }

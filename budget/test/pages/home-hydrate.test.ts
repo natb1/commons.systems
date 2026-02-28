@@ -101,16 +101,23 @@ describe("hydrateTransactionTable", () => {
     expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: null });
   });
 
-  it("rejects non-finite reimbursement values", async () => {
+  it("rejects non-finite reimbursement values and shows error", async () => {
     const container = createContainer("txn-1");
     hydrateTransactionTable(container);
     const input = container.querySelector(".edit-reimbursement") as HTMLInputElement;
-    // Number inputs sanitize invalid strings, so override value getter to simulate
+    // Number inputs sanitize invalid strings, so override value to simulate
     // a programmatic non-numeric value (defense-in-depth test)
-    Object.defineProperty(input, "value", { get: () => "abc", configurable: true });
+    let currentValue = "abc";
+    Object.defineProperty(input, "value", {
+      get: () => currentValue,
+      set: (v: string) => { currentValue = v; },
+      configurable: true,
+    });
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
     expect(mockUpdateTransaction).not.toHaveBeenCalled();
+    expect(currentValue).toBe("50"); // reverted to defaultValue
+    expect(input.classList.contains("save-error")).toBe(true);
   });
 
   it("skips save when value has not changed", async () => {
