@@ -47,7 +47,7 @@ describe("renderHomeHtml", () => {
   it("renders post titles as links in h2 elements", () => {
     const html = renderHomeHtml([publishedPost]);
     expect(html).toContain('class="post-link"');
-    expect(html).toContain("Hello World</a>");
+    expect(html).toContain("Hello World</span></a>");
     expect(html).toContain('href="#/post/hello-world"');
   });
 
@@ -136,6 +136,23 @@ describe("hydrateHome", () => {
     expect(outlet.innerHTML).toBe("<p>Navigated away</p>");
   });
 
+  it("strips h1 from markdown and updates h2 title", async () => {
+    outlet.innerHTML = renderHomeHtml([publishedPost]);
+    mockFetchPost.mockResolvedValue("# Markdown Title\nBody text here.");
+
+    hydrateHome(outlet, [publishedPost]);
+    await vi.waitFor(() => {
+      const content = outlet.querySelector("#post-content-hello-world");
+      expect(content?.innerHTML).not.toContain("Markdown Title");
+      expect(content?.innerHTML).toContain("Body text here.");
+    });
+
+    const titleSpan = outlet.querySelector(
+      "#post-hello-world h2 .post-title",
+    );
+    expect(titleSpan?.textContent).toBe("Markdown Title");
+  });
+
   it("scrolls to target article when scrollTo is provided", async () => {
     // Add a header so hydrateHome can measure its height
     const header = document.createElement("header");
@@ -147,17 +164,19 @@ describe("hydrateHome", () => {
 
     const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
 
-    hydrateHome(outlet, [publishedPost], "hello-world");
-    await vi.waitFor(() => {
-      expect(scrollSpy).toHaveBeenCalled();
-    });
+    try {
+      hydrateHome(outlet, [publishedPost], "hello-world");
+      await vi.waitFor(() => {
+        expect(scrollSpy).toHaveBeenCalled();
+      });
 
-    // Verify header height is subtracted from scroll position
-    const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
-    expect(call.top).toBeLessThanOrEqual(0); // getBoundingClientRect().top is 0 in happy-dom, so 0 + 0 - 60 - 16 = -76, clamped to 0
-    expect(call.behavior).toBe("smooth");
-
-    scrollSpy.mockRestore();
-    document.body.removeChild(header);
+      // getBoundingClientRect().top is 0 in happy-dom, so Math.max(0, 0 + 0 - 60 - 16) = 0
+      const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
+      expect(call.top).toBe(0);
+      expect(call.behavior).toBe("smooth");
+    } finally {
+      scrollSpy.mockRestore();
+      document.body.removeChild(header);
+    }
   });
 });
