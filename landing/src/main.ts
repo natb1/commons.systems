@@ -122,6 +122,11 @@ if (app) {
     { onNavigate: updateNav },
   );
 
+  function closePanel(): void {
+    infoPanel?.classList.remove("open");
+    document.getElementById("panel-toggle")?.setAttribute("aria-expanded", "false");
+  }
+
   document.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
 
@@ -134,15 +139,13 @@ if (app) {
       !target.closest("#info-panel") &&
       !target.closest("#panel-toggle")
     ) {
-      infoPanel.classList.remove("open");
-      document.getElementById("panel-toggle")?.setAttribute("aria-expanded", "false");
+      closePanel();
     }
   });
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && infoPanel?.classList.contains("open")) {
-      infoPanel.classList.remove("open");
-      document.getElementById("panel-toggle")?.setAttribute("aria-expanded", "false");
+      closePanel();
     }
   });
 

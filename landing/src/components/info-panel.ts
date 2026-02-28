@@ -14,10 +14,10 @@ function monthName(month: number): string {
   return new Date(2000, month).toLocaleString("en-US", { month: "long" });
 }
 
-function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string {
-  if (published.length === 0) return "";
-
-  const grouped = new Map<number, Map<number, typeof published>>();
+function groupByYearMonth(
+  published: PublishedPost[],
+): Map<number, Map<number, PublishedPost[]>> {
+  const grouped = new Map<number, Map<number, PublishedPost[]>>();
   for (const post of published) {
     const date = new Date(post.publishedAt);
     const year = date.getFullYear();
@@ -27,38 +27,55 @@ function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string 
     if (!months.has(month)) months.set(month, []);
     months.get(month)!.push(post);
   }
+  return grouped;
+}
 
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
-
-  const sortedYears = [...grouped.keys()].sort((a, b) => b - a);
-  const yearBlocks = sortedYears
-    .map((year) => {
-      const isCurrentYear = year === currentYear;
-      const months = grouped.get(year)!;
-      const sortedMonths = [...months.keys()].sort((a, b) => b - a);
-      const monthBlocks = sortedMonths
-        .map((month) => {
-          const monthPosts = months.get(month)!;
-          const isCurrentMonth = isCurrentYear && month === currentMonth;
-          const items = monthPosts
-            .map(
-              (p) =>
-                `<li><a href="#/post/${escapeHtml(p.id)}">${escapeHtml(p.title)}</a></li>`,
-            )
-            .join("");
-          return `<details${isCurrentMonth ? " open" : ""}>
+function renderMonthBlock(
+  month: number,
+  posts: PublishedPost[],
+  isOpen: boolean,
+): string {
+  const items = posts
+    .map(
+      (p) =>
+        `<li><a href="#/post/${escapeHtml(p.id)}">${escapeHtml(p.title)}</a></li>`,
+    )
+    .join("");
+  return `<details${isOpen ? " open" : ""}>
             <summary>${monthName(month)}</summary>
             <ul class="panel-list">${items}</ul>
           </details>`;
-        })
-        .join("");
-      return `<details${isCurrentYear ? " open" : ""}>
+}
+
+function renderYearBlock(
+  year: number,
+  months: Map<number, PublishedPost[]>,
+  currentYear: number,
+  currentMonth: number,
+): string {
+  const isCurrentYear = year === currentYear;
+  const sortedMonths = [...months.keys()].sort((a, b) => b - a);
+  const monthBlocks = sortedMonths
+    .map((month) =>
+      renderMonthBlock(month, months.get(month)!, isCurrentYear && month === currentMonth),
+    )
+    .join("");
+  return `<details${isCurrentYear ? " open" : ""}>
         <summary>${year}</summary>
         ${monthBlocks}
       </details>`;
-    })
+}
+
+function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string {
+  if (published.length === 0) return "";
+
+  const grouped = groupByYearMonth(published);
+  const now = new Date();
+  const sortedYears = [...grouped.keys()].sort((a, b) => b - a);
+  const yearBlocks = sortedYears
+    .map((year) =>
+      renderYearBlock(year, grouped.get(year)!, now.getFullYear(), now.getMonth()),
+    )
     .join("");
 
   const rssIcon = rssFeedUrl
@@ -127,16 +144,20 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export function hydrateInfoPanel(
-  panel: HTMLElement,
+interface FetchResult {
+  entry: BlogRollEntry;
+  post: LatestPost | null;
+}
+
+function fetchAllLatestPosts(
   blogRoll: BlogRollEntry[],
   strategies: Map<string, BlogRollStrategy>,
-): void {
-  const fetches = blogRoll.map((entry) => {
+): Promise<FetchResult>[] {
+  return blogRoll.map((entry) => {
     const strategy = strategies.get(entry.id);
     if (!strategy) {
       console.warn(`No strategy found for blog roll entry "${entry.id}"`);
-      return Promise.resolve({ entry, post: null as LatestPost | null });
+      return Promise.resolve({ entry, post: null });
     }
 
     return strategy
@@ -144,43 +165,56 @@ export function hydrateInfoPanel(
       .then((post) => ({ entry, post }))
       .catch((err) => {
         console.error(`Failed to fetch latest post for "${entry.id}":`, err);
-        return { entry, post: null as LatestPost | null };
+        return { entry, post: null };
       });
   });
+}
 
-  Promise.all(fetches).then((results) => {
-    for (const { entry, post } of results) {
-      const entryLink = panel.querySelector(`#blogroll-entry-${CSS.escape(entry.id)}`);
-      const placeholder = panel.querySelector(`#blogroll-latest-${CSS.escape(entry.id)}`);
-      const dateSpan = panel.querySelector(`#blogroll-date-${CSS.escape(entry.id)}`);
-      if (!entryLink || !placeholder) continue;
+function updateBlogrollEntry(panel: HTMLElement, entry: BlogRollEntry, post: LatestPost): void {
+  const entryLink = panel.querySelector(`#blogroll-entry-${CSS.escape(entry.id)}`);
+  const placeholder = panel.querySelector(`#blogroll-latest-${CSS.escape(entry.id)}`);
+  const dateSpan = panel.querySelector(`#blogroll-date-${CSS.escape(entry.id)}`);
+  if (!entryLink || !placeholder) return;
 
-      if (post) {
-        placeholder.textContent = post.title;
-        entryLink.setAttribute("href", post.url);
-        if (dateSpan && post.publishedAt) {
-          dateSpan.textContent = formatDate(post.publishedAt);
-          dateSpan.setAttribute("data-iso", post.publishedAt);
-        }
+  placeholder.textContent = post.title;
+  entryLink.setAttribute("href", post.url);
+  if (dateSpan && post.publishedAt) {
+    dateSpan.textContent = formatDate(post.publishedAt);
+    dateSpan.setAttribute("data-iso", post.publishedAt);
+  }
+}
+
+function sortBlogrollByDate(panel: HTMLElement): void {
+  const firstItem = panel.querySelector("li[data-blogroll-id]");
+  const blogrollList = firstItem?.parentElement;
+  if (!blogrollList) return;
+
+  const items = [...blogrollList.querySelectorAll("li[data-blogroll-id]")];
+  items.sort((a, b) => {
+    const dateA = a.querySelector(".blogroll-date")?.getAttribute("data-iso") || "";
+    const dateB = b.querySelector(".blogroll-date")?.getAttribute("data-iso") || "";
+    if (!dateA && !dateB) return 0;
+    if (!dateA) return 1;
+    if (!dateB) return -1;
+    return dateB.localeCompare(dateA);
+  });
+
+  for (const item of items) {
+    blogrollList.appendChild(item);
+  }
+}
+
+export function hydrateInfoPanel(
+  panel: HTMLElement,
+  blogRoll: BlogRollEntry[],
+  strategies: Map<string, BlogRollStrategy>,
+): void {
+  Promise.all(fetchAllLatestPosts(blogRoll, strategies))
+    .then((results) => {
+      for (const { entry, post } of results) {
+        if (post) updateBlogrollEntry(panel, entry, post);
       }
-    }
-
-    const firstItem = panel.querySelector("li[data-blogroll-id]");
-    const blogrollList = firstItem?.parentElement;
-    if (!blogrollList) return;
-
-    const items = [...blogrollList.querySelectorAll("li[data-blogroll-id]")];
-    items.sort((a, b) => {
-      const dateA = a.querySelector(".blogroll-date")?.getAttribute("data-iso") || "";
-      const dateB = b.querySelector(".blogroll-date")?.getAttribute("data-iso") || "";
-      if (!dateA && !dateB) return 0;
-      if (!dateA) return 1;
-      if (!dateB) return -1;
-      return dateB.localeCompare(dateA);
-    });
-
-    for (const item of items) {
-      blogrollList.appendChild(item);
-    }
-  }).catch((err) => console.error("Failed to hydrate blogroll:", err));
+      sortBlogrollByDate(panel);
+    })
+    .catch((err) => console.error("Failed to hydrate blogroll:", err));
 }

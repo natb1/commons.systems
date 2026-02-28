@@ -120,21 +120,18 @@ main {
   text-decoration: none;
 }
 
-.blogroll-name {
-  color: var(--accent);
-  font-size: 0.85rem;
+.blogroll-latest,
+.blogroll-date {
+  display: block;
+  color: var(--muted);
 }
 
 .blogroll-latest {
   font-size: 0.75rem;
-  color: var(--muted);
-  display: block;
 }
 
 .blogroll-date {
   font-size: 0.65rem;
-  color: var(--muted);
-  display: block;
   opacity: 0.7;
 }
 
