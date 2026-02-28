@@ -53,13 +53,17 @@ jobs:
           set -o pipefail
           OUTPUT=$(.claude/skills/ref-pr-workflow/scripts/run-preview-deploy.sh budget "pr-${{ github.event.pull_request.number }}" | tee /dev/stderr)
           PREVIEW_URL=$(echo "$OUTPUT" | grep '^PREVIEW_URL=' | cut -d= -f2-)
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "::error::PREVIEW_URL not found in deploy output"
+            exit 1
+          fi
           echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
       - name: Comment preview URL on PR
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} \
+          gh pr comment "${{ github.event.pull_request.number }}" \
             --repo ${{ github.repository }} \
             --body "Preview deployed: ${{ steps.deploy.outputs.preview_url }}"
       - name: Cleanup credentials

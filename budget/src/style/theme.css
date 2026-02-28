@@ -15,12 +15,12 @@
 
 .txn-header {
   font-weight: bold;
-  border-bottom: 2px solid var(--color-border, #ccc);
+  border-bottom: 2px solid var(--border);
   padding-left: 1.5rem;
 }
 
 .txn-row {
-  border-bottom: 1px solid var(--color-border, #eee);
+  border-bottom: 1px solid var(--border);
 }
 
 .txn-summary {
@@ -103,11 +103,11 @@
 }
 
 .save-error {
-  outline: 2px solid var(--color-error, #c00);
+  outline: 2px solid var(--error, #c00);
 }
 
 .auth-error {
-  background: var(--color-error, #c00);
+  background: var(--error, #c00);
   color: white;
   padding: 0.5rem 1rem;
   text-align: center;

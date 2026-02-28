@@ -7,25 +7,28 @@ import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js"
 import { getUserGroups, type Group } from "./firestore.js";
 
 const nav = document.getElementById("nav");
-if (!nav) console.error("Fatal: #nav element not found");
+if (!nav) throw new Error("#nav element not found");
 const app = document.getElementById("app");
+if (!app) throw new Error("#app element not found");
 
 let currentGroups: Group[] = [];
 let currentUser: User | null = null;
 let currentGroupError = false;
 
-function getGroupParam(): string | null {
+function parseHash(): { path: string; params: URLSearchParams } {
   const hash = location.hash.slice(1) || "/";
   const qIndex = hash.indexOf("?");
-  if (qIndex === -1) return null;
-  const params = new URLSearchParams(hash.slice(qIndex + 1));
-  return params.get("group");
+  return qIndex === -1
+    ? { path: hash, params: new URLSearchParams() }
+    : { path: hash.slice(0, qIndex), params: new URLSearchParams(hash.slice(qIndex + 1)) };
+}
+
+function getGroupParam(): string | null {
+  return parseHash().params.get("group");
 }
 
 function setGroupParam(groupId: string): void {
-  const hash = location.hash.slice(1) || "/";
-  const qIndex = hash.indexOf("?");
-  const path = qIndex === -1 ? hash : hash.slice(0, qIndex);
+  const { path } = parseHash();
   location.hash = `${path}?group=${encodeURIComponent(groupId)}`;
 }
 
@@ -36,7 +39,6 @@ function selectedGroup(): Group | null {
 }
 
 function updateNav(user: User | null): void {
-  if (!nav) return;
   const group = selectedGroup();
   nav.innerHTML = renderNav(user, currentGroups, group?.id ?? null);
   document.getElementById("sign-in")?.addEventListener("click", (e) => {
@@ -56,47 +58,47 @@ function updateNav(user: User | null): void {
 // Render nav immediately with unauthenticated state
 updateNav(null);
 
-if (app) {
-  const navigate = createRouter(app, [
-    {
-      path: "/",
-      render: () => {
-        const group = selectedGroup();
-        return renderHome({
-          user: currentUser,
-          group,
-          groupError: currentGroupError,
-        });
-      },
+const navigate = createRouter(app, [
+  {
+    path: "/",
+    render: () => {
+      const group = selectedGroup();
+      return renderHome({
+        user: currentUser,
+        group,
+        groupError: currentGroupError,
+      });
     },
-    { path: "/about", render: renderAbout },
-  ]);
+  },
+  { path: "/about", render: renderAbout },
+]);
 
-  // Hydrate transaction table when it appears in the DOM
-  const observer = new MutationObserver(() => {
-    const table = app.querySelector("#transactions-table") as HTMLElement | null;
-    if (table && !table.dataset.hydrated) {
-      table.dataset.hydrated = "true";
-      hydrateTransactionTable(table);
-    }
-  });
-  observer.observe(app, { childList: true, subtree: true });
+// The router sets innerHTML asynchronously, so we watch for the table
+// to appear rather than hydrating inline after render.
+const observer = new MutationObserver(() => {
+  const table = app.querySelector("#transactions-table") as HTMLElement | null;
+  if (table && !table.dataset.hydrated) {
+    table.dataset.hydrated = "true";
+    observer.disconnect();
+    hydrateTransactionTable(table);
+  }
+});
+observer.observe(app, { childList: true, subtree: true });
 
-  onAuthStateChanged(auth, async (user) => {
-    currentUser = user;
-    currentGroupError = false;
-    if (user) {
-      try {
-        currentGroups = await getUserGroups(user);
-      } catch (error) {
-        console.error("Failed to fetch user groups:", error);
-        currentGroups = [];
-        currentGroupError = true;
-      }
-    } else {
+onAuthStateChanged(auth, async (user) => {
+  currentUser = user;
+  currentGroupError = false;
+  if (user) {
+    try {
+      currentGroups = await getUserGroups(user);
+    } catch (error) {
+      console.error("Failed to fetch user groups:", error);
       currentGroups = [];
+      currentGroupError = true;
     }
-    updateNav(user);
-    navigate();
-  });
-}
+  } else {
+    currentGroups = [];
+  }
+  updateNav(user);
+  navigate();
+});

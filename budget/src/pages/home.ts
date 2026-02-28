@@ -76,8 +76,9 @@ function renderTransactionTable(transactions: Transaction[], authorized: boolean
     return "<p>No transactions found.</p>";
   }
 
+  const renderRow = authorized ? renderEditableRow : renderReadOnlyRow;
   const rows = transactions
-    .map((txn) => authorized ? renderEditableRow(txn, groupName) : renderReadOnlyRow(txn, groupName))
+    .map((txn) => renderRow(txn, groupName))
     .join("\n");
 
   let dataAttrs = "";
@@ -115,6 +116,9 @@ export async function renderHome(options: RenderHomeOptions = {}): Promise<strin
     transactions.sort(compareByTimestampDesc);
     tableHtml = renderTransactionTable(transactions, authorized, groupName);
   } catch (error) {
+    if (error instanceof RangeError || (error instanceof Error && error.message.includes("uid is required"))) {
+      throw error;
+    }
     console.error("Failed to load transactions:", error);
     tableHtml = '<p id="transactions-error">Could not load transactions</p>';
   }

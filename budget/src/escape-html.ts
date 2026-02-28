@@ -1,3 +1,4 @@
+// TODO: consolidate into shared @commons-systems/htmlutil package
 export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")

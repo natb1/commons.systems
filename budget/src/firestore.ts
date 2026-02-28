@@ -44,6 +44,10 @@ export async function getUserGroups(user: User): Promise<Group[]> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function asTimestamp(value: unknown): Timestamp | null {
+  return value != null && typeof (value as Timestamp).toDate === "function" ? (value as Timestamp) : null;
+}
+
 export async function getTransactions(groupId: string | null, uid?: string): Promise<Transaction[]> {
   if (groupId && !uid) throw new Error("uid is required when querying by groupId");
   const collectionName = groupId ? "transactions" : "seed-transactions";
@@ -64,9 +68,9 @@ export async function getTransactions(groupId: string | null, uid?: string): Pro
       category: requireString(data.category, "category"),
       reimbursement: requireNumber(data.reimbursement, "reimbursement"),
       budget: typeof data.budget === "string" ? data.budget : null,
-      timestamp: data.timestamp != null && typeof (data.timestamp as Timestamp).toDate === "function" ? (data.timestamp as Timestamp) : null,
+      timestamp: asTimestamp(data.timestamp),
       statementId: typeof data.statementId === "string" ? data.statementId : null,
-      ...(typeof data.groupId === "string" ? { groupId: data.groupId } : {}),
+      groupId: typeof data.groupId === "string" ? data.groupId : undefined,
     };
   });
 }

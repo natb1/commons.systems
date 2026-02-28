@@ -27,9 +27,13 @@ function handleOutsideClick(e: Event): void {
   }
 }
 
-// Dismiss dropdown on scroll or outside click (one-time registration)
-window.addEventListener("scroll", removeDropdown, true);
-document.addEventListener("click", handleOutsideClick);
+let listenersRegistered = false;
+
+function showInputError(input: HTMLInputElement): void {
+  input.value = input.defaultValue;
+  input.classList.add("save-error");
+  setTimeout(() => input.classList.remove("save-error"), 2000);
+}
 
 function showDropdown(input: HTMLInputElement, options: string[]): void {
   removeDropdown();
@@ -64,6 +68,12 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
 }
 
 export function hydrateTransactionTable(container: HTMLElement): void {
+  if (!listenersRegistered) {
+    listenersRegistered = true;
+    window.addEventListener("scroll", removeDropdown, true);
+    document.addEventListener("click", handleOutsideClick);
+  }
+
   // Prevent accordion toggle when clicking inputs inside summary
   container.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
@@ -103,9 +113,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       } else if (input.classList.contains("edit-reimbursement")) {
         const reimbursement = Number(input.value);
         if (!Number.isFinite(reimbursement)) {
-          input.value = input.defaultValue;
-          input.classList.add("save-error");
-          setTimeout(() => input.classList.remove("save-error"), 2000);
+          showInputError(input);
           return;
         }
         await updateTransaction(txnId, { reimbursement });
@@ -117,9 +125,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       input.defaultValue = input.value;
     } catch (error) {
       console.error("Failed to save transaction:", error);
-      input.value = input.defaultValue;
-      input.classList.add("save-error");
-      setTimeout(() => input.classList.remove("save-error"), 2000);
+      showInputError(input);
     }
   }, true);
 }

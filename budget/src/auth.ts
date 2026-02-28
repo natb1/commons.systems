@@ -42,7 +42,6 @@ export function signIn(): void {
   signInWithRedirect(auth, provider).catch((error) => {
     console.error("Sign-in redirect failed:", error);
     showAuthError("Sign-in failed. Please try again.");
-    throw error;
   });
 }
 

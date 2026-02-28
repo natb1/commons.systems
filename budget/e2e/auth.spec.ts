@@ -35,7 +35,6 @@ test.describe("auth", () => {
     await expect(rows).toHaveCount(2);
     await expect(rows.nth(0)).toContainText("Hotel Stay");
     await expect(rows.nth(1)).toContainText("Grocery Store");
-    // Verify inline edit inputs are present
     await expect(page.locator(".edit-note")).toHaveCount(2);
     await expect(page.locator(".edit-category")).toHaveCount(2);
     await expect(page.locator(".edit-reimbursement")).toHaveCount(2);
@@ -54,7 +53,6 @@ test.describe("auth", () => {
     await expect(firstRow.locator(".txn-details")).toBeVisible();
     const budgetInput = firstRow.locator(".edit-budget");
     await budgetInput.click();
-    // Custom autocomplete dropdown should appear
     await expect(page.locator(".autocomplete-dropdown")).toBeVisible();
     const items = page.locator(".autocomplete-item");
     const count = await items.count();
@@ -69,7 +67,6 @@ test.describe("auth", () => {
     await expect(page.locator("#transactions-table")).toBeVisible();
     const categoryInput = page.locator(".edit-category").first();
     await categoryInput.click();
-    // Custom autocomplete dropdown should appear
     await expect(page.locator(".autocomplete-dropdown")).toBeVisible();
     const items = page.locator(".autocomplete-item");
     const count = await items.count();
@@ -86,7 +83,6 @@ test.describe("auth", () => {
     const firstRow = page.locator("#transactions-table .txn-row").first();
     await firstRow.locator(".txn-summary-content span").first().click();
     await expect(firstRow.locator(".txn-details")).toBeVisible();
-    // Verify group name is displayed
     await expect(firstRow.locator(".txn-details")).toContainText("household");
   });
 

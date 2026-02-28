@@ -70,6 +70,11 @@ describe("renderHome", () => {
     expect(html).toContain('id="transactions-error"');
   });
 
+  it("re-throws RangeError instead of showing fallback", async () => {
+    mockGetTransactions.mockRejectedValue(new RangeError("reimbursement must be between 0 and 100"));
+    await expect(renderHome()).rejects.toThrow(RangeError);
+  });
+
   it("shows group error when groupError is true for signed-in user", async () => {
     mockGetTransactions.mockResolvedValue([]);
     const html = await renderHome({ user: mockUser, groupError: true });
