@@ -36,13 +36,13 @@ function renderReadOnlyRow(txn: Transaction): string {
   </details>`;
 }
 
-function renderEditableRow(txn: Transaction, budgetOptions: string[]): string {
+function renderEditableRow(txn: Transaction): string {
   return `<details class="txn-row" data-txn-id="${escapeHtml(txn.id)}">
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(txn.description)}</span>
         <span><input type="text" class="edit-note" value="${escapeHtml(txn.note)}"></span>
-        <span><input type="text" class="edit-category" value="${escapeHtml(txn.category)}"></span>
+        <span><input type="text" class="edit-category" list="category-options" value="${escapeHtml(txn.category)}"></span>
         <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
       </div>
     </summary>
@@ -76,11 +76,13 @@ export async function renderHome(user?: User | null): Promise<string> {
       tableHtml = "<p>No transactions found.</p>";
     } else {
       const budgetOptions = [...new Set(transactions.map(t => t.budget).filter(Boolean))].sort() as string[];
+      const categoryOptions = [...new Set(transactions.map(t => t.category).filter(Boolean))].sort() as string[];
       const rows = transactions
-        .map((txn) => authorized ? renderEditableRow(txn, budgetOptions) : renderReadOnlyRow(txn))
+        .map((txn) => authorized ? renderEditableRow(txn) : renderReadOnlyRow(txn))
         .join("\n");
       const datalistHtml = authorized
-        ? `<datalist id="budget-options">${budgetOptions.map(b => `<option value="${escapeHtml(b)}">`).join("")}</datalist>`
+        ? `<datalist id="budget-options">${budgetOptions.map(b => `<option value="${escapeHtml(b)}">`).join("")}</datalist>` +
+          `<datalist id="category-options">${categoryOptions.map(c => `<option value="${escapeHtml(c)}">`).join("")}</datalist>`
         : "";
       tableHtml = `<div id="transactions-table">
       <div class="txn-header">

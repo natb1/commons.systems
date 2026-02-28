@@ -9,6 +9,14 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     }
   });
 
+  // Show datalist dropdown on focus for inputs with a list attribute
+  container.addEventListener("focus", (e) => {
+    const target = e.target as HTMLInputElement;
+    if (target.tagName === "INPUT" && target.list && typeof target.showPicker === "function") {
+      target.showPicker();
+    }
+  }, true);
+
   container.addEventListener("blur", async (e) => {
     const target = e.target as HTMLElement;
     const row = target.closest(".txn-row");
