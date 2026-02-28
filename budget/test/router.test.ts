@@ -103,6 +103,14 @@ describe("createRouter", () => {
     });
   });
 
+  it("strips query params for route matching", async () => {
+    location.hash = "#/about?group=household";
+    createRouter(outlet, routes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>About</h2>");
+    });
+  });
+
   it("returns a refresh function that re-renders the current route", async () => {
     let count = 0;
     const dynamicRoutes: Route[] = [

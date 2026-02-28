@@ -90,6 +90,14 @@
   background: var(--border);
 }
 
+#group-select {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
 .save-error {
   outline: 2px solid var(--color-error, #c00);
 }

@@ -6,45 +6,41 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("../../src/firestore.js", () => ({
   getTransactions: vi.fn(),
-  getUserGroup: vi.fn(),
 }));
 
 import { renderHome } from "../../src/pages/home";
-import { getTransactions, getUserGroup } from "../../src/firestore";
+import { getTransactions } from "../../src/firestore";
 
 const mockGetTransactions = vi.mocked(getTransactions);
-const mockGetUserGroup = vi.mocked(getUserGroup);
 
 function mockTimestamp(dateStr: string) {
   const d = new Date(dateStr);
   return { toDate: () => d, toMillis: () => d.getTime() } as import("firebase/firestore").Timestamp;
 }
 
+const mockUser = { uid: "user-123" } as import("firebase/auth").User;
+const mockGroup = { id: "household", name: "household" };
+
 describe("renderHome", () => {
   it("returns HTML containing a Transactions heading", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockResolvedValue([]);
     const html = await renderHome();
     expect(html).toContain("<h2>Transactions</h2>");
   });
 
   it("shows seed data notice for unauthorized users", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockResolvedValue([]);
     const html = await renderHome();
     expect(html).toContain('id="seed-data-notice"');
   });
 
   it("does not show seed data notice for authorized users", async () => {
-    mockGetUserGroup.mockResolvedValue({ id: "household", name: "household" });
     mockGetTransactions.mockResolvedValue([]);
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    const html = await renderHome(user);
+    const html = await renderHome({ user: mockUser, group: mockGroup });
     expect(html).not.toContain('id="seed-data-notice"');
   });
 
   it("renders transaction list with data", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockResolvedValue([
       {
         id: "txn-1",
@@ -68,22 +64,27 @@ describe("renderHome", () => {
   });
 
   it("renders error fallback when Firestore fails", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockRejectedValue(new Error("connection failed"));
     const html = await renderHome();
     expect(html).toContain("Could not load transactions");
     expect(html).toContain('id="transactions-error"');
   });
 
+  it("shows group error when groupError is true for signed-in user", async () => {
+    mockGetTransactions.mockResolvedValue([]);
+    const html = await renderHome({ user: mockUser, groupError: true });
+    expect(html).toContain('id="group-error"');
+    expect(html).toContain("Could not verify group membership");
+    expect(html).not.toContain('id="seed-data-notice"');
+  });
+
   it("renders empty state when no transactions", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockResolvedValue([]);
     const html = await renderHome();
     expect(html).toContain("No transactions found.");
   });
 
   it("renders inline edit inputs for authorized users", async () => {
-    mockGetUserGroup.mockResolvedValue({ id: "household", name: "household" });
     mockGetTransactions.mockResolvedValue([
       {
         id: "txn-1",
@@ -100,8 +101,7 @@ describe("renderHome", () => {
         groupId: "household",
       },
     ]);
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    const html = await renderHome(user);
+    const html = await renderHome({ user: mockUser, group: mockGroup });
     expect(html).toContain('class="edit-note"');
     expect(html).toContain('class="edit-category"');
     expect(html).toContain('class="edit-reimbursement"');
@@ -110,7 +110,6 @@ describe("renderHome", () => {
   });
 
   it("renders read-only cells for unauthorized users", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockResolvedValue([
       {
         id: "txn-1",
@@ -133,7 +132,6 @@ describe("renderHome", () => {
   });
 
   it("renders accordion rows with details/summary elements", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockResolvedValue([
       {
         id: "txn-1",
@@ -159,7 +157,6 @@ describe("renderHome", () => {
   });
 
   it("renders date and statement link in expanded details", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockResolvedValue([
       {
         id: "txn-1",
@@ -182,7 +179,6 @@ describe("renderHome", () => {
   });
 
   it("renders empty statement dd when statementId is null", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockResolvedValue([
       {
         id: "txn-1",
@@ -203,7 +199,6 @@ describe("renderHome", () => {
   });
 
   it("renders budget options as data attribute for authorized users", async () => {
-    mockGetUserGroup.mockResolvedValue({ id: "household", name: "household" });
     mockGetTransactions.mockResolvedValue([
       {
         id: "txn-1",
@@ -248,15 +243,13 @@ describe("renderHome", () => {
         groupId: "household",
       },
     ]);
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    const html = await renderHome(user);
+    const html = await renderHome({ user: mockUser, group: mockGroup });
     expect(html).toContain("data-budget-options");
     expect(html).toContain("food");
     expect(html).toContain("vacation");
   });
 
   it("does not render autocomplete options for unauthorized users", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockResolvedValue([
       {
         id: "txn-1",
@@ -278,7 +271,6 @@ describe("renderHome", () => {
   });
 
   it("renders category options as data attribute for authorized users", async () => {
-    mockGetUserGroup.mockResolvedValue({ id: "household", name: "household" });
     mockGetTransactions.mockResolvedValue([
       {
         id: "txn-1",
@@ -309,15 +301,13 @@ describe("renderHome", () => {
         groupId: "household",
       },
     ]);
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    const html = await renderHome(user);
+    const html = await renderHome({ user: mockUser, group: mockGroup });
     expect(html).toContain("data-category-options");
     expect(html).toContain("Food:Groceries");
     expect(html).toContain("Travel:Lodging");
   });
 
   it("renders group name in expanded details", async () => {
-    mockGetUserGroup.mockResolvedValue({ id: "household", name: "household" });
     mockGetTransactions.mockResolvedValue([
       {
         id: "txn-1",
@@ -334,14 +324,12 @@ describe("renderHome", () => {
         groupId: "household",
       },
     ]);
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    const html = await renderHome(user);
+    const html = await renderHome({ user: mockUser, group: mockGroup });
     expect(html).toContain("<dt>Group</dt>");
     expect(html).toContain("<dd>household</dd>");
   });
 
   it("sorts transactions by timestamp descending with nulls last", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockResolvedValue([
       {
         id: "txn-1",

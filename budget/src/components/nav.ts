@@ -1,14 +1,28 @@
 import type { User } from "firebase/auth";
+import type { Group } from "../firestore.js";
 import { escapeHtml } from "../escape-html.js";
 
-export function renderNav(user: User | null): string {
+function renderGroupSelect(groups: Group[], selectedGroupId: string | null): string {
+  if (groups.length === 0) return "";
+  const options = groups
+    .map((g) => {
+      const selected = g.id === selectedGroupId ? " selected" : "";
+      return `<option value="${escapeHtml(g.id)}"${selected}>${escapeHtml(g.name)}</option>`;
+    })
+    .join("");
+  return `<select id="group-select">${options}</select>`;
+}
+
+export function renderNav(user: User | null, groups: Group[] = [], selectedGroupId: string | null = null): string {
   const auth = user
     ? `<span id="user-display">${escapeHtml(user.displayName ?? user.email ?? "User")}</span>
        <a href="#" id="sign-out">Logout</a>`
     : `<a href="#" id="sign-in">Login</a>`;
+  const groupSelect = user ? renderGroupSelect(groups, selectedGroupId) : "";
   return `
     <a href="#/">Home</a>
     <a href="#/about">About</a>
+    ${groupSelect}
     <span style="margin-left: auto">${auth}</span>
   `;
 }

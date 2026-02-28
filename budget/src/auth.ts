@@ -30,7 +30,9 @@ function showAuthError(message: string): void {
 // Handle redirect result on page load (user returning from GitHub OAuth / emulator picker).
 // Catch errors to avoid unhandled promise rejection warnings.
 getRedirectResult(auth).catch((error) => {
-  if (error?.code !== "auth/popup-closed-by-user") {
+  if (error?.code === "auth/popup-closed-by-user") {
+    console.debug("Auth redirect cancelled by user");
+  } else {
     console.error("Auth redirect error:", error);
     showAuthError("Sign-in could not be completed. Please try again.");
   }
@@ -50,6 +52,7 @@ export function signIn(): void {
 export function signOut(): Promise<void> {
   return firebaseSignOut(auth).catch((error) => {
     console.error("Sign-out failed:", error);
+    showAuthError("Sign-out failed. Please try again.");
   });
 }
 

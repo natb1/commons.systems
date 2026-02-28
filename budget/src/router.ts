@@ -11,8 +11,9 @@ export function createRouter(
 
   async function navigate(): Promise<void> {
     const id = ++navigationId;
-    const hash = location.hash.slice(1) || "/";
-    const route = routes.find((r) => r.path === hash) ?? routes[0];
+    const raw = location.hash.slice(1) || "/";
+    const path = raw.split("?")[0];
+    const route = routes.find((r) => r.path === path) ?? routes[0];
     try {
       const html = await route.render();
       if (id === navigationId) {

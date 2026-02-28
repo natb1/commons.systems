@@ -1,5 +1,4 @@
-import { collection, doc, getDocs, query, updateDoc, where } from "firebase/firestore";
-import type { Timestamp } from "firebase/firestore";
+import { collection, doc, getDocs, query, updateDoc, where, type Timestamp } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
@@ -45,11 +44,20 @@ export async function getUserGroup(user: User): Promise<Group | null> {
   return { id: d.id, name: requireString(d.data().name, "groups.name") };
 }
 
-export async function getTransactions(groupId: string | null): Promise<Transaction[]> {
+export async function getUserGroups(user: User): Promise<Group[]> {
+  const path = nsCollectionPath(NAMESPACE, "groups");
+  const q = query(collection(db, path), where("members", "array-contains", user.uid));
+  const snapshot = await getDocs(q);
+  return snapshot.docs
+    .map((d) => ({ id: d.id, name: requireString(d.data().name, "groups.name") }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getTransactions(groupId: string | null, uid?: string): Promise<Transaction[]> {
   const collectionName = groupId ? "transactions" : "seed-transactions";
   const path = nsCollectionPath(NAMESPACE, collectionName);
   const q = groupId
-    ? query(collection(db, path), where("groupId", "==", groupId))
+    ? query(collection(db, path), where("groupId", "==", groupId), where("memberUids", "array-contains", uid))
     : query(collection(db, path));
   const snapshot = await getDocs(q);
   return snapshot.docs.map((d) => {
@@ -75,6 +83,10 @@ export async function updateTransaction(
   txnId: string,
   fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget">>,
 ): Promise<void> {
+  if (Object.keys(fields).length === 0) return;
+  if (fields.reimbursement !== undefined && (fields.reimbursement < 0 || fields.reimbursement > 100)) {
+    throw new RangeError(`reimbursement must be between 0 and 100, got ${fields.reimbursement}`);
+  }
   const path = nsCollectionPath(NAMESPACE, "transactions");
   const ref = doc(db, path, txnId);
   await updateDoc(ref, fields);

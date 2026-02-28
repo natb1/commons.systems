@@ -1,11 +1,12 @@
 import { updateTransaction } from "../firestore.js";
 
 function getOptions(input: HTMLInputElement, container: HTMLElement): string[] {
-  const raw = input.classList.contains("edit-budget")
-    ? container.dataset.budgetOptions
-    : input.classList.contains("edit-category")
-      ? container.dataset.categoryOptions
-      : undefined;
+  let raw: string | undefined;
+  if (input.classList.contains("edit-budget")) {
+    raw = container.dataset.budgetOptions;
+  } else if (input.classList.contains("edit-category")) {
+    raw = container.dataset.categoryOptions;
+  }
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -18,6 +19,12 @@ function getOptions(input: HTMLInputElement, container: HTMLElement): string[] {
 
 function removeDropdown(): void {
   document.querySelector(".autocomplete-dropdown")?.remove();
+}
+
+function handleOutsideClick(e: Event): void {
+  if (!(e.target as HTMLElement).closest(".autocomplete-dropdown")) {
+    removeDropdown();
+  }
 }
 
 function showDropdown(input: HTMLInputElement, options: string[]): void {
@@ -61,29 +68,20 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     }
   });
 
-  // Show autocomplete dropdown on focus for budget/category inputs
-  container.addEventListener("focus", (e) => {
+  function handleAutocomplete(e: Event): void {
     const input = e.target as HTMLInputElement;
     if (input.tagName !== "INPUT") return;
     const options = getOptions(input, container);
     if (options.length > 0) showDropdown(input, options);
-  }, true);
+  }
 
-  // Filter dropdown as user types
-  container.addEventListener("input", (e) => {
-    const input = e.target as HTMLInputElement;
-    if (input.tagName !== "INPUT") return;
-    const options = getOptions(input, container);
-    if (options.length > 0) showDropdown(input, options);
-  });
+  // Show autocomplete dropdown on focus and filter as user types
+  container.addEventListener("focus", handleAutocomplete, true);
+  container.addEventListener("input", handleAutocomplete);
 
   // Dismiss dropdown on scroll or outside click
   window.addEventListener("scroll", removeDropdown, true);
-  document.addEventListener("click", (e) => {
-    if (!(e.target as HTMLElement).closest(".autocomplete-dropdown")) {
-      removeDropdown();
-    }
-  });
+  document.addEventListener("click", handleOutsideClick);
 
   container.addEventListener("blur", async (e) => {
     const target = e.target as HTMLElement;

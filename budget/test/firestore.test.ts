@@ -22,7 +22,7 @@ vi.mock("../src/firebase.js", () => ({
   NAMESPACE: "app/test",
 }));
 
-import { getTransactions, getUserGroup, updateTransaction } from "../src/firestore";
+import { getTransactions, getUserGroup, getUserGroups, updateTransaction } from "../src/firestore";
 
 describe("getUserGroup", () => {
   beforeEach(() => {
@@ -72,6 +72,42 @@ describe("getUserGroup", () => {
   });
 });
 
+describe("getUserGroups", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+    mockQuery.mockReturnValue("mock-query");
+    mockWhere.mockReturnValue("mock-where");
+  });
+
+  it("returns all groups sorted by name", async () => {
+    mockGetDocs.mockResolvedValue({
+      empty: false,
+      docs: [
+        { id: "work", data: () => ({ name: "work", members: ["user-123"] }) },
+        { id: "household", data: () => ({ name: "household", members: ["user-123"] }) },
+      ],
+    });
+
+    const user = { uid: "user-123" } as import("firebase/auth").User;
+    const groups = await getUserGroups(user);
+
+    expect(groups).toEqual([
+      { id: "household", name: "household" },
+      { id: "work", name: "work" },
+    ]);
+  });
+
+  it("returns empty array when user has no groups", async () => {
+    mockGetDocs.mockResolvedValue({ empty: true, docs: [] });
+
+    const user = { uid: "user-456" } as import("firebase/auth").User;
+    const groups = await getUserGroups(user);
+
+    expect(groups).toEqual([]);
+  });
+});
+
 describe("getTransactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -92,16 +128,17 @@ describe("getTransactions", () => {
     expect(mockWhere).not.toHaveBeenCalled();
   });
 
-  it("queries transactions with groupId filter when groupId is provided", async () => {
+  it("queries transactions with groupId and memberUids filters when groupId is provided", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getTransactions("household");
+    await getTransactions("household", "user-123");
 
     expect(mockCollection).toHaveBeenCalledWith(
       { type: "mock-firestore" },
       "app/test/transactions",
     );
     expect(mockWhere).toHaveBeenCalledWith("groupId", "==", "household");
+    expect(mockWhere).toHaveBeenCalledWith("memberUids", "array-contains", "user-123");
   });
 
   it("maps Firestore documents to Transaction objects", async () => {
@@ -191,6 +228,29 @@ describe("updateTransaction", () => {
     expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", {
       note: "updated note",
     });
+  });
+
+  it("skips empty updates without calling updateDoc", async () => {
+    await updateTransaction("txn-1", {});
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws RangeError when reimbursement is below 0", async () => {
+    await expect(updateTransaction("txn-1", { reimbursement: -5 })).rejects.toThrow(RangeError);
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws RangeError when reimbursement is above 100", async () => {
+    await expect(updateTransaction("txn-1", { reimbursement: 150 })).rejects.toThrow(RangeError);
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("accepts reimbursement at boundary values", async () => {
+    await updateTransaction("txn-1", { reimbursement: 0 });
+    expect(mockUpdateDoc).toHaveBeenCalled();
+    mockUpdateDoc.mockClear();
+    await updateTransaction("txn-1", { reimbursement: 100 });
+    expect(mockUpdateDoc).toHaveBeenCalled();
   });
 
   it("passes multiple fields to updateDoc", async () => {

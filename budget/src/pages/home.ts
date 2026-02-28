@@ -1,7 +1,7 @@
 import type { User } from "firebase/auth";
 import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "../escape-html.js";
-import { getUserGroup, getTransactions, type Group, type Transaction } from "../firestore.js";
+import { getTransactions, type Group, type Transaction } from "../firestore.js";
 
 function formatTimestamp(ts: Timestamp | null): string {
   if (!ts) return "";
@@ -68,7 +68,7 @@ function compareByTimestampDesc(a: Transaction, b: Transaction): number {
 }
 
 function uniqueSorted(values: (string | null)[]): string[] {
-  return [...new Set(values.filter(Boolean))].sort() as string[];
+  return [...new Set(values.filter((v): v is string => v != null))].sort();
 }
 
 function renderTransactionTable(transactions: Transaction[], authorized: boolean, groupName: string): string {
@@ -96,22 +96,20 @@ function renderTransactionTable(transactions: Transaction[], authorized: boolean
     </div>`;
 }
 
-export async function renderHome(user?: User | null): Promise<string> {
-  const currentUser = user ?? null;
-  let group: Group | null = null;
-  if (currentUser) {
-    try {
-      group = await getUserGroup(currentUser);
-    } catch (error) {
-      console.error("Failed to determine user group:", error);
-    }
-  }
+export interface RenderHomeOptions {
+  user?: User | null;
+  group?: Group | null;
+  groupError?: boolean;
+}
+
+export async function renderHome(options: RenderHomeOptions = {}): Promise<string> {
+  const { user = null, group = null, groupError = false } = options;
   const authorized = group !== null;
   const groupName = group?.name ?? "";
 
   let tableHtml: string;
   try {
-    const transactions = await getTransactions(group?.id ?? null);
+    const transactions = await getTransactions(group?.id ?? null, user?.uid);
     transactions.sort(compareByTimestampDesc);
     tableHtml = renderTransactionTable(transactions, authorized, groupName);
   } catch (error) {
@@ -119,12 +117,17 @@ export async function renderHome(user?: User | null): Promise<string> {
     tableHtml = '<p id="transactions-error">Could not load transactions</p>';
   }
 
-  const seedNotice = !authorized
+  const groupErrorNotice = groupError && user
+    ? '<p id="group-error" class="auth-error">Could not verify group membership. Showing example data.</p>'
+    : "";
+
+  const seedNotice = !authorized && !groupError
     ? '<p id="seed-data-notice">Viewing example data. Sign in to see your transactions.</p>'
     : "";
 
   return `
     <h2>Transactions</h2>
+    ${groupErrorNotice}
     ${seedNotice}
     ${tableHtml}
   `;

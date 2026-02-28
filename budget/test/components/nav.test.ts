@@ -7,6 +7,11 @@ const mockUser = {
   email: "test@example.com",
 } as User;
 
+const mockGroups = [
+  { id: "household", name: "household" },
+  { id: "work", name: "work" },
+];
+
 describe("renderNav", () => {
   it("returns HTML with a link to the home route", () => {
     const html = renderNav(null);
@@ -30,5 +35,28 @@ describe("renderNav", () => {
     expect(html).toContain('id="user-display"');
     expect(html).toContain("Test User");
     expect(html).not.toContain('id="sign-in"');
+  });
+
+  it("renders group select when user has groups", () => {
+    const html = renderNav(mockUser, mockGroups, "household");
+    expect(html).toContain('id="group-select"');
+    expect(html).toContain("household");
+    expect(html).toContain("work");
+  });
+
+  it("marks selected group in dropdown", () => {
+    const html = renderNav(mockUser, mockGroups, "work");
+    expect(html).toContain('value="work" selected');
+    expect(html).not.toContain('value="household" selected');
+  });
+
+  it("does not render group select when user is null", () => {
+    const html = renderNav(null, mockGroups, "household");
+    expect(html).not.toContain('id="group-select"');
+  });
+
+  it("does not render group select when groups is empty", () => {
+    const html = renderNav(mockUser, [], null);
+    expect(html).not.toContain('id="group-select"');
   });
 });
