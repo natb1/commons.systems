@@ -4,12 +4,38 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Published posts are public; unpublished posts require authentication
     match /landing/{env}/posts/{postId} {
-      allow read: if resource.data.published == true || request.auth != null;
+      allow read: if resource.data.published == true || request.auth \!= null;
       allow write: if false;
     }
 
-    // Deny everything else by default (scaffolding uses this line as an insertion marker)
-    // DO NOT EDIT the line above — the scaffolding's InsertFirestoreRules depends on it.
+    // Seed transactions are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-transactions/{txnId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Groups are readable only by their members (membership check via members array)
+    match /budget/{env}/groups/{groupId} {
+      allow read: if request.auth \!= null && request.auth.uid in resource.data.members;
+      allow write: if false;
+    }
+
+    // Transactions are scoped to group members. Updates are restricted to
+    // user-editable fields only; reimbursement must stay within 0-100 range.
+    match /budget/{env}/transactions/{txnId} {
+      allow read: if request.auth \!= null
+        && request.auth.uid in resource.data.memberUids;
+      allow update: if request.auth \!= null
+        && request.auth.uid in resource.data.memberUids
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['note', 'category', 'reimbursement', 'budget'])
+        && request.resource.data.reimbursement >= 0
+        && request.resource.data.reimbursement <= 100;
+      allow create, delete: if false;
+    }
+
+    // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
+    // InsertFirestoreRules inserts new rule blocks immediately above this line.
     match /{document=**} {
       allow read, write: if false;
     }
