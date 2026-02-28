@@ -10,6 +10,8 @@
   --border: light-dark(#c4b8a4, #3d3529);
   --surface: light-dark(#ece5d8, #252017);
 
+  --main-max-width: 48rem;
+
   color-scheme: light dark;
 }
 
@@ -17,7 +19,7 @@ body {
   font-family: var(--font-body);
   color: var(--fg);
   background: var(--bg);
-  max-width: 48rem;
+  max-width: var(--main-max-width);
   margin: 0 auto;
   padding: 1rem;
 }

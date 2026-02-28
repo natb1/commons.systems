@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>commons.systems Blogroll</title>
+  </head>
+  <body>
+    <outline text="Anthropic Engineering"
+             htmlUrl="https://www.anthropic.com/engineering"
+             type="rss" />
+    <outline text="Claude Code Blog"
+             htmlUrl="https://claude.com/blog/category/claude-code"
+             type="rss" />
+  </body>
+</opml>

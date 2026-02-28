@@ -9,10 +9,8 @@ test.describe("blog", () => {
     await page.waitForSelector("#posts", { timeout: 30000 });
     const posts = page.locator("#posts article");
     expect(await posts.count()).toBeGreaterThanOrEqual(2);
-    await expect(page.locator("#posts")).toContainText("Hello World");
-    await expect(page.locator("#posts")).toContainText(
-      "Agentic Coding Workflow",
-    );
+    // h1 extraction replaces Firestore titles with the markdown heading
+    await expect(posts.first()).toContainText("Test");
   });
 
   test("home page does not show draft posts to unauthenticated user", async ({

@@ -13,5 +13,6 @@ export function renderNav(user: User | null, currentPath: string): string {
   return `
     <a href="#/">Home</a>
     ${authHtml ? `<span style="margin-left: auto">${authHtml}</span>` : ""}
+    <button id="panel-toggle" class="panel-toggle" aria-label="Toggle info panel" aria-expanded="false">&#9656;</button>
   `;
 }

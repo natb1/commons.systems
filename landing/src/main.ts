@@ -4,15 +4,33 @@ import { createRouter, getHashPath } from "./router.js";
 import { renderHomeHtml, hydrateHome } from "./pages/home.js";
 import { renderAdmin } from "./pages/admin.js";
 import { renderNav } from "./components/nav.js";
+import { renderInfoPanel, hydrateInfoPanel } from "./components/info-panel.js";
+import { createRssBlobUrl } from "./feed.js";
+import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { getPosts, type PostMeta } from "./firestore.js";
 
 const nav = document.getElementById("nav");
 const app = document.getElementById("app");
+const infoPanel = document.getElementById("info-panel");
+
+const header = document.querySelector("body > header");
+if (header) {
+  new ResizeObserver(([entry]) => {
+    document.documentElement.style.setProperty(
+      "--header-height",
+      `${entry.borderBoxSize[0].blockSize}px`,
+    );
+  }).observe(header);
+}
 
 let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
 let lastSkippedCount = 0;
+let rssBlobUrl: string | undefined;
+let lastRenderedPosts: PostMeta[] | undefined;
+const strategies = createStrategies();
+const INFO_PANEL_LINKS = [{ label: "Source", url: "https://github.com/natb1/commons.systems" }];
 
 function handleClick(action: () => Promise<void>, label: string): (e: Event) => void {
   return function (e: Event): void {
@@ -25,6 +43,26 @@ function handleClick(action: () => Promise<void>, label: string): (e: Event) => 
   };
 }
 
+function updateInfoPanel(): void {
+  if (!infoPanel) {
+    console.error("updateInfoPanel: #info-panel element not found");
+    return;
+  }
+  if (cachedPosts === lastRenderedPosts) return;
+
+  if (rssBlobUrl) URL.revokeObjectURL(rssBlobUrl);
+  rssBlobUrl = createRssBlobUrl(cachedPosts);
+
+  infoPanel.innerHTML = renderInfoPanel({
+    links: INFO_PANEL_LINKS,
+    topPosts: cachedPosts,
+    blogRoll: BLOG_ROLL_ENTRIES,
+    rssFeedUrl: rssBlobUrl,
+  });
+  hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
+  lastRenderedPosts = cachedPosts;
+}
+
 function updateNav(): void {
   if (!nav) {
     console.error("updateNav: #nav element not found");
@@ -33,6 +71,13 @@ function updateNav(): void {
   nav.innerHTML = renderNav(currentUser, getHashPath());
   document.getElementById("sign-in")?.addEventListener("click", handleClick(signIn, "Sign-in"));
   document.getElementById("sign-out")?.addEventListener("click", handleClick(signOut, "Sign-out"));
+
+  const toggle = document.getElementById("panel-toggle");
+  toggle?.addEventListener("click", () => {
+    if (!infoPanel) return;
+    const isOpen = infoPanel.classList.toggle("open");
+    toggle.setAttribute("aria-expanded", String(isOpen));
+  });
 }
 
 async function loadPosts(): Promise<string> {
@@ -69,6 +114,7 @@ if (app) {
         afterRender: (outlet, hash) => {
           const slug = hash.startsWith("/post/") ? hash.slice(6) : undefined;
           hydrateHome(outlet, cachedPosts, slug);
+          updateInfoPanel();
         },
       },
       { path: "/admin", render: () => renderAdmin(currentUser, lastSkippedCount) },
@@ -76,9 +122,30 @@ if (app) {
     { onNavigate: updateNav },
   );
 
+  function closePanel(): void {
+    infoPanel?.classList.remove("open");
+    document.getElementById("panel-toggle")?.setAttribute("aria-expanded", "false");
+  }
+
   document.addEventListener("click", (e) => {
-    if ((e.target as HTMLElement).closest('a[href="#/"]')) {
+    const target = e.target as HTMLElement;
+
+    if (target.closest('a[href="#/"]')) {
       window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    if (
+      infoPanel?.classList.contains("open") &&
+      !target.closest("#info-panel") &&
+      !target.closest("#panel-toggle")
+    ) {
+      closePanel();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && infoPanel?.classList.contains("open")) {
+      closePanel();
     }
   });
 
@@ -86,6 +153,7 @@ if (app) {
     currentUser = user;
     updateNav();
     navigate();
+    updateInfoPanel();
   });
 } else {
   console.error("Fatal: #app element not found");
