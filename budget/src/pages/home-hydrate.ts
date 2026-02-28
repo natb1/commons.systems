@@ -10,9 +10,13 @@ function getOptions(input: HTMLInputElement, container: HTMLElement): string[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    console.error("Failed to parse autocomplete options:", raw);
+    if (!Array.isArray(parsed)) {
+      console.error("Autocomplete options is not an array:", typeof parsed);
+      return [];
+    }
+    return parsed;
+  } catch (error) {
+    console.error("Failed to parse autocomplete options:", raw, error);
     return [];
   }
 }
@@ -40,8 +44,9 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
   const value = input.value;
   const filter = value.toLowerCase();
   const matches = options.filter(o => {
-    if (o.toLowerCase() === filter) return false;
-    return !filter || o.toLowerCase().includes(filter);
+    const lower = o.toLowerCase();
+    if (lower === filter) return false;
+    return !filter || lower.includes(filter);
   });
   if (matches.length === 0) return;
 

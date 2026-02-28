@@ -35,6 +35,12 @@ function requireNumber(value: unknown, field: string): number {
   return value;
 }
 
+function requireReimbursement(value: unknown): number {
+  const n = requireNumber(value, "reimbursement");
+  if (n < 0 || n > 100) throw new RangeError(`reimbursement must be between 0 and 100, got ${n}`);
+  return n;
+}
+
 export async function getUserGroups(user: User): Promise<Group[]> {
   const path = nsCollectionPath(NAMESPACE, "groups");
   const q = query(collection(db, path), where("members", "array-contains", user.uid));
@@ -66,7 +72,7 @@ export async function getTransactions(groupId: string | null, uid?: string): Pro
       amount: requireNumber(data.amount, "amount"),
       note: requireString(data.note, "note"),
       category: requireString(data.category, "category"),
-      reimbursement: requireNumber(data.reimbursement, "reimbursement"),
+      reimbursement: requireReimbursement(data.reimbursement),
       budget: typeof data.budget === "string" ? data.budget : null,
       timestamp: asTimestamp(data.timestamp),
       statementId: typeof data.statementId === "string" ? data.statementId : null,

@@ -169,7 +169,7 @@ describe("hydrateTransactionTable", () => {
     const input = container.querySelector(".edit-budget") as HTMLInputElement;
     input.dispatchEvent(new Event("focus", { bubbles: true }));
     expect(document.querySelector(".autocomplete-dropdown")).toBeNull();
-    expect(console.error).toHaveBeenCalledWith("Failed to parse autocomplete options:", "not-json");
+    expect(console.error).toHaveBeenCalledWith("Failed to parse autocomplete options:", "not-json", expect.any(SyntaxError));
   });
 
   it("does not save for elements outside a txn-row", async () => {

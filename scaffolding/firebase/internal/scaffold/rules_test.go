@@ -29,7 +29,7 @@ const baseRules = `rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
+    // Deny everything else by default (scaffolding uses this line as an insertion marker)
     match /{document=**} {
       allow read, write: if false;
     }
@@ -53,7 +53,7 @@ func TestInsertFirestoreRules(t *testing.T) {
 			t.Error("expected notes rule block")
 		}
 
-		catchAllIdx := strings.Index(got, "// SCAFFOLD MARKER:")
+		catchAllIdx := strings.Index(got, "// Deny everything else")
 		appIdx := strings.Index(got, "match /myapp/")
 		if appIdx >= catchAllIdx {
 			t.Error("app rules should appear before catch-all")
@@ -124,7 +124,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
+    // Deny everything else by default (scaffolding uses this line as an insertion marker)
     match /{document=**} {
       allow read, write: if false;
     }
@@ -141,7 +141,7 @@ service cloud.firestore {
 		if strings.Contains(got, "myapp") {
 			t.Error("myapp rules should have been removed")
 		}
-		if !strings.Contains(got, "SCAFFOLD MARKER:") {
+		if !strings.Contains(got, "Deny everything else") {
 			t.Error("catch-all should remain")
 		}
 	})

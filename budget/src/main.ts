@@ -28,8 +28,9 @@ function getGroupParam(): string | null {
 }
 
 function setGroupParam(groupId: string): void {
-  const { path } = parseHash();
-  location.hash = `${path}?group=${encodeURIComponent(groupId)}`;
+  const { path, params } = parseHash();
+  params.set("group", groupId);
+  location.hash = `${path}?${params.toString()}`;
 }
 
 function selectedGroup(): Group | null {
@@ -73,13 +74,12 @@ const navigate = createRouter(app, [
   { path: "/about", render: renderAbout },
 ]);
 
-// The router sets innerHTML asynchronously, so we watch for the table
-// to appear rather than hydrating inline after render.
+// navigate() is fire-and-forget (returns void), so we cannot await the
+// render result. Watch for the table element to appear in the DOM.
 const observer = new MutationObserver(() => {
   const table = app.querySelector("#transactions-table") as HTMLElement | null;
   if (table && !table.dataset.hydrated) {
     table.dataset.hydrated = "true";
-    observer.disconnect();
     hydrateTransactionTable(table);
   }
 });
@@ -92,6 +92,9 @@ onAuthStateChanged(auth, async (user) => {
     try {
       currentGroups = await getUserGroups(user);
     } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Expected ")) {
+        throw error; // data integrity error — surface, don't swallow
+      }
       console.error("Failed to fetch user groups:", error);
       currentGroups = [];
       currentGroupError = true;
