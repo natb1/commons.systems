@@ -65,4 +65,19 @@ describe("renderNav", () => {
     const html = renderNav(xssUser, "/admin");
     expect(html).not.toContain("<script>");
   });
+
+  it("always includes a panel toggle button", () => {
+    const html = renderNav(null, "/");
+    expect(html).toContain('id="panel-toggle"');
+  });
+
+  it("panel toggle has correct aria-label", () => {
+    const html = renderNav(null, "/");
+    expect(html).toContain('aria-label="Toggle info panel"');
+  });
+
+  it("panel toggle has aria-expanded false by default", () => {
+    const html = renderNav(null, "/");
+    expect(html).toContain('aria-expanded="false"');
+  });
 });
