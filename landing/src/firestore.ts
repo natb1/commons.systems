@@ -37,7 +37,7 @@ export async function getPosts(user: User | null): Promise<GetPostsResult> {
   const path = nsCollectionPath(NAMESPACE, "posts");
   const admin = isAuthorized(user);
   const q = admin
-    ? query(collection(db, path), orderBy("publishedAt"))
+    ? query(collection(db, path), orderBy("publishedAt", "desc"))
     : query(collection(db, path), where("published", "==", true));
   const snapshot = await getDocs(q);
   const posts: PostMeta[] = [];
@@ -51,7 +51,7 @@ export async function getPosts(user: User | null): Promise<GetPostsResult> {
     }
   }
   if (!admin) {
-    posts.sort((a, b) => (a.publishedAt ?? "").localeCompare(b.publishedAt ?? ""));
+    posts.sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
   }
   return { posts, skippedCount };
 }

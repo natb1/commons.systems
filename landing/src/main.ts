@@ -15,17 +15,15 @@ const app = document.getElementById("app");
 const infoPanel = document.getElementById("info-panel");
 
 // Set --header-height for sticky info panel positioning
-function syncHeaderHeight(): void {
-  const header = document.querySelector("body > header");
-  if (header) {
+const header = document.querySelector("body > header");
+if (header) {
+  new ResizeObserver(([entry]) => {
     document.documentElement.style.setProperty(
       "--header-height",
-      `${header.getBoundingClientRect().height}px`,
+      `${entry.borderBoxSize[0].blockSize}px`,
     );
-  }
+  }).observe(header);
 }
-syncHeaderHeight();
-window.addEventListener("resize", syncHeaderHeight);
 
 let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];

@@ -80,7 +80,7 @@ describe("getPosts", () => {
 
     await getPosts(natb1UserByScreenName);
 
-    expect(mockOrderBy).toHaveBeenCalledWith("publishedAt");
+    expect(mockOrderBy).toHaveBeenCalledWith("publishedAt", "desc");
     expect(mockWhere).not.toHaveBeenCalled();
   });
 
@@ -149,7 +149,7 @@ describe("getPosts", () => {
     expect(posts).toEqual([]);
   });
 
-  it("sorts published posts by publishedAt ascending for non-admin", async () => {
+  it("sorts published posts by publishedAt descending for non-admin", async () => {
     const jan = {
       id: "jan",
       data: () => ({
@@ -168,12 +168,12 @@ describe("getPosts", () => {
         filename: "feb.md",
       }),
     };
-    mockGetDocs.mockResolvedValue({ docs: [feb, jan] });
+    mockGetDocs.mockResolvedValue({ docs: [jan, feb] });
 
     const { posts } = await getPosts(null);
 
-    expect(posts[0].id).toBe("jan");
-    expect(posts[1].id).toBe("feb");
+    expect(posts[0].id).toBe("feb");
+    expect(posts[1].id).toBe("jan");
   });
 
   it("filters out documents with missing title", async () => {

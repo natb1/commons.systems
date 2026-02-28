@@ -62,6 +62,10 @@ main {
   color: var(--accent);
 }
 
+.post-link:hover {
+  text-decoration: none;
+}
+
 .post-link:hover .post-title {
   text-decoration: underline;
   text-decoration-thickness: 2px;
