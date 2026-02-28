@@ -136,6 +136,23 @@ describe("hydrateHome", () => {
     expect(outlet.innerHTML).toBe("<p>Navigated away</p>");
   });
 
+  it("strips h1 from markdown and updates h2 title", async () => {
+    outlet.innerHTML = renderHomeHtml([publishedPost]);
+    mockFetchPost.mockResolvedValue("# Markdown Title\nBody text here.");
+
+    hydrateHome(outlet, [publishedPost]);
+    await vi.waitFor(() => {
+      const content = outlet.querySelector("#post-content-hello-world");
+      expect(content?.innerHTML).not.toContain("Markdown Title");
+      expect(content?.innerHTML).toContain("Body text here.");
+    });
+
+    const titleLink = outlet.querySelector(
+      "#post-hello-world h2 .post-link",
+    );
+    expect(titleLink?.textContent).toContain("Markdown Title");
+  });
+
   it("scrolls to target article when scrollTo is provided", async () => {
     // Add a header so hydrateHome can measure its height
     const header = document.createElement("header");

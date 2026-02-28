@@ -70,7 +70,22 @@ export function hydrateHome(
     if (!contentDiv) return;
 
     try {
-      const markdown = await fetchPost(post.filename);
+      let markdown = await fetchPost(post.filename);
+
+      // Extract h1 from markdown to use as the canonical title
+      const h1Match = markdown.match(/^#\s+(.+)$/m);
+      if (h1Match) {
+        markdown = markdown.replace(/^#\s+.+\n?/m, "");
+        const titleLink = outlet.querySelector<HTMLElement>(
+          `#post-${CSS.escape(post.id)} h2 .post-link`,
+        );
+        if (titleLink) {
+          const icon = titleLink.querySelector(".link-icon");
+          titleLink.textContent = h1Match[1];
+          if (icon) titleLink.prepend(icon);
+        }
+      }
+
       const html = await marked.parse(markdown);
       if (!outlet.contains(container)) return;
       contentDiv.innerHTML = DOMPurify.sanitize(html);

@@ -43,6 +43,12 @@ main {
   }
 }
 
+#posts article h1,
+#posts article h2,
+#posts article h3 {
+  text-shadow: none;
+}
+
 #posts article {
   margin-top: 4rem;
 }
