@@ -42,38 +42,38 @@ test.describe("auth", () => {
     await expect(page.locator(".edit-budget")).toHaveCount(2);
   });
 
-  test("budget input has datalist with autocomplete options", async ({
+  test("budget input shows autocomplete dropdown on focus", async ({
     page,
   }) => {
     await page.goto("/");
     await signIn(page);
     await expect(page.locator("#transactions-table")).toBeVisible();
-    // Datalist should exist with budget options
-    const datalist = page.locator("#budget-options");
-    await expect(datalist).toBeAttached();
-    const options = datalist.locator("option");
-    const count = await options.count();
+    // Open a row — click the description text (not an input) to toggle
+    const firstRow = page.locator("#transactions-table .txn-row").first();
+    await firstRow.locator(".txn-summary-content span").first().click();
+    await expect(firstRow.locator(".txn-details")).toBeVisible();
+    const budgetInput = firstRow.locator(".edit-budget");
+    await budgetInput.click();
+    // Custom autocomplete dropdown should appear
+    await expect(page.locator(".autocomplete-dropdown")).toBeVisible();
+    const items = page.locator(".autocomplete-item");
+    const count = await items.count();
     expect(count).toBeGreaterThan(0);
-    // Budget input should reference the datalist
-    const budgetInput = page.locator(".edit-budget").first();
-    await expect(budgetInput).toHaveAttribute("list", "budget-options");
   });
 
-  test("category input has datalist with autocomplete options", async ({
+  test("category input shows autocomplete dropdown on focus", async ({
     page,
   }) => {
     await page.goto("/");
     await signIn(page);
     await expect(page.locator("#transactions-table")).toBeVisible();
-    // Category datalist should exist
-    const datalist = page.locator("#category-options");
-    await expect(datalist).toBeAttached();
-    const options = datalist.locator("option");
-    const count = await options.count();
-    expect(count).toBeGreaterThan(0);
-    // Category input should reference the datalist
     const categoryInput = page.locator(".edit-category").first();
-    await expect(categoryInput).toHaveAttribute("list", "category-options");
+    await categoryInput.click();
+    // Custom autocomplete dropdown should appear
+    await expect(page.locator(".autocomplete-dropdown")).toBeVisible();
+    const items = page.locator(".autocomplete-item");
+    const count = await items.count();
+    expect(count).toBeGreaterThan(0);
   });
 
   test("expanded details show group name for authorized user", async ({
@@ -82,9 +82,10 @@ test.describe("auth", () => {
     await page.goto("/");
     await signIn(page);
     await expect(page.locator("#transactions-table")).toBeVisible();
-    // Open the first row
+    // Open the first row — click the description text (not an input)
     const firstRow = page.locator("#transactions-table .txn-row").first();
-    await firstRow.locator("summary").click();
+    await firstRow.locator(".txn-summary-content span").first().click();
+    await expect(firstRow.locator(".txn-details")).toBeVisible();
     // Verify group name is displayed
     await expect(firstRow.locator(".txn-details")).toContainText("household");
   });
@@ -93,7 +94,6 @@ test.describe("auth", () => {
     await page.goto("/");
     await signIn(page);
     await expect(page.locator("#transactions-table")).toBeVisible();
-    // Open the first row to access the edit-note input in summary
     const noteInput = page.locator(".edit-note").first();
     await noteInput.fill("test note update");
     await noteInput.blur();

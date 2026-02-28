@@ -3,12 +3,12 @@ import { renderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
 import { renderNav } from "./components/nav.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
-import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
+import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
 
 const nav = document.getElementById("nav");
 const app = document.getElementById("app");
 
-function updateNav(user: import("firebase/auth").User | null): void {
+function updateNav(user: User | null): void {
   if (!nav) return;
   nav.innerHTML = renderNav(user);
   document.getElementById("sign-in")?.addEventListener("click", (e) => {

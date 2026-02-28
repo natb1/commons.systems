@@ -145,7 +145,7 @@ describe("getTransactions", () => {
     ]);
   });
 
-  it("includes groupId and groupName when present in document data", async () => {
+  it("includes groupId when present in document data", async () => {
     mockGetDocs.mockResolvedValue({
       docs: [
         {
@@ -162,7 +162,6 @@ describe("getTransactions", () => {
             timestamp: null,
             statementId: null,
             groupId: "household",
-            groupName: "household",
           }),
         },
       ],
@@ -171,7 +170,6 @@ describe("getTransactions", () => {
     const transactions = await getTransactions("household");
 
     expect(transactions[0].groupId).toBe("household");
-    expect(transactions[0].groupName).toBe("household");
   });
 });
 

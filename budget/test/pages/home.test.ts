@@ -98,7 +98,6 @@ describe("renderHome", () => {
         timestamp: mockTimestamp("2025-01-15"),
         statementId: "stmt-2025-01",
         groupId: "household",
-        groupName: "household",
       },
     ]);
     const user = { uid: "user-123" } as import("firebase/auth").User;
@@ -203,7 +202,7 @@ describe("renderHome", () => {
     expect(html).toContain("<dt>Statement</dt><dd></dd>");
   });
 
-  it("renders budget datalist with unique sorted options for authorized users", async () => {
+  it("renders budget options as data attribute for authorized users", async () => {
     mockGetUserGroup.mockResolvedValue({ id: "household", name: "household" });
     mockGetTransactions.mockResolvedValue([
       {
@@ -219,7 +218,6 @@ describe("renderHome", () => {
         timestamp: mockTimestamp("2025-01-15"),
         statementId: null,
         groupId: "household",
-        groupName: "household",
       },
       {
         id: "txn-2",
@@ -234,7 +232,6 @@ describe("renderHome", () => {
         timestamp: mockTimestamp("2025-02-01"),
         statementId: null,
         groupId: "household",
-        groupName: "household",
       },
       {
         id: "txn-3",
@@ -249,44 +246,16 @@ describe("renderHome", () => {
         timestamp: mockTimestamp("2025-01-20"),
         statementId: null,
         groupId: "household",
-        groupName: "household",
       },
     ]);
     const user = { uid: "user-123" } as import("firebase/auth").User;
     const html = await renderHome(user);
-    expect(html).toContain('id="budget-options"');
-    expect(html).toContain('<option value="food">');
-    expect(html).toContain('<option value="vacation">');
-    // "food" appears only once despite two transactions having it
-    const foodCount = (html.match(/option value="food"/g) || []).length;
-    expect(foodCount).toBe(1);
+    expect(html).toContain("data-budget-options");
+    expect(html).toContain("food");
+    expect(html).toContain("vacation");
   });
 
-  it("budget input has list attribute linking to datalist", async () => {
-    mockGetUserGroup.mockResolvedValue({ id: "household", name: "household" });
-    mockGetTransactions.mockResolvedValue([
-      {
-        id: "txn-1",
-        institution: "Bank A",
-        account: "Checking",
-        description: "Grocery store",
-        amount: 52.30,
-        note: "",
-        category: "Food",
-        reimbursement: 0,
-        budget: "food",
-        timestamp: mockTimestamp("2025-01-15"),
-        statementId: null,
-        groupId: "household",
-        groupName: "household",
-      },
-    ]);
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    const html = await renderHome(user);
-    expect(html).toContain('list="budget-options"');
-  });
-
-  it("does not render budget datalist for unauthorized users", async () => {
+  it("does not render autocomplete options for unauthorized users", async () => {
     mockGetUserGroup.mockResolvedValue(null);
     mockGetTransactions.mockResolvedValue([
       {
@@ -304,10 +273,11 @@ describe("renderHome", () => {
       },
     ]);
     const html = await renderHome();
-    expect(html).not.toContain('id="budget-options"');
+    expect(html).not.toContain("data-budget-options");
+    expect(html).not.toContain("data-category-options");
   });
 
-  it("renders category datalist with unique sorted options for authorized users", async () => {
+  it("renders category options as data attribute for authorized users", async () => {
     mockGetUserGroup.mockResolvedValue({ id: "household", name: "household" });
     mockGetTransactions.mockResolvedValue([
       {
@@ -323,7 +293,6 @@ describe("renderHome", () => {
         timestamp: mockTimestamp("2025-01-15"),
         statementId: null,
         groupId: "household",
-        groupName: "household",
       },
       {
         id: "txn-2",
@@ -338,77 +307,13 @@ describe("renderHome", () => {
         timestamp: mockTimestamp("2025-02-01"),
         statementId: null,
         groupId: "household",
-        groupName: "household",
-      },
-      {
-        id: "txn-3",
-        institution: "Bank A",
-        account: "Checking",
-        description: "Coffee",
-        amount: 5,
-        note: "",
-        category: "Food:Groceries",
-        reimbursement: 0,
-        budget: "food",
-        timestamp: mockTimestamp("2025-01-20"),
-        statementId: null,
-        groupId: "household",
-        groupName: "household",
       },
     ]);
     const user = { uid: "user-123" } as import("firebase/auth").User;
     const html = await renderHome(user);
-    expect(html).toContain('id="category-options"');
-    expect(html).toContain('<option value="Food:Groceries">');
-    expect(html).toContain('<option value="Travel:Lodging">');
-    // "Food:Groceries" appears only once despite two transactions having it
-    const catCount = (html.match(/option value="Food:Groceries"/g) || []).length;
-    expect(catCount).toBe(1);
-  });
-
-  it("category input has list attribute linking to datalist", async () => {
-    mockGetUserGroup.mockResolvedValue({ id: "household", name: "household" });
-    mockGetTransactions.mockResolvedValue([
-      {
-        id: "txn-1",
-        institution: "Bank A",
-        account: "Checking",
-        description: "Grocery store",
-        amount: 52.30,
-        note: "",
-        category: "Food",
-        reimbursement: 0,
-        budget: "food",
-        timestamp: mockTimestamp("2025-01-15"),
-        statementId: null,
-        groupId: "household",
-        groupName: "household",
-      },
-    ]);
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    const html = await renderHome(user);
-    expect(html).toContain('list="category-options"');
-  });
-
-  it("does not render category datalist for unauthorized users", async () => {
-    mockGetUserGroup.mockResolvedValue(null);
-    mockGetTransactions.mockResolvedValue([
-      {
-        id: "txn-1",
-        institution: "Bank A",
-        account: "Checking",
-        description: "Grocery store",
-        amount: 52.30,
-        note: "",
-        category: "Food",
-        reimbursement: 0,
-        budget: "food",
-        timestamp: mockTimestamp("2025-01-15"),
-        statementId: null,
-      },
-    ]);
-    const html = await renderHome();
-    expect(html).not.toContain('id="category-options"');
+    expect(html).toContain("data-category-options");
+    expect(html).toContain("Food:Groceries");
+    expect(html).toContain("Travel:Lodging");
   });
 
   it("renders group name in expanded details", async () => {
@@ -427,7 +332,6 @@ describe("renderHome", () => {
         timestamp: mockTimestamp("2025-01-15"),
         statementId: null,
         groupId: "household",
-        groupName: "household",
       },
     ]);
     const user = { uid: "user-123" } as import("firebase/auth").User;

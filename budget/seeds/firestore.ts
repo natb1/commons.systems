@@ -31,7 +31,6 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-01-15"),
             statementId: "stmt-2025-01",
             groupId: "household",
-            groupName: "household",
           },
         },
         {
@@ -48,7 +47,6 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-01-20"),
             statementId: "stmt-2025-01",
             groupId: "household",
-            groupName: "household",
           },
         },
         {
@@ -65,7 +63,6 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-02-05"),
             statementId: "stmt-2025-02",
             groupId: "household",
-            groupName: "household",
           },
         },
       ],
@@ -87,7 +84,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-02-10"),
             statementId: "stmt-2025-02",
             groupId: "household",
-            groupName: "household",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -104,7 +101,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-02-15"),
             statementId: null,
             groupId: "household",
-            groupName: "household",
+            memberUids: ["test-github-user"],
           },
         },
       ],

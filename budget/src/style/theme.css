@@ -65,12 +65,38 @@
   text-align: right;
 }
 
-.txn-summary-content input {
+.txn-summary-content input,
+.txn-details input {
   width: 100%;
   box-sizing: border-box;
 }
 
-.txn-details input {
-  width: 100%;
-  box-sizing: border-box;
+.autocomplete-dropdown {
+  position: absolute;
+  z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.autocomplete-item {
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+}
+
+.autocomplete-item:hover {
+  background: var(--border);
+}
+
+.save-error {
+  outline: 2px solid var(--color-error, #c00);
+}
+
+.auth-error {
+  background: var(--color-error, #c00);
+  color: white;
+  padding: 0.5rem 1rem;
+  text-align: center;
 }

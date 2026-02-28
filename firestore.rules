@@ -20,11 +20,13 @@ service cloud.firestore {
 
     match /budget/{env}/transactions/{txnId} {
       allow read: if request.auth != null
-        && request.auth.uid in get(/databases/$(database)/documents/budget/$(env)/groups/$(resource.data.groupId)).data.members;
+        && request.auth.uid in resource.data.memberUids;
       allow update: if request.auth != null
-        && request.auth.uid in get(/databases/$(database)/documents/budget/$(env)/groups/$(resource.data.groupId)).data.members
+        && request.auth.uid in resource.data.memberUids
         && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['note', 'category', 'reimbursement', 'budget']);
+            .hasOnly(['note', 'category', 'reimbursement', 'budget'])
+        && request.resource.data.reimbursement >= 0
+        && request.resource.data.reimbursement <= 100;
       allow create, delete: if false;
     }
 

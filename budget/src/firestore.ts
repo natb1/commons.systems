@@ -1,4 +1,5 @@
-import { collection, doc, getDocs, query, Timestamp, updateDoc, where } from "firebase/firestore";
+import { collection, doc, getDocs, query, updateDoc, where } from "firebase/firestore";
+import type { Timestamp } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
@@ -22,7 +23,17 @@ export interface Transaction {
   timestamp: Timestamp | null;
   statementId: string | null;
   groupId?: string;
-  groupName?: string;
+}
+
+function requireString(value: unknown, field: string): string {
+  if (typeof value !== "string") throw new Error(`Expected string for ${field}, got ${typeof value}`);
+  return value;
+}
+
+function requireNumber(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value))
+    throw new Error(`Expected finite number for ${field}, got ${value}`);
+  return value;
 }
 
 export async function getUserGroup(user: User): Promise<Group | null> {
@@ -31,7 +42,7 @@ export async function getUserGroup(user: User): Promise<Group | null> {
   const snapshot = await getDocs(q);
   if (snapshot.empty) return null;
   const d = snapshot.docs[0];
-  return { id: d.id, name: d.data().name as string };
+  return { id: d.id, name: requireString(d.data().name, "groups.name") };
 }
 
 export async function getTransactions(groupId: string | null): Promise<Transaction[]> {
@@ -45,18 +56,17 @@ export async function getTransactions(groupId: string | null): Promise<Transacti
     const data = d.data();
     return {
       id: d.id,
-      institution: data.institution as string,
-      account: data.account as string,
-      description: data.description as string,
-      amount: data.amount as number,
-      note: data.note as string,
-      category: data.category as string,
-      reimbursement: data.reimbursement as number,
-      budget: (data.budget as string) ?? null,
-      timestamp: (data.timestamp as Timestamp) ?? null,
-      statementId: (data.statementId as string) ?? null,
-      ...(data.groupId ? { groupId: data.groupId as string } : {}),
-      ...(data.groupName ? { groupName: data.groupName as string } : {}),
+      institution: requireString(data.institution, "institution"),
+      account: requireString(data.account, "account"),
+      description: requireString(data.description, "description"),
+      amount: requireNumber(data.amount, "amount"),
+      note: requireString(data.note, "note"),
+      category: requireString(data.category, "category"),
+      reimbursement: requireNumber(data.reimbursement, "reimbursement"),
+      budget: typeof data.budget === "string" ? data.budget : null,
+      timestamp: data.timestamp != null ? (data.timestamp as Timestamp) : null,
+      statementId: typeof data.statementId === "string" ? data.statementId : null,
+      ...(typeof data.groupId === "string" ? { groupId: data.groupId } : {}),
     };
   });
 }

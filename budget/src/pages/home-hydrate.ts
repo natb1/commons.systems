@@ -1,5 +1,57 @@
 import { updateTransaction } from "../firestore.js";
 
+function getOptions(input: HTMLInputElement, container: HTMLElement): string[] {
+  const raw = input.classList.contains("edit-budget")
+    ? container.dataset.budgetOptions
+    : input.classList.contains("edit-category")
+      ? container.dataset.categoryOptions
+      : undefined;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    console.error("Failed to parse autocomplete options:", raw);
+    return [];
+  }
+}
+
+function removeDropdown(): void {
+  document.querySelector(".autocomplete-dropdown")?.remove();
+}
+
+function showDropdown(input: HTMLInputElement, options: string[]): void {
+  removeDropdown();
+  const value = input.value;
+  const filter = value.toLowerCase();
+  const matches = options.filter(o => {
+    if (o.toLowerCase() === filter) return false;
+    return !filter || o.toLowerCase().includes(filter);
+  });
+  if (matches.length === 0) return;
+
+  const dropdown = document.createElement("div");
+  dropdown.className = "autocomplete-dropdown";
+  for (const opt of matches) {
+    const item = document.createElement("div");
+    item.className = "autocomplete-item";
+    item.textContent = opt;
+    item.addEventListener("mousedown", (e) => {
+      e.preventDefault(); // prevent blur before value is set
+      input.value = opt;
+      removeDropdown();
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+    });
+    dropdown.appendChild(item);
+  }
+
+  const rect = input.getBoundingClientRect();
+  dropdown.style.top = `${rect.bottom + window.scrollY}px`;
+  dropdown.style.left = `${rect.left + window.scrollX}px`;
+  dropdown.style.width = `${rect.width}px`;
+  document.body.appendChild(dropdown);
+}
+
 export function hydrateTransactionTable(container: HTMLElement): void {
   // Prevent accordion toggle when clicking inputs inside summary
   container.addEventListener("click", (e) => {
@@ -9,29 +61,62 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     }
   });
 
-  // Show datalist dropdown on focus for inputs with a list attribute
+  // Show autocomplete dropdown on focus for budget/category inputs
   container.addEventListener("focus", (e) => {
-    const target = e.target as HTMLInputElement;
-    if (target.tagName === "INPUT" && target.list && typeof target.showPicker === "function") {
-      target.showPicker();
-    }
+    const input = e.target as HTMLInputElement;
+    if (input.tagName !== "INPUT") return;
+    const options = getOptions(input, container);
+    if (options.length > 0) showDropdown(input, options);
   }, true);
+
+  // Filter dropdown as user types
+  container.addEventListener("input", (e) => {
+    const input = e.target as HTMLInputElement;
+    if (input.tagName !== "INPUT") return;
+    const options = getOptions(input, container);
+    if (options.length > 0) showDropdown(input, options);
+  });
+
+  // Dismiss dropdown on scroll or outside click
+  window.addEventListener("scroll", removeDropdown, true);
+  document.addEventListener("click", (e) => {
+    if (!(e.target as HTMLElement).closest(".autocomplete-dropdown")) {
+      removeDropdown();
+    }
+  });
 
   container.addEventListener("blur", async (e) => {
     const target = e.target as HTMLElement;
+    removeDropdown();
+
     const row = target.closest(".txn-row");
     const txnId = (row as HTMLElement)?.dataset.txnId;
     if (!txnId) return;
 
-    if (target.classList.contains("edit-note")) {
-      await updateTransaction(txnId, { note: (target as HTMLInputElement).value });
-    } else if (target.classList.contains("edit-category")) {
-      await updateTransaction(txnId, { category: (target as HTMLInputElement).value });
-    } else if (target.classList.contains("edit-reimbursement")) {
-      await updateTransaction(txnId, { reimbursement: Number((target as HTMLInputElement).value) });
-    } else if (target.classList.contains("edit-budget")) {
-      const value = (target as HTMLInputElement).value;
-      await updateTransaction(txnId, { budget: value || null });
+    const input = target as HTMLInputElement;
+    // Skip save if value hasn't changed (also prevents double-save from synthetic + real blur)
+    if (input.value === input.defaultValue) return;
+
+    try {
+      if (input.classList.contains("edit-note")) {
+        await updateTransaction(txnId, { note: input.value });
+      } else if (input.classList.contains("edit-category")) {
+        await updateTransaction(txnId, { category: input.value });
+      } else if (input.classList.contains("edit-reimbursement")) {
+        const reimbursement = Number(input.value);
+        if (!Number.isFinite(reimbursement)) return;
+        await updateTransaction(txnId, { reimbursement });
+      } else if (input.classList.contains("edit-budget")) {
+        await updateTransaction(txnId, { budget: input.value || null });
+      } else {
+        return;
+      }
+      input.defaultValue = input.value;
+    } catch (error) {
+      console.error("Failed to save transaction:", error);
+      input.value = input.defaultValue;
+      input.classList.add("save-error");
+      setTimeout(() => input.classList.remove("save-error"), 2000);
     }
   }, true);
 }
