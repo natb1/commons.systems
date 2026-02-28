@@ -21,3 +21,12 @@ EROFS: read-only file system, open '/home/n8/.npm/_cacache/tmp/...'
 Use `dangerouslyDisableSandbox: true` on Bash calls that run `npx` for packages not
 already cached (e.g., `npx firebase-tools`, `npx playwright test`), or scripts that
 invoke them (e.g., `run-qa-server.sh`).
+
+## Network namespace isolation
+
+Sandboxed Bash calls run in an isolated network namespace. Servers started with
+`dangerouslyDisableSandbox: true` listen on the host network — sandboxed `curl`,
+`ss -tlnp`, and health checks cannot reach them.
+
+Use `dangerouslyDisableSandbox: true` on Bash calls that check local server
+connectivity (e.g., `curl http://localhost:*`, `ss -tlnp`, readiness polls).

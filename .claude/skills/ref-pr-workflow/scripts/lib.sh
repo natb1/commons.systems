@@ -104,6 +104,20 @@ delete_preview_channel() {
   }
 }
 
+# Remove the emulator hub file if the PID recorded in it is dead.
+# Safe for concurrent worktrees: only removes if the owning process has exited.
+cleanup_stale_hub() {
+  local hub_file="/tmp/hub-${FIREBASE_PROJECT_ID}.json"
+  if [ -f "$hub_file" ]; then
+    local hub_pid
+    hub_pid=$(jq -r '.pid // empty' "$hub_file" 2>/dev/null) || true
+    if [ -n "$hub_pid" ] && ! kill -0 "$hub_pid" 2>/dev/null; then
+      echo "Removing stale emulator hub file (PID $hub_pid is dead)"
+      rm -f "$hub_file"
+    fi
+  fi
+}
+
 # Find an available TCP port by binding to port 0 and reading the assigned port.
 find_available_port() {
   node -e "
