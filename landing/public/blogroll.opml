@@ -6,9 +6,9 @@
   <body>
     <outline text="Anthropic Engineering"
              htmlUrl="https://www.anthropic.com/engineering"
-             type="link" />
+             type="rss" />
     <outline text="Claude Code Blog"
              htmlUrl="https://claude.com/blog/category/claude-code"
-             type="link" />
+             type="rss" />
   </body>
 </opml>

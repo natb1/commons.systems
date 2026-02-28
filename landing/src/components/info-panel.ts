@@ -1,5 +1,6 @@
 import { escapeHtml } from "../escape-html.js";
 import type { PostMeta } from "../firestore.js";
+import { isPublished, type PublishedPost } from "../post-types.js";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.js";
 
 interface InfoPanelData {
@@ -13,19 +14,12 @@ function monthName(month: number): string {
   return new Date(2000, month).toLocaleString("en-US", { month: "long" });
 }
 
-type PublishedPost = PostMeta & { published: true; publishedAt: string };
-
-function isPublished(p: PostMeta): p is PublishedPost {
-  return p.published;
-}
-
 function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string {
   if (published.length === 0) return "";
 
   const grouped = new Map<number, Map<number, typeof published>>();
   for (const post of published) {
     const date = new Date(post.publishedAt);
-    if (isNaN(date.getTime())) continue;
     const year = date.getFullYear();
     const month = date.getMonth();
     if (!grouped.has(year)) grouped.set(year, new Map());
@@ -126,7 +120,6 @@ export function renderInfoPanel(data: InfoPanelData): string {
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return "";
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -141,12 +134,18 @@ export function hydrateInfoPanel(
 ): void {
   const fetches = blogRoll.map((entry) => {
     const strategy = strategies.get(entry.id);
-    if (!strategy) return Promise.resolve({ entry, post: null as LatestPost | null });
+    if (!strategy) {
+      console.warn(`No strategy found for blog roll entry "${entry.id}"`);
+      return Promise.resolve({ entry, post: null as LatestPost | null });
+    }
 
     return strategy
       .fetchLatestPost()
       .then((post) => ({ entry, post }))
-      .catch(() => ({ entry, post: null as LatestPost | null }));
+      .catch((err) => {
+        console.error(`Failed to fetch latest post for "${entry.id}":`, err);
+        return { entry, post: null as LatestPost | null };
+      });
   });
 
   Promise.all(fetches).then((results) => {

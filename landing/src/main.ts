@@ -53,16 +53,6 @@ function updateInfoPanel(): void {
   if (rssBlobUrl) URL.revokeObjectURL(rssBlobUrl);
   rssBlobUrl = createRssBlobUrl(cachedPosts);
 
-  let rssLink = document.querySelector<HTMLLinkElement>('link[type="application/rss+xml"]');
-  if (!rssLink) {
-    rssLink = document.createElement("link");
-    rssLink.rel = "alternate";
-    rssLink.type = "application/rss+xml";
-    rssLink.title = "commons.systems RSS";
-    document.head.appendChild(rssLink);
-  }
-  rssLink.href = rssBlobUrl;
-
   infoPanel.innerHTML = renderInfoPanel({
     links: INFO_PANEL_LINKS,
     topPosts: cachedPosts,
@@ -144,6 +134,13 @@ if (app) {
       !target.closest("#info-panel") &&
       !target.closest("#panel-toggle")
     ) {
+      infoPanel.classList.remove("open");
+      document.getElementById("panel-toggle")?.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && infoPanel?.classList.contains("open")) {
       infoPanel.classList.remove("open");
       document.getElementById("panel-toggle")?.setAttribute("aria-expanded", "false");
     }

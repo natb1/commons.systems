@@ -1,7 +1,7 @@
 import type { BlogRollEntry, BlogRollStrategy } from "./types.js";
 import { StaticStrategy } from "./static-strategy.js";
 
-export interface BlogRollConfig {
+interface BlogRollConfig {
   entry: BlogRollEntry;
   strategy: BlogRollStrategy;
 }

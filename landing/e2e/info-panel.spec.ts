@@ -70,15 +70,12 @@ test.describe("info panel — mobile", () => {
     const toggle = page.locator("#panel-toggle");
     const panel = page.locator("#info-panel");
 
-    // Initially hidden
     await expect(panel).toBeHidden();
 
-    // Click to show
     await toggle.click();
     await expect(panel).toBeVisible();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
 
-    // Click to hide
     await toggle.click();
     await expect(panel).toBeHidden();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");

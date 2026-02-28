@@ -1,9 +1,10 @@
 import { escapeHtml } from "./escape-html.js";
 import type { PostMeta } from "./firestore.js";
+import { isPublished } from "./post-types.js";
 
 export function generateRssXml(posts: PostMeta[]): string {
   const published = posts
-    .filter((p): p is PostMeta & { published: true; publishedAt: string } => p.published)
+    .filter(isPublished)
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 
   const items = published

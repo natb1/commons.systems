@@ -9,6 +9,9 @@ export type PostMeta =
   | { id: string; title: string; published: true; publishedAt: string; filename: string }
   | { id: string; title: string; published: false; publishedAt: null; filename: string };
 
+export type { PublishedPost } from "./post-types.js";
+export { isPublished } from "./post-types.js";
+
 export interface GetPostsResult {
   posts: PostMeta[];
   skippedCount: number;

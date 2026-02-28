@@ -147,7 +147,6 @@ describe("renderInfoPanel", () => {
     expect(html).toContain("Links");
     expect(html).toContain("Top Posts");
     expect(html).toContain("Blogroll");
-    // Archive section is empty when no published posts
     expect(html).not.toContain("Archive");
   });
 

@@ -74,9 +74,9 @@ export function hydrateHome(
 
       // If the markdown starts with an h1, use it as the post title (overriding
       // the Firestore title) and strip it from the body to avoid duplication.
-      const h1Match = markdown.match(/^#\s+(.+)$/m);
+      const h1Match = markdown.match(/^#\s+(.+)/);
       if (h1Match) {
-        markdown = markdown.replace(/^#\s+.+\n?/m, "");
+        markdown = markdown.replace(/^#\s+.+\n?/, "");
         const titleSpan = outlet.querySelector<HTMLElement>(
           `#post-${CSS.escape(post.id)} h2 .post-title`,
         );
