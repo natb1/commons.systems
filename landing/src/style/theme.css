@@ -12,6 +12,8 @@ body {
 
 main {
   min-width: 0;
+  max-inline-size: none;
+  margin-inline: 0;
 }
 
 @media (min-width: 768px) {
@@ -19,13 +21,14 @@ main {
     grid-template-columns: 1fr 16rem;
   }
 
-  header {
+  body > header {
     display: grid;
     grid-template-columns: 1fr 16rem;
     column-gap: 1.5rem;
+    padding: 1rem 0;
   }
 
-  header > * {
+  body > header > * {
     grid-column: 1;
   }
 
