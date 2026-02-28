@@ -1,24 +1,23 @@
 import { escapeHtml } from "./escape-html.js";
 import type { PostMeta } from "./firestore.js";
 
-function escapeXml(str: string): string {
-  return escapeHtml(str);
-}
-
 export function generateRssXml(posts: PostMeta[]): string {
   const published = posts
     .filter((p): p is PostMeta & { published: true; publishedAt: string } => p.published)
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 
   const items = published
-    .map(
-      (p) => `    <item>
-      <title>${escapeXml(p.title)}</title>
-      <link>https://commons.systems/#/post/${escapeXml(p.id)}</link>
-      <guid>https://commons.systems/#/post/${escapeXml(p.id)}</guid>
-      <pubDate>${new Date(p.publishedAt).toUTCString()}</pubDate>
-    </item>`,
-    )
+    .map((p) => {
+      const date = new Date(p.publishedAt);
+      const pubDateTag = isNaN(date.getTime())
+        ? ""
+        : `\n      <pubDate>${date.toUTCString()}</pubDate>`;
+      return `    <item>
+      <title>${escapeHtml(p.title)}</title>
+      <link>https://commons.systems/#/post/${escapeHtml(p.id)}</link>
+      <guid>https://commons.systems/#/post/${escapeHtml(p.id)}</guid>${pubDateTag}
+    </item>`;
+    })
     .join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>

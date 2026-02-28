@@ -29,6 +29,8 @@ let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
 let lastSkippedCount = 0;
 let rssBlobUrl: string | undefined;
+let lastRenderedPosts: PostMeta[] | undefined;
+const strategies = createStrategies();
 
 function handleClick(action: () => Promise<void>, label: string): (e: Event) => void {
   return function (e: Event): void {
@@ -42,7 +44,11 @@ function handleClick(action: () => Promise<void>, label: string): (e: Event) => 
 }
 
 function updateInfoPanel(): void {
-  if (!infoPanel) return;
+  if (!infoPanel) {
+    console.error("updateInfoPanel: #info-panel element not found");
+    return;
+  }
+  if (cachedPosts === lastRenderedPosts) return;
 
   if (rssBlobUrl) URL.revokeObjectURL(rssBlobUrl);
   rssBlobUrl = createRssBlobUrl(cachedPosts);
@@ -64,8 +70,8 @@ function updateInfoPanel(): void {
     blogRoll: BLOG_ROLL_ENTRIES,
     rssFeedUrl: rssBlobUrl,
   });
-  const strategies = createStrategies();
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
+  lastRenderedPosts = cachedPosts;
 }
 
 function updateNav(): void {
@@ -131,6 +137,14 @@ if (app) {
     if ((e.target as HTMLElement).closest('a[href="#/"]')) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!infoPanel?.classList.contains("open")) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("#info-panel") || target.closest("#panel-toggle")) return;
+    infoPanel.classList.remove("open");
+    document.getElementById("panel-toggle")?.setAttribute("aria-expanded", "false");
   });
 
   onAuthStateChanged(auth, (user) => {

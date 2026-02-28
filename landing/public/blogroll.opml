@@ -4,7 +4,6 @@
     <title>commons.systems Blogroll</title>
   </head>
   <body>
-    <!-- Keep in sync with landing/src/blog-roll/config.ts -->
     <outline text="Anthropic Engineering"
              htmlUrl="https://www.anthropic.com/engineering"
              type="link" />

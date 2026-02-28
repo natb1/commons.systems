@@ -1,5 +1,8 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import fs from "fs";
+import path from "path";
 import { renderInfoPanel, hydrateInfoPanel } from "../../src/components/info-panel";
+import { BLOG_ROLL_ENTRIES } from "../../src/blog-roll/config";
 import type { PostMeta } from "../../src/firestore";
 import type {
   BlogRollEntry,
@@ -178,169 +181,177 @@ describe("renderInfoPanel", () => {
     expect(html).toContain('class="blogroll-date"');
   });
 
-  it("archive groups posts by year and month correctly", () => {
-    const html = renderInfoPanel(defaultData());
-    expect(html).toContain("2026");
-    expect(html).toContain("February");
-    expect(html).toContain("January");
-  });
-
-  it("archive current year (2026) is open by default", () => {
-    const html = renderInfoPanel(defaultData());
-    const container = document.createElement("div");
-    container.innerHTML = html;
-
-    const allDetails = container.querySelectorAll("details");
-    let foundOpen = false;
-    for (const details of allDetails) {
-      const summary = details.querySelector("summary");
-      if (summary?.textContent?.trim() === "2026") {
-        expect(details.hasAttribute("open")).toBe(true);
-        foundOpen = true;
-      }
-    }
-    expect(foundOpen).toBe(true);
-  });
-
-  it("archive other years are collapsed", () => {
-    const multiYearPosts: PostMeta[] = [
-      {
-        id: "p1",
-        title: "Old",
-        published: true,
-        publishedAt: "2025-03-01T00:00:00Z",
-        filename: "old.md",
-      },
-      {
-        id: "p3",
-        title: "New",
-        published: true,
-        publishedAt: "2026-02-15T00:00:00Z",
-        filename: "new.md",
-      },
-    ];
-    const html = renderInfoPanel({
-      links: [],
-      topPosts: multiYearPosts,
-      blogRoll: [],
+  describe("archive (pinned date)", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-02-15"));
     });
-    const container = document.createElement("div");
-    container.innerHTML = html;
 
-    const allDetails = container.querySelectorAll("details");
-    for (const details of allDetails) {
-      const summary = details.querySelector("summary");
-      if (summary?.textContent?.trim() === "2025") {
-        expect(details.hasAttribute("open")).toBe(false);
-      }
-    }
-  });
-
-  it("archive current month (February 2026) is open by default", () => {
-    const html = renderInfoPanel(defaultData());
-    const container = document.createElement("div");
-    container.innerHTML = html;
-
-    const allDetails = container.querySelectorAll("details");
-    let foundOpen = false;
-    for (const details of allDetails) {
-      const summary = details.querySelector("summary");
-      if (summary?.textContent?.trim() === "February") {
-        expect(details.hasAttribute("open")).toBe(true);
-        foundOpen = true;
-      }
-    }
-    expect(foundOpen).toBe(true);
-  });
-
-  it("archive other months are collapsed", () => {
-    const html = renderInfoPanel(defaultData());
-    const container = document.createElement("div");
-    container.innerHTML = html;
-
-    const allDetails = container.querySelectorAll("details");
-    for (const details of allDetails) {
-      const summary = details.querySelector("summary");
-      if (
-        summary?.textContent?.trim() === "January"
-      ) {
-        expect(details.hasAttribute("open")).toBe(false);
-      }
-    }
-  });
-
-  it("archive years sorted descending, months sorted descending within year", () => {
-    const multiYearPosts: PostMeta[] = [
-      {
-        id: "p1",
-        title: "Old",
-        published: true,
-        publishedAt: "2025-03-01T00:00:00Z",
-        filename: "old.md",
-      },
-      {
-        id: "p2",
-        title: "Older",
-        published: true,
-        publishedAt: "2025-06-01T00:00:00Z",
-        filename: "older.md",
-      },
-      {
-        id: "p3",
-        title: "New",
-        published: true,
-        publishedAt: "2026-02-15T00:00:00Z",
-        filename: "new.md",
-      },
-    ];
-    const html = renderInfoPanel({
-      links: [],
-      topPosts: multiYearPosts,
-      blogRoll: [],
+    afterEach(() => {
+      vi.useRealTimers();
     });
-    const container = document.createElement("div");
-    container.innerHTML = html;
 
-    // Top-level details elements within the archive section are years.
-    // Use children instead of :scope > details for happy-dom compatibility.
-    const archiveSection = container.querySelector(
-      ".panel-section:last-child",
-    )!;
-    const yearDetails = [...archiveSection.children].filter(
-      (el) => el.tagName === "DETAILS",
-    );
-    const years = yearDetails.map(
-      (d) => d.querySelector("summary")!.textContent!.trim(),
-    );
-    expect(years).toEqual(["2026", "2025"]);
-
-    // Within 2025, months should be descending: June before March
-    const year2025 = yearDetails[1];
-    const monthDetails = [...year2025.children].filter(
-      (el) => el.tagName === "DETAILS",
-    );
-    const months = monthDetails.map(
-      (d) => d.querySelector("summary")!.textContent!.trim(),
-    );
-    expect(months).toEqual(["June", "March"]);
-  });
-
-  it("archive is empty when no published posts", () => {
-    const draftsOnly: PostMeta[] = [
-      {
-        id: "d1",
-        title: "Draft",
-        published: false,
-        publishedAt: null,
-        filename: "d.md",
-      },
-    ];
-    const html = renderInfoPanel({
-      links: [],
-      topPosts: draftsOnly,
-      blogRoll: [],
+    it("groups posts by year and month correctly", () => {
+      const html = renderInfoPanel(defaultData());
+      expect(html).toContain("2026");
+      expect(html).toContain("February");
+      expect(html).toContain("January");
     });
-    expect(html).not.toContain("Archive");
+
+    it("current year (2026) is open by default", () => {
+      const html = renderInfoPanel(defaultData());
+      const container = document.createElement("div");
+      container.innerHTML = html;
+
+      const allDetails = container.querySelectorAll("details");
+      let foundOpen = false;
+      for (const details of allDetails) {
+        const summary = details.querySelector("summary");
+        if (summary?.textContent?.trim() === "2026") {
+          expect(details.hasAttribute("open")).toBe(true);
+          foundOpen = true;
+        }
+      }
+      expect(foundOpen).toBe(true);
+    });
+
+    it("other years are collapsed", () => {
+      const multiYearPosts: PostMeta[] = [
+        {
+          id: "p1",
+          title: "Old",
+          published: true,
+          publishedAt: "2025-03-01T00:00:00Z",
+          filename: "old.md",
+        },
+        {
+          id: "p3",
+          title: "New",
+          published: true,
+          publishedAt: "2026-02-15T00:00:00Z",
+          filename: "new.md",
+        },
+      ];
+      const html = renderInfoPanel({
+        links: [],
+        topPosts: multiYearPosts,
+        blogRoll: [],
+      });
+      const container = document.createElement("div");
+      container.innerHTML = html;
+
+      const allDetails = container.querySelectorAll("details");
+      for (const details of allDetails) {
+        const summary = details.querySelector("summary");
+        if (summary?.textContent?.trim() === "2025") {
+          expect(details.hasAttribute("open")).toBe(false);
+        }
+      }
+    });
+
+    it("current month (February 2026) is open by default", () => {
+      const html = renderInfoPanel(defaultData());
+      const container = document.createElement("div");
+      container.innerHTML = html;
+
+      const allDetails = container.querySelectorAll("details");
+      let foundOpen = false;
+      for (const details of allDetails) {
+        const summary = details.querySelector("summary");
+        if (summary?.textContent?.trim() === "February") {
+          expect(details.hasAttribute("open")).toBe(true);
+          foundOpen = true;
+        }
+      }
+      expect(foundOpen).toBe(true);
+    });
+
+    it("other months are collapsed", () => {
+      const html = renderInfoPanel(defaultData());
+      const container = document.createElement("div");
+      container.innerHTML = html;
+
+      const allDetails = container.querySelectorAll("details");
+      for (const details of allDetails) {
+        const summary = details.querySelector("summary");
+        if (
+          summary?.textContent?.trim() === "January"
+        ) {
+          expect(details.hasAttribute("open")).toBe(false);
+        }
+      }
+    });
+
+    it("years sorted descending, months sorted descending within year", () => {
+      const multiYearPosts: PostMeta[] = [
+        {
+          id: "p1",
+          title: "Old",
+          published: true,
+          publishedAt: "2025-03-01T00:00:00Z",
+          filename: "old.md",
+        },
+        {
+          id: "p2",
+          title: "Older",
+          published: true,
+          publishedAt: "2025-06-01T00:00:00Z",
+          filename: "older.md",
+        },
+        {
+          id: "p3",
+          title: "New",
+          published: true,
+          publishedAt: "2026-02-15T00:00:00Z",
+          filename: "new.md",
+        },
+      ];
+      const html = renderInfoPanel({
+        links: [],
+        topPosts: multiYearPosts,
+        blogRoll: [],
+      });
+      const container = document.createElement("div");
+      container.innerHTML = html;
+
+      const archiveSection = container.querySelector(
+        ".panel-section:last-child",
+      )!;
+      const yearDetails = [...archiveSection.children].filter(
+        (el) => el.tagName === "DETAILS",
+      );
+      const years = yearDetails.map(
+        (d) => d.querySelector("summary")!.textContent!.trim(),
+      );
+      expect(years).toEqual(["2026", "2025"]);
+
+      const year2025 = yearDetails[1];
+      const monthDetails = [...year2025.children].filter(
+        (el) => el.tagName === "DETAILS",
+      );
+      const months = monthDetails.map(
+        (d) => d.querySelector("summary")!.textContent!.trim(),
+      );
+      expect(months).toEqual(["June", "March"]);
+    });
+
+    it("archive is empty when no published posts", () => {
+      const draftsOnly: PostMeta[] = [
+        {
+          id: "d1",
+          title: "Draft",
+          published: false,
+          publishedAt: null,
+          filename: "d.md",
+        },
+      ];
+      const html = renderInfoPanel({
+        links: [],
+        topPosts: draftsOnly,
+        blogRoll: [],
+      });
+      expect(html).not.toContain("Archive");
+    });
   });
 });
 
@@ -410,7 +421,7 @@ describe("hydrateInfoPanel", () => {
     });
   });
 
-  it("fills date span when strategy returns publishedAt", async () => {
+  it("fills date span and sets data-iso when strategy returns publishedAt", async () => {
     const entries: BlogRollEntry[] = [
       { id: "test-blog", name: "Test Blog", url: "https://example.com" },
     ];
@@ -434,6 +445,7 @@ describe("hydrateInfoPanel", () => {
       const dateSpan = panel.querySelector("#blogroll-date-test-blog");
       expect(dateSpan!.textContent).toContain("Oct");
       expect(dateSpan!.textContent).toContain("2025");
+      expect(dateSpan!.getAttribute("data-iso")).toBe("2025-10-08");
     });
   });
 
@@ -510,5 +522,26 @@ describe("hydrateInfoPanel", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const placeholder = panel.querySelector("#blogroll-latest-test-blog");
     expect(placeholder!.textContent).toBe("");
+  });
+});
+
+describe("OPML/config sync", () => {
+  it("blogroll.opml entries match BLOG_ROLL_ENTRIES in order", () => {
+    const opmlPath = path.resolve(__dirname, "../../public/blogroll.opml");
+    const opml = fs.readFileSync(opmlPath, "utf-8");
+
+    const outlineRegex = /<outline\s[^>]*text="([^"]*)"[^>]*htmlUrl="([^"]*)"[^>]*\/>/g;
+    const opmlEntries: { name: string; url: string }[] = [];
+    let match;
+    while ((match = outlineRegex.exec(opml)) !== null) {
+      opmlEntries.push({ name: match[1], url: match[2] });
+    }
+
+    const configEntries = BLOG_ROLL_ENTRIES.map((e) => ({
+      name: e.name,
+      url: e.url,
+    }));
+
+    expect(opmlEntries).toEqual(configEntries);
   });
 });

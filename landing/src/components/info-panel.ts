@@ -23,6 +23,7 @@ function renderArchive(posts: PostMeta[], rssFeedUrl?: string): string {
   const grouped = new Map<number, Map<number, typeof published>>();
   for (const post of published) {
     const date = new Date(post.publishedAt);
+    if (isNaN(date.getTime())) continue;
     const year = date.getFullYear();
     const month = date.getMonth();
     if (!grouped.has(year)) grouped.set(year, new Map());
@@ -122,6 +123,7 @@ export function renderInfoPanel(data: InfoPanelData): string {
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "";
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -156,6 +158,7 @@ export function hydrateInfoPanel(
         entryLink.setAttribute("href", post.url);
         if (dateSpan && post.publishedAt) {
           dateSpan.textContent = formatDate(post.publishedAt);
+          dateSpan.setAttribute("data-iso", post.publishedAt);
         }
       }
     }
@@ -167,16 +170,16 @@ export function hydrateInfoPanel(
 
     const items = [...blogrollList.querySelectorAll("li[data-blogroll-id]")];
     items.sort((a, b) => {
-      const dateA = a.querySelector(".blogroll-date")?.textContent || "";
-      const dateB = b.querySelector(".blogroll-date")?.textContent || "";
+      const dateA = a.querySelector(".blogroll-date")?.getAttribute("data-iso") || "";
+      const dateB = b.querySelector(".blogroll-date")?.getAttribute("data-iso") || "";
       if (!dateA && !dateB) return 0;
       if (!dateA) return 1;
       if (!dateB) return -1;
-      return new Date(dateB).getTime() - new Date(dateA).getTime();
+      return dateB.localeCompare(dateA);
     });
 
     for (const item of items) {
       blogrollList.appendChild(item);
     }
-  });
+  }).catch((err) => console.error("Failed to hydrate blogroll:", err));
 }
