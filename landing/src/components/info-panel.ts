@@ -1,6 +1,6 @@
 import { escapeHtml } from "../escape-html.js";
 import type { PostMeta } from "../firestore.js";
-import type { BlogRollEntry, BlogRollStrategy } from "../blog-roll/types.js";
+import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.js";
 
 interface InfoPanelData {
   links: { label: string; url: string }[];
@@ -65,7 +65,7 @@ function renderArchive(posts: PostMeta[], rssFeedUrl?: string): string {
     .join("");
 
   const rssIcon = rssFeedUrl
-    ? ` <a href="${escapeHtml(rssFeedUrl)}" class="feed-icon" title="RSS" download="feed.xml">&#x25A0;</a>`
+    ? ` <a href="${escapeHtml(rssFeedUrl)}" title="RSS" download="feed.xml"><img src="/icons/rss.svg" class="feed-icon" alt="RSS"></a>`
     : "";
 
   return `<section class="panel-section">
@@ -93,10 +93,11 @@ export function renderInfoPanel(data: InfoPanelData): string {
   const blogRollHtml = data.blogRoll
     .map(
       (b) =>
-        `<li>
+        `<li data-blogroll-id="${escapeHtml(b.id)}">
         <a class="blogroll-entry" id="blogroll-entry-${escapeHtml(b.id)}" href="${escapeHtml(b.url)}" target="_blank" rel="noopener">
           <span class="blogroll-name">${escapeHtml(b.name)}</span>
           <span class="blogroll-latest" id="blogroll-latest-${escapeHtml(b.id)}"></span>
+          <span class="blogroll-date" id="blogroll-date-${escapeHtml(b.id)}"></span>
         </a>
       </li>`,
     )
@@ -112,11 +113,20 @@ export function renderInfoPanel(data: InfoPanelData): string {
       <ul class="panel-list">${topPostsHtml}</ul>
     </section>
     <section class="panel-section">
-      <h3>Blogroll <a href="/blogroll.opml" class="feed-icon" title="OPML">&#x25A0;</a></h3>
+      <h3>Blogroll <a href="/blogroll.opml" title="OPML"><img src="/icons/opml.svg" class="feed-icon" alt="OPML"></a></h3>
       <ul class="panel-list">${blogRollHtml}</ul>
     </section>
     ${renderArchive(data.topPosts, data.rssFeedUrl)}
   `;
+}
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function hydrateInfoPanel(
@@ -124,21 +134,49 @@ export function hydrateInfoPanel(
   blogRoll: BlogRollEntry[],
   strategies: Map<string, BlogRollStrategy>,
 ): void {
-  for (const entry of blogRoll) {
+  const fetches = blogRoll.map((entry) => {
     const strategy = strategies.get(entry.id);
-    if (!strategy) continue;
+    if (!strategy) return Promise.resolve({ entry, post: null as LatestPost | null });
 
-    const entryLink = panel.querySelector(`#blogroll-entry-${CSS.escape(entry.id)}`);
-    const placeholder = panel.querySelector(`#blogroll-latest-${CSS.escape(entry.id)}`);
-    if (!entryLink || !placeholder) continue;
+    return strategy
+      .fetchLatestPost()
+      .then((post) => ({ entry, post }))
+      .catch(() => ({ entry, post: null as LatestPost | null }));
+  });
 
-    strategy.fetchLatestPost().then((post) => {
+  Promise.all(fetches).then((results) => {
+    for (const { entry, post } of results) {
+      const entryLink = panel.querySelector(`#blogroll-entry-${CSS.escape(entry.id)}`);
+      const placeholder = panel.querySelector(`#blogroll-latest-${CSS.escape(entry.id)}`);
+      const dateSpan = panel.querySelector(`#blogroll-date-${CSS.escape(entry.id)}`);
+      if (!entryLink || !placeholder) continue;
+
       if (post) {
         placeholder.textContent = post.title;
         entryLink.setAttribute("href", post.url);
+        if (dateSpan && post.publishedAt) {
+          dateSpan.textContent = formatDate(post.publishedAt);
+        }
       }
-    }).catch(() => {
-      // Silently handle failures — blog roll latest post is non-critical
+    }
+
+    // Sort entries by publishedAt descending (most recent first)
+    const firstItem = panel.querySelector("li[data-blogroll-id]");
+    const blogrollList = firstItem?.parentElement;
+    if (!blogrollList) return;
+
+    const items = [...blogrollList.querySelectorAll("li[data-blogroll-id]")];
+    items.sort((a, b) => {
+      const dateA = a.querySelector(".blogroll-date")?.textContent || "";
+      const dateB = b.querySelector(".blogroll-date")?.textContent || "";
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1;
+      if (!dateB) return -1;
+      return new Date(dateB).getTime() - new Date(dateA).getTime();
     });
-  }
+
+    for (const item of items) {
+      blogrollList.appendChild(item);
+    }
+  });
 }

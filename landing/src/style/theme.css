@@ -20,7 +20,13 @@ main {
   }
 
   header {
-    padding-right: calc(16rem + 1.5rem);
+    display: grid;
+    grid-template-columns: 1fr 16rem;
+    column-gap: 1.5rem;
+  }
+
+  header > * {
+    grid-column: 1;
   }
 
   #info-panel {
@@ -111,6 +117,13 @@ main {
   display: block;
 }
 
+.blogroll-date {
+  font-size: 0.65rem;
+  color: var(--muted);
+  display: block;
+  opacity: 0.7;
+}
+
 .panel-section details {
   margin-bottom: 0.25rem;
   background: none;
@@ -128,14 +141,15 @@ main {
 }
 
 .feed-icon {
-  font-size: 0.6rem;
-  text-decoration: none;
-  color: var(--muted);
+  width: 0.75rem;
+  height: 0.75rem;
+  vertical-align: middle;
   margin-left: 0.3rem;
+  opacity: 0.5;
 }
 
 .feed-icon:hover {
-  color: var(--accent);
+  opacity: 0.8;
 }
 
 /* Panel toggle button */

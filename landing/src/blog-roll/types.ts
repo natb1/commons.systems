@@ -1,6 +1,7 @@
 export interface LatestPost {
   title: string;
   url: string;
+  publishedAt?: string;
 }
 
 export interface BlogRollEntry {

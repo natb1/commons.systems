@@ -22,6 +22,7 @@ export function createStrategies(): Map<string, BlogRollStrategy> {
     new StaticStrategy({
       title: "Quantifying infrastructure noise in agentic coding evals",
       url: "https://www.anthropic.com/engineering/infrastructure-noise",
+      publishedAt: "2025-10-08",
     }),
   );
   strategies.set(
@@ -29,6 +30,7 @@ export function createStrategies(): Map<string, BlogRollStrategy> {
     new StaticStrategy({
       title: "Bringing automated preview, review, and merge to Claude Code on desktop",
       url: "https://claude.com/blog/preview-review-and-merge-with-claude-code",
+      publishedAt: "2025-11-19",
     }),
   );
   return strategies;

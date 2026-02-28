@@ -148,26 +148,34 @@ describe("renderInfoPanel", () => {
     expect(html).not.toContain("Archive");
   });
 
-  it("blogroll section includes OPML icon link", () => {
+  it("blogroll section includes OPML icon as img", () => {
     const html = renderInfoPanel(defaultData());
     expect(html).toContain('href="/blogroll.opml"');
+    expect(html).toContain('src="/icons/opml.svg"');
     expect(html).toContain('class="feed-icon"');
-    expect(html).toContain('title="OPML"');
+    expect(html).toContain('alt="OPML"');
   });
 
-  it("archive section includes RSS icon when rssFeedUrl provided", () => {
+  it("archive section includes RSS icon as img when rssFeedUrl provided", () => {
     const html = renderInfoPanel({
       ...defaultData(),
       rssFeedUrl: "blob:http://localhost/rss",
     });
-    expect(html).toContain('title="RSS"');
+    expect(html).toContain('src="/icons/rss.svg"');
+    expect(html).toContain('alt="RSS"');
     expect(html).toContain('href="blob:http://localhost/rss"');
     expect(html).toContain('download="feed.xml"');
   });
 
   it("archive section has no RSS icon when rssFeedUrl undefined", () => {
     const html = renderInfoPanel(defaultData());
-    expect(html).not.toContain('title="RSS"');
+    expect(html).not.toContain('src="/icons/rss.svg"');
+  });
+
+  it("blogroll entries include date placeholder span", () => {
+    const html = renderInfoPanel(defaultData());
+    expect(html).toContain('id="blogroll-date-test-blog"');
+    expect(html).toContain('class="blogroll-date"');
   });
 
   it("archive groups posts by year and month correctly", () => {
@@ -399,6 +407,68 @@ describe("hydrateInfoPanel", () => {
       expect(placeholder!.textContent).toBe("New Article");
       const entryLink = panel.querySelector("#blogroll-entry-test-blog");
       expect(entryLink!.getAttribute("href")).toBe("https://example.com/article");
+    });
+  });
+
+  it("fills date span when strategy returns publishedAt", async () => {
+    const entries: BlogRollEntry[] = [
+      { id: "test-blog", name: "Test Blog", url: "https://example.com" },
+    ];
+    const panel = createPanel(entries);
+
+    const latest: LatestPost = {
+      title: "New Article",
+      url: "https://example.com/article",
+      publishedAt: "2025-10-08",
+    };
+    const strategy: BlogRollStrategy = {
+      fetchLatestPost: vi.fn().mockResolvedValue(latest),
+    };
+    const strategies = new Map<string, BlogRollStrategy>([
+      ["test-blog", strategy],
+    ]);
+
+    hydrateInfoPanel(panel, entries, strategies);
+
+    await vi.waitFor(() => {
+      const dateSpan = panel.querySelector("#blogroll-date-test-blog");
+      expect(dateSpan!.textContent).toContain("Oct");
+      expect(dateSpan!.textContent).toContain("2025");
+    });
+  });
+
+  it("sorts entries by publishedAt descending", async () => {
+    const entries: BlogRollEntry[] = [
+      { id: "old-blog", name: "Old Blog", url: "https://old.com" },
+      { id: "new-blog", name: "New Blog", url: "https://new.com" },
+    ];
+    const panel = createPanel(entries);
+
+    const strategyOld: BlogRollStrategy = {
+      fetchLatestPost: vi.fn().mockResolvedValue({
+        title: "Old Post",
+        url: "https://old.com/post",
+        publishedAt: "2025-01-01",
+      }),
+    };
+    const strategyNew: BlogRollStrategy = {
+      fetchLatestPost: vi.fn().mockResolvedValue({
+        title: "New Post",
+        url: "https://new.com/post",
+        publishedAt: "2025-11-19",
+      }),
+    };
+    const strategies = new Map<string, BlogRollStrategy>([
+      ["old-blog", strategyOld],
+      ["new-blog", strategyNew],
+    ]);
+
+    hydrateInfoPanel(panel, entries, strategies);
+
+    await vi.waitFor(() => {
+      const items = panel.querySelectorAll("li[data-blogroll-id]");
+      expect(items[0].getAttribute("data-blogroll-id")).toBe("new-blog");
+      expect(items[1].getAttribute("data-blogroll-id")).toBe("old-blog");
     });
   });
 
