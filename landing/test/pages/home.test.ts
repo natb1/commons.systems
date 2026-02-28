@@ -164,17 +164,19 @@ describe("hydrateHome", () => {
 
     const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
 
-    hydrateHome(outlet, [publishedPost], "hello-world");
-    await vi.waitFor(() => {
-      expect(scrollSpy).toHaveBeenCalled();
-    });
+    try {
+      hydrateHome(outlet, [publishedPost], "hello-world");
+      await vi.waitFor(() => {
+        expect(scrollSpy).toHaveBeenCalled();
+      });
 
-    // Verify header height is subtracted from scroll position
-    const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
-    expect(call.top).toBeLessThanOrEqual(0); // getBoundingClientRect().top is 0 in happy-dom, so 0 + 0 - 60 - 16 = -76, clamped to 0
-    expect(call.behavior).toBe("smooth");
-
-    scrollSpy.mockRestore();
-    document.body.removeChild(header);
+      // getBoundingClientRect().top is 0 in happy-dom, so Math.max(0, 0 + 0 - 60 - 16) = 0
+      const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
+      expect(call.top).toBe(0);
+      expect(call.behavior).toBe("smooth");
+    } finally {
+      scrollSpy.mockRestore();
+      document.body.removeChild(header);
+    }
   });
 });

@@ -86,6 +86,12 @@ describe("generateRssXml", () => {
     expect(xml).toContain("https://commons.systems/#/post/older-post");
   });
 
+  it("guid elements have isPermaLink=false", () => {
+    const xml = generateRssXml(publishedPosts);
+    expect(xml).toContain('isPermaLink="false"');
+    expect(xml).not.toMatch(/<guid>(?!.*isPermaLink)/);
+  });
+
   it("includes pubDate elements", () => {
     const xml = generateRssXml(publishedPosts);
     expect(xml).toContain("<pubDate>");

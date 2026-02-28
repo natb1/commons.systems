@@ -14,7 +14,6 @@ const nav = document.getElementById("nav");
 const app = document.getElementById("app");
 const infoPanel = document.getElementById("info-panel");
 
-// Set --header-height for sticky info panel positioning
 const header = document.querySelector("body > header");
 if (header) {
   new ResizeObserver(([entry]) => {
@@ -31,6 +30,7 @@ let lastSkippedCount = 0;
 let rssBlobUrl: string | undefined;
 let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
+const INFO_PANEL_LINKS = [{ label: "Source", url: "https://github.com/natb1/commons.systems" }];
 
 function handleClick(action: () => Promise<void>, label: string): (e: Event) => void {
   return function (e: Event): void {
@@ -63,9 +63,8 @@ function updateInfoPanel(): void {
   }
   rssLink.href = rssBlobUrl;
 
-  const links = [{ label: "Source", url: "https://github.com/natb1/commons.systems" }];
   infoPanel.innerHTML = renderInfoPanel({
-    links,
+    links: INFO_PANEL_LINKS,
     topPosts: cachedPosts,
     blogRoll: BLOG_ROLL_ENTRIES,
     rssFeedUrl: rssBlobUrl,
@@ -134,23 +133,27 @@ if (app) {
   );
 
   document.addEventListener("click", (e) => {
-    if ((e.target as HTMLElement).closest('a[href="#/"]')) {
+    const target = e.target as HTMLElement;
+
+    if (target.closest('a[href="#/"]')) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  });
 
-  document.addEventListener("click", (e) => {
-    if (!infoPanel?.classList.contains("open")) return;
-    const target = e.target as HTMLElement;
-    if (target.closest("#info-panel") || target.closest("#panel-toggle")) return;
-    infoPanel.classList.remove("open");
-    document.getElementById("panel-toggle")?.setAttribute("aria-expanded", "false");
+    if (
+      infoPanel?.classList.contains("open") &&
+      !target.closest("#info-panel") &&
+      !target.closest("#panel-toggle")
+    ) {
+      infoPanel.classList.remove("open");
+      document.getElementById("panel-toggle")?.setAttribute("aria-expanded", "false");
+    }
   });
 
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
     updateNav();
     navigate();
+    updateInfoPanel();
   });
 } else {
   console.error("Fatal: #app element not found");

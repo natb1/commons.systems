@@ -15,7 +15,7 @@ export function generateRssXml(posts: PostMeta[]): string {
       return `    <item>
       <title>${escapeHtml(p.title)}</title>
       <link>https://commons.systems/#/post/${escapeHtml(p.id)}</link>
-      <guid>https://commons.systems/#/post/${escapeHtml(p.id)}</guid>${pubDateTag}
+      <guid isPermaLink="false">https://commons.systems/#/post/${escapeHtml(p.id)}</guid>${pubDateTag}
     </item>`;
     })
     .join("\n");

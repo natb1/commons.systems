@@ -499,7 +499,7 @@ describe("hydrateInfoPanel", () => {
 
     hydrateInfoPanel(panel, entries, strategies);
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(() => expect(strategy.fetchLatestPost).toHaveBeenCalled());
     const placeholder = panel.querySelector("#blogroll-latest-test-blog");
     expect(placeholder!.textContent).toBe("");
   });
@@ -519,7 +519,7 @@ describe("hydrateInfoPanel", () => {
 
     hydrateInfoPanel(panel, entries, strategies);
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(() => expect(strategy.fetchLatestPost).toHaveBeenCalled());
     const placeholder = panel.querySelector("#blogroll-latest-test-blog");
     expect(placeholder!.textContent).toBe("");
   });

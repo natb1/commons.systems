@@ -182,7 +182,7 @@ main {
   transform: rotate(180deg);
 }
 
-/* Mobile: panel overlays content as dropdown */
+/* Mobile: panel appears as an overlay anchored to top-right */
 @media (max-width: 767px) {
   .content-grid {
     position: relative;

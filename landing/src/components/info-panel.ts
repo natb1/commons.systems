@@ -9,15 +9,17 @@ interface InfoPanelData {
   rssFeedUrl?: string;
 }
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+function monthName(month: number): string {
+  return new Date(2000, month).toLocaleString("en-US", { month: "long" });
+}
 
-function renderArchive(posts: PostMeta[], rssFeedUrl?: string): string {
-  const published = posts.filter(
-    (p): p is PostMeta & { published: true; publishedAt: string } => p.published,
-  );
+type PublishedPost = PostMeta & { published: true; publishedAt: string };
+
+function isPublished(p: PostMeta): p is PublishedPost {
+  return p.published;
+}
+
+function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string {
   if (published.length === 0) return "";
 
   const grouped = new Map<number, Map<number, typeof published>>();
@@ -53,7 +55,7 @@ function renderArchive(posts: PostMeta[], rssFeedUrl?: string): string {
             )
             .join("");
           return `<details${isCurrentMonth ? " open" : ""}>
-            <summary>${MONTH_NAMES[month]}</summary>
+            <summary>${monthName(month)}</summary>
             <ul class="panel-list">${items}</ul>
           </details>`;
         })
@@ -83,8 +85,9 @@ export function renderInfoPanel(data: InfoPanelData): string {
     )
     .join("");
 
-  const topPostsHtml = data.topPosts
-    .filter((p) => p.published)
+  const published = data.topPosts.filter(isPublished);
+
+  const topPostsHtml = published
     .map(
       (p) =>
         `<li><a href="#/post/${escapeHtml(p.id)}">${escapeHtml(p.title)}</a></li>`,
@@ -117,7 +120,7 @@ export function renderInfoPanel(data: InfoPanelData): string {
       <h3>Blogroll <a href="/blogroll.opml" title="OPML"><img src="/icons/opml.svg" class="feed-icon" alt="OPML"></a></h3>
       <ul class="panel-list">${blogRollHtml}</ul>
     </section>
-    ${renderArchive(data.topPosts, data.rssFeedUrl)}
+    ${renderArchive(published, data.rssFeedUrl)}
   `;
 }
 
@@ -163,7 +166,6 @@ export function hydrateInfoPanel(
       }
     }
 
-    // Sort entries by publishedAt descending (most recent first)
     const firstItem = panel.querySelector("li[data-blogroll-id]");
     const blogrollList = firstItem?.parentElement;
     if (!blogrollList) return;

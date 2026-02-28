@@ -72,7 +72,8 @@ export function hydrateHome(
     try {
       let markdown = await fetchPost(post.filename);
 
-      // Extract h1 from markdown to use as the canonical title
+      // If the markdown starts with an h1, use it as the post title (overriding
+      // the Firestore title) and strip it from the body to avoid duplication.
       const h1Match = markdown.match(/^#\s+(.+)$/m);
       if (h1Match) {
         markdown = markdown.replace(/^#\s+.+\n?/m, "");

@@ -230,6 +230,30 @@ describe("getPosts", () => {
     expect(posts[0].published).toBe(false);
   });
 
+  it("filters out published posts with invalid publishedAt date", async () => {
+    const invalidDate = {
+      id: "bad-date",
+      data: () => ({
+        title: "Bad Date",
+        published: true,
+        publishedAt: "not-a-date",
+        filename: "bad-date.md",
+      }),
+    };
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockGetDocs.mockResolvedValue({ docs: [invalidDate] });
+
+    const { posts, skippedCount } = await getPosts(natb1UserByScreenName);
+
+    expect(posts).toHaveLength(0);
+    expect(skippedCount).toBe(1);
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("bad-date"),
+      expect.anything(),
+    );
+    consoleError.mockRestore();
+  });
+
   it("filters out published posts without publishedAt date", async () => {
     const badPublished = {
       id: "published-no-date",

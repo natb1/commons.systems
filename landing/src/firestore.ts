@@ -24,6 +24,10 @@ function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null 
     return null;
   }
   if (published && publishedAt !== null) {
+    if (isNaN(new Date(publishedAt).getTime())) {
+      console.error(`Post "${id}" has invalid publishedAt date:`, data);
+      return null;
+    }
     return { id, title, published: true, publishedAt, filename };
   }
   if (published) {
