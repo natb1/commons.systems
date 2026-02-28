@@ -1,6 +1,7 @@
 import type { BlogRollEntry, BlogRollStrategy } from "./types.js";
 import { StaticStrategy } from "./static-strategy.js";
 
+// Keep in sync with landing/public/blogroll.opml
 export const BLOG_ROLL_ENTRIES: BlogRollEntry[] = [
   {
     id: "anthropic-engineering",

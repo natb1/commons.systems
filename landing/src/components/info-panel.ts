@@ -6,6 +6,7 @@ interface InfoPanelData {
   links: { label: string; url: string }[];
   topPosts: PostMeta[];
   blogRoll: BlogRollEntry[];
+  rssFeedUrl?: string;
 }
 
 const MONTH_NAMES = [
@@ -13,7 +14,7 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-function renderArchive(posts: PostMeta[]): string {
+function renderArchive(posts: PostMeta[], rssFeedUrl?: string): string {
   const published = posts.filter(
     (p): p is PostMeta & { published: true; publishedAt: string } => p.published,
   );
@@ -63,8 +64,12 @@ function renderArchive(posts: PostMeta[]): string {
     })
     .join("");
 
+  const rssIcon = rssFeedUrl
+    ? ` <a href="${escapeHtml(rssFeedUrl)}" class="feed-icon" title="RSS" download="feed.xml">&#x25A0;</a>`
+    : "";
+
   return `<section class="panel-section">
-    <h3>Archive</h3>
+    <h3>Archive${rssIcon}</h3>
     ${yearBlocks}
   </section>`;
 }
@@ -107,10 +112,10 @@ export function renderInfoPanel(data: InfoPanelData): string {
       <ul class="panel-list">${topPostsHtml}</ul>
     </section>
     <section class="panel-section">
-      <h3>Blog Roll</h3>
+      <h3>Blogroll <a href="/blogroll.opml" class="feed-icon" title="OPML">&#x25A0;</a></h3>
       <ul class="panel-list">${blogRollHtml}</ul>
     </section>
-    ${renderArchive(data.topPosts)}
+    ${renderArchive(data.topPosts, data.rssFeedUrl)}
   `;
 }
 

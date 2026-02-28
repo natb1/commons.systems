@@ -52,7 +52,7 @@ describe("renderInfoPanel", () => {
     const html = renderInfoPanel(defaultData());
     expect(html).toContain("Links");
     expect(html).toContain("Top Posts");
-    expect(html).toContain("Blog Roll");
+    expect(html).toContain("Blogroll");
     expect(html).toContain("Archive");
   });
 
@@ -143,9 +143,31 @@ describe("renderInfoPanel", () => {
     });
     expect(html).toContain("Links");
     expect(html).toContain("Top Posts");
-    expect(html).toContain("Blog Roll");
+    expect(html).toContain("Blogroll");
     // Archive section is empty when no published posts
     expect(html).not.toContain("Archive");
+  });
+
+  it("blogroll section includes OPML icon link", () => {
+    const html = renderInfoPanel(defaultData());
+    expect(html).toContain('href="/blogroll.opml"');
+    expect(html).toContain('class="feed-icon"');
+    expect(html).toContain('title="OPML"');
+  });
+
+  it("archive section includes RSS icon when rssFeedUrl provided", () => {
+    const html = renderInfoPanel({
+      ...defaultData(),
+      rssFeedUrl: "blob:http://localhost/rss",
+    });
+    expect(html).toContain('title="RSS"');
+    expect(html).toContain('href="blob:http://localhost/rss"');
+    expect(html).toContain('download="feed.xml"');
+  });
+
+  it("archive section has no RSS icon when rssFeedUrl undefined", () => {
+    const html = renderInfoPanel(defaultData());
+    expect(html).not.toContain('title="RSS"');
   });
 
   it("archive groups posts by year and month correctly", () => {

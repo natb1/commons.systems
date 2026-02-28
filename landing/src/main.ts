@@ -5,6 +5,7 @@ import { renderHomeHtml, hydrateHome } from "./pages/home.js";
 import { renderAdmin } from "./pages/admin.js";
 import { renderNav } from "./components/nav.js";
 import { renderInfoPanel, hydrateInfoPanel } from "./components/info-panel.js";
+import { createRssBlobUrl } from "./feed.js";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { getPosts, type PostMeta } from "./firestore.js";
@@ -16,6 +17,7 @@ const infoPanel = document.getElementById("info-panel");
 let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
 let lastSkippedCount = 0;
+let rssBlobUrl: string | undefined;
 
 function handleClick(action: () => Promise<void>, label: string): (e: Event) => void {
   return function (e: Event): void {
@@ -30,11 +32,26 @@ function handleClick(action: () => Promise<void>, label: string): (e: Event) => 
 
 function updateInfoPanel(): void {
   if (!infoPanel) return;
+
+  if (rssBlobUrl) URL.revokeObjectURL(rssBlobUrl);
+  rssBlobUrl = createRssBlobUrl(cachedPosts);
+
+  let rssLink = document.querySelector<HTMLLinkElement>('link[type="application/rss+xml"]');
+  if (!rssLink) {
+    rssLink = document.createElement("link");
+    rssLink.rel = "alternate";
+    rssLink.type = "application/rss+xml";
+    rssLink.title = "commons.systems RSS";
+    document.head.appendChild(rssLink);
+  }
+  rssLink.href = rssBlobUrl;
+
   const links = [{ label: "GitHub", url: "https://github.com/natb1/commons.systems" }];
   infoPanel.innerHTML = renderInfoPanel({
     links,
     topPosts: cachedPosts,
     blogRoll: BLOG_ROLL_ENTRIES,
+    rssFeedUrl: rssBlobUrl,
   });
   const strategies = createStrategies();
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);

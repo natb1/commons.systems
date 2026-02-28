@@ -19,6 +19,10 @@ main {
     grid-template-columns: 1fr 16rem;
   }
 
+  header {
+    padding-right: calc(16rem + 1.5rem);
+  }
+
   #info-panel {
     position: sticky;
     top: 5rem;
@@ -121,6 +125,17 @@ main {
 
 .panel-section details details {
   margin-left: 1rem;
+}
+
+.feed-icon {
+  font-size: 0.6rem;
+  text-decoration: none;
+  color: var(--muted);
+  margin-left: 0.3rem;
+}
+
+.feed-icon:hover {
+  color: var(--accent);
 }
 
 /* Panel toggle button */

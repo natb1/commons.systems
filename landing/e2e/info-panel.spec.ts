@@ -15,7 +15,7 @@ test.describe("info panel — desktop", () => {
     await expect(panel).toBeVisible();
     await expect(panel.locator("h3", { hasText: "Links" })).toBeVisible();
     await expect(panel.locator("h3", { hasText: "Top Posts" })).toBeVisible();
-    await expect(panel.locator("h3", { hasText: "Blog Roll" })).toBeVisible();
+    await expect(panel.locator("h3", { hasText: "Blogroll" })).toBeVisible();
     await expect(panel.locator("h3", { hasText: "Archive" })).toBeVisible();
   });
 
