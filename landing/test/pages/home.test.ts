@@ -47,7 +47,7 @@ describe("renderHomeHtml", () => {
   it("renders post titles as links in h2 elements", () => {
     const html = renderHomeHtml([publishedPost]);
     expect(html).toContain('class="post-link"');
-    expect(html).toContain("Hello World</a>");
+    expect(html).toContain("Hello World</span></a>");
     expect(html).toContain('href="#/post/hello-world"');
   });
 
@@ -147,10 +147,10 @@ describe("hydrateHome", () => {
       expect(content?.innerHTML).toContain("Body text here.");
     });
 
-    const titleLink = outlet.querySelector(
-      "#post-hello-world h2 .post-link",
+    const titleSpan = outlet.querySelector(
+      "#post-hello-world h2 .post-title",
     );
-    expect(titleLink?.textContent).toContain("Markdown Title");
+    expect(titleSpan?.textContent).toBe("Markdown Title");
   });
 
   it("scrolls to target article when scrollTo is provided", async () => {

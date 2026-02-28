@@ -27,7 +27,7 @@ function renderArticle(p: PostMeta): string {
     : ` <span class="draft-badge">[draft]</span>`;
   const linkHtml =
     `<a href="#/post/${safeId}" class="post-link">` +
-    `<span class="link-icon" aria-hidden="true">&#x1F517; </span>${escapeHtml(p.title)}</a>`;
+    `<span class="link-icon" aria-hidden="true">&#x1F517; </span><span class="post-title">${escapeHtml(p.title)}</span></a>`;
   return `<article id="post-${safeId}">
         <h2>${linkHtml}${draftBadge}</h2>
         ${dateHtml}
@@ -43,7 +43,7 @@ export function renderHomeHtml(posts: PostMeta[]): string {
   `;
   }
 
-  const articles = posts.map(renderArticle).join("\n      ");
+  const articles = posts.map(renderArticle).join("\n      <hr>\n      ");
 
   return `
     <div id="posts">
@@ -76,13 +76,11 @@ export function hydrateHome(
       const h1Match = markdown.match(/^#\s+(.+)$/m);
       if (h1Match) {
         markdown = markdown.replace(/^#\s+.+\n?/m, "");
-        const titleLink = outlet.querySelector<HTMLElement>(
-          `#post-${CSS.escape(post.id)} h2 .post-link`,
+        const titleSpan = outlet.querySelector<HTMLElement>(
+          `#post-${CSS.escape(post.id)} h2 .post-title`,
         );
-        if (titleLink) {
-          const icon = titleLink.querySelector(".link-icon");
-          titleLink.textContent = h1Match[1];
-          if (icon) titleLink.prepend(icon);
+        if (titleSpan) {
+          titleSpan.textContent = h1Match[1];
         }
       }
 

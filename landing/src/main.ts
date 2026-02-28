@@ -14,6 +14,19 @@ const nav = document.getElementById("nav");
 const app = document.getElementById("app");
 const infoPanel = document.getElementById("info-panel");
 
+// Set --header-height for sticky info panel positioning
+function syncHeaderHeight(): void {
+  const header = document.querySelector("body > header");
+  if (header) {
+    document.documentElement.style.setProperty(
+      "--header-height",
+      `${header.getBoundingClientRect().height}px`,
+    );
+  }
+}
+syncHeaderHeight();
+window.addEventListener("resize", syncHeaderHeight);
+
 let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
 let lastSkippedCount = 0;
