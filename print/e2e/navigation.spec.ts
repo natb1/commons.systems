@@ -37,7 +37,7 @@ test.describe("navigation", () => {
     await expect(page.locator("#metadata-table")).toBeVisible({ timeout: 10000 });
 
     // Click "Back to library" to return home
-    await page.locator('a[href="#/"]').click();
+    await page.getByRole("link", { name: "Back to library" }).click();
     await expect(page.locator("main h2")).toHaveText("Library");
     await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
   });

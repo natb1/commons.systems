@@ -99,7 +99,7 @@ test.describe("media", () => {
     await page.goto("/#/view/phaedrus");
     await page.waitForSelector("#metadata-table", { timeout: 30000 });
 
-    await page.locator('a[href="#/"]').click();
+    await page.getByRole("link", { name: "Back to library" }).click();
     await expect(page.locator("main h2")).toHaveText("Library");
     await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
   });

@@ -9,6 +9,9 @@ export type PostMeta =
   | { id: string; title: string; published: true; publishedAt: string; filename: string }
   | { id: string; title: string; published: false; publishedAt: null; filename: string };
 
+export type { PublishedPost } from "./post-types.js";
+export { isPublished } from "./post-types.js";
+
 export interface GetPostsResult {
   posts: PostMeta[];
   skippedCount: number;
@@ -24,6 +27,10 @@ function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null 
     return null;
   }
   if (published && publishedAt !== null) {
+    if (isNaN(new Date(publishedAt).getTime())) {
+      console.error(`Post "${id}" has invalid publishedAt date:`, data);
+      return null;
+    }
     return { id, title, published: true, publishedAt, filename };
   }
   if (published) {
@@ -37,7 +44,7 @@ export async function getPosts(user: User | null): Promise<GetPostsResult> {
   const path = nsCollectionPath(NAMESPACE, "posts");
   const admin = isAuthorized(user);
   const q = admin
-    ? query(collection(db, path), orderBy("publishedAt"))
+    ? query(collection(db, path), orderBy("publishedAt", "desc"))
     : query(collection(db, path), where("published", "==", true));
   const snapshot = await getDocs(q);
   const posts: PostMeta[] = [];
@@ -51,7 +58,7 @@ export async function getPosts(user: User | null): Promise<GetPostsResult> {
     }
   }
   if (!admin) {
-    posts.sort((a, b) => (a.publishedAt ?? "").localeCompare(b.publishedAt ?? ""));
+    posts.sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
   }
   return { posts, skippedCount };
 }
