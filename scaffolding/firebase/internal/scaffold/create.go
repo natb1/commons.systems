@@ -170,7 +170,7 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 	return nil
 }
 
-const firestoreRulesCatchAll = "// Deny everything else by default (scaffolding uses this line as an insertion marker)"
+const firestoreRulesCatchAll = "// SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment."
 
 // InsertFirestoreRules inserts a default rules block for appName into firestore.rules,
 // just before the deny-all catch-all rule. Rules use the literal app name as a
