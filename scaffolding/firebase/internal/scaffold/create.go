@@ -94,13 +94,24 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 		}
 	}
 
-	// Render workflow templates
+	// Render per-app pr-checks and prod-deploy workflow templates.
+	// Unit test workflows use the consolidated unit-tests.yml instead (managed by InsertUnitTestsPath).
 	if dryRun {
 		fmt.Printf("[dry-run] Would render workflow templates into .github/workflows/\n")
 	} else {
 		fmt.Println("Rendering workflow templates...")
 		if err := renderTemplates(templateFS, repoRoot, "templates/workflows", filepath.Join(".github", "workflows"), data); err != nil {
 			return fmt.Errorf("rendering workflow templates: %w", err)
+		}
+	}
+
+	// Add app path to consolidated unit-tests.yml trigger
+	if dryRun {
+		fmt.Printf("[dry-run] Would add %q path trigger to unit-tests.yml\n", appName)
+	} else {
+		fmt.Println("Updating unit-tests.yml path triggers...")
+		if err := InsertUnitTestsPath(repoRoot, appName); err != nil {
+			return fmt.Errorf("updating unit-tests.yml: %w", err)
 		}
 	}
 
@@ -162,12 +173,64 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 	if !dryRun {
 		fmt.Println("Next steps:")
 		fmt.Printf("  cd %s && npm install\n", appName)
-		fmt.Printf("  # Run unit tests:       .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh %s\n", appName)
-		fmt.Printf("  # Run acceptance tests:  .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh %s\n", appName)
+		fmt.Printf("  # Run unit tests:       .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh --app %s\n", appName)
+		fmt.Printf("  # Run lint:             .claude/skills/ref-pr-workflow/scripts/run-lint.sh --app %s\n", appName)
+		fmt.Printf("  # Run acceptance tests: .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh %s\n", appName)
 		fmt.Println()
 	}
 
 	return nil
+}
+
+const unitTestsPathMarker = "      # SCAFFOLD MARKER: app-paths - scaffold inserts new app paths above this line"
+
+// InsertUnitTestsPath adds a path trigger for appName to .github/workflows/unit-tests.yml,
+// immediately before the scaffold marker. No-ops if the path already exists.
+func InsertUnitTestsPath(repoRoot, appName string) error {
+	wfPath := filepath.Join(repoRoot, ".github", "workflows", "unit-tests.yml")
+	raw, err := os.ReadFile(wfPath)
+	if err != nil {
+		return fmt.Errorf("reading unit-tests.yml: %w", err)
+	}
+
+	content := string(raw)
+	appPath := `      - "` + appName + `/**"`
+	if strings.Contains(content, appPath) {
+		fmt.Printf("NOTE: path trigger for %q already exists in unit-tests.yml\n", appName)
+		return nil
+	}
+
+	idx := strings.Index(content, unitTestsPathMarker)
+	if idx == -1 {
+		return fmt.Errorf("scaffold marker not found in unit-tests.yml")
+	}
+
+	updated := content[:idx] + appPath + "\n" + content[idx:]
+	return os.WriteFile(wfPath, []byte(updated), 0o644)
+}
+
+// RemoveUnitTestsPath removes the path trigger for appName from .github/workflows/unit-tests.yml.
+// No-ops if the path is not present.
+func RemoveUnitTestsPath(repoRoot, appName string) error {
+	wfPath := filepath.Join(repoRoot, ".github", "workflows", "unit-tests.yml")
+	raw, err := os.ReadFile(wfPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Printf("NOTE: unit-tests.yml not found, skipping path trigger removal for %q\n", appName)
+			return nil
+		}
+		return fmt.Errorf("reading unit-tests.yml: %w", err)
+	}
+
+	content := string(raw)
+	appPath := `      - "` + appName + `/**"` + "\n"
+	if !strings.Contains(content, appPath) {
+		fmt.Printf("NOTE: path trigger for %q not found in unit-tests.yml\n", appName)
+		return nil
+	}
+
+	updated := strings.Replace(content, appPath, "", 1)
+	return os.WriteFile(wfPath, []byte(updated), 0o644)
 }
 
 const firestoreRulesCatchAll = "// SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment."
