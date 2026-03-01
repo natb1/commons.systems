@@ -30,7 +30,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 ## Workflow
 | Step | Agent Pattern | Artifacts |
 |------|--------------|-----------|
-| 1. Functional Requirement Definition & Prioritization | Augmented | [functional requirement tracking skill #3](https://github.com/natb1/commons.systems/issues/3) |
+| 1. Functional Requirement Definition & Prioritization | Augmented | [ready skill](.claude/skills/ready/SKILL.md) |
 | 2. Dev Environment Management | Delegated + QC | [worktree skill](.claude/skills/worktree/SKILL.md) [Declarative dev env #5](https://github.com/natb1/commons.systems/issues/5)  [app scaffolding #18](https://github.com/natb1/commons.systems/issues/18) |
 | 3. Implementation Planning | Delegated + QC | [planning skill #8](https://github.com/natb1/commons.systems/issues/8) [batching skill #9](https://github.com/natb1/commons.systems/issues/9) |
 | 4. Implementation | Delegated | [wiggum loop skill](./claude/skills/wiggup-loop/SKILL.md) [implementation skills #10](https://github.com/natb1/commons.systems/issues/10) [implementation tracking skill #20](https://github.com/natb1/commons.systems/issues/20) [unit testing skill #11](https://github.com/natb1/commons.systems/issues/11) [unit test tooling #16](https://github.com/natb1/commons.systems/issues/16) [acceptance testing skill #15](https://github.com/natb1/commons.systems/issues/15) [acceptance test tooling #17](https://github.com/natb1/commons.systems/issues/17) |
