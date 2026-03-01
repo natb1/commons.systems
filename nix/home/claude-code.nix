@@ -52,11 +52,13 @@ in
   ];
 
   # Configure Claude to use the nix-managed seccomp filter.
-  # Deep-merges into settings.local.json to preserve existing user settings.
+  # Deep-merges into settings.json to preserve existing user settings.
+  # Uses settings.json (not settings.local.json) because Claude's seccomp
+  # diagnostic reads from settings.json specifically.
   home.activation.configureClaudeSeccomp = lib.mkIf (pkgs.stdenv.isLinux && archDir != null) (
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       SETTINGS_DIR="${config.home.homeDirectory}/.claude"
-      SETTINGS_FILE="$SETTINGS_DIR/settings.local.json"
+      SETTINGS_FILE="$SETTINGS_DIR/settings.json"
 
       $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$SETTINGS_DIR"
 
