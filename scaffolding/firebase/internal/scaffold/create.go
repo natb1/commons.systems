@@ -94,7 +94,8 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 		}
 	}
 
-	// Render per-app workflow templates (pr-checks, prod-deploy)
+	// Render per-app pr-checks and prod-deploy workflow templates.
+	// Unit test workflows use the consolidated unit-tests.yml instead (managed by InsertUnitTestsPath).
 	if dryRun {
 		fmt.Printf("[dry-run] Would render workflow templates into .github/workflows/\n")
 	} else {
@@ -214,16 +215,21 @@ func RemoveUnitTestsPath(repoRoot, appName string) error {
 	wfPath := filepath.Join(repoRoot, ".github", "workflows", "unit-tests.yml")
 	raw, err := os.ReadFile(wfPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Printf("NOTE: unit-tests.yml not found, skipping path trigger removal for %q\n", appName)
+			return nil
+		}
 		return fmt.Errorf("reading unit-tests.yml: %w", err)
 	}
 
+	content := string(raw)
 	appPath := `      - "` + appName + `/**"` + "\n"
-	if !strings.Contains(string(raw), appPath) {
+	if !strings.Contains(content, appPath) {
 		fmt.Printf("NOTE: path trigger for %q not found in unit-tests.yml\n", appName)
 		return nil
 	}
 
-	updated := strings.ReplaceAll(string(raw), appPath, "")
+	updated := strings.Replace(content, appPath, "", 1)
 	return os.WriteFile(wfPath, []byte(updated), 0o644)
 }
 

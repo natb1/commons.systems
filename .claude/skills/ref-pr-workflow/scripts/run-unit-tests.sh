@@ -13,6 +13,7 @@ EXPLICIT=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --app)
+      [[ $# -lt 2 ]] && { echo "Error: --app requires an argument" >&2; exit 1; }
       DIRTY_APPS["$2"]=1
       EXPLICIT=true
       shift 2
@@ -36,7 +37,16 @@ done
 
 # Auto-detect mode: derive suites from changed files vs origin/main
 if [ "$EXPLICIT" = false ]; then
-  CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1...HEAD 2>/dev/null || echo "")
+  if ! CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null); then
+    if ! CHANGED=$(git diff --name-only HEAD~1...HEAD 2>/dev/null); then
+      echo "WARNING: could not determine changed files; running all app checks as fallback" >&2
+      for dir in "$REPO_ROOT"/*/; do
+        base=$(basename "$dir")
+        [ -f "$dir/package.json" ] && [ -f "$dir/package-lock.json" ] && DIRTY_APPS["$base"]=1
+      done
+      CHANGED=""
+    fi
+  fi
 
   while IFS= read -r file; do
     [ -z "$file" ] && continue
@@ -67,8 +77,10 @@ if [ "$EXPLICIT" = false ]; then
         DIRTY_APPS[landing]=1
         ;;
       *)
-        # Generic: any top-level dir with package.json handles new apps
-        [ -f "$REPO_ROOT/$top_dir/package.json" ] && DIRTY_APPS["$top_dir"]=1
+        # Generic: any new app dir with package.json and package-lock.json gets unit tests.
+        # Requires package-lock.json (npm ci will fail without it). Dirs with only package.json
+        # but no lock file (e.g. style/) must be handled by named cases above.
+        [ -f "$REPO_ROOT/$top_dir/package.json" ] && [ -f "$REPO_ROOT/$top_dir/package-lock.json" ] && DIRTY_APPS["$top_dir"]=1
         ;;
     esac
   done <<< "$CHANGED"
@@ -108,6 +120,11 @@ if [ "$RUN_RULES" = true ]; then
     echo "FAIL: firestore rules" >&2
     FAILURES+=(rules)
   fi
+fi
+
+if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ]; then
+  echo "No test suites matched changed files. Nothing to check."
+  exit 0
 fi
 
 if [ ${#FAILURES[@]} -gt 0 ]; then

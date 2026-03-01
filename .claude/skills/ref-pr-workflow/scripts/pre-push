@@ -8,6 +8,7 @@ SCRIPTS="$REPO_ROOT/.claude/skills/ref-pr-workflow/scripts"
 
 TESTS_LOG=$(mktemp)
 LINT_LOG=$(mktemp)
+trap 'rm -f "$TESTS_LOG" "$LINT_LOG"' EXIT
 
 "$SCRIPTS/run-unit-tests.sh" >"$TESTS_LOG" 2>&1 &
 TESTS_PID=$!
@@ -23,5 +24,4 @@ if [ $TESTS_EXIT -ne 0 ] || [ $LINT_EXIT -ne 0 ]; then
   [ $LINT_EXIT  -ne 0 ] && { echo "=== Lint failures ===" >&2;      cat "$LINT_LOG"  >&2; }
 fi
 
-rm -f "$TESTS_LOG" "$LINT_LOG"
 exit 0
