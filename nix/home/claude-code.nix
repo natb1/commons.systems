@@ -7,8 +7,13 @@
 # binary's PATH, so no explicit sandbox packages are needed here.
 #
 # On Linux, this module also installs the seccomp filter from
-# @anthropic-ai/sandbox-runtime and configures Claude's settings.local.json
-# to use it. The filter blocks Unix domain socket access in sandboxed processes.
+# @anthropic-ai/sandbox-runtime. Claude's auto-detection scans global npm
+# install paths for vendor/seccomp/<arch>/{apply-seccomp,unix-block.bpf},
+# so the activation script symlinks the nix store files into ~/.npm-global/.
+#
+# Note: Claude Code 2.1.50 has a bug where settings.sandbox.seccomp paths
+# are parsed but never passed to the detection function. The symlink
+# approach bypasses this by matching the auto-detection path directly.
 
 {
   config,
@@ -51,38 +56,22 @@ in
     pkgs.claude-code
   ];
 
-  # Configure Claude to use the nix-managed seccomp filter.
-  # Deep-merges into settings.json to preserve existing user settings.
-  # Uses settings.json (not settings.local.json) because Claude's seccomp
-  # diagnostic reads from settings.json specifically.
+  # Symlink seccomp filter files into a global npm install path where Claude's
+  # auto-detection will find them. Claude scans paths like ~/.npm-global/lib/
+  # node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/<arch>/.
   home.activation.configureClaudeSeccomp = lib.mkIf (pkgs.stdenv.isLinux && archDir != null) (
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      SETTINGS_DIR="${config.home.homeDirectory}/.claude"
-      SETTINGS_FILE="$SETTINGS_DIR/settings.json"
+      VENDOR_DIR="${config.home.homeDirectory}/.npm-global/lib/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/${archDir}"
 
-      $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$SETTINGS_DIR"
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$VENDOR_DIR"
 
-      if [ ! -f "$SETTINGS_FILE" ]; then
-        echo '{}' > "$SETTINGS_FILE"
-      fi
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/ln -sf \
+        "${sandbox-seccomp}/lib/claude-seccomp/apply-seccomp" \
+        "$VENDOR_DIR/apply-seccomp"
 
-      SECCOMP_OVERLAY=$(${pkgs.coreutils}/bin/cat <<'ENDJSON'
-      {
-        "sandbox": {
-          "seccomp": {
-            "bpfPath": "${sandbox-seccomp}/lib/claude-seccomp/unix-block.bpf",
-            "applyPath": "${sandbox-seccomp}/lib/claude-seccomp/apply-seccomp"
-          }
-        }
-      }
-      ENDJSON
-      )
-
-      $DRY_RUN_CMD ${pkgs.jq}/bin/jq -s '.[0] * .[1]' \
-        "$SETTINGS_FILE" \
-        <(echo "$SECCOMP_OVERLAY") \
-        > "$SETTINGS_FILE.tmp"
-      $DRY_RUN_CMD ${pkgs.coreutils}/bin/mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/ln -sf \
+        "${sandbox-seccomp}/lib/claude-seccomp/unix-block.bpf" \
+        "$VENDOR_DIR/unix-block.bpf"
     ''
   );
 }
