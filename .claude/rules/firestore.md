@@ -4,9 +4,23 @@
 merges to `main` — this workflow is independent of any app's prod-deploy workflow.
 Preview branch deploys do not deploy rules.
 
-**Put rules changes in a standalone PR targeting `main`**, separate from feature work.
-Smoke tests on a feature branch will fail with permission-denied until the standalone
-rules PR merges and the centralized workflow deploys the updated rules.
+## Serialized workflow
+
+Only one worktree should have unmerged rules changes at a time. Follow this sequence:
+
+1. **Develop on the feature branch.** Include Firestore rules changes directly in the feature branch. Proceed through preview deployment and smoke tests as normal.
+
+2. **Before submitting the feature PR**, request user approval to:
+   - Merge latest rules from `origin/main` into the feature branch
+   - Manually deploy updated rules if needed (see [Manual deployment](#manual-deployment) below)
+
+3. **After smoke tests and QA pass**, create a new worktree and open a **standalone rules-only PR** targeting `main`. Do not include unrelated feature changes.
+
+4. **Repeat** for each subsequent feature that requires rules changes. Do not begin step 1 for a new feature until the previous standalone rules PR has merged.
+
+This keeps `origin/main` always declaring the current deployed rule set and prevents multiple worktrees from thrashing on rules updates.
+
+> **Note:** Smoke tests on a feature branch will fail with permission-denied until the standalone rules PR merges and deploys.
 
 ## Manual deployment (for debugging)
 
