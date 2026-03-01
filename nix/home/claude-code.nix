@@ -11,8 +11,8 @@
 # install paths for vendor/seccomp/<arch>/{apply-seccomp,unix-block.bpf},
 # so the activation script symlinks the nix store files into ~/.npm-global/.
 #
-# Note: Claude Code 2.1.50 has a bug where settings.sandbox.seccomp paths
-# are parsed but never passed to the detection function. The symlink
+# Note: Claude Code's settings.sandbox.seccomp paths are parsed but never
+# passed to the detection function (rGA() omits the field). The symlink
 # approach bypasses this by matching the auto-detection path directly.
 
 {
@@ -23,7 +23,9 @@
 }:
 
 let
-  # Architecture mapping: nix system -> npm tarball directory name
+  # Architecture mapping: nix system -> npm tarball directory name.
+  # Evaluates to null on unsupported platforms, which disables the seccomp
+  # activation below.
   archDir =
     {
       "x86_64-linux" = "x64";
@@ -31,7 +33,9 @@ let
     }
     .${pkgs.stdenv.hostPlatform.system} or null;
 
-  sandbox-seccomp = pkgs.stdenv.mkDerivation {
+  # To update: bump version and sha256, then verify tarball paths are unchanged.
+  # nix-prefetch-url https://registry.npmjs.org/@anthropic-ai/sandbox-runtime/-/sandbox-runtime-<version>.tgz
+  sandbox-seccomp = assert archDir != null; pkgs.stdenv.mkDerivation {
     pname = "claude-sandbox-seccomp";
     version = "0.0.39";
 
@@ -44,9 +48,8 @@ let
 
     installPhase = ''
       mkdir -p $out/lib/claude-seccomp
-      cp package/vendor/seccomp/${archDir}/apply-seccomp $out/lib/claude-seccomp/
-      cp package/vendor/seccomp/${archDir}/unix-block.bpf $out/lib/claude-seccomp/
-      chmod +x $out/lib/claude-seccomp/apply-seccomp
+      install -m 755 package/vendor/seccomp/${archDir}/apply-seccomp $out/lib/claude-seccomp/
+      install -m 644 package/vendor/seccomp/${archDir}/unix-block.bpf $out/lib/claude-seccomp/
     '';
   };
 
@@ -61,6 +64,8 @@ in
   # node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/<arch>/.
   home.activation.configureClaudeSeccomp = lib.mkIf (pkgs.stdenv.isLinux && archDir != null) (
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      set -eu
+
       VENDOR_DIR="${config.home.homeDirectory}/.npm-global/lib/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/${archDir}"
 
       $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$VENDOR_DIR"
