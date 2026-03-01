@@ -16,14 +16,15 @@ describe("renderNav", () => {
     expect(html).toContain("Library");
   });
 
-  it("shows no auth elements when currentPath is / and user is null", () => {
+  it("shows Login link when user is null on home page", () => {
     const html = renderNav(null, "/");
 
-    expect(html).not.toContain('id="sign-in"');
+    expect(html).toContain('id="sign-in"');
+    expect(html).toContain("Login");
     expect(html).not.toContain('id="sign-out"');
   });
 
-  it("shows Login link when currentPath is /admin and user is null", () => {
+  it("shows Login link when user is null on admin page", () => {
     const html = renderNav(null, "/admin");
 
     expect(html).toContain('id="sign-in"');
@@ -31,8 +32,8 @@ describe("renderNav", () => {
     expect(html).not.toContain('id="sign-out"');
   });
 
-  it("shows user display name and Logout when currentPath is /admin and user is present", () => {
-    const html = renderNav(mockUser, "/admin");
+  it("shows user display name and Logout when user is present", () => {
+    const html = renderNav(mockUser, "/");
 
     expect(html).toContain('id="sign-out"');
     expect(html).toContain('id="user-display"');
@@ -41,18 +42,19 @@ describe("renderNav", () => {
     expect(html).not.toContain('id="sign-in"');
   });
 
-  it("shows no auth elements when currentPath is / and user is present", () => {
-    const html = renderNav(mockUser, "/");
-
-    expect(html).not.toContain('id="sign-in"');
-    expect(html).not.toContain('id="sign-out"');
-  });
-
-  it("shows no auth elements on view routes", () => {
+  it("shows auth elements on view routes", () => {
     const html = renderNav(null, "/view/phaedrus");
 
-    expect(html).not.toContain('id="sign-in"');
-    expect(html).not.toContain('id="sign-out"');
+    expect(html).toContain('id="sign-in"');
+    expect(html).toContain("Login");
+  });
+
+  it("shows user display on view routes when signed in", () => {
+    const html = renderNav(mockUser, "/view/phaedrus");
+
+    expect(html).toContain('id="sign-out"');
+    expect(html).toContain('id="user-display"');
+    expect(html).toContain("Test User");
   });
 
   it("falls back to email when displayName is null", () => {
@@ -62,7 +64,7 @@ describe("renderNav", () => {
       providerData: [],
     } as unknown as User;
 
-    const html = renderNav(emailOnlyUser, "/admin");
+    const html = renderNav(emailOnlyUser, "/");
 
     expect(html).toContain("user@example.com");
   });
@@ -74,7 +76,7 @@ describe("renderNav", () => {
       providerData: [],
     } as unknown as User;
 
-    const html = renderNav(noNameUser, "/admin");
+    const html = renderNav(noNameUser, "/");
 
     expect(html).toContain("User");
   });
@@ -86,7 +88,7 @@ describe("renderNav", () => {
       providerData: [],
     } as unknown as User;
 
-    const html = renderNav(xssUser, "/admin");
+    const html = renderNav(xssUser, "/");
 
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
@@ -99,7 +101,7 @@ describe("renderNav", () => {
       providerData: [],
     } as unknown as User;
 
-    const html = renderNav(xssUser, "/admin");
+    const html = renderNav(xssUser, "/");
 
     expect(html).not.toContain("<tag>");
     expect(html).toContain("&lt;tag&gt;");

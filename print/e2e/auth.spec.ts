@@ -2,15 +2,15 @@ import { test, expect } from "@playwright/test";
 import { signIn } from "@commons-systems/authutil/e2e/sign-in";
 
 test.describe("auth", () => {
-  test("sign-in link visible on admin page", async ({ page }) => {
-    await page.goto("/#/admin");
+  test("sign-in link visible on home page", async ({ page }) => {
+    await page.goto("/");
     await expect(page.locator("#sign-in")).toBeVisible();
     await expect(page.locator("#sign-out")).not.toBeVisible();
   });
 
-  test("sign-in link not shown on non-admin routes", async ({ page }) => {
-    await page.goto("/");
-    await expect(page.locator("#sign-in")).not.toBeAttached();
+  test("sign-in link visible on view routes", async ({ page }) => {
+    await page.goto("/#/view/nonexistent");
+    await expect(page.locator("#sign-in")).toBeVisible();
   });
 
   test("nav shows user display and sign-out after sign-in", async ({
@@ -18,7 +18,6 @@ test.describe("auth", () => {
   }) => {
     await page.goto("/");
     await signIn(page);
-    await page.goto("/#/admin");
     await expect(page.locator("#sign-out")).toBeVisible();
     await expect(page.locator("#user-display")).toBeVisible();
   });
@@ -36,13 +35,10 @@ test.describe("auth", () => {
     await signIn(page);
     await page.waitForSelector("#media-list", { timeout: 30000 });
 
-    // Navigate to admin and sign out
-    await page.goto("/#/admin");
+    // Sign out from home page
     await page.locator("#sign-out").click();
     await page.waitForSelector("#sign-in");
 
-    // Navigate back to library
-    await page.locator('a[href="#/"]').click();
     await page.waitForSelector("#media-list", { timeout: 30000 });
     const items = page.locator("#media-list article.media-item");
     await expect(items).toHaveCount(3);
@@ -74,12 +70,9 @@ test.describe("auth", () => {
     await expect(page.locator("#media-list")).toContainText("Republic");
   });
 
-  test("sign-out returns to unauthenticated state on admin page", async ({
-    page,
-  }) => {
+  test("sign-out returns to unauthenticated state", async ({ page }) => {
     await page.goto("/");
     await signIn(page);
-    await page.goto("/#/admin");
     await page.locator("#sign-out").click();
     await page.waitForSelector("#sign-in");
     await expect(page.locator("#sign-in")).toBeVisible();
