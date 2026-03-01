@@ -25,19 +25,19 @@ const mockGroup = { id: "household", name: "household" };
 describe("renderHome", () => {
   it("returns HTML containing a Transactions heading", async () => {
     mockGetTransactions.mockResolvedValue([]);
-    const html = await renderHome();
+    const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).toContain("<h2>Transactions</h2>");
   });
 
   it("shows seed data notice for unauthorized users", async () => {
     mockGetTransactions.mockResolvedValue([]);
-    const html = await renderHome();
+    const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).toContain('id="seed-data-notice"');
   });
 
   it("does not show seed data notice for authorized users", async () => {
     mockGetTransactions.mockResolvedValue([]);
-    const html = await renderHome({ user: mockUser, group: mockGroup });
+    const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).not.toContain('id="seed-data-notice"');
   });
 
@@ -58,7 +58,7 @@ describe("renderHome", () => {
         groupId: null,
       },
     ]);
-    const html = await renderHome();
+    const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).toContain('id="transactions-table"');
     expect(html).toContain("Grocery store");
     expect(html).toContain("52.30");
@@ -67,24 +67,24 @@ describe("renderHome", () => {
 
   it("renders error fallback when Firestore fails", async () => {
     mockGetTransactions.mockRejectedValue(new Error("connection failed"));
-    const html = await renderHome();
+    const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).toContain("Could not load transactions");
     expect(html).toContain('id="transactions-error"');
   });
 
   it("re-throws RangeError instead of showing fallback", async () => {
     mockGetTransactions.mockRejectedValue(new RangeError("reimbursement must be between 0 and 100"));
-    await expect(renderHome()).rejects.toThrow(RangeError);
+    await expect(renderHome({ user: null, group: null, groupError: false })).rejects.toThrow(RangeError);
   });
 
   it("re-throws DataIntegrityError instead of showing fallback", async () => {
     mockGetTransactions.mockRejectedValue(new DataIntegrityError("Expected string for description, got undefined"));
-    await expect(renderHome()).rejects.toThrow(DataIntegrityError);
+    await expect(renderHome({ user: null, group: null, groupError: false })).rejects.toThrow(DataIntegrityError);
   });
 
   it("shows group error when groupError is true for signed-in user", async () => {
     mockGetTransactions.mockResolvedValue([]);
-    const html = await renderHome({ user: mockUser, groupError: true });
+    const html = await renderHome({ user: mockUser, group: null, groupError: true });
     expect(html).toContain('id="group-error"');
     expect(html).toContain("Could not verify group membership");
     expect(html).not.toContain('id="seed-data-notice"');
@@ -92,7 +92,7 @@ describe("renderHome", () => {
 
   it("renders empty state when no transactions", async () => {
     mockGetTransactions.mockResolvedValue([]);
-    const html = await renderHome();
+    const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).toContain("No transactions found.");
   });
 
@@ -113,7 +113,7 @@ describe("renderHome", () => {
         groupId: "household",
       },
     ]);
-    const html = await renderHome({ user: mockUser, group: mockGroup });
+    const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain('class="edit-note"');
     expect(html).toContain('class="edit-category"');
     expect(html).toContain('class="edit-reimbursement"');
@@ -142,7 +142,7 @@ describe("renderHome", () => {
         groupId: null,
       },
     ]);
-    const html = await renderHome();
+    const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).not.toContain('class="edit-note"');
     expect(html).not.toContain('class="edit-category"');
     expect(html).toContain("weekly groceries");
@@ -165,7 +165,7 @@ describe("renderHome", () => {
         groupId: null,
       },
     ]);
-    const html = await renderHome();
+    const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).toContain('class="txn-row"');
     expect(html).toContain('class="txn-summary"');
     expect(html).toContain('class="txn-summary-content"');
@@ -191,7 +191,7 @@ describe("renderHome", () => {
         groupId: null,
       },
     ]);
-    const html = await renderHome();
+    const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).toContain("<dt>Date</dt>");
     expect(html).toContain("<dt>Statement</dt>");
     expect(html).toContain('<a href="#">statement</a>');
@@ -214,7 +214,7 @@ describe("renderHome", () => {
         groupId: null,
       },
     ]);
-    const html = await renderHome();
+    const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).toContain("<dt>Statement</dt><dd></dd>");
   });
 
@@ -263,7 +263,7 @@ describe("renderHome", () => {
         groupId: "household",
       },
     ]);
-    const html = await renderHome({ user: mockUser, group: mockGroup });
+    const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain("data-budget-options");
     expect(html).toContain("food");
     expect(html).toContain("vacation");
@@ -286,7 +286,7 @@ describe("renderHome", () => {
         groupId: null,
       },
     ]);
-    const html = await renderHome();
+    const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).not.toContain("data-budget-options");
     expect(html).not.toContain("data-category-options");
   });
@@ -322,7 +322,7 @@ describe("renderHome", () => {
         groupId: "household",
       },
     ]);
-    const html = await renderHome({ user: mockUser, group: mockGroup });
+    const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain("data-category-options");
     expect(html).toContain("Food:Groceries");
     expect(html).toContain("Travel:Lodging");
@@ -345,7 +345,7 @@ describe("renderHome", () => {
         groupId: "household",
       },
     ]);
-    const html = await renderHome({ user: mockUser, group: mockGroup });
+    const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain("<dt>Group</dt>");
     expect(html).toContain("<dd>household</dd>");
   });
@@ -395,7 +395,7 @@ describe("renderHome", () => {
         groupId: null,
       },
     ]);
-    const html = await renderHome();
+    const html = await renderHome({ user: null, group: null, groupError: false });
     const newerIdx = html.indexOf("Newer");
     const olderIdx = html.indexOf("Older");
     const noDateIdx = html.indexOf("No date");

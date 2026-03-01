@@ -66,17 +66,21 @@ const router = createRouter(app, [
   { path: "/about", render: renderAbout },
 ]);
 
-// The router discards navigate()'s Promise (returns void) so we use a
-// MutationObserver to detect when the table appears in the DOM.
+// Hydrate the transaction table whenever it appears in the DOM. Multiple code
+// paths trigger renders (hashchange, auth state changes), so an observer
+// catches all of them.
+// Observer runs for page lifetime: each navigation to "/" produces a new table.
 const observer = new MutationObserver(() => {
   try {
     const table = app.querySelector("#transactions-table") as HTMLElement | null;
     if (table && !table.dataset.hydrated) {
-      table.dataset.hydrated = "true";
       hydrateTransactionTable(table);
+      table.dataset.hydrated = "true";
     }
   } catch (error) {
     console.error("Hydration error:", error);
+    const table = app.querySelector("#transactions-table") as HTMLElement | null;
+    if (table) table.dataset.hydrated = "true";
   }
 });
 observer.observe(app, { childList: true, subtree: true });

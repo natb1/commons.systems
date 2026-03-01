@@ -13,37 +13,27 @@ function formatCategory(category: string): string {
   return category.split(":").map(escapeHtml).join(" &gt; ");
 }
 
-function renderReadOnlyRow(txn: Transaction, groupName: string): string {
-  return `<details class="txn-row">
-    <summary class="txn-summary">
-      <div class="txn-summary-content">
-        <span>${escapeHtml(txn.description)}</span>
-        <span>${escapeHtml(txn.note)}</span>
-        <span>${formatCategory(txn.category)}</span>
-        <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
-      </div>
-    </summary>
-    <div class="txn-details">
-      <dl>
-        <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
-        <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
-        <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
-        <dt>Reimbursement</dt><dd>${String(txn.reimbursement)}%</dd>
-        <dt>Budget</dt><dd>${escapeHtml(txn.budget ?? "")}</dd>
-        <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
-        <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
-      </dl>
-    </div>
-  </details>`;
-}
+function renderRow(txn: Transaction, groupName: string, editable: boolean): string {
+  const txnIdAttr = editable ? ` data-txn-id="${escapeHtml(txn.id)}"` : "";
+  const noteCell = editable
+    ? `<input type="text" class="edit-note" value="${escapeHtml(txn.note)}" aria-label="Note">`
+    : escapeHtml(txn.note);
+  const categoryCell = editable
+    ? `<input type="text" class="edit-category" value="${escapeHtml(txn.category)}" aria-label="Category">`
+    : formatCategory(txn.category);
+  const reimbursementCell = editable
+    ? `<input type="number" class="edit-reimbursement" value="${String(txn.reimbursement)}" min="0" max="100" aria-label="Reimbursement">`
+    : `${String(txn.reimbursement)}%`;
+  const budgetCell = editable
+    ? `<input type="text" class="edit-budget" value="${escapeHtml(txn.budget ?? "")}" aria-label="Budget">`
+    : escapeHtml(txn.budget ?? "");
 
-function renderEditableRow(txn: Transaction, groupName: string): string {
-  return `<details class="txn-row" data-txn-id="${escapeHtml(txn.id)}">
+  return `<details class="txn-row"${txnIdAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(txn.description)}</span>
-        <span><input type="text" class="edit-note" value="${escapeHtml(txn.note)}" aria-label="Note"></span>
-        <span><input type="text" class="edit-category" value="${escapeHtml(txn.category)}" aria-label="Category"></span>
+        <span>${noteCell}</span>
+        <span>${categoryCell}</span>
         <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
       </div>
     </summary>
@@ -52,8 +42,8 @@ function renderEditableRow(txn: Transaction, groupName: string): string {
         <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
         <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
         <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
-        <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="${String(txn.reimbursement)}" min="0" max="100" aria-label="Reimbursement"></dd>
-        <dt>Budget</dt><dd><input type="text" class="edit-budget" value="${escapeHtml(txn.budget ?? "")}" aria-label="Budget"></dd>
+        <dt>Reimbursement</dt><dd>${reimbursementCell}</dd>
+        <dt>Budget</dt><dd>${budgetCell}</dd>
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
       </dl>
@@ -77,9 +67,8 @@ function renderTransactionTable(transactions: Transaction[], authorized: boolean
     return "<p>No transactions found.</p>";
   }
 
-  const renderRow = authorized ? renderEditableRow : renderReadOnlyRow;
   const rows = transactions
-    .map((txn) => renderRow(txn, groupName))
+    .map((txn) => renderRow(txn, groupName, authorized))
     .join("\n");
 
   let dataAttrs = "";
@@ -108,19 +97,21 @@ function renderTransactionTable(transactions: Transaction[], authorized: boolean
  * - `{ user }` — authenticated, no groups exist (shows seed data)
  */
 export interface RenderHomeOptions {
-  user?: User | null;
-  group?: Group | null;
-  groupError?: boolean;
+  user: User | null;
+  group: Group | null;
+  groupError: boolean;
 }
 
-export async function renderHome(options: RenderHomeOptions = {}): Promise<string> {
-  const { user = null, group = null, groupError = false } = options;
+export async function renderHome(options: RenderHomeOptions): Promise<string> {
+  const { user, group, groupError } = options;
   const authorized = group !== null;
   const groupName = group?.name ?? "";
 
   let tableHtml: string;
   try {
-    const transactions = await getTransactions(group?.id ?? null, user?.uid);
+    const transactions = group
+      ? await getTransactions(group.id, user!.uid)
+      : await getTransactions(null);
     transactions.sort(compareByTimestampDesc);
     tableHtml = renderTransactionTable(transactions, authorized, groupName);
   } catch (error) {

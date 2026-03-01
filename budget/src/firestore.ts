@@ -58,9 +58,15 @@ export async function getUserGroups(user: User): Promise<Group[]> {
 }
 
 function asTimestamp(value: unknown): Timestamp | null {
-  return value != null && typeof (value as Timestamp).toDate === "function" ? (value as Timestamp) : null;
+  if (value == null) return null;
+  if (typeof (value as Timestamp).toDate !== "function") {
+    throw new DataIntegrityError(`Expected Timestamp for timestamp field, got ${typeof value}`);
+  }
+  return value as Timestamp;
 }
 
+export async function getTransactions(groupId: null): Promise<Transaction[]>;
+export async function getTransactions(groupId: string, uid: string): Promise<Transaction[]>;
 export async function getTransactions(groupId: string | null, uid?: string): Promise<Transaction[]> {
   if (groupId && !uid) throw new DataIntegrityError("uid is required when querying by groupId");
   const collectionName = groupId ? "transactions" : "seed-transactions";

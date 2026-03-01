@@ -10,7 +10,7 @@ function renderGroupSelect(groups: Group[], selectedGroupId: string | null): str
       return `<option value="${escapeHtml(g.id)}"${selected}>${escapeHtml(g.name)}</option>`;
     })
     .join("");
-  return `<select id="group-select">${options}</select>`;
+  return `<select id="group-select" aria-label="Select group">${options}</select>`;
 }
 
 export function renderNav(user: User | null, groups: Group[] = [], selectedGroupId: string | null = null): string {

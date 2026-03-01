@@ -86,7 +86,8 @@
   cursor: pointer;
 }
 
-.autocomplete-item:hover {
+.autocomplete-item:hover,
+.autocomplete-item.selected {
   background: var(--border);
 }
 
@@ -128,4 +129,10 @@
 
 .auth-error {
   color: var(--error, #c00);
+}
+
+.cc-badge {
+  width: 117px;
+  height: 41px;
+  vertical-align: middle;
 }

@@ -17,6 +17,12 @@ function parseJsonArray(raw: string | undefined): string[] {
 
 function removeDropdown(): void {
   document.querySelector(".autocomplete-dropdown")?.remove();
+  const active = document.querySelector("[aria-controls='autocomplete-listbox']") as HTMLElement | null;
+  if (active) {
+    active.removeAttribute("aria-activedescendant");
+    active.removeAttribute("aria-controls");
+    active.removeAttribute("aria-autocomplete");
+  }
 }
 
 function handleOutsideClick(e: Event): void {
@@ -39,6 +45,12 @@ function showInputError(input: HTMLInputElement): void {
   }, 2000);
 }
 
+function selectItem(input: HTMLInputElement, value: string): void {
+  input.value = value;
+  removeDropdown();
+  input.dispatchEvent(new Event("blur", { bubbles: true }));
+}
+
 function showDropdown(input: HTMLInputElement, options: string[]): void {
   removeDropdown();
   const value = input.value;
@@ -48,22 +60,63 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
     if (lower === filter) return false;
     return !filter || lower.includes(filter);
   });
-  if (matches.length === 0) return;
+  if (matches.length === 0) {
+    input.removeAttribute("aria-activedescendant");
+    input.removeAttribute("aria-controls");
+    input.removeAttribute("aria-autocomplete");
+    return;
+  }
 
+  let selectedIndex = -1;
   const dropdown = document.createElement("div");
   dropdown.className = "autocomplete-dropdown";
-  for (const opt of matches) {
+  dropdown.setAttribute("role", "listbox");
+  dropdown.id = "autocomplete-listbox";
+
+  const items: HTMLElement[] = [];
+  matches.forEach((opt, i) => {
     const item = document.createElement("div");
     item.className = "autocomplete-item";
+    item.setAttribute("role", "option");
+    item.id = `autocomplete-option-${i}`;
     item.textContent = opt;
     item.addEventListener("mousedown", (e) => {
       e.preventDefault(); // prevent blur before value is set
-      input.value = opt;
-      removeDropdown();
-      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      selectItem(input, opt);
     });
+    items.push(item);
     dropdown.appendChild(item);
+  });
+
+  function updateSelection(index: number): void {
+    items.forEach((el) => el.classList.remove("selected"));
+    selectedIndex = index;
+    if (index >= 0 && index < items.length) {
+      items[index].classList.add("selected");
+      input.setAttribute("aria-activedescendant", items[index].id);
+    } else {
+      input.removeAttribute("aria-activedescendant");
+    }
   }
+
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-controls", "autocomplete-listbox");
+
+  input.addEventListener("keydown", function handleKeydown(e: KeyboardEvent) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      updateSelection(selectedIndex < items.length - 1 ? selectedIndex + 1 : 0);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      updateSelection(selectedIndex > 0 ? selectedIndex - 1 : items.length - 1);
+    } else if (e.key === "Enter" && selectedIndex >= 0) {
+      e.preventDefault();
+      selectItem(input, matches[selectedIndex]);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      removeDropdown();
+    }
+  });
 
   const rect = input.getBoundingClientRect();
   dropdown.style.top = `${rect.bottom + window.scrollY}px`;
@@ -73,7 +126,12 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
 }
 
 export function _resetForTest(): void {
-  listenersRegistered = false;
+  if (listenersRegistered) {
+    window.removeEventListener("scroll", removeDropdown, true);
+    document.removeEventListener("click", handleOutsideClick);
+    listenersRegistered = false;
+  }
+  removeDropdown();
 }
 
 export function hydrateTransactionTable(container: HTMLElement): void {
