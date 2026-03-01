@@ -130,6 +130,7 @@ describe("getTransactions", () => {
         budget: null,
         timestamp: mockTimestamp,
         statementId: "stmt-2025-01",
+        groupId: null,
       },
     ]);
   });

@@ -17,14 +17,27 @@ if (authEmulatorHost) {
 }
 
 function showAuthError(message: string): void {
-  const existing = document.querySelector(".auth-error");
+  const existing = document.querySelector(".auth-toast");
   if (existing) existing.remove();
   const el = document.createElement("div");
-  el.className = "auth-error";
-  el.textContent = message;
+  el.className = "auth-toast";
   el.setAttribute("role", "alert");
+
+  const text = document.createElement("span");
+  text.textContent = message;
+  el.appendChild(text);
+
+  const btn = document.createElement("button");
+  btn.textContent = "\u00d7";
+  btn.setAttribute("aria-label", "Dismiss error");
+  el.appendChild(btn);
+
   document.body.prepend(el);
-  setTimeout(() => el.remove(), 5000);
+  const timer = setTimeout(() => el.remove(), 5000);
+  btn.addEventListener("click", () => {
+    clearTimeout(timer);
+    el.remove();
+  });
 }
 
 // Handle redirect result on page load (user returning from GitHub OAuth / emulator picker).

@@ -3,6 +3,7 @@ import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
 import { db, NAMESPACE } from "./firebase.js";
+import { DataIntegrityError } from "./errors.js";
 
 export interface Group {
   id: string;
@@ -21,23 +22,29 @@ export interface Transaction {
   budget: string | null;
   timestamp: Timestamp | null;
   statementId: string | null;
-  groupId?: string;
+  groupId: string | null;
 }
 
 function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") throw new Error(`Expected string for ${field}, got ${typeof value}`);
+  if (typeof value !== "string") throw new DataIntegrityError(`Expected string for ${field}, got ${typeof value}`);
   return value;
 }
 
 function requireNumber(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isFinite(value))
-    throw new Error(`Expected finite number for ${field}, got ${value}`);
+    throw new DataIntegrityError(`Expected finite number for ${field}, got ${value}`);
   return value;
+}
+
+function validateReimbursementRange(n: number): void {
+  if (!Number.isFinite(n) || n < 0 || n > 100) {
+    throw new RangeError(`reimbursement must be between 0 and 100, got ${n}`);
+  }
 }
 
 function requireReimbursement(value: unknown): number {
   const n = requireNumber(value, "reimbursement");
-  if (n < 0 || n > 100) throw new RangeError(`reimbursement must be between 0 and 100, got ${n}`);
+  validateReimbursementRange(n);
   return n;
 }
 
@@ -55,7 +62,7 @@ function asTimestamp(value: unknown): Timestamp | null {
 }
 
 export async function getTransactions(groupId: string | null, uid?: string): Promise<Transaction[]> {
-  if (groupId && !uid) throw new Error("uid is required when querying by groupId");
+  if (groupId && !uid) throw new DataIntegrityError("uid is required when querying by groupId");
   const collectionName = groupId ? "transactions" : "seed-transactions";
   const path = nsCollectionPath(NAMESPACE, collectionName);
   const q = groupId
@@ -76,7 +83,7 @@ export async function getTransactions(groupId: string | null, uid?: string): Pro
       budget: typeof data.budget === "string" ? data.budget : null,
       timestamp: asTimestamp(data.timestamp),
       statementId: typeof data.statementId === "string" ? data.statementId : null,
-      groupId: typeof data.groupId === "string" ? data.groupId : undefined,
+      groupId: typeof data.groupId === "string" ? data.groupId : null,
     };
   });
 }
@@ -86,8 +93,8 @@ export async function updateTransaction(
   fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget">>,
 ): Promise<void> {
   if (Object.keys(fields).length === 0) return;
-  if (fields.reimbursement !== undefined && (!Number.isFinite(fields.reimbursement) || fields.reimbursement < 0 || fields.reimbursement > 100)) {
-    throw new RangeError(`reimbursement must be between 0 and 100, got ${fields.reimbursement}`);
+  if (fields.reimbursement !== undefined) {
+    validateReimbursementRange(fields.reimbursement);
   }
   const path = nsCollectionPath(NAMESPACE, "transactions");
   const ref = doc(db, path, txnId);

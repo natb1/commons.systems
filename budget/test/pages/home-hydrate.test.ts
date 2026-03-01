@@ -4,7 +4,7 @@ vi.mock("../../src/firestore.js", () => ({
   updateTransaction: vi.fn(),
 }));
 
-import { hydrateTransactionTable } from "../../src/pages/home-hydrate";
+import { hydrateTransactionTable, _resetForTest } from "../../src/pages/home-hydrate";
 import { updateTransaction } from "../../src/firestore";
 
 const mockUpdateTransaction = vi.mocked(updateTransaction);
@@ -45,6 +45,7 @@ describe("hydrateTransactionTable", () => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
     mockUpdateTransaction.mockResolvedValue(undefined);
+    _resetForTest();
   });
 
   afterEach(() => {
@@ -129,7 +130,7 @@ describe("hydrateTransactionTable", () => {
     expect(mockUpdateTransaction).not.toHaveBeenCalled();
   });
 
-  it("reverts input value on save failure", async () => {
+  it("reverts input value on save failure and sets title", async () => {
     mockUpdateTransaction.mockRejectedValue(new Error("permission denied"));
     const container = createContainer("txn-1");
     hydrateTransactionTable(container);
@@ -138,6 +139,7 @@ describe("hydrateTransactionTable", () => {
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
     expect(input.value).toBe("original note");
+    expect(input.title).toContain("Save failed");
     expect(console.error).toHaveBeenCalledWith("Failed to save transaction:", expect.any(Error));
   });
 
@@ -166,10 +168,10 @@ describe("hydrateTransactionTable", () => {
     const container = createContainer("txn-1");
     container.dataset.budgetOptions = "not-json";
     hydrateTransactionTable(container);
+    expect(console.error).toHaveBeenCalledWith("Failed to parse autocomplete options:", "not-json", expect.any(SyntaxError));
     const input = container.querySelector(".edit-budget") as HTMLInputElement;
     input.dispatchEvent(new Event("focus", { bubbles: true }));
     expect(document.querySelector(".autocomplete-dropdown")).toBeNull();
-    expect(console.error).toHaveBeenCalledWith("Failed to parse autocomplete options:", "not-json", expect.any(SyntaxError));
   });
 
   it("does not save for elements outside a txn-row", async () => {

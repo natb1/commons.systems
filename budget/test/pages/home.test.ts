@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { DataIntegrityError } from "../../src/errors";
 
 vi.mock("firebase/firestore", () => ({
   Timestamp: { fromDate: (d: Date) => ({ toDate: () => d, toMillis: () => d.getTime() }) },
@@ -54,6 +55,7 @@ describe("renderHome", () => {
         budget: null,
         timestamp: mockTimestamp("2025-01-15"),
         statementId: "stmt-2025-01",
+        groupId: null,
       },
     ]);
     const html = await renderHome();
@@ -73,6 +75,11 @@ describe("renderHome", () => {
   it("re-throws RangeError instead of showing fallback", async () => {
     mockGetTransactions.mockRejectedValue(new RangeError("reimbursement must be between 0 and 100"));
     await expect(renderHome()).rejects.toThrow(RangeError);
+  });
+
+  it("re-throws DataIntegrityError instead of showing fallback", async () => {
+    mockGetTransactions.mockRejectedValue(new DataIntegrityError("Expected string for description, got undefined"));
+    await expect(renderHome()).rejects.toThrow(DataIntegrityError);
   });
 
   it("shows group error when groupError is true for signed-in user", async () => {
@@ -112,6 +119,10 @@ describe("renderHome", () => {
     expect(html).toContain('class="edit-reimbursement"');
     expect(html).toContain('class="edit-budget"');
     expect(html).toContain('data-txn-id="txn-1"');
+    expect(html).toContain('aria-label="Note"');
+    expect(html).toContain('aria-label="Category"');
+    expect(html).toContain('aria-label="Reimbursement"');
+    expect(html).toContain('aria-label="Budget"');
   });
 
   it("renders read-only cells for unauthorized users", async () => {
@@ -128,6 +139,7 @@ describe("renderHome", () => {
         budget: null,
         timestamp: mockTimestamp("2025-01-15"),
         statementId: null,
+        groupId: null,
       },
     ]);
     const html = await renderHome();
@@ -150,6 +162,7 @@ describe("renderHome", () => {
         budget: "food",
         timestamp: mockTimestamp("2025-01-15"),
         statementId: "stmt-2025-01",
+        groupId: null,
       },
     ]);
     const html = await renderHome();
@@ -175,6 +188,7 @@ describe("renderHome", () => {
         budget: "food",
         timestamp: mockTimestamp("2025-01-15"),
         statementId: "stmt-2025-01",
+        groupId: null,
       },
     ]);
     const html = await renderHome();
@@ -197,6 +211,7 @@ describe("renderHome", () => {
         budget: null,
         timestamp: null,
         statementId: null,
+        groupId: null,
       },
     ]);
     const html = await renderHome();
@@ -268,6 +283,7 @@ describe("renderHome", () => {
         budget: "food",
         timestamp: mockTimestamp("2025-01-15"),
         statementId: null,
+        groupId: null,
       },
     ]);
     const html = await renderHome();
@@ -348,6 +364,7 @@ describe("renderHome", () => {
         budget: null,
         timestamp: mockTimestamp("2025-01-01"),
         statementId: null,
+        groupId: null,
       },
       {
         id: "txn-2",
@@ -361,6 +378,7 @@ describe("renderHome", () => {
         budget: null,
         timestamp: mockTimestamp("2025-02-01"),
         statementId: null,
+        groupId: null,
       },
       {
         id: "txn-3",
@@ -374,6 +392,7 @@ describe("renderHome", () => {
         budget: null,
         timestamp: null,
         statementId: null,
+        groupId: null,
       },
     ]);
     const html = await renderHome();

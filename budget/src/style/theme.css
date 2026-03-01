@@ -106,9 +106,26 @@
   outline: 2px solid var(--error, #c00);
 }
 
-.auth-error {
+.auth-toast {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   background: var(--error, #c00);
   color: white;
   padding: 0.5rem 1rem;
   text-align: center;
+}
+
+.auth-toast button {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.2em;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+
+.auth-error {
+  color: var(--error, #c00);
 }

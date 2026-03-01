@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createRouter, Route } from "../src/router";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createRouter, Route, Router } from "../src/router";
 
 describe("createRouter", () => {
   let outlet: HTMLDivElement;
-  let routes: Route[];
+  let routes: [Route, ...Route[]];
+  let router: Router;
 
   beforeEach(() => {
     outlet = document.createElement("div");
@@ -14,15 +15,19 @@ describe("createRouter", () => {
     location.hash = "";
   });
 
+  afterEach(() => {
+    router?.destroy();
+  });
+
   it("renders the default route when there is no hash", async () => {
-    createRouter(outlet, routes);
+    router = createRouter(outlet, routes);
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>Home</h2>");
     });
   });
 
   it("navigates to the correct route on hash change", async () => {
-    createRouter(outlet, routes);
+    router = createRouter(outlet, routes);
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>Home</h2>");
     });
@@ -37,20 +42,20 @@ describe("createRouter", () => {
 
   it("falls back to the first route for an unknown hash", async () => {
     location.hash = "#/nonexistent";
-    createRouter(outlet, routes);
+    router = createRouter(outlet, routes);
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>Home</h2>");
     });
   });
 
   it("supports async render functions", async () => {
-    const asyncRoutes: Route[] = [
+    const asyncRoutes: [Route] = [
       {
         path: "/",
         render: async () => "<h2>Async Home</h2>",
       },
     ];
-    createRouter(outlet, asyncRoutes);
+    router = createRouter(outlet, asyncRoutes);
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>Async Home</h2>");
     });
@@ -70,7 +75,7 @@ describe("createRouter", () => {
       render: () => "<h2>Fast</h2>",
     };
 
-    createRouter(outlet, [slowRoute, fastRoute]);
+    router = createRouter(outlet, [slowRoute, fastRoute]);
 
     // Initial navigate() is pending on slowRoute
     // Trigger a second navigation to the fast route
@@ -89,7 +94,7 @@ describe("createRouter", () => {
   });
 
   it("shows error message when render throws", async () => {
-    const errorRoutes: Route[] = [
+    const errorRoutes: [Route] = [
       {
         path: "/",
         render: () => {
@@ -97,31 +102,46 @@ describe("createRouter", () => {
         },
       },
     ];
-    createRouter(outlet, errorRoutes);
+    router = createRouter(outlet, errorRoutes);
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toContain("Something went wrong");
     });
   });
 
+  it("shows data error message when render throws RangeError", async () => {
+    const errorRoutes: [Route] = [
+      {
+        path: "/",
+        render: () => {
+          throw new RangeError("reimbursement out of range");
+        },
+      },
+    ];
+    router = createRouter(outlet, errorRoutes);
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toContain("A data error occurred");
+    });
+  });
+
   it("strips query params for route matching", async () => {
     location.hash = "#/about?group=household";
-    createRouter(outlet, routes);
+    router = createRouter(outlet, routes);
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>About</h2>");
     });
   });
 
-  it("returns a refresh function that re-renders the current route", async () => {
+  it("returns a router with navigate that re-renders the current route", async () => {
     let count = 0;
-    const dynamicRoutes: Route[] = [
+    const dynamicRoutes: [Route] = [
       { path: "/", render: () => `<h2>Count ${++count}</h2>` },
     ];
-    const refresh = createRouter(outlet, dynamicRoutes);
+    router = createRouter(outlet, dynamicRoutes);
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>Count 1</h2>");
     });
 
-    refresh();
+    router.navigate();
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>Count 2</h2>");
     });

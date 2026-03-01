@@ -1,18 +1,32 @@
+import { DataIntegrityError } from "./errors.js";
+
 export interface Route {
   path: string;
   render: () => string | Promise<string>;
 }
 
+export interface Router {
+  navigate(): void;
+  destroy(): void;
+}
+
+export function parseHash(): { path: string; params: URLSearchParams } {
+  const hash = location.hash.slice(1) || "/";
+  const qIndex = hash.indexOf("?");
+  return qIndex === -1
+    ? { path: hash, params: new URLSearchParams() }
+    : { path: hash.slice(0, qIndex), params: new URLSearchParams(hash.slice(qIndex + 1)) };
+}
+
 export function createRouter(
   outlet: HTMLElement,
-  routes: Route[],
-): () => void {
+  routes: [Route, ...Route[]],
+): Router {
   let navigationId = 0;
 
   async function navigate(): Promise<void> {
     const id = ++navigationId;
-    const raw = location.hash.slice(1) || "/";
-    const path = raw.split("?")[0];
+    const { path } = parseHash();
     const route = routes.find((r) => r.path === path) ?? routes[0];
     try {
       const html = await route.render();
@@ -22,13 +36,20 @@ export function createRouter(
     } catch (error) {
       console.error("Navigation error:", error);
       if (id === navigationId) {
-        outlet.innerHTML = "<p>Something went wrong. Please try again.</p>";
+        const message = error instanceof RangeError || error instanceof DataIntegrityError
+          ? "A data error occurred. Please contact support."
+          : "Something went wrong. Please try again.";
+        outlet.innerHTML = `<p>${message}</p>`;
       }
     }
   }
 
-  window.addEventListener("hashchange", () => void navigate());
+  const onHashChange = () => void navigate();
+  window.addEventListener("hashchange", onHashChange);
   void navigate();
 
-  return () => void navigate();
+  return {
+    navigate: () => void navigate(),
+    destroy: () => window.removeEventListener("hashchange", onHashChange),
+  };
 }

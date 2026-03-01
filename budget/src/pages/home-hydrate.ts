@@ -1,12 +1,6 @@
 import { updateTransaction } from "../firestore.js";
 
-function getOptions(input: HTMLInputElement, container: HTMLElement): string[] {
-  let raw: string | undefined;
-  if (input.classList.contains("edit-budget")) {
-    raw = container.dataset.budgetOptions;
-  } else if (input.classList.contains("edit-category")) {
-    raw = container.dataset.categoryOptions;
-  }
+function parseJsonArray(raw: string | undefined): string[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -26,9 +20,11 @@ function removeDropdown(): void {
 }
 
 function handleOutsideClick(e: Event): void {
-  if (!(e.target as HTMLElement).closest(".autocomplete-dropdown")) {
-    removeDropdown();
-  }
+  const target = e.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (target.closest(".autocomplete-dropdown")) return;
+  if (target.closest(".edit-budget") || target.closest(".edit-category")) return;
+  removeDropdown();
 }
 
 let listenersRegistered = false;
@@ -36,7 +32,11 @@ let listenersRegistered = false;
 function showInputError(input: HTMLInputElement): void {
   input.value = input.defaultValue;
   input.classList.add("save-error");
-  setTimeout(() => input.classList.remove("save-error"), 2000);
+  input.title = "Save failed \u2014 value reverted";
+  setTimeout(() => {
+    input.classList.remove("save-error");
+    input.title = "";
+  }, 2000);
 }
 
 function showDropdown(input: HTMLInputElement, options: string[]): void {
@@ -72,11 +72,24 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
   document.body.appendChild(dropdown);
 }
 
+export function _resetForTest(): void {
+  listenersRegistered = false;
+}
+
 export function hydrateTransactionTable(container: HTMLElement): void {
   if (!listenersRegistered) {
     listenersRegistered = true;
     window.addEventListener("scroll", removeDropdown, true);
     document.addEventListener("click", handleOutsideClick);
+  }
+
+  const budgetOptions = parseJsonArray(container.dataset.budgetOptions);
+  const categoryOptions = parseJsonArray(container.dataset.categoryOptions);
+
+  function getOptionsForInput(input: HTMLInputElement): string[] {
+    if (input.classList.contains("edit-budget")) return budgetOptions;
+    if (input.classList.contains("edit-category")) return categoryOptions;
+    return [];
   }
 
   // Prevent accordion toggle when clicking inputs inside summary
@@ -90,7 +103,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
   function handleAutocomplete(e: Event): void {
     const input = e.target as HTMLInputElement;
     if (input.tagName !== "INPUT") return;
-    const options = getOptions(input, container);
+    const options = getOptionsForInput(input);
     if (options.length > 0) showDropdown(input, options);
   }
 

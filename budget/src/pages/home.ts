@@ -2,6 +2,7 @@ import type { User } from "firebase/auth";
 import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "../escape-html.js";
 import { getTransactions, type Group, type Transaction } from "../firestore.js";
+import { DataIntegrityError } from "../errors.js";
 
 function formatTimestamp(ts: Timestamp | null): string {
   if (!ts) return "";
@@ -27,7 +28,7 @@ function renderReadOnlyRow(txn: Transaction, groupName: string): string {
         <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
         <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
         <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
-        <dt>Reimbursement</dt><dd>${txn.reimbursement}%</dd>
+        <dt>Reimbursement</dt><dd>${String(txn.reimbursement)}%</dd>
         <dt>Budget</dt><dd>${escapeHtml(txn.budget ?? "")}</dd>
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
@@ -41,8 +42,8 @@ function renderEditableRow(txn: Transaction, groupName: string): string {
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(txn.description)}</span>
-        <span><input type="text" class="edit-note" value="${escapeHtml(txn.note)}"></span>
-        <span><input type="text" class="edit-category" value="${escapeHtml(txn.category)}"></span>
+        <span><input type="text" class="edit-note" value="${escapeHtml(txn.note)}" aria-label="Note"></span>
+        <span><input type="text" class="edit-category" value="${escapeHtml(txn.category)}" aria-label="Category"></span>
         <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
       </div>
     </summary>
@@ -51,8 +52,8 @@ function renderEditableRow(txn: Transaction, groupName: string): string {
         <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
         <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
         <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
-        <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="${txn.reimbursement}" min="0" max="100"></dd>
-        <dt>Budget</dt><dd><input type="text" class="edit-budget" value="${escapeHtml(txn.budget ?? "")}"></dd>
+        <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="${String(txn.reimbursement)}" min="0" max="100" aria-label="Reimbursement"></dd>
+        <dt>Budget</dt><dd><input type="text" class="edit-budget" value="${escapeHtml(txn.budget ?? "")}" aria-label="Budget"></dd>
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
       </dl>
@@ -99,6 +100,13 @@ function renderTransactionTable(transactions: Transaction[], authorized: boolean
     </div>`;
 }
 
+/**
+ * Valid state combinations:
+ * - `{}` — unauthenticated, no group (shows seed data)
+ * - `{ user, groupError: true }` — authenticated but group fetch failed
+ * - `{ user, group }` — authenticated with group (shows real data, editable)
+ * - `{ user }` — authenticated, no groups exist (shows seed data)
+ */
 export interface RenderHomeOptions {
   user?: User | null;
   group?: Group | null;
@@ -116,7 +124,7 @@ export async function renderHome(options: RenderHomeOptions = {}): Promise<strin
     transactions.sort(compareByTimestampDesc);
     tableHtml = renderTransactionTable(transactions, authorized, groupName);
   } catch (error) {
-    if (error instanceof RangeError || (error instanceof Error && error.message.includes("uid is required"))) {
+    if (error instanceof RangeError || error instanceof DataIntegrityError) {
       throw error;
     }
     console.error("Failed to load transactions:", error);
