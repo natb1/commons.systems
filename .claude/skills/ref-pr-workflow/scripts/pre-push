@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# pre-push hook: warns on test/lint failures but does not block push
+#
+# Install: cp .claude/skills/ref-pr-workflow/scripts/pre-push .bare/hooks/pre-push && chmod +x .bare/hooks/pre-push
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+SCRIPTS="$REPO_ROOT/.claude/skills/ref-pr-workflow/scripts"
+
+TESTS_LOG=$(mktemp)
+LINT_LOG=$(mktemp)
+
+"$SCRIPTS/run-unit-tests.sh" >"$TESTS_LOG" 2>&1 &
+TESTS_PID=$!
+"$SCRIPTS/run-lint.sh" >"$LINT_LOG" 2>&1 &
+LINT_PID=$!
+
+wait $TESTS_PID; TESTS_EXIT=$?
+wait $LINT_PID;  LINT_EXIT=$?
+
+if [ $TESTS_EXIT -ne 0 ] || [ $LINT_EXIT -ne 0 ]; then
+  echo "WARNING: pre-push checks failed (push proceeding anyway)" >&2
+  [ $TESTS_EXIT -ne 0 ] && { echo "=== Unit test failures ===" >&2; cat "$TESTS_LOG" >&2; }
+  [ $LINT_EXIT  -ne 0 ] && { echo "=== Lint failures ===" >&2;      cat "$LINT_LOG"  >&2; }
+fi
+
+rm -f "$TESTS_LOG" "$LINT_LOG"
+exit 0
