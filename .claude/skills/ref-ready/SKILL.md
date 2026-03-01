@@ -20,6 +20,19 @@ Detect input mode from `$INPUT`:
   gh issue view <N> --json title,body,labels,assignees,projectItems,state
   ```
   Store title and body for evaluation.
+
+  Then fetch sub-issues:
+  ```bash
+  gh api "/repos/{owner}/{repo}/issues/<N>/sub_issues" --jq '.[].number'
+  ```
+
+  For each sub-issue number returned, fetch its full content:
+  ```bash
+  gh issue view <sub-N> --json title,body,labels,assignees,projectItems,state
+  ```
+
+  Store all fetched issues (parent + sub-issues) for evaluation.
+
 - Otherwise → **description mode**: treat `$INPUT` as the issue body text. Prompt user for a title if not provided.
 
 ## Step 2. Branch-Conditional Setup
@@ -98,23 +111,30 @@ Assess whether the issue spans more than one PR-sized chunk of work. If so, reco
 
 Suggest alternative requirements or designs that could improve functionality or architectural maintainability. Focus on substantive improvements, not stylistic preferences.
 
+After completing the 7-category evaluation of the parent issue, repeat the full evaluation for each sub-issue. Compile findings per issue, clearly labeled (e.g., "Parent #83", "Sub-issue #87", "Sub-issue #88").
+
 ## Step 4. Plan Mode — Propose Improvements
 
-Enter plan mode. Present:
+Enter plan mode. Structure the plan across all issues with findings (parent + sub-issues):
 
-1. **Summary of findings** — one section per category (a–g), each with a bullet list of findings. Omit categories with no findings.
-2. **Proposed improved issue body** — a complete rewrite incorporating all improvements: clearer scope, acceptance criteria checklist, compliance fixes, context section, and any structural changes.
-3. **Change rationale** — a bulleted list of specific changes made and why.
+1. **Findings summary** — one section per issue (labeled by number), each with per-category bullet lists. Omit issues and categories with no findings.
+2. **Proposed improved bodies** — one complete rewrite per issue that has improvements.
+3. **Change rationale** — bulleted list of specific changes per issue and why.
 
 Wait for user approval before proceeding.
 
 ## Step 5. Apply Improvements
 
-Apply the approved improvements:
+Apply the approved improvements for each issue in sequence:
 
 - **Issue number mode**:
   ```bash
   gh issue edit <N> --body "<improved body>"
+  ```
+
+  Repeat for each sub-issue that has improvements:
+  ```bash
+  gh issue edit <sub-N> --body "<improved body>"
   ```
 
 - **Description mode**:
