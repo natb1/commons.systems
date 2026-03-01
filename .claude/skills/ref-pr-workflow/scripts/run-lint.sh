@@ -49,10 +49,10 @@ if [ "$EXPLICIT" = false ]; then
         RUN_RULES=true
         ;;
       .claude/skills/ref-pr-workflow/scripts/*)
-        # Scripts changed: lint all top-level app dirs with package.json
+        # Scripts changed: lint all top-level app dirs with package.json and package-lock.json
         for dir in "$REPO_ROOT"/*/; do
           base=$(basename "$dir")
-          [ -f "$dir/package.json" ] && DIRTY_APPS["$base"]=1
+          [ -f "$dir/package.json" ] && [ -f "$dir/package-lock.json" ] && DIRTY_APPS["$base"]=1
         done
         ;;
       authutil/*)
