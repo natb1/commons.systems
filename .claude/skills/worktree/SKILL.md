@@ -132,17 +132,20 @@ Format: `<issue-num>-<sanitized-title>`
 
 ## 4. Create Worktree
 
-Fetch the latest `main` branch:
+Check whether the branch already exists on `origin`, then create the worktree accordingly:
 
 ```bash
-git fetch origin main
+if git ls-remote --exit-code origin <branch-name>; then
+  git fetch origin <branch-name>
+  git worktree add "$PROJECT_ROOT/worktrees/<branch-name>" <branch-name>
+else
+  git fetch origin main
+  git worktree add -b <branch-name> "$PROJECT_ROOT/worktrees/<branch-name>" origin/main
+fi
 ```
 
-Then create the worktree branching from `origin/main`:
-
-```bash
-git worktree add -b <branch-name> "$PROJECT_ROOT/worktrees/<branch-name>" origin/main
-```
+- When the remote branch exists: `git ls-remote --exit-code` exits 0, then `git fetch` updates the remote tracking ref, and `git worktree add <path> <branch-name>` uses git's DWIM behavior to create a local tracking branch automatically.
+- When no remote branch exists: fetches `main` and creates a fresh branch from `origin/main` (existing behavior).
 
 `PROJECT_ROOT` was computed in Section 2 and already accounts for the layout (bare or classic). No `--git-dir` flag is needed — `git worktree add` finds the git dir from the current worktree context.
 
