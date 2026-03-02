@@ -146,6 +146,12 @@ let
         else
           "echo 'FAIL: Linux config missing tailscale' && exit 1"
       }
+      ${
+        if lib.hasInfix "Program Files/Tailscale/tailscale.exe" luaConfig then
+          "echo 'PASS: Linux config includes Windows-specific Tailscale path'"
+        else
+          "echo 'FAIL: Linux config missing Windows-specific Tailscale path' && exit 1"
+      }
       touch $out
     '';
 
