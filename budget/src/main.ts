@@ -44,8 +44,8 @@ function updateNav(user: User | null): void {
   });
   document.getElementById("sign-out")?.addEventListener("click", (e) => {
     e.preventDefault();
-    // signOut shows a toast on failure; swallow the rejection to avoid unhandled promise error
-    signOut().catch(() => {});
+    // signOut shows a toast on failure; log unexpected rejections to avoid silent swallowing
+    signOut().catch((error) => console.error("Unexpected sign-out error:", error));
   });
   document.getElementById("group-select")?.addEventListener("change", (e) => {
     const select = e.target as HTMLSelectElement;
@@ -85,9 +85,10 @@ function transition(next: AppState): void {
 // catches all of them. Sets dataset.hydrated to "true" on success or "error"
 // on failure to prevent retry loops.
 // Observer runs for page lifetime: each navigation to "/" produces a new table.
-// DataIntegrityError is caught and logged (not re-thrown) since throwing from a
-// MutationObserver goes nowhere useful. TypeError and ReferenceError propagate
-// as programmer errors.
+// All errors except TypeError and ReferenceError are caught and logged
+// (not re-thrown) since throwing from a MutationObserver callback goes
+// nowhere useful. TypeError and ReferenceError are deferred via setTimeout
+// to surface in devtools without killing the observer.
 const observer = new MutationObserver(() => {
   const table = app.querySelector("#transactions-table") as HTMLElement | null;
   if (!table || table.dataset.hydrated) return;
@@ -96,7 +97,10 @@ const observer = new MutationObserver(() => {
     table.dataset.hydrated = "true";
   } catch (error) {
     table.dataset.hydrated = "error";
-    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+    if (error instanceof TypeError || error instanceof ReferenceError) {
+      setTimeout(() => { throw error; }, 0);
+      return;
+    }
     console.error("Hydration error:", error);
     table.querySelectorAll("input").forEach((el) => {
       el.disabled = true;
@@ -110,10 +114,12 @@ observer.observe(app, { childList: true, subtree: true });
 
 export interface AuthStateDeps {
   getUserGroups: (user: User) => Promise<Group[]>;
+  /** Commits final state and triggers nav update + route re-render. */
   transition: (next: AppState) => void;
   destroyRouter: () => void;
   setAppHtml: (html: string) => void;
   getState: () => AppState;
+  /** Sets intermediate state without triggering re-render (e.g., setting user before async group fetch). */
   setState: (next: AppState) => void;
 }
 
@@ -157,4 +163,8 @@ const handleAuth = createAuthStateHandler({
   setState: (next) => { state = next; },
 });
 
-onAuthStateChanged(auth, (user) => void handleAuth(user));
+onAuthStateChanged(auth, (user) => {
+  handleAuth(user).catch((error) => {
+    console.error("Unhandled error in auth state handler:", error);
+  });
+});

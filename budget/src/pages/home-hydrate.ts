@@ -79,7 +79,8 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
   const matches = options.filter(o => {
     const lower = o.toLowerCase();
     if (lower === filter) return false;
-    return !filter || lower.includes(filter);
+    if (filter === "") return true;
+    return lower.includes(filter);
   });
   if (matches.length === 0) {
     clearAriaAutocomplete(input);
@@ -202,7 +203,8 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     const txnId = row.dataset.txnId;
     if (!txnId) return;
 
-    const input = target as HTMLInputElement;
+    if (!(target instanceof HTMLInputElement)) return;
+    const input = target;
     // Skip save if value hasn't changed (also prevents double-save from synthetic + real blur)
     if (input.value === input.defaultValue) return;
 

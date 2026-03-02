@@ -1,8 +1,8 @@
 import { DataIntegrityError } from "./errors.js";
 
 export interface Route {
-  path: `/${string}`;
-  render: () => string | Promise<string>;
+  readonly path: `/${string}`;
+  readonly render: () => string | Promise<string>;
 }
 
 export interface Router {

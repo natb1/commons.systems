@@ -14,7 +14,13 @@ vi.mock("firebase/firestore", () => ({
   where: (...args: unknown[]) => mockWhere(...args),
   doc: (...args: unknown[]) => mockDoc(...args),
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
-  Timestamp: { fromDate: (d: Date) => ({ toDate: () => d, toMillis: () => d.getTime() }) },
+  Timestamp: class Timestamp {
+    _date: Date;
+    constructor(d: Date) { this._date = d; }
+    toDate() { return this._date; }
+    toMillis() { return this._date.getTime(); }
+    static fromDate(d: Date) { return new Timestamp(d); }
+  },
 }));
 
 vi.mock("../src/firebase.js", () => ({
@@ -22,6 +28,7 @@ vi.mock("../src/firebase.js", () => ({
   NAMESPACE: "app/test",
 }));
 
+import { Timestamp } from "firebase/firestore";
 import { getTransactions, getUserGroups, updateTransaction } from "../src/firestore";
 
 describe("getUserGroups", () => {
@@ -94,7 +101,7 @@ describe("getTransactions", () => {
   });
 
   it("maps Firestore documents to Transaction objects", async () => {
-    const mockTimestamp = { toDate: () => new Date("2025-01-15"), toMillis: () => new Date("2025-01-15").getTime() };
+    const mockTimestamp = Timestamp.fromDate(new Date("2025-01-15"));
     mockGetDocs.mockResolvedValue({
       docs: [
         {

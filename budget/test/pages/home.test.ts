@@ -2,7 +2,13 @@ import { describe, it, expect, vi } from "vitest";
 import { DataIntegrityError } from "../../src/errors";
 
 vi.mock("firebase/firestore", () => ({
-  Timestamp: { fromDate: (d: Date) => ({ toDate: () => d, toMillis: () => d.getTime() }) },
+  Timestamp: class Timestamp {
+    _date: Date;
+    constructor(d: Date) { this._date = d; }
+    toDate() { return this._date; }
+    toMillis() { return this._date.getTime(); }
+    static fromDate(d: Date) { return new Timestamp(d); }
+  },
 }));
 
 vi.mock("../../src/firestore.js", () => ({
@@ -215,6 +221,14 @@ describe("renderHome", () => {
     const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain("<dt>Group</dt>");
     expect(html).toContain("<dd>household</dd>");
+  });
+
+  it("shows access denied message for permission-denied error", async () => {
+    const error = new Error("permission denied");
+    (error as any).code = "permission-denied";
+    mockGetTransactions.mockRejectedValue(error);
+    const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
+    expect(html).toContain("Access denied");
   });
 
   it("sorts transactions by timestamp descending with nulls last", async () => {

@@ -28,6 +28,7 @@ function firebaseAuthMessage(error: unknown): string {
     case "auth/account-exists-with-different-credential":
       return "An account with this email already exists using a different sign-in method.";
     default:
+      if (code) console.warn("Unhandled Firebase auth error code:", code);
       return "";
   }
 }
@@ -67,18 +68,18 @@ getRedirectResult(auth).catch((error) => {
 
 const provider = new GithubAuthProvider();
 
+function handleSignInError(error: unknown): void {
+  console.error("Sign-in redirect failed:", error);
+  if ((error as { code?: string })?.code === "auth/popup-closed-by-user") return;
+  const message = firebaseAuthMessage(error) || "Sign-in failed. Please try again.";
+  showAuthError(message);
+}
+
 export function signIn(): void {
   try {
-    signInWithRedirect(auth, provider).catch((error) => {
-      console.error("Sign-in redirect failed:", error);
-      if (error?.code === "auth/popup-closed-by-user") return;
-      const message = firebaseAuthMessage(error) || "Sign-in failed. Please try again.";
-      showAuthError(message);
-    });
+    signInWithRedirect(auth, provider).catch(handleSignInError);
   } catch (error) {
-    console.error("Sign-in redirect failed synchronously:", error);
-    const message = firebaseAuthMessage(error) || "Sign-in failed. Please try again.";
-    showAuthError(message);
+    handleSignInError(error);
   }
 }
 

@@ -24,7 +24,7 @@ service cloud.firestore {
     // Firestore rules can only read the document being accessed, not join across
     // collections, so membership is checked directly on the transaction document.
     // Updates limited to note, category, reimbursement, and budget; reimbursement
-    // must be in [0, 100].
+    // must be in [0, 100]. Create and delete are explicitly denied.
     match /budget/{env}/transactions/{txnId} {
       allow read: if request.auth != null
         && request.auth.uid in resource.data.memberUids;
@@ -32,6 +32,7 @@ service cloud.firestore {
         && request.auth.uid in resource.data.memberUids
         && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['note', 'category', 'reimbursement', 'budget'])
+        && request.resource.data.reimbursement is number
         && request.resource.data.reimbursement >= 0
         && request.resource.data.reimbursement <= 100;
       allow create, delete: if false;

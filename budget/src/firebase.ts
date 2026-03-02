@@ -18,7 +18,7 @@ if (emulatorHost) {
   connectFirestoreEmulator(db, url.hostname, port);
 }
 
-const envNamespace = import.meta.env.VITE_FIRESTORE_NAMESPACE as string;
+const envNamespace = import.meta.env.VITE_FIRESTORE_NAMESPACE;
 if (!envNamespace && import.meta.env.MODE !== "production") {
   throw new Error(
     "VITE_FIRESTORE_NAMESPACE is required in dev/preview mode. " +

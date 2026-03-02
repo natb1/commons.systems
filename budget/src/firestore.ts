@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, query, updateDoc, where, type Timestamp } from "firebase/firestore";
+import { collection, doc, getDocs, query, updateDoc, where, Timestamp } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
@@ -7,9 +7,8 @@ import { DataIntegrityError } from "./errors.js";
 
 /**
  * Client-side view of a Firestore group document, carrying only `id` and `name`.
- * The server-side `members` array is excluded to avoid exposing group membership
- * to the client — authorization checks use the server-side `memberUids` field on
- * transactions instead.
+ * The server-side `members` array is not mapped because the client only needs
+ * the group's id and display name.
  */
 export interface Group {
   readonly id: string;
@@ -21,6 +20,7 @@ export interface Transaction {
   readonly institution: string;
   readonly account: string;
   readonly description: string;
+  /** Transaction amount. May be negative for credits/refunds. */
   readonly amount: number;
   readonly note: string;
   readonly category: string;
@@ -44,8 +44,9 @@ function requireString(value: unknown, field: string): string {
 }
 
 function requireNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value))
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new DataIntegrityError(`Expected finite number for ${field}, got ${value}`);
+  }
   return value;
 }
 
@@ -80,10 +81,10 @@ export async function getUserGroups(user: User): Promise<Group[]> {
 
 function asTimestamp(value: unknown): Timestamp | null {
   if (value == null) return null;
-  if (typeof (value as Timestamp).toDate !== "function") {
+  if (!(value instanceof Timestamp)) {
     throw new DataIntegrityError(`Expected Timestamp for timestamp field, got ${typeof value}`);
   }
-  return value as Timestamp;
+  return value;
 }
 
 export async function getTransactions(groupId: null): Promise<Transaction[]>;
