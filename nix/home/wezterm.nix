@@ -42,10 +42,11 @@
 
       -- Auto-discover Tailscale peers for ssh_domains.
       -- Wrapped in pcall so config loads cleanly if tailscale is unavailable.
-      -- On Windows, tailscale runs inside WSL, so call it via wsl.exe.
+      -- On Windows, tailscale runs inside WSL so invoke it via a login shell
+      -- to get the NixOS PATH (wsl -e can't find tailscale without it).
       local tailscale_status_cmd = { 'tailscale', 'status', '--json' }
       if wezterm.target_triple:find('windows') then
-        tailscale_status_cmd = { 'wsl.exe', '-d', 'NixOS', '-e', 'tailscale', 'status', '--json' }
+        tailscale_status_cmd = { 'wsl.exe', '-d', 'NixOS', '--', 'bash', '-lc', 'tailscale status --json' }
       end
 
       local ssh_domains = {}
