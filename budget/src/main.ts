@@ -12,7 +12,7 @@ if (!nav) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
-type AppState =
+export type AppState =
   | { user: null; groups: Group[]; groupError: false }
   | { user: User; groups: Group[]; groupError: false }
   | { user: User; groups: Group[]; groupError: true };
@@ -44,7 +44,8 @@ function updateNav(user: User | null): void {
   });
   document.getElementById("sign-out")?.addEventListener("click", (e) => {
     e.preventDefault();
-    void signOut();
+    // signOut shows a toast on failure; swallow the rejection to avoid unhandled promise error
+    signOut().catch(() => {});
   });
   document.getElementById("group-select")?.addEventListener("change", (e) => {
     const select = e.target as HTMLSelectElement;
@@ -73,11 +74,20 @@ const router = createRouter(app, [
   { path: "/about", render: renderAbout },
 ]);
 
+function transition(next: AppState): void {
+  state = next;
+  updateNav(next.user);
+  router.navigate();
+}
+
 // Hydrate the transaction table whenever it appears in the DOM. Multiple code
 // paths trigger renders (hashchange, auth state changes), so an observer
 // catches all of them. Sets dataset.hydrated to "true" on success or "error"
 // on failure to prevent retry loops.
 // Observer runs for page lifetime: each navigation to "/" produces a new table.
+// DataIntegrityError is caught and logged (not re-thrown) since throwing from a
+// MutationObserver goes nowhere useful. TypeError and ReferenceError propagate
+// as programmer errors.
 const observer = new MutationObserver(() => {
   const table = app.querySelector("#transactions-table") as HTMLElement | null;
   if (!table || table.dataset.hydrated) return;
@@ -86,40 +96,65 @@ const observer = new MutationObserver(() => {
     table.dataset.hydrated = "true";
   } catch (error) {
     table.dataset.hydrated = "error";
-    if (error instanceof DataIntegrityError) throw error;
+    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     console.error("Hydration error:", error);
-    table.querySelectorAll("input").forEach((el) =>
-      (el as HTMLInputElement).disabled = true,
-    );
+    table.querySelectorAll("input").forEach((el) => {
+      el.disabled = true;
+    });
+    const msg = document.createElement("p");
+    msg.textContent = "Editing is temporarily unavailable. Try refreshing the page.";
+    table.appendChild(msg);
   }
 });
 observer.observe(app, { childList: true, subtree: true });
 
-// TODO: Extract auth state callback into a testable function to cover
-// race guard (state.user !== user) and DataIntegrityError paths.
-onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    state = { user: null, groups: [], groupError: false };
-    updateNav(null);
-    router.navigate();
-    return;
-  }
-  // Set user immediately so concurrent callbacks detect the change
-  state = { user, groups: state.user === user ? state.groups : [], groupError: false };
-  try {
-    const groups = await getUserGroups(user);
-    if (state.user !== user) return; // auth state changed during fetch
-    state = { user, groups, groupError: false };
-  } catch (error) {
-    if (error instanceof DataIntegrityError) {
-      console.error("Data integrity error in user groups:", error);
-      router.destroy();
-      app.innerHTML = '<p>A data error occurred. Please contact support.</p>';
+export interface AuthStateDeps {
+  getUserGroups: (user: User) => Promise<Group[]>;
+  transition: (next: AppState) => void;
+  destroyRouter: () => void;
+  setAppHtml: (html: string) => void;
+  getState: () => AppState;
+  setState: (next: AppState) => void;
+}
+
+export function createAuthStateHandler(deps: AuthStateDeps): (user: User | null) => Promise<void> {
+  return async (user) => {
+    if (!user) {
+      deps.transition({ user: null, groups: [], groupError: false });
       return;
     }
-    console.error("Failed to fetch user groups:", error);
-    state = { user, groups: [], groupError: true };
-  }
-  updateNav(user);
-  router.navigate();
+    // Set user immediately so concurrent callbacks detect the change
+    const currentState = deps.getState();
+    deps.setState({
+      user,
+      groups: currentState.user === user ? currentState.groups : [],
+      groupError: false,
+    });
+    try {
+      const groups = await deps.getUserGroups(user);
+      if (deps.getState().user !== user) return; // auth state changed during fetch
+      deps.transition({ user, groups, groupError: false });
+    } catch (error) {
+      if (error instanceof DataIntegrityError) {
+        console.error("Data integrity error in user groups:", error);
+        deps.destroyRouter();
+        deps.setAppHtml("<p>A data error occurred. Please contact support.</p>");
+        return;
+      }
+      if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+      console.error("Failed to fetch user groups:", error);
+      deps.transition({ user, groups: [], groupError: true });
+    }
+  };
+}
+
+const handleAuth = createAuthStateHandler({
+  getUserGroups,
+  transition,
+  destroyRouter: () => router.destroy(),
+  setAppHtml: (html) => { app.innerHTML = html; },
+  getState: () => state,
+  setState: (next) => { state = next; },
 });
+
+onAuthStateChanged(auth, (user) => void handleAuth(user));

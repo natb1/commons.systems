@@ -16,6 +16,22 @@ if (authEmulatorHost) {
   setupAuthEmulator(auth, authEmulatorHost);
 }
 
+function firebaseAuthMessage(error: unknown): string {
+  const code = (error as { code?: string })?.code;
+  switch (code) {
+    case "auth/network-request-failed":
+      return "Network error. Check your connection and try again.";
+    case "auth/operation-not-allowed":
+      return "GitHub sign-in is not enabled. Please contact support.";
+    case "auth/user-disabled":
+      return "Your account has been disabled. Please contact support.";
+    case "auth/account-exists-with-different-credential":
+      return "An account with this email already exists using a different sign-in method.";
+    default:
+      return "";
+  }
+}
+
 function showAuthError(message: string): void {
   const existing = document.querySelector(".auth-toast");
   if (existing) existing.remove();
@@ -45,26 +61,31 @@ function showAuthError(message: string): void {
 getRedirectResult(auth).catch((error) => {
   console.error("Auth redirect error:", error);
   if (error?.code === "auth/popup-closed-by-user") return;
-  showAuthError("Sign-in could not be completed. Please try again.");
+  const message = firebaseAuthMessage(error) || "Sign-in could not be completed. Please try again.";
+  showAuthError(message);
 });
 
 const provider = new GithubAuthProvider();
 
 export function signIn(): void {
-  // In emulator mode, redirects to the emulator's fake GitHub account picker.
-  // In production, redirects to real GitHub OAuth.
-  void signInWithRedirect(auth, provider).catch((error) => {
-    console.error("Sign-in redirect failed:", error);
-    if (error?.code === "auth/popup-closed-by-user") return;
-    showAuthError("Sign-in failed. Please try again.");
-  });
+  try {
+    signInWithRedirect(auth, provider).catch((error) => {
+      console.error("Sign-in redirect failed:", error);
+      if (error?.code === "auth/popup-closed-by-user") return;
+      const message = firebaseAuthMessage(error) || "Sign-in failed. Please try again.";
+      showAuthError(message);
+    });
+  } catch (error) {
+    console.error("Sign-in redirect failed synchronously:", error);
+    const message = firebaseAuthMessage(error) || "Sign-in failed. Please try again.";
+    showAuthError(message);
+  }
 }
 
 export function signOut(): Promise<void> {
   return firebaseSignOut(auth).catch((error) => {
     console.error("Sign-out failed:", error);
     showAuthError("Sign-out failed. Please try again.");
-    throw error;
   });
 }
 

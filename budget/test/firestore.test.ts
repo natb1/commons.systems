@@ -240,6 +240,7 @@ describe("getTransactions — input validation", () => {
   });
 
   it("throws when groupId provided without uid", async () => {
+    // Cast bypasses overload signatures to test the runtime guard
     await expect(getTransactions("household" as Parameters<typeof getTransactions>[0])).rejects.toThrow(
       "uid is required",
     );

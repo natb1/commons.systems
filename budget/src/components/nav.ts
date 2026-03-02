@@ -13,7 +13,11 @@ function renderGroupSelect(groups: Group[], selectedGroupId: string | null): str
   return `<select id="group-select" aria-label="Select group">${options}</select>`;
 }
 
-export function renderNav(user: User | null, groups: Group[] = [], selectedGroupId: string | null = null): string {
+export function renderNav(
+  user: User | null,
+  groups: Group[] = [],
+  selectedGroupId: string | null = null,
+): string {
   const authHtml = user
     ? `<span id="user-display">${escapeHtml(user.displayName ?? user.email ?? "User")}</span>
        <a href="#" id="sign-out">Logout</a>`

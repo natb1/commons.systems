@@ -1,6 +1,17 @@
-// Firestore Admin SDK converts Date objects to Timestamps on write.
-// Seed documents use Date for readability; they become Timestamps in Firestore.
+// Seed data for the budget app's Firestore collections.
+// The firestoreutil seed runner writes these specs to Firestore using the Admin SDK,
+// which converts Date objects to Timestamps on write.
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
+import type { Transaction, Group } from "../src/firestore.js";
+
+/** Seed groups include memberUids (a server-only field not on the client Group type) */
+type GroupSeedData = Omit<Group, "id"> & { members: string[] };
+
+/** Seed transactions use Date instead of Timestamp and include the server-only memberUids field */
+type TransactionSeedData = Omit<Transaction, "id" | "timestamp"> & {
+  timestamp: Date;
+  memberUids: string[];
+};
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
@@ -12,7 +23,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
           data: {
             name: "household",
             members: ["test-github-user"],
-          },
+          } satisfies GroupSeedData,
         },
       ],
     },
@@ -33,7 +44,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-01-15"),
             statementId: "stmt-2025-01",
             groupId: "household",
-          },
+            memberUids: ["test-github-user"],
+          } satisfies TransactionSeedData,
         },
         {
           id: "seed-txn-2",
@@ -49,7 +61,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-01-20"),
             statementId: "stmt-2025-01",
             groupId: "household",
-          },
+            memberUids: ["test-github-user"],
+          } satisfies TransactionSeedData,
         },
         {
           id: "seed-txn-3",
@@ -65,7 +78,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-02-05"),
             statementId: "stmt-2025-02",
             groupId: "household",
-          },
+            memberUids: ["test-github-user"],
+          } satisfies TransactionSeedData,
         },
       ],
     },
@@ -87,7 +101,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             statementId: "stmt-2025-02",
             groupId: "household",
             memberUids: ["test-github-user"],
-          },
+          } satisfies TransactionSeedData,
         },
         {
           id: "user-txn-2",
@@ -104,7 +118,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             statementId: null,
             groupId: "household",
             memberUids: ["test-github-user"],
-          },
+          } satisfies TransactionSeedData,
         },
       ],
     },

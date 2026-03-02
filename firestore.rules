@@ -20,8 +20,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Transactions are scoped to group members. Updates limited to
-    // note, category, reimbursement, and budget; reimbursement must be in [0, 100].
+    // Transactions are scoped to group members via a denormalized `memberUids` field.
+    // Firestore rules can only read the document being accessed, not join across
+    // collections, so membership is checked directly on the transaction document.
+    // Updates limited to note, category, reimbursement, and budget; reimbursement
+    // must be in [0, 100].
     match /budget/{env}/transactions/{txnId} {
       allow read: if request.auth != null
         && request.auth.uid in resource.data.memberUids;

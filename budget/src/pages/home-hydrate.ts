@@ -26,14 +26,18 @@ function parseJsonArray(raw: string | undefined): string[] {
 let dropdownController: AbortController | null = null;
 let activeInput: HTMLInputElement | null = null;
 
+function clearAriaAutocomplete(el: HTMLInputElement): void {
+  el.removeAttribute("aria-activedescendant");
+  el.removeAttribute("aria-controls");
+  el.removeAttribute("aria-autocomplete");
+}
+
 function removeDropdown(): void {
   dropdownController?.abort();
   dropdownController = null;
   document.querySelector(".autocomplete-dropdown")?.remove();
   if (activeInput) {
-    activeInput.removeAttribute("aria-activedescendant");
-    activeInput.removeAttribute("aria-controls");
-    activeInput.removeAttribute("aria-autocomplete");
+    clearAriaAutocomplete(activeInput);
     activeInput = null;
   }
 }
@@ -78,9 +82,7 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
     return !filter || lower.includes(filter);
   });
   if (matches.length === 0) {
-    input.removeAttribute("aria-activedescendant");
-    input.removeAttribute("aria-controls");
-    input.removeAttribute("aria-autocomplete");
+    clearAriaAutocomplete(input);
     return;
   }
 
@@ -146,6 +148,7 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
 export function _resetForTest(): void {
   if (listenersRegistered) {
     window.removeEventListener("scroll", removeDropdown, true);
+    window.removeEventListener("resize", removeDropdown);
     document.removeEventListener("click", handleOutsideClick);
     listenersRegistered = false;
   }
@@ -158,6 +161,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     listenersRegistered = true;
     // Capture phase: dismiss dropdown before child scroll handlers run
     window.addEventListener("scroll", removeDropdown, true);
+    window.addEventListener("resize", removeDropdown);
     document.addEventListener("click", handleOutsideClick);
   }
 
@@ -194,7 +198,8 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     removeDropdown();
 
     const row = target.closest(".txn-row");
-    const txnId = (row as HTMLElement)?.dataset.txnId;
+    if (!(row instanceof HTMLElement)) return;
+    const txnId = row.dataset.txnId;
     if (!txnId) return;
 
     const input = target as HTMLInputElement;
@@ -220,13 +225,17 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       }
       input.defaultValue = input.value;
     } catch (error) {
+      if (error instanceof TypeError || error instanceof ReferenceError) throw error;
       if (error instanceof DataIntegrityError) {
         console.error("Data integrity error:", error);
         showInputError(input, "Data error \u2014 please reload");
         return;
       }
       console.error("Failed to save transaction:", error);
-      if (error instanceof RangeError) {
+      const code = (error as { code?: string })?.code;
+      if (code === "permission-denied") {
+        showInputError(input, "Access denied. Please contact support.");
+      } else if (error instanceof RangeError) {
         showInputError(input, "Value out of range");
       } else {
         showInputError(input);

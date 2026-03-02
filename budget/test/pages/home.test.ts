@@ -10,7 +10,7 @@ vi.mock("../../src/firestore.js", () => ({
 }));
 
 import { renderHome } from "../../src/pages/home";
-import { getTransactions } from "../../src/firestore";
+import { getTransactions, type Transaction } from "../../src/firestore";
 
 const mockGetTransactions = vi.mocked(getTransactions);
 
@@ -22,7 +22,7 @@ function mockTimestamp(dateStr: string) {
 const mockUser = { uid: "user-123" } as import("firebase/auth").User;
 const mockGroup = { id: "household", name: "household" };
 
-function txn(overrides: Partial<import("../../src/firestore").Transaction> = {}): import("../../src/firestore").Transaction {
+function txn(overrides: Partial<Transaction> = {}): Transaction {
   return {
     id: "txn-1",
     institution: "Bank A",
@@ -168,8 +168,15 @@ describe("renderHome", () => {
   it("renders budget options as data attribute for authorized users", async () => {
     mockGetTransactions.mockResolvedValue([
       txn({ category: "Food", budget: "food", groupId: "household" }),
-      txn({ id: "txn-2", institution: "Bank B", account: "Savings", description: "Hotel", amount: 215, category: "Travel", budget: "vacation", timestamp: mockTimestamp("2025-02-01"), groupId: "household" }),
-      txn({ id: "txn-3", description: "Coffee", amount: 5, category: "Food", budget: "food", timestamp: mockTimestamp("2025-01-20"), groupId: "household" }),
+      txn({
+        id: "txn-2", institution: "Bank B", account: "Savings",
+        description: "Hotel", amount: 215, category: "Travel",
+        budget: "vacation", timestamp: mockTimestamp("2025-02-01"), groupId: "household",
+      }),
+      txn({
+        id: "txn-3", description: "Coffee", amount: 5, category: "Food",
+        budget: "food", timestamp: mockTimestamp("2025-01-20"), groupId: "household",
+      }),
     ]);
     const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain("data-budget-options");
@@ -189,7 +196,11 @@ describe("renderHome", () => {
   it("renders category options as data attribute for authorized users", async () => {
     mockGetTransactions.mockResolvedValue([
       txn({ budget: "food", groupId: "household" }),
-      txn({ id: "txn-2", institution: "Bank B", account: "Savings", description: "Hotel", amount: 215, category: "Travel:Lodging", budget: "vacation", timestamp: mockTimestamp("2025-02-01"), groupId: "household" }),
+      txn({
+        id: "txn-2", institution: "Bank B", account: "Savings",
+        description: "Hotel", amount: 215, category: "Travel:Lodging",
+        budget: "vacation", timestamp: mockTimestamp("2025-02-01"), groupId: "household",
+      }),
     ]);
     const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain("data-category-options");
@@ -208,9 +219,19 @@ describe("renderHome", () => {
 
   it("sorts transactions by timestamp descending with nulls last", async () => {
     mockGetTransactions.mockResolvedValue([
-      txn({ description: "Older", amount: 10, category: "A", timestamp: mockTimestamp("2025-01-01") }),
-      txn({ id: "txn-2", institution: "Bank B", account: "Savings", description: "Newer", amount: 20, category: "B", timestamp: mockTimestamp("2025-02-01") }),
-      txn({ id: "txn-3", institution: "Bank C", account: "Credit", description: "No date", amount: 30, category: "C", timestamp: null }),
+      txn({
+        description: "Older", amount: 10, category: "A",
+        timestamp: mockTimestamp("2025-01-01"),
+      }),
+      txn({
+        id: "txn-2", institution: "Bank B", account: "Savings",
+        description: "Newer", amount: 20, category: "B",
+        timestamp: mockTimestamp("2025-02-01"),
+      }),
+      txn({
+        id: "txn-3", institution: "Bank C", account: "Credit",
+        description: "No date", amount: 30, category: "C", timestamp: null,
+      }),
     ]);
     const html = await renderHome({ user: null, group: null, groupError: false });
     const newerIdx = html.indexOf("Newer");

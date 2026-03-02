@@ -5,30 +5,41 @@ import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
 
-/** Client-side view of a Firestore group document, carrying only `id` and `name`. */
+/**
+ * Client-side view of a Firestore group document, carrying only `id` and `name`.
+ * The server-side `members` array is excluded to avoid exposing group membership
+ * to the client — authorization checks use the server-side `memberUids` field on
+ * transactions instead.
+ */
 export interface Group {
-  id: string;
-  name: string;
+  readonly id: string;
+  readonly name: string;
 }
 
 export interface Transaction {
-  id: string;
-  institution: string;
-  account: string;
-  description: string;
-  amount: number;
-  note: string;
-  category: string;
-  /** Percentage, range [0, 100]. Validated at read and write boundaries. */
-  reimbursement: number;
-  budget: string | null;
-  timestamp: Timestamp | null;
-  statementId: string | null;
-  groupId: string | null;
+  readonly id: string;
+  readonly institution: string;
+  readonly account: string;
+  readonly description: string;
+  readonly amount: number;
+  readonly note: string;
+  readonly category: string;
+  /**
+   * Percentage, range [0, 100]. Validated at read and write boundaries.
+   * Server-side enforcement via Firestore security rules ensures the range
+   * constraint holds even if client validation is bypassed.
+   */
+  readonly reimbursement: number;
+  readonly budget: string | null;
+  readonly timestamp: Timestamp | null;
+  readonly statementId: string | null;
+  readonly groupId: string | null;
 }
 
 function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") throw new DataIntegrityError(`Expected string for ${field}, got ${typeof value}`);
+  if (typeof value !== "string") {
+    throw new DataIntegrityError(`Expected string for ${field}, got ${typeof value}`);
+  }
   return value;
 }
 
@@ -50,12 +61,20 @@ function requireReimbursement(value: unknown): number {
   return n;
 }
 
+function optionalString(value: unknown, field: string): string | null {
+  if (value == null) return null;
+  if (typeof value !== "string") {
+    throw new DataIntegrityError(`Expected string or null for ${field}, got ${typeof value}`);
+  }
+  return value;
+}
+
 export async function getUserGroups(user: User): Promise<Group[]> {
   const path = nsCollectionPath(NAMESPACE, "groups");
   const q = query(collection(db, path), where("members", "array-contains", user.uid));
   const snapshot = await getDocs(q);
   return snapshot.docs
-    .map((d) => ({ id: d.id, name: requireString(d.data().name, "groups.name") }))
+    .map((docSnap) => ({ id: docSnap.id, name: requireString(docSnap.data().name, "groups.name") }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -74,13 +93,17 @@ export async function getTransactions(groupId: string | null, uid?: string): Pro
   const collectionName = groupId ? "transactions" : "seed-transactions";
   const path = nsCollectionPath(NAMESPACE, collectionName);
   const q = groupId
-    ? query(collection(db, path), where("groupId", "==", groupId), where("memberUids", "array-contains", uid))
+    ? query(
+        collection(db, path),
+        where("groupId", "==", groupId),
+        where("memberUids", "array-contains", uid),
+      )
     : query(collection(db, path));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((d) => {
-    const data = d.data();
+  return snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
     return {
-      id: d.id,
+      id: docSnap.id,
       institution: requireString(data.institution, "institution"),
       account: requireString(data.account, "account"),
       description: requireString(data.description, "description"),
@@ -88,10 +111,10 @@ export async function getTransactions(groupId: string | null, uid?: string): Pro
       note: requireString(data.note, "note"),
       category: requireString(data.category, "category"),
       reimbursement: requireReimbursement(data.reimbursement),
-      budget: typeof data.budget === "string" ? data.budget : null,
+      budget: optionalString(data.budget, "budget"),
       timestamp: asTimestamp(data.timestamp),
-      statementId: typeof data.statementId === "string" ? data.statementId : null,
-      groupId: typeof data.groupId === "string" ? data.groupId : null,
+      statementId: optionalString(data.statementId, "statementId"),
+      groupId: optionalString(data.groupId, "groupId"),
     };
   });
 }

@@ -3,6 +3,7 @@ package scaffold
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,13 +19,31 @@ type RewriteEntry struct {
 
 func (r RewriteEntry) Validate() error {
 	if r.Source == "" {
-		return fmt.Errorf("rewrite source must not be empty")
+		return errors.New("rewrite source must not be empty")
 	}
 	if r.Destination == "" {
-		return fmt.Errorf("rewrite destination must not be empty")
+		return errors.New("rewrite destination must not be empty")
 	}
 	if !strings.HasPrefix(r.Destination, "/") {
 		return fmt.Errorf("rewrite destination must start with /: %s", r.Destination)
+	}
+	return nil
+}
+
+func NewRewriteEntry(source, destination string) (RewriteEntry, error) {
+	entry := RewriteEntry{Source: source, Destination: destination}
+	if err := entry.Validate(); err != nil {
+		return RewriteEntry{}, err
+	}
+	return entry, nil
+}
+
+func (h HostingEntry) Validate() error {
+	if h.Target == "" {
+		return errors.New("hosting target must not be empty")
+	}
+	if h.Public == "" {
+		return errors.New("hosting public must not be empty")
 	}
 	return nil
 }
@@ -248,15 +267,12 @@ func AddHostingEntry(config *FirebaseConfig, appName string) error {
 		}
 	}
 	entry := HostingEntry{
-		Target:   appName,
-		Public:   appName + "/dist",
-		Ignore:   []string{"firebase.json", "**/.*", "**/node_modules/**"},
-		Rewrites: []RewriteEntry{{Source: "**", Destination: "/index.html"}},
+		Target: appName,
+		Public: appName + "/dist",
+		Ignore: []string{"firebase.json", "**/.*", "**/node_modules/**"},
 	}
-	for _, r := range entry.Rewrites {
-		if err := r.Validate(); err != nil {
-			return fmt.Errorf("invalid rewrite for %q: %w", appName, err)
-		}
+	if err := entry.Validate(); err != nil {
+		return fmt.Errorf("invalid hosting entry for %q: %w", appName, err)
 	}
 	config.Hosting = append(config.Hosting, entry)
 	return nil

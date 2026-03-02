@@ -8,8 +8,7 @@ function formatTimestamp(ts: Timestamp | null): string {
   if (!ts) return "";
   const date = ts.toDate();
   if (isNaN(date.getTime())) {
-    console.warn("Invalid Date from Timestamp:", ts);
-    return "";
+    throw new DataIntegrityError(`Invalid Date from Timestamp: ${String(ts)}`);
   }
   return date.toLocaleDateString();
 }
@@ -124,18 +123,23 @@ export async function renderHome(options: RenderHomeOptions): Promise<string> {
       throw error;
     }
     console.error("Failed to load transactions:", error);
-    tableHtml = '<p id="transactions-error">Could not load transactions. Try refreshing the page.</p>';
+    const code = (error as { code?: string })?.code;
+    const message = code === "permission-denied"
+      ? "Access denied. Please contact support."
+      : "Could not load transactions. Try refreshing the page.";
+    tableHtml = `<p id="transactions-error">${message}</p>`;
   }
 
   const groupErrorNotice = groupError && user
     ? '<p id="group-error" class="auth-error">Could not load group data. Showing example data. Try refreshing the page.</p>'
     : "";
 
-  const seedNotice = !authorized && !groupError
-    ? user
+  let seedNotice = "";
+  if (!authorized && !groupError) {
+    seedNotice = user
       ? '<p id="seed-data-notice">Viewing example data. You are not a member of any groups.</p>'
-      : '<p id="seed-data-notice">Viewing example data. Sign in to see your transactions.</p>'
-    : "";
+      : '<p id="seed-data-notice">Viewing example data. Sign in to see your transactions.</p>';
+  }
 
   return `
     <h2>Transactions</h2>
