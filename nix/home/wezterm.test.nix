@@ -105,16 +105,16 @@ let
     in
     pkgs.runCommand "test-wezterm-linux-config" { } ''
       ${
-        if lib.hasInfix "default_prog" luaConfig then
-          "echo 'PASS: Linux config includes default_prog for WSL'"
+        if lib.hasInfix "target_triple" luaConfig && lib.hasInfix "windows" luaConfig then
+          "echo 'PASS: Linux config guards default_prog with target_triple windows check'"
         else
-          "echo 'FAIL: Linux config missing default_prog' && exit 1"
+          "echo 'FAIL: Linux config missing target_triple windows guard' && exit 1"
       }
       ${
-        if lib.hasInfix "wsl.exe" luaConfig then
-          "echo 'PASS: Linux config includes wsl.exe'"
+        if lib.hasInfix "default_prog" luaConfig && lib.hasInfix "wsl.exe" luaConfig then
+          "echo 'PASS: Linux config includes default_prog with wsl.exe'"
         else
-          "echo 'FAIL: Linux config missing wsl.exe' && exit 1"
+          "echo 'FAIL: Linux config missing default_prog/wsl.exe' && exit 1"
       }
       ${
         if lib.hasInfix "/home/" luaConfig && lib.hasInfix "linuxuser" luaConfig then

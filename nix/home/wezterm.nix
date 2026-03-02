@@ -26,12 +26,12 @@
       local config = wezterm.config_builder()
 
       ${lib.optionalString pkgs.stdenv.isLinux ''
-        -- WSL Integration (Linux/WSL only)
-        -- When running on Linux/WSL, include default_prog to automatically
-        -- launch into WSL when the Windows WezTerm application reads this config.
-        -- Using lib.strings.toJSON to safely escape username special characters.
-        -- JSON string syntax is valid Lua string syntax, making this a reliable escaping mechanism.
-        config.default_prog = { 'wsl.exe', '-d', 'NixOS', '--cd', '/home/' .. ${lib.strings.toJSON config.home.username} }
+        -- WSL Integration: set default_prog only when running on Windows.
+        -- This config is generated on NixOS and copied to Windows, but the NixOS
+        -- mux server also reads it — wsl.exe only exists on the Windows side.
+        if wezterm.target_triple:find('windows') then
+          config.default_prog = { 'wsl.exe', '-d', 'NixOS', '--cd', '/home/' .. ${lib.strings.toJSON config.home.username} }
+        end
       ''}
 
       ${lib.optionalString pkgs.stdenv.isDarwin ''
