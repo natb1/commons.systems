@@ -30,14 +30,21 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
+      - name: Detect changed file categories
+        id: changes
+        run: |
+          CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1...HEAD 2>/dev/null || echo "")
+          if echo "$CHANGED" | grep -qE '^(nix/|flake\.nix$|flake\.lock$)'; then
+            echo "nix=true" >> "$GITHUB_OUTPUT"
+          fi
+          if echo "$CHANGED" | grep -qF 'firestore.rules'; then
+            echo "rules=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Install nix (if nix files changed)
-        if: |
-          contains(toJson(github.event.commits.*.modified), 'flake.nix') ||
-          contains(toJson(github.event.commits.*.modified), 'flake.lock') ||
-          contains(toJson(github.event.commits.*.modified), 'nix/')
+        if: steps.changes.outputs.nix == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
       - name: Set up Java (if firestore.rules changed)
-        if: contains(toJson(github.event.commits.*.modified), 'firestore.rules')
+        if: steps.changes.outputs.rules == 'true'
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
@@ -54,14 +61,21 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
+      - name: Detect changed file categories
+        id: changes
+        run: |
+          CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1...HEAD 2>/dev/null || echo "")
+          if echo "$CHANGED" | grep -qE '^(nix/|flake\.nix$|flake\.lock$)'; then
+            echo "nix=true" >> "$GITHUB_OUTPUT"
+          fi
+          if echo "$CHANGED" | grep -qF 'firestore.rules'; then
+            echo "rules=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Install nix (if nix files changed)
-        if: |
-          contains(toJson(github.event.commits.*.modified), 'flake.nix') ||
-          contains(toJson(github.event.commits.*.modified), 'flake.lock') ||
-          contains(toJson(github.event.commits.*.modified), 'nix/')
+        if: steps.changes.outputs.nix == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
       - name: Set up Java (if firestore.rules changed)
-        if: contains(toJson(github.event.commits.*.modified), 'firestore.rules')
+        if: steps.changes.outputs.rules == 'true'
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
