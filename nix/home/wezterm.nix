@@ -26,18 +26,79 @@
       local config = wezterm.config_builder()
 
       ${lib.optionalString pkgs.stdenv.isLinux ''
-        -- WSL Integration (Linux/WSL only)
-        -- When running on Linux/WSL, include default_prog to automatically
-        -- launch into WSL when the Windows WezTerm application reads this config.
-        -- Using lib.strings.toJSON to safely escape username special characters.
-        -- JSON string syntax is valid Lua string syntax, making this a reliable escaping mechanism.
-        config.default_prog = { 'wsl.exe', '-d', 'NixOS', '--cd', '/home/' .. ${lib.strings.toJSON config.home.username} }
+        -- WSL Integration: set default_prog only when running on Windows.
+        -- This config is generated on NixOS and copied to Windows, but the NixOS
+        -- mux server also reads it — wsl.exe only exists on the Windows side.
+        if wezterm.target_triple:find('windows') then
+          config.default_prog = { 'wsl.exe', '-d', 'NixOS', '--cd', '/home/' .. ${lib.strings.toJSON config.home.username} }
+          config.default_gui_startup_args = { 'connect', 'nixos' }
+        end
       ''}
 
       ${lib.optionalString pkgs.stdenv.isDarwin ''
         -- Enable macOS native fullscreen mode
         config.native_macos_fullscreen_mode = true
       ''}
+
+      -- Auto-discover Tailscale peers for ssh_domains.
+      -- Wrapped in pcall so config loads cleanly if tailscale is unavailable.
+      -- On Windows, tailscale runs inside WSL so invoke it via a login shell
+      -- to get the NixOS PATH (a non-login shell won't have tailscale on PATH).
+      local is_windows = wezterm.target_triple:find('windows')
+      local tailscale_status_cmd = { 'tailscale', 'status', '--json' }
+      if is_windows then
+        tailscale_status_cmd = { 'wsl.exe', '-d', 'NixOS', '--', 'bash', '-lc', 'tailscale status --json' }
+      end
+
+      local ssh_domains = {}
+      local pcall_ok, pcall_err = pcall(function()
+        local ok, stdout, stderr = wezterm.run_child_process(tailscale_status_cmd)
+        if not ok then
+          wezterm.log_warn('tailscale status failed: ' .. (stderr or '(no stderr)'))
+          return
+        end
+        local status = wezterm.json_parse(stdout)
+        if not status then
+          wezterm.log_warn('Failed to parse tailscale status JSON; stdout length: ' .. #stdout)
+          return
+        end
+        -- Collect all nodes: Self + Peers
+        local nodes = {}
+        if status.Self then
+          table.insert(nodes, status.Self)
+        end
+        if status.Peer then
+          for _, peer in pairs(status.Peer) do
+            table.insert(nodes, peer)
+          end
+        end
+        for _, node in ipairs(nodes) do
+          if node.DNSName then
+            -- DNSName has a trailing dot; strip it and take the short hostname
+            local fqdn = node.DNSName:gsub('%.$', "")
+            local hostname = fqdn:match('^([^.]+)')
+            if hostname then
+              local domain = {
+                name = hostname,
+                remote_address = hostname,
+                username = ${lib.strings.toJSON config.home.username},
+              }
+              -- On Windows, point to the WSL SSH key via the \\wsl$ UNC share
+              -- since WezTerm's built-in SSH client can't see the WSL filesystem.
+              if is_windows then
+                domain.ssh_option = {
+                  identityfile = '//wsl$/NixOS/home/' .. ${lib.strings.toJSON config.home.username} .. '/.ssh/id_ed25519',
+                }
+              end
+              table.insert(ssh_domains, domain)
+            end
+          end
+        end
+      end)
+      if not pcall_ok then
+        wezterm.log_warn('ssh_domains discovery failed: ' .. tostring(pcall_err))
+      end
+      config.ssh_domains = ssh_domains
 
       return config
     '';
