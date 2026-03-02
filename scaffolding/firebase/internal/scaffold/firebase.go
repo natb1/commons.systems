@@ -10,10 +10,16 @@ import (
 
 const hostingTargetType = "hosting"
 
+type RewriteEntry struct {
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+}
+
 type HostingEntry struct {
-	Target string   `json:"target"`
-	Public string   `json:"public"`
-	Ignore []string `json:"ignore"`
+	Target   string         `json:"target"`
+	Public   string         `json:"public"`
+	Ignore   []string       `json:"ignore"`
+	Rewrites []RewriteEntry `json:"rewrites,omitempty"`
 }
 
 type FirestoreConfig struct {
@@ -185,9 +191,10 @@ func AddHostingEntry(config *FirebaseConfig, appName string) error {
 		}
 	}
 	config.Hosting = append(config.Hosting, HostingEntry{
-		Target: appName,
-		Public: appName + "/dist",
-		Ignore: []string{"firebase.json", "**/.*", "**/node_modules/**"},
+		Target:   appName,
+		Public:   appName + "/dist",
+		Ignore:   []string{"firebase.json", "**/.*", "**/node_modules/**"},
+		Rewrites: []RewriteEntry{{Source: "**", Destination: "/index.html"}},
 	})
 	return nil
 }

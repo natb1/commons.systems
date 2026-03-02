@@ -33,7 +33,7 @@ function showAuthError(message: string): void {
   el.appendChild(btn);
 
   document.body.prepend(el);
-  const timer = setTimeout(() => el.remove(), 5000);
+  const timer = setTimeout(() => el.remove(), 15000);
   btn.addEventListener("click", () => {
     clearTimeout(timer);
     el.remove();
@@ -62,7 +62,6 @@ export function signOut(): Promise<void> {
   return firebaseSignOut(auth).catch((error) => {
     console.error("Sign-out failed:", error);
     showAuthError("Sign-out failed. Please try again.");
-    throw error;
   });
 }
 

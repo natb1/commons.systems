@@ -13,9 +13,13 @@ export interface Router {
 export function parseHash(): { path: string; params: URLSearchParams } {
   const hash = location.hash.slice(1) || "/";
   const qIndex = hash.indexOf("?");
-  return qIndex === -1
-    ? { path: hash, params: new URLSearchParams() }
-    : { path: hash.slice(0, qIndex), params: new URLSearchParams(hash.slice(qIndex + 1)) };
+  if (qIndex === -1) {
+    return { path: hash, params: new URLSearchParams() };
+  }
+  return {
+    path: hash.slice(0, qIndex),
+    params: new URLSearchParams(hash.slice(qIndex + 1)),
+  };
 }
 
 export function createRouter(

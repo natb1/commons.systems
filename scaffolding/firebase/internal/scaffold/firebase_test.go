@@ -78,6 +78,12 @@ func TestAddAndRemoveHostingEntry(t *testing.T) {
 	if config.Hosting[1].Target != "demo" {
 		t.Errorf("expected target demo, got %q", config.Hosting[1].Target)
 	}
+	if len(config.Hosting[1].Rewrites) != 1 {
+		t.Fatalf("expected 1 rewrite, got %d", len(config.Hosting[1].Rewrites))
+	}
+	if config.Hosting[1].Rewrites[0].Source != "**" || config.Hosting[1].Rewrites[0].Destination != "/index.html" {
+		t.Errorf("expected SPA rewrite, got %+v", config.Hosting[1].Rewrites[0])
+	}
 
 	// Adding duplicate should error
 	if err := AddHostingEntry(config, "demo"); err == nil {

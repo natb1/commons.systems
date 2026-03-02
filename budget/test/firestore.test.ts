@@ -219,4 +219,80 @@ describe("updateTransaction", () => {
       reimbursement: 50,
     });
   });
+
+  it("throws for empty txnId", async () => {
+    await expect(updateTransaction("", { note: "test" })).rejects.toThrow("Invalid transaction ID");
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws for txnId containing slash", async () => {
+    await expect(updateTransaction("a/b", { note: "test" })).rejects.toThrow("Invalid transaction ID");
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+});
+
+describe("getTransactions — input validation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+    mockQuery.mockReturnValue("mock-query");
+    mockWhere.mockReturnValue("mock-where");
+  });
+
+  it("throws when groupId provided without uid", async () => {
+    await expect(getTransactions("household" as Parameters<typeof getTransactions>[0])).rejects.toThrow(
+      "uid is required",
+    );
+  });
+});
+
+describe("data validation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+    mockQuery.mockReturnValue("mock-query");
+    mockWhere.mockReturnValue("mock-where");
+  });
+
+  function mockDocsWithData(data: Record<string, unknown>) {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "txn-bad",
+        data: () => ({
+          institution: "Bank",
+          account: "Checking",
+          description: "Test",
+          amount: 10,
+          note: "",
+          category: "Test",
+          reimbursement: 0,
+          budget: null,
+          timestamp: null,
+          statementId: null,
+          groupId: null,
+          ...data,
+        }),
+      }],
+    });
+  }
+
+  it("throws DataIntegrityError for non-string required fields", async () => {
+    mockDocsWithData({ institution: 123 });
+    await expect(getTransactions(null)).rejects.toThrow(/Expected string for institution/);
+  });
+
+  it("throws DataIntegrityError for non-finite number", async () => {
+    mockDocsWithData({ amount: NaN });
+    await expect(getTransactions(null)).rejects.toThrow(/Expected finite number for amount/);
+  });
+
+  it("throws RangeError for out-of-range reimbursement on read", async () => {
+    mockDocsWithData({ reimbursement: 150 });
+    await expect(getTransactions(null)).rejects.toThrow(RangeError);
+  });
+
+  it("throws DataIntegrityError for invalid timestamp", async () => {
+    mockDocsWithData({ timestamp: "not-a-timestamp" });
+    await expect(getTransactions(null)).rejects.toThrow(/Expected Timestamp/);
+  });
 });

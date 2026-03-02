@@ -12,12 +12,11 @@ if (!nav) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
-interface AppState {
-  groups: Group[];
-  user: User | null;
-  groupError: boolean;
-}
-const state: AppState = { groups: [], user: null, groupError: false };
+type AppState =
+  | { user: null; groups: []; groupError: false }
+  | { user: User; groups: Group[]; groupError: boolean };
+
+let state: AppState = { user: null, groups: [], groupError: false };
 
 function getGroupParam(): string | null {
   return parseHash().params.get("group");
@@ -64,6 +63,9 @@ const router = createRouter(app, [
       if (!user) {
         return renderHome({ user: null, group: null, groupError: false });
       }
+      if (group) {
+        return renderHome({ user, group, groupError: false });
+      }
       return renderHome({ user, group, groupError: state.groupError });
     },
   },
@@ -81,29 +83,34 @@ const observer = new MutationObserver(() => {
     hydrateTransactionTable(table);
     table.dataset.hydrated = "true";
   } catch (error) {
+    if (error instanceof DataIntegrityError) throw error;
     console.error("Hydration error:", error);
+    table.dataset.hydrated = "error";
   }
 });
 observer.observe(app, { childList: true, subtree: true });
 
 onAuthStateChanged(auth, async (user) => {
-  state.user = user;
-  state.groupError = false;
-  if (user) {
-    try {
-      const groups = await getUserGroups(user);
-      if (state.user !== user) return; // auth state changed during fetch
-      state.groups = groups;
-    } catch (error) {
-      if (error instanceof DataIntegrityError) {
-        throw error; // data integrity error — surface, don't swallow
-      }
-      console.error("Failed to fetch user groups:", error);
-      state.groups = [];
-      state.groupError = true;
+  if (!user) {
+    state = { user: null, groups: [], groupError: false };
+    updateNav(null);
+    router.navigate();
+    return;
+  }
+  // Set user immediately so concurrent callbacks detect the change
+  state = { user, groups: state.user === user ? state.groups : [], groupError: false };
+  try {
+    const groups = await getUserGroups(user);
+    if (state.user !== user) return; // auth state changed during fetch
+    state = { user, groups, groupError: false };
+  } catch (error) {
+    if (error instanceof DataIntegrityError) {
+      console.error("Data integrity error in user groups:", error);
+      app.innerHTML = '<p>A data error occurred. Please contact support.</p>';
+      return;
     }
-  } else {
-    state.groups = [];
+    console.error("Failed to fetch user groups:", error);
+    state = { user, groups: [], groupError: true };
   }
   updateNav(user);
   router.navigate();

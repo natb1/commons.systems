@@ -2,6 +2,8 @@ import { updateTransaction } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";
 
 function parseJsonArray(raw: string | undefined): string[] {
+  // Attribute absent for unauthorized users (no autocomplete). Non-empty but
+  // invalid values throw DataIntegrityError below.
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -39,14 +41,19 @@ function handleOutsideClick(e: Event): void {
 
 let listenersRegistered = false;
 
-function showInputError(input: HTMLInputElement): void {
+const errorTimers = new WeakMap<HTMLInputElement, ReturnType<typeof setTimeout>>();
+
+function showInputError(input: HTMLInputElement, title = "Save failed \u2014 value reverted"): void {
+  const existing = errorTimers.get(input);
+  if (existing) clearTimeout(existing);
   input.value = input.defaultValue;
   input.classList.add("save-error");
-  input.title = "Save failed \u2014 value reverted";
-  setTimeout(() => {
+  input.title = title;
+  errorTimers.set(input, setTimeout(() => {
     input.classList.remove("save-error");
     input.title = "";
-  }, 2000);
+    errorTimers.delete(input);
+  }, 5000));
 }
 
 function selectItem(input: HTMLInputElement, value: string): void {
@@ -164,8 +171,8 @@ export function hydrateTransactionTable(container: HTMLElement): void {
   });
 
   function handleAutocomplete(e: Event): void {
-    const input = e.target as HTMLInputElement;
-    if (input.tagName !== "INPUT") return;
+    if (!(e.target instanceof HTMLInputElement)) return;
+    const input = e.target;
     const options = getOptionsForInput(input);
     if (options.length > 0) showDropdown(input, options);
   }
@@ -205,15 +212,10 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       }
       input.defaultValue = input.value;
     } catch (error) {
+      if (error instanceof DataIntegrityError) throw error;
       console.error("Failed to save transaction:", error);
       if (error instanceof RangeError) {
-        input.value = input.defaultValue;
-        input.classList.add("save-error");
-        input.title = "Value out of range";
-        setTimeout(() => {
-          input.classList.remove("save-error");
-          input.title = "";
-        }, 2000);
+        showInputError(input, "Value out of range");
       } else {
         showInputError(input);
       }

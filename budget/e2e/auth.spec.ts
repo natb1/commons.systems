@@ -93,9 +93,7 @@ test.describe("auth", () => {
     const noteInput = page.locator(".edit-note").first();
     await noteInput.fill("test note update");
     await noteInput.blur();
-    // Wait for the save to complete by confirming the input accepted the value
     await expect(page.locator(".edit-note").first()).toHaveValue("test note update");
-    // Reload and verify persistence
     await page.reload();
     await expect(page.locator("#transactions-table")).toBeVisible();
     await expect(page.locator(".edit-note").first()).toHaveValue("test note update");

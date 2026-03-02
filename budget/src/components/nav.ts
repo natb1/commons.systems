@@ -14,7 +14,7 @@ function renderGroupSelect(groups: Group[], selectedGroupId: string | null): str
 }
 
 export function renderNav(user: User | null, groups: Group[] = [], selectedGroupId: string | null = null): string {
-  const auth = user
+  const authHtml = user
     ? `<span id="user-display">${escapeHtml(user.displayName ?? user.email ?? "User")}</span>
        <a href="#" id="sign-out">Logout</a>`
     : `<a href="#" id="sign-in">Login</a>`;
@@ -23,6 +23,6 @@ export function renderNav(user: User | null, groups: Group[] = [], selectedGroup
     <a href="#/">Home</a>
     <a href="#/about">About</a>
     ${groupSelect}
-    <span class="nav-auth">${auth}</span>
+    <span class="nav-auth">${authHtml}</span>
   `;
 }

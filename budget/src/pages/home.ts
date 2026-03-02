@@ -6,7 +6,9 @@ import { DataIntegrityError } from "../errors.js";
 
 function formatTimestamp(ts: Timestamp | null): string {
   if (!ts) return "";
-  return ts.toDate().toLocaleDateString();
+  const date = ts.toDate();
+  if (isNaN(date.getTime())) return "";
+  return date.toLocaleDateString();
 }
 
 function formatCategory(category: string): string {
@@ -92,13 +94,13 @@ function renderTransactionTable(transactions: Transaction[], authorized: boolean
 /**
  * Valid state combinations:
  * - { user: null, group: null, groupError: false } — unauthenticated (shows seed data)
- * - { user: User, group: null, groupError: true } — authenticated but group fetch failed
  * - { user: User, group: Group, groupError: false } — authenticated with group (editable)
- * - { user: User, group: null, groupError: false } — authenticated, no groups exist (shows seed data)
+ * - { user: User, group: null, groupError: boolean } — authenticated, no group (error or none exist)
  */
 export type RenderHomeOptions =
   | { user: null; group: null; groupError: false }
-  | { user: User; group: Group | null; groupError: boolean };
+  | { user: User; group: Group; groupError: false }
+  | { user: User; group: null; groupError: boolean };
 
 export async function renderHome(options: RenderHomeOptions): Promise<string> {
   const { user, group, groupError } = options;
@@ -117,7 +119,7 @@ export async function renderHome(options: RenderHomeOptions): Promise<string> {
       throw error;
     }
     console.error("Failed to load transactions:", error);
-    tableHtml = '<p id="transactions-error">Could not load transactions</p>';
+    tableHtml = '<p id="transactions-error">Could not load transactions. Try refreshing the page.</p>';
   }
 
   const groupErrorNotice = groupError && user
