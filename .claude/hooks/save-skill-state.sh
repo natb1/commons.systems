@@ -47,9 +47,6 @@ atomic_write() {
     rm -f "$tmp"
     return 1
   fi
-  if ! sync 2>/dev/null; then
-    echo "[save-skill-state] WARNING: sync failed -- state may not survive a system crash" >&2
-  fi
 }
 
 case "${1:-}" in
