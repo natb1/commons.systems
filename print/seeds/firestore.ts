@@ -3,6 +3,18 @@ import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
+      name: "groups",
+      documents: [
+        {
+          id: "natb1-library",
+          data: {
+            name: "natb1-library",
+            members: ["test-github-user"],
+          },
+        },
+      ],
+    },
+    {
       name: "media",
       documents: [
         // Public domain items (3)
@@ -53,6 +65,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 765_000_000,
             sourceNotes: "Private GCS bucket: rml-media/print/conan-chronicles-vol01.cbz",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -65,6 +79,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 567_000,
             sourceNotes: "Private GCS bucket: rml-media/print/confessions-augustine.epub",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -77,6 +93,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 82_000_000,
             sourceNotes: "Private GCS bucket: rml-media/print/crown-and-skull-digital.pdf",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -89,6 +107,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 1_300_000,
             sourceNotes: "Private GCS bucket: rml-media/print/crown-and-skull-hero-sheet.pdf",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -101,6 +121,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 73_500_000,
             sourceNotes: "Private GCS bucket: rml-media/print/crown-and-skull-vol2.pdf",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -113,6 +135,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 1_200_000,
             sourceNotes: "Private GCS bucket: rml-media/print/name-of-the-rose.epub",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -125,6 +149,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 31_000_000,
             sourceNotes: "Private GCS bucket: rml-media/print/hex-crown-skull-zine.pdf",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -137,6 +163,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 4_700_000,
             sourceNotes: "Private GCS bucket: rml-media/print/plato-complete-works.epub",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -149,6 +177,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 1_200_000,
             sourceNotes: "Private GCS bucket: rml-media/print/scattered-minds.epub",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -161,6 +191,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 72_000_000,
             sourceNotes: "Private GCS bucket: rml-media/print/shadowdark-rpg.pdf",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -173,6 +205,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 3_500_000,
             sourceNotes: "Private GCS bucket: rml-media/print/delian-tomb.pdf",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -185,6 +219,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 2_800_000,
             sourceNotes: "Private GCS bucket: rml-media/print/unmasking-autism.epub",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
         {
@@ -197,6 +233,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sizeBytes: 2_100_000,
             sourceNotes: "Private GCS bucket: rml-media/print/test-comic.cbz",
             currentLocation: {},
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
           },
         },
       ],

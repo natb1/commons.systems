@@ -1,9 +1,8 @@
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
 import { db, NAMESPACE } from "./firebase.js";
-import { isAuthorized } from "./is-authorized.js";
 
 export type MediaType = "epub" | "pdf" | "cbz";
 
@@ -53,23 +52,33 @@ function toMediaMeta(id: string, data: Record<string, unknown>): MediaMeta | nul
 
 export async function getMedia(user: User | null): Promise<GetMediaResult> {
   const path = nsCollectionPath(NAMESPACE, "media");
-  const admin = isAuthorized(user);
-  const q = admin
-    ? query(collection(db, path), orderBy("title"))
-    : query(collection(db, path), where("publicDomain", "==", true));
-  const snapshot = await getDocs(q);
-  const items: MediaMeta[] = [];
+  const col = collection(db, path);
+
+  const publicQuery = query(col, where("publicDomain", "==", true));
+  const queries = [getDocs(publicQuery)];
+
+  if (user) {
+    const memberQuery = query(col, where("memberUids", "array-contains", user.uid));
+    queries.push(getDocs(memberQuery));
+  }
+
+  const snapshots = await Promise.all(queries);
+
+  const seen = new Map<string, MediaMeta>();
   let skippedCount = 0;
-  for (const d of snapshot.docs) {
-    const item = toMediaMeta(d.id, d.data());
-    if (item) {
-      items.push(item);
-    } else {
-      skippedCount++;
+
+  for (const snapshot of snapshots) {
+    for (const d of snapshot.docs) {
+      if (seen.has(d.id)) continue;
+      const item = toMediaMeta(d.id, d.data());
+      if (item) {
+        seen.set(d.id, item);
+      } else {
+        skippedCount++;
+      }
     }
   }
-  if (!admin) {
-    items.sort((a, b) => a.title.localeCompare(b.title));
-  }
+
+  const items = [...seen.values()].sort((a, b) => a.title.localeCompare(b.title));
   return { items, skippedCount };
 }

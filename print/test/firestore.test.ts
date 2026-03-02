@@ -4,14 +4,12 @@ import { makeUser } from "./helpers/make-user";
 const mockGetDocs = vi.fn();
 const mockCollection = vi.fn();
 const mockQuery = vi.fn();
-const mockOrderBy = vi.fn();
 const mockWhere = vi.fn();
 
 vi.mock("firebase/firestore", () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
   query: (...args: unknown[]) => mockQuery(...args),
-  orderBy: (...args: unknown[]) => mockOrderBy(...args),
   where: (...args: unknown[]) => mockWhere(...args),
 }));
 
@@ -24,12 +22,7 @@ vi.mock("@commons-systems/firestoreutil/namespace", () => ({
   nsCollectionPath: (ns: string, col: string) => `${ns}/${col}`,
 }));
 
-vi.mock("../src/is-authorized.js", () => ({
-  isAuthorized: vi.fn(),
-}));
-
 import { getMedia } from "../src/firestore";
-import { isAuthorized } from "../src/is-authorized";
 
 const validEpub = {
   id: "phaedrus",
@@ -67,20 +60,17 @@ const validCbz = {
   }),
 };
 
-const natb1User = makeUser({ screenName: "natb1" });
-const otherUser = makeUser({ screenName: "other", providerDisplayName: "other-name" });
+const testUser = makeUser({ uid: "user-123" });
 
 describe("getMedia", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCollection.mockReturnValue("mock-collection-ref");
-    mockOrderBy.mockReturnValue("mock-order");
-    mockWhere.mockReturnValue("mock-where");
-    mockQuery.mockReturnValue("mock-query");
+    mockWhere.mockImplementation((...args: unknown[]) => ({ _where: args }));
+    mockQuery.mockImplementation((...args: unknown[]) => ({ _query: args }));
   });
 
   it("queries the correct namespaced collection path", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(false);
     mockGetDocs.mockResolvedValue({ docs: [] });
 
     await getMedia(null);
@@ -91,38 +81,28 @@ describe("getMedia", () => {
     );
   });
 
-  it("uses orderBy('title') for admin queries", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
-    mockGetDocs.mockResolvedValue({ docs: [] });
-
-    await getMedia(natb1User);
-
-    expect(mockOrderBy).toHaveBeenCalledWith("title");
-    expect(mockWhere).not.toHaveBeenCalled();
-  });
-
-  it("uses where filter for non-admin queries", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(false);
+  it("runs single publicDomain query for unauthenticated user", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
     await getMedia(null);
 
+    expect(mockWhere).toHaveBeenCalledTimes(1);
     expect(mockWhere).toHaveBeenCalledWith("publicDomain", "==", true);
-    expect(mockOrderBy).not.toHaveBeenCalled();
+    expect(mockGetDocs).toHaveBeenCalledTimes(1);
   });
 
-  it("uses where filter for non-admin signed-in user", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(false);
+  it("runs two queries for authenticated user (public + memberUids)", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getMedia(otherUser);
+    await getMedia(testUser);
 
+    expect(mockWhere).toHaveBeenCalledTimes(2);
     expect(mockWhere).toHaveBeenCalledWith("publicDomain", "==", true);
-    expect(mockOrderBy).not.toHaveBeenCalled();
+    expect(mockWhere).toHaveBeenCalledWith("memberUids", "array-contains", "user-123");
+    expect(mockGetDocs).toHaveBeenCalledTimes(2);
   });
 
   it("returns empty array when snapshot has no docs", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(false);
     mockGetDocs.mockResolvedValue({ docs: [] });
 
     const result = await getMedia(null);
@@ -132,10 +112,9 @@ describe("getMedia", () => {
   });
 
   it("maps valid documents to MediaMeta objects", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
     mockGetDocs.mockResolvedValue({ docs: [validEpub] });
 
-    const { items } = await getMedia(natb1User);
+    const { items } = await getMedia(null);
 
     expect(items).toEqual([
       {
@@ -150,17 +129,30 @@ describe("getMedia", () => {
     ]);
   });
 
-  it("returns all media types for admin", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
-    mockGetDocs.mockResolvedValue({ docs: [validEpub, validPdf, validCbz] });
+  it("merges results from both queries for authenticated user", async () => {
+    mockGetDocs
+      .mockResolvedValueOnce({ docs: [validEpub, validPdf] })
+      .mockResolvedValueOnce({ docs: [validCbz] });
 
-    const { items } = await getMedia(natb1User);
+    const { items } = await getMedia(testUser);
 
     expect(items).toHaveLength(3);
   });
 
-  it("sorts non-admin results client-side by title", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(false);
+  it("deduplicates items appearing in both query results", async () => {
+    mockGetDocs
+      .mockResolvedValueOnce({ docs: [validEpub] })
+      .mockResolvedValueOnce({ docs: [validEpub, validCbz] });
+
+    const { items } = await getMedia(testUser);
+
+    expect(items).toHaveLength(2);
+    const ids = items.map((i) => i.id);
+    expect(ids).toContain("phaedrus");
+    expect(ids).toContain("comic-1");
+  });
+
+  it("sorts results client-side by title for unauthenticated user", async () => {
     const zeta = {
       id: "zeta",
       data: () => ({
@@ -189,8 +181,7 @@ describe("getMedia", () => {
     expect(items[1].title).toBe("Zeta Book");
   });
 
-  it("does not sort admin results client-side", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
+  it("sorts results client-side by title for authenticated user", async () => {
     const zeta = {
       id: "zeta",
       data: () => ({
@@ -211,17 +202,17 @@ describe("getMedia", () => {
         tags: {},
       }),
     };
-    mockGetDocs.mockResolvedValue({ docs: [zeta, alpha] });
+    mockGetDocs
+      .mockResolvedValueOnce({ docs: [zeta] })
+      .mockResolvedValueOnce({ docs: [alpha] });
 
-    const { items } = await getMedia(natb1User);
+    const { items } = await getMedia(testUser);
 
-    // Admin results keep Firestore order (orderBy), not re-sorted client-side
-    expect(items[0].title).toBe("Zeta Book");
-    expect(items[1].title).toBe("Alpha Book");
+    expect(items[0].title).toBe("Alpha Book");
+    expect(items[1].title).toBe("Zeta Book");
   });
 
   it("filters out documents with missing title", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
     const noTitle = {
       id: "no-title",
       data: () => ({
@@ -234,7 +225,7 @@ describe("getMedia", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [validEpub, noTitle] });
 
-    const { items, skippedCount } = await getMedia(natb1User);
+    const { items, skippedCount } = await getMedia(null);
 
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe("phaedrus");
@@ -247,7 +238,6 @@ describe("getMedia", () => {
   });
 
   it("filters out documents with empty title", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
     const emptyTitle = {
       id: "empty-title",
       data: () => ({
@@ -261,7 +251,7 @@ describe("getMedia", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [emptyTitle] });
 
-    const { items, skippedCount } = await getMedia(natb1User);
+    const { items, skippedCount } = await getMedia(null);
 
     expect(items).toHaveLength(0);
     expect(skippedCount).toBe(1);
@@ -269,7 +259,6 @@ describe("getMedia", () => {
   });
 
   it("filters out documents with invalid mediaType", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
     const badType = {
       id: "bad-type",
       data: () => ({
@@ -283,7 +272,7 @@ describe("getMedia", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [badType] });
 
-    const { items, skippedCount } = await getMedia(natb1User);
+    const { items, skippedCount } = await getMedia(null);
 
     expect(items).toHaveLength(0);
     expect(skippedCount).toBe(1);
@@ -295,7 +284,6 @@ describe("getMedia", () => {
   });
 
   it("filters out documents with missing mediaType", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
     const noType = {
       id: "no-type",
       data: () => ({
@@ -308,7 +296,7 @@ describe("getMedia", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [noType] });
 
-    const { items, skippedCount } = await getMedia(natb1User);
+    const { items, skippedCount } = await getMedia(null);
 
     expect(items).toHaveLength(0);
     expect(skippedCount).toBe(1);
@@ -316,7 +304,6 @@ describe("getMedia", () => {
   });
 
   it("treats non-boolean publicDomain as false", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
     const badPublic = {
       id: "bad-public",
       data: () => ({
@@ -329,14 +316,13 @@ describe("getMedia", () => {
     };
     mockGetDocs.mockResolvedValue({ docs: [badPublic] });
 
-    const { items } = await getMedia(natb1User);
+    const { items } = await getMedia(null);
 
     expect(items).toHaveLength(1);
     expect(items[0].publicDomain).toBe(false);
   });
 
   it("defaults sizeBytes to 0 when not a number", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
     const noSize = {
       id: "no-size",
       data: () => ({
@@ -348,14 +334,13 @@ describe("getMedia", () => {
     };
     mockGetDocs.mockResolvedValue({ docs: [noSize] });
 
-    const { items } = await getMedia(natb1User);
+    const { items } = await getMedia(null);
 
     expect(items).toHaveLength(1);
     expect(items[0].sizeBytes).toBe(0);
   });
 
   it("defaults tags to empty object when missing", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
     const noTags = {
       id: "no-tags",
       data: () => ({
@@ -367,14 +352,13 @@ describe("getMedia", () => {
     };
     mockGetDocs.mockResolvedValue({ docs: [noTags] });
 
-    const { items } = await getMedia(natb1User);
+    const { items } = await getMedia(null);
 
     expect(items).toHaveLength(1);
     expect(items[0].tags).toEqual({});
   });
 
   it("defaults sourceNotes to empty string when missing", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
     const noNotes = {
       id: "no-notes",
       data: () => ({
@@ -387,14 +371,13 @@ describe("getMedia", () => {
     };
     mockGetDocs.mockResolvedValue({ docs: [noNotes] });
 
-    const { items } = await getMedia(natb1User);
+    const { items } = await getMedia(null);
 
     expect(items).toHaveLength(1);
     expect(items[0].sourceNotes).toBe("");
   });
 
   it("defaults tags to empty object when tags is an array", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
     const arrayTags = {
       id: "array-tags",
       data: () => ({
@@ -407,14 +390,13 @@ describe("getMedia", () => {
     };
     mockGetDocs.mockResolvedValue({ docs: [arrayTags] });
 
-    const { items } = await getMedia(natb1User);
+    const { items } = await getMedia(null);
 
     expect(items).toHaveLength(1);
     expect(items[0].tags).toEqual({});
   });
 
   it("increments skippedCount for each invalid document", async () => {
-    vi.mocked(isAuthorized).mockReturnValue(true);
     const bad1 = {
       id: "bad1",
       data: () => ({ mediaType: "pdf", publicDomain: true, sizeBytes: 0 }),
@@ -426,7 +408,7 @@ describe("getMedia", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [bad1, bad2, validEpub] });
 
-    const { items, skippedCount } = await getMedia(natb1User);
+    const { items, skippedCount } = await getMedia(null);
 
     expect(items).toHaveLength(1);
     expect(skippedCount).toBe(2);

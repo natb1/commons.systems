@@ -8,9 +8,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Public domain media is public; private media requires authentication
+    // Public domain media is public; private media requires group membership
     match /print/{env}/media/{mediaId} {
-      allow read: if resource.data.publicDomain == true || request.auth != null;
+      allow read: if resource.data.publicDomain == true
+        || (request.auth != null && request.auth.uid in resource.data.memberUids);
+      allow write: if false;
+    }
+
+    // Groups are readable only by their members
+    match /print/{env}/groups/{groupId} {
+      allow read: if request.auth != null && request.auth.uid in resource.data.members;
       allow write: if false;
     }
 
