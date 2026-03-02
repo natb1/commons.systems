@@ -7,7 +7,10 @@ import { DataIntegrityError } from "../errors.js";
 function formatTimestamp(ts: Timestamp | null): string {
   if (!ts) return "";
   const date = ts.toDate();
-  if (isNaN(date.getTime())) return "";
+  if (isNaN(date.getTime())) {
+    console.warn("Invalid Date from Timestamp:", ts);
+    return "";
+  }
   return date.toLocaleDateString();
 }
 
@@ -92,6 +95,7 @@ function renderTransactionTable(transactions: Transaction[], authorized: boolean
 }
 
 /**
+ * Render-time options after resolving the active group from AppState.
  * Valid state combinations:
  * - { user: null, group: null, groupError: false } — unauthenticated (shows seed data)
  * - { user: User, group: Group, groupError: false } — authenticated with group (editable)
@@ -115,7 +119,8 @@ export async function renderHome(options: RenderHomeOptions): Promise<string> {
     transactions.sort(compareByTimestampDesc);
     tableHtml = renderTransactionTable(transactions, authorized, groupName);
   } catch (error) {
-    if (error instanceof RangeError || error instanceof DataIntegrityError) {
+    if (error instanceof RangeError || error instanceof DataIntegrityError
+        || error instanceof TypeError || error instanceof ReferenceError) {
       throw error;
     }
     console.error("Failed to load transactions:", error);
@@ -127,7 +132,9 @@ export async function renderHome(options: RenderHomeOptions): Promise<string> {
     : "";
 
   const seedNotice = !authorized && !groupError
-    ? '<p id="seed-data-notice">Viewing example data. Sign in to see your transactions.</p>'
+    ? user
+      ? '<p id="seed-data-notice">Viewing example data. You are not a member of any groups.</p>'
+      : '<p id="seed-data-notice">Viewing example data. Sign in to see your transactions.</p>'
     : "";
 
   return `

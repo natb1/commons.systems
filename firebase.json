@@ -16,8 +16,7 @@
             { "key": "Content-Type", "value": "text/x-opml+xml; charset=utf-8" }
           ]
         }
-      ],
-      "rewrites": [{ "source": "**", "destination": "/index.html" }]
+      ]
     },
     {
       "target": "budget",

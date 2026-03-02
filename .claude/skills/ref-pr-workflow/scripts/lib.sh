@@ -105,7 +105,8 @@ delete_preview_channel() {
 }
 
 # Remove the emulator hub file if the PID recorded in it is dead.
-# Generally safe for concurrent worktrees: only removes if the owning PID has exited.
+# Safe for concurrent worktrees: only removes if the owning PID has exited.
+# (PID recycling could theoretically cause a false positive but is negligible in practice.)
 cleanup_stale_hub() {
   local hub_file="/tmp/hub-${FIREBASE_PROJECT_ID}.json"
   if [ -f "$hub_file" ]; then

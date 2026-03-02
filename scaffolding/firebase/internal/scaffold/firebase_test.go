@@ -386,6 +386,57 @@ func TestRemoveHostingTargetEmptyProject(t *testing.T) {
 	}
 }
 
+func TestHostingEntryPreservesHeaders(t *testing.T) {
+	input := `{
+  "target": "landing",
+  "public": "landing/dist",
+  "ignore": ["firebase.json"],
+  "headers": [{"source": "/blogroll.opml", "headers": [{"key": "Content-Type", "value": "text/xml"}]}]
+}`
+	var entry HostingEntry
+	if err := json.Unmarshal([]byte(input), &entry); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if entry.Target != "landing" {
+		t.Errorf("expected target landing, got %q", entry.Target)
+	}
+
+	out, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(out, &raw); err != nil {
+		t.Fatalf("re-unmarshal error: %v", err)
+	}
+	if _, ok := raw["headers"]; !ok {
+		t.Error("expected 'headers' key to be preserved in round-trip")
+	}
+}
+
+func TestRewriteEntryValidate(t *testing.T) {
+	valid := RewriteEntry{Source: "**", Destination: "/index.html"}
+	if err := valid.Validate(); err != nil {
+		t.Errorf("expected valid, got error: %v", err)
+	}
+
+	noSource := RewriteEntry{Source: "", Destination: "/index.html"}
+	if err := noSource.Validate(); err == nil {
+		t.Error("expected error for empty source")
+	}
+
+	noDest := RewriteEntry{Source: "**", Destination: ""}
+	if err := noDest.Validate(); err == nil {
+		t.Error("expected error for empty destination")
+	}
+
+	noSlash := RewriteEntry{Source: "**", Destination: "index.html"}
+	if err := noSlash.Validate(); err == nil {
+		t.Error("expected error for destination without leading /")
+	}
+}
+
 func TestRemoveHostingTargetNilTargets(t *testing.T) {
 	rc := &FirebaseRC{
 		Projects: map[string]string{"default": "commons-systems"},

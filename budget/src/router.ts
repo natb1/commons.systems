@@ -38,6 +38,9 @@ export function createRouter(
         outlet.innerHTML = html;
       }
     } catch (error) {
+      // Terminal error boundary — errors are displayed, not propagated.
+      // DataIntegrityError and RangeError indicate corrupted data;
+      // all other errors get a generic message.
       console.error("Navigation error:", error);
       if (id === navigationId) {
         const message = error instanceof RangeError || error instanceof DataIntegrityError

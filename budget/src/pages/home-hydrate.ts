@@ -1,14 +1,20 @@
 import { updateTransaction } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";
 
+/**
+ * Parse the JSON array from a data attribute.
+ * Returns [] when the attribute is absent (unauthorized users).
+ * Throws DataIntegrityError for non-empty values that are not valid JSON arrays.
+ */
 function parseJsonArray(raw: string | undefined): string[] {
-  // Attribute absent for unauthorized users (no autocomplete). Non-empty but
-  // invalid values throw DataIntegrityError below.
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
       throw new DataIntegrityError(`Autocomplete options is not an array: ${typeof parsed}`);
+    }
+    if (!parsed.every((item: unknown) => typeof item === "string")) {
+      throw new DataIntegrityError("Autocomplete options contains non-string element");
     }
     return parsed;
   } catch (error) {
@@ -18,24 +24,24 @@ function parseJsonArray(raw: string | undefined): string[] {
 }
 
 let dropdownController: AbortController | null = null;
+let activeInput: HTMLInputElement | null = null;
 
 function removeDropdown(): void {
   dropdownController?.abort();
   dropdownController = null;
   document.querySelector(".autocomplete-dropdown")?.remove();
-  const active = document.querySelector("[aria-controls='autocomplete-listbox']") as HTMLElement | null;
-  if (active) {
-    active.removeAttribute("aria-activedescendant");
-    active.removeAttribute("aria-controls");
-    active.removeAttribute("aria-autocomplete");
+  if (activeInput) {
+    activeInput.removeAttribute("aria-activedescendant");
+    activeInput.removeAttribute("aria-controls");
+    activeInput.removeAttribute("aria-autocomplete");
+    activeInput = null;
   }
 }
 
 function handleOutsideClick(e: Event): void {
   const target = e.target;
   if (!(target instanceof HTMLElement)) return;
-  if (target.closest(".autocomplete-dropdown")) return;
-  if (target.closest(".edit-budget, .edit-category")) return;
+  if (target.closest(".autocomplete-dropdown, .edit-budget, .edit-category")) return;
   removeDropdown();
 }
 
@@ -53,7 +59,7 @@ function showInputError(input: HTMLInputElement, title = "Save failed \u2014 val
     input.classList.remove("save-error");
     input.title = "";
     errorTimers.delete(input);
-  }, 5000));
+  }, 30000));
 }
 
 function selectItem(input: HTMLInputElement, value: string): void {
@@ -112,6 +118,7 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
   input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-controls", "autocomplete-listbox");
 
+  activeInput = input;
   dropdownController = new AbortController();
   input.addEventListener("keydown", (e: KeyboardEvent) => {
     if (e.key === "ArrowDown") {
@@ -143,6 +150,7 @@ export function _resetForTest(): void {
     listenersRegistered = false;
   }
   removeDropdown();
+  activeInput = null;
 }
 
 export function hydrateTransactionTable(container: HTMLElement): void {
@@ -212,7 +220,11 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       }
       input.defaultValue = input.value;
     } catch (error) {
-      if (error instanceof DataIntegrityError) throw error;
+      if (error instanceof DataIntegrityError) {
+        console.error("Data integrity error:", error);
+        showInputError(input, "Data error \u2014 please reload");
+        return;
+      }
       console.error("Failed to save transaction:", error);
       if (error instanceof RangeError) {
         showInputError(input, "Value out of range");

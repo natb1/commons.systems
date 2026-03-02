@@ -20,8 +20,8 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Transactions are scoped to group members. Updates are restricted to
-    // user-editable fields only; reimbursement must stay within 0-100 range.
+    // Transactions are scoped to group members. Updates limited to
+    // note, category, reimbursement, and budget; reimbursement must be in [0, 100].
     match /budget/{env}/transactions/{txnId} {
       allow read: if request.auth != null
         && request.auth.uid in resource.data.memberUids;

@@ -5,7 +5,7 @@ import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
 
-/** Client-side projection of the Firestore groups document (excludes `members` array). */
+/** Client-side view of a Firestore group document, carrying only `id` and `name`. */
 export interface Group {
   id: string;
   name: string;

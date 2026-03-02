@@ -12,7 +12,6 @@ test.describe("theme", () => {
     // Dark theme should produce a dark background (low RGB channel values)
     const match = bg.match(/\d+/g)?.map(Number) ?? [];
     expect(match.length).toBeGreaterThanOrEqual(3);
-    // All RGB channels should be low (dark background)
     expect(match[0]).toBeLessThan(80);
     expect(match[1]).toBeLessThan(80);
     expect(match[2]).toBeLessThan(80);
@@ -29,7 +28,6 @@ test.describe("theme", () => {
     // Light theme should produce a light background (high RGB channel values)
     const match = bg.match(/\d+/g)?.map(Number) ?? [];
     expect(match.length).toBeGreaterThanOrEqual(3);
-    // All RGB channels should be high (light background)
     expect(match[0]).toBeGreaterThan(180);
     expect(match[1]).toBeGreaterThan(180);
     expect(match[2]).toBeGreaterThan(180);

@@ -13,8 +13,9 @@ const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
 type AppState =
-  | { user: null; groups: []; groupError: false }
-  | { user: User; groups: Group[]; groupError: boolean };
+  | { user: null; groups: Group[]; groupError: false }
+  | { user: User; groups: Group[]; groupError: false }
+  | { user: User; groups: Group[]; groupError: true };
 
 let state: AppState = { user: null, groups: [], groupError: false };
 
@@ -74,7 +75,8 @@ const router = createRouter(app, [
 
 // Hydrate the transaction table whenever it appears in the DOM. Multiple code
 // paths trigger renders (hashchange, auth state changes), so an observer
-// catches all of them.
+// catches all of them. Sets dataset.hydrated to "true" on success or "error"
+// on failure to prevent retry loops.
 // Observer runs for page lifetime: each navigation to "/" produces a new table.
 const observer = new MutationObserver(() => {
   const table = app.querySelector("#transactions-table") as HTMLElement | null;
@@ -83,13 +85,18 @@ const observer = new MutationObserver(() => {
     hydrateTransactionTable(table);
     table.dataset.hydrated = "true";
   } catch (error) {
+    table.dataset.hydrated = "error";
     if (error instanceof DataIntegrityError) throw error;
     console.error("Hydration error:", error);
-    table.dataset.hydrated = "error";
+    table.querySelectorAll("input").forEach((el) =>
+      (el as HTMLInputElement).disabled = true,
+    );
   }
 });
 observer.observe(app, { childList: true, subtree: true });
 
+// TODO: Extract auth state callback into a testable function to cover
+// race guard (state.user !== user) and DataIntegrityError paths.
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     state = { user: null, groups: [], groupError: false };
@@ -106,6 +113,7 @@ onAuthStateChanged(auth, async (user) => {
   } catch (error) {
     if (error instanceof DataIntegrityError) {
       console.error("Data integrity error in user groups:", error);
+      router.destroy();
       app.innerHTML = '<p>A data error occurred. Please contact support.</p>';
       return;
     }
