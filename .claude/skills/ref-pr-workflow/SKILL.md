@@ -301,10 +301,20 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 
 **Evaluation instructions:**
-- Present findings from ALL agents to user
-- User classifies each as: required, false positive, or out of scope
-- Any required findings → **Iterate**
-- No required findings → **Terminate**
+- **Aggregate and deduplicate** findings across all agents — merge near-identical findings into single entries noting which agents raised them
+- **Prior iteration context:** Read all prior `tmp/codequality-eval-*.txt` before classifying comment improvements; pick the strongest comment version for maintainability autonomously without reopening for user review
+- **Classify each finding as required / out of scope / false positive:**
+  - Code quality (maintainability, readability) and code simplification → **required** unless high effort + low impact → **out of scope**
+  - Test coverage → **required** if high impact; otherwise **out of scope**
+  - Security → always **required**
+  - Comment improvements → **required** (low effort by default). Exception: comments revised in prior iterations — pick strongest version autonomously
+- **Assign priority (high / low) to required and out of scope findings:**
+  - High: affects correctness, security, or meaningful readability/maintainability
+  - Low: cosmetic or minor naming; high effort with modest benefit; or out-of-scope deferral unlikely to become relevant
+- **Present findings organized by category** (required-high, required-low, out of scope-high, out of scope-low, false positive), with rationale for each classification
+- **User confirms or alters** each classification before the iterate/terminate decision
+- Any high-priority required findings → **Iterate**
+- Zero high-priority required findings → **Terminate** (low-priority required findings alone do not block termination)
 
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
@@ -315,6 +325,8 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 
 **Termination instructions:**
+- Implement all low-priority required findings from the final evaluation
+- Commit the low-priority implementations
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write final summary to `$(git rev-parse --show-toplevel)/tmp/codequality-final.txt` (header must be `# Code Quality Review - Complete ✓`):
   ```
@@ -324,17 +336,38 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   **Date**: [Current date]
   **Outcome**: [Summary of result]
 
-  ## User Classification Decisions
+  ## Classification Summary
 
+  ### Required — High Priority
   [For each finding:]
-  - Finding 1: [title] → [required/false positive/out of scope] - [rationale]
+  - Finding: [title] — [rationale]
+  ...
+
+  ### Required — Low Priority
+  [For each finding:]
+  - Finding: [title] — [rationale] — Implemented in [commit hash]
+  ...
+
+  ### Out of Scope — High Priority
+  [For each finding:]
+  - Finding: [title] — [rationale]
+  ...
+
+  ### Out of Scope — Low Priority
+  [For each finding:]
+  - Finding: [title] — [rationale]
+  ...
+
+  ### False Positive
+  [For each finding:]
+  - Finding: [title] — [rationale]
   ...
 
   ## Conclusion
 
   [Final assessment and next steps]
   ```
-- Post:
+- Post as a separate PR comment (distinct from the progress report already posted by progress report instructions):
   ```bash
   post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/codequality-final.txt"
   ```
