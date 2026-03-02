@@ -44,7 +44,7 @@ function updateNav(user: User | null): void {
   });
   document.getElementById("sign-out")?.addEventListener("click", (e) => {
     e.preventDefault();
-    // signOut shows a toast on failure; log unexpected rejections to avoid silent swallowing
+    // signOut handles failures internally with a toast; outer catch guards against bugs in the error handler
     signOut().catch((error) => console.error("Unexpected sign-out error:", error));
   });
   document.getElementById("group-select")?.addEventListener("change", (e) => {
@@ -89,6 +89,8 @@ function transition(next: AppState): void {
 // (not re-thrown) since throwing from a MutationObserver callback goes
 // nowhere useful. TypeError and ReferenceError are deferred via setTimeout
 // to surface in devtools without killing the observer.
+// On recoverable errors, inputs are disabled and an error message is appended
+// to preserve the read-only view while signaling that editing is unavailable.
 const observer = new MutationObserver(() => {
   const table = app.querySelector("#transactions-table") as HTMLElement | null;
   if (!table || table.dataset.hydrated) return;
@@ -106,7 +108,9 @@ const observer = new MutationObserver(() => {
       el.disabled = true;
     });
     const msg = document.createElement("p");
-    msg.textContent = "Editing is temporarily unavailable. Try refreshing the page.";
+    msg.textContent = error instanceof DataIntegrityError
+      ? "A data error occurred. Please contact support."
+      : "Editing is temporarily unavailable. Try refreshing the page.";
     table.appendChild(msg);
   }
 });
@@ -116,7 +120,9 @@ export interface AuthStateDeps {
   getUserGroups: (user: User) => Promise<Group[]>;
   /** Commits final state and triggers nav update + route re-render. */
   transition: (next: AppState) => void;
+  /** Tears down the router (removes hashchange listener) on terminal data errors. */
   destroyRouter: () => void;
+  /** Replaces app content directly, bypassing the router, for terminal error states. */
   setAppHtml: (html: string) => void;
   getState: () => AppState;
   /** Sets intermediate state without triggering re-render (e.g., setting user before async group fetch). */

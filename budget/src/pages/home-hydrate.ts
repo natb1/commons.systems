@@ -205,7 +205,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
 
     if (!(target instanceof HTMLInputElement)) return;
     const input = target;
-    // Skip save if value hasn't changed (also prevents double-save from synthetic + real blur)
+    // Skip save if value hasn't changed (prevents double-save when selectItem dispatches synthetic blur followed by native blur)
     if (input.value === input.defaultValue) return;
 
     try {
@@ -227,7 +227,10 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       }
       input.defaultValue = input.value;
     } catch (error) {
-      if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+      if (error instanceof TypeError || error instanceof ReferenceError) {
+        setTimeout(() => { throw error; }, 0);
+        return;
+      }
       if (error instanceof DataIntegrityError) {
         console.error("Data integrity error:", error);
         showInputError(input, "Data error \u2014 please reload");

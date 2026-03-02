@@ -25,6 +25,9 @@ if (!envNamespace && import.meta.env.MODE !== "production") {
       "Set it in your .env or build command to avoid writing to production data.",
   );
 }
+if (!envNamespace) {
+  console.warn("VITE_FIRESTORE_NAMESPACE not set; defaulting to 'budget/prod'");
+}
 export const NAMESPACE = envNamespace || "budget/prod";
 validateNamespace(NAMESPACE);
 

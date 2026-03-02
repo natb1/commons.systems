@@ -32,6 +32,9 @@ service cloud.firestore {
         && request.auth.uid in resource.data.memberUids
         && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['note', 'category', 'reimbursement', 'budget'])
+        && request.resource.data.note is string
+        && request.resource.data.category is string
+        && (request.resource.data.budget is string || request.resource.data.budget == null)
         && request.resource.data.reimbursement is number
         && request.resource.data.reimbursement >= 0
         && request.resource.data.reimbursement <= 100;

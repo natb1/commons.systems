@@ -4,10 +4,10 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { Transaction, Group } from "../src/firestore.js";
 
-/** Seed groups include members (a server-only field not on the client Group type) */
+/** Seed groups include `members` (used in queries and security rules, not mapped to the client Group type) */
 type GroupSeedData = Omit<Group, "id"> & { members: string[] };
 
-/** Seed transactions use Date instead of Timestamp and include the server-only memberUids field */
+/** Seed transactions use Date instead of Timestamp and include `memberUids` (used by security rules, not mapped to the client Transaction type) */
 type TransactionSeedData = Omit<Transaction, "id" | "timestamp"> & {
   timestamp: Date;
   memberUids: string[];

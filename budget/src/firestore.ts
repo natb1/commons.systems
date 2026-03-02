@@ -6,9 +6,10 @@ import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
 
 /**
- * Client-side view of a Firestore group document, carrying only `id` and `name`.
- * The server-side `members` array is not mapped because the client only needs
- * the group's id and display name.
+ * Client-side view of a Firestore group document.
+ * The groups collection stores a `members` array (used for access control in
+ * security rules and the getUserGroups query), but the client only needs
+ * the group's id and display name, so `members` is not mapped here.
  */
 export interface Group {
   readonly id: string;
@@ -26,8 +27,8 @@ export interface Transaction {
   readonly category: string;
   /**
    * Percentage, range [0, 100]. Validated at read and write boundaries.
-   * Server-side enforcement via Firestore security rules ensures the range
-   * constraint holds even if client validation is bypassed.
+   * Server-side enforcement via Firestore security rules ensures the type
+   * and range constraints hold even if client validation is bypassed.
    */
   readonly reimbursement: number;
   readonly budget: string | null;
