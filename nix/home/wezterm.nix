@@ -31,6 +31,7 @@
         -- mux server also reads it — wsl.exe only exists on the Windows side.
         if wezterm.target_triple:find('windows') then
           config.default_prog = { 'wsl.exe', '-d', 'NixOS', '--cd', '/home/' .. ${lib.strings.toJSON config.home.username} }
+          config.default_gui_startup_args = { 'connect', 'nixos' }
         end
       ''}
 

@@ -123,6 +123,12 @@ let
           "echo 'FAIL: Linux config has wrong home directory' && exit 1"
       }
       ${
+        if lib.hasInfix "default_gui_startup_args" luaConfig && lib.hasInfix "'connect', 'nixos'" luaConfig then
+          "echo 'PASS: Linux config includes default_gui_startup_args to auto-connect to nixos mux'"
+        else
+          "echo 'FAIL: Linux config missing default_gui_startup_args for nixos mux auto-connect' && exit 1"
+      }
+      ${
         if lib.hasInfix "native_macos_fullscreen_mode" luaConfig then
           "echo 'FAIL: Linux config should not include macOS settings' && exit 1"
         else
