@@ -285,20 +285,22 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   5. **`pr-review-toolkit:pr-test-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:pr-test-analyzer"`.
   6. **`pr-review-toolkit:silent-failure-hunter`** — Launch a Task with `subagent_type: "pr-review-toolkit:silent-failure-hunter"`.
   7. **`pr-review-toolkit:type-design-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:type-design-analyzer"`.
-- All 7 tasks MUST be launched in a single message (parallel execution)
+- All 7 tasks MUST be launched in a single message (parallel execution) with `run_in_background: true`
+- Wait for all 7 tasks to complete using TaskOutput with `block: true` before proceeding. Note each task's `output_file` path.
 - If any pr-review-toolkit agent fails to launch, log a warning but continue — `/review` results alone are sufficient to proceed
-- Write all verbatim agent outputs to `$(git rev-parse --show-toplevel)/tmp/codequality-output-<N>.txt` under per-agent headings:
+- Construct `$(git rev-parse --show-toplevel)/tmp/codequality-output-<N>.txt` by concatenating the output files with Bash — do NOT use the Write tool or re-output verbatim content:
+  ```bash
+  REPO=$(git rev-parse --show-toplevel) && mkdir -p "$REPO/tmp" && {
+    printf '## /review Output\n\n'; cat "$REVIEW_OUT";
+    printf '\n\n## pr-review-toolkit: code-reviewer\n\n'; cat "$CODE_REVIEWER_OUT";
+    printf '\n\n## pr-review-toolkit: code-simplifier\n\n'; cat "$CODE_SIMPLIFIER_OUT";
+    printf '\n\n## pr-review-toolkit: comment-analyzer\n\n'; cat "$COMMENT_ANALYZER_OUT";
+    printf '\n\n## pr-review-toolkit: pr-test-analyzer\n\n'; cat "$PR_TEST_ANALYZER_OUT";
+    printf '\n\n## pr-review-toolkit: silent-failure-hunter\n\n'; cat "$SILENT_FAILURE_OUT";
+    printf '\n\n## pr-review-toolkit: type-design-analyzer\n\n'; cat "$TYPE_DESIGN_OUT";
+  } > "$REPO/tmp/codequality-output-<N>.txt"
   ```
-  ## /review Output
-
-  [verbatim output]
-
-  ## pr-review-toolkit: code-reviewer
-
-  [verbatim output — or "Agent unavailable"]
-
-  ...
-  ```
+  Substitute each `$*_OUT` variable with the `output_file` path from the corresponding Task result. For unavailable agents, replace `cat` with `echo "Agent unavailable"`.
 
 **Evaluation instructions:**
 - **Aggregate and deduplicate** findings across all agents — merge near-identical findings into single entries noting which agents raised them
@@ -319,7 +321,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt`
-- Post combined comment (output file written by Claude directly, not a background Task's `output_file`):
+- Post combined comment (constructed from background Task `output_file` paths via the Bash command above):
   ```bash
   post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/codequality-output-<N>.txt" "$(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt"
   ```
