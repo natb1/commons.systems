@@ -44,8 +44,9 @@
       -- Wrapped in pcall so config loads cleanly if tailscale is unavailable.
       -- On Windows, tailscale runs inside WSL so invoke it via a login shell
       -- to get the NixOS PATH (wsl -e can't find tailscale without it).
+      local is_windows = wezterm.target_triple:find('windows')
       local tailscale_status_cmd = { 'tailscale', 'status', '--json' }
-      if wezterm.target_triple:find('windows') then
+      if is_windows then
         tailscale_status_cmd = { 'wsl.exe', '-d', 'NixOS', '--', 'bash', '-lc', 'tailscale status --json' }
       end
 
@@ -54,18 +55,36 @@
         local ok, stdout, _ = wezterm.run_child_process(tailscale_status_cmd)
         if ok then
           local status = wezterm.json_parse(stdout)
-          if status and status.Peer then
-            for _, peer in pairs(status.Peer) do
-              if peer.DNSName then
+          if status then
+            -- Collect all nodes: Self + Peers
+            local nodes = {}
+            if status.Self then
+              table.insert(nodes, status.Self)
+            end
+            if status.Peer then
+              for _, peer in pairs(status.Peer) do
+                table.insert(nodes, peer)
+              end
+            end
+            for _, node in ipairs(nodes) do
+              if node.DNSName then
                 -- DNSName has a trailing dot; strip it and take the short hostname
-                local fqdn = peer.DNSName:gsub('%.$', "")
+                local fqdn = node.DNSName:gsub('%.$', "")
                 local hostname = fqdn:match('^([^.]+)')
                 if hostname then
-                  table.insert(ssh_domains, {
+                  local domain = {
                     name = hostname,
                     remote_address = hostname,
                     username = ${lib.strings.toJSON config.home.username},
-                  })
+                  }
+                  -- On Windows, point to the WSL SSH key since WezTerm's
+                  -- built-in SSH client won't find keys in the WSL filesystem.
+                  if is_windows then
+                    domain.ssh_option = {
+                      identityfile = '//wsl$/NixOS/home/${config.home.username}/.ssh/id_ed25519',
+                    }
+                  end
+                  table.insert(ssh_domains, domain)
                 end
               end
             end
