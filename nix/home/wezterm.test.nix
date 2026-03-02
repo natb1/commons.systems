@@ -141,6 +141,18 @@ let
           "echo 'FAIL: Linux config missing ssh_domains' && exit 1"
       }
       ${
+        if lib.hasInfix "config.ssh_domains = ssh_domains" luaConfig then
+          "echo 'PASS: Linux config assigns ssh_domains to config'"
+        else
+          "echo 'FAIL: Linux config missing config.ssh_domains assignment' && exit 1"
+      }
+      ${
+        if lib.hasInfix "pcall" luaConfig then
+          "echo 'PASS: Linux config wraps ssh_domains discovery in pcall'"
+        else
+          "echo 'FAIL: Linux config missing pcall wrapper for ssh_domains' && exit 1"
+      }
+      ${
         if lib.hasInfix "tailscale" luaConfig then
           "echo 'PASS: Linux config includes tailscale'"
         else
@@ -184,6 +196,12 @@ let
           "echo 'PASS: macOS config includes ssh_domains'"
         else
           "echo 'FAIL: macOS config missing ssh_domains' && exit 1"
+      }
+      ${
+        if lib.hasInfix "pcall" luaConfig then
+          "echo 'PASS: macOS config wraps ssh_domains discovery in pcall'"
+        else
+          "echo 'FAIL: macOS config missing pcall wrapper for ssh_domains' && exit 1"
       }
       ${
         if lib.hasInfix "tailscale" luaConfig then
@@ -327,6 +345,7 @@ let
       commonSettings = [
         "config_builder"
         "return config"
+        "ssh_domains"
       ];
     in
     pkgs.runCommand "test-wezterm-common-config" { } ''

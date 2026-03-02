@@ -43,7 +43,7 @@
       -- Auto-discover Tailscale peers for ssh_domains.
       -- Wrapped in pcall so config loads cleanly if tailscale is unavailable.
       -- On Windows, tailscale runs inside WSL so invoke it via a login shell
-      -- to get the NixOS PATH (wsl -e can't find tailscale without it).
+      -- to get the NixOS PATH (a non-login shell won't have tailscale on PATH).
       local is_windows = wezterm.target_triple:find('windows')
       local tailscale_status_cmd = { 'tailscale', 'status', '--json' }
       if is_windows then
@@ -51,46 +51,53 @@
       end
 
       local ssh_domains = {}
-      pcall(function()
-        local ok, stdout, _ = wezterm.run_child_process(tailscale_status_cmd)
-        if ok then
-          local status = wezterm.json_parse(stdout)
-          if status then
-            -- Collect all nodes: Self + Peers
-            local nodes = {}
-            if status.Self then
-              table.insert(nodes, status.Self)
-            end
-            if status.Peer then
-              for _, peer in pairs(status.Peer) do
-                table.insert(nodes, peer)
+      local pcall_ok, pcall_err = pcall(function()
+        local ok, stdout, stderr = wezterm.run_child_process(tailscale_status_cmd)
+        if not ok then
+          wezterm.log_warn('tailscale status failed: ' .. (stderr or '(no stderr)'))
+          return
+        end
+        local status = wezterm.json_parse(stdout)
+        if not status then
+          wezterm.log_warn('Failed to parse tailscale status JSON; stdout length: ' .. #stdout)
+          return
+        end
+        -- Collect all nodes: Self + Peers
+        local nodes = {}
+        if status.Self then
+          table.insert(nodes, status.Self)
+        end
+        if status.Peer then
+          for _, peer in pairs(status.Peer) do
+            table.insert(nodes, peer)
+          end
+        end
+        for _, node in ipairs(nodes) do
+          if node.DNSName then
+            -- DNSName has a trailing dot; strip it and take the short hostname
+            local fqdn = node.DNSName:gsub('%.$', "")
+            local hostname = fqdn:match('^([^.]+)')
+            if hostname then
+              local domain = {
+                name = hostname,
+                remote_address = hostname,
+                username = ${lib.strings.toJSON config.home.username},
+              }
+              -- On Windows, point to the WSL SSH key via the \\wsl$ UNC share
+              -- since WezTerm's built-in SSH client can't see the WSL filesystem.
+              if is_windows then
+                domain.ssh_option = {
+                  identityfile = '//wsl$/NixOS/home/' .. ${lib.strings.toJSON config.home.username} .. '/.ssh/id_ed25519',
+                }
               end
-            end
-            for _, node in ipairs(nodes) do
-              if node.DNSName then
-                -- DNSName has a trailing dot; strip it and take the short hostname
-                local fqdn = node.DNSName:gsub('%.$', "")
-                local hostname = fqdn:match('^([^.]+)')
-                if hostname then
-                  local domain = {
-                    name = hostname,
-                    remote_address = hostname,
-                    username = ${lib.strings.toJSON config.home.username},
-                  }
-                  -- On Windows, point to the WSL SSH key since WezTerm's
-                  -- built-in SSH client won't find keys in the WSL filesystem.
-                  if is_windows then
-                    domain.ssh_option = {
-                      identityfile = '//wsl$/NixOS/home/${config.home.username}/.ssh/id_ed25519',
-                    }
-                  end
-                  table.insert(ssh_domains, domain)
-                end
-              end
+              table.insert(ssh_domains, domain)
             end
           end
         end
       end)
+      if not pcall_ok then
+        wezterm.log_warn('ssh_domains discovery failed: ' .. tostring(pcall_err))
+      end
       config.ssh_domains = ssh_domains
 
       return config
