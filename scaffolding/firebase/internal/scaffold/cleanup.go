@@ -187,7 +187,18 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 		}
 	}
 
-	// Remove workflow files
+	// Remove app path trigger from consolidated unit-tests.yml
+	if dryRun {
+		fmt.Printf("[dry-run] Would remove %q path trigger from unit-tests.yml\n", appName)
+	} else {
+		fmt.Println("Removing path trigger from unit-tests.yml...")
+		if err := RemoveUnitTestsPath(repoRoot, appName); err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: failed to update unit-tests.yml: %v\n", err)
+			warnings++
+		}
+	}
+
+	// Remove per-app workflow files (pr-checks, prod-deploy)
 	workflowDir := filepath.Join(repoRoot, ".github", "workflows")
 	entries, err := os.ReadDir(workflowDir)
 	if err != nil {
