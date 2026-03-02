@@ -100,6 +100,15 @@
       end
       config.ssh_domains = ssh_domains
 
+      wezterm.on('format-tab-title', function(tab)
+        local branch = tab.active_pane.user_vars.git_branch or ""
+        local title = tab.active_pane.title
+        if branch ~= "" then
+          return branch .. ' | ' .. title
+        end
+        return title
+      end)
+
       return config
     '';
   };
