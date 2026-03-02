@@ -105,16 +105,16 @@ let
     in
     pkgs.runCommand "test-wezterm-linux-config" { } ''
       ${
-        if lib.hasInfix "default_prog" luaConfig then
-          "echo 'PASS: Linux config includes default_prog for WSL'"
+        if lib.hasInfix "target_triple" luaConfig && lib.hasInfix "windows" luaConfig then
+          "echo 'PASS: Linux config guards default_prog with target_triple windows check'"
         else
-          "echo 'FAIL: Linux config missing default_prog' && exit 1"
+          "echo 'FAIL: Linux config missing target_triple windows guard' && exit 1"
       }
       ${
-        if lib.hasInfix "wsl.exe" luaConfig then
-          "echo 'PASS: Linux config includes wsl.exe'"
+        if lib.hasInfix "default_prog" luaConfig && lib.hasInfix "wsl.exe" luaConfig then
+          "echo 'PASS: Linux config includes default_prog with wsl.exe'"
         else
-          "echo 'FAIL: Linux config missing wsl.exe' && exit 1"
+          "echo 'FAIL: Linux config missing default_prog/wsl.exe' && exit 1"
       }
       ${
         if lib.hasInfix "/home/" luaConfig && lib.hasInfix "linuxuser" luaConfig then
@@ -123,10 +123,46 @@ let
           "echo 'FAIL: Linux config has wrong home directory' && exit 1"
       }
       ${
+        if lib.hasInfix "default_gui_startup_args" luaConfig && lib.hasInfix "'connect', 'nixos'" luaConfig then
+          "echo 'PASS: Linux config includes default_gui_startup_args to auto-connect to nixos mux'"
+        else
+          "echo 'FAIL: Linux config missing default_gui_startup_args for nixos mux auto-connect' && exit 1"
+      }
+      ${
         if lib.hasInfix "native_macos_fullscreen_mode" luaConfig then
           "echo 'FAIL: Linux config should not include macOS settings' && exit 1"
         else
           "echo 'PASS: Linux config excludes macOS settings'"
+      }
+      ${
+        if lib.hasInfix "ssh_domains" luaConfig then
+          "echo 'PASS: Linux config includes ssh_domains'"
+        else
+          "echo 'FAIL: Linux config missing ssh_domains' && exit 1"
+      }
+      ${
+        if lib.hasInfix "config.ssh_domains = ssh_domains" luaConfig then
+          "echo 'PASS: Linux config assigns ssh_domains to config'"
+        else
+          "echo 'FAIL: Linux config missing config.ssh_domains assignment' && exit 1"
+      }
+      ${
+        if lib.hasInfix "pcall" luaConfig then
+          "echo 'PASS: Linux config wraps ssh_domains discovery in pcall'"
+        else
+          "echo 'FAIL: Linux config missing pcall wrapper for ssh_domains' && exit 1"
+      }
+      ${
+        if lib.hasInfix "tailscale" luaConfig then
+          "echo 'PASS: Linux config includes tailscale'"
+        else
+          "echo 'FAIL: Linux config missing tailscale' && exit 1"
+      }
+      ${
+        if lib.hasInfix "wsl.exe" luaConfig && lib.hasInfix "tailscale_status_cmd" luaConfig then
+          "echo 'PASS: Linux config calls tailscale via wsl.exe on Windows'"
+        else
+          "echo 'FAIL: Linux config missing wsl.exe tailscale invocation' && exit 1"
       }
       touch $out
     '';
@@ -151,15 +187,27 @@ let
       }
       ${
         if lib.hasInfix "default_prog" luaConfig then
-          "echo 'FAIL: macOS config should not include WSL settings' && exit 1"
+          "echo 'FAIL: macOS config should not include WSL default_prog' && exit 1"
         else
-          "echo 'PASS: macOS config excludes WSL settings'"
+          "echo 'PASS: macOS config excludes WSL default_prog'"
       }
       ${
-        if lib.hasInfix "wsl.exe" luaConfig then
-          "echo 'FAIL: macOS config should not include wsl.exe' && exit 1"
+        if lib.hasInfix "ssh_domains" luaConfig then
+          "echo 'PASS: macOS config includes ssh_domains'"
         else
-          "echo 'PASS: macOS config excludes wsl.exe'"
+          "echo 'FAIL: macOS config missing ssh_domains' && exit 1"
+      }
+      ${
+        if lib.hasInfix "pcall" luaConfig then
+          "echo 'PASS: macOS config wraps ssh_domains discovery in pcall'"
+        else
+          "echo 'FAIL: macOS config missing pcall wrapper for ssh_domains' && exit 1"
+      }
+      ${
+        if lib.hasInfix "tailscale" luaConfig then
+          "echo 'PASS: macOS config includes tailscale'"
+        else
+          "echo 'FAIL: macOS config missing tailscale' && exit 1"
       }
       touch $out
     '';
@@ -297,6 +345,7 @@ let
       commonSettings = [
         "config_builder"
         "return config"
+        "ssh_domains"
       ];
     in
     pkgs.runCommand "test-wezterm-common-config" { } ''
