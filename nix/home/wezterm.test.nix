@@ -599,6 +599,60 @@ let
       touch $out
     '';
 
+  # Test: format-tab-title event handler
+  test-format-tab-title =
+    let
+      testPlatforms = [
+        {
+          name = "linux";
+          isLinux = true;
+          isDarwin = false;
+        }
+        {
+          name = "macos";
+          isLinux = false;
+          isDarwin = true;
+        }
+        {
+          name = "generic";
+          isLinux = false;
+          isDarwin = false;
+        }
+      ];
+    in
+    pkgs.runCommand "test-wezterm-format-tab-title" { } ''
+      ${lib.concatMapStringsSep "\n" (
+        platform:
+        let
+          luaConfig = extractLuaConfig (evaluateModule {
+            isLinux = platform.isLinux;
+            isDarwin = platform.isDarwin;
+          });
+        in
+        ''
+          ${
+            if lib.hasInfix "format-tab-title" luaConfig then
+              "echo 'PASS: ${platform.name} config includes format-tab-title event handler'"
+            else
+              "echo 'FAIL: ${platform.name} config missing format-tab-title event handler' && exit 1"
+          }
+          ${
+            if lib.hasInfix "user_vars.git_branch" luaConfig then
+              "echo 'PASS: ${platform.name} config reads git_branch user variable'"
+            else
+              "echo 'FAIL: ${platform.name} config missing user_vars.git_branch' && exit 1"
+          }
+          ${
+            if lib.hasInfix " | " luaConfig then
+              "echo 'PASS: ${platform.name} config uses branch | title separator'"
+            else
+              "echo 'FAIL: ${platform.name} config missing branch | title separator' && exit 1"
+          }
+        ''
+      ) testPlatforms}
+      touch $out
+    '';
+
   # Aggregate all tests into a test suite
   allTests = [
     test-module-structure
@@ -613,6 +667,7 @@ let
     test-activation-script-runtime
     test-homemanager-integration
     test-activation-dag-execution
+    test-format-tab-title
   ];
 
   wezterm-test-suite = pkgs.runCommand "wezterm-test-suite" { buildInputs = allTests; } ''
@@ -640,6 +695,7 @@ in
       test-activation-script-runtime
       test-homemanager-integration
       test-activation-dag-execution
+      test-format-tab-title
       ;
   };
 
