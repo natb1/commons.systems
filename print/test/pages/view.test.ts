@@ -86,11 +86,11 @@ describe("renderView", () => {
     expect(html).toContain("<td>No</td>");
   });
 
-  it("renders Size in bytes", () => {
+  it("renders formatted size", () => {
     const html = renderView(sampleItem);
 
     expect(html).toContain("<td>Size</td>");
-    expect(html).toContain("<td>500000 bytes</td>");
+    expect(html).toContain("<td>500.0 KB</td>");
   });
 
   it("renders tag rows when tags exist", () => {

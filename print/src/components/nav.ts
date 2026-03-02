@@ -1,7 +1,7 @@
 import type { User } from "firebase/auth";
 import { escapeHtml } from "../escape-html.js";
 
-export function renderNav(user: User | null, _currentPath: string): string {
+export function renderNav(user: User | null): string {
   const authHtml = user
     ? `<span id="user-display">${escapeHtml(user.displayName ?? user.email ?? "User")}</span>
          <a href="#" id="sign-out">Logout</a>`

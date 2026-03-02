@@ -9,6 +9,7 @@ on:
       - "authutil/**"
       - "firestoreutil/**"
       - "firebaseutil/**"
+      - "storageutil/**"
       - "style/**"
       - ".claude/skills/ref-pr-workflow/scripts/**"
 

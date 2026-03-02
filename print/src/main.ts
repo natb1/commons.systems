@@ -1,12 +1,13 @@
 import type { User } from "firebase/auth";
 
-import { createRouter, getHashPath } from "./router.js";
+import { createRouter } from "./router.js";
 import { renderHomeHtml } from "./pages/home.js";
 import { renderView } from "./pages/view.js";
 import { renderNav } from "./components/nav.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { getMedia, type MediaMeta } from "./firestore.js";
 import { getMediaDownloadUrl } from "./storage.js";
+import { escapeHtml } from "./escape-html.js";
 
 const nav = document.getElementById("nav");
 const app = document.getElementById("app");
@@ -27,7 +28,7 @@ function handleClick(action: () => Promise<void>, label: string): (e: Event) => 
 
 function updateNav(): void {
   if (!nav) return;
-  nav.innerHTML = renderNav(currentUser, getHashPath());
+  nav.innerHTML = renderNav(currentUser);
   document.getElementById("sign-in")?.addEventListener("click", handleClick(signIn, "Sign-in"));
   document.getElementById("sign-out")?.addEventListener("click", handleClick(signOut, "Sign-out"));
 }
@@ -45,14 +46,16 @@ function attachDownloadHandlers(outlet: HTMLElement): void {
     btn.addEventListener("click", () => {
       btn.disabled = true;
       btn.textContent = "Loading...";
+      let failed = false;
       handleDownload(mediaId, mediaType)
         .catch((err) => {
+          failed = true;
           console.error("Download failed:", err);
           btn.textContent = "Download failed";
         })
         .finally(() => {
           btn.disabled = false;
-          btn.textContent = "Download";
+          if (!failed) btn.textContent = "Download";
         });
     });
   });
@@ -65,11 +68,7 @@ async function loadMedia(): Promise<string> {
     return renderHomeHtml(cachedMedia);
   } catch (error) {
     console.error("Failed to load media:", error);
-    const isPermissionDenied =
-      error instanceof Error &&
-      "code" in error &&
-      (error as { code: string }).code === "permission-denied";
-    const msg = isPermissionDenied
+    const msg = (error as { code?: string })?.code === "permission-denied"
       ? "Permission denied loading media."
       : "Could not load media. Try refreshing the page.";
     return `
@@ -107,7 +106,7 @@ if (app) {
         render: () => {
           const user = currentUser;
           return user
-            ? `<h2>Admin</h2><p>Signed in as ${user.displayName ?? user.email ?? "User"}</p>`
+            ? `<h2>Admin</h2><p>Signed in as ${escapeHtml(user.displayName ?? user.email ?? "User")}</p>`
             : `<h2>Admin</h2><p>Sign in to access admin features.</p>`;
         },
       },

@@ -1,7 +1,7 @@
 import { escapeHtml } from "../escape-html.js";
 import type { MediaMeta } from "../firestore.js";
 
-function formatSize(bytes: number): string {
+export function formatSize(bytes: number): string {
   if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
   if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} KB`;
