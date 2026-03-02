@@ -1,3 +1,5 @@
+import { placeholderContent } from "./placeholder.js";
+
 export interface StorageSeedFile {
   path: string;
   contentType: string;
@@ -23,17 +25,15 @@ export async function seedStorage(
       metadata: file.metadata ?? {},
     });
 
-    const body = [
-      `--${boundary}`,
-      "Content-Type: application/json",
-      "",
-      metadata,
-      `--${boundary}`,
-      `Content-Type: ${file.contentType}`,
-      "",
-      "placeholder",
-      `--${boundary}--`,
-    ].join("\r\n");
+    const content = placeholderContent(file.contentType);
+    const body = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Type: application/json\r\n\r\n${metadata}\r\n` +
+          `--${boundary}\r\nContent-Type: ${file.contentType}\r\n\r\n`,
+      ),
+      content,
+      Buffer.from(`\r\n--${boundary}--`),
+    ]);
 
     const res = await fetch(baseUrl, {
       method: "POST",
