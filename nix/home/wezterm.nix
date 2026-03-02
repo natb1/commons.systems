@@ -42,14 +42,15 @@
 
       -- Auto-discover Tailscale peers for ssh_domains.
       -- Wrapped in pcall so config loads cleanly if tailscale is unavailable.
-      local tailscale_cmd = 'tailscale'
+      -- On Windows, tailscale runs inside WSL, so call it via wsl.exe.
+      local tailscale_status_cmd = { 'tailscale', 'status', '--json' }
       if wezterm.target_triple:find('windows') then
-        tailscale_cmd = 'C:/Program Files/Tailscale/tailscale.exe'
+        tailscale_status_cmd = { 'wsl.exe', '-d', 'NixOS', '-e', 'tailscale', 'status', '--json' }
       end
 
       local ssh_domains = {}
       pcall(function()
-        local ok, stdout, _ = wezterm.run_child_process({ tailscale_cmd, 'status', '--json' })
+        local ok, stdout, _ = wezterm.run_child_process(tailscale_status_cmd)
         if ok then
           local status = wezterm.json_parse(stdout)
           if status and status.Peer then

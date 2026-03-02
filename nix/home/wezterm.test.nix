@@ -147,10 +147,10 @@ let
           "echo 'FAIL: Linux config missing tailscale' && exit 1"
       }
       ${
-        if lib.hasInfix "Program Files/Tailscale/tailscale.exe" luaConfig then
-          "echo 'PASS: Linux config includes Windows-specific Tailscale path'"
+        if lib.hasInfix "wsl.exe" luaConfig && lib.hasInfix "tailscale_status_cmd" luaConfig then
+          "echo 'PASS: Linux config calls tailscale via wsl.exe on Windows'"
         else
-          "echo 'FAIL: Linux config missing Windows-specific Tailscale path' && exit 1"
+          "echo 'FAIL: Linux config missing wsl.exe tailscale invocation' && exit 1"
       }
       touch $out
     '';
@@ -175,15 +175,9 @@ let
       }
       ${
         if lib.hasInfix "default_prog" luaConfig then
-          "echo 'FAIL: macOS config should not include WSL settings' && exit 1"
+          "echo 'FAIL: macOS config should not include WSL default_prog' && exit 1"
         else
-          "echo 'PASS: macOS config excludes WSL settings'"
-      }
-      ${
-        if lib.hasInfix "wsl.exe" luaConfig then
-          "echo 'FAIL: macOS config should not include wsl.exe' && exit 1"
-        else
-          "echo 'PASS: macOS config excludes wsl.exe'"
+          "echo 'PASS: macOS config excludes WSL default_prog'"
       }
       ${
         if lib.hasInfix "ssh_domains" luaConfig then
