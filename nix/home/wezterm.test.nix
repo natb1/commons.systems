@@ -128,6 +128,18 @@ let
         else
           "echo 'PASS: Linux config excludes macOS settings'"
       }
+      ${
+        if lib.hasInfix "ssh_domains" luaConfig then
+          "echo 'PASS: Linux config includes ssh_domains'"
+        else
+          "echo 'FAIL: Linux config missing ssh_domains' && exit 1"
+      }
+      ${
+        if lib.hasInfix "tailscale" luaConfig then
+          "echo 'PASS: Linux config includes tailscale'"
+        else
+          "echo 'FAIL: Linux config missing tailscale' && exit 1"
+      }
       touch $out
     '';
 
@@ -160,6 +172,18 @@ let
           "echo 'FAIL: macOS config should not include wsl.exe' && exit 1"
         else
           "echo 'PASS: macOS config excludes wsl.exe'"
+      }
+      ${
+        if lib.hasInfix "ssh_domains" luaConfig then
+          "echo 'PASS: macOS config includes ssh_domains'"
+        else
+          "echo 'FAIL: macOS config missing ssh_domains' && exit 1"
+      }
+      ${
+        if lib.hasInfix "tailscale" luaConfig then
+          "echo 'PASS: macOS config includes tailscale'"
+        else
+          "echo 'FAIL: macOS config missing tailscale' && exit 1"
       }
       touch $out
     '';

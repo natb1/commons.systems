@@ -39,6 +39,33 @@
         config.native_macos_fullscreen_mode = true
       ''}
 
+      -- Auto-discover Tailscale peers for ssh_domains.
+      -- Wrapped in pcall so config loads cleanly if tailscale is unavailable.
+      local ssh_domains = {}
+      pcall(function()
+        local ok, stdout, _ = wezterm.run_child_process({ 'tailscale', 'status', '--json' })
+        if ok then
+          local status = wezterm.json_parse(stdout)
+          if status and status.Peer then
+            for _, peer in pairs(status.Peer) do
+              if peer.DNSName then
+                -- DNSName has a trailing dot; strip it and take the short hostname
+                local fqdn = peer.DNSName:gsub('%.$', "")
+                local hostname = fqdn:match('^([^.]+)')
+                if hostname then
+                  table.insert(ssh_domains, {
+                    name = hostname,
+                    remote_address = hostname,
+                    username = ${lib.strings.toJSON config.home.username},
+                  })
+                end
+              end
+            end
+          end
+        end
+      end)
+      config.ssh_domains = ssh_domains
+
       return config
     '';
   };
