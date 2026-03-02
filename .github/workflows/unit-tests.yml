@@ -1,0 +1,70 @@
+name: Unit Tests & Lint
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - "landing/**"
+      - "authutil/**"
+      - "firestoreutil/**"
+      # SCAFFOLD MARKER: app-paths - scaffold inserts new app paths above this line
+      - "firebaseutil/**"
+      - "style/**"
+      - "nix/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "firestore.rules"
+      - ".claude/skills/ref-pr-workflow/scripts/**"
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Install nix (if nix files changed)
+        if: |
+          contains(toJson(github.event.commits.*.modified), 'flake.nix') ||
+          contains(toJson(github.event.commits.*.modified), 'flake.lock') ||
+          contains(toJson(github.event.commits.*.modified), 'nix/')
+        uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+      - name: Set up Java (if firestore.rules changed)
+        if: contains(toJson(github.event.commits.*.modified), 'firestore.rules')
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Run unit tests
+        run: .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Install nix (if nix files changed)
+        if: |
+          contains(toJson(github.event.commits.*.modified), 'flake.nix') ||
+          contains(toJson(github.event.commits.*.modified), 'flake.lock') ||
+          contains(toJson(github.event.commits.*.modified), 'nix/')
+        uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+      - name: Set up Java (if firestore.rules changed)
+        if: contains(toJson(github.event.commits.*.modified), 'firestore.rules')
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Run lint
+        run: .claude/skills/ref-pr-workflow/scripts/run-lint.sh
