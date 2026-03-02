@@ -50,6 +50,11 @@ install_local_deps() {
     echo "Installing authutil dependency..."
     (cd "$repo_root/authutil" && npm ci)
   fi
+
+  if [ "${USES_STORAGE:-false}" = true ]; then
+    echo "Installing storageutil dependency..."
+    (cd "$repo_root/storageutil" && npm ci)
+  fi
 }
 
 # Extract the app name from the app directory path.

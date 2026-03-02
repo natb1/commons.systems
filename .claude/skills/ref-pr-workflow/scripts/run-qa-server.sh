@@ -152,6 +152,24 @@ if [ "$USES_AUTH" = true ]; then
   APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
 fi
 
+# Poll until Storage emulator is ready and seed (if used)
+if [ "$USES_STORAGE" = true ]; then
+  ELAPSED=0
+  until curl -s -o /dev/null "http://localhost:${STORAGE_PORT}/" 2>/dev/null; do
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+      echo "ERROR: Storage emulator did not start within ${TIMEOUT}s" >&2
+      exit 1
+    fi
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+  done
+  echo "Firebase Storage emulator ready on port ${STORAGE_PORT}"
+
+  echo "Seeding storage..."
+  APP_NAME="$APP_NAME" STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" \
+  npx tsx storageutil/bin/run-storage-seed.ts
+fi
+
 VITE_ARGS=()
 if [ "$USES_FIRESTORE" = true ]; then
   VITE_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=${NAMESPACE}")

@@ -114,6 +114,25 @@ test.describe("media", () => {
     );
   });
 
+  test("download works for public domain item without auth", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForSelector("#media-list", { timeout: 30000 });
+
+    const downloadButton = page.locator(
+      "#media-list article.media-item button.btn-download",
+    ).first();
+    await expect(downloadButton).toBeVisible();
+
+    const responsePromise = page.waitForResponse(
+      (r) => r.url().includes("/v0/b/") && r.request().method() === "GET",
+    );
+    await downloadButton.click();
+    const response = await responsePromise;
+    expect(response.status()).toBe(200);
+  });
+
   test("private items not visible without authentication", async ({
     page,
   }) => {
