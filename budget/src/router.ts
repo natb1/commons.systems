@@ -1,7 +1,7 @@
 import { DataIntegrityError } from "./errors.js";
 
 export interface Route {
-  path: string;
+  path: `/${string}`;
   render: () => string | Promise<string>;
 }
 
@@ -49,7 +49,7 @@ export function createRouter(
   void navigate();
 
   return {
-    navigate: () => void navigate(),
+    navigate: onHashChange,
     destroy: () => window.removeEventListener("hashchange", onHashChange),
   };
 }

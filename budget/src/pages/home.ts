@@ -91,16 +91,14 @@ function renderTransactionTable(transactions: Transaction[], authorized: boolean
 
 /**
  * Valid state combinations:
- * - `{}` — unauthenticated, no group (shows seed data)
- * - `{ user, groupError: true }` — authenticated but group fetch failed
- * - `{ user, group }` — authenticated with group (shows real data, editable)
- * - `{ user }` — authenticated, no groups exist (shows seed data)
+ * - { user: null, group: null, groupError: false } — unauthenticated (shows seed data)
+ * - { user: User, group: null, groupError: true } — authenticated but group fetch failed
+ * - { user: User, group: Group, groupError: false } — authenticated with group (editable)
+ * - { user: User, group: null, groupError: false } — authenticated, no groups exist (shows seed data)
  */
-export interface RenderHomeOptions {
-  user: User | null;
-  group: Group | null;
-  groupError: boolean;
-}
+export type RenderHomeOptions =
+  | { user: null; group: null; groupError: false }
+  | { user: User; group: Group | null; groupError: boolean };
 
 export async function renderHome(options: RenderHomeOptions): Promise<string> {
   const { user, group, groupError } = options;
@@ -109,8 +107,8 @@ export async function renderHome(options: RenderHomeOptions): Promise<string> {
 
   let tableHtml: string;
   try {
-    const transactions = group
-      ? await getTransactions(group.id, user!.uid)
+    const transactions = group && user
+      ? await getTransactions(group.id, user.uid)
       : await getTransactions(null);
     transactions.sort(compareByTimestampDesc);
     tableHtml = renderTransactionTable(transactions, authorized, groupName);
@@ -123,7 +121,7 @@ export async function renderHome(options: RenderHomeOptions): Promise<string> {
   }
 
   const groupErrorNotice = groupError && user
-    ? '<p id="group-error" class="auth-error">Could not verify group membership. Showing example data.</p>'
+    ? '<p id="group-error" class="auth-error">Could not load group data. Showing example data. Try refreshing the page.</p>'
     : "";
 
   const seedNotice = !authorized && !groupError

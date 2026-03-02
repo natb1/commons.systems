@@ -164,14 +164,10 @@ describe("hydrateTransactionTable", () => {
     expect(input.defaultValue).toBe("new value");
   });
 
-  it("handles malformed JSON in data attributes gracefully", () => {
+  it("throws DataIntegrityError for malformed JSON in data attributes", () => {
     const container = createContainer("txn-1");
     container.dataset.budgetOptions = "not-json";
-    hydrateTransactionTable(container);
-    expect(console.error).toHaveBeenCalledWith("Failed to parse autocomplete options:", "not-json", expect.any(SyntaxError));
-    const input = container.querySelector(".edit-budget") as HTMLInputElement;
-    input.dispatchEvent(new Event("focus", { bubbles: true }));
-    expect(document.querySelector(".autocomplete-dropdown")).toBeNull();
+    expect(() => hydrateTransactionTable(container)).toThrow("Failed to parse autocomplete options: not-json");
   });
 
   it("does not save for elements outside a txn-row", async () => {

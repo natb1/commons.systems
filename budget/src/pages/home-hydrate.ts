@@ -1,21 +1,25 @@
 import { updateTransaction } from "../firestore.js";
+import { DataIntegrityError } from "../errors.js";
 
 function parseJsonArray(raw: string | undefined): string[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      console.error("Autocomplete options is not an array:", typeof parsed);
-      return [];
+      throw new DataIntegrityError(`Autocomplete options is not an array: ${typeof parsed}`);
     }
     return parsed;
   } catch (error) {
-    console.error("Failed to parse autocomplete options:", raw, error);
-    return [];
+    if (error instanceof DataIntegrityError) throw error;
+    throw new DataIntegrityError(`Failed to parse autocomplete options: ${raw}`);
   }
 }
 
+let dropdownController: AbortController | null = null;
+
 function removeDropdown(): void {
+  dropdownController?.abort();
+  dropdownController = null;
   document.querySelector(".autocomplete-dropdown")?.remove();
   const active = document.querySelector("[aria-controls='autocomplete-listbox']") as HTMLElement | null;
   if (active) {
@@ -29,7 +33,7 @@ function handleOutsideClick(e: Event): void {
   const target = e.target;
   if (!(target instanceof HTMLElement)) return;
   if (target.closest(".autocomplete-dropdown")) return;
-  if (target.closest(".edit-budget") || target.closest(".edit-category")) return;
+  if (target.closest(".edit-budget, .edit-category")) return;
   removeDropdown();
 }
 
@@ -73,8 +77,7 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
   dropdown.setAttribute("role", "listbox");
   dropdown.id = "autocomplete-listbox";
 
-  const items: HTMLElement[] = [];
-  matches.forEach((opt, i) => {
+  const items = matches.map((opt, i) => {
     const item = document.createElement("div");
     item.className = "autocomplete-item";
     item.setAttribute("role", "option");
@@ -84,8 +87,8 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
       e.preventDefault(); // prevent blur before value is set
       selectItem(input, opt);
     });
-    items.push(item);
     dropdown.appendChild(item);
+    return item;
   });
 
   function updateSelection(index: number): void {
@@ -102,7 +105,8 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
   input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-controls", "autocomplete-listbox");
 
-  input.addEventListener("keydown", function handleKeydown(e: KeyboardEvent) {
+  dropdownController = new AbortController();
+  input.addEventListener("keydown", (e: KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       updateSelection(selectedIndex < items.length - 1 ? selectedIndex + 1 : 0);
@@ -116,7 +120,7 @@ function showDropdown(input: HTMLInputElement, options: string[]): void {
       e.preventDefault();
       removeDropdown();
     }
-  });
+  }, { signal: dropdownController.signal });
 
   const rect = input.getBoundingClientRect();
   dropdown.style.top = `${rect.bottom + window.scrollY}px`;
@@ -137,6 +141,7 @@ export function _resetForTest(): void {
 export function hydrateTransactionTable(container: HTMLElement): void {
   if (!listenersRegistered) {
     listenersRegistered = true;
+    // Capture phase: dismiss dropdown before child scroll handlers run
     window.addEventListener("scroll", removeDropdown, true);
     document.addEventListener("click", handleOutsideClick);
   }
@@ -201,7 +206,17 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       input.defaultValue = input.value;
     } catch (error) {
       console.error("Failed to save transaction:", error);
-      showInputError(input);
+      if (error instanceof RangeError) {
+        input.value = input.defaultValue;
+        input.classList.add("save-error");
+        input.title = "Value out of range";
+        setTimeout(() => {
+          input.classList.remove("save-error");
+          input.title = "";
+        }, 2000);
+      } else {
+        showInputError(input);
+      }
     }
   }, true);
 }

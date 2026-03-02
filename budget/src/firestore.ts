@@ -18,6 +18,7 @@ export interface Transaction {
   amount: number;
   note: string;
   category: string;
+  /** Percentage, range [0, 100]. Validated at read and write boundaries. */
   reimbursement: number;
   budget: string | null;
   timestamp: Timestamp | null;
@@ -68,7 +69,7 @@ function asTimestamp(value: unknown): Timestamp | null {
 export async function getTransactions(groupId: null): Promise<Transaction[]>;
 export async function getTransactions(groupId: string, uid: string): Promise<Transaction[]>;
 export async function getTransactions(groupId: string | null, uid?: string): Promise<Transaction[]> {
-  if (groupId && !uid) throw new DataIntegrityError("uid is required when querying by groupId");
+  if (groupId && !uid) throw new Error("uid is required when querying by groupId");
   const collectionName = groupId ? "transactions" : "seed-transactions";
   const path = nsCollectionPath(NAMESPACE, collectionName);
   const q = groupId
@@ -98,6 +99,7 @@ export async function updateTransaction(
   txnId: string,
   fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget">>,
 ): Promise<void> {
+  if (!txnId || txnId.includes("/")) throw new Error("Invalid transaction ID");
   if (Object.keys(fields).length === 0) return;
   if (fields.reimbursement !== undefined) {
     validateReimbursementRange(fields.reimbursement);

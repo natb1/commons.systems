@@ -1,3 +1,5 @@
+// Firestore Admin SDK converts Date objects to Timestamps on write.
+// Seed documents use Date for readability; they become Timestamps in Firestore.
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
 const appSeed: Omit<SeedSpec, "namespace"> = {

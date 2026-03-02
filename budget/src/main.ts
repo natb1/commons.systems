@@ -12,7 +12,11 @@ if (!nav) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
-interface AppState { groups: Group[]; user: User | null; groupError: boolean; }
+interface AppState {
+  groups: Group[];
+  user: User | null;
+  groupError: boolean;
+}
 const state: AppState = { groups: [], user: null, groupError: false };
 
 function getGroupParam(): string | null {
@@ -56,11 +60,11 @@ const router = createRouter(app, [
     path: "/",
     render: () => {
       const group = selectedGroup();
-      return renderHome({
-        user: state.user,
-        group,
-        groupError: state.groupError,
-      });
+      const user = state.user;
+      if (!user) {
+        return renderHome({ user: null, group: null, groupError: false });
+      }
+      return renderHome({ user, group, groupError: state.groupError });
     },
   },
   { path: "/about", render: renderAbout },
@@ -71,16 +75,13 @@ const router = createRouter(app, [
 // catches all of them.
 // Observer runs for page lifetime: each navigation to "/" produces a new table.
 const observer = new MutationObserver(() => {
+  const table = app.querySelector("#transactions-table") as HTMLElement | null;
+  if (!table || table.dataset.hydrated) return;
   try {
-    const table = app.querySelector("#transactions-table") as HTMLElement | null;
-    if (table && !table.dataset.hydrated) {
-      hydrateTransactionTable(table);
-      table.dataset.hydrated = "true";
-    }
+    hydrateTransactionTable(table);
+    table.dataset.hydrated = "true";
   } catch (error) {
     console.error("Hydration error:", error);
-    const table = app.querySelector("#transactions-table") as HTMLElement | null;
-    if (table) table.dataset.hydrated = "true";
   }
 });
 observer.observe(app, { childList: true, subtree: true });
@@ -90,7 +91,9 @@ onAuthStateChanged(auth, async (user) => {
   state.groupError = false;
   if (user) {
     try {
-      state.groups = await getUserGroups(user);
+      const groups = await getUserGroups(user);
+      if (state.user !== user) return; // auth state changed during fetch
+      state.groups = groups;
     } catch (error) {
       if (error instanceof DataIntegrityError) {
         throw error; // data integrity error — surface, don't swallow

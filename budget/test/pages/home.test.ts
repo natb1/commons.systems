@@ -86,7 +86,7 @@ describe("renderHome", () => {
     mockGetTransactions.mockResolvedValue([]);
     const html = await renderHome({ user: mockUser, group: null, groupError: true });
     expect(html).toContain('id="group-error"');
-    expect(html).toContain("Could not verify group membership");
+    expect(html).toContain("Could not load group data");
     expect(html).not.toContain('id="seed-data-notice"');
   });
 
