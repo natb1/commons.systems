@@ -321,7 +321,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt`
-- Post combined comment (output file written by Claude directly, not a background Task's `output_file`):
+- Post combined comment (constructed from background Task `output_file` paths via the Bash command above):
   ```bash
   post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/codequality-output-<N>.txt" "$(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt"
   ```
