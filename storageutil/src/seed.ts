@@ -4,6 +4,7 @@ export interface StorageSeedFile {
   path: string;
   contentType: string;
   metadata?: Record<string, string>;
+  content?: Uint8Array;
 }
 
 export interface StorageSeedSpec {
@@ -25,7 +26,7 @@ export async function seedStorage(
       metadata: file.metadata ?? {},
     });
 
-    const content = placeholderContent(file.contentType);
+    const content = file.content ?? placeholderContent(file.contentType);
     const body = Buffer.concat([
       Buffer.from(
         `--${boundary}\r\nContent-Type: application/json\r\n\r\n${metadata}\r\n` +

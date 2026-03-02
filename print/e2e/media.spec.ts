@@ -81,7 +81,7 @@ test.describe("media", () => {
     await expect(table).toContainText("Public Domain");
     await expect(table).toContainText("Yes");
     await expect(table).toContainText("Size");
-    await expect(table).toContainText("890000 bytes");
+    await expect(table).toContainText("820046 bytes");
   });
 
   test("metadata table shows tag fields", async ({ page }) => {

@@ -1,4 +1,11 @@
-import type { StorageSeedSpec } from "@commons-systems/storageutil/seed";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import type { StorageSeedFile, StorageSeedSpec } from "@commons-systems/storageutil/seed";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const fixture = (name: string) =>
+  new Uint8Array(readFileSync(resolve(__dirname, "../fixtures", name)));
 
 const CONTENT_TYPE: Record<string, string> = {
   epub: "application/epub+zip",
@@ -10,20 +17,22 @@ function file(
   mediaId: string,
   mediaType: string,
   publicDomain: boolean,
-): { path: string; contentType: string; metadata?: Record<string, string> } {
+  content?: Uint8Array,
+): StorageSeedFile {
   return {
     path: `print/${mediaId}.${mediaType}`,
     contentType: CONTENT_TYPE[mediaType],
     ...(publicDomain ? { metadata: { publicDomain: "true" } } : {}),
+    ...(content ? { content } : {}),
   };
 }
 
 const storageSeed: StorageSeedSpec = {
   files: [
-    // Public domain (3)
-    file("confessions-of-st-augustine", "epub", true),
-    file("phaedrus", "pdf", true),
-    file("republic", "pdf", true),
+    // Public domain (3) — actual files from fixtures
+    file("confessions-of-st-augustine", "epub", true, fixture("confessions-of-st-augustine.epub")),
+    file("phaedrus", "pdf", true, fixture("phaedrus.pdf")),
+    file("republic", "pdf", true, fixture("republic.pdf")),
     // Private (13)
     file("conan-chronicles-vol01", "cbz", false),
     file("confessions-augustine", "epub", false),
