@@ -26,7 +26,9 @@ export interface Transaction {
   readonly note: string;
   readonly category: string;
   /**
-   * Percentage, range [0, 100]. Validated at read and write boundaries.
+   * Percentage, range [0, 100]. Validated at read and write boundaries:
+   * read via requireReimbursement (throws RangeError for out-of-range values),
+   * write via validateReimbursementRange in updateTransaction.
    * Server-side enforcement via Firestore security rules ensures the type
    * and range constraints hold even if client validation is bypassed.
    */

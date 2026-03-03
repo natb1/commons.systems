@@ -14,8 +14,7 @@ if (!app) throw new Error("#app element not found");
 
 export type AppState =
   | { user: null; groups: Group[]; groupError: false }
-  | { user: User; groups: Group[]; groupError: false }
-  | { user: User; groups: Group[]; groupError: true };
+  | { user: User; groups: Group[]; groupError: boolean };
 
 let state: AppState = { user: null, groups: [], groupError: false };
 
@@ -85,12 +84,6 @@ function transition(next: AppState): void {
 // catches all of them. Sets dataset.hydrated to "true" on success or "error"
 // on failure to prevent retry loops.
 // Observer runs for page lifetime: each navigation to "/" produces a new table.
-// All errors except TypeError and ReferenceError are caught and logged
-// (not re-thrown) since throwing from a MutationObserver callback goes
-// nowhere useful. TypeError and ReferenceError are deferred via setTimeout
-// to surface in devtools without killing the observer.
-// On recoverable errors, inputs are disabled and an error message is appended
-// to preserve the read-only view while signaling that editing is unavailable.
 const observer = new MutationObserver(() => {
   const table = app.querySelector("#transactions-table") as HTMLElement | null;
   if (!table || table.dataset.hydrated) return;
@@ -99,10 +92,15 @@ const observer = new MutationObserver(() => {
     table.dataset.hydrated = "true";
   } catch (error) {
     table.dataset.hydrated = "error";
+    // TypeError/ReferenceError: deferred via setTimeout so they surface in
+    // devtools without killing the observer. No UI feedback — these are
+    // programmer errors that need code fixes, not user-facing recovery.
     if (error instanceof TypeError || error instanceof ReferenceError) {
       setTimeout(() => { throw error; }, 0);
       return;
     }
+    // All other errors: inputs are disabled and an error message is appended
+    // to preserve the read-only view while signaling that editing is unavailable.
     console.error("Hydration error:", error);
     table.querySelectorAll("input").forEach((el) => {
       el.disabled = true;
@@ -117,6 +115,7 @@ const observer = new MutationObserver(() => {
 observer.observe(app, { childList: true, subtree: true });
 
 export interface AuthStateDeps {
+  /** Fetches groups the user belongs to from Firestore. */
   getUserGroups: (user: User) => Promise<Group[]>;
   /** Commits final state and triggers nav update + route re-render. */
   transition: (next: AppState) => void;
@@ -124,6 +123,7 @@ export interface AuthStateDeps {
   destroyRouter: () => void;
   /** Replaces app content directly, bypassing the router, for terminal error states. */
   setAppHtml: (html: string) => void;
+  /** Returns the current app state snapshot (used for race-condition guards during async operations). */
   getState: () => AppState;
   /** Sets intermediate state without triggering re-render (e.g., setting user before async group fetch). */
   setState: (next: AppState) => void;
