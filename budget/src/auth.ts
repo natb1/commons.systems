@@ -61,7 +61,6 @@ function showAuthError(message: string): void {
 // Show a toast on failure and catch to prevent unhandled promise rejection.
 getRedirectResult(auth).catch((error) => {
   console.error("Auth redirect error:", error);
-  if (error?.code === "auth/popup-closed-by-user") return;
   const message = firebaseAuthMessage(error) || "Sign-in could not be completed. Please try again.";
   showAuthError(message);
 });
@@ -70,7 +69,6 @@ const provider = new GithubAuthProvider();
 
 function handleSignInError(error: unknown): void {
   console.error("Sign-in redirect failed:", error);
-  if ((error as { code?: string })?.code === "auth/popup-closed-by-user") return;
   const message = firebaseAuthMessage(error) || "Sign-in failed. Please try again.";
   showAuthError(message);
 }
