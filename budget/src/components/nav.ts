@@ -2,7 +2,7 @@ import type { User } from "firebase/auth";
 import type { Group } from "../firestore.js";
 import { escapeHtml } from "../escape-html.js";
 
-function renderGroupSelect(groups: Group[], selectedGroupId: string | null): string {
+function renderGroupSelect(groups: readonly Group[], selectedGroupId: string | null): string {
   if (groups.length === 0) return "";
   const options = groups
     .map((g) => {
@@ -15,7 +15,7 @@ function renderGroupSelect(groups: Group[], selectedGroupId: string | null): str
 
 export function renderNav(
   user: User | null,
-  groups: Group[] = [],
+  groups: readonly Group[] = [],
   selectedGroupId: string | null = null,
 ): string {
   const authHtml = user

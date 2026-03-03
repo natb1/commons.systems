@@ -35,55 +35,25 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Auto-detect mode: derive suites from changed files vs origin/main
+# Auto-detect mode: delegate app detection to get-changed-apps.sh,
+# then check nix/rules inline (those aren't app-level concerns).
 if [ "$EXPLICIT" = false ]; then
-  if ! CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null); then
-    if ! CHANGED=$(git diff --name-only HEAD~1...HEAD 2>/dev/null); then
-      echo "WARNING: could not determine changed files; running all app checks as fallback" >&2
-      for dir in "$REPO_ROOT"/*/; do
-        base=$(basename "$dir")
-        [ -f "$dir/package.json" ] && [ -f "$dir/package-lock.json" ] && DIRTY_APPS["$base"]=1
-      done
-      CHANGED=""
-    fi
-  fi
+  while IFS= read -r app; do
+    [ -z "$app" ] && continue
+    DIRTY_APPS["$app"]=1
+  done < <("$SCRIPTS/get-changed-apps.sh")
 
-  while IFS= read -r file; do
-    [ -z "$file" ] && continue
-    top_dir="${file%%/*}"
-    case "$file" in
-      nix/*|flake.nix|flake.lock)
-        RUN_NIX=true
-        ;;
-      firestore.rules)
-        RUN_RULES=true
-        ;;
-      .claude/skills/ref-pr-workflow/scripts/*)
-        # Scripts changed: run all top-level app dirs with package.json and package-lock.json
-        for dir in "$REPO_ROOT"/*/; do
-          base=$(basename "$dir")
-          [ -f "$dir/package.json" ] && [ -f "$dir/package-lock.json" ] && DIRTY_APPS["$base"]=1
-        done
-        ;;
-      authutil/*)
-        DIRTY_APPS[authutil]=1
-        DIRTY_APPS[landing]=1
-        ;;
-      firestoreutil/*)
-        DIRTY_APPS[firestoreutil]=1
-        DIRTY_APPS[landing]=1
-        ;;
-      firebaseutil/*|style/*)
-        DIRTY_APPS[landing]=1
-        ;;
-      *)
-        # Generic: any new app dir with package.json and package-lock.json gets unit tests.
-        # Requires package-lock.json (npm ci will fail without it). Dirs with only package.json
-        # but no lock file (e.g. style/) must be handled by named cases above.
-        [ -f "$REPO_ROOT/$top_dir/package.json" ] && [ -f "$REPO_ROOT/$top_dir/package-lock.json" ] && DIRTY_APPS["$top_dir"]=1
-        ;;
-    esac
-  done <<< "$CHANGED"
+  # Detect nix and rules changes separately
+  if CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null) || \
+     CHANGED=$(git diff --name-only HEAD~1...HEAD 2>/dev/null); then
+    while IFS= read -r file; do
+      [ -z "$file" ] && continue
+      case "$file" in
+        nix/*|flake.nix|flake.lock) RUN_NIX=true ;;
+        firestore.rules) RUN_RULES=true ;;
+      esac
+    done <<< "$CHANGED"
+  fi
 fi
 
 APP_DIRS=("${!DIRTY_APPS[@]}")
