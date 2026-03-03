@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Write pr-workflow state to the primary issue body.
+# Usage: issue-state-write <issue-number> [json-state]
+# If json-state is omitted, reads from stdin.
+# Replaces content between <!-- pr-workflow-state --> markers, or appends if absent.
+# Idempotent: same input produces same body.
+set -euo pipefail
+
+ISSUE_NUM="${1:-}"
+JSON_INPUT="${2:-}"
+
+if [ -z "$ISSUE_NUM" ] || ! [[ "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: issue number must be a positive integer, got: '${ISSUE_NUM}'" >&2
+  exit 1
+fi
+
+# Read JSON from arg or stdin
+if [ -z "$JSON_INPUT" ]; then
+  JSON_INPUT=$(cat)
+fi
+
+if [ -z "$JSON_INPUT" ]; then
+  echo "error: no JSON state provided" >&2
+  exit 1
+fi
+
+# Validate and pretty-print
+PRETTY_JSON=$(echo "$JSON_INPUT" | jq .) || {
+  echo "error: invalid JSON state" >&2
+  exit 1
+}
+
+# Build state block
+STATE_BLOCK="<!-- pr-workflow-state -->
+\`\`\`json
+${PRETTY_JSON}
+\`\`\`
+<!-- /pr-workflow-state -->"
+
+# Fetch current body
+BODY=$(gh issue view "$ISSUE_NUM" --json body --jq '.body') || {
+  echo "error: failed to fetch issue #${ISSUE_NUM}" >&2
+  exit 1
+}
+
+# Replace or append
+if echo "$BODY" | grep -q '<!-- pr-workflow-state -->'; then
+  # Replace between markers using awk skip-flag pattern
+  NEW_BODY=$(echo "$BODY" | awk -v block="$STATE_BLOCK" '
+    /<!-- pr-workflow-state -->/ { print block; skip=1; next }
+    /<!-- \/pr-workflow-state -->/ { skip=0; next }
+    !skip { print }
+  ')
+else
+  # Append state block at end of body
+  if [ -n "$BODY" ]; then
+    NEW_BODY="${BODY}
+
+${STATE_BLOCK}"
+  else
+    NEW_BODY="$STATE_BLOCK"
+  fi
+fi
+
+# Write via gh api using temp file to avoid shell quoting issues
+TMPFILE=""
+trap '[ -n "${TMPFILE}" ] && rm -f "${TMPFILE}"' EXIT
+TMPFILE=$(mktemp) || { echo "error: could not create temporary file" >&2; exit 1; }
+echo "$NEW_BODY" > "$TMPFILE"
+
+# Determine repo
+if ! REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null); then
+  echo "error: could not determine repository name" >&2
+  exit 1
+fi
+
+gh api "repos/${REPO}/issues/${ISSUE_NUM}" \
+  --method PATCH \
+  --field body=@"${TMPFILE}" > /dev/null || {
+  echo "error: failed to update issue #${ISSUE_NUM}" >&2
+  exit 1
+}

@@ -22,19 +22,32 @@ Reference only. Do not execute this workflow until directed to do so (eg., by `/
 
 ## Resume Logic
 
-Determine starting step using the **Current PR Scope and Status** section above.
+Determine starting step:
 
-Decision tree:
+1. Read state from primary issue body:
+   ```bash
+   issue-state-read <issue-number>
+   ```
+   If exit 0 → use `step` and `phase` fields from the returned JSON. Skip the fallback decision tree.
+
+2. If `issue-state-read` exits 1 (missing markers, corrupt JSON, or empty body) → fall back to the decision tree below, then write a fresh state block via `issue-state-write`.
+
+**Fallback decision tree** (uses **Current PR Scope and Status** section above):
 
 - **No PR**:
-  - Implementation commits in commit log → Step 4
-  - No implementation commits → Step 2
-- **PR exists, no acceptance test comment with "Complete" in header** → Step 6
-- **PR exists, acceptance test complete, no smoke test comment with "Complete" in header** → Step 7
-- **PR exists, acceptance test + smoke test complete, no QA comment with "Complete" in header** → Step 8
-- **PR exists, QA complete, no code quality comment with "Complete" in header** → Step 9
-- **PR exists, QA + code quality complete, no security comment with "Complete" in header** → Step 10
-- **All audit logs exist (all have "Complete" in header)** → Step 11
+  - Implementation commits in commit log → Step 4, phase=unit
+  - No implementation commits → Step 2, phase=core
+- **PR exists, no acceptance test comment with "Complete" in header** → Step 6, phase=verify
+- **PR exists, acceptance test complete, no smoke test comment with "Complete" in header** → Step 7, phase=verify
+- **PR exists, acceptance test + smoke test complete, no QA comment with "Complete" in header** → Step 8, phase=review
+- **PR exists, QA complete, no code quality comment with "Complete" in header** → Step 9, phase=review
+- **PR exists, QA + code quality complete, no security comment with "Complete" in header** → Step 10, phase=review
+- **All audit logs exist (all have "Complete" in header)** → Step 11, phase=core
+
+After determining step via fallback, write state:
+```bash
+issue-state-write <issue-number> '{"version":1,"step":<N>,"step_label":"<label>","phase":"<phase>"}'
+```
 
 ## Step 1. Prerequisite Check
 

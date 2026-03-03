@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Read pr-workflow state from the primary issue body.
+# Usage: issue-state-read <issue-number>
+# Extracts JSON between <!-- pr-workflow-state --> markers.
+# Exit 0 + JSON on stdout if valid; exit 1 on missing/corrupt/empty.
+set -euo pipefail
+
+ISSUE_NUM="${1:-}"
+
+if [ -z "$ISSUE_NUM" ] || ! [[ "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: issue number must be a positive integer, got: '${ISSUE_NUM}'" >&2
+  exit 1
+fi
+
+BODY=$(gh issue view "$ISSUE_NUM" --json body --jq '.body') || {
+  echo "error: failed to fetch issue #${ISSUE_NUM}" >&2
+  exit 1
+}
+
+if [ -z "$BODY" ]; then
+  echo "error: issue #${ISSUE_NUM} has an empty body" >&2
+  exit 1
+fi
+
+# Extract between markers using sed
+STATE_BLOCK=$(echo "$BODY" | sed -n '/<!-- pr-workflow-state -->/,/<!-- \/pr-workflow-state -->/p')
+
+if [ -z "$STATE_BLOCK" ]; then
+  echo "error: no pr-workflow-state markers found in issue #${ISSUE_NUM}" >&2
+  exit 1
+fi
+
+# Strip the HTML comment markers and fenced code block delimiters
+JSON=$(echo "$STATE_BLOCK" | sed '1d;$d' | sed '/^```/d')
+
+if [ -z "$JSON" ]; then
+  echo "error: state block is empty in issue #${ISSUE_NUM}" >&2
+  exit 1
+fi
+
+# Validate JSON
+if ! echo "$JSON" | jq empty 2>/dev/null; then
+  echo "error: state block contains invalid JSON in issue #${ISSUE_NUM}" >&2
+  exit 1
+fi
+
+echo "$JSON"
