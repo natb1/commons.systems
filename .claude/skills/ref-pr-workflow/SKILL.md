@@ -42,6 +42,17 @@ Run `save-skill-state.sh skill ref-pr-workflow-<phase>`, then invoke the phase s
 | Step | Phase | Invoke |
 |---|---|---|
 | 1, 2, 3, 5, 11 | core | `/ref-pr-workflow-core` at Step N |
-| 4 | unit | `/ref-pr-workflow-unit` |
-| 6, 7 | verify | `/ref-pr-workflow-verify` at Step N |
+| 4 | unit | `/ref-pr-workflow-unit-fork` (isolated) |
+| 6, 7 | verify | `/ref-pr-workflow-verify-fork` (isolated) |
 | 8, 9, 10 | review | `/ref-pr-workflow-review` at Step N |
+
+## Fork Delegation (Steps 4, 6, 7)
+
+Steps 4, 6, and 7 are fully automated — invoke fork skills instead of in-thread phase skills:
+- Step 4 → `/ref-pr-workflow-unit-fork`
+- Steps 6, 7 → `/ref-pr-workflow-verify-fork`
+
+On fork result:
+- `"success"` → read updated issue state, proceed to next step
+- `"needs_user"` → fall back to in-thread phase skill (`/ref-pr-workflow-unit` or `/ref-pr-workflow-verify`) at the failing step
+- `"failure"` → read `tmp/<prefix>-subagent-state.json` for last checkpoint, present error to user
