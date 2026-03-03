@@ -305,7 +305,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 **Evaluation instructions:**
 - **Aggregate and deduplicate** findings across all agents — merge near-identical findings into single entries noting which agents raised them
 - **Prior iteration context:** Read all prior `tmp/codequality-eval-*.txt` before classifying comment improvements; pick the strongest comment version for maintainability autonomously without reopening for user review
-- **Classify each finding as required / out of scope / false positive:**
+- **Classify each finding** (Claude proposes, user decides):
   - Code quality (maintainability, readability) and code simplification → **required** unless high effort + low impact → **out of scope**
   - Test coverage → **required** if high impact; otherwise **out of scope**
   - Security → always **required**
@@ -314,9 +314,11 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   - High: affects correctness, security, or meaningful readability/maintainability
   - Low: cosmetic or minor naming; high effort with modest benefit; or out-of-scope deferral unlikely to become relevant
 - **Present findings organized by category** (required-high, required-low, out of scope-high, out of scope-low, false positive), with rationale for each classification
-- **User confirms or alters** each classification before the iterate/terminate decision
-- Any high-priority required findings → **Iterate**
-- Zero high-priority required findings → **Terminate** (low-priority required findings alone do not block termination)
+- **CRITICAL: STOP AND WAIT FOR USER APPROVAL.** The user confirms or alters each classification. Do not write the evaluation file, implement fixes, or proceed to the iterate/terminate decision until the user responds.
+- **User decision determines outcome:**
+  - User confirms zero high-priority required findings → **Terminate**
+  - User confirms or adds high-priority required findings → **Iterate** (fix, re-run agents)
+  - User alters classifications → re-evaluate using same decision rules
 
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`

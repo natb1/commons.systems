@@ -13,7 +13,7 @@ const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
 export type AppState =
-  | { user: null; groups: Group[]; groupError: false }
+  | { user: null; groups: readonly []; groupError: false }
   | { user: User; groups: Group[]; groupError: boolean };
 
 let state: AppState = { user: null, groups: [], groupError: false };
