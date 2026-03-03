@@ -8,6 +8,8 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 
 Steps 8, 9, and 10. Start at the step indicated by the router.
 
+Invoke `/ref-pr-workflow-loop` if not already active.
+
 ## Step 8. QA Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
@@ -34,47 +36,17 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
 
 **Progress report instructions:**
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt`
-- Post combined comment (where `qa-plan-<N>.txt` is the QA testing plan written during the next step instructions above):
-  ```bash
-  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/qa-plan-<N>.txt" "$(git rev-parse --show-toplevel)/tmp/qa-eval-<N>.txt"
-  ```
+- Use Template A (Progress Report) with `{FILE_PREFIX}=qa`, but use `qa-plan-<N>.txt` as the output file (from next step instructions above)
 
 **Termination instructions:**
 - Stop the QA server (run-qa-server.sh) if started
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write final summary to `$(git rev-parse --show-toplevel)/tmp/qa-final.txt` (header must be `# QA Review - Complete ✓`):
-  ```
-  # QA Review - Complete ✓
-
-  **Reviewer**: [User name from git config]
-  **Date**: [Current date]
-  **Tested By**: Human QA with Claude Code facilitation
-
-  ## QA Iterations
-
-  [For each iteration:]
-  - Iteration 1: [Issues found] → [Fixes implemented] (commits: [hashes])
-  ...
-  - Final iteration: All tests passed
-
-  ## QA Summary
-
-  - Total test cycles: [N]
-  - Key behaviors verified: [list]
-  - Edge cases tested: [list]
-  - Total issues found and resolved: [N]
-
-  ## Conclusion
-
-  All test cases passed. PR approved for code quality review.
-  ```
-- Post:
-  ```bash
-  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/qa-final.txt"
-  ```
-- Update state to step=9/phase=review via `issue-state-write`
+- Use Template B (Termination Summary) with:
+  - `{PHASE_NAME}=QA`
+  - `{FILE_PREFIX}=qa`
+  - `{EXTRA_HEADER_FIELDS}=**Reviewer**: [User name from git config]\n**Tested By**: Human QA with Claude Code facilitation`
+  - `{EXTRA_SECTIONS}=## QA Summary\n\n- Total test cycles: [N]\n- Key behaviors verified: [list]\n- Edge cases tested: [list]\n- Total issues found and resolved: [N]`
+  - `{CONCLUSION_TEXT}=All test cases passed. PR approved for code quality review.`
+  - `{NEXT_STEP}=9`, `{NEXT_PHASE}=review`
 - Proceed to Step 9
 
 ## Step 9. Code Quality Review Loop
@@ -195,36 +167,14 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - No required findings → **Terminate**
 
 **Progress report instructions:**
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/security-eval-<N>.txt`
-- Post combined comment (where `<output_file>` is the `output_file` path from the background Task result):
-  ```bash
-  post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/security-eval-<N>.txt"
-  ```
+- Use Template A (Progress Report) with `{FILE_PREFIX}=security`
 
 **Termination instructions:**
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write final summary to `$(git rev-parse --show-toplevel)/tmp/security-final.txt` (header must be `# Security Review - Complete ✓`):
-  ```
-  # Security Review - Complete ✓
-
-  **Reviewer**: Claude Code (via /security-review skill)
-  **Date**: [Current date]
-  **Outcome**: [Summary of result]
-
-  ## User Classification Decisions
-
-  [For each finding:]
-  - Finding 1: [title] → [required/false positive/out of scope] - [rationale]
-  ...
-
-  ## Conclusion
-
-  [Final assessment and next steps]
-  ```
-- Post:
-  ```bash
-  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/security-final.txt"
-  ```
-- Update state to step=11/phase=core via `issue-state-write`
+- Use Template B (Termination Summary) with:
+  - `{PHASE_NAME}=Security`
+  - `{FILE_PREFIX}=security`
+  - `{EXTRA_HEADER_FIELDS}=**Reviewer**: Claude Code (via /security-review skill)\n**Outcome**: [Summary of result]`
+  - `{EXTRA_SECTIONS}=## User Classification Decisions\n\n[For each finding:]\n- Finding 1: [title] → [required/false positive/out of scope] - [rationale]\n...`
+  - `{CONCLUSION_TEXT}=[Final assessment and next steps]`
+  - `{NEXT_STEP}=11`, `{NEXT_PHASE}=core`
 - Return to router for dispatch to core phase (Step 11)

@@ -8,17 +8,14 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 
 Steps 6 and 7. Start at the step indicated by the router.
 
+Invoke `/ref-pr-workflow-loop` if not already active.
+
 ## Step 6. Acceptance Test Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Run the following in a background Task (`run_in_background: true`). Note the `output_file` path from the Task result:
-  ```bash
-  gh run list --branch <branch> --limit 5
-  gh run view <run-id>
-  ```
-  If the run is in progress, wait for it to complete before returning output.
+- Use Template C (CI Monitoring) from `/ref-pr-workflow-loop`
 
 **Evaluation instructions:**
 - All pass → **Terminate**
@@ -26,38 +23,14 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Infrastructure failures → present to user for resolution
 
 **Progress report instructions:**
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt` (`<N>` is the loop iteration number, starting at 1 and incrementing with each iterate cycle)
-- Post combined comment (where `<output_file>` is the `output_file` path from the background Task result):
-  ```bash
-  post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt"
-  ```
+- Use Template A (Progress Report) with: `{FILE_PREFIX}=acceptance`
 
 **Termination instructions:**
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write final summary to `$(git rev-parse --show-toplevel)/tmp/acceptance-final.txt` (header must be `# Acceptance Test Review - Complete ✓`):
-  ```
-  # Acceptance Test Review - Complete ✓
-
-  **Date**: [Current date]
-  **Branch**: [branch name]
-
-  ## Iterations
-
-  [For each iteration:]
-  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
-  ...
-  - Final iteration: All tests passed
-
-  ## Conclusion
-
-  All acceptance tests passed. PR approved for QA review.
-  ```
-- Post:
-  ```bash
-  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/acceptance-final.txt"
-  ```
-- Update state to step=7/phase=verify via `issue-state-write`
+- Use Template B (Termination Summary) with:
+  - `{PHASE_NAME}=Acceptance Test`
+  - `{FILE_PREFIX}=acceptance`
+  - `{CONCLUSION_TEXT}=All acceptance tests passed. PR approved for QA review.`
+  - `{NEXT_STEP}=7`, `{NEXT_PHASE}=verify`
 - Proceed to Step 7
 
 ## Step 7. Smoke Test Loop
@@ -65,12 +38,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Run the following in a background Task (`run_in_background: true`). Note the `output_file` path from the Task result:
-  ```bash
-  gh run list --branch <branch> --limit 5
-  gh run view <run-id>
-  ```
-  If the run is in progress, wait for it to complete before returning output.
+- Use Template C (CI Monitoring) from `/ref-pr-workflow-loop`
 
 **Evaluation instructions:**
 - All pass → **Terminate**
@@ -78,36 +46,12 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Deploy failures → present to user for resolution
 
 **Progress report instructions:**
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt`
-- Post combined comment (where `<output_file>` is the `output_file` path from the background Task result):
-  ```bash
-  post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt"
-  ```
+- Use Template A (Progress Report) with: `{FILE_PREFIX}=smoke`
 
 **Termination instructions:**
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write final summary to `$(git rev-parse --show-toplevel)/tmp/smoke-final.txt` (header must be `# Smoke Test Review - Complete ✓`):
-  ```
-  # Smoke Test Review - Complete ✓
-
-  **Date**: [Current date]
-  **Branch**: [branch name]
-
-  ## Iterations
-
-  [For each iteration:]
-  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
-  ...
-  - Final iteration: All tests passed
-
-  ## Conclusion
-
-  Smoke tests passed. Preview deployment verified.
-  ```
-- Post:
-  ```bash
-  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/smoke-final.txt"
-  ```
-- Update state to step=8/phase=review via `issue-state-write`
+- Use Template B (Termination Summary) with:
+  - `{PHASE_NAME}=Smoke Test`
+  - `{FILE_PREFIX}=smoke`
+  - `{CONCLUSION_TEXT}=Smoke tests passed. Preview deployment verified.`
+  - `{NEXT_STEP}=8`, `{NEXT_PHASE}=review`
 - Return to router for dispatch to review phase
