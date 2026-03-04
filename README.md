@@ -89,8 +89,6 @@ Step 10: Security Review ──────────────────�
 Step 11: Mark Ready + Merge
 ```
 
-Forked steps run in isolated context via `context: fork` skills, returning a JSON status contract (`success`, `needs_user`, `failure`).
-
 #### State Persistence
 
 Workflow state is stored as JSON in the GitHub issue body via `issue-state-write`. This allows any new conversation to resume from the correct step after context loss or auto-compaction. State includes: `step`, `phase`, `active_skills`, and optional `wiggum_step`.
@@ -100,8 +98,6 @@ Workflow state is stored as JSON in the GitHub issue body via `issue-state-write
 Six of eleven steps use the [wiggum-loop](.claude/skills/wiggum-loop/SKILL.md) pattern: an evaluate-iterate-terminate cycle where each iteration runs the step's action, evaluates the result, and either iterates (fix + retry) or terminates (advance to next step). Progress reports and termination summaries are posted as PR comments.
 
 ## CI/CD
-
-Four consolidated workflows handle all CI/CD. Change detection determines which apps to test and deploy.
 
 ### Workflows
 
