@@ -47,7 +47,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 | 4 | Unit Tests + Lint | Delegated | [ref-unit-test](.claude/skills/ref-unit-test/SKILL.md) | [unit test framework](.claude/skills/ref-pr-workflow/run-unit-tests.sh) |
 | 5 | PR Creation | Delegated | [ref-create-pr](.claude/skills/ref-create-pr/SKILL.md) | |
 | 6 | Acceptance Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) | [e2e test framework](.claude/skills/ref-pr-workflow/run-acceptance-tests.sh) |
-| 7 | Smoke Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) | smoke test framework: [preview deployments](.claude/skills/ref-pr-workflow/run-preview-deploy.sh) [smoke tests](.claude/skills/ref-pr-workflow/run-smoke-tests.sh)) |
+| 7 | Smoke Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) | smoke test framework: [preview deployments](.claude/skills/ref-pr-workflow/run-preview-deploy.sh) [smoke tests](.claude/skills/ref-pr-workflow/run-smoke-tests.sh) |
 | 8 | QA Review | Augmented | [ref-qa](.claude/skills/ref-qa/SKILL.md) | QA server |
 | 9 | Code Quality Review | Delegated + QC | [ref-code-quality](.claude/skills/ref-code-quality/SKILL.md) | |
 | 10 | Security Review | Delegated + QC | [ref-security](.claude/skills/ref-security/SKILL.md) | |
