@@ -94,24 +94,22 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 		}
 	}
 
-	// Render per-app pr-checks and prod-deploy workflow templates.
-	// Unit test workflows use the consolidated unit-tests.yml instead (managed by InsertUnitTestsPath).
-	if dryRun {
-		fmt.Printf("[dry-run] Would render workflow templates into .github/workflows/\n")
-	} else {
-		fmt.Println("Rendering workflow templates...")
-		if err := renderTemplates(templateFS, repoRoot, "templates/workflows", filepath.Join(".github", "workflows"), data); err != nil {
-			return fmt.Errorf("rendering workflow templates: %w", err)
-		}
-	}
-
-	// Add app path to consolidated unit-tests.yml trigger
-	if dryRun {
-		fmt.Printf("[dry-run] Would add %q path trigger to unit-tests.yml\n", appName)
-	} else {
-		fmt.Println("Updating unit-tests.yml path triggers...")
-		if err := InsertUnitTestsPath(repoRoot, appName); err != nil {
-			return fmt.Errorf("updating unit-tests.yml: %w", err)
+	// Add app path to consolidated workflow triggers
+	for _, wf := range []struct {
+		name   string
+		insert func(string, string) error
+	}{
+		{"unit-tests.yml", InsertUnitTestsPath},
+		{"pr-checks.yml", InsertPRChecksPath},
+		{"prod-deploy.yml", InsertProdDeployPath},
+	} {
+		if dryRun {
+			fmt.Printf("[dry-run] Would add %q path trigger to %s\n", appName, wf.name)
+		} else {
+			fmt.Printf("Updating %s path triggers...\n", wf.name)
+			if err := wf.insert(repoRoot, appName); err != nil {
+				return fmt.Errorf("updating %s: %w", wf.name, err)
+			}
 		}
 	}
 
@@ -226,6 +224,81 @@ func RemoveUnitTestsPath(repoRoot, appName string) error {
 	appPath := `      - "` + appName + `/**"` + "\n"
 	if !strings.Contains(content, appPath) {
 		fmt.Printf("NOTE: path trigger for %q not found in unit-tests.yml\n", appName)
+		return nil
+	}
+
+	updated := strings.Replace(content, appPath, "", 1)
+	return os.WriteFile(wfPath, []byte(updated), 0o644)
+}
+
+const prChecksPathMarker = "      # SCAFFOLD MARKER: pr-checks-paths - scaffold inserts new app paths above this line"
+
+// InsertPRChecksPath adds a path trigger for appName to .github/workflows/pr-checks.yml,
+// immediately before the scaffold marker. No-ops if the path already exists.
+func InsertPRChecksPath(repoRoot, appName string) error {
+	return insertWorkflowPath(repoRoot, "pr-checks.yml", prChecksPathMarker, appName)
+}
+
+// RemovePRChecksPath removes the path trigger for appName from .github/workflows/pr-checks.yml.
+// No-ops if the path is not present.
+func RemovePRChecksPath(repoRoot, appName string) error {
+	return removeWorkflowPath(repoRoot, "pr-checks.yml", appName)
+}
+
+const prodDeployPathMarker = "      # SCAFFOLD MARKER: prod-deploy-paths - scaffold inserts new app paths above this line"
+
+// InsertProdDeployPath adds a path trigger for appName to .github/workflows/prod-deploy.yml,
+// immediately before the scaffold marker. No-ops if the path already exists.
+func InsertProdDeployPath(repoRoot, appName string) error {
+	return insertWorkflowPath(repoRoot, "prod-deploy.yml", prodDeployPathMarker, appName)
+}
+
+// RemoveProdDeployPath removes the path trigger for appName from .github/workflows/prod-deploy.yml.
+// No-ops if the path is not present.
+func RemoveProdDeployPath(repoRoot, appName string) error {
+	return removeWorkflowPath(repoRoot, "prod-deploy.yml", appName)
+}
+
+// insertWorkflowPath inserts an app path trigger into a workflow file before the given marker.
+func insertWorkflowPath(repoRoot, workflowFile, marker, appName string) error {
+	wfPath := filepath.Join(repoRoot, ".github", "workflows", workflowFile)
+	raw, err := os.ReadFile(wfPath)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", workflowFile, err)
+	}
+
+	content := string(raw)
+	appPath := `      - "` + appName + `/**"`
+	if strings.Contains(content, appPath) {
+		fmt.Printf("NOTE: path trigger for %q already exists in %s\n", appName, workflowFile)
+		return nil
+	}
+
+	idx := strings.Index(content, marker)
+	if idx == -1 {
+		return fmt.Errorf("scaffold marker not found in %s", workflowFile)
+	}
+
+	updated := content[:idx] + appPath + "\n" + content[idx:]
+	return os.WriteFile(wfPath, []byte(updated), 0o644)
+}
+
+// removeWorkflowPath removes an app path trigger from a workflow file.
+func removeWorkflowPath(repoRoot, workflowFile, appName string) error {
+	wfPath := filepath.Join(repoRoot, ".github", "workflows", workflowFile)
+	raw, err := os.ReadFile(wfPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Printf("NOTE: %s not found, skipping path trigger removal for %q\n", workflowFile, appName)
+			return nil
+		}
+		return fmt.Errorf("reading %s: %w", workflowFile, err)
+	}
+
+	content := string(raw)
+	appPath := `      - "` + appName + `/**"` + "\n"
+	if !strings.Contains(content, appPath) {
+		fmt.Printf("NOTE: path trigger for %q not found in %s\n", appName, workflowFile)
 		return nil
 	}
 

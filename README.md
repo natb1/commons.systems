@@ -138,3 +138,54 @@ For using and/or extending the artifacts in this repo: forking is encouraged. To
 /plugin install pr-workflow-bundle@commons-systems
 /worktree <issue-number>
 ```
+
+## CI/CD
+
+Four consolidated workflows handle all CI/CD. Change detection determines which apps to test and deploy.
+
+### Workflows
+
+| Trigger | Workflow | Jobs |
+|---------|----------|------|
+| Push to non-`main` branch | `unit-tests.yml` | `unit-tests`, `lint` |
+| PR opened/synchronized | `pr-checks.yml` | `acceptance`, `preview-and-smoke` |
+| PR merged to `main` | `prod-deploy.yml` | `deploy-and-smoke`, `cleanup-preview` |
+| Push `firestore.rules` to `main` | `firestore-deploy.yml` | `deploy-rules` |
+
+### Change detection
+
+`get-changed-apps.sh` determines which apps are affected by a change:
+
+- **Direct changes** to `<app>/**` mark that app
+- **Shared package changes** (e.g. `authutil/`) scan every app's `package.json` for `file:` references to the changed package and mark all matches
+- **Global triggers** (`firebase.json`, `firestore.rules`, CI scripts) mark all apps
+
+An "app" is any top-level directory containing both `package.json` and `package-lock.json`.
+
+### Script call chain
+
+Wrapper scripts delegate to per-app scripts:
+
+```
+run-all-acceptance-tests.sh
+  get-changed-apps.sh            -> <app1>, <app2>, ...
+  run-acceptance-tests.sh <app>     (emulators, seed, playwright)
+
+run-all-preview-deploy-smoke.sh <channel-id>
+  get-changed-apps.sh
+  run-preview-deploy.sh <app> <channel-id>   -> PREVIEW_URL
+  run-smoke-tests.sh <app> <url>
+
+run-all-prod-deploy-smoke.sh
+  get-changed-apps.sh --base HEAD~1
+  run-prod-deploy.sh <app>
+  run-smoke-tests.sh <app> https://<hosting-site>.web.app
+
+run-all-cleanup-preview.sh <pr-number>
+  get-changed-apps.sh --base HEAD~1
+  run-cleanup-preview.sh <app> <pr-number>
+```
+
+### Adding a new app
+
+The scaffold tool (`scaffolding/firebase/`) automatically registers new apps in all consolidated workflows via marker-based path insertion. No manual workflow edits are needed.

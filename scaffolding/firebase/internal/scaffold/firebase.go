@@ -3,17 +3,99 @@ package scaffold
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const hostingTargetType = "hosting"
 
+type RewriteEntry struct {
+	Source      string `json:"source"`
+	Destination string `json:"destination"`
+}
+
+func (r RewriteEntry) Validate() error {
+	if r.Source == "" {
+		return errors.New("rewrite source must not be empty")
+	}
+	if r.Destination == "" {
+		return errors.New("rewrite destination must not be empty")
+	}
+	if !strings.HasPrefix(r.Destination, "/") {
+		return fmt.Errorf("rewrite destination must start with /: %s", r.Destination)
+	}
+	return nil
+}
+
+func NewRewriteEntry(source, destination string) (RewriteEntry, error) {
+	entry := RewriteEntry{Source: source, Destination: destination}
+	if err := entry.Validate(); err != nil {
+		return RewriteEntry{}, err
+	}
+	return entry, nil
+}
+
+func (h HostingEntry) Validate() error {
+	if h.Target == "" {
+		return errors.New("hosting target must not be empty")
+	}
+	if h.Public == "" {
+		return errors.New("hosting public must not be empty")
+	}
+	return nil
+}
+
 type HostingEntry struct {
-	Target string   `json:"target"`
-	Public string   `json:"public"`
-	Ignore []string `json:"ignore"`
+	Target   string         `json:"target"`
+	Public   string         `json:"public"`
+	Ignore   []string       `json:"ignore"`
+	Rewrites []RewriteEntry `json:"rewrites,omitempty"`
+	// extra preserves unknown JSON keys (e.g., headers) during round-trip.
+	extra map[string]json.RawMessage
+}
+
+func (h *HostingEntry) UnmarshalJSON(data []byte) error {
+	type Alias HostingEntry
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*h = HostingEntry(alias)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	delete(raw, "target")
+	delete(raw, "public")
+	delete(raw, "ignore")
+	delete(raw, "rewrites")
+	if len(raw) > 0 {
+		h.extra = raw
+	}
+	return nil
+}
+
+func (h HostingEntry) MarshalJSON() ([]byte, error) {
+	type Alias HostingEntry
+	data, err := json.Marshal(Alias(h))
+	if err != nil {
+		return nil, err
+	}
+	if len(h.extra) == 0 {
+		return data, nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return nil, err
+	}
+	for k, v := range h.extra {
+		obj[k] = v
+	}
+	return json.Marshal(obj)
 }
 
 type FirestoreConfig struct {
@@ -184,11 +266,15 @@ func AddHostingEntry(config *FirebaseConfig, appName string) error {
 			return fmt.Errorf("hosting entry for target %q already exists", appName)
 		}
 	}
-	config.Hosting = append(config.Hosting, HostingEntry{
+	entry := HostingEntry{
 		Target: appName,
 		Public: appName + "/dist",
 		Ignore: []string{"firebase.json", "**/.*", "**/node_modules/**"},
-	})
+	}
+	if err := entry.Validate(); err != nil {
+		return fmt.Errorf("invalid hosting entry for %q: %w", appName, err)
+	}
+	config.Hosting = append(config.Hosting, entry)
 	return nil
 }
 
