@@ -7,7 +7,7 @@ import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js"
 import { getUserGroups, type Group } from "./firestore.js";
 import { DataIntegrityError } from "./errors.js";
 
-const nav = document.getElementById("nav")!;
+const nav = document.getElementById("nav");
 if (!nav) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");

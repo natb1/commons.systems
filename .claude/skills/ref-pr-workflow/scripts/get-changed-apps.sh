@@ -5,7 +5,7 @@ set -euo pipefail
 # An "app" is a top-level directory containing both package.json and package-lock.json.
 #
 # Usage: get-changed-apps.sh [--base <ref>]
-#   --base <ref>  Override comparison base (default: origin/main, fallback: HEAD~1)
+#   --base <ref>  Override comparison base (default: origin/main)
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
@@ -25,16 +25,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Determine changed files
-if [ -n "$BASE" ]; then
-  if ! CHANGED=$(git diff --name-only "$BASE"...HEAD 2>/dev/null); then
-    echo "ERROR: could not diff against $BASE" >&2
-    exit 1
-  fi
-elif ! CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null); then
-  if ! CHANGED=$(git diff --name-only HEAD~1...HEAD 2>/dev/null); then
-    echo "ERROR: could not determine changed files (tried origin/main and HEAD~1)" >&2
-    exit 1
-  fi
+if [ -z "$BASE" ]; then
+  BASE="origin/main"
+fi
+
+if ! CHANGED=$(git diff --name-only "$BASE"...HEAD 2>/dev/null); then
+  echo "ERROR: could not diff against $BASE" >&2
+  exit 1
 fi
 
 # Discover all apps (top-level dirs with both package.json and package-lock.json)

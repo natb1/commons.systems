@@ -50,7 +50,7 @@ printf '%s\n' "$BODY" | grep -q '<!-- pr-workflow-state -->' && HAS_OPEN=true
 printf '%s\n' "$BODY" | grep -q '<!-- /pr-workflow-state -->' && HAS_CLOSE=true
 
 if [ "$HAS_OPEN" = true ] && [ "$HAS_CLOSE" = true ]; then
-  # Replace between markers using awk skip-flag pattern
+  # Replace the entire block including markers using awk skip-flag pattern
   NEW_BODY=$(printf '%s\n' "$BODY" | awk -v block="$STATE_BLOCK" '
     /<!-- pr-workflow-state -->/ { print block; skip=1; next }
     /<!-- \/pr-workflow-state -->/ { skip=0; next }
@@ -58,6 +58,10 @@ if [ "$HAS_OPEN" = true ] && [ "$HAS_CLOSE" = true ]; then
   ')
 elif [ "$HAS_OPEN" = true ]; then
   echo "error: opening pr-workflow-state marker found but closing marker missing in issue #${ISSUE_NUM}" >&2
+  echo "error: refusing to write to avoid data loss" >&2
+  exit 1
+elif [ "$HAS_CLOSE" = true ]; then
+  echo "error: closing pr-workflow-state marker found but opening marker missing in issue #${ISSUE_NUM}" >&2
   echo "error: refusing to write to avoid data loss" >&2
   exit 1
 else
