@@ -30,8 +30,14 @@ service cloud.firestore {
         && request.auth.uid in resource.data.memberUids;
       allow update: if request.auth != null
         && request.auth.uid in resource.data.memberUids
-        && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['note', 'category', 'reimbursement', 'budget'])
+        && request.resource.data.institution == resource.data.institution
+        && request.resource.data.account == resource.data.account
+        && request.resource.data.description == resource.data.description
+        && request.resource.data.amount == resource.data.amount
+        && request.resource.data.timestamp == resource.data.timestamp
+        && request.resource.data.statementId == resource.data.statementId
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberUids == resource.data.memberUids
         && request.resource.data.note is string
         && request.resource.data.category is string
         && (request.resource.data.budget is string || request.resource.data.budget == null)

@@ -11,8 +11,8 @@ TESTED=0
 
 while IFS= read -r app; do
   [ -z "$app" ] && continue
-  # Only run acceptance tests for apps that have an e2e/ directory
-  [ -d "$REPO_ROOT/$app/e2e" ] || continue
+  # Only run acceptance tests for apps that have a playwright.config.ts
+  [ -f "$REPO_ROOT/$app/e2e/playwright.config.ts" ] || continue
 
   echo "=== Acceptance tests: $app ==="
   TESTED=$((TESTED + 1))

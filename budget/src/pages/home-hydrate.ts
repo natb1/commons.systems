@@ -72,10 +72,9 @@ function selectItem(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("blur", { bubbles: true }));
 }
 
-function showDropdown(input: HTMLInputElement, options: string[]): void {
+function showDropdown(input: HTMLInputElement, options: string[], filterOverride?: string): void {
   removeDropdown();
-  const value = input.value;
-  const filter = value.toLowerCase();
+  const filter = filterOverride !== undefined ? filterOverride : input.value.toLowerCase();
   const matches = options.filter(o => {
     const lower = o.toLowerCase();
     if (lower === filter) return false;
@@ -183,16 +182,18 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     }
   });
 
-  function handleAutocomplete(e: Event): void {
+  // Show all options on focus; filter as user types
+  container.addEventListener("focus", (e: Event) => {
     if (!(e.target instanceof HTMLInputElement)) return;
-    const input = e.target;
-    const options = getOptionsForInput(input);
-    if (options.length > 0) showDropdown(input, options);
-  }
+    const options = getOptionsForInput(e.target);
+    if (options.length > 0) showDropdown(e.target, options, "");
+  }, true);
 
-  // Show autocomplete dropdown on focus and filter as user types
-  container.addEventListener("focus", handleAutocomplete, true);
-  container.addEventListener("input", handleAutocomplete);
+  container.addEventListener("input", (e: Event) => {
+    if (!(e.target instanceof HTMLInputElement)) return;
+    const options = getOptionsForInput(e.target);
+    if (options.length > 0) showDropdown(e.target, options);
+  });
 
   container.addEventListener("blur", async (e) => {
     const target = e.target as HTMLElement;

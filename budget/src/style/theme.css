@@ -77,6 +77,10 @@
   box-sizing: border-box;
 }
 
+.txn-details input {
+  scroll-margin-top: 4rem; /* accommodate sticky header */
+}
+
 .autocomplete-dropdown {
   position: absolute;
   z-index: 10;
