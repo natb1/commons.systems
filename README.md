@@ -38,19 +38,20 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 
 ### PR Control Flow
 
-| Step | Name | Agent Pattern | Skill |
-|------|------|---------------|-------|
-| 1 | Prerequisite Check | Augmented | [ref-implement](.claude/skills/ref-implement/SKILL.md) |
-| 2 | Planning | Augmented | [ref-implement](.claude/skills/ref-implement/SKILL.md) |
-| 3 | Implementation | Delegated | [ref-implement](.claude/skills/ref-implement/SKILL.md) |
-| 4 | Unit Tests + Lint | Delegated | [ref-unit-test](.claude/skills/ref-unit-test/SKILL.md) |
-| 5 | PR Creation | Delegated | [ref-create-pr](.claude/skills/ref-create-pr/SKILL.md) |
-| 6 | Acceptance Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) |
-| 7 | Smoke Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) |
-| 8 | QA Review | Augmented | [ref-qa](.claude/skills/ref-qa/SKILL.md) |
-| 9 | Code Quality Review | Delegated + QC | [ref-code-quality](.claude/skills/ref-code-quality/SKILL.md) |
-| 10 | Security Review | Delegated + QC | [ref-security](.claude/skills/ref-security/SKILL.md) |
-| 11 | Merge | Augmented | [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) |
+| Step | Name | Agent Pattern | Skill | Tooling |
+|------|------|---------------|-------|---------|
+| 0 | Issue Grooming | Augmented | [ready](.claude/skills/ready/SKILL.md) | |
+| 1 | Dev Env Management | Delegated | [worktree](.claude/skills/worktree/SKILL.md) | [nix](nix) |
+| 2 | Planning | Delegated + QC | [ref-implement](.claude/skills/ref-implement/SKILL.md) | Claude Code Planning Tool |
+| 3 | Implementation | Delegated | [ref-implement](.claude/skills/ref-implement/SKILL.md) | |
+| 4 | Unit Tests + Lint | Delegated | [ref-unit-test](.claude/skills/ref-unit-test/SKILL.md) | [unit test framework](.claude/skills/ref-pr-workflow/run-unit-tests.sh) |
+| 5 | PR Creation | Delegated | [ref-create-pr](.claude/skills/ref-create-pr/SKILL.md) | |
+| 6 | Acceptance Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) | [e2e test framework](.claude/skills/ref-pr-workflow/run-acceptance-tests.sh) |
+| 7 | Smoke Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) | smoke test framework: [preview deployments](.claude/skills/ref-pr-workflow/run-preview-deploy.sh) [smoke tests](.claude/skills/ref-pr-workflow/run-smoke-tests.sh)) |
+| 8 | QA Review | Augmented | [ref-qa](.claude/skills/ref-qa/SKILL.md) | QA server |
+| 9 | Code Quality Review | Delegated + QC | [ref-code-quality](.claude/skills/ref-code-quality/SKILL.md) | |
+| 10 | Security Review | Delegated + QC | [ref-security](.claude/skills/ref-security/SKILL.md) | |
+| 11 | Merge | Augmented | [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) | |
 
 **Agent patterns:** *Augmented* = human-in-the-loop, Claude assists. *Delegated* = Claude drives autonomously. *QC* = human quality gate before proceeding.
 
