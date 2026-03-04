@@ -4,6 +4,16 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 
 > WIP: many of Nate's tools and POC apps are currently being migrated over from rumor-ml/commons.systems
 
+## Table of Contents
+
+- [Pre-requisites](#pre-requisites)
+- [Design Principles](#design-principles)
+- [Agentic Coding Workflow](#agentic-coding-workflow)
+  - [Cross Cutting Artifacts](#cross-cutting-artifacts)
+  - [PR Control Flow](#pr-control-flow)
+- [CI/CD](#cicd)
+- [Usage and Contributing](#usage-and-contributing)
+
 ## Pre-requisites
 
 - **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
@@ -17,27 +27,74 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 - Delegated workflows have well defined break points for human quality control (QC).
 - Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts (system instructions, hooks, sub-agents, agent teams, etc.) due to portability and ease of maintenance.
 - Separate "reference" skills from "task" skills with "ref-" naming convention. This enables more powerful (sub-agent-like) context management for skills when combined with [ref-memory-management](.claude/skills/ref-memory-management/SKILL.md) skill.
-- Conversation scope is persisted in git commit log, github issues and PR using [dynamic content](https://code.claude.com/docs/en/skills#inject-dynamic-context) in [pr-workflow](.claude/skills/pr-workflow/SKILL.md) skills.
+- Conversation scope is persisted in git commit log, github issues and PR using [dynamic content](https://code.claude.com/docs/en/skills#inject-dynamic-context) in [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) skills.
 
 ## Agentic Coding Workflow
 
-## Cross Cutting Artifacts
-- [pr-workflow skill](.claude/skills/pr-workflow/SKILL.md): manages PR workflow using state stored in git commit log, github issues and PR.
+### Cross Cutting Artifacts
+- [ref-pr-workflow skill](.claude/skills/ref-pr-workflow/SKILL.md): manages PR workflow using state stored in git commit log, github issues and PR.
 - [ref-memory-management](.claude/skills/ref-memory-management/SKILL.md): smart management of the conversation context using skills and ["plan mode"](https://code.claude.com/docs/en/how-claude-code-works#explore-before-implementing).
-- [compaction recovery hooks](.claude/hooks/): restores active skill and workflow state after auto-compaction
-- [agent shell multiplexing #26](https://github.com/natb1/commons.systems/issues/26)
+- Issue-body-based state persistence via `issue-state-read` / `issue-state-write` scripts for cross-session workflow resumption
 
-## Workflow
-| Step | Agent Pattern | Artifacts |
-|------|--------------|-----------|
-| 1. Functional Requirement Definition & Prioritization | Augmented | [ready skill](.claude/skills/ready/SKILL.md) |
-| 2. Dev Environment Management | Delegated + QC | [worktree skill](.claude/skills/worktree/SKILL.md) [Declarative dev env #5](https://github.com/natb1/commons.systems/issues/5)  [app scaffolding #18](https://github.com/natb1/commons.systems/issues/18) |
-| 3. Implementation Planning | Delegated + QC | [planning skill #8](https://github.com/natb1/commons.systems/issues/8) [batching skill #9](https://github.com/natb1/commons.systems/issues/9) |
-| 4. Implementation | Delegated | [wiggum loop skill](./claude/skills/wiggup-loop/SKILL.md) [implementation skills #10](https://github.com/natb1/commons.systems/issues/10) [implementation tracking skill #20](https://github.com/natb1/commons.systems/issues/20) [unit testing skill #11](https://github.com/natb1/commons.systems/issues/11) [unit test tooling #16](https://github.com/natb1/commons.systems/issues/16) [acceptance testing skill #15](https://github.com/natb1/commons.systems/issues/15) [acceptance test tooling #17](https://github.com/natb1/commons.systems/issues/17) |
-| 5. QA (functional review of pull request) | Augmented | [QA CICD tooling #21](https://github.com/natb1/commons.systems/issues/21) [qa-prep skill #12](https://github.com/natb1/commons.systems/issues/12) [smoke test tooling #19](https://github.com/natb1/commons.systems/issues/19) |
-| 6. Code Quality Review | Delegated + QC | [pr review skills #13](https://github.com/natb1/commons.systems/issues/13) [out of scope tracking skill #14](https://github.com/natb1/commons.systems/issues/14) |
-| 7. Security Review | Delegated + QC | [security review skill #22](https://github.com/natb1/commons.systems/issues/22) |
-| 8. Merge | Augmented | [merge skill #23](https://github.com/natb1/commons.systems/issues/23) [Prod CICD tooling #24](https://github.com/natb1/commons.systems/issues/24) [smoke test tooling #19](https://github.com/natb1/commons.systems/issues/19) |
+### PR Control Flow
+
+| Step | Name | Agent Pattern | Skill |
+|------|------|---------------|-------|
+| 1 | Prerequisite Check | Augmented | [ref-implement](.claude/skills/ref-implement/SKILL.md) |
+| 2 | Planning | Augmented | [ref-implement](.claude/skills/ref-implement/SKILL.md) |
+| 3 | Implementation | Delegated | [ref-implement](.claude/skills/ref-implement/SKILL.md) |
+| 4 | Unit Tests + Lint | Delegated | [ref-unit-test](.claude/skills/ref-unit-test/SKILL.md) |
+| 5 | PR Creation | Delegated | [ref-create-pr](.claude/skills/ref-create-pr/SKILL.md) |
+| 6 | Acceptance Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) |
+| 7 | Smoke Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) |
+| 8 | QA Review | Augmented | [ref-qa](.claude/skills/ref-qa/SKILL.md) |
+| 9 | Code Quality Review | Delegated + QC | [ref-code-quality](.claude/skills/ref-code-quality/SKILL.md) |
+| 10 | Security Review | Delegated + QC | [ref-security](.claude/skills/ref-security/SKILL.md) |
+| 11 | Merge | Augmented | [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) |
+
+**Agent patterns:** *Augmented* = human-in-the-loop, Claude assists. *Delegated* = Claude drives autonomously. *QC* = human quality gate before proceeding.
+
+#### Dispatcher Architecture
+
+```
+Entry points               Dispatcher                    Phase skills
+─────────────              ──────────                    ────────────
+/pr-workflow  ──┐
+                ├──>  ref-pr-workflow  ──┬──>  ref-implement     (Steps 1-3)
+compaction    ──┘     (resume logic,    ├──>  ref-unit-test     (Step 4, fork)
+recovery hook         dispatch table,   ├──>  ref-create-pr     (Step 5)
+                      state machine)    ├──>  ref-pr-check      (Steps 6-7, fork)
+                                        ├──>  ref-qa            (Step 8)
+                                        ├──>  ref-code-quality  (Step 9)
+                                        ├──>  ref-security      (Step 10)
+                                        └──>  (inline Step 11)
+```
+
+#### Control Flow with Fork Boundaries
+
+```
+Main context                          Forked context
+────────────                          ──────────────
+Step 1: Prerequisite Check
+Step 2: Planning (plan mode)
+Step 3: Implementation
+                                      Step 4: Unit Tests + Lint ──── wiggum-loop
+Step 5: PR Creation
+                                      Step 6: Acceptance Tests ───── wiggum-loop
+                                      Step 7: Smoke Tests ────────── wiggum-loop
+Step 8: QA Review ──────────────────────────────────────────── wiggum-loop
+Step 9: Code Quality Review ────────────────────────────────── wiggum-loop
+Step 10: Security Review ───────────────────────────────────── wiggum-loop
+Step 11: Mark Ready + Merge
+```
+
+#### State Persistence
+
+Workflow state is stored as JSON in the GitHub issue body via `issue-state-write`. This allows any new conversation to resume from the correct step after context loss or auto-compaction. State includes: `step`, `phase`, `active_skills`, and optional `wiggum_step`.
+
+#### Wiggum-Loop Pattern
+
+Six of eleven steps use the [wiggum-loop](.claude/skills/ref-wiggum-loop/SKILL.md) pattern: an evaluate-iterate-terminate cycle where each iteration runs the step's action, evaluates the result, and either iterates (fix + retry) or terminates (advance to next step). Progress reports and termination summaries are posted as PR comments.
 
 ## Usage and Contributing
 <a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>

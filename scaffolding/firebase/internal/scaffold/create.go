@@ -185,50 +185,13 @@ const unitTestsPathMarker = "      # SCAFFOLD MARKER: app-paths - scaffold inser
 // InsertUnitTestsPath adds a path trigger for appName to .github/workflows/unit-tests.yml,
 // immediately before the scaffold marker. No-ops if the path already exists.
 func InsertUnitTestsPath(repoRoot, appName string) error {
-	wfPath := filepath.Join(repoRoot, ".github", "workflows", "unit-tests.yml")
-	raw, err := os.ReadFile(wfPath)
-	if err != nil {
-		return fmt.Errorf("reading unit-tests.yml: %w", err)
-	}
-
-	content := string(raw)
-	appPath := `      - "` + appName + `/**"`
-	if strings.Contains(content, appPath) {
-		fmt.Printf("NOTE: path trigger for %q already exists in unit-tests.yml\n", appName)
-		return nil
-	}
-
-	idx := strings.Index(content, unitTestsPathMarker)
-	if idx == -1 {
-		return fmt.Errorf("scaffold marker not found in unit-tests.yml")
-	}
-
-	updated := content[:idx] + appPath + "\n" + content[idx:]
-	return os.WriteFile(wfPath, []byte(updated), 0o644)
+	return insertWorkflowPath(repoRoot, "unit-tests.yml", unitTestsPathMarker, appName)
 }
 
 // RemoveUnitTestsPath removes the path trigger for appName from .github/workflows/unit-tests.yml.
 // No-ops if the path is not present.
 func RemoveUnitTestsPath(repoRoot, appName string) error {
-	wfPath := filepath.Join(repoRoot, ".github", "workflows", "unit-tests.yml")
-	raw, err := os.ReadFile(wfPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			fmt.Printf("NOTE: unit-tests.yml not found, skipping path trigger removal for %q\n", appName)
-			return nil
-		}
-		return fmt.Errorf("reading unit-tests.yml: %w", err)
-	}
-
-	content := string(raw)
-	appPath := `      - "` + appName + `/**"` + "\n"
-	if !strings.Contains(content, appPath) {
-		fmt.Printf("NOTE: path trigger for %q not found in unit-tests.yml\n", appName)
-		return nil
-	}
-
-	updated := strings.Replace(content, appPath, "", 1)
-	return os.WriteFile(wfPath, []byte(updated), 0o644)
+	return removeWorkflowPath(repoRoot, "unit-tests.yml", appName)
 }
 
 const prChecksPathMarker = "      # SCAFFOLD MARKER: pr-checks-paths - scaffold inserts new app paths above this line"
