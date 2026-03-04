@@ -5,7 +5,7 @@ set -euo pipefail
 # An "app" is a top-level directory containing both package.json and package-lock.json.
 #
 # Usage: get-changed-apps.sh [--base <ref>]
-#   --base <ref>  Override comparison base (default: origin/main, fallback: HEAD~1)
+#   --base <ref>  Override comparison base (default: origin/main)
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
@@ -25,16 +25,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Determine changed files
-if [ -n "$BASE" ]; then
-  if ! CHANGED=$(git diff --name-only "$BASE"...HEAD 2>/dev/null); then
-    echo "WARNING: could not diff against $BASE; falling back to all apps" >&2
-    CHANGED=""
-  fi
-elif ! CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null); then
-  if ! CHANGED=$(git diff --name-only HEAD~1...HEAD 2>/dev/null); then
-    echo "WARNING: could not determine changed files; falling back to all apps" >&2
-    CHANGED=""
-  fi
+if [ -z "$BASE" ]; then
+  BASE="origin/main"
+fi
+
+if ! CHANGED=$(git diff --name-only "$BASE"...HEAD); then
+  echo "ERROR: could not diff against $BASE" >&2
+  exit 1
 fi
 
 # Discover all apps (top-level dirs with both package.json and package-lock.json)
@@ -44,11 +41,8 @@ for dir in "$REPO_ROOT"/*/; do
   [ -f "$dir/package.json" ] && [ -f "$dir/package-lock.json" ] && ALL_APPS["$base"]=1
 done
 
-# If diff failed, output all apps
-if [ -z "$CHANGED" ] && [ -z "$BASE" ]; then
-  for app in "${!ALL_APPS[@]}"; do
-    echo "$app"
-  done | sort
+# No changed files — nothing to output
+if [ -z "$CHANGED" ]; then
   exit 0
 fi
 

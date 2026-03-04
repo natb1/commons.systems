@@ -94,17 +94,22 @@ If the user confirms, run the following steps in order:
    git -C .bare remote set-url origin "$ORIGINAL_REMOTE"
    ```
 
-3. Add the `main` worktree:
+3. Configure the fetch refspec so `git fetch` populates `refs/remotes/origin/*` tracking refs:
+   ```bash
+   git -C .bare config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+   ```
+
+4. Add the `main` worktree:
    ```bash
    git --git-dir=.bare worktree add worktrees/main main
    ```
 
-4. For each existing worktree besides HEAD, add it under `worktrees/`:
+5. For each existing worktree besides HEAD, add it under `worktrees/`:
    ```bash
    git --git-dir=.bare worktree add -b <branch> worktrees/<branch> <branch>
    ```
 
-5. Inform the user: the old working-tree files in the project root (everything except `.bare/` and `worktrees/`) should be removed manually after verifying the new worktrees work correctly.
+6. Inform the user: the old working-tree files in the project root (everything except `.bare/` and `worktrees/`) should be removed manually after verifying the new worktrees work correctly.
 
 After conversion, update variables:
 ```bash

@@ -44,16 +44,17 @@ if [ "$EXPLICIT" = false ]; then
   done < <("$SCRIPTS/get-changed-apps.sh")
 
   # Detect nix and rules changes separately
-  if CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null) || \
-     CHANGED=$(git diff --name-only HEAD~1...HEAD 2>/dev/null); then
-    while IFS= read -r file; do
-      [ -z "$file" ] && continue
-      case "$file" in
-        nix/*|flake.nix|flake.lock) RUN_NIX=true ;;
-        firestore.rules) RUN_RULES=true ;;
-      esac
-    done <<< "$CHANGED"
+  if ! CHANGED=$(git diff --name-only origin/main...HEAD); then
+    echo "ERROR: could not diff against origin/main" >&2
+    exit 1
   fi
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    case "$file" in
+      nix/*|flake.nix|flake.lock) RUN_NIX=true ;;
+      firestore.rules) RUN_RULES=true ;;
+    esac
+  done <<< "$CHANGED"
 fi
 
 APP_DIRS=("${!DIRTY_APPS[@]}")

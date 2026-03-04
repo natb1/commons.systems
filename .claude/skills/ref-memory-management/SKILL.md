@@ -1,7 +1,7 @@
 ---
 name: ref-memory-management
 description: Load when planning work, writing commits, changing requirements, or editing/commenting on issues/PR
-allowed-tools: Bash(.claude/hooks/save-skill-state.sh:*), Bash($CLAUDE_PLUGIN_ROOT/hooks/save-skill-state.sh:*)
+allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # Clean Context Planning Rule
@@ -11,17 +11,27 @@ When creating any plan (issue implementation, review, security review, or ad hoc
 - Check the conversation for all active reference skills (names begin with "ref-"). If any are active, add this line to the plan preface: `**Before executing this plan:** Invoke /ref-X and /ref-Y`. The line **must** include the **explicit** instruction to invoke the reference skills before executing the plan.
 - If plan is being created as part of a multi-step process (eg. pr-workflow, or wiggum-loop), the plan must record which step of the process is active in the preface of the plan.
 
-# Skill State Persistence Rule
+# Issue State Rule
 
-Persist skill and workflow state to disk so it survives auto-compaction. Use the project path in direct project use, or the plugin path when installed as a plugin:
+Persist workflow state to the issue body so it survives auto-compaction. Use `issue-state-write <issue-number> '<json>'` to update state.
 
-- **Project context:** `.claude/hooks/save-skill-state.sh <subcommand> [args...]`
-- **Plugin context:** `$CLAUDE_PLUGIN_ROOT/hooks/save-skill-state.sh <subcommand> [args...]`
+State schema:
+```json
+{
+  "version": 1,
+  "step": 8,
+  "step_label": "QA Review Loop",
+  "phase": "qa",
+  "active_skills": ["ref-memory-management", "ref-pr-workflow", "ref-qa"],
+  "wiggum_step": 2,
+  "wiggum_step_label": "Evaluate"
+}
+```
 
-- **When loading ref-skills:** call `save-skill-state.sh skill <names...>` with all active ref-skills
-- **When entering a workflow step:** call `save-skill-state.sh workflow <name> <step> <label>` (pushes or updates in stack)
-- **When a nested workflow completes:** call `save-skill-state.sh workflow-pop <name>` (removes from stack)
-- **When the outermost workflow completes:** call `save-skill-state.sh clear-workflow`
+- **When entering a workflow step or changing phase:** call `issue-state-write` with updated `step`, `step_label`, `phase`, and current `active_skills`
+- **When loading or unloading ref-skills:** include the updated `active_skills` list in the next `issue-state-write` call
+- **When entering a wiggum-loop step:** include `wiggum_step` and `wiggum_step_label` in the state
+- **When a wiggum-loop terminates:** omit `wiggum_step` and `wiggum_step_label` from the state
 
 # Commit Guidelines
 
