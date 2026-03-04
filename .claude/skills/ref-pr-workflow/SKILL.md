@@ -27,7 +27,7 @@ Reference only. Do not execute this workflow until directed to do so (eg., by `/
 1. Run `issue-state-read <issue-number>`. If exit 0 → use `step`, `phase`, `active_skills`, and `wiggum_step` from the JSON. Skip fallback.
 2. If exit 1 → use fallback, then write fresh state via `issue-state-write`.
 
-**Fallback** (scan **Current PR Scope and Status** above):
+**Fallback** (scan **Current PR Scope and Status** above; step=1 is intentionally omitted — branch existence implies prerequisites passed):
 - No PR + implementation commits → step=4, phase=unit
 - No PR + no commits → step=2, phase=core
 - PR, no acceptance "Complete" → step=6, phase=verify
