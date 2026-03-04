@@ -3,17 +3,20 @@
 # Called by hooks.json on SessionStart/compact events.
 # Always exits 0 — never blocks session recovery.
 set -uo pipefail
+trap 'echo "[restore-skill-state] WARNING: unexpected error on line $LINENO" >&2; exit 0' ERR
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || {
+  echo "[restore-skill-state] WARNING: cannot resolve script directory" >&2
+  exit 0
+}
 ISSUE_STATE_READ="$SCRIPT_DIR/../skills/ref-pr-workflow/scripts/issue-state-read"
 
 # Extract issue number from branch name (e.g., "121-improve-pr-workflow" → "121")
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
 ISSUE_NUM=$(printf '%s\n' "$BRANCH" | grep -oE '^[0-9]+') || exit 0
-[ -z "$ISSUE_NUM" ] && exit 0
 
 # Read issue state
-if ! STATE=$("$ISSUE_STATE_READ" "$ISSUE_NUM" 2>/dev/null); then
+if ! STATE=$("$ISSUE_STATE_READ" "$ISSUE_NUM"); then
   exit 0
 fi
 

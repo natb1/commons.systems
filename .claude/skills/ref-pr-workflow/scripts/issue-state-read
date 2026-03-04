@@ -39,9 +39,9 @@ if [ -z "$JSON" ]; then
 fi
 
 # Validate JSON
-if ! printf '%s\n' "$JSON" | jq empty 2>/dev/null; then
-  echo "error: state block contains invalid JSON in issue #${ISSUE_NUM}" >&2
+JQ_ERR=$(printf '%s\n' "$JSON" | jq empty 2>&1) || {
+  echo "error: state block contains invalid JSON in issue #${ISSUE_NUM}: ${JQ_ERR}" >&2
   exit 1
-fi
+}
 
 printf '%s\n' "$JSON"

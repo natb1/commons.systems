@@ -44,7 +44,7 @@ if [ "$EXPLICIT" = false ]; then
   done < <("$SCRIPTS/get-changed-apps.sh")
 
   # Detect nix and rules changes separately
-  if ! CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null); then
+  if ! CHANGED=$(git diff --name-only origin/main...HEAD); then
     echo "ERROR: could not diff against origin/main" >&2
     exit 1
   fi

@@ -11,7 +11,7 @@ Self-contained wiggum-loop for Step 4. Runs in isolated context — cannot invok
 
 ## Sandbox
 
-Use `dangerouslyDisableSandbox: true` for git write operations: `git add`, `git commit`, `git merge`, `git push`.
+Use `dangerouslyDisableSandbox: true` for git write operations (`git add`, `git commit`, `git merge`, `git push`) and all `gh` CLI calls (`issue-state-write`, `post-pr-comment.sh`).
 
 ## Loop Mechanics
 

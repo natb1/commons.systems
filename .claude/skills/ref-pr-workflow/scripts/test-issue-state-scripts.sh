@@ -15,7 +15,7 @@ SAVED_PATH=""
 
 setup() {
   TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/stub" "$TMPDIR_TEST/mktemp-dir"
+  mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/stub"
 
   # Copy scripts under test into temp dir
   cp "$READ_SCRIPT" "$TMPDIR_TEST/issue-state-read"
@@ -70,7 +70,6 @@ case "$1" in
     esac
     ;;
   "api")
-    endpoint="$2"
     shift 2
     method_flag="" file_field=""
     while [ $# -gt 0 ]; do

@@ -29,7 +29,7 @@ if [ -z "$BASE" ]; then
   BASE="origin/main"
 fi
 
-if ! CHANGED=$(git diff --name-only "$BASE"...HEAD 2>/dev/null); then
+if ! CHANGED=$(git diff --name-only "$BASE"...HEAD); then
   echo "ERROR: could not diff against $BASE" >&2
   exit 1
 fi

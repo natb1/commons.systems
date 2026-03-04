@@ -46,7 +46,11 @@ Step 9. Start `/wiggum-loop` at Step 0 with these instruction sets:
   - High: affects correctness, security, or meaningful readability/maintainability
   - Low: cosmetic or minor naming; high effort with modest benefit; or out-of-scope deferral unlikely to become relevant
 - **Present findings organized by category** (required-high, required-low, out of scope-high, out of scope-low, false positive), with rationale for each classification
-- **User confirms or alters** each classification before the iterate/terminate decision
+- **CRITICAL: STOP AND WAIT FOR USER APPROVAL.** Present findings organized by category, then wait for the user to confirm or alter each classification. Do not write the evaluation file, implement fixes, or proceed to the iterate/terminate decision until the user responds.
+- **User decision determines outcome:**
+  - User confirms zero high-priority required findings → **Terminate**
+  - User confirms or adds high-priority required findings → **Iterate**
+  - User alters classifications → re-evaluate using same decision rules
 - Any high-priority required findings → **Iterate**
 - Zero high-priority required findings → **Terminate** (low-priority required findings alone do not block termination)
 

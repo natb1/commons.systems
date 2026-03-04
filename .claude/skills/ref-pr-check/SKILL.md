@@ -15,7 +15,7 @@ On load, read issue state via `issue-state-read` to determine entry point:
 
 ## Sandbox
 
-Use `dangerouslyDisableSandbox: true` for git write operations: `git add`, `git commit`, `git merge`, `git push`.
+Use `dangerouslyDisableSandbox: true` for git write operations (`git add`, `git commit`, `git merge`, `git push`) and all `gh` CLI calls (`gh run list`, `gh run view`, `issue-state-write`, `post-pr-comment.sh`).
 
 ## Phase 1: Acceptance Tests (Step 6)
 
