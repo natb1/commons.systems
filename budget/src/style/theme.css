@@ -1,0 +1,148 @@
+@import "@commons-systems/style/default.css";
+
+.content-grid {
+  max-width: 64rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+#transactions-table {
+  overflow-wrap: break-word;
+}
+
+.txn-header,
+.txn-summary-content {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  align-items: center;
+}
+
+.txn-header {
+  font-weight: bold;
+  border-bottom: 2px solid var(--border);
+  padding-left: 1.5rem;
+}
+
+.txn-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.txn-summary {
+  cursor: pointer;
+  list-style: none;
+  position: relative;
+  padding-left: 1.5rem;
+}
+
+.txn-summary::-webkit-details-marker {
+  display: none;
+}
+
+.txn-summary::before {
+  content: "▶";
+  font-size: 0.7em;
+  transition: transform 0.15s;
+  position: absolute;
+  left: 0.5rem;
+}
+
+.txn-row[open] > .txn-summary::before {
+  transform: rotate(90deg);
+}
+
+.txn-details {
+  padding: 0.5rem 1rem 1rem;
+}
+
+.txn-details dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+}
+
+.txn-details dt {
+  font-weight: bold;
+}
+
+.txn-summary-content .amount {
+  text-align: right;
+}
+
+.txn-summary-content input,
+.txn-details input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.txn-details input {
+  scroll-margin-top: 4rem; /* accommodate sticky header */
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.autocomplete-item {
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.selected {
+  background: var(--border);
+}
+
+#group-select {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.nav-auth {
+  margin-left: auto;
+}
+
+.save-error {
+  outline: 2px solid var(--error, #c00);
+}
+
+.auth-toast {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--error, #c00);
+  color: white;
+  padding: 0.5rem 1rem;
+  text-align: center;
+}
+
+.auth-toast button {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.2em;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+
+.auth-error {
+  color: var(--error, #c00);
+}
+
+.cc-badge {
+  width: 117px;
+  height: 41px;
+  vertical-align: middle;
+}

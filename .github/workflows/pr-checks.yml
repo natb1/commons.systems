@@ -1,10 +1,12 @@
-name: Landing — PR Checks
+name: PR Checks
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
       - "landing/**"
+      - "budget/**"
+      # SCAFFOLD MARKER: pr-checks-paths - scaffold inserts new app paths above this line
       - "authutil/**"
       - "firebaseutil/**"
       - "firestoreutil/**"
@@ -22,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
@@ -32,14 +36,14 @@ jobs:
       - name: Run acceptance tests
         env:
           VITE_GITHUB_BRANCH: ${{ github.head_ref }}
-        run: .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh landing
+        run: .claude/skills/ref-pr-workflow/scripts/run-all-acceptance-tests.sh
 
-  preview-deploy:
+  preview-and-smoke:
     runs-on: ubuntu-latest
-    outputs:
-      preview_url: ${{ steps.deploy.outputs.preview_url }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
@@ -49,39 +53,29 @@ jobs:
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$CREDS_FILE"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE" >> "$GITHUB_ENV"
           echo "CREDS_FILE=$CREDS_FILE" >> "$GITHUB_ENV"
-      - name: Deploy to preview channel
+      - name: Deploy previews and run smoke tests
         id: deploy
         env:
           VITE_GITHUB_BRANCH: ${{ github.head_ref }}
         run: |
           set -o pipefail
-          OUTPUT=$(.claude/skills/ref-pr-workflow/scripts/run-preview-deploy.sh landing "pr-${{ github.event.pull_request.number }}" | tee /dev/stderr)
-          PREVIEW_URL=$(echo "$OUTPUT" | grep '^PREVIEW_URL=' | cut -d= -f2-)
-          if [ -z "$PREVIEW_URL" ]; then
-            echo "::error::PREVIEW_URL not found in deploy output"
-            exit 1
+          OUTPUT=$(.claude/skills/ref-pr-workflow/scripts/run-all-preview-deploy-smoke.sh "pr-${{ github.event.pull_request.number }}" | tee /dev/stderr)
+          # Extract multi-line preview comment from output
+          COMMENT=$(echo "$OUTPUT" | sed -n '/^PREVIEW_COMMENT<<EOF$/,/^EOF$/{ /^PREVIEW_COMMENT<<EOF$/d; /^EOF$/d; p; }')
+          if [ -n "$COMMENT" ]; then
+            echo "preview_comment<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$COMMENT" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
           fi
-          echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
-      - name: Comment preview URL on PR
-        if: success()
+      - name: Comment preview URLs on PR
+        if: success() && steps.deploy.outputs.preview_comment != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREVIEW_COMMENT: ${{ steps.deploy.outputs.preview_comment }}
         run: |
           gh pr comment "${{ github.event.pull_request.number }}" \
             --repo ${{ github.repository }} \
-            --body "Preview deployed: ${{ steps.deploy.outputs.preview_url }}"
+            --body "$PREVIEW_COMMENT"
       - name: Cleanup credentials
         if: always()
         run: rm -f "$CREDS_FILE"
-
-  smoke-tests:
-    needs: preview-deploy
-    if: needs.preview-deploy.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "22"
-      - name: Run smoke tests
-        run: .claude/skills/ref-pr-workflow/scripts/run-smoke-tests.sh landing "${{ needs.preview-deploy.outputs.preview_url }}"

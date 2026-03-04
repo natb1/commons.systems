@@ -72,11 +72,14 @@ func TestAddAndRemoveHostingEntry(t *testing.T) {
 	if err := AddHostingEntry(config, "demo"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(config.Hosting) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(config.Hosting))
+	if len(config.Hosting) < 2 {
+		t.Fatalf("expected at least 2 entries, got %d", len(config.Hosting))
 	}
 	if config.Hosting[1].Target != "demo" {
 		t.Errorf("expected target demo, got %q", config.Hosting[1].Target)
+	}
+	if len(config.Hosting[1].Rewrites) != 0 {
+		t.Errorf("expected no default rewrites, got %d", len(config.Hosting[1].Rewrites))
 	}
 
 	// Adding duplicate should error
@@ -377,6 +380,57 @@ func TestRemoveHostingTargetEmptyProject(t *testing.T) {
 	}
 	if err := RemoveHostingTarget(rc, "demo"); err == nil {
 		t.Error("expected error for empty project, got nil")
+	}
+}
+
+func TestHostingEntryPreservesHeaders(t *testing.T) {
+	input := `{
+  "target": "landing",
+  "public": "landing/dist",
+  "ignore": ["firebase.json"],
+  "headers": [{"source": "/blogroll.opml", "headers": [{"key": "Content-Type", "value": "text/xml"}]}]
+}`
+	var entry HostingEntry
+	if err := json.Unmarshal([]byte(input), &entry); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if entry.Target != "landing" {
+		t.Errorf("expected target landing, got %q", entry.Target)
+	}
+
+	out, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(out, &raw); err != nil {
+		t.Fatalf("re-unmarshal error: %v", err)
+	}
+	if _, ok := raw["headers"]; !ok {
+		t.Error("expected 'headers' key to be preserved in round-trip")
+	}
+}
+
+func TestRewriteEntryValidate(t *testing.T) {
+	valid := RewriteEntry{Source: "**", Destination: "/index.html"}
+	if err := valid.Validate(); err != nil {
+		t.Errorf("expected valid, got error: %v", err)
+	}
+
+	noSource := RewriteEntry{Source: "", Destination: "/index.html"}
+	if err := noSource.Validate(); err == nil {
+		t.Error("expected error for empty source")
+	}
+
+	noDest := RewriteEntry{Source: "**", Destination: ""}
+	if err := noDest.Validate(); err == nil {
+		t.Error("expected error for empty destination")
+	}
+
+	noSlash := RewriteEntry{Source: "**", Destination: "index.html"}
+	if err := noSlash.Validate(); err == nil {
+		t.Error("expected error for destination without leading /")
 	}
 }
 

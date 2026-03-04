@@ -20,17 +20,31 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Transactions are scoped to group members. Updates are restricted to
-    // user-editable fields only; reimbursement must stay within 0-100 range.
+    // Transactions are scoped to group members via a denormalized `memberUids` field.
+    // Firestore rules can only read the document being accessed, not join across
+    // collections, so membership is checked directly on the transaction document.
+    // Updates limited to note, category, reimbursement, and budget; reimbursement
+    // must be in [0, 100]. Create and delete are explicitly denied.
     match /budget/{env}/transactions/{txnId} {
       allow read: if request.auth != null
         && request.auth.uid in resource.data.memberUids;
       allow update: if request.auth != null
         && request.auth.uid in resource.data.memberUids
-        && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['note', 'category', 'reimbursement', 'budget'])
+        && request.resource.data.institution == resource.data.institution
+        && request.resource.data.account == resource.data.account
+        && request.resource.data.description == resource.data.description
+        && request.resource.data.amount == resource.data.amount
+        && request.resource.data.timestamp == resource.data.timestamp
+        && request.resource.data.statementId == resource.data.statementId
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberUids == resource.data.memberUids
+        && request.resource.data.note is string
+        && request.resource.data.category is string
+        && (request.resource.data.budget is string || request.resource.data.budget == null)
+        && request.resource.data.reimbursement is number
         && request.resource.data.reimbursement >= 0
-        && request.resource.data.reimbursement <= 100;
+        && request.resource.data.reimbursement <= 100
+        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'groupId', 'memberUids', 'note', 'category', 'budget', 'reimbursement']);
       allow create, delete: if false;
     }
 

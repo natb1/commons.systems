@@ -5,6 +5,9 @@
   "targets": {
     "commons-systems": {
       "hosting": {
+        "budget": [
+          "cs-budget-f920"
+        ],
         "landing": [
           "cs-landing-ce1d"
         ]
