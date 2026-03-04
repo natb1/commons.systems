@@ -43,7 +43,8 @@ service cloud.firestore {
         && (request.resource.data.budget is string || request.resource.data.budget == null)
         && request.resource.data.reimbursement is number
         && request.resource.data.reimbursement >= 0
-        && request.resource.data.reimbursement <= 100;
+        && request.resource.data.reimbursement <= 100
+        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'groupId', 'memberUids', 'note', 'category', 'budget', 'reimbursement']);
       allow create, delete: if false;
     }
 

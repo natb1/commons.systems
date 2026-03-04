@@ -71,10 +71,11 @@ jobs:
         if: success() && steps.deploy.outputs.preview_comment != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREVIEW_COMMENT: ${{ steps.deploy.outputs.preview_comment }}
         run: |
           gh pr comment "${{ github.event.pull_request.number }}" \
             --repo ${{ github.repository }} \
-            --body "${{ steps.deploy.outputs.preview_comment }}"
+            --body "$PREVIEW_COMMENT"
       - name: Cleanup credentials
         if: always()
         run: rm -f "$CREDS_FILE"
