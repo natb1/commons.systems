@@ -27,12 +27,12 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 - Delegated workflows have well defined break points for human quality control (QC).
 - Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts (system instructions, hooks, sub-agents, agent teams, etc.) due to portability and ease of maintenance.
 - Separate "reference" skills from "task" skills with "ref-" naming convention. This enables more powerful (sub-agent-like) context management for skills when combined with [ref-memory-management](.claude/skills/ref-memory-management/SKILL.md) skill.
-- Conversation scope is persisted in git commit log, github issues and PR using [dynamic content](https://code.claude.com/docs/en/skills#inject-dynamic-context) in [pr-workflow](.claude/skills/pr-workflow/SKILL.md) skills.
+- Conversation scope is persisted in git commit log, github issues and PR using [dynamic content](https://code.claude.com/docs/en/skills#inject-dynamic-context) in [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) skills.
 
 ## Agentic Coding Workflow
 
 ### Cross Cutting Artifacts
-- [pr-workflow skill](.claude/skills/pr-workflow/SKILL.md): manages PR workflow using state stored in git commit log, github issues and PR.
+- [ref-pr-workflow skill](.claude/skills/ref-pr-workflow/SKILL.md): manages PR workflow using state stored in git commit log, github issues and PR.
 - [ref-memory-management](.claude/skills/ref-memory-management/SKILL.md): smart management of the conversation context using skills and ["plan mode"](https://code.claude.com/docs/en/how-claude-code-works#explore-before-implementing).
 - Issue-body-based state persistence via `issue-state-read` / `issue-state-write` scripts for cross-session workflow resumption
 
@@ -95,37 +95,6 @@ Workflow state is stored as JSON in the GitHub issue body via `issue-state-write
 #### Wiggum-Loop Pattern
 
 Six of eleven steps use the [wiggum-loop](.claude/skills/ref-wiggum-loop/SKILL.md) pattern: an evaluate-iterate-terminate cycle where each iteration runs the step's action, evaluates the result, and either iterates (fix + retry) or terminates (advance to next step). Progress reports and termination summaries are posted as PR comments.
-
-## CI/CD
-
-### Workflows
-
-| Trigger | Workflow | Jobs |
-|---------|----------|------|
-| Push to non-`main` branch | `unit-tests.yml` | `unit-tests`, `lint` |
-| PR opened/synchronized | `pr-checks.yml` | `acceptance`, `preview-and-smoke` |
-| PR merged to `main` | `prod-deploy.yml` | `deploy-and-smoke`, `cleanup-preview` |
-| Push `firestore.rules` to `main` | `firestore-deploy.yml` | `deploy-rules` |
-
-```
-run-all-acceptance-tests.sh
-  get-changed-apps.sh            -> <app1>, <app2>, ...
-  run-acceptance-tests.sh <app>     (emulators, seed, playwright)
-
-run-all-preview-deploy-smoke.sh <channel-id>
-  get-changed-apps.sh
-  run-preview-deploy.sh <app> <channel-id>   -> PREVIEW_URL
-  run-smoke-tests.sh <app> <url>
-
-run-all-prod-deploy-smoke.sh
-  get-changed-apps.sh --base HEAD~1
-  run-prod-deploy.sh <app>
-  run-smoke-tests.sh <app> https://<hosting-site>.web.app
-
-run-all-cleanup-preview.sh <pr-number>
-  get-changed-apps.sh --base HEAD~1
-  run-cleanup-preview.sh <app> <pr-number>
-```
 
 ## Usage and Contributing
 <a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>

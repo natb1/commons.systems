@@ -141,20 +141,6 @@ assert_contains() {
   fi
 }
 
-assert_exit_code() {
-  local label="$1" expected="$2" actual="$3"
-  TOTAL=$((TOTAL + 1))
-  if [ "$expected" = "$actual" ]; then
-    PASS=$((PASS + 1))
-    echo "  PASS: $label"
-  else
-    FAIL=$((FAIL + 1))
-    echo "  FAIL: $label"
-    echo "    expected exit code: $expected"
-    echo "    actual exit code:   $actual"
-  fi
-}
-
 # --- issue-state-read tests ---
 
 echo "Test 1: read valid state block"
@@ -175,7 +161,7 @@ Some issue description here.
 EOF
 exit_code=0
 output=$("$READ_T" 42) || exit_code=$?
-assert_exit_code "exits 0 on valid state" "0" "$exit_code"
+assert_eq "exits 0 on valid state" "0" "$exit_code"
 step=$(echo "$output" | jq -r '.step')
 assert_eq "reads step correctly" "6" "$step"
 phase=$(echo "$output" | jq -r '.phase')
@@ -189,7 +175,7 @@ Just a plain issue body with no state markers.
 EOF
 exit_code=0
 stderr=$("$READ_T" 42 2>&1 >/dev/null) || exit_code=$?
-assert_exit_code "exits 1 on missing markers" "1" "$exit_code"
+assert_eq "exits 1 on missing markers" "1" "$exit_code"
 assert_contains "error mentions markers" "no pr-workflow-state markers" "$stderr"
 teardown
 
@@ -204,7 +190,7 @@ cat > "$TMPDIR_TEST/stub/issue-body.txt" <<'EOF'
 EOF
 exit_code=0
 stderr=$("$READ_T" 42 2>&1 >/dev/null) || exit_code=$?
-assert_exit_code "exits 1 on corrupt JSON" "1" "$exit_code"
+assert_eq "exits 1 on corrupt JSON" "1" "$exit_code"
 assert_contains "error mentions invalid JSON" "invalid JSON" "$stderr"
 teardown
 
@@ -214,18 +200,18 @@ setup
 : > "$TMPDIR_TEST/stub/issue-body.txt"
 exit_code=0
 stderr=$("$READ_T" 42 2>&1 >/dev/null) || exit_code=$?
-assert_exit_code "exits 1 on empty body" "1" "$exit_code"
+assert_eq "exits 1 on empty body" "1" "$exit_code"
 teardown
 
 echo "Test 5: read invalid issue number"
 setup
 exit_code=0
 stderr=$("$READ_T" 0 2>&1 >/dev/null) || exit_code=$?
-assert_exit_code "exits 1 on zero issue number" "1" "$exit_code"
+assert_eq "exits 1 on zero issue number" "1" "$exit_code"
 assert_contains "error mentions issue number" "positive integer" "$stderr"
 exit_code=0
 stderr=$("$READ_T" abc 2>&1 >/dev/null) || exit_code=$?
-assert_exit_code "exits 1 on non-numeric issue number" "1" "$exit_code"
+assert_eq "exits 1 on non-numeric issue number" "1" "$exit_code"
 teardown
 
 echo "Test 6: read empty state block (markers present, no content)"
@@ -238,7 +224,7 @@ cat > "$TMPDIR_TEST/stub/issue-body.txt" <<'EOF'
 EOF
 exit_code=0
 stderr=$("$READ_T" 42 2>&1 >/dev/null) || exit_code=$?
-assert_exit_code "exits 1 on empty state block" "1" "$exit_code"
+assert_eq "exits 1 on empty state block" "1" "$exit_code"
 teardown
 
 # --- issue-state-write tests ---
@@ -250,7 +236,7 @@ Original issue description.
 EOF
 exit_code=0
 "$WRITE_T" 42 '{"version":1,"step":3,"phase":"core"}' 2>&1 || exit_code=$?
-assert_exit_code "exits 0 on append write" "0" "$exit_code"
+assert_eq "exits 0 on append write" "0" "$exit_code"
 body=$(cat "$TMPDIR_TEST/stub/issue-body.txt")
 assert_contains "body contains original text" "Original issue description." "$body"
 assert_contains "body contains state marker" "<!-- pr-workflow-state -->" "$body"
@@ -277,7 +263,7 @@ More text after state.
 EOF
 exit_code=0
 "$WRITE_T" 42 '{"version":1,"step":6,"phase":"verify"}' 2>&1 || exit_code=$?
-assert_exit_code "exits 0 on replace write" "0" "$exit_code"
+assert_eq "exits 0 on replace write" "0" "$exit_code"
 body=$(cat "$TMPDIR_TEST/stub/issue-body.txt")
 assert_contains "body still has description" "Issue description." "$body"
 assert_contains "body still has trailing text" "More text after state." "$body"
@@ -331,7 +317,7 @@ Issue with "quotes", $dollars, and `backticks`.
 EOF
 exit_code=0
 "$WRITE_T" 42 '{"version":1,"step":2,"step_label":"Planning Phase"}' 2>&1 || exit_code=$?
-assert_exit_code "exits 0 with special chars" "0" "$exit_code"
+assert_eq "exits 0 with special chars" "0" "$exit_code"
 body=$(cat "$TMPDIR_TEST/stub/issue-body.txt")
 assert_contains "preserves quotes" '"quotes"' "$body"
 assert_contains "preserves dollars" '$dollars' "$body"
@@ -345,7 +331,7 @@ Original body.
 EOF
 exit_code=0
 echo '{"version":1,"step":5,"phase":"core"}' | "$WRITE_T" 42 2>&1 || exit_code=$?
-assert_exit_code "exits 0 on stdin input" "0" "$exit_code"
+assert_eq "exits 0 on stdin input" "0" "$exit_code"
 body=$(cat "$TMPDIR_TEST/stub/issue-body.txt")
 assert_contains "body has step from stdin" '"step": 5' "$body"
 teardown
@@ -357,7 +343,7 @@ Body.
 EOF
 exit_code=0
 stderr=$("$WRITE_T" 42 '{not json}' 2>&1 >/dev/null) || exit_code=$?
-assert_exit_code "exits 1 on invalid JSON" "1" "$exit_code"
+assert_eq "exits 1 on invalid JSON" "1" "$exit_code"
 teardown
 
 # --- round-trip test ---
@@ -371,7 +357,7 @@ STATE='{"version":1,"step":7,"step_label":"Smoke Test Loop","phase":"verify","pr
 "$WRITE_T" 42 "$STATE" 2>/dev/null
 exit_code=0
 output=$("$READ_T" 42) || exit_code=$?
-assert_exit_code "round-trip read succeeds" "0" "$exit_code"
+assert_eq "round-trip read succeeds" "0" "$exit_code"
 step=$(echo "$output" | jq -r '.step')
 assert_eq "round-trip step" "7" "$step"
 phase=$(echo "$output" | jq -r '.phase')

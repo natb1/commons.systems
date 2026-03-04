@@ -38,6 +38,15 @@ func NewRewriteEntry(source, destination string) (RewriteEntry, error) {
 	return entry, nil
 }
 
+type HostingEntry struct {
+	Target   string         `json:"target"`
+	Public   string         `json:"public"`
+	Ignore   []string       `json:"ignore"`
+	Rewrites []RewriteEntry `json:"rewrites,omitempty"`
+	// extra preserves unknown JSON keys (e.g., headers) during round-trip.
+	extra map[string]json.RawMessage
+}
+
 func (h HostingEntry) Validate() error {
 	if h.Target == "" {
 		return errors.New("hosting target must not be empty")
@@ -46,15 +55,6 @@ func (h HostingEntry) Validate() error {
 		return errors.New("hosting public must not be empty")
 	}
 	return nil
-}
-
-type HostingEntry struct {
-	Target   string         `json:"target"`
-	Public   string         `json:"public"`
-	Ignore   []string       `json:"ignore"`
-	Rewrites []RewriteEntry `json:"rewrites,omitempty"`
-	// extra preserves unknown JSON keys (e.g., headers) during round-trip.
-	extra map[string]json.RawMessage
 }
 
 func (h *HostingEntry) UnmarshalJSON(data []byte) error {

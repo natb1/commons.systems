@@ -73,7 +73,7 @@ Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Re
 
   ## Conclusion
 
-  All acceptance tests passed. PR approved for QA review.
+  All acceptance tests passed. Proceeding to smoke tests.
   ```
 - Post:
   ```bash

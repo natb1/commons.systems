@@ -60,8 +60,10 @@ Steps 4, 6, and 7 are fully automated — invoke fork skills instead of in-threa
 
 On fork result:
 - `"success"` → read updated issue state, proceed to next step
-- `"needs_user"` → read `tmp/<prefix>-subagent-state.json` for last checkpoint, present error to user
-- `"failure"` → read `tmp/<prefix>-subagent-state.json` for last checkpoint, present error to user
+- `"needs_user"` → read checkpoint file for last state, present error to user
+- `"failure"` → read checkpoint file for last state, present error to user
+
+Checkpoint files: `tmp/unit-subagent-state.json` (Step 4), `tmp/acceptance-subagent-state.json` (Step 6), `tmp/smoke-subagent-state.json` (Step 7).
 
 ## Step 11. Completion
 
