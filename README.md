@@ -64,20 +64,6 @@ Four consolidated workflows handle all CI/CD. Change detection determines which 
 | PR merged to `main` | `prod-deploy.yml` | `deploy-and-smoke`, `cleanup-preview` |
 | Push `firestore.rules` to `main` | `firestore-deploy.yml` | `deploy-rules` |
 
-### Change detection
-
-`get-changed-apps.sh` determines which apps are affected by a change:
-
-- **Direct changes** to `<app>/**` mark that app
-- **Shared package changes** (e.g. `authutil/`) scan every app's `package.json` for `file:` references to the changed package and mark all matches
-- **Global triggers** (`firebase.json`, `firestore.rules`, CI scripts) mark all apps
-
-An "app" is any top-level directory containing both `package.json` and `package-lock.json`.
-
-### Script call chain
-
-Wrapper scripts delegate to per-app scripts:
-
 ```
 run-all-acceptance-tests.sh
   get-changed-apps.sh            -> <app1>, <app2>, ...
@@ -97,10 +83,6 @@ run-all-cleanup-preview.sh <pr-number>
   get-changed-apps.sh --base HEAD~1
   run-cleanup-preview.sh <app> <pr-number>
 ```
-
-### Adding a new app
-
-The scaffold tool (`scaffolding/firebase/`) automatically registers new apps in all consolidated workflows via marker-based path insertion. No manual workflow edits are needed.
 
 ## Usage and Contributing
 <a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>
