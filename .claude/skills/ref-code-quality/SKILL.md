@@ -54,6 +54,10 @@ Step 9. Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Any high-priority required findings → **Iterate**
 - Zero high-priority required findings → **Terminate** (low-priority required findings alone do not block termination)
 
+**Iterate instructions:**
+- Implement ONLY required findings (high and low priority). Do NOT implement out-of-scope or false positive findings.
+- Do NOT modify files outside the PR's scope. If a finding targets code that was not changed by this PR branch, classify it as out-of-scope.
+
 **Progress report instructions:**
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
 - Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt`
