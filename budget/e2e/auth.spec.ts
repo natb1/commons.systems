@@ -52,7 +52,7 @@ test.describe("auth", () => {
     await firstRow.locator(".txn-summary-content span").first().click();
     await expect(firstRow.locator(".txn-details")).toBeVisible();
     const budgetInput = firstRow.locator(".edit-budget");
-    await budgetInput.click();
+    await budgetInput.focus(); // use focus() to avoid pointer-event interception on mobile
     await expect(page.locator(".autocomplete-dropdown")).toBeVisible();
     const items = page.locator(".autocomplete-item");
     const count = await items.count();
@@ -93,7 +93,12 @@ test.describe("auth", () => {
     const noteInput = page.locator(".edit-note").first();
     await noteInput.fill("test note update");
     await noteInput.blur();
-    await expect(page.locator(".edit-note").first()).toHaveValue("test note update");
+    // Wait for async Firestore save to complete before reloading.
+    // The blur handler sets input.defaultValue = input.value only after a successful save.
+    await expect.poll(
+      async () => noteInput.evaluate((el: HTMLInputElement) => el.defaultValue),
+      { timeout: 5000 },
+    ).toBe("test note update");
     await page.reload();
     await expect(page.locator("#transactions-table")).toBeVisible();
     await expect(page.locator(".edit-note").first()).toHaveValue("test note update");
