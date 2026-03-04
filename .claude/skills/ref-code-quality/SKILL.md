@@ -62,9 +62,9 @@ Step 9. Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Implement all low-priority required findings from the final evaluation
 - Commit the low-priority implementations
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write final summary to `$(git rev-parse --show-toplevel)/tmp/codequality-final.txt` (header must be `# Code Quality Review - Complete`):
+- Write final summary to `$(git rev-parse --show-toplevel)/tmp/codequality-final.txt` (header must be `# Code Quality Review - Complete ✓`):
   ```
-  # Code Quality Review - Complete
+  # Code Quality Review - Complete ✓
 
   **Reviewer**: Claude Code (via /review skill + pr-review-toolkit agents)
   **Date**: [Current date]

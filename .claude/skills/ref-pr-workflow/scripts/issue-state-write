@@ -25,7 +25,7 @@ if [ -z "$JSON_INPUT" ]; then
 fi
 
 # Validate and pretty-print
-PRETTY_JSON=$(echo "$JSON_INPUT" | jq .) || {
+PRETTY_JSON=$(printf '%s\n' "$JSON_INPUT" | jq .) || {
   echo "error: invalid JSON state" >&2
   exit 1
 }
@@ -44,13 +44,17 @@ BODY=$(gh issue view "$ISSUE_NUM" --json body --jq '.body') || {
 }
 
 # Replace or append
-if echo "$BODY" | grep -q '<!-- pr-workflow-state -->'; then
+if printf '%s\n' "$BODY" | grep -q '<!-- pr-workflow-state -->' && printf '%s\n' "$BODY" | grep -q '<!-- /pr-workflow-state -->'; then
   # Replace between markers using awk skip-flag pattern
-  NEW_BODY=$(echo "$BODY" | awk -v block="$STATE_BLOCK" '
+  NEW_BODY=$(printf '%s\n' "$BODY" | awk -v block="$STATE_BLOCK" '
     /<!-- pr-workflow-state -->/ { print block; skip=1; next }
     /<!-- \/pr-workflow-state -->/ { skip=0; next }
     !skip { print }
   ')
+elif printf '%s\n' "$BODY" | grep -q '<!-- pr-workflow-state -->'; then
+  echo "error: opening pr-workflow-state marker found but closing marker missing in issue #${ISSUE_NUM}" >&2
+  echo "error: refusing to write to avoid data loss" >&2
+  exit 1
 else
   # Append state block at end of body
   if [ -n "$BODY" ]; then
@@ -66,7 +70,7 @@ fi
 TMPFILE=""
 trap '[ -n "${TMPFILE}" ] && rm -f "${TMPFILE}"' EXIT
 TMPFILE=$(mktemp) || { echo "error: could not create temporary file" >&2; exit 1; }
-echo "$NEW_BODY" > "$TMPFILE"
+printf '%s\n' "$NEW_BODY" > "$TMPFILE"
 
 # Determine repo
 if ! REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null); then

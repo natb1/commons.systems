@@ -23,7 +23,7 @@ if [ -z "$BODY" ]; then
 fi
 
 # Extract between markers using sed
-STATE_BLOCK=$(echo "$BODY" | sed -n '/<!-- pr-workflow-state -->/,/<!-- \/pr-workflow-state -->/p')
+STATE_BLOCK=$(printf '%s\n' "$BODY" | sed -n '/<!-- pr-workflow-state -->/,/<!-- \/pr-workflow-state -->/p')
 
 if [ -z "$STATE_BLOCK" ]; then
   echo "error: no pr-workflow-state markers found in issue #${ISSUE_NUM}" >&2
@@ -31,7 +31,7 @@ if [ -z "$STATE_BLOCK" ]; then
 fi
 
 # Strip the HTML comment markers and fenced code block delimiters
-JSON=$(echo "$STATE_BLOCK" | sed '1d;$d' | sed '/^```/d')
+JSON=$(printf '%s\n' "$STATE_BLOCK" | sed '1d;$d;/^```/d')
 
 if [ -z "$JSON" ]; then
   echo "error: state block is empty in issue #${ISSUE_NUM}" >&2
@@ -39,9 +39,9 @@ if [ -z "$JSON" ]; then
 fi
 
 # Validate JSON
-if ! echo "$JSON" | jq empty 2>/dev/null; then
+if ! printf '%s\n' "$JSON" | jq empty 2>/dev/null; then
   echo "error: state block contains invalid JSON in issue #${ISSUE_NUM}" >&2
   exit 1
 fi
 
-echo "$JSON"
+printf '%s\n' "$JSON"

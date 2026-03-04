@@ -15,7 +15,7 @@ mkdir -p "$(git rev-parse --show-toplevel)/tmp"
 
 - Write final summary to `$(git rev-parse --show-toplevel)/tmp/{FILE_PREFIX}-final.txt`:
   ```
-  # {PHASE_NAME} Review - Complete
+  # {PHASE_NAME} Review - Complete ✓
 
   **Date**: [Current date]
   **Branch**: [branch name]

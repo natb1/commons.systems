@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Test suite for issue-state-read and issue-state-write scripts.
+# Usage: ./test-issue-state-scripts.sh
+# Requires: jq
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"

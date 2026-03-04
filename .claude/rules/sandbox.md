@@ -27,7 +27,7 @@ do not wait for a TLS error before setting it.
 `npx` downloads packages to `~/.npm/_cacache/`, which sandbox blocks:
 
 ```
-EROFS: read-only file system, open '/home/n8/.npm/_cacache/tmp/...'
+EROFS: read-only file system, open '~/.npm/_cacache/tmp/...'
 ```
 
 Use `dangerouslyDisableSandbox: true` on Bash calls that run `npx` for packages not

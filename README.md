@@ -34,24 +34,23 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 ### Cross Cutting Artifacts
 - [pr-workflow skill](.claude/skills/pr-workflow/SKILL.md): manages PR workflow using state stored in git commit log, github issues and PR.
 - [ref-memory-management](.claude/skills/ref-memory-management/SKILL.md): smart management of the conversation context using skills and ["plan mode"](https://code.claude.com/docs/en/how-claude-code-works#explore-before-implementing).
-- [compaction recovery hooks](.claude/hooks/): restores active skill and workflow state after auto-compaction
+- Issue-body-based state persistence via `issue-state-read` / `issue-state-write` scripts for cross-session workflow resumption
 
 ### PR Control Flow
 
 | Step | Name | Agent Pattern | Skill |
 |------|------|---------------|-------|
-| 1 | Requirement Definition | Augmented | [ready](.claude/skills/ready/SKILL.md) |
-| 2 | Dev Environment Setup | Delegated + QC | [worktree](.claude/skills/worktree/SKILL.md) |
-| 3 | Planning | Augmented | [ref-implement](.claude/skills/ref-implement/SKILL.md) |
-| 4 | Implementation | Delegated | [ref-implement](.claude/skills/ref-implement/SKILL.md) |
-| 5 | Unit Tests + Lint | Delegated | [ref-unit-test](.claude/skills/ref-unit-test/SKILL.md) |
-| 6 | PR Creation | Delegated | [ref-create-pr](.claude/skills/ref-create-pr/SKILL.md) |
-| 7 | Acceptance Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) |
-| 8 | Smoke Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) |
-| 9 | QA Review | Augmented | [ref-qa](.claude/skills/ref-qa/SKILL.md) |
-| 10 | Code Quality Review | Delegated + QC | [ref-code-quality](.claude/skills/ref-code-quality/SKILL.md) |
-| 11 | Security Review | Delegated + QC | [ref-security](.claude/skills/ref-security/SKILL.md) |
-| 12 | Merge | Augmented | [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) |
+| 1 | Prerequisite Check | Augmented | [ref-implement](.claude/skills/ref-implement/SKILL.md) |
+| 2 | Planning | Augmented | [ref-implement](.claude/skills/ref-implement/SKILL.md) |
+| 3 | Implementation | Delegated | [ref-implement](.claude/skills/ref-implement/SKILL.md) |
+| 4 | Unit Tests + Lint | Delegated | [ref-unit-test](.claude/skills/ref-unit-test/SKILL.md) |
+| 5 | PR Creation | Delegated | [ref-create-pr](.claude/skills/ref-create-pr/SKILL.md) |
+| 6 | Acceptance Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) |
+| 7 | Smoke Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) |
+| 8 | QA Review | Augmented | [ref-qa](.claude/skills/ref-qa/SKILL.md) |
+| 9 | Code Quality Review | Delegated + QC | [ref-code-quality](.claude/skills/ref-code-quality/SKILL.md) |
+| 10 | Security Review | Delegated + QC | [ref-security](.claude/skills/ref-security/SKILL.md) |
+| 11 | Merge | Augmented | [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) |
 
 **Agent patterns:** *Augmented* = human-in-the-loop, Claude assists. *Delegated* = Claude drives autonomously. *QC* = human quality gate before proceeding.
 
@@ -95,7 +94,7 @@ Workflow state is stored as JSON in the GitHub issue body via `issue-state-write
 
 #### Wiggum-Loop Pattern
 
-Six of eleven steps use the [wiggum-loop](.claude/skills/wiggum-loop/SKILL.md) pattern: an evaluate-iterate-terminate cycle where each iteration runs the step's action, evaluates the result, and either iterates (fix + retry) or terminates (advance to next step). Progress reports and termination summaries are posted as PR comments.
+Six of eleven steps use the [wiggum-loop](.claude/skills/ref-wiggum-loop/SKILL.md) pattern: an evaluate-iterate-terminate cycle where each iteration runs the step's action, evaluates the result, and either iterates (fix + retry) or terminates (advance to next step). Progress reports and termination summaries are posted as PR comments.
 
 ## CI/CD
 
