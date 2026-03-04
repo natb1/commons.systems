@@ -1,5 +1,5 @@
 ---
-name: ref-pr-workflow-unit-fork
+name: ref-unit-test
 description: Forked unit test loop — runs Step 4 in isolated context
 context: fork
 allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
@@ -45,7 +45,7 @@ Fix failures. Commit fixes (dangerouslyDisableSandbox). Increment iteration coun
 
 - Update issue state to step=5/phase=core:
   ```bash
-  issue-state-write <issue-number> '{"version":1,"step":5,"step_label":"PR Creation","phase":"core","active_skills":["ref-memory-management","ref-pr-workflow","ref-pr-workflow-core"]}'
+  issue-state-write <issue-number> '{"version":1,"step":5,"step_label":"PR Creation","phase":"core","active_skills":["ref-memory-management","ref-pr-workflow","ref-create-pr"]}'
   ```
 - Write final checkpoint:
   ```bash

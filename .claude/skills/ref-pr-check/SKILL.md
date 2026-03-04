@@ -1,5 +1,5 @@
 ---
-name: ref-pr-workflow-verify-fork
+name: ref-pr-check
 description: Forked verify loop — runs Steps 6 and 7 in isolated context
 context: fork
 allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
@@ -140,9 +140,9 @@ Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Re
   ```bash
   post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/smoke-final.txt"
   ```
-- Update issue state to step=8/phase=review:
+- Update issue state to step=8/phase=qa:
   ```bash
-  issue-state-write <issue-number> '{"version":1,"step":8,"step_label":"QA Review Loop","phase":"review","active_skills":["ref-memory-management","ref-pr-workflow","ref-pr-workflow-review"]}'
+  issue-state-write <issue-number> '{"version":1,"step":8,"step_label":"QA Review Loop","phase":"qa","active_skills":["ref-memory-management","ref-pr-workflow","ref-qa"]}'
   ```
 - Go to Return with status `"success"`.
 

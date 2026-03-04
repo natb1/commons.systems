@@ -1,49 +1,12 @@
 ---
-name: ref-pr-workflow-review
-description: PR workflow review phase — QA, code quality, and security review loops
+name: ref-code-quality
+description: Code quality review loop — 7 parallel review agents with wiggum-loop
 allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
-# PR Workflow — Review Phase
+# Code Quality Review Loop
 
-Steps 8, 9, and 10. Start at the step indicated by the router.
-
-## Step 8. QA Review Loop
-
-Start `/wiggum-loop` at Step 0 with these instruction sets:
-
-**Next step instructions:**
-- If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files):
-  1. Check if a QA server from a previous iteration is still running (look for the background task or a listening Vite port). If running, reuse its App URL. If not, start the QA server using `run-qa-server.sh <app-dir>` in background.
-  2. Parse the App URL from the script's output (current or previous run)
-  3. Run acceptance tests as a smoke check: `BASE_URL=<url> npx playwright test --config e2e/playwright.config.ts`
-  4. If smoke tests fail → fix issues and re-run before involving the user
-  5. Once smoke tests pass, proceed to write the QA testing plan
-- Write a comprehensive QA testing plan including:
-  - Key behaviors to verify
-  - Test steps for each behavior
-  - Edge cases to test
-  - Expected outcomes
-- Write the QA testing plan to `"$(git rev-parse --show-toplevel)/tmp/qa-plan-<N>.txt"`
-- Present the plan and App URL (if applicable) to the user
-- **CRITICAL**: The user performs the actual testing (not Claude)
-- Wait for the user to test and report results
-
-**Evaluation instructions:**
-- User reports "passed"/"approved" → **Terminate**
-- User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
-
-**Progress report instructions:**
-- Invoke `/pr-workflow-progress-report` with `FILE_PREFIX=qa PR_NUM=<pr-num> ITERATION=<N>`, using `qa-plan-<N>.txt` as the output file
-
-**Termination instructions:**
-- Stop the QA server (run-qa-server.sh) if started
-- Invoke `/pr-workflow-termination-summary` with `PHASE_NAME="QA" FILE_PREFIX=qa PR_NUM=<pr-num> NEXT_STEP=9 NEXT_PHASE=review CONCLUSION_TEXT="All test cases passed. PR approved for code quality review." EXTRA_HEADER_FIELDS="**Reviewer**: [User name from git config]\n**Tested By**: Human QA with Claude Code facilitation" EXTRA_SECTIONS="## QA Summary\n\n- Total test cycles: [N]\n- Key behaviors verified: [list]\n- Edge cases tested: [list]\n- Total issues found and resolved: [N]"`
-- Proceed to Step 9
-
-## Step 9. Code Quality Review Loop
-
-Start `/wiggum-loop` at Step 0 with these instruction sets:
+Step 9. Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
 - Launch 7 review tasks in parallel using the Task tool. Collect all returned results verbatim — do NOT summarize or paraphrase agent output:
@@ -99,9 +62,9 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Implement all low-priority required findings from the final evaluation
 - Commit the low-priority implementations
 - `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write final summary to `$(git rev-parse --show-toplevel)/tmp/codequality-final.txt` (header must be `# Code Quality Review - Complete ✓`):
+- Write final summary to `$(git rev-parse --show-toplevel)/tmp/codequality-final.txt` (header must be `# Code Quality Review - Complete`):
   ```
-  # Code Quality Review - Complete ✓
+  # Code Quality Review - Complete
 
   **Reviewer**: Claude Code (via /review skill + pr-review-toolkit agents)
   **Date**: [Current date]
@@ -142,25 +105,5 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```bash
   post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/codequality-final.txt"
   ```
-- Update state to step=10/phase=review via `issue-state-write`
+- Update state to step=10/phase=security via `issue-state-write`
 - Proceed to Step 10
-
-## Step 10. Security Review Loop
-
-Start `/wiggum-loop` at Step 0 with these instruction sets:
-
-**Next step instructions:**
-- Run `/security-review` in a background Task (`run_in_background: true`, exists even if not visible in skill list). Note the `output_file` path from the Task result.
-
-**Evaluation instructions:**
-- Present findings to user
-- User classifies each as: required, false positive, or out of scope
-- Any required findings → **Iterate**
-- No required findings → **Terminate**
-
-**Progress report instructions:**
-- Invoke `/pr-workflow-progress-report` with `FILE_PREFIX=security PR_NUM=<pr-num> ITERATION=<N>`
-
-**Termination instructions:**
-- Invoke `/pr-workflow-termination-summary` with `PHASE_NAME="Security" FILE_PREFIX=security PR_NUM=<pr-num> NEXT_STEP=11 NEXT_PHASE=core CONCLUSION_TEXT="[Final assessment and next steps]" EXTRA_HEADER_FIELDS="**Reviewer**: Claude Code (via /security-review skill)\n**Outcome**: [Summary of result]" EXTRA_SECTIONS="## User Classification Decisions\n\n[For each finding:]\n- Finding 1: [title] -> [required/false positive/out of scope] - [rationale]\n..."`
-- Return to router for dispatch to core phase (Step 11)

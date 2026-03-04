@@ -22,7 +22,7 @@ State schema:
   "step": 8,
   "step_label": "QA Review Loop",
   "phase": "review",
-  "active_skills": ["ref-memory-management", "ref-pr-workflow", "ref-pr-workflow-review"],
+  "active_skills": ["ref-memory-management", "ref-pr-workflow", "ref-qa"],
   "wiggum_step": 2,
   "wiggum_step_label": "Evaluate"
 }

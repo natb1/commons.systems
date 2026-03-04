@@ -30,9 +30,9 @@ Reference only. Do not execute this workflow until directed to do so (eg., by `/
 - No PR + no commits → step=2, phase=core
 - PR, no acceptance "Complete" → step=6, phase=verify
 - PR, acceptance done, no smoke "Complete" → step=7, phase=verify
-- PR, smoke done, no QA "Complete" → step=8, phase=review
-- PR, QA done, no code quality "Complete" → step=9, phase=review
-- PR, code quality done, no security "Complete" → step=10, phase=review
+- PR, smoke done, no QA "Complete" → step=8, phase=qa
+- PR, QA done, no code quality "Complete" → step=9, phase=code-quality
+- PR, code quality done, no security "Complete" → step=10, phase=security
 - All "Complete" → step=11, phase=core
 
 ## Dispatch
@@ -41,18 +41,30 @@ Re-invoke each skill listed in `active_skills` from the issue state that is not 
 
 | Step | Phase | Invoke |
 |---|---|---|
-| 1, 2, 3, 5, 11 | core | `/ref-pr-workflow-core` at Step N |
-| 4 | unit | `/ref-pr-workflow-unit-fork` (isolated) |
-| 6, 7 | verify | `/ref-pr-workflow-verify-fork` (isolated) |
-| 8, 9, 10 | review | `/ref-pr-workflow-review` at Step N |
+| 1, 2, 3 | core | `/ref-implement` at Step N |
+| 4 | unit | `/ref-unit-test` (isolated) |
+| 5 | core | `/ref-create-pr` |
+| 6, 7 | verify | `/ref-pr-check` (isolated) |
+| 8 | qa | `/ref-qa` at Step 8 |
+| 9 | code-quality | `/ref-code-quality` at Step 9 |
+| 10 | security | `/ref-security` at Step 10 |
+| 11 | core | (this skill, inline — see Step 11 below) |
 
 ## Fork Delegation (Steps 4, 6, 7)
 
 Steps 4, 6, and 7 are fully automated — invoke fork skills instead of in-thread phase skills:
-- Step 4 → `/ref-pr-workflow-unit-fork`
-- Steps 6, 7 → `/ref-pr-workflow-verify-fork`
+- Step 4 → `/ref-unit-test`
+- Steps 6, 7 → `/ref-pr-check`
 
 On fork result:
 - `"success"` → read updated issue state, proceed to next step
 - `"needs_user"` → read `tmp/<prefix>-subagent-state.json` for last checkpoint, present error to user
 - `"failure"` → read `tmp/<prefix>-subagent-state.json` for last checkpoint, present error to user
+
+## Step 11. Completion
+
+```bash
+gh pr ready <pr-num>
+```
+
+Prompt user to review and merge the PR.

@@ -1,12 +1,12 @@
 ---
-name: ref-pr-workflow-core
-description: PR workflow core phase — prerequisite check, planning, implementation, PR creation, completion
+name: ref-implement
+description: Prerequisite check, planning, and implementation — Steps 1, 2, 3
 allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
-# PR Workflow — Core Phase
+# PR Workflow — Implementation Phase
 
-Steps 1, 2, 3, 5, and 11. Start at the step indicated by the router.
+Steps 1, 2, and 3. Start at the step indicated by the router.
 
 ## Step 1. Prerequisite Check
 
@@ -45,32 +45,3 @@ Use the Task tool to launch parallel general-purpose subagents:
 All run concurrently with main implementation.
 
 On completion → update state to step=4/phase=unit via `issue-state-write`. Return to router for dispatch to unit phase.
-
-## Step 5. PR Creation
-
-Create a PR closing all implemented issues from the **Current PR Scope and Status** section:
-
-```bash
-gh pr create --draft --title "PR title" --body "$(cat <<'EOF'
-## Summary
-...
-
-Closes #<primary-issue>
-Closes #<related-issue-1>
-Closes #<related-issue-2>
-
-EOF
-)"
-```
-
-Include a separate `Closes #N` for each issue (primary + all implemented dependencies and sub-issues).
-
-On completion → update state to step=6/phase=verify via `issue-state-write`. Return to router for dispatch to verify phase.
-
-## Step 11. Completion
-
-```bash
-gh pr ready <pr-num>
-```
-
-Prompt user to review and merge the PR.
