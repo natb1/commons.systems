@@ -13,6 +13,8 @@ source "$SCRIPT_DIR/lib.sh"
 
 APP_NAME=$(get_app_name "$APP_DIR")
 
+cleanup_stale_hub
+
 detect_features "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
@@ -90,9 +92,10 @@ cleanup() {
     kill "$EMULATOR_PID" 2>/dev/null || true
     wait "$EMULATOR_PID" 2>/dev/null || true
   fi
+  cleanup_stale_hub
   rm -f "$TEMP_FIREBASE_JSON"
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 # Start Firebase emulators in background
 EMULATORS="hosting"

@@ -1,10 +1,12 @@
-name: {{.Title}} — Production Deploy
+name: Production Deploy
 
 on:
   pull_request:
     types: [closed]
     paths:
-      - "{{.AppName}}/**"
+      - "landing/**"
+      - "budget/**"
+      # SCAFFOLD MARKER: prod-deploy-paths - scaffold inserts new app paths above this line
       - "authutil/**"
       - "firebaseutil/**"
       - "firestoreutil/**"
@@ -17,44 +19,28 @@ permissions:
   contents: read
 
 jobs:
-  prod-deploy:
+  deploy-and-smoke:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: main
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: Authenticate with Firebase
         run: |
           CREDS_FILE=$(mktemp --suffix=.json)
-          echo '${{"{{"}} secrets.FIREBASE_SERVICE_ACCOUNT {{"}}"}}' > "$CREDS_FILE"
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$CREDS_FILE"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE" >> "$GITHUB_ENV"
           echo "CREDS_FILE=$CREDS_FILE" >> "$GITHUB_ENV"
-      - name: Deploy to production
-        run: .claude/skills/ref-pr-workflow/scripts/run-prod-deploy.sh {{.AppName}}
+      - name: Deploy to production and run smoke tests
+        run: .claude/skills/ref-pr-workflow/scripts/run-all-prod-deploy-smoke.sh
       - name: Cleanup credentials
         if: always()
         run: rm -f "$CREDS_FILE"
-
-  smoke-tests:
-    needs: prod-deploy
-    if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-        with:
-          ref: main
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "22"
-      - name: Run smoke tests
-        run: |
-          source .claude/skills/ref-pr-workflow/scripts/lib.sh
-          SITE=$(get_hosting_site "$(pwd)" {{.AppName}})
-          .claude/skills/ref-pr-workflow/scripts/run-smoke-tests.sh {{.AppName}} "https://${SITE}.web.app"
 
   cleanup-preview:
     if: github.event.pull_request.merged == true
@@ -63,17 +49,18 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           ref: main
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: Authenticate with Firebase
         run: |
           CREDS_FILE=$(mktemp --suffix=.json)
-          echo '${{"{{"}} secrets.FIREBASE_SERVICE_ACCOUNT {{"}}"}}' > "$CREDS_FILE"
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$CREDS_FILE"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE" >> "$GITHUB_ENV"
           echo "CREDS_FILE=$CREDS_FILE" >> "$GITHUB_ENV"
       - name: Cleanup preview resources
-        run: .claude/skills/ref-pr-workflow/scripts/run-cleanup-preview.sh {{.AppName}} "${{"{{"}} github.event.pull_request.number {{"}}"}}"
+        run: .claude/skills/ref-pr-workflow/scripts/run-all-cleanup-preview.sh "${{ github.event.pull_request.number }}"
       - name: Cleanup credentials
         if: always()
         run: rm -f "$CREDS_FILE"

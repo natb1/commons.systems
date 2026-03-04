@@ -187,39 +187,22 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 		}
 	}
 
-	// Remove app path trigger from consolidated unit-tests.yml
-	if dryRun {
-		fmt.Printf("[dry-run] Would remove %q path trigger from unit-tests.yml\n", appName)
-	} else {
-		fmt.Println("Removing path trigger from unit-tests.yml...")
-		if err := RemoveUnitTestsPath(repoRoot, appName); err != nil {
-			fmt.Fprintf(os.Stderr, "WARNING: failed to update unit-tests.yml: %v\n", err)
-			warnings++
-		}
-	}
-
-	// Remove per-app workflow files (pr-checks, prod-deploy)
-	workflowDir := filepath.Join(repoRoot, ".github", "workflows")
-	entries, err := os.ReadDir(workflowDir)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "WARNING: could not read workflow directory: %v\n", err)
-			warnings++
-		}
-	} else {
-		prefix := appName + "-"
-		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasPrefix(entry.Name(), prefix) {
-				if dryRun {
-					fmt.Printf("[dry-run] Would remove %s\n", entry.Name())
-				} else {
-					path := filepath.Join(workflowDir, entry.Name())
-					fmt.Printf("  Removing %s\n", entry.Name())
-					if err := os.Remove(path); err != nil {
-						fmt.Fprintf(os.Stderr, "WARNING: failed to remove %s: %v\n", entry.Name(), err)
-						warnings++
-					}
-				}
+	// Remove app path triggers from consolidated workflow files
+	for _, wf := range []struct {
+		name   string
+		remove func(string, string) error
+	}{
+		{"unit-tests.yml", RemoveUnitTestsPath},
+		{"pr-checks.yml", RemovePRChecksPath},
+		{"prod-deploy.yml", RemoveProdDeployPath},
+	} {
+		if dryRun {
+			fmt.Printf("[dry-run] Would remove %q path trigger from %s\n", appName, wf.name)
+		} else {
+			fmt.Printf("Removing path trigger from %s...\n", wf.name)
+			if err := wf.remove(repoRoot, appName); err != nil {
+				fmt.Fprintf(os.Stderr, "WARNING: failed to update %s: %v\n", wf.name, err)
+				warnings++
 			}
 		}
 	}

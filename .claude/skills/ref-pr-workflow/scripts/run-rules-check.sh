@@ -12,4 +12,4 @@ echo "Checking Firestore rules syntax..."
 npx firebase-tools emulators:exec \
   --only firestore \
   --project dummy \
-  -- echo "Firestore rules syntax OK"
+  'echo "Firestore rules syntax OK"'

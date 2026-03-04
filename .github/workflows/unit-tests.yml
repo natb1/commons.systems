@@ -8,6 +8,7 @@ on:
       - "landing/**"
       - "authutil/**"
       - "firestoreutil/**"
+      - "budget/**"
       # SCAFFOLD MARKER: app-paths - scaffold inserts new app paths above this line
       - "firebaseutil/**"
       - "style/**"
