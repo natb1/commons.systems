@@ -4,6 +4,16 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 
 > WIP: many of Nate's tools and POC apps are currently being migrated over from rumor-ml/commons.systems
 
+## Table of Contents
+
+- [Pre-requisites](#pre-requisites)
+- [Design Principles](#design-principles)
+- [Agentic Coding Workflow](#agentic-coding-workflow)
+  - [Cross Cutting Artifacts](#cross-cutting-artifacts)
+  - [PR Control Flow](#pr-control-flow)
+- [CI/CD](#cicd)
+- [Usage and Contributing](#usage-and-contributing)
+
 ## Pre-requisites
 
 - **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
@@ -21,23 +31,76 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 
 ## Agentic Coding Workflow
 
-## Cross Cutting Artifacts
+### Cross Cutting Artifacts
 - [pr-workflow skill](.claude/skills/pr-workflow/SKILL.md): manages PR workflow using state stored in git commit log, github issues and PR.
 - [ref-memory-management](.claude/skills/ref-memory-management/SKILL.md): smart management of the conversation context using skills and ["plan mode"](https://code.claude.com/docs/en/how-claude-code-works#explore-before-implementing).
 - [compaction recovery hooks](.claude/hooks/): restores active skill and workflow state after auto-compaction
-- [agent shell multiplexing #26](https://github.com/natb1/commons.systems/issues/26)
 
-## Workflow
+### PR Control Flow
+
 | Step | Agent Pattern | Artifacts |
 |------|--------------|-----------|
-| 1. Functional Requirement Definition & Prioritization | Augmented | [ready skill](.claude/skills/ready/SKILL.md) |
-| 2. Dev Environment Management | Delegated + QC | [worktree skill](.claude/skills/worktree/SKILL.md) [Declarative dev env #5](https://github.com/natb1/commons.systems/issues/5)  [app scaffolding #18](https://github.com/natb1/commons.systems/issues/18) |
-| 3. Implementation Planning | Delegated + QC | [planning skill #8](https://github.com/natb1/commons.systems/issues/8) [batching skill #9](https://github.com/natb1/commons.systems/issues/9) |
-| 4. Implementation | Delegated | [wiggum loop skill](./claude/skills/wiggup-loop/SKILL.md) [implementation skills #10](https://github.com/natb1/commons.systems/issues/10) [implementation tracking skill #20](https://github.com/natb1/commons.systems/issues/20) [unit testing skill #11](https://github.com/natb1/commons.systems/issues/11) [unit test tooling #16](https://github.com/natb1/commons.systems/issues/16) [acceptance testing skill #15](https://github.com/natb1/commons.systems/issues/15) [acceptance test tooling #17](https://github.com/natb1/commons.systems/issues/17) |
-| 5. QA (functional review of pull request) | Augmented | [QA CICD tooling #21](https://github.com/natb1/commons.systems/issues/21) [qa-prep skill #12](https://github.com/natb1/commons.systems/issues/12) [smoke test tooling #19](https://github.com/natb1/commons.systems/issues/19) |
-| 6. Code Quality Review | Delegated + QC | [pr review skills #13](https://github.com/natb1/commons.systems/issues/13) [out of scope tracking skill #14](https://github.com/natb1/commons.systems/issues/14) |
-| 7. Security Review | Delegated + QC | [security review skill #22](https://github.com/natb1/commons.systems/issues/22) |
-| 8. Merge | Augmented | [merge skill #23](https://github.com/natb1/commons.systems/issues/23) [Prod CICD tooling #24](https://github.com/natb1/commons.systems/issues/24) [smoke test tooling #19](https://github.com/natb1/commons.systems/issues/19) |
+| 1. Requirement Definition | Augmented | [ready](.claude/skills/ready/SKILL.md) |
+| 2. Dev Environment Setup | Delegated + QC | [worktree](.claude/skills/worktree/SKILL.md), [nix/](nix/), [scaffolding/](scaffolding/) |
+| 3. Planning | Augmented | [pr-workflow](.claude/skills/pr-workflow/SKILL.md) |
+| 4. Implementation | Delegated | [pr-workflow](.claude/skills/pr-workflow/SKILL.md), [wiggum-loop](.claude/skills/wiggum-loop/SKILL.md) |
+| 5. Unit Tests + Lint | Delegated | [pr-workflow](.claude/skills/pr-workflow/SKILL.md) |
+| 6. PR Creation + CI Verification | Delegated + QC | [pr-workflow](.claude/skills/pr-workflow/SKILL.md), [CI/CD](#cicd) |
+| 7. QA Review | Augmented | [pr-workflow](.claude/skills/pr-workflow/SKILL.md) |
+| 8. Code Quality Review | Delegated + QC | [pr-workflow](.claude/skills/pr-workflow/SKILL.md) |
+| 9. Security Review | Delegated + QC | [pr-workflow](.claude/skills/pr-workflow/SKILL.md) |
+| 10. Merge | Augmented | [pr-workflow](.claude/skills/pr-workflow/SKILL.md), [CI/CD](#cicd) |
+
+## CI/CD
+
+Four consolidated workflows handle all CI/CD. Change detection determines which apps to test and deploy.
+
+### Workflows
+
+| Trigger | Workflow | Jobs |
+|---------|----------|------|
+| Push to non-`main` branch | `unit-tests.yml` | `unit-tests`, `lint` |
+| PR opened/synchronized | `pr-checks.yml` | `acceptance`, `preview-and-smoke` |
+| PR merged to `main` | `prod-deploy.yml` | `deploy-and-smoke`, `cleanup-preview` |
+| Push `firestore.rules` to `main` | `firestore-deploy.yml` | `deploy-rules` |
+
+### Change detection
+
+`get-changed-apps.sh` determines which apps are affected by a change:
+
+- **Direct changes** to `<app>/**` mark that app
+- **Shared package changes** (e.g. `authutil/`) scan every app's `package.json` for `file:` references to the changed package and mark all matches
+- **Global triggers** (`firebase.json`, `firestore.rules`, CI scripts) mark all apps
+
+An "app" is any top-level directory containing both `package.json` and `package-lock.json`.
+
+### Script call chain
+
+Wrapper scripts delegate to per-app scripts:
+
+```
+run-all-acceptance-tests.sh
+  get-changed-apps.sh            -> <app1>, <app2>, ...
+  run-acceptance-tests.sh <app>     (emulators, seed, playwright)
+
+run-all-preview-deploy-smoke.sh <channel-id>
+  get-changed-apps.sh
+  run-preview-deploy.sh <app> <channel-id>   -> PREVIEW_URL
+  run-smoke-tests.sh <app> <url>
+
+run-all-prod-deploy-smoke.sh
+  get-changed-apps.sh --base HEAD~1
+  run-prod-deploy.sh <app>
+  run-smoke-tests.sh <app> https://<hosting-site>.web.app
+
+run-all-cleanup-preview.sh <pr-number>
+  get-changed-apps.sh --base HEAD~1
+  run-cleanup-preview.sh <app> <pr-number>
+```
+
+### Adding a new app
+
+The scaffold tool (`scaffolding/firebase/`) automatically registers new apps in all consolidated workflows via marker-based path insertion. No manual workflow edits are needed.
 
 ## Usage and Contributing
 <a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>

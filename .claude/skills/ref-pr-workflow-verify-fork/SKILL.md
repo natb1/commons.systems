@@ -81,7 +81,7 @@ Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Re
   ```
 - Update issue state to step=7/phase=verify:
   ```bash
-  issue-state-write <issue-number> '{"version":1,"step":7,"step_label":"Smoke Test Loop","phase":"verify"}'
+  issue-state-write <issue-number> '{"version":1,"step":7,"step_label":"Smoke Test Loop","phase":"verify","active_skills":["ref-memory-management","ref-pr-workflow"]}'
   ```
 - Reset iteration counter to 1. Proceed to Phase 2.
 
@@ -142,7 +142,7 @@ Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Re
   ```
 - Update issue state to step=8/phase=review:
   ```bash
-  issue-state-write <issue-number> '{"version":1,"step":8,"step_label":"QA Review Loop","phase":"review"}'
+  issue-state-write <issue-number> '{"version":1,"step":8,"step_label":"QA Review Loop","phase":"review","active_skills":["ref-memory-management","ref-pr-workflow","ref-pr-workflow-review"]}'
   ```
 - Go to Return with status `"success"`.
 

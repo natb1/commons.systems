@@ -22,7 +22,7 @@ Reference only. Do not execute this workflow until directed to do so (eg., by `/
 
 ## Resume Logic
 
-1. Run `issue-state-read <issue-number>`. If exit 0 → use `step` and `phase` from the JSON. Skip fallback.
+1. Run `issue-state-read <issue-number>`. If exit 0 → use `step`, `phase`, `active_skills`, and `wiggum_step` from the JSON. Skip fallback.
 2. If exit 1 → use fallback, then write fresh state via `issue-state-write`.
 
 **Fallback** (scan **Current PR Scope and Status** above):
@@ -37,7 +37,7 @@ Reference only. Do not execute this workflow until directed to do so (eg., by `/
 
 ## Dispatch
 
-Run `save-skill-state.sh skill ref-pr-workflow-<phase>`, then invoke the phase skill at the determined step:
+Re-invoke each skill listed in `active_skills` from the issue state that is not already active. Then invoke the phase skill at the determined step. If `wiggum_step` is present, the phase skill resumes the wiggum-loop at that step instead of starting from Step 0.
 
 | Step | Phase | Invoke |
 |---|---|---|

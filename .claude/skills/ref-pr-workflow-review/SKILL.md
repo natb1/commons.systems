@@ -8,8 +8,6 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 
 Steps 8, 9, and 10. Start at the step indicated by the router.
 
-Invoke `/ref-pr-workflow-loop` if not already active.
-
 ## Step 8. QA Review Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
@@ -36,17 +34,11 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
 
 **Progress report instructions:**
-- Use Template A (Progress Report) with `{FILE_PREFIX}=qa`, but use `qa-plan-<N>.txt` as the output file (from next step instructions above)
+- Invoke `/pr-workflow-progress-report` with `FILE_PREFIX=qa PR_NUM=<pr-num> ITERATION=<N>`, using `qa-plan-<N>.txt` as the output file
 
 **Termination instructions:**
 - Stop the QA server (run-qa-server.sh) if started
-- Use Template B (Termination Summary) with:
-  - `{PHASE_NAME}=QA`
-  - `{FILE_PREFIX}=qa`
-  - `{EXTRA_HEADER_FIELDS}=**Reviewer**: [User name from git config]\n**Tested By**: Human QA with Claude Code facilitation`
-  - `{EXTRA_SECTIONS}=## QA Summary\n\n- Total test cycles: [N]\n- Key behaviors verified: [list]\n- Edge cases tested: [list]\n- Total issues found and resolved: [N]`
-  - `{CONCLUSION_TEXT}=All test cases passed. PR approved for code quality review.`
-  - `{NEXT_STEP}=9`, `{NEXT_PHASE}=review`
+- Invoke `/pr-workflow-termination-summary` with `PHASE_NAME="QA" FILE_PREFIX=qa PR_NUM=<pr-num> NEXT_STEP=9 NEXT_PHASE=review CONCLUSION_TEXT="All test cases passed. PR approved for code quality review." EXTRA_HEADER_FIELDS="**Reviewer**: [User name from git config]\n**Tested By**: Human QA with Claude Code facilitation" EXTRA_SECTIONS="## QA Summary\n\n- Total test cycles: [N]\n- Key behaviors verified: [list]\n- Edge cases tested: [list]\n- Total issues found and resolved: [N]"`
 - Proceed to Step 9
 
 ## Step 9. Code Quality Review Loop
@@ -167,14 +159,8 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - No required findings → **Terminate**
 
 **Progress report instructions:**
-- Use Template A (Progress Report) with `{FILE_PREFIX}=security`
+- Invoke `/pr-workflow-progress-report` with `FILE_PREFIX=security PR_NUM=<pr-num> ITERATION=<N>`
 
 **Termination instructions:**
-- Use Template B (Termination Summary) with:
-  - `{PHASE_NAME}=Security`
-  - `{FILE_PREFIX}=security`
-  - `{EXTRA_HEADER_FIELDS}=**Reviewer**: Claude Code (via /security-review skill)\n**Outcome**: [Summary of result]`
-  - `{EXTRA_SECTIONS}=## User Classification Decisions\n\n[For each finding:]\n- Finding 1: [title] → [required/false positive/out of scope] - [rationale]\n...`
-  - `{CONCLUSION_TEXT}=[Final assessment and next steps]`
-  - `{NEXT_STEP}=11`, `{NEXT_PHASE}=core`
+- Invoke `/pr-workflow-termination-summary` with `PHASE_NAME="Security" FILE_PREFIX=security PR_NUM=<pr-num> NEXT_STEP=11 NEXT_PHASE=core CONCLUSION_TEXT="[Final assessment and next steps]" EXTRA_HEADER_FIELDS="**Reviewer**: Claude Code (via /security-review skill)\n**Outcome**: [Summary of result]" EXTRA_SECTIONS="## User Classification Decisions\n\n[For each finding:]\n- Finding 1: [title] -> [required/false positive/out of scope] - [rationale]\n..."`
 - Return to router for dispatch to core phase (Step 11)

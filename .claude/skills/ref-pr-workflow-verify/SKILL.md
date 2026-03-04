@@ -8,14 +8,12 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 
 Steps 6 and 7. Start at the step indicated by the router.
 
-Invoke `/ref-pr-workflow-loop` if not already active.
-
 ## Step 6. Acceptance Test Loop
 
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Use Template C (CI Monitoring) from `/ref-pr-workflow-loop`
+- Invoke `/pr-workflow-ci-monitor` with `BRANCH=<current branch>`
 
 **Evaluation instructions:**
 - All pass → **Terminate**
@@ -23,14 +21,10 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Infrastructure failures → present to user for resolution
 
 **Progress report instructions:**
-- Use Template A (Progress Report) with: `{FILE_PREFIX}=acceptance`
+- Invoke `/pr-workflow-progress-report` with `FILE_PREFIX=acceptance PR_NUM=<pr-num> ITERATION=<N>`
 
 **Termination instructions:**
-- Use Template B (Termination Summary) with:
-  - `{PHASE_NAME}=Acceptance Test`
-  - `{FILE_PREFIX}=acceptance`
-  - `{CONCLUSION_TEXT}=All acceptance tests passed. PR approved for QA review.`
-  - `{NEXT_STEP}=7`, `{NEXT_PHASE}=verify`
+- Invoke `/pr-workflow-termination-summary` with `PHASE_NAME="Acceptance Test" FILE_PREFIX=acceptance PR_NUM=<pr-num> NEXT_STEP=7 NEXT_PHASE=verify CONCLUSION_TEXT="All acceptance tests passed. PR approved for QA review."`
 - Proceed to Step 7
 
 ## Step 7. Smoke Test Loop
@@ -38,7 +32,7 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Use Template C (CI Monitoring) from `/ref-pr-workflow-loop`
+- Invoke `/pr-workflow-ci-monitor` with `BRANCH=<current branch>`
 
 **Evaluation instructions:**
 - All pass → **Terminate**
@@ -46,12 +40,8 @@ Start `/wiggum-loop` at Step 0 with these instruction sets:
 - Deploy failures → present to user for resolution
 
 **Progress report instructions:**
-- Use Template A (Progress Report) with: `{FILE_PREFIX}=smoke`
+- Invoke `/pr-workflow-progress-report` with `FILE_PREFIX=smoke PR_NUM=<pr-num> ITERATION=<N>`
 
 **Termination instructions:**
-- Use Template B (Termination Summary) with:
-  - `{PHASE_NAME}=Smoke Test`
-  - `{FILE_PREFIX}=smoke`
-  - `{CONCLUSION_TEXT}=Smoke tests passed. Preview deployment verified.`
-  - `{NEXT_STEP}=8`, `{NEXT_PHASE}=review`
+- Invoke `/pr-workflow-termination-summary` with `PHASE_NAME="Smoke Test" FILE_PREFIX=smoke PR_NUM=<pr-num> NEXT_STEP=8 NEXT_PHASE=review CONCLUSION_TEXT="Smoke tests passed. Preview deployment verified."`
 - Return to router for dispatch to review phase
