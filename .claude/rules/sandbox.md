@@ -10,6 +10,18 @@ Use `dangerouslyDisableSandbox: true` on Bash calls that write to the git index:
 
 Read-only git ops (`git log`, `git diff`, `git status`, `git show`) work without disabling sandbox.
 
+## gh CLI (GitHub API)
+
+`gh` uses the macOS Security framework for TLS certificate validation, which sandbox blocks:
+
+```
+tls: failed to verify certificate: x509: OSStatus -26276
+```
+
+Use `dangerouslyDisableSandbox: true` on **all** Bash calls that invoke `gh` directly or via scripts
+(e.g., `issue-state-read`, `issue-state-write`, `post-pr-comment.sh`). Apply this from the start —
+do not wait for a TLS error before setting it.
+
 ## npm cache writes
 
 `npx` downloads packages to `~/.npm/_cacache/`, which sandbox blocks:

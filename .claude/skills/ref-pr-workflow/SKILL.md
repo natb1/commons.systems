@@ -54,5 +54,5 @@ Steps 4, 6, and 7 are fully automated — invoke fork skills instead of in-threa
 
 On fork result:
 - `"success"` → read updated issue state, proceed to next step
-- `"needs_user"` → fall back to in-thread phase skill (`/ref-pr-workflow-unit` or `/ref-pr-workflow-verify`) at the failing step
+- `"needs_user"` → read `tmp/<prefix>-subagent-state.json` for last checkpoint, present error to user
 - `"failure"` → read `tmp/<prefix>-subagent-state.json` for last checkpoint, present error to user
