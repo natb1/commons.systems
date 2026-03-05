@@ -34,11 +34,11 @@ let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const INFO_PANEL_LINKS = [{ label: "Source", url: "https://github.com/natb1/commons.systems" }];
 
-function handleClick(action: () => Promise<void>, label: string): (e: Event) => void {
+function handleClick(action: () => void | Promise<void>, label: string): (e: Event) => void {
   return function (e: Event): void {
     e.preventDefault();
     const btn = e.currentTarget;
-    action().catch((err) => {
+    Promise.resolve(action()).catch((err) => {
       console.error(`${label} failed:`, err);
       if (btn instanceof HTMLElement) btn.textContent = `${label} failed — try again`;
     });
