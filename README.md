@@ -51,7 +51,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 | 8 | QA Review | Augmented | [ref-qa](.claude/skills/ref-qa/SKILL.md) | QA server |
 | 9 | Code Quality Review | Delegated + QC | [ref-code-quality](.claude/skills/ref-code-quality/SKILL.md) | |
 | 10 | Security Review | Delegated + QC | [ref-security](.claude/skills/ref-security/SKILL.md) | |
-| 11 | Merge | Augmented | [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) | |
+| 11 | Merge | Augmented | [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) | [continuous deployment](.claude/skills/ref-pr-workflow/run-prod-deploy.sh) |
 
 **Agent patterns:** *Augmented* = human-in-the-loop, Claude assists. *Delegated* = Claude drives autonomously. *QC* = human quality gate before proceeding.
 
