@@ -6,7 +6,7 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 
 # Code Quality Review Loop
 
-Step 9. Start `/wiggum-loop` at Step 0 with these instruction sets:
+Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
 - Launch 7 review tasks in parallel using the Task tool. Collect all returned results verbatim — do NOT summarize or paraphrase agent output:
