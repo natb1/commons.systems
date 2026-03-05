@@ -4,8 +4,11 @@ import { renderAbout } from "./pages/about.js";
 import { renderNav } from "./components/nav.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
-import { getUserGroups, type Group } from "./firestore.js";
+import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/authutil/groups";
+import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
+
+const getUserGroups = (user: User) => _getUserGroups(db, NAMESPACE, user);
 
 const nav = document.getElementById("nav")!;
 if (!nav) throw new Error("#nav element not found");

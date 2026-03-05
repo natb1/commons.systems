@@ -1,15 +1,14 @@
 import type { User } from "firebase/auth";
 import { escapeHtml } from "../escape-html.js";
-import { isAuthorized } from "../is-authorized.js";
 
-export function renderAdmin(user: User | null, skippedCount = 0): string {
+export function renderAdmin(user: User | null, isAdmin: boolean, skippedCount = 0): string {
   if (!user) {
     return `
       <h2>Admin</h2>
       <p>Sign in with your GitHub account to access admin features.</p>
     `;
   }
-  if (!isAuthorized(user)) {
+  if (!isAdmin) {
     return `
       <h2>Admin</h2>
       <p id="not-authorized">You are not authorized to access admin features.</p>

@@ -1,29 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mockGetAuth = vi.fn();
-const mockSignInWithRedirect = vi.fn();
-const mockGetRedirectResult = vi.fn();
-const mockFirebaseSignOut = vi.fn();
-const mockOnAuthStateChanged = vi.fn();
-const mockSetupAuthEmulator = vi.fn();
+const mockCreateFirebaseAuth = vi.fn();
 
-class MockGithubAuthProvider {}
-
-vi.mock("firebase/auth", () => ({
-  getAuth: (...args: unknown[]) => mockGetAuth(...args),
-  GithubAuthProvider: MockGithubAuthProvider,
-  signInWithRedirect: (...args: unknown[]) =>
-    mockSignInWithRedirect(...args),
-  getRedirectResult: (...args: unknown[]) =>
-    mockGetRedirectResult(...args),
-  signOut: (...args: unknown[]) => mockFirebaseSignOut(...args),
-  onAuthStateChanged: (...args: unknown[]) =>
-    mockOnAuthStateChanged(...args),
-}));
-
-vi.mock("@commons-systems/authutil/emulator-auth", () => ({
-  setupAuthEmulator: (...args: unknown[]) =>
-    mockSetupAuthEmulator(...args),
+vi.mock("@commons-systems/authutil/firebase-auth", () => ({
+  createFirebaseAuth: (...args: unknown[]) => mockCreateFirebaseAuth(...args),
 }));
 
 vi.mock("../src/firebase.js", () => ({
@@ -31,45 +11,35 @@ vi.mock("../src/firebase.js", () => ({
 }));
 
 describe("auth module", () => {
+  const mockResult = {
+    auth: { type: "mock-auth" },
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+    onAuthStateChanged: vi.fn(),
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
-    mockGetAuth.mockReturnValue({ type: "mock-auth" });
-    mockGetRedirectResult.mockResolvedValue(null);
-    mockSignInWithRedirect.mockResolvedValue(undefined);
+    mockCreateFirebaseAuth.mockReturnValue(mockResult);
   });
 
-  it("calls getRedirectResult on module load", async () => {
+  it("calls createFirebaseAuth with app", async () => {
     await import("../src/auth");
 
-    expect(mockGetRedirectResult).toHaveBeenCalledWith({ type: "mock-auth" });
-  });
-
-  it("exports auth from getAuth", async () => {
-    const { auth } = await import("../src/auth");
-
-    expect(auth).toEqual({ type: "mock-auth" });
-    expect(mockGetAuth).toHaveBeenCalledWith({ type: "mock-app" });
-  });
-
-  it("calls signInWithRedirect with a GithubAuthProvider on signIn", async () => {
-    const { signIn } = await import("../src/auth");
-
-    signIn();
-
-    expect(mockSignInWithRedirect).toHaveBeenCalledWith(
-      { type: "mock-auth" },
-      expect.any(MockGithubAuthProvider),
+    expect(mockCreateFirebaseAuth).toHaveBeenCalledWith(
+      { type: "mock-app" },
+      undefined,
     );
   });
 
-  it("calls firebaseSignOut on signOut", async () => {
-    mockFirebaseSignOut.mockResolvedValue(undefined);
-    const { signOut } = await import("../src/auth");
+  it("re-exports auth, signIn, signOut, onAuthStateChanged", async () => {
+    const mod = await import("../src/auth");
 
-    await signOut();
-
-    expect(mockFirebaseSignOut).toHaveBeenCalledWith({ type: "mock-auth" });
+    expect(mod.auth).toBe(mockResult.auth);
+    expect(mod.signIn).toBe(mockResult.signIn);
+    expect(mod.signOut).toBe(mockResult.signOut);
+    expect(mod.onAuthStateChanged).toBe(mockResult.onAuthStateChanged);
   });
 
   describe("when VITE_AUTH_EMULATOR_HOST is set", () => {
@@ -77,12 +47,12 @@ describe("auth module", () => {
       vi.stubEnv("VITE_AUTH_EMULATOR_HOST", "localhost:9099");
     });
 
-    it("calls setupAuthEmulator", async () => {
+    it("passes emulatorHost option", async () => {
       await import("../src/auth");
 
-      expect(mockSetupAuthEmulator).toHaveBeenCalledWith(
-        { type: "mock-auth" },
-        "localhost:9099",
+      expect(mockCreateFirebaseAuth).toHaveBeenCalledWith(
+        { type: "mock-app" },
+        { emulatorHost: "localhost:9099" },
       );
     });
   });
@@ -92,10 +62,13 @@ describe("auth module", () => {
       vi.stubEnv("VITE_AUTH_EMULATOR_HOST", "");
     });
 
-    it("does not call setupAuthEmulator", async () => {
+    it("passes undefined options", async () => {
       await import("../src/auth");
 
-      expect(mockSetupAuthEmulator).not.toHaveBeenCalled();
+      expect(mockCreateFirebaseAuth).toHaveBeenCalledWith(
+        { type: "mock-app" },
+        undefined,
+      );
     });
   });
 });

@@ -10,7 +10,13 @@ vi.mock("../src/pages/home.js", () => ({ renderHome: vi.fn().mockResolvedValue("
 vi.mock("../src/pages/about.js", () => ({ renderAbout: () => "<div>about</div>" }));
 vi.mock("../src/components/nav.js", () => ({ renderNav: () => "<nav>nav</nav>" }));
 vi.mock("../src/pages/home-hydrate.js", () => ({ hydrateTransactionTable: vi.fn() }));
-vi.mock("../src/firestore.js", () => ({ getUserGroups: vi.fn() }));
+vi.mock("@commons-systems/authutil/groups", () => ({
+  getUserGroups: vi.fn(),
+}));
+vi.mock("../src/firebase.js", () => ({
+  db: { type: "mock-firestore" },
+  NAMESPACE: "app/test",
+}));
 vi.mock("../src/auth.js", () => ({
   auth: {},
   signIn: vi.fn(),
@@ -22,7 +28,7 @@ vi.mock("../src/auth.js", () => ({
 document.body.innerHTML = '<div id="nav"></div><div id="app"></div>';
 
 type User = import("firebase/auth").User;
-type Group = import("../src/firestore").Group;
+type Group = import("@commons-systems/authutil/groups").Group;
 type AppState = import("../src/main").AppState;
 type AuthStateDeps = import("../src/main").AuthStateDeps;
 

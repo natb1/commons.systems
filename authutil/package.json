@@ -6,6 +6,8 @@
   "exports": {
     "./seed": "./src/seed.ts",
     "./emulator-auth": "./src/emulator-auth.ts",
+    "./firebase-auth": "./src/firebase-auth.ts",
+    "./groups": "./src/groups.ts",
     "./e2e/sign-in": "./e2e/sign-in.ts"
   },
   "peerDependencies": {
@@ -18,10 +20,12 @@
     "lint": "eslint src/"
   },
   "devDependencies": {
+    "@commons-systems/firestoreutil": "file:../firestoreutil",
     "@eslint/js": "^9.19.0",
     "@playwright/test": "1.57.0",
     "eslint": "^9.19.0",
     "firebase": "^12.9.0",
+    "happy-dom": "^17.4.4",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.22.0",
     "vitest": "^3.0.5"

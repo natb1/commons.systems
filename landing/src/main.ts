@@ -9,6 +9,8 @@ import { createRssBlobUrl } from "./feed.js";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { getPosts, type PostMeta } from "./firestore.js";
+import { isInGroup } from "@commons-systems/authutil/groups";
+import { db, NAMESPACE } from "./firebase.js";
 
 const nav = document.getElementById("nav");
 const app = document.getElementById("app");
@@ -117,7 +119,13 @@ if (app) {
           updateInfoPanel();
         },
       },
-      { path: "/admin", render: () => renderAdmin(currentUser, lastSkippedCount) },
+      {
+        path: "/admin",
+        render: async () => {
+          const admin = currentUser ? await isInGroup(db, NAMESPACE, currentUser, "admin") : false;
+          return renderAdmin(currentUser, admin, lastSkippedCount);
+        },
+      },
     ],
     { onNavigate: updateNav },
   );
