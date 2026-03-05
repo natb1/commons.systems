@@ -40,7 +40,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 
 | Step | Name | Agent Pattern | Skill | Tooling |
 |------|------|---------------|-------|---------|
-| 0 | Issue Grooming | Augmented | [ready](.claude/skills/ready/SKILL.md) | |
+| 0 | Issue Grooming | Augmented | [ref-ready](.claude/skills/ref-ready/SKILL.md) | |
 | 1 | Dev Env Management | Delegated | [worktree](.claude/skills/worktree/SKILL.md) | [nix](nix) |
 | 2 | Planning | Delegated + QC | [ref-implement](.claude/skills/ref-implement/SKILL.md) | Claude Code Planning Tool |
 | 3 | Implementation | Delegated | [ref-implement](.claude/skills/ref-implement/SKILL.md) | |
