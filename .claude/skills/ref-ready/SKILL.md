@@ -31,7 +31,26 @@ Detect input mode from `$INPUT`:
   gh issue view <sub-N> --json title,body,labels,assignees,projectItems,state
   ```
 
-  Store all fetched issues (parent + sub-issues) for evaluation.
+  Store all fetched issues (primary + sub-issues) for evaluation.
+
+  Then fetch parent issue (if this is a sub-issue):
+  ```bash
+  gh api "/repos/{owner}/{repo}/issues/<N>/parent" --jq '.number'
+  ```
+  If a parent exists, fetch its full content:
+  ```bash
+  gh issue view <parent-N> --json title,body,labels,assignees,projectItems,state
+  ```
+
+  Then fetch sibling issues (other sub-issues of the same parent):
+  ```bash
+  gh api "/repos/{owner}/{repo}/issues/<parent-N>/sub_issues" --jq '.[].number'
+  ```
+  For each sibling (excluding `<N>`), fetch content based on state:
+  - Open siblings: full content (`title,body,labels,assignees,projectItems,state`)
+  - Closed siblings: summary only (`title,number,state`)
+
+  > See `ref-memory-management` Issue Context Loading for the authoritative list of content types.
 
 - Otherwise → **description mode**: treat `$INPUT` as the issue body text. Prompt user for a title if not provided.
 

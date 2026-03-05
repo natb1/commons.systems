@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+')
+PARENT=$(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/parent" --jq '.number' 2>/dev/null) || true
+[[ ! "$PARENT" =~ ^[0-9]+$ ]] && exit 0
+for sib in $(gh api "/repos/{owner}/{repo}/issues/$PARENT/sub_issues" --jq '.[].number' 2>/dev/null); do
+  [ "$sib" = "$ISSUE_NUM" ] && continue
+  STATE=$(gh issue view "$sib" --json state --jq '.state')
+  if [ "$STATE" = "OPEN" ]; then
+    gh issue view "$sib" --json title,body,comments,number,state
+  else
+    gh issue view "$sib" --json title,number,state
+  fi
+done
