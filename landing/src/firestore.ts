@@ -42,7 +42,7 @@ function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null 
 
 export async function getPosts(user: User | null): Promise<GetPostsResult> {
   const path = nsCollectionPath(NAMESPACE, "posts");
-  const admin = user ? await isInGroup(db, NAMESPACE, user, "admin") : false;
+  const admin = await isInGroup(db, NAMESPACE, user, "admin");
   const q = admin
     ? query(collection(db, path), orderBy("publishedAt", "desc"))
     : query(collection(db, path), where("published", "==", true));

@@ -24,8 +24,11 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
 
 function firebaseAuthMessage(error: unknown, fallback: string): string {
   const code = (error as { code?: string })?.code;
-  if (code && code in AUTH_ERROR_MESSAGES) return AUTH_ERROR_MESSAGES[code];
-  if (code) console.warn("Unhandled Firebase auth error code:", code);
+  if (code) {
+    const message = AUTH_ERROR_MESSAGES[code];
+    if (message) return message;
+    console.warn("Unhandled Firebase auth error code:", code);
+  }
   return fallback;
 }
 
@@ -53,6 +56,13 @@ function showAuthError(message: string): void {
   });
 }
 
+/**
+ * Creates a Firebase auth instance configured with GitHub sign-in.
+ * Immediately calls getRedirectResult to handle the OAuth callback on
+ * page load (user returning from GitHub OAuth or emulator picker).
+ * Auth errors display a dismissible toast rather than throwing, to
+ * prevent unhandled rejections from blocking app initialization.
+ */
 export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptions): {
   auth: Auth;
   signIn(): void;

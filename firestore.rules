@@ -2,7 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Landing admin is determined by membership in the admin group
+    // Landing admin: members of the admin group can read unpublished posts
     function isLandingAdmin(env) {
       return request.auth != null
         && request.auth.uid in get(/databases/$(database)/documents/landing/$(env)/groups/admin).data.members;

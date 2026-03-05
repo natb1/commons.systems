@@ -122,7 +122,7 @@ if (app) {
       {
         path: "/admin",
         render: async () => {
-          const admin = currentUser ? await isInGroup(db, NAMESPACE, currentUser, "admin") : false;
+          const admin = await isInGroup(db, NAMESPACE, currentUser, "admin");
           return renderAdmin(currentUser, admin, lastSkippedCount);
         },
       },
