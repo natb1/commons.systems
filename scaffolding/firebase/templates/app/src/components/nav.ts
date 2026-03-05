@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { escapeHtml } from "../escape-html.js";
+import { escapeHtml } from "@commons-systems/htmlutil";
 
 export function renderNav(user: User | null): string {
   const auth = user

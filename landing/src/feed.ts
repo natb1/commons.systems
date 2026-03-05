@@ -1,4 +1,4 @@
-import { escapeHtml } from "./escape-html.js";
+import { escapeHtml } from "@commons-systems/htmlutil";
 import type { PostMeta } from "./firestore.js";
 import { isPublished } from "./post-types.js";
 
