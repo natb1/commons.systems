@@ -21,6 +21,6 @@ export function renderAdmin(user: User | null, isAdmin: boolean, skippedCount = 
   return `
     <h2>Admin</h2>
     ${warning}
-    <p>Signed in as <strong>${escapeHtml(user.displayName ?? "natb1")}</strong>.</p>
+    <p>Signed in as <strong>${escapeHtml(user.displayName ?? user.email ?? "Unknown")}</strong>.</p>
   `;
 }

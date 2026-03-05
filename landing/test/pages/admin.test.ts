@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 import { renderAdmin } from "../../src/pages/admin";
 import type { User } from "firebase/auth";
 
-function makeUser(overrides?: { displayName?: string | null }): User {
+function makeUser(overrides?: { displayName?: string | null; email?: string | null }): User {
   return {
     displayName: overrides?.displayName ?? null,
+    email: overrides?.email ?? "test@example.com",
     uid: "test-uid",
   } as unknown as User;
 }
@@ -36,9 +37,9 @@ describe("renderAdmin", () => {
     expect(html).toContain("&lt;script&gt;");
   });
 
-  it("falls back to 'natb1' when displayName is null", () => {
+  it("falls back to email when displayName is null", () => {
     const user = makeUser({ displayName: null });
     const html = renderAdmin(user, true);
-    expect(html).toContain("natb1");
+    expect(html).toContain("test@example.com");
   });
 });

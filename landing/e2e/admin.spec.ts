@@ -32,8 +32,8 @@ test.describe("admin", () => {
     await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
   });
 
-  // The seed user (seeds/auth.ts) is in the admin group, so draft posts
-  // should be visible on the home page after sign-in.
+  // The seed user (seeds/auth.ts) is a member of the admin group
+  // (seeds/firestore.ts), so draft posts should be visible after sign-in.
 
   test("[draft] badge visible for admin", async ({
     page,

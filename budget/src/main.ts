@@ -17,7 +17,8 @@ if (!app) throw new Error("#app element not found");
 
 export type AppState =
   | { user: null; groups: readonly []; groupError: false }
-  | { user: User; groups: Group[]; groupError: boolean };
+  | { user: User; groups: Group[]; groupError: false }
+  | { user: User; groups: readonly []; groupError: true };
 
 let state: AppState = { user: null, groups: [], groupError: false };
 

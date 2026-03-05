@@ -7,7 +7,7 @@ import type { Transaction, Group } from "../src/firestore.js";
 /** Seed groups include `members` (used in queries and security rules, not mapped to the client Group type) */
 type GroupSeedData = Omit<Group, "id"> & { members: string[] };
 
-/** Seed transactions use Date instead of Timestamp and include `memberUids` (used by security rules, not mapped to the client Transaction type) */
+/** Seed transactions use Date instead of Timestamp and add `memberUids` for security rules (not present in the client Transaction type) */
 type TransactionSeedData = Omit<Transaction, "id" | "timestamp"> & {
   timestamp: Date;
   memberUids: string[];

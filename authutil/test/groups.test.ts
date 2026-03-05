@@ -57,12 +57,13 @@ describe("getUserGroups", () => {
     expect(groups).toEqual([]);
   });
 
-  it("throws TypeError for non-string group name", async () => {
+  it("throws DataIntegrityError for non-string group name", async () => {
     mockGetDocs.mockResolvedValue({
       docs: [{ id: "bad", data: () => ({ name: 123, members: ["user-123"] }) }],
     });
 
-    await expect(getUserGroups(mockDb, "app/test", mockUser)).rejects.toThrow(TypeError);
+    const { DataIntegrityError } = await import("../src/errors");
+    await expect(getUserGroups(mockDb, "app/test", mockUser)).rejects.toThrow(DataIntegrityError);
   });
 });
 
