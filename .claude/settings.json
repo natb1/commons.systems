@@ -1,6 +1,15 @@
 {
   "permissions": {
     "allow": [
+      "Skill(ref-memory-management)",
+      "Skill(ref-unit-test)",
+      "Skill(ref-create-pr)",
+      "Skill(ref-pr-check)",
+      "Skill(ref-qa)",
+      "Skill(ref-code-quality)",
+      "Skill(ref-security)",
+      "Skill(pr-workflow-termination-summary)",
+      "Skill(pr-workflow-progress-report)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
@@ -8,6 +17,7 @@
       "Bash(git merge:*)",
       "Bash(gh issue view:*)",
       "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
       "Bash(gh api /repos/*/issues/*:*)",
       "Bash(gh api repos/*/issues/*:*)",
       "Bash(.claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh:*)",
@@ -32,6 +42,8 @@
       "Bash(gh run view:*)",
       "Bash(gh issue list:*)",
       "Bash(ls:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
       "Bash(find:*)"
     ]
   },

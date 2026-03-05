@@ -20,8 +20,8 @@ function groupByYearMonth(
   const grouped = new Map<number, Map<number, PublishedPost[]>>();
   for (const post of published) {
     const date = new Date(post.publishedAt);
-    const year = date.getFullYear();
-    const month = date.getMonth();
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth();
     if (!grouped.has(year)) grouped.set(year, new Map());
     const months = grouped.get(year)!;
     if (!months.has(month)) months.set(month, []);
@@ -74,7 +74,7 @@ function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string 
   const sortedYears = [...grouped.keys()].sort((a, b) => b - a);
   const yearBlocks = sortedYears
     .map((year) =>
-      renderYearBlock(year, grouped.get(year)!, now.getFullYear(), now.getMonth()),
+      renderYearBlock(year, grouped.get(year)!, now.getUTCFullYear(), now.getUTCMonth()),
     )
     .join("");
 

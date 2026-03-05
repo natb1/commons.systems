@@ -23,18 +23,19 @@ test.describe("admin", () => {
     await expect(page.locator("#sign-in")).toBeVisible();
   });
 
-  test("after sign-in, non-natb1 user sees not-authorized on admin", async ({ page }) => {
+  test("after sign-in, admin group member sees admin page", async ({ page }) => {
     await page.goto("/");
     await signIn(page);
     await page.goto("/#/admin");
     await expect(page.locator("#sign-in")).not.toBeVisible();
-    await expect(page.locator("#not-authorized")).toBeVisible();
+    await expect(page.locator("#not-authorized")).not.toBeAttached();
+    await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
   });
 
-  // The seed user (seeds/auth.ts) is not natb1, so these tests would need a
-  // natb1 seed to verify admin-only behavior.
+  // The seed user (seeds/auth.ts) is a member of the admin group
+  // (seeds/firestore.ts), so draft posts should be visible after sign-in.
 
-  test.skip("[draft] badge visible for admin (aspirational - requires natb1 emulator user)", async ({
+  test("[draft] badge visible for admin", async ({
     page,
   }) => {
     await page.goto("/");
@@ -43,7 +44,7 @@ test.describe("admin", () => {
     await expect(page.locator("#posts")).toContainText("[draft]");
   });
 
-  test.skip("home page shows draft posts after sign-in as natb1 (aspirational - requires natb1 emulator user)", async ({
+  test("home page shows draft posts after sign-in as admin", async ({
     page,
   }) => {
     await page.goto("/");

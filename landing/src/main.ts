@@ -9,6 +9,8 @@ import { createRssBlobUrl } from "./feed.js";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { getPosts, type PostMeta } from "./firestore.js";
+import { isInGroup } from "@commons-systems/authutil/groups";
+import { db, NAMESPACE } from "./firebase.js";
 
 const nav = document.getElementById("nav");
 const app = document.getElementById("app");
@@ -32,11 +34,11 @@ let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const INFO_PANEL_LINKS = [{ label: "Source", url: "https://github.com/natb1/commons.systems" }];
 
-function handleClick(action: () => Promise<void>, label: string): (e: Event) => void {
+function handleClick(action: () => void | Promise<void>, label: string): (e: Event) => void {
   return function (e: Event): void {
     e.preventDefault();
     const btn = e.currentTarget;
-    action().catch((err) => {
+    Promise.resolve(action()).catch((err) => {
       console.error(`${label} failed:`, err);
       if (btn instanceof HTMLElement) btn.textContent = `${label} failed — try again`;
     });
@@ -117,7 +119,13 @@ if (app) {
           updateInfoPanel();
         },
       },
-      { path: "/admin", render: () => renderAdmin(currentUser, lastSkippedCount) },
+      {
+        path: "/admin",
+        render: async () => {
+          const admin = await isInGroup(db, NAMESPACE, currentUser, "admin");
+          return renderAdmin(currentUser, admin, lastSkippedCount);
+        },
+      },
     ],
     { onNavigate: updateNav },
   );

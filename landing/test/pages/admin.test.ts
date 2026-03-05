@@ -1,46 +1,45 @@
 import { describe, it, expect } from "vitest";
 import { renderAdmin } from "../../src/pages/admin";
-import { makeUser } from "../helpers/make-user";
+import type { User } from "firebase/auth";
+
+function makeUser(overrides?: { displayName?: string | null; email?: string | null }): User {
+  return {
+    displayName: overrides?.displayName ?? null,
+    email: overrides?.email ?? "test@example.com",
+    uid: "test-uid",
+  } as unknown as User;
+}
 
 describe("renderAdmin", () => {
   it("returns sign-in prompt when user is null", () => {
-    const html = renderAdmin(null);
+    const html = renderAdmin(null, false);
     expect(html).toContain("Sign in with your GitHub account");
   });
 
-  it("returns not-authorized message for non-natb1 user", () => {
-    const user = makeUser({ screenName: "other", providerDisplayName: "other-name" });
-    const html = renderAdmin(user);
+  it("returns not-authorized message for non-admin user", () => {
+    const user = makeUser();
+    const html = renderAdmin(user, false);
     expect(html).toContain("not authorized");
     expect(html).toContain('id="not-authorized"');
   });
 
-  it("returns admin content when authorized via screenName", () => {
-    const user = makeUser({ screenName: "natb1", displayName: "Nat B" });
-    const html = renderAdmin(user);
+  it("returns admin content when isAdmin is true", () => {
+    const user = makeUser({ displayName: "Nat B" });
+    const html = renderAdmin(user, true);
     expect(html).toContain("Signed in as");
     expect(html).toContain("Nat B");
   });
 
-  it("returns admin content when authorized via providerData displayName", () => {
-    const user = makeUser({ providerDisplayName: "natb1", displayName: "Nat" });
-    const html = renderAdmin(user);
-    expect(html).toContain("Signed in as");
-  });
-
   it("escapes displayName containing HTML", () => {
-    const user = makeUser({
-      screenName: "natb1",
-      displayName: '<script>alert("xss")</script>',
-    });
-    const html = renderAdmin(user);
+    const user = makeUser({ displayName: '<script>alert("xss")</script>' });
+    const html = renderAdmin(user, true);
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
   });
 
-  it("falls back to 'natb1' when displayName is null", () => {
-    const user = makeUser({ screenName: "natb1", displayName: null });
-    const html = renderAdmin(user);
-    expect(html).toContain("natb1");
+  it("falls back to email when displayName is null", () => {
+    const user = makeUser({ displayName: null });
+    const html = renderAdmin(user, true);
+    expect(html).toContain("test@example.com");
   });
 });

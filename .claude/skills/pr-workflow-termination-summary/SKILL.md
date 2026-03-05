@@ -7,7 +7,7 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 # Termination Summary
 
 Args: `PHASE_NAME=<x> FILE_PREFIX=<x> PR_NUM=<n> NEXT_STEP=<n> NEXT_PHASE=<x> CONCLUSION_TEXT=<text>`
-Optional args: `EXTRA_HEADER_FIELDS=<text> EXTRA_SECTIONS=<text>`
+Optional args: `EXTRA_HEADER_FIELDS=<text> EXTRA_SECTIONS=<text> ACTIVE_SKILLS='["skill1","skill2"]'`
 
 ```bash
 mkdir -p "$(git rev-parse --show-toplevel)/tmp"
@@ -38,4 +38,4 @@ mkdir -p "$(git rev-parse --show-toplevel)/tmp"
   ```bash
   post-pr-comment.sh {PR_NUM} "$(git rev-parse --show-toplevel)/tmp/{FILE_PREFIX}-final.txt"
   ```
-- Update issue state to step={NEXT_STEP}/phase={NEXT_PHASE} via `issue-state-write`
+- Update issue state to step={NEXT_STEP}/phase={NEXT_PHASE} via `issue-state-write`. If `ACTIVE_SKILLS` is provided, include it as the `active_skills` value in the state JSON.

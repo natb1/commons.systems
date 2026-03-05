@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { makeUser } from "./helpers/make-user";
 
 const mockGetDocs = vi.fn();
 const mockCollection = vi.fn();
 const mockQuery = vi.fn();
 const mockOrderBy = vi.fn();
 const mockWhere = vi.fn();
+const mockIsInGroup = vi.fn();
 
 vi.mock("firebase/firestore", () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
@@ -15,12 +15,17 @@ vi.mock("firebase/firestore", () => ({
   where: (...args: unknown[]) => mockWhere(...args),
 }));
 
+vi.mock("@commons-systems/authutil/groups", () => ({
+  isInGroup: (...args: unknown[]) => mockIsInGroup(...args),
+}));
+
 vi.mock("../src/firebase.js", () => ({
   db: { type: "mock-firestore" },
   NAMESPACE: "landing/test",
 }));
 
 import { getPosts } from "../src/firestore";
+import type { User } from "firebase/auth";
 
 const publishedPost = {
   id: "hello-world",
@@ -42,9 +47,8 @@ const draftPost = {
   }),
 };
 
-const natb1UserByScreenName = makeUser({ screenName: "natb1" });
-const natb1UserByProviderData = makeUser({ providerDisplayName: "natb1" });
-const otherUser = makeUser({ screenName: "other", providerDisplayName: "other-name" });
+const adminUser = { uid: "admin-uid" } as User;
+const regularUser = { uid: "regular-uid" } as User;
 
 describe("getPosts", () => {
   beforeEach(() => {
@@ -53,6 +57,7 @@ describe("getPosts", () => {
     mockOrderBy.mockReturnValue("mock-order");
     mockWhere.mockReturnValue("mock-where");
     mockQuery.mockReturnValue("mock-query");
+    mockIsInGroup.mockResolvedValue(false);
   });
 
   it("queries the correct namespaced collection path", async () => {
@@ -76,17 +81,22 @@ describe("getPosts", () => {
   });
 
   it("orders results by publishedAt for admin", async () => {
+    mockIsInGroup.mockResolvedValue(true);
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getPosts(natb1UserByScreenName);
+    await getPosts(adminUser);
 
+    expect(mockIsInGroup).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "landing/test",
+      adminUser,
+      "admin",
+    );
     expect(mockOrderBy).toHaveBeenCalledWith("publishedAt", "desc");
     expect(mockWhere).not.toHaveBeenCalled();
   });
 
   it("returns only published posts when user is null", async () => {
-    // Non-admin query uses where("published","==",true), so Firestore
-    // only returns published docs — mock reflects server-side filtering
     mockGetDocs.mockResolvedValue({ docs: [publishedPost] });
 
     const { posts } = await getPosts(null);
@@ -96,28 +106,20 @@ describe("getPosts", () => {
     expect(posts[0].published).toBe(true);
   });
 
-  it("returns all posts including drafts for natb1 user identified by screenName", async () => {
+  it("returns all posts including drafts for admin user", async () => {
+    mockIsInGroup.mockResolvedValue(true);
     mockGetDocs.mockResolvedValue({ docs: [publishedPost, draftPost] });
 
-    const { posts } = await getPosts(natb1UserByScreenName);
+    const { posts } = await getPosts(adminUser);
 
     expect(posts).toHaveLength(2);
   });
 
-  it("returns all posts including drafts for natb1 user identified by providerData displayName", async () => {
-    mockGetDocs.mockResolvedValue({ docs: [publishedPost, draftPost] });
-
-    const { posts } = await getPosts(natb1UserByProviderData);
-
-    expect(posts).toHaveLength(2);
-  });
-
-  it("returns only published posts for a non-natb1 signed-in user", async () => {
-    // Non-admin query uses where("published","==",true), so Firestore
-    // only returns published docs — mock reflects server-side filtering
+  it("returns only published posts for a non-admin signed-in user", async () => {
+    mockIsInGroup.mockResolvedValue(false);
     mockGetDocs.mockResolvedValue({ docs: [publishedPost] });
 
-    const { posts } = await getPosts(otherUser);
+    const { posts } = await getPosts(regularUser);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].id).toBe("hello-world");
@@ -140,8 +142,6 @@ describe("getPosts", () => {
   });
 
   it("returns empty array when there are no published posts and user is null", async () => {
-    // Firestore where("published","==",true) returns nothing when
-    // all docs are drafts
     mockGetDocs.mockResolvedValue({ docs: [] });
 
     const { posts } = await getPosts(null);
@@ -177,6 +177,7 @@ describe("getPosts", () => {
   });
 
   it("filters out documents with missing title", async () => {
+    mockIsInGroup.mockResolvedValue(true);
     const noTitle = {
       id: "no-title",
       data: () => ({ published: true, publishedAt: null, filename: "f.md" }),
@@ -184,7 +185,7 @@ describe("getPosts", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [publishedPost, noTitle] });
 
-    const { posts, skippedCount } = await getPosts(natb1UserByScreenName);
+    const { posts, skippedCount } = await getPosts(adminUser);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].id).toBe("hello-world");
@@ -197,6 +198,7 @@ describe("getPosts", () => {
   });
 
   it("filters out documents with missing filename", async () => {
+    mockIsInGroup.mockResolvedValue(true);
     const noFilename = {
       id: "no-filename",
       data: () => ({ title: "Title", published: true, publishedAt: null }),
@@ -204,7 +206,7 @@ describe("getPosts", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [noFilename] });
 
-    const { posts, skippedCount } = await getPosts(natb1UserByScreenName);
+    const { posts, skippedCount } = await getPosts(adminUser);
 
     expect(posts).toHaveLength(0);
     expect(skippedCount).toBe(1);
@@ -213,6 +215,7 @@ describe("getPosts", () => {
   });
 
   it("treats non-boolean published as false", async () => {
+    mockIsInGroup.mockResolvedValue(true);
     const badPublished = {
       id: "bad-pub",
       data: () => ({
@@ -224,13 +227,14 @@ describe("getPosts", () => {
     };
     mockGetDocs.mockResolvedValue({ docs: [badPublished] });
 
-    const { posts } = await getPosts(natb1UserByScreenName);
+    const { posts } = await getPosts(adminUser);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].published).toBe(false);
   });
 
   it("filters out published posts with invalid publishedAt date", async () => {
+    mockIsInGroup.mockResolvedValue(true);
     const invalidDate = {
       id: "bad-date",
       data: () => ({
@@ -243,7 +247,7 @@ describe("getPosts", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [invalidDate] });
 
-    const { posts, skippedCount } = await getPosts(natb1UserByScreenName);
+    const { posts, skippedCount } = await getPosts(adminUser);
 
     expect(posts).toHaveLength(0);
     expect(skippedCount).toBe(1);
@@ -255,6 +259,7 @@ describe("getPosts", () => {
   });
 
   it("filters out published posts without publishedAt date", async () => {
+    mockIsInGroup.mockResolvedValue(true);
     const badPublished = {
       id: "published-no-date",
       data: () => ({
@@ -267,7 +272,7 @@ describe("getPosts", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [badPublished] });
 
-    const { posts, skippedCount } = await getPosts(natb1UserByScreenName);
+    const { posts, skippedCount } = await getPosts(adminUser);
 
     expect(posts).toHaveLength(0);
     expect(skippedCount).toBe(1);

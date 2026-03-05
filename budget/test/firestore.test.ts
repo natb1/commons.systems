@@ -29,43 +29,7 @@ vi.mock("../src/firebase.js", () => ({
 }));
 
 import { Timestamp } from "firebase/firestore";
-import { getTransactions, getUserGroups, updateTransaction } from "../src/firestore";
-
-describe("getUserGroups", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockCollection.mockReturnValue("mock-collection-ref");
-    mockQuery.mockReturnValue("mock-query");
-    mockWhere.mockReturnValue("mock-where");
-  });
-
-  it("returns all groups sorted by name", async () => {
-    mockGetDocs.mockResolvedValue({
-      empty: false,
-      docs: [
-        { id: "work", data: () => ({ name: "work", members: ["user-123"] }) },
-        { id: "household", data: () => ({ name: "household", members: ["user-123"] }) },
-      ],
-    });
-
-    const user = { uid: "user-123" } as import("firebase/auth").User;
-    const groups = await getUserGroups(user);
-
-    expect(groups).toEqual([
-      { id: "household", name: "household" },
-      { id: "work", name: "work" },
-    ]);
-  });
-
-  it("returns empty array when user has no groups", async () => {
-    mockGetDocs.mockResolvedValue({ empty: true, docs: [] });
-
-    const user = { uid: "user-456" } as import("firebase/auth").User;
-    const groups = await getUserGroups(user);
-
-    expect(groups).toEqual([]);
-  });
-});
+import { getTransactions, updateTransaction } from "../src/firestore";
 
 describe("getTransactions", () => {
   beforeEach(() => {

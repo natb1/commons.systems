@@ -1,7 +1,8 @@
 import type { User } from "firebase/auth";
 import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "../escape-html.js";
-import { getTransactions, type Group, type Transaction } from "../firestore.js";
+import type { Group } from "@commons-systems/authutil/groups";
+import { getTransactions, type Transaction } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";
 
 function formatTimestamp(ts: Timestamp | null): string {

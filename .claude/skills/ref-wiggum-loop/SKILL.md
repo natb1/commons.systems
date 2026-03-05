@@ -59,4 +59,13 @@ Return to Step 0. (Step 0, not Step 1: each iteration requires a fresh plan for 
 
 ## Step 4. Terminate
 
-Execute termination instructions. Return control to caller.
+**If termination instructions include implementation work** (code changes, file edits), enter plan mode first. Plan must include:
+- Findings to implement (from the evaluation written in Step 2)
+- Steps to address each finding
+- Commit instructions
+
+Execute plan, then continue with remaining termination instructions (summary, PR comment, state update).
+
+**If termination instructions are reporting-only** (no code changes), execute them directly.
+
+Return control to caller.
