@@ -1,20 +1,8 @@
 import { collection, doc, getDocs, query, updateDoc, where, Timestamp } from "firebase/firestore";
-import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
-
-/**
- * Client-side view of a Firestore group document.
- * The groups collection stores a `members` array (used for access control in
- * security rules and the getUserGroups query), but the client only needs
- * the group's id and display name, so `members` is not mapped here.
- */
-export interface Group {
-  readonly id: string;
-  readonly name: string;
-}
 
 export interface Transaction {
   readonly id: string;
@@ -71,15 +59,6 @@ function optionalString(value: unknown, field: string): string | null {
     throw new DataIntegrityError(`Expected string or null for ${field}, got ${typeof value}`);
   }
   return value;
-}
-
-export async function getUserGroups(user: User): Promise<Group[]> {
-  const path = nsCollectionPath(NAMESPACE, "groups");
-  const q = query(collection(db, path), where("members", "array-contains", user.uid));
-  const snapshot = await getDocs(q);
-  return snapshot.docs
-    .map((docSnap) => ({ id: docSnap.id, name: requireString(docSnap.data().name, "groups.name") }))
-    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function asTimestamp(value: unknown): Timestamp | null {

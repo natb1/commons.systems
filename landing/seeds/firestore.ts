@@ -3,6 +3,15 @@ import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
+      name: "groups",
+      documents: [
+        {
+          id: "admin",
+          data: { name: "admin", members: ["test-github-user"] },
+        },
+      ],
+    },
+    {
       name: "posts",
       documents: [
         {

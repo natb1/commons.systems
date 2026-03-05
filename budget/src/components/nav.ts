@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import type { Group } from "../firestore.js";
+import type { Group } from "@commons-systems/authutil/groups";
 import { escapeHtml } from "../escape-html.js";
 
 function renderGroupSelect(groups: readonly Group[], selectedGroupId: string | null): string {

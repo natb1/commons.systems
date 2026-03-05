@@ -4,17 +4,23 @@ import { renderAbout } from "./pages/about.js";
 import { renderNav } from "./components/nav.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
-import { getUserGroups, type Group } from "./firestore.js";
+import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/authutil/groups";
+import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
 
-const nav = document.getElementById("nav")!;
+function getUserGroups(user: User): Promise<Group[]> {
+  return _getUserGroups(db, NAMESPACE, user);
+}
+
+const nav = document.getElementById("nav");
 if (!nav) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
 export type AppState =
   | { user: null; groups: readonly []; groupError: false }
-  | { user: User; groups: Group[]; groupError: boolean };
+  | { user: User; groups: Group[]; groupError: false }
+  | { user: User; groups: readonly []; groupError: true };
 
 let state: AppState = { user: null, groups: [], groupError: false };
 

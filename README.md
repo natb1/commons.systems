@@ -26,7 +26,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 - Augmented workflows focus on requirements management and design, while delegated workflows focus on implementation.
 - Delegated workflows have well defined break points for human quality control (QC).
 - Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts (system instructions, hooks, sub-agents, agent teams, etc.) due to portability and ease of maintenance.
-- Separate "reference" skills from "task" skills with "ref-" naming convention. This enables more powerful (sub-agent-like) context management for skills when combined with [ref-memory-management](.claude/skills/ref-memory-management/SKILL.md) skill.
+- Keep [focused context windows](.claude/skills/ref-memory-management/SKILL.md) with frequent planning and QC steps, using workflows with [persisted state](.claude/skills/ref-pr-workflow/SKILL.md) so skills and PR context reload cleanly across sessions.
 - Conversation scope is persisted in git commit log, github issues and PR using [dynamic content](https://code.claude.com/docs/en/skills#inject-dynamic-context) in [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) skills.
 
 ## Agentic Coding Workflow

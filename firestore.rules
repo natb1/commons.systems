@@ -2,9 +2,19 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Published posts are public; unpublished posts require authentication
+    // Landing admin: members of the admin group can read unpublished posts
+    function isLandingAdmin(env) {
+      return request.auth != null
+        && request.auth.uid in get(/databases/$(database)/documents/landing/$(env)/groups/admin).data.members;
+    }
+
+    match /landing/{env}/groups/{groupId} {
+      allow read: if request.auth != null && request.auth.uid in resource.data.members;
+      allow write: if false;
+    }
+
     match /landing/{env}/posts/{postId} {
-      allow read: if resource.data.published == true || request.auth != null;
+      allow read: if resource.data.published == true || isLandingAdmin(env);
       allow write: if false;
     }
 
