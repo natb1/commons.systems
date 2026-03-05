@@ -97,18 +97,6 @@ Workflow state is stored as JSON in the GitHub issue body via `issue-state-write
 
 Six of eleven steps use the [wiggum-loop](.claude/skills/ref-wiggum-loop/SKILL.md) pattern: an evaluate-iterate-terminate cycle where each iteration runs the step's action, evaluates the result, and either iterates (fix + retry) or terminates (advance to next step). Progress reports and termination summaries are posted as PR comments.
 
-## Usage and Contributing
-<a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>
-
-For using and/or extending the artifacts in this repo: forking is encouraged. To better understand the agentic coding artifacts a demo is available as a Claude Code [plugin](https://code.claude.com/docs/en/plugins).
-
-> Plugin distribution is WIP. If you encounter errors you can attempt to clone and load pr-workflow skills from this repo.
-```
-/plugin marketplace add natb1/commons.systems
-/plugin install pr-workflow-bundle@commons-systems
-/worktree <issue-number>
-```
-
 ## CI/CD
 
 Four consolidated workflows handle all CI/CD. Change detection determines which apps to test and deploy.
@@ -156,6 +144,14 @@ run-all-cleanup-preview.sh <pr-number>
   run-cleanup-preview.sh <app> <pr-number>
 ```
 
-### Adding a new app
+## Usage and Contributing
+<a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>
 
-The scaffold tool (`scaffolding/firebase/`) automatically registers new apps in all consolidated workflows via marker-based path insertion. No manual workflow edits are needed.
+For using and/or extending the artifacts in this repo: forking is encouraged. To better understand the agentic coding artifacts a demo is available as a Claude Code [plugin](https://code.claude.com/docs/en/plugins).
+
+> Plugin distribution is WIP. If you encounter errors you can attempt to clone and load pr-workflow skills from this repo.
+```
+/plugin marketplace add natb1/commons.systems
+/plugin install pr-workflow-bundle@commons-systems
+/worktree <issue-number>
+```
