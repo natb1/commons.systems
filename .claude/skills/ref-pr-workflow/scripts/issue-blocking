@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+')
-for dep in $(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number' 2>/dev/null); do
+set -euo pipefail
+ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+' || true)
+if [[ -z "$ISSUE_NUM" ]]; then
+  echo "error: branch name does not start with an issue number" >&2
+  exit 1
+fi
+BLOCKERS=$(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number')
+for dep in $BLOCKERS; do
   gh issue view "$dep" --json title,body,comments,number,state
 done

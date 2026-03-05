@@ -44,13 +44,13 @@ Detect input mode from `$INPUT`:
 
   Then fetch sibling issues (other sub-issues of the same parent):
   ```bash
-  gh api "/repos/{owner}/{repo}/issues/<parent-N>/sub_issues" --jq '.[].number'
+  gh api "/repos/{owner}/{repo}/issues/<parent-N>/sub_issues" --jq '.[] | {number, state}'
   ```
   For each sibling (excluding `<N>`), fetch content based on state:
   - Open siblings: full content (`title,body,labels,assignees,projectItems,state`)
   - Closed siblings: summary only (`title,number,state`)
 
-  > See `ref-memory-management` Issue Context Loading for the authoritative list of content types.
+  > See `ref-memory-management` Issue Context Loading for the authoritative list of content types. This skill extends the base field set with `labels, assignees, projectItems` for evaluation.
 
 - Otherwise → **description mode**: treat `$INPUT` as the issue body text. Prompt user for a title if not provided.
 
@@ -130,11 +130,11 @@ Assess whether the issue spans more than one PR-sized chunk of work. If so, reco
 
 Suggest alternative requirements or designs that could improve functionality or architectural maintainability. Focus on substantive improvements, not stylistic preferences.
 
-After completing the 7-category evaluation of the parent issue, repeat the full evaluation for each sub-issue. Compile findings per issue, clearly labeled (e.g., "Parent #83", "Sub-issue #87", "Sub-issue #88").
+After completing the 7-category evaluation of the primary issue, repeat the full evaluation for each sub-issue. Compile findings per issue, clearly labeled (e.g., "Primary #83", "Sub-issue #87", "Sub-issue #88").
 
 ## Step 4. Plan Mode — Propose Improvements
 
-Enter plan mode. Structure the plan across all issues with findings (parent + sub-issues):
+Enter plan mode. Structure the plan across all issues with findings (primary + sub-issues):
 
 1. **Findings summary** — one section per issue (labeled by number), each with per-category bullet lists. Omit issues and categories with no findings.
 2. **Proposed improved bodies** — one complete rewrite per issue that has improvements.

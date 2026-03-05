@@ -17,11 +17,13 @@ When loading issue context (at session start, after context loss, or when a skil
 
 | Content type | Detail level | Script |
 |---|---|---|
-| **Primary issue** | Full: title, body, comments, number, state | `issue-primary` |
+| **Primary issue** | Full | `issue-primary` |
 | **Blockers** | Full for each blocking issue | `issue-blocking` |
 | **Sub-issues** | Full for each sub-issue | `issue-sub-issues` |
 | **Parent issue** (if primary is a sub-issue) | Full | `issue-parent` |
-| **Sibling issues** (if primary is a sub-issue) | Full for open siblings; title, number, state only for closed | `issue-siblings` |
+| **Sibling issues** (if primary is a sub-issue) | Full for open siblings; Summary for closed | `issue-siblings` |
+
+Full = `title, body, comments, number, state`. Summary = `title, number, state`. Consumers that need additional fields (e.g., `ref-ready` uses `labels, assignees, projectItems` for evaluation) extend the base set.
 
 Scripts are in `.claude/skills/ref-pr-workflow/scripts/`. All derive the issue number from the current branch name.
 
