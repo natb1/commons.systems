@@ -8,7 +8,7 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 
 When creating any plan (issue implementation, review, security review, or ad hoc):
 - All plans must assume execution in a clean context. Include all necessary steps — do not rely on state from the planning session.
-- Check the conversation for all active reference skills (names begin with "ref-"). If any are active, add this line to the plan preface: `**Before executing this plan:** Invoke /ref-X and /ref-Y`. The line **must** include the **explicit** instruction to invoke the reference skills before executing the plan.
+- Read the issue state's `active_skills` list (the canonical store for skills that must be reloaded across sessions). If any skills are listed, add this line to the plan preface: `**Before executing this plan:** Invoke /skill-X and /skill-Y`. The line **must** include the **explicit** instruction to invoke ALL skills from `active_skills` before executing the plan.
 - If plan is being created as part of a multi-step process (eg. pr-workflow, or wiggum-loop), the plan must record which step of the process is active in the preface of the plan.
 
 # Issue State Rule
@@ -29,7 +29,7 @@ State schema:
 ```
 
 - **When entering a workflow step or changing phase:** call `issue-state-write` with updated `step`, `step_label`, `phase`, and current `active_skills`
-- **When loading or unloading ref-skills:** include the updated `active_skills` list in the next `issue-state-write` call
+- **When loading or unloading skills:** include the updated `active_skills` list in the next `issue-state-write` call
 - **When entering a wiggum-loop step:** include `wiggum_step` and `wiggum_step_label` in the state
 - **When a wiggum-loop terminates:** omit `wiggum_step` and `wiggum_step_label` from the state
 

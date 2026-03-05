@@ -34,5 +34,5 @@ Step 8. Start `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Termination instructions:**
 - Stop the QA server (run-qa-server.sh) if started
-- Invoke `/pr-workflow-termination-summary` with `PHASE_NAME="QA" FILE_PREFIX=qa PR_NUM=<pr-num> NEXT_STEP=9 NEXT_PHASE=code-quality CONCLUSION_TEXT="All test cases passed. PR approved for code quality review." EXTRA_HEADER_FIELDS="**Reviewer**: [User name from git config]\n**Tested By**: Human QA with Claude Code facilitation" EXTRA_SECTIONS="## QA Summary\n\n- Total test cycles: [N]\n- Key behaviors verified: [list]\n- Edge cases tested: [list]\n- Total issues found and resolved: [N]"`
+- Invoke `/pr-workflow-termination-summary` with `PHASE_NAME="QA" FILE_PREFIX=qa PR_NUM=<pr-num> NEXT_STEP=9 NEXT_PHASE=code-quality ACTIVE_SKILLS='["ref-memory-management","ref-pr-workflow","ref-code-quality"]' CONCLUSION_TEXT="All test cases passed. PR approved for code quality review." EXTRA_HEADER_FIELDS="**Reviewer**: [User name from git config]\n**Tested By**: Human QA with Claude Code facilitation" EXTRA_SECTIONS="## QA Summary\n\n- Total test cycles: [N]\n- Key behaviors verified: [list]\n- Edge cases tested: [list]\n- Total issues found and resolved: [N]"`
 - Proceed to Step 9

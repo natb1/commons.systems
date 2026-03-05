@@ -113,5 +113,5 @@ Step 9. Start `/wiggum-loop` at Step 0 with these instruction sets:
   ```bash
   post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/codequality-final.txt"
   ```
-- Update state to step=10/phase=security via `issue-state-write`
+- Update state to step=10/phase=security via `issue-state-write` with `active_skills: ["ref-memory-management", "ref-pr-workflow", "ref-security"]`
 - Proceed to Step 10
