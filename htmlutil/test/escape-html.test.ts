@@ -48,4 +48,14 @@ describe("escapeHtml", () => {
     expect(escapeHtml("hello world")).toBe("hello world");
     expect(escapeHtml("hello world 123")).toBe("hello world 123");
   });
+
+  it("double-escapes already-escaped entities", () => {
+    expect(escapeHtml("&amp;")).toBe("&amp;amp;");
+    expect(escapeHtml("&lt;")).toBe("&amp;lt;");
+  });
+
+  it("replaces ampersand before angle brackets to avoid double-encoding", () => {
+    expect(escapeHtml("&<")).toBe("&amp;&lt;");
+    expect(escapeHtml("&>")).toBe("&amp;&gt;");
+  });
 });

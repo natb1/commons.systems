@@ -52,8 +52,9 @@ export async function isInGroup(
   } catch (error) {
     // Firestore rules restrict group reads to members (request.auth.uid in
     // resource.data.members), so permission-denied is the primary signal that
-    // the user is not in this group. The members.includes check above is a
-    // defensive guard for the case where rules and data are inconsistent.
+    // the user is not in this group. The membership check on the returned
+    // document is a defensive guard for the case where rules and data are
+    // inconsistent.
     if (isPermissionDenied(error)) {
       console.warn(`isInGroup: permission denied for group "${groupId}" (user ${user.uid})`);
       return false;

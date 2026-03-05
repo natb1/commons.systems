@@ -131,7 +131,7 @@ export interface AuthStateDeps {
   setAppHtml: (html: string) => void;
   /** Returns the current app state snapshot (used for race-condition guards during async operations). */
   getState: () => AppState;
-  /** Sets intermediate state without triggering re-render (e.g., setting user before async group fetch). */
+  /** Sets intermediate state without updating nav or triggering route re-render (e.g., setting user before async group fetch). */
   setState: (next: AppState) => void;
 }
 
