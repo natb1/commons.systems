@@ -12,6 +12,7 @@
     "./e2e/sign-in": "./e2e/sign-in.ts"
   },
   "peerDependencies": {
+    "@commons-systems/firestoreutil": "*",
     "firebase": ">=12",
     "@playwright/test": ">=1.50"
   },
@@ -21,7 +22,6 @@
     "lint": "eslint src/"
   },
   "devDependencies": {
-    "@commons-systems/firestoreutil": "file:../firestoreutil",
     "@eslint/js": "^9.19.0",
     "@playwright/test": "1.57.0",
     "eslint": "^9.19.0",

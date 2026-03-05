@@ -2,7 +2,8 @@
 // The firestoreutil seed runner writes these specs to Firestore using the Admin SDK,
 // which converts Date objects to Timestamps on write.
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { Transaction, Group } from "../src/firestore.js";
+import type { Transaction } from "../src/firestore.js";
+import type { Group } from "@commons-systems/authutil/groups";
 
 /** Seed groups include `members` (used in queries and security rules, not mapped to the client Group type) */
 type GroupSeedData = Omit<Group, "id"> & { members: string[] };

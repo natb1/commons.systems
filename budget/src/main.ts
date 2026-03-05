@@ -8,7 +8,9 @@ import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/au
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
 
-const getUserGroups = (user: User) => _getUserGroups(db, NAMESPACE, user);
+function getUserGroups(user: User): Promise<Group[]> {
+  return _getUserGroups(db, NAMESPACE, user);
+}
 
 const nav = document.getElementById("nav")!;
 if (!nav) throw new Error("#nav element not found");

@@ -14,21 +14,19 @@ export interface FirebaseAuthOptions {
   emulatorHost?: string;
 }
 
-function firebaseAuthMessage(error: unknown): string {
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  "auth/network-request-failed": "Network error. Check your connection and try again.",
+  "auth/operation-not-allowed": "GitHub sign-in is not enabled. Please contact support.",
+  "auth/user-disabled": "Your account has been disabled. Please contact support.",
+  "auth/account-exists-with-different-credential":
+    "An account with this email already exists using a different sign-in method.",
+};
+
+function firebaseAuthMessage(error: unknown, fallback: string): string {
   const code = (error as { code?: string })?.code;
-  switch (code) {
-    case "auth/network-request-failed":
-      return "Network error. Check your connection and try again.";
-    case "auth/operation-not-allowed":
-      return "GitHub sign-in is not enabled. Please contact support.";
-    case "auth/user-disabled":
-      return "Your account has been disabled. Please contact support.";
-    case "auth/account-exists-with-different-credential":
-      return "An account with this email already exists using a different sign-in method.";
-    default:
-      if (code) console.warn("Unhandled Firebase auth error code:", code);
-      return "";
-  }
+  if (code && code in AUTH_ERROR_MESSAGES) return AUTH_ERROR_MESSAGES[code];
+  if (code) console.warn("Unhandled Firebase auth error code:", code);
+  return fallback;
 }
 
 function showAuthError(message: string): void {
@@ -68,25 +66,18 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
   }
 
   getRedirectResult(auth).catch((error) => {
+    if ((error as { code?: string })?.code === "auth/popup-closed-by-user") return;
     console.error("Auth redirect error:", error);
-    const message = firebaseAuthMessage(error) || "Sign-in could not be completed. Please try again.";
-    showAuthError(message);
+    showAuthError(firebaseAuthMessage(error, "Sign-in could not be completed. Please try again."));
   });
 
   const provider = new GithubAuthProvider();
 
-  function handleSignInError(error: unknown): void {
-    console.error("Sign-in redirect failed:", error);
-    const message = firebaseAuthMessage(error) || "Sign-in failed. Please try again.";
-    showAuthError(message);
-  }
-
   function signIn(): void {
-    try {
-      signInWithRedirect(auth, provider).catch(handleSignInError);
-    } catch (error) {
-      handleSignInError(error);
-    }
+    signInWithRedirect(auth, provider).catch((error) => {
+      console.error("Sign-in redirect failed:", error);
+      showAuthError(firebaseAuthMessage(error, "Sign-in failed. Please try again."));
+    });
   }
 
   function signOut(): Promise<void> {
