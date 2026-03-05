@@ -12,7 +12,7 @@ function getUserGroups(user: User): Promise<Group[]> {
   return _getUserGroups(db, NAMESPACE, user);
 }
 
-const nav = document.getElementById("nav");
+const nav = document.getElementById("nav")!;
 if (!nav) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
@@ -145,7 +145,7 @@ export function createAuthStateHandler(deps: AuthStateDeps): (user: User | null)
     const currentState = deps.getState();
     deps.setState({
       user,
-      groups: currentState.user === user ? currentState.groups : [],
+      groups: currentState.user === user && !currentState.groupError ? currentState.groups : [],
       groupError: false,
     });
     try {
