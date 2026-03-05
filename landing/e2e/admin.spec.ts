@@ -29,7 +29,7 @@ test.describe("admin", () => {
     await page.goto("/#/admin");
     await expect(page.locator("#sign-in")).not.toBeVisible();
     await expect(page.locator("#not-authorized")).not.toBeAttached();
-    await expect(page.locator("h2")).toContainText("Admin");
+    await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
   });
 
   // The seed user (seeds/auth.ts) is in the admin group, so draft posts
