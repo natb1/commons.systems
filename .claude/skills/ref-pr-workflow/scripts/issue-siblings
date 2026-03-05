@@ -16,12 +16,12 @@ if [[ ! "$PARENT" =~ ^[0-9]+$ ]]; then
   echo "error: unexpected parent API response: $PARENT" >&2
   exit 1
 fi
-gh api "/repos/{owner}/{repo}/issues/$PARENT/sub_issues" --jq '.[] | [.number, .state] | @tsv' |
+SIBLINGS_TSV=$(gh api "/repos/{owner}/{repo}/issues/$PARENT/sub_issues" --jq '.[] | [.number, .state] | @tsv')
 while IFS=$'\t' read -r sib state; do
   if [[ "$sib" = "$ISSUE_NUM" ]]; then continue; fi
-  if [ "$state" = "open" ]; then
+  if [[ "$state" = "open" ]]; then
     gh issue view "$sib" --json title,body,comments,number,state
   else
     gh issue view "$sib" --json title,number,state
   fi
-done
+done <<< "$SIBLINGS_TSV"

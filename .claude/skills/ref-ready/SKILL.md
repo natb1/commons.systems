@@ -31,7 +31,7 @@ Detect input mode from `$INPUT`:
   gh issue view <sub-N> --json title,body,labels,assignees,projectItems,state
   ```
 
-  Store all fetched issues (primary + sub-issues) for evaluation.
+  Store all fetched issues (primary + sub-issues + parent + siblings) for evaluation.
 
   Then fetch parent issue (if this is a sub-issue):
   ```bash
