@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("../../src/firestore.js", () => ({
@@ -17,6 +18,7 @@ function createContainer(txnId: string): HTMLElement {
   const container = document.createElement("div");
   container.id = "transactions-table";
   container.dataset.budgetOptions = JSON.stringify(["food", "housing", "vacation"]);
+  container.dataset.budgetMap = JSON.stringify({ food: "budget-food", housing: "budget-housing", vacation: "budget-vacation" });
   container.dataset.categoryOptions = JSON.stringify(["Food", "Travel"]);
   container.innerHTML = `
     <details class="txn-row" data-txn-id="${txnId}">
@@ -89,7 +91,7 @@ describe("hydrateTransactionTable", () => {
     input.value = "vacation";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: "vacation" });
+    expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
   });
 
   it("saves budget as null when empty", async () => {
@@ -168,6 +170,35 @@ describe("hydrateTransactionTable", () => {
     const container = createContainer("txn-1");
     container.dataset.budgetOptions = "not-json";
     expect(() => hydrateTransactionTable(container)).toThrow("Failed to parse autocomplete options: not-json");
+  });
+
+  it("shows error for unknown budget name and does not save", async () => {
+    const container = createContainer("txn-1");
+    hydrateTransactionTable(container);
+    const input = container.querySelector(".edit-budget") as HTMLInputElement;
+    input.value = "nonexistent";
+    input.dispatchEvent(new Event("blur", { bubbles: true }));
+    await flush();
+    expect(mockUpdateTransaction).not.toHaveBeenCalled();
+    expect(input.classList.contains("save-error")).toBe(true);
+  });
+
+  it("throws DataIntegrityError for malformed budget map JSON", () => {
+    const container = createContainer("txn-1");
+    container.dataset.budgetMap = "not-json";
+    expect(() => hydrateTransactionTable(container)).toThrow("Failed to parse budget map: not-json");
+  });
+
+  it("throws DataIntegrityError for non-object budget map JSON", () => {
+    const container = createContainer("txn-1");
+    container.dataset.budgetMap = JSON.stringify([1, 2, 3]);
+    expect(() => hydrateTransactionTable(container)).toThrow("Budget map is not an object");
+  });
+
+  it("throws DataIntegrityError for budget map with non-string values", () => {
+    const container = createContainer("txn-1");
+    container.dataset.budgetMap = JSON.stringify({ food: 123 });
+    expect(() => hydrateTransactionTable(container)).toThrow("Budget map contains non-string value");
   });
 
   it("does not save for elements outside a txn-row", async () => {

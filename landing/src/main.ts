@@ -146,11 +146,14 @@ if (app) {
     }
   });
 
+  // router.navigate() is fire-and-forget — updateInfoPanel() below may see stale
+  // cachedPosts until the router's async render cycle completes and afterRender
+  // calls updateInfoPanel() again with fresh data.
   async function refreshAfterAuthChange(): Promise<void> {
     updateNav();
     router.navigate();
-    // router.navigate() only loads posts on the home route; re-fetch here so
-    // the info panel populates regardless of which route is active.
+    // router.navigate() only loads posts on the home route; re-fetch on /admin
+    // so the info panel populates even when not on home.
     if (parseHash().path === "/admin") {
       await loadPosts();
     }
@@ -160,6 +163,10 @@ if (app) {
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
     refreshAfterAuthChange().catch((err) => {
+      if (err instanceof TypeError || err instanceof ReferenceError) {
+        setTimeout(() => { throw err; }, 0);
+        return;
+      }
       console.error("Failed to refresh after auth change:", err);
     });
   });

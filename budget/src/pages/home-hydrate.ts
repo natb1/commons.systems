@@ -23,6 +23,28 @@ function parseJsonArray(raw: string | undefined): string[] {
   }
 }
 
+/**
+ * Parse the budget name-to-ID mapping from a data attribute.
+ * Returns {} when the attribute is absent (unauthorized users).
+ * Throws DataIntegrityError for non-empty values that are not valid JSON objects with string values.
+ */
+function parseBudgetMap(raw: string | undefined): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new DataIntegrityError(`Budget map is not an object: ${typeof parsed}`);
+    }
+    if (!Object.values(parsed).every((v: unknown) => typeof v === "string")) {
+      throw new DataIntegrityError("Budget map contains non-string value");
+    }
+    return parsed;
+  } catch (error) {
+    if (error instanceof DataIntegrityError) throw error;
+    throw new DataIntegrityError(`Failed to parse budget map: ${raw}`);
+  }
+}
+
 let dropdownController: AbortController | null = null;
 let activeInput: HTMLInputElement | null = null;
 
@@ -166,6 +188,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
   }
 
   const budgetOptions = parseJsonArray(container.dataset.budgetOptions);
+  const budgetNameToId = parseBudgetMap(container.dataset.budgetMap);
   const categoryOptions = parseJsonArray(container.dataset.categoryOptions);
 
   function getOptionsForInput(input: HTMLInputElement): string[] {
@@ -222,7 +245,13 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         }
         await updateTransaction(txnId, { reimbursement });
       } else if (input.classList.contains("edit-budget")) {
-        await updateTransaction(txnId, { budget: input.value || null });
+        const value = input.value || null;
+        if (value !== null && !(value in budgetNameToId)) {
+          showInputError(input, `Unknown budget: "${value}"`);
+          return;
+        }
+        const budgetId = value ? budgetNameToId[value] : null;
+        await updateTransaction(txnId, { budget: budgetId });
       } else {
         return;
       }
