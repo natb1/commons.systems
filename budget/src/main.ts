@@ -1,4 +1,4 @@
-import { createRouter, parseHash } from "./router.js";
+import { createRouter, parseHash } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
 import "@commons-systems/style/components/nav";
@@ -74,23 +74,33 @@ function updateNav(user: User | null): void {
 // Show login UI immediately; onAuthStateChanged will update once auth resolves.
 updateNav(null);
 
-const router = createRouter(app, [
+const router = createRouter(
+  app,
+  [
+    {
+      path: "/",
+      render: () => {
+        const group = selectedGroup();
+        const user = state.user;
+        if (!user) {
+          return renderHome({ user: null, group: null, groupError: false });
+        }
+        if (group) {
+          return renderHome({ user, group, groupError: false });
+        }
+        return renderHome({ user, group, groupError: state.groupError });
+      },
+    },
+    { path: "/about", render: renderAbout },
+  ],
   {
-    path: "/",
-    render: () => {
-      const group = selectedGroup();
-      const user = state.user;
-      if (!user) {
-        return renderHome({ user: null, group: null, groupError: false });
-      }
-      if (group) {
-        return renderHome({ user, group, groupError: false });
-      }
-      return renderHome({ user, group, groupError: state.groupError });
+    formatError: (error) => {
+      if (error instanceof DataIntegrityError || error instanceof RangeError)
+        return "A data error occurred. Please contact support.";
+      return undefined;
     },
   },
-  { path: "/about", render: renderAbout },
-]);
+);
 
 function transition(next: AppState): void {
   state = next;
@@ -138,10 +148,8 @@ export interface AuthStateDeps {
   getUserGroups: (user: User) => Promise<Group[]>;
   /** Commits final state and triggers nav update + route re-render. */
   transition: (next: AppState) => void;
-  /** Tears down the router (removes hashchange listener) on terminal data errors. */
-  destroyRouter: () => void;
-  /** Replaces app content directly, bypassing the router, for terminal error states. */
-  setAppHtml: (html: string) => void;
+  /** Displays a terminal error message, halting further route navigation. */
+  showTerminalError: (html: string) => void;
   /** Returns the current app state snapshot (used for race-condition guards during async operations). */
   getState: () => AppState;
   /** Sets intermediate state without updating nav or triggering route re-render (e.g., setting user before async group fetch). */
@@ -168,8 +176,7 @@ export function createAuthStateHandler(deps: AuthStateDeps): (user: User | null)
     } catch (error) {
       if (error instanceof DataIntegrityError) {
         console.error("Data integrity error in user groups:", error);
-        deps.destroyRouter();
-        deps.setAppHtml("<p>A data error occurred. Please contact support.</p>");
+        deps.showTerminalError("<p>A data error occurred. Please contact support.</p>");
         return;
       }
       if (error instanceof TypeError || error instanceof ReferenceError) throw error;
@@ -182,8 +189,7 @@ export function createAuthStateHandler(deps: AuthStateDeps): (user: User | null)
 const handleAuth = createAuthStateHandler({
   getUserGroups,
   transition,
-  destroyRouter: () => router.destroy(),
-  setAppHtml: (html) => { app.innerHTML = html; },
+  showTerminalError: router.showTerminalError,
   getState: () => state,
   setState: (next) => { state = next; },
 });
