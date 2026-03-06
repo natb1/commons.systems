@@ -169,7 +169,80 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
       ],
     },
     {
+      name: "budgets",
+      documents: [
+        {
+          id: "food",
+          data: {
+            name: "Food",
+            weeklyAllowance: 150,
+            rollover: "none",
+            groupId: "household",
+            memberUids: ["test-github-user"],
+          } satisfies BudgetSeedData,
+        },
+        {
+          id: "housing",
+          data: {
+            name: "Housing",
+            weeklyAllowance: 500,
+            rollover: "balance",
+            groupId: "household",
+            memberUids: ["test-github-user"],
+          } satisfies BudgetSeedData,
+        },
+        {
+          id: "vacation",
+          data: {
+            name: "Vacation",
+            weeklyAllowance: 100,
+            rollover: "balance",
+            groupId: "household",
+            memberUids: ["test-github-user"],
+          } satisfies BudgetSeedData,
+        },
+      ],
+    },
+    {
       name: "seed-budget-periods",
+      documents: [
+        {
+          id: "food-2025-01-13",
+          data: {
+            budgetId: "food",
+            periodStart: new Date("2025-01-13"),
+            periodEnd: new Date("2025-01-20"),
+            total: 5.75,
+            groupId: "household",
+            memberUids: ["test-github-user"],
+          } satisfies BudgetPeriodSeedData,
+        },
+        {
+          id: "housing-2025-01-20",
+          data: {
+            budgetId: "housing",
+            periodStart: new Date("2025-01-20"),
+            periodEnd: new Date("2025-01-27"),
+            total: 142.50,
+            groupId: "household",
+            memberUids: ["test-github-user"],
+          } satisfies BudgetPeriodSeedData,
+        },
+        {
+          id: "vacation-2025-02-03",
+          data: {
+            budgetId: "vacation",
+            periodStart: new Date("2025-02-03"),
+            periodEnd: new Date("2025-02-10"),
+            total: 389.00,
+            groupId: "household",
+            memberUids: ["test-github-user"],
+          } satisfies BudgetPeriodSeedData,
+        },
+      ],
+    },
+    {
+      name: "budget-periods",
       documents: [
         {
           id: "food-2025-01-13",

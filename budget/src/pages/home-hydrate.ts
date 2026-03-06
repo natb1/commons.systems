@@ -23,6 +23,20 @@ function parseJsonArray(raw: string | undefined): string[] {
   }
 }
 
+function parseBudgetMap(raw: string | undefined): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new DataIntegrityError(`Budget map is not an object: ${typeof parsed}`);
+    }
+    return parsed;
+  } catch (error) {
+    if (error instanceof DataIntegrityError) throw error;
+    throw new DataIntegrityError(`Failed to parse budget map: ${raw}`);
+  }
+}
+
 let dropdownController: AbortController | null = null;
 let activeInput: HTMLInputElement | null = null;
 
@@ -166,6 +180,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
   }
 
   const budgetOptions = parseJsonArray(container.dataset.budgetOptions);
+  const budgetNameToId = parseBudgetMap(container.dataset.budgetMap);
   const categoryOptions = parseJsonArray(container.dataset.categoryOptions);
 
   function getOptionsForInput(input: HTMLInputElement): string[] {
@@ -222,7 +237,9 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         }
         await updateTransaction(txnId, { reimbursement });
       } else if (input.classList.contains("edit-budget")) {
-        await updateTransaction(txnId, { budget: input.value || null });
+        const value = input.value || null;
+        const budgetId = value ? (budgetNameToId[value] ?? value) : null;
+        await updateTransaction(txnId, { budget: budgetId });
       } else {
         return;
       }

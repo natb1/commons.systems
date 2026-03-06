@@ -2,7 +2,7 @@ import type { User } from "firebase/auth";
 import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { Group } from "@commons-systems/authutil/groups";
-import { getTransactions, type Transaction } from "../firestore.js";
+import { getTransactions, getBudgets, type Transaction, type Budget } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";
 
 function formatTimestamp(ts: Timestamp | null): string {
@@ -18,7 +18,7 @@ function formatCategory(category: string): string {
   return category.split(":").map(escapeHtml).join(" &gt; ");
 }
 
-function renderRow(txn: Transaction, groupName: string, editable: boolean): string {
+function renderRow(txn: Transaction, groupName: string, editable: boolean, budgetIdToName: Map<string, string>): string {
   const txnIdAttr = editable ? ` data-txn-id="${escapeHtml(txn.id)}"` : "";
   const noteCell = editable
     ? `<input type="text" class="edit-note" value="${escapeHtml(txn.note)}" aria-label="Note">`
@@ -29,9 +29,10 @@ function renderRow(txn: Transaction, groupName: string, editable: boolean): stri
   const reimbursementCell = editable
     ? `<input type="number" class="edit-reimbursement" value="${String(txn.reimbursement)}" min="0" max="100" aria-label="Reimbursement">`
     : `${String(txn.reimbursement)}%`;
+  const budgetName = txn.budget ? (budgetIdToName.get(txn.budget) ?? txn.budget) : "";
   const budgetCell = editable
-    ? `<input type="text" class="edit-budget" value="${escapeHtml(txn.budget ?? "")}" aria-label="Budget">`
-    : escapeHtml(txn.budget ?? "");
+    ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget">`
+    : escapeHtml(budgetName);
 
   return `<details class="txn-row"${txnIdAttr}>
     <summary class="txn-summary">
@@ -67,20 +68,24 @@ function uniqueSorted(values: (string | null)[]): string[] {
   return [...new Set(values.filter((v): v is string => v != null))].sort();
 }
 
-function renderTransactionTable(transactions: Transaction[], authorized: boolean, groupName: string): string {
+function renderTransactionTable(transactions: Transaction[], authorized: boolean, groupName: string, budgets: Budget[]): string {
   if (transactions.length === 0) {
     return "<p>No transactions found.</p>";
   }
 
+  const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
   const rows = transactions
-    .map((txn) => renderRow(txn, groupName, authorized))
+    .map((txn) => renderRow(txn, groupName, authorized, budgetIdToName))
     .join("\n");
 
   let dataAttrs = "";
   if (authorized) {
-    const budgetOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.budget))));
+    const budgetNames = budgets.map(b => b.name).sort();
+    const budgetOpts = escapeHtml(JSON.stringify(budgetNames));
+    const budgetNameToId = Object.fromEntries(budgets.map(b => [b.name, b.id]));
+    const budgetMapAttr = escapeHtml(JSON.stringify(budgetNameToId));
     const categoryOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))));
-    dataAttrs = ` data-budget-options="${budgetOpts}" data-category-options="${categoryOpts}"`;
+    dataAttrs = ` data-budget-options="${budgetOpts}" data-budget-map="${budgetMapAttr}" data-category-options="${categoryOpts}"`;
   }
 
   return `<div id="transactions-table"${dataAttrs}>
@@ -113,11 +118,16 @@ export async function renderHome(options: RenderHomeOptions): Promise<string> {
 
   let tableHtml: string;
   try {
-    const transactions = group && user
-      ? await getTransactions(group.id, user.uid)
-      : await getTransactions(null);
+    const [transactions, budgets] = await Promise.all([
+      group && user
+        ? getTransactions(group.id, user.uid)
+        : getTransactions(null),
+      group && user
+        ? getBudgets(group.id, user.uid)
+        : getBudgets(null),
+    ]);
     transactions.sort(compareByTimestampDesc);
-    tableHtml = renderTransactionTable(transactions, authorized, groupName);
+    tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets);
   } catch (error) {
     if (error instanceof RangeError || error instanceof DataIntegrityError
         || error instanceof TypeError || error instanceof ReferenceError) {
