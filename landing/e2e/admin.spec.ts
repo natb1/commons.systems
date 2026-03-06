@@ -52,4 +52,17 @@ test.describe("admin", () => {
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(page.locator("#posts")).toContainText("Draft Ideas");
   });
+
+  test("info panel populates after sign-in on admin route", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
+    await page.goto("/#/admin");
+    await signIn(page);
+    const panel = page.locator("#info-panel");
+    await expect(panel.locator("h3", { hasText: "Top Posts" })).toBeVisible({
+      timeout: 30000,
+    });
+    await expect(panel.locator("h3", { hasText: "Archive" })).toBeVisible();
+  });
 });
