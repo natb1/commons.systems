@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
+import { formatUtcDate } from "../date.js";
 import { fetchPost } from "../github.js";
 import type { PostMeta } from "../firestore.js";
 
@@ -9,18 +10,10 @@ const SCROLL_PADDING_PX = 16;
 // Strip raw HTML from markdown to prevent XSS from post file content.
 marked.use({ renderer: { html: () => "" } });
 
-function formatDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 function renderArticle(p: PostMeta): string {
   const safeId = escapeHtml(p.id);
   const dateHtml = p.publishedAt
-    ? `<time datetime="${escapeHtml(p.publishedAt)}">${escapeHtml(formatDate(p.publishedAt))}</time>`
+    ? `<time datetime="${escapeHtml(p.publishedAt)}">${escapeHtml(formatUtcDate(p.publishedAt))}</time>`
     : "";
   const draftBadge = p.published
     ? ""

@@ -159,11 +159,22 @@ if (app) {
     }
   });
 
-  onAuthStateChanged(auth, (user) => {
-    currentUser = user;
+  async function refreshAfterAuthChange(): Promise<void> {
     updateNav();
     navigate();
-    updateInfoPanel();
+    // navigate() only loads posts on the home route; re-fetch here so
+    // the info panel populates regardless of which route is active.
+    if (getHashPath() === "/admin") {
+      await loadPosts();
+      updateInfoPanel();
+    }
+  }
+
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    refreshAfterAuthChange().catch((err) => {
+      console.error("Failed to refresh after auth change:", err);
+    });
   });
 } else {
   console.error("Fatal: #app element not found");
