@@ -7,5 +7,9 @@ if [[ -z "$ISSUE_NUM" ]]; then
 fi
 BLOCKERS=$(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number')
 for dep in $BLOCKERS; do
+  if [[ ! "$dep" =~ ^[0-9]+$ ]]; then
+    echo "error: unexpected blocker value: $dep" >&2
+    exit 1
+  fi
   gh issue view "$dep" --json title,body,comments,number,state
 done

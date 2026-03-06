@@ -7,5 +7,9 @@ if [[ -z "$ISSUE_NUM" ]]; then
 fi
 SUBS=$(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" --jq '.[].number')
 for sub in $SUBS; do
+  if [[ ! "$sub" =~ ^[0-9]+$ ]]; then
+    echo "error: unexpected sub-issue value: $sub" >&2
+    exit 1
+  fi
   gh issue view "$sub" --json title,body,comments,number,state
 done
