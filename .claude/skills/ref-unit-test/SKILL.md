@@ -13,6 +13,17 @@ Self-contained wiggum-loop for Step 4. Runs in isolated context — cannot invok
 
 Use `dangerouslyDisableSandbox: true` for git write operations (`git add`, `git commit`, `git merge`, `git push`) and all `gh` CLI calls (`issue-state-write`, `post-pr-comment.sh`).
 
+## Running Tests
+
+Use the pre-approved script from the repo root (do not use `$()` substitution — it breaks permission matching):
+
+```bash
+.claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh            # auto-detect changed apps
+.claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh --app router --app budget  # explicit apps
+```
+
+Requires `dangerouslyDisableSandbox: true` (runs `npm ci` + `npx`).
+
 ## Loop Mechanics
 
 Iteration counter starts at 1. Each cycle:

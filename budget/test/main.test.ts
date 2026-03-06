@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DataIntegrityError } from "../src/errors";
 
 // Mock all modules that main.ts imports at the top level
-vi.mock("../src/router.js", () => ({
-  createRouter: () => ({ navigate: vi.fn(), destroy: vi.fn() }),
+vi.mock("@commons-systems/router", () => ({
+  createRouter: () => ({ navigate: vi.fn(), destroy: vi.fn(), showTerminalError: vi.fn() }),
   parseHash: () => ({ path: "/", params: new URLSearchParams() }),
 }));
 vi.mock("../src/pages/home.js", () => ({ renderHome: vi.fn().mockResolvedValue("<div>home</div>") }));
@@ -41,7 +41,6 @@ const mockGroups: Group[] = [{ id: "household", name: "household" }];
 interface TestContext {
   state: AppState;
   transitionCalls: AppState[];
-  destroyCalls: number;
   appHtml: string;
 }
 
@@ -52,7 +51,6 @@ function createDeps(overrides: Partial<AuthStateDeps> = {}): {
   const ctx: TestContext = {
     state: { user: null, groups: [], groupError: false },
     transitionCalls: [],
-    destroyCalls: 0,
     appHtml: "",
   };
   const deps: AuthStateDeps = {
@@ -61,8 +59,7 @@ function createDeps(overrides: Partial<AuthStateDeps> = {}): {
       ctx.state = next;
       ctx.transitionCalls.push(next);
     },
-    destroyRouter: () => { ctx.destroyCalls++; },
-    setAppHtml: (html: string) => { ctx.appHtml = html; },
+    showTerminalError: (html: string) => { ctx.appHtml = html; },
     getState: () => ctx.state,
     setState: (next: AppState) => { ctx.state = next; },
     ...overrides,
@@ -111,7 +108,7 @@ describe("createAuthStateHandler", () => {
     expect(ctx.transitionCalls).toHaveLength(0);
   });
 
-  it("destroys router and sets error HTML on DataIntegrityError", async () => {
+  it("shows terminal error on DataIntegrityError", async () => {
     const { deps, ctx } = createDeps({
       getUserGroups: vi.fn<(user: User) => Promise<Group[]>>().mockRejectedValue(
         new DataIntegrityError("bad data"),
@@ -121,7 +118,6 @@ describe("createAuthStateHandler", () => {
 
     await handler(mockUser);
 
-    expect(ctx.destroyCalls).toBe(1);
     expect(ctx.appHtml).toContain("data error");
     expect(ctx.transitionCalls).toHaveLength(0);
   });

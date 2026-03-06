@@ -1,6 +1,6 @@
 import type { User } from "firebase/auth";
 
-import { createRouter, getHashPath } from "./router.js";
+import { createRouter, parseHash } from "@commons-systems/router";
 import { renderHomeHtml, hydrateHome } from "./pages/home.js";
 import { renderAdmin } from "./pages/admin.js";
 import { renderNav } from "./components/nav.js";
@@ -70,7 +70,7 @@ function updateNav(): void {
     console.error("updateNav: #nav element not found");
     return;
   }
-  nav.innerHTML = renderNav(currentUser, getHashPath());
+  nav.innerHTML = renderNav(currentUser, parseHash().path);
   document.getElementById("sign-in")?.addEventListener("click", handleClick(signIn, "Sign-in"));
   document.getElementById("sign-out")?.addEventListener("click", handleClick(signOut, "Sign-out"));
 
@@ -107,14 +107,14 @@ async function loadPosts(): Promise<string> {
 updateNav();
 
 if (app) {
-  const navigate = createRouter(
+  const router = createRouter(
     app,
     [
       {
         path: /^\/(?:post\/.*)?$/,
         render: () => loadPosts(),
-        afterRender: (outlet, hash) => {
-          const slug = hash.startsWith("/post/") ? hash.slice(6) : undefined;
+        afterRender: (outlet, path) => {
+          const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
           hydrateHome(outlet, cachedPosts, slug);
           updateInfoPanel();
         },
@@ -159,13 +159,13 @@ if (app) {
 
   async function refreshAfterAuthChange(): Promise<void> {
     updateNav();
-    navigate();
-    // navigate() only loads posts on the home route; re-fetch here so
+    router.navigate();
+    // router.navigate() only loads posts on the home route; re-fetch here so
     // the info panel populates regardless of which route is active.
-    if (getHashPath() === "/admin") {
+    if (parseHash().path === "/admin") {
       await loadPosts();
-      updateInfoPanel();
     }
+    updateInfoPanel();
   }
 
   onAuthStateChanged(auth, (user) => {
