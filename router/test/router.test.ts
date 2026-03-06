@@ -274,6 +274,71 @@ describe("createRouter", () => {
     });
   });
 
+  it("afterRender TypeError preserves content and defers error", async () => {
+    const deferred: Array<() => void> = [];
+    const realSetTimeout = globalThis.setTimeout;
+    vi.stubGlobal("setTimeout", (fn: TimerHandler, ...rest: unknown[]) => {
+      if (typeof fn === "function" && (!rest[0] || rest[0] === 0)) {
+        deferred.push(fn as () => void);
+        return 0;
+      }
+      return realSetTimeout(fn, ...(rest as [number?]));
+    });
+
+    router = createRouter(outlet, [
+      {
+        path: "/",
+        render: () => "<h2>Home</h2>",
+        afterRender: () => {
+          throw new TypeError("cannot read property of undefined");
+        },
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+    vi.stubGlobal("setTimeout", realSetTimeout);
+
+    // Content preserved — not replaced with generic error message
+    expect(outlet.innerHTML).not.toContain("Something went wrong");
+    expect(outlet.innerHTML).not.toContain("Some content failed to load");
+    expect(deferred).toHaveLength(1);
+    expect(() => deferred[0]()).toThrow(TypeError);
+  });
+
+  it("afterRender ReferenceError preserves content and defers error", async () => {
+    const deferred: Array<() => void> = [];
+    const realSetTimeout = globalThis.setTimeout;
+    vi.stubGlobal("setTimeout", (fn: TimerHandler, ...rest: unknown[]) => {
+      if (typeof fn === "function" && (!rest[0] || rest[0] === 0)) {
+        deferred.push(fn as () => void);
+        return 0;
+      }
+      return realSetTimeout(fn, ...(rest as [number?]));
+    });
+
+    router = createRouter(outlet, [
+      {
+        path: "/",
+        render: () => "<h2>Home</h2>",
+        afterRender: () => {
+          throw new ReferenceError("x is not defined");
+        },
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+    vi.stubGlobal("setTimeout", realSetTimeout);
+
+    expect(outlet.innerHTML).not.toContain("Something went wrong");
+    expect(outlet.innerHTML).not.toContain("Some content failed to load");
+    expect(deferred).toHaveLength(1);
+    expect(() => deferred[0]()).toThrow(ReferenceError);
+  });
+
   it("onNavigate callback fires on each navigation", async () => {
     const onNavigate = vi.fn();
     router = createRouter(outlet, routes, { onNavigate });

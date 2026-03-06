@@ -52,7 +52,12 @@ export function createRouter(
         try {
           route.afterRender?.(outlet, path);
         } catch (afterError) {
-          if (afterError instanceof TypeError || afterError instanceof ReferenceError) throw afterError;
+          if (afterError instanceof TypeError || afterError instanceof ReferenceError) {
+            // Defer so it surfaces as uncaught in devtools without
+            // replacing rendered content via the outer catch block.
+            setTimeout(() => { throw afterError; }, 0);
+            return;
+          }
           console.error("afterRender error:", afterError);
           outlet.insertAdjacentHTML(
             "beforeend",
@@ -75,14 +80,16 @@ export function createRouter(
   window.addEventListener("hashchange", onHashChange);
   void navigate();
 
+  function teardown(): void {
+    destroyed = true;
+    window.removeEventListener("hashchange", onHashChange);
+  }
+
   return {
     navigate: onHashChange,
-    destroy() {
-      destroyed = true;
-      window.removeEventListener("hashchange", onHashChange);
-    },
+    destroy: teardown,
     showTerminalError(html: string) {
-      this.destroy();
+      teardown();
       outlet.innerHTML = html;
     },
   };
