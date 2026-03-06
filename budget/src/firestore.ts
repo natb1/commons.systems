@@ -19,6 +19,7 @@ export interface BudgetPeriod {
   readonly budgetId: string;
   readonly periodStart: Timestamp;
   readonly periodEnd: Timestamp;
+  /** Sum of transaction amounts in this period. */
   readonly total: number;
   readonly groupId: string | null;
 }
@@ -60,6 +61,12 @@ function requireNumber(value: unknown, field: string): number {
   return value;
 }
 
+function requireNonNegativeNumber(value: unknown, field: string): number {
+  const n = requireNumber(value, field);
+  if (n < 0) throw new DataIntegrityError(`Expected non-negative number for ${field}, got ${n}`);
+  return n;
+}
+
 function validateReimbursementRange(n: number): void {
   if (!Number.isFinite(n) || n < 0 || n > 100) {
     throw new RangeError(`reimbursement must be between 0 and 100, got ${n}`);
@@ -88,13 +95,9 @@ function asTimestamp(value: unknown): Timestamp | null {
   return value;
 }
 
-const ROLLOVER_VALUES = new Set<string>(["none", "debt", "balance"]);
-
 function requireRollover(value: unknown): Rollover {
-  if (typeof value !== "string" || !ROLLOVER_VALUES.has(value)) {
-    throw new DataIntegrityError(`Expected rollover to be one of ${[...ROLLOVER_VALUES].join(", ")}, got ${value}`);
-  }
-  return value as Rollover;
+  if (value === "none" || value === "debt" || value === "balance") return value;
+  throw new DataIntegrityError(`Expected rollover to be one of none, debt, balance, got ${value}`);
 }
 
 function requireTimestamp(value: unknown, field: string): Timestamp {
@@ -173,7 +176,7 @@ export async function getBudgets(groupId: string | null, uid?: string): Promise<
     return {
       id: docSnap.id,
       name: requireString(data.name, "name"),
-      weeklyAllowance: requireNumber(data.weeklyAllowance, "weeklyAllowance"),
+      weeklyAllowance: requireNonNegativeNumber(data.weeklyAllowance, "weeklyAllowance"),
       rollover: requireRollover(data.rollover),
       groupId: optionalString(data.groupId, "groupId"),
     };
@@ -196,11 +199,18 @@ export async function getBudgetPeriods(groupId: string | null, uid?: string): Pr
   const snapshot = await getDocs(q);
   return snapshot.docs.map((docSnap) => {
     const data = docSnap.data();
+    const periodStart = requireTimestamp(data.periodStart, "periodStart");
+    const periodEnd = requireTimestamp(data.periodEnd, "periodEnd");
+    if (periodStart.toMillis() >= periodEnd.toMillis()) {
+      throw new DataIntegrityError(
+        `periodStart must be before periodEnd for budget period ${docSnap.id}`
+      );
+    }
     return {
       id: docSnap.id,
       budgetId: requireString(data.budgetId, "budgetId"),
-      periodStart: requireTimestamp(data.periodStart, "periodStart"),
-      periodEnd: requireTimestamp(data.periodEnd, "periodEnd"),
+      periodStart,
+      periodEnd,
       total: requireNumber(data.total, "total"),
       groupId: optionalString(data.groupId, "groupId"),
     };

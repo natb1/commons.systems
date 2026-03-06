@@ -380,6 +380,21 @@ describe("getBudgets", () => {
     });
     await expect(getBudgets(null)).rejects.toThrow(/Expected finite number for weeklyAllowance/);
   });
+
+  it("throws DataIntegrityError for negative weeklyAllowance", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          name: "Bad",
+          weeklyAllowance: -10,
+          rollover: "none",
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgets(null)).rejects.toThrow(/Expected non-negative number for weeklyAllowance/);
+  });
 });
 
 describe("getBudgetPeriods", () => {
@@ -483,6 +498,35 @@ describe("getBudgetPeriods", () => {
       }],
     });
     await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected Timestamp for periodStart, got null/);
+  });
+
+  it("throws DataIntegrityError for non-Timestamp periodEnd", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [{ id: "bad", data: () => ({
+      budgetId: "food",
+      periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+      periodEnd: "not-a-timestamp",
+      total: 5.75, groupId: null,
+    })}]});
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected Timestamp for periodEnd/);
+  });
+
+  it("throws DataIntegrityError for non-string budgetId", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [{ id: "bad", data: () => ({
+      budgetId: 123,
+      periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+      periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+      total: 5.75, groupId: null,
+    })}]});
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected string for budgetId/);
+  });
+
+  it("throws DataIntegrityError when periodStart >= periodEnd", async () => {
+    const sameDate = Timestamp.fromDate(new Date("2025-01-13"));
+    mockGetDocs.mockResolvedValue({ docs: [{ id: "bad", data: () => ({
+      budgetId: "food", periodStart: sameDate, periodEnd: sameDate,
+      total: 5.75, groupId: null,
+    })}]});
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/periodStart must be before periodEnd/);
   });
 
   it("throws DataIntegrityError for non-finite total", async () => {

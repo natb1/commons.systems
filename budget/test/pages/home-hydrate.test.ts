@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("../../src/firestore.js", () => ({
@@ -17,6 +18,7 @@ function createContainer(txnId: string): HTMLElement {
   const container = document.createElement("div");
   container.id = "transactions-table";
   container.dataset.budgetOptions = JSON.stringify(["food", "housing", "vacation"]);
+  container.dataset.budgetMap = JSON.stringify({ food: "budget-food", housing: "budget-housing", vacation: "budget-vacation" });
   container.dataset.categoryOptions = JSON.stringify(["Food", "Travel"]);
   container.innerHTML = `
     <details class="txn-row" data-txn-id="${txnId}">
@@ -89,7 +91,7 @@ describe("hydrateTransactionTable", () => {
     input.value = "vacation";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: "vacation" });
+    expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
   });
 
   it("saves budget as null when empty", async () => {

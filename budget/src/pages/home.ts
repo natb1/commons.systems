@@ -29,7 +29,9 @@ function renderRow(txn: Transaction, groupName: string, editable: boolean, budge
   const reimbursementCell = editable
     ? `<input type="number" class="edit-reimbursement" value="${String(txn.reimbursement)}" min="0" max="100" aria-label="Reimbursement">`
     : `${String(txn.reimbursement)}%`;
-  const budgetName = txn.budget ? (budgetIdToName.get(txn.budget) ?? txn.budget) : "";
+  const budgetName = txn.budget
+    ? budgetIdToName.get(txn.budget) ?? (() => { throw new DataIntegrityError(`Transaction ${txn.id} references unknown budget ID: ${txn.budget}`); })()
+    : "";
   const budgetCell = editable
     ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget">`
     : escapeHtml(budgetName);
@@ -82,7 +84,13 @@ function renderTransactionTable(transactions: Transaction[], authorized: boolean
   if (authorized) {
     const budgetNames = budgets.map(b => b.name).sort();
     const budgetOpts = escapeHtml(JSON.stringify(budgetNames));
-    const budgetNameToId = Object.fromEntries(budgets.map(b => [b.name, b.id]));
+    const budgetNameToId: Record<string, string> = {};
+    for (const b of budgets) {
+      if (budgetNameToId[b.name] !== undefined) {
+        throw new DataIntegrityError(`Duplicate budget name: ${b.name}`);
+      }
+      budgetNameToId[b.name] = b.id;
+    }
     const budgetMapAttr = escapeHtml(JSON.stringify(budgetNameToId));
     const categoryOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))));
     dataAttrs = ` data-budget-options="${budgetOpts}" data-budget-map="${budgetMapAttr}" data-category-options="${categoryOpts}"`;
@@ -133,11 +141,11 @@ export async function renderHome(options: RenderHomeOptions): Promise<string> {
         || error instanceof TypeError || error instanceof ReferenceError) {
       throw error;
     }
-    console.error("Failed to load transactions:", error);
+    console.error("Failed to load transactions and budgets:", error);
     const code = (error as { code?: string })?.code;
     const message = code === "permission-denied"
       ? "Access denied. Please contact support."
-      : "Could not load transactions. Try refreshing the page.";
+      : "Could not load data. Try refreshing the page.";
     tableHtml = `<p id="transactions-error">${message}</p>`;
   }
 

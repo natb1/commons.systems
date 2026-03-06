@@ -73,7 +73,7 @@ service cloud.firestore {
 
     // Budgets are scoped to group members via a denormalized `memberUids` field.
     // Updates limited to name, weeklyAllowance, and rollover; rollover must be
-    // one of the allowed values. Create and delete are explicitly denied.
+    // one of "none", "debt", "balance". Create and delete are explicitly denied.
     match /budget/{env}/budgets/{budgetId} {
       allow read: if request.auth != null
         && request.auth.uid in resource.data.memberUids;
@@ -103,6 +103,7 @@ service cloud.firestore {
         && request.resource.data.groupId == resource.data.groupId
         && request.resource.data.memberUids == resource.data.memberUids
         && request.resource.data.total is number
+        && request.resource.data.total >= 0
         && request.resource.data.keys().hasOnly(['budgetId', 'periodStart', 'periodEnd', 'total', 'groupId', 'memberUids']);
       allow create, delete: if false;
     }

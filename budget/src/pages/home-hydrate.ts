@@ -23,12 +23,20 @@ function parseJsonArray(raw: string | undefined): string[] {
   }
 }
 
+/**
+ * Parse the budget name-to-ID mapping from a data attribute.
+ * Returns {} when the attribute is absent (unauthorized users).
+ * Throws DataIntegrityError for non-empty values that are not valid JSON objects with string values.
+ */
 function parseBudgetMap(raw: string | undefined): Record<string, string> {
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       throw new DataIntegrityError(`Budget map is not an object: ${typeof parsed}`);
+    }
+    if (!Object.values(parsed).every((v: unknown) => typeof v === "string")) {
+      throw new DataIntegrityError("Budget map contains non-string value");
     }
     return parsed;
   } catch (error) {
@@ -238,7 +246,11 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         await updateTransaction(txnId, { reimbursement });
       } else if (input.classList.contains("edit-budget")) {
         const value = input.value || null;
-        const budgetId = value ? (budgetNameToId[value] ?? value) : null;
+        if (value !== null && !(value in budgetNameToId)) {
+          showInputError(input, `Unknown budget: "${value}"`);
+          return;
+        }
+        const budgetId = value ? budgetNameToId[value] : null;
         await updateTransaction(txnId, { budget: budgetId });
       } else {
         return;
