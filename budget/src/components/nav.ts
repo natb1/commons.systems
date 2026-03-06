@@ -1,6 +1,6 @@
 import type { User } from "firebase/auth";
 import type { Group } from "@commons-systems/authutil/groups";
-import { escapeHtml } from "../escape-html.js";
+import { escapeHtml } from "@commons-systems/htmlutil";
 
 function renderGroupSelect(groups: readonly Group[], selectedGroupId: string | null): string {
   if (groups.length === 0) return "";
