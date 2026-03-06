@@ -17,6 +17,7 @@ const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 const infoPanel = document.getElementById("info-panel");
+if (!infoPanel) throw new Error("#info-panel element not found");
 
 const header = document.querySelector("body > header");
 if (header) {
@@ -36,22 +37,7 @@ let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const INFO_PANEL_LINKS = [{ label: "Source", url: "https://github.com/natb1/commons.systems" }];
 
-function handleClick(action: () => void | Promise<void>, label: string): (e: Event) => void {
-  return function (e: Event): void {
-    e.preventDefault();
-    const btn = e.currentTarget;
-    Promise.resolve(action()).catch((err) => {
-      console.error(`${label} failed:`, err);
-      if (btn instanceof HTMLElement) btn.textContent = `${label} failed — try again`;
-    });
-  };
-}
-
 function updateInfoPanel(): void {
-  if (!infoPanel) {
-    console.error("updateInfoPanel: #info-panel element not found");
-    return;
-  }
   if (cachedPosts === lastRenderedPosts) return;
 
   if (rssBlobUrl) URL.revokeObjectURL(rssBlobUrl);
@@ -68,8 +54,10 @@ function updateInfoPanel(): void {
 }
 
 navEl.links = [{ href: "#/", label: "Home" }];
-navEl.addEventListener("sign-in", handleClick(signIn, "Sign-in"));
-navEl.addEventListener("sign-out", handleClick(signOut, "Sign-out"));
+navEl.addEventListener("sign-in", () => signIn());
+navEl.addEventListener("sign-out", () => {
+  signOut().catch((err) => console.error("Sign-out failed:", err));
+});
 
 function updateNav(): void {
   navEl.showAuth = getHashPath() === "/admin";
@@ -79,7 +67,6 @@ function updateNav(): void {
 const toggle = document.getElementById("panel-toggle");
 if (!toggle) throw new Error("#panel-toggle element not found");
 toggle.addEventListener("click", () => {
-  if (!infoPanel) return;
   const isOpen = infoPanel.classList.toggle("open");
   toggle.setAttribute("aria-expanded", String(isOpen));
 });
@@ -133,8 +120,8 @@ if (app) {
   );
 
   function closePanel(): void {
-    infoPanel?.classList.remove("open");
-    document.getElementById("panel-toggle")?.setAttribute("aria-expanded", "false");
+    infoPanel.classList.remove("open");
+    toggle.setAttribute("aria-expanded", "false");
   }
 
   document.addEventListener("click", (e) => {
@@ -145,7 +132,7 @@ if (app) {
     }
 
     if (
-      infoPanel?.classList.contains("open") &&
+      infoPanel.classList.contains("open") &&
       !target.closest("#info-panel") &&
       !target.closest("#panel-toggle")
     ) {
@@ -154,7 +141,7 @@ if (app) {
   });
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && infoPanel?.classList.contains("open")) {
+    if (e.key === "Escape" && infoPanel.classList.contains("open")) {
       closePanel();
     }
   });

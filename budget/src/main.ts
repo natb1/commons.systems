@@ -43,9 +43,8 @@ function selectedGroup(): Group | null {
 }
 
 navEl.links = [{ href: "#/", label: "Home" }, { href: "#/about", label: "About" }];
-navEl.addEventListener("sign-in", (e) => { e.preventDefault(); signIn(); });
-navEl.addEventListener("sign-out", (e) => {
-  e.preventDefault();
+navEl.addEventListener("sign-in", () => signIn());
+navEl.addEventListener("sign-out", () => {
   signOut().catch((error) => console.error("Unexpected sign-out error:", error));
 });
 
@@ -60,7 +59,7 @@ function updateNav(user: User | null): void {
       select.setAttribute("aria-label", "Select group");
       const authContainer = navEl.querySelector(".nav-auth");
       if (!authContainer) throw new Error(".nav-auth container not found in app-nav");
-      authContainer.insertBefore(select, navEl.querySelector("#sign-out"));
+      authContainer.insertBefore(select, authContainer.querySelector("#sign-out"));
       select.addEventListener("change", (e) => setGroupParam((e.target as HTMLSelectElement).value));
     }
     select.innerHTML = state.groups.map(g => {
@@ -72,7 +71,7 @@ function updateNav(user: User | null): void {
   }
 }
 
-// Render nav immediately with unauthenticated state
+// Show login UI immediately; onAuthStateChanged will update once auth resolves.
 updateNav(null);
 
 const router = createRouter(app, [

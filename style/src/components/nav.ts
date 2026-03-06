@@ -5,6 +5,7 @@ export interface NavLink {
   readonly label: string;
 }
 
+/** Minimal user shape for the nav, decoupled from any auth provider. */
 export interface NavUser {
   readonly displayName: string | null;
   readonly email: string | null;
@@ -20,7 +21,7 @@ class AppNavElement extends HTMLElement {
     this.#render();
   }
   get links(): NavLink[] {
-    return this.#links;
+    return [...this.#links];
   }
 
   set user(v: NavUser | null) {
@@ -39,24 +40,24 @@ class AppNavElement extends HTMLElement {
     return this.#showAuth;
   }
 
-  #render(): void {
-    let linksContainer = this.querySelector(".nav-links") as HTMLSpanElement | null;
-    if (!linksContainer) {
-      linksContainer = document.createElement("span");
-      linksContainer.className = "nav-links";
-      this.prepend(linksContainer);
+  #ensureContainer(className: string, position: "prepend" | "append"): HTMLSpanElement {
+    let el = this.querySelector(`.${className}`) as HTMLSpanElement | null;
+    if (!el) {
+      el = document.createElement("span");
+      el.className = className;
+      this[position](el);
     }
+    return el;
+  }
+
+  #render(): void {
+    const linksContainer = this.#ensureContainer("nav-links", "prepend");
 
     linksContainer.innerHTML = this.#links
       .map((l) => `<a href="${escapeHtml(l.href)}">${escapeHtml(l.label)}</a>`)
       .join("");
 
-    let authContainer = this.querySelector(".nav-auth") as HTMLSpanElement | null;
-    if (!authContainer) {
-      authContainer = document.createElement("span");
-      authContainer.className = "nav-auth";
-      this.append(authContainer);
-    }
+    const authContainer = this.#ensureContainer("nav-auth", "append");
 
     if (!this.#showAuth) {
       authContainer.innerHTML = "";
