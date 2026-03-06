@@ -1,4 +1,4 @@
-import { escapeHtml } from "../escape-html.js";
+import { escapeHtml } from "@commons-systems/htmlutil";
 import type { PostMeta } from "../firestore.js";
 import { isPublished, type PublishedPost } from "../post-types.js";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.js";

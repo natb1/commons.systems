@@ -1,6 +1,6 @@
 import type { User } from "firebase/auth";
 import type { Timestamp } from "firebase/firestore";
-import { escapeHtml } from "../escape-html.js";
+import { escapeHtml } from "@commons-systems/htmlutil";
 import type { Group } from "@commons-systems/authutil/groups";
 import { getTransactions, type Transaction } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";

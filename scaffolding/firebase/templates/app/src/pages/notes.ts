@@ -1,5 +1,5 @@
 import { auth } from "../auth.js";
-import { escapeHtml } from "../escape-html.js";
+import { escapeHtml } from "@commons-systems/htmlutil";
 import { getNotes } from "../firestore.js";
 
 export async function renderNotes(): Promise<string> {

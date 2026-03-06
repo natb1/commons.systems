@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import { escapeHtml } from "../escape-html.js";
+import { escapeHtml } from "@commons-systems/htmlutil";
 
 export function renderAdmin(user: User | null, isAdmin: boolean, skippedCount = 0): string {
   if (!user) {

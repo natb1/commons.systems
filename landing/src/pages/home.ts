@@ -1,6 +1,6 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { escapeHtml } from "../escape-html.js";
+import { escapeHtml } from "@commons-systems/htmlutil";
 import { fetchPost } from "../github.js";
 import type { PostMeta } from "../firestore.js";
 
