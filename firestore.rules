@@ -109,13 +109,17 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
-    match /print/{env}/messages/{messageId} {
-      allow read: if true;
+    // Media items are readable by everyone if public domain, or by group members
+    // via denormalized memberUids array. Writes are admin-only (not exposed in rules).
+    match /print/{env}/media/{mediaId} {
+      allow read: if resource.data.publicDomain == true
+        || (request.auth != null && request.auth.uid in resource.data.memberUids);
       allow write: if false;
     }
 
-    match /print/{env}/notes/{noteId} {
-      allow read: if request.auth != null;
+    // Groups are readable only by their members
+    match /print/{env}/groups/{groupId} {
+      allow read: if request.auth != null && request.auth.uid in resource.data.members;
       allow write: if false;
     }
 
