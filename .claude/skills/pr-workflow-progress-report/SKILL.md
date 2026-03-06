@@ -15,5 +15,5 @@ mkdir -p tmp
 - Write evaluation results to `tmp/{FILE_PREFIX}-eval-{ITERATION}.txt`
 - Post combined comment:
   ```bash
-  post-pr-comment.sh {PR_NUM} <output_file> tmp/{FILE_PREFIX}-eval-{ITERATION}.txt
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh {PR_NUM} <output_file> tmp/{FILE_PREFIX}-eval-{ITERATION}.txt
   ```

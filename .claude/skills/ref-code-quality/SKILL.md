@@ -63,7 +63,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 - Write evaluation results (user classifications) to `tmp/codequality-eval-<N>.txt`
 - Post combined comment (constructed from background Task `output_file` paths via the Bash command above):
   ```bash
-  post-pr-comment.sh <pr-num> tmp/codequality-output-<N>.txt tmp/codequality-eval-<N>.txt
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/codequality-output-<N>.txt tmp/codequality-eval-<N>.txt
   ```
 
 **Termination instructions:**
@@ -111,7 +111,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post as a separate PR comment (distinct from the progress report already posted by progress report instructions):
   ```bash
-  post-pr-comment.sh <pr-num> tmp/codequality-final.txt
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/codequality-final.txt
   ```
-- Update state to step=10/phase=security via `issue-state-write` with `active_skills: ["ref-memory-management", "ref-pr-workflow", "ref-security"]`
+- Update state to step=10/phase=security via `.claude/skills/ref-pr-workflow/scripts/issue-state-write` with `active_skills: ["ref-memory-management", "ref-pr-workflow", "ref-security"]`
 - Proceed to Step 10
