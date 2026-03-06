@@ -17,8 +17,9 @@ function getUserGroups(user: User): Promise<Group[]> {
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
-const app = document.getElementById("app");
-if (!app) throw new Error("#app element not found");
+const appOrNull = document.getElementById("app");
+if (!appOrNull) throw new Error("#app element not found");
+const app: HTMLElement = appOrNull;
 
 export type AppState =
   | { user: null; groups: readonly []; groupError: false }
