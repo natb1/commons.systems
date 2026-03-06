@@ -1,0 +1,48 @@
+{
+  "name": "@commons-systems/blog",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./post-types": "./src/post-types.ts",
+    "./date": "./src/date.ts",
+    "./github": "./src/github.ts",
+    "./feed": "./src/feed.ts",
+    "./firestore": "./src/firestore.ts",
+    "./blog-roll/types": "./src/blog-roll/types.ts",
+    "./blog-roll/static-strategy": "./src/blog-roll/static-strategy.ts",
+    "./blog-roll/atom-strategy": "./src/blog-roll/atom-strategy.ts",
+    "./pages/home": "./src/pages/home.ts",
+    "./pages/admin": "./src/pages/admin.ts",
+    "./components/info-panel": "./src/components/info-panel.ts",
+    "./blog.css": "./blog.css"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/"
+  },
+  "peerDependencies": {
+    "@commons-systems/authutil": "file:../authutil",
+    "@commons-systems/firestoreutil": "file:../firestoreutil",
+    "@commons-systems/htmlutil": "file:../htmlutil",
+    "dompurify": "^3.3.1",
+    "firebase": "^12.9.0",
+    "marked": "^15"
+  },
+  "devDependencies": {
+    "@commons-systems/authutil": "file:../authutil",
+    "@commons-systems/firestoreutil": "file:../firestoreutil",
+    "@commons-systems/htmlutil": "file:../htmlutil",
+    "@eslint/js": "^9.19.0",
+    "@types/dompurify": "^3.0.5",
+    "dompurify": "^3.3.1",
+    "eslint": "^9.19.0",
+    "firebase": "^12.9.0",
+    "happy-dom": "^17.4.4",
+    "marked": "^15",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.22.0",
+    "vitest": "^3.0.5"
+  }
+}

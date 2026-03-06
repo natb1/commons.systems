@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { generateRssXml } from "../src/feed";
-import type { PostMeta } from "../src/firestore";
+import type { PostMeta } from "../src/post-types";
+
+const config = { title: "commons.systems", siteUrl: "https://commons.systems" };
 
 const publishedPosts: PostMeta[] = [
   {
@@ -32,7 +34,7 @@ const mixedPosts: PostMeta[] = [
 
 describe("generateRssXml", () => {
   it("generates valid RSS 2.0 with published posts sorted newest-first", () => {
-    const xml = generateRssXml(publishedPosts);
+    const xml = generateRssXml(publishedPosts, config);
     expect(xml).toContain('<?xml version="1.0" encoding="UTF-8"?>');
     expect(xml).toContain('<rss version="2.0">');
     expect(xml).toContain("<channel>");
@@ -43,7 +45,7 @@ describe("generateRssXml", () => {
   });
 
   it("excludes unpublished posts", () => {
-    const xml = generateRssXml(mixedPosts);
+    const xml = generateRssXml(mixedPosts, config);
     expect(xml).toContain("Newer Post");
     expect(xml).toContain("Older Post");
     expect(xml).not.toContain("Draft");
@@ -59,7 +61,7 @@ describe("generateRssXml", () => {
         filename: "xss.md",
       },
     ];
-    const xml = generateRssXml(xssPosts);
+    const xml = generateRssXml(xssPosts, config);
     expect(xml).not.toContain("<script>");
     expect(xml).toContain("&lt;script&gt;");
   });
@@ -74,26 +76,34 @@ describe("generateRssXml", () => {
         filename: "d.md",
       },
     ];
-    const xml = generateRssXml(drafts);
+    const xml = generateRssXml(drafts, config);
     expect(xml).toContain("<channel>");
     expect(xml).toContain("</channel>");
     expect(xml).not.toContain("<item>");
   });
 
   it("includes post links in hash URL format", () => {
-    const xml = generateRssXml(publishedPosts);
+    const xml = generateRssXml(publishedPosts, config);
     expect(xml).toContain("https://commons.systems/#/post/newer-post");
     expect(xml).toContain("https://commons.systems/#/post/older-post");
   });
 
   it("guid elements have isPermaLink=false", () => {
-    const xml = generateRssXml(publishedPosts);
+    const xml = generateRssXml(publishedPosts, config);
     expect(xml).toContain('isPermaLink="false"');
     expect(xml).not.toMatch(/<guid>(?!.*isPermaLink)/);
   });
 
   it("includes pubDate elements", () => {
-    const xml = generateRssXml(publishedPosts);
+    const xml = generateRssXml(publishedPosts, config);
     expect(xml).toContain("<pubDate>");
+  });
+
+  it("uses config title and siteUrl in channel", () => {
+    const customConfig = { title: "My Blog", siteUrl: "https://myblog.com" };
+    const xml = generateRssXml(publishedPosts, customConfig);
+    expect(xml).toContain("<title>My Blog</title>");
+    expect(xml).toContain("<link>https://myblog.com</link>");
+    expect(xml).toContain("https://myblog.com/#/post/newer-post");
   });
 });

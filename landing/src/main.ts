@@ -1,15 +1,16 @@
 import type { User } from "firebase/auth";
 
 import { createRouter, parseHash } from "@commons-systems/router";
-import { renderHomeHtml, hydrateHome } from "./pages/home.js";
-import { renderAdmin } from "./pages/admin.js";
+import { renderHomeHtml, hydrateHome } from "@commons-systems/blog/pages/home";
+import { renderAdmin } from "@commons-systems/blog/pages/admin";
+import { renderInfoPanel, hydrateInfoPanel } from "@commons-systems/blog/components/info-panel";
+import { createRssBlobUrl } from "@commons-systems/blog/feed";
+import { createFetchPost } from "@commons-systems/blog/github";
+import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
-import { renderInfoPanel, hydrateInfoPanel } from "./components/info-panel.js";
-import { createRssBlobUrl } from "./feed.js";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
-import { getPosts, type PostMeta } from "./firestore.js";
 import { isInGroup } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE } from "./firebase.js";
 
@@ -35,19 +36,24 @@ let lastSkippedCount = 0;
 let rssBlobUrl: string | undefined;
 let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
-const INFO_PANEL_LINKS = [{ label: "Source", url: "https://github.com/natb1/commons.systems" }];
+const boundFetchPost = createFetchPost("landing/post");
+const RSS_CONFIG = { title: "commons.systems", siteUrl: "https://commons.systems" };
+const INFO_PANEL_LINK_SECTIONS = [
+  { heading: "Links", links: [{ label: "Source", url: "https://github.com/natb1/commons.systems" }] },
+];
 
 const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
 
   if (rssBlobUrl) URL.revokeObjectURL(rssBlobUrl);
-  rssBlobUrl = createRssBlobUrl(cachedPosts);
+  rssBlobUrl = createRssBlobUrl(cachedPosts, RSS_CONFIG);
 
   infoPanel.innerHTML = renderInfoPanel({
-    links: INFO_PANEL_LINKS,
+    linkSections: INFO_PANEL_LINK_SECTIONS,
     topPosts: cachedPosts,
     blogRoll: BLOG_ROLL_ENTRIES,
     rssFeedUrl: rssBlobUrl,
+    opmlUrl: "/blogroll.opml",
   });
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
   lastRenderedPosts = cachedPosts;
@@ -73,7 +79,7 @@ toggle.addEventListener("click", () => {
 
 async function loadPosts(): Promise<string> {
   try {
-    const result = await getPosts(currentUser);
+    const result = await getPosts(db, NAMESPACE, currentUser);
     cachedPosts = result.posts;
     lastSkippedCount = result.skippedCount;
     return renderHomeHtml(cachedPosts);
@@ -104,7 +110,7 @@ if (app) {
         render: () => loadPosts(),
         afterRender: (outlet, path) => {
           const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
-          hydrateHome(outlet, cachedPosts, slug);
+          hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
           updateInfoPanel();
         },
       },

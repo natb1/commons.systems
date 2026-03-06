@@ -1,16 +1,13 @@
 import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import type { Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { isInGroup } from "@commons-systems/authutil/groups";
 
-import { db, NAMESPACE } from "./firebase.js";
-
-export type PostMeta =
-  | { id: string; title: string; published: true; publishedAt: string; filename: string }
-  | { id: string; title: string; published: false; publishedAt: null; filename: string };
-
-export type { PublishedPost } from "./post-types.js";
+export type { PostMeta, PublishedPost } from "./post-types.js";
 export { isPublished } from "./post-types.js";
+
+import type { PostMeta } from "./post-types.js";
 
 export interface GetPostsResult {
   posts: PostMeta[];
@@ -40,9 +37,9 @@ function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null 
   return { id, title, published: false, publishedAt: null, filename };
 }
 
-export async function getPosts(user: User | null): Promise<GetPostsResult> {
-  const path = nsCollectionPath(NAMESPACE, "posts");
-  const admin = await isInGroup(db, NAMESPACE, user, "admin");
+export async function getPosts(db: Firestore, namespace: string, user: User | null): Promise<GetPostsResult> {
+  const path = nsCollectionPath(namespace, "posts");
+  const admin = await isInGroup(db, namespace, user, "admin");
   const q = admin
     ? query(collection(db, path), orderBy("publishedAt", "desc"))
     : query(collection(db, path), where("published", "==", true));
