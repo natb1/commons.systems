@@ -183,6 +183,12 @@ describe("hydrateTransactionTable", () => {
     expect(input.classList.contains("save-error")).toBe(true);
   });
 
+  it("throws DataIntegrityError for malformed budget map JSON", () => {
+    const container = createContainer("txn-1");
+    container.dataset.budgetMap = "not-json";
+    expect(() => hydrateTransactionTable(container)).toThrow("Failed to parse budget map: not-json");
+  });
+
   it("throws DataIntegrityError for non-object budget map JSON", () => {
     const container = createContainer("txn-1");
     container.dataset.budgetMap = JSON.stringify([1, 2, 3]);

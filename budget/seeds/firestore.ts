@@ -33,7 +33,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
       rollover: "none",
       groupId: "household",
       memberUids: ["test-github-user"],
-    },
+    } satisfies BudgetSeedData,
   },
   {
     id: "housing",
@@ -43,7 +43,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
       rollover: "balance",
       groupId: "household",
       memberUids: ["test-github-user"],
-    },
+    } satisfies BudgetSeedData,
   },
   {
     id: "vacation",
@@ -53,7 +53,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
       rollover: "balance",
       groupId: "household",
       memberUids: ["test-github-user"],
-    },
+    } satisfies BudgetSeedData,
   },
 ];
 
@@ -69,7 +69,7 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       total: 5.75,
       groupId: "household",
       memberUids: ["test-github-user"],
-    },
+    } satisfies BudgetPeriodSeedData,
   },
   {
     id: "housing-2025-01-20",
@@ -80,7 +80,7 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       total: 142.50,
       groupId: "household",
       memberUids: ["test-github-user"],
-    },
+    } satisfies BudgetPeriodSeedData,
   },
   {
     id: "vacation-2025-02-03",
@@ -91,7 +91,7 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       total: 389.00,
       groupId: "household",
       memberUids: ["test-github-user"],
-    },
+    } satisfies BudgetPeriodSeedData,
   },
 ];
 

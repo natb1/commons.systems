@@ -381,6 +381,21 @@ describe("getBudgets", () => {
     await expect(getBudgets(null)).rejects.toThrow(/Expected finite number for weeklyAllowance/);
   });
 
+  it("throws DataIntegrityError for empty budget name", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          name: "",
+          weeklyAllowance: 100,
+          rollover: "none",
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgets(null)).rejects.toThrow("Budget name must be non-empty");
+  });
+
   it("throws DataIntegrityError for negative weeklyAllowance", async () => {
     mockGetDocs.mockResolvedValue({
       docs: [{
@@ -527,6 +542,22 @@ describe("getBudgetPeriods", () => {
       total: 5.75, groupId: null,
     })}]});
     await expect(getBudgetPeriods(null)).rejects.toThrow(/periodStart must be before periodEnd/);
+  });
+
+  it("throws DataIntegrityError for negative total", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: -5,
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected non-negative number for total/);
   });
 
   it("throws DataIntegrityError for non-finite total", async () => {

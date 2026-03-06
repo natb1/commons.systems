@@ -82,6 +82,7 @@ service cloud.firestore {
         && request.resource.data.groupId == resource.data.groupId
         && request.resource.data.memberUids == resource.data.memberUids
         && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
         && request.resource.data.weeklyAllowance is number
         && request.resource.data.weeklyAllowance >= 0
         && request.resource.data.rollover in ["none", "debt", "balance"]
