@@ -41,12 +41,14 @@ a:hover {
   text-decoration-thickness: 2px;
 }
 
-nav {
+nav,
+app-nav {
   display: flex;
   align-items: baseline;
 }
 
-nav a {
+nav a,
+app-nav a {
   margin-right: 1rem;
 }
 

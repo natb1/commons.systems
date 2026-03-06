@@ -3,7 +3,8 @@ import type { User } from "firebase/auth";
 import { createRouter, getHashPath } from "./router.js";
 import { renderHomeHtml, hydrateHome } from "./pages/home.js";
 import { renderAdmin } from "./pages/admin.js";
-import { renderNav } from "./components/nav.js";
+import "@commons-systems/style/components/nav";
+import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { renderInfoPanel, hydrateInfoPanel } from "./components/info-panel.js";
 import { createRssBlobUrl } from "./feed.js";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
@@ -12,7 +13,7 @@ import { getPosts, type PostMeta } from "./firestore.js";
 import { isInGroup } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE } from "./firebase.js";
 
-const nav = document.getElementById("nav");
+const navEl = document.getElementById("nav") as AppNavElement;
 const app = document.getElementById("app");
 const infoPanel = document.getElementById("info-panel");
 
@@ -65,22 +66,21 @@ function updateInfoPanel(): void {
   lastRenderedPosts = cachedPosts;
 }
 
-function updateNav(): void {
-  if (!nav) {
-    console.error("updateNav: #nav element not found");
-    return;
-  }
-  nav.innerHTML = renderNav(currentUser, getHashPath());
-  document.getElementById("sign-in")?.addEventListener("click", handleClick(signIn, "Sign-in"));
-  document.getElementById("sign-out")?.addEventListener("click", handleClick(signOut, "Sign-out"));
+navEl.links = [{ href: "#/", label: "Home" }];
+navEl.addEventListener("sign-in", handleClick(signIn, "Sign-in"));
+navEl.addEventListener("sign-out", handleClick(signOut, "Sign-out"));
 
-  const toggle = document.getElementById("panel-toggle");
-  toggle?.addEventListener("click", () => {
-    if (!infoPanel) return;
-    const isOpen = infoPanel.classList.toggle("open");
-    toggle.setAttribute("aria-expanded", String(isOpen));
-  });
+function updateNav(): void {
+  navEl.showAuth = getHashPath() === "/admin";
+  navEl.user = currentUser;
 }
+
+const toggle = document.getElementById("panel-toggle");
+toggle?.addEventListener("click", () => {
+  if (!infoPanel) return;
+  const isOpen = infoPanel.classList.toggle("open");
+  toggle.setAttribute("aria-expanded", String(isOpen));
+});
 
 async function loadPosts(): Promise<string> {
   try {

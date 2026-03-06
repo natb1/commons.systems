@@ -1,7 +1,9 @@
 import { createRouter, parseHash } from "./router.js";
 import { renderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
-import { renderNav } from "./components/nav.js";
+import "@commons-systems/style/components/nav";
+import type { AppNavElement } from "@commons-systems/style/components/nav";
+import { escapeHtml } from "@commons-systems/htmlutil";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
 import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/authutil/groups";
@@ -12,8 +14,8 @@ function getUserGroups(user: User): Promise<Group[]> {
   return _getUserGroups(db, NAMESPACE, user);
 }
 
-const nav = document.getElementById("nav")!;
-if (!nav) throw new Error("#nav element not found");
+const navEl = document.getElementById("nav") as AppNavElement;
+if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
@@ -40,22 +42,32 @@ function selectedGroup(): Group | null {
   return state.groups.find((g) => g.id === param) ?? state.groups[0];
 }
 
+navEl.links = [{ href: "#/", label: "Home" }, { href: "#/about", label: "About" }];
+navEl.addEventListener("sign-in", (e) => { e.preventDefault(); signIn(); });
+navEl.addEventListener("sign-out", (e) => {
+  e.preventDefault();
+  signOut().catch((error) => console.error("Unexpected sign-out error:", error));
+});
+
 function updateNav(user: User | null): void {
+  navEl.user = user;
   const group = selectedGroup();
-  nav!.innerHTML = renderNav(user, state.groups, group?.id ?? null);
-  document.getElementById("sign-in")?.addEventListener("click", (e) => {
-    e.preventDefault();
-    signIn();
-  });
-  document.getElementById("sign-out")?.addEventListener("click", (e) => {
-    e.preventDefault();
-    // signOut handles failures internally with a toast; outer catch guards against bugs in the error handler
-    signOut().catch((error) => console.error("Unexpected sign-out error:", error));
-  });
-  document.getElementById("group-select")?.addEventListener("change", (e) => {
-    const select = e.target as HTMLSelectElement;
-    setGroupParam(select.value);
-  });
+  let select = navEl.querySelector("#group-select") as HTMLSelectElement | null;
+  if (user && state.groups.length > 0) {
+    if (!select) {
+      select = document.createElement("select");
+      select.id = "group-select";
+      select.setAttribute("aria-label", "Select group");
+      navEl.insertBefore(select, navEl.querySelector(".nav-auth"));
+      select.addEventListener("change", (e) => setGroupParam((e.target as HTMLSelectElement).value));
+    }
+    select.innerHTML = state.groups.map(g => {
+      const sel = g.id === (group?.id ?? null) ? " selected" : "";
+      return `<option value="${escapeHtml(g.id)}"${sel}>${escapeHtml(g.name)}</option>`;
+    }).join("");
+  } else if (select) {
+    select.remove();
+  }
 }
 
 // Render nav immediately with unauthenticated state
