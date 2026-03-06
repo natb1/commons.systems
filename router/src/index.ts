@@ -53,8 +53,10 @@ export function createRouter(
           route.afterRender?.(outlet, path);
         } catch (afterError) {
           if (afterError instanceof TypeError || afterError instanceof ReferenceError) {
-            // Defer so it surfaces as uncaught in devtools without
-            // replacing rendered content via the outer catch block.
+            // Return early so the outer catch doesn't replace rendered
+            // content with a generic error message. Defer via setTimeout
+            // so it surfaces as uncaught in devtools (rethrowing here
+            // would only reject the navigate() promise, which is void-discarded).
             setTimeout(() => { throw afterError; }, 0);
             return;
           }

@@ -12,7 +12,7 @@ function getUserGroups(user: User): Promise<Group[]> {
   return _getUserGroups(db, NAMESPACE, user);
 }
 
-const nav = document.getElementById("nav")!;
+const nav = document.getElementById("nav");
 if (!nav) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
@@ -42,7 +42,7 @@ function selectedGroup(): Group | null {
 
 function updateNav(user: User | null): void {
   const group = selectedGroup();
-  nav!.innerHTML = renderNav(user, state.groups, group?.id ?? null);
+  nav.innerHTML = renderNav(user, state.groups, group?.id ?? null);
   document.getElementById("sign-in")?.addEventListener("click", (e) => {
     e.preventDefault();
     signIn();
@@ -135,7 +135,7 @@ export interface AuthStateDeps {
   getUserGroups: (user: User) => Promise<Group[]>;
   /** Commits final state and triggers nav update + route re-render. */
   transition: (next: AppState) => void;
-  /** Destroys the router and replaces outlet content for terminal error states. */
+  /** Displays a terminal error message, halting further route navigation. */
   showTerminalError: (html: string) => void;
   /** Returns the current app state snapshot (used for race-condition guards during async operations). */
   getState: () => AppState;
@@ -176,7 +176,7 @@ export function createAuthStateHandler(deps: AuthStateDeps): (user: User | null)
 const handleAuth = createAuthStateHandler({
   getUserGroups,
   transition,
-  showTerminalError: (html) => router.showTerminalError(html),
+  showTerminalError: router.showTerminalError,
   getState: () => state,
   setState: (next) => { state = next; },
 });
