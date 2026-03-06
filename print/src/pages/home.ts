@@ -15,7 +15,6 @@ function renderMediaList(items: MediaItem[]): string {
 
   const rows = items
     .map((item) => {
-      const downloadUrl = `javascript:void(0)`;
       return `<li class="media-item" data-id="${escapeHtml(item.id)}">
         <div class="media-info">
           <span class="media-title">${escapeHtml(item.title)}</span>
