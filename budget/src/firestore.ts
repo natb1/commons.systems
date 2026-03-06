@@ -1,9 +1,15 @@
-import { collection, doc, getDocs, query, updateDoc, where, Timestamp } from "firebase/firestore";
+import { collection, doc, getDocs, query, updateDoc, where, Timestamp, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
 
+/**
+ * Budget rollover strategy:
+ * - "none": unspent allowance resets each period
+ * - "debt": only negative balances carry to next period
+ * - "balance": full balance (positive or negative) carries over
+ */
 export type Rollover = "none" | "debt" | "balance";
 
 export interface Budget {
@@ -19,7 +25,7 @@ export interface BudgetPeriod {
   readonly budgetId: string;
   readonly periodStart: Timestamp;
   readonly periodEnd: Timestamp;
-  /** Sum of transaction amounts in this period. */
+  /** Sum of transaction amounts in this period. Non-negative per Firestore rules. */
   readonly total: number;
   readonly groupId: string | null;
 }
@@ -87,12 +93,18 @@ function optionalString(value: unknown, field: string): string | null {
   return value;
 }
 
-function asTimestamp(value: unknown): Timestamp | null {
+function optionalTimestamp(value: unknown, field: string): Timestamp | null {
   if (value == null) return null;
   if (!(value instanceof Timestamp)) {
-    throw new DataIntegrityError(`Expected Timestamp for timestamp field, got ${typeof value}`);
+    throw new DataIntegrityError(`Expected Timestamp for ${field}, got ${typeof value}`);
   }
   return value;
+}
+
+function requireTimestamp(value: unknown, field: string): Timestamp {
+  const ts = optionalTimestamp(value, field);
+  if (ts === null) throw new DataIntegrityError(`Expected Timestamp for ${field}, got null`);
+  return ts;
 }
 
 function requireRollover(value: unknown): Rollover {
@@ -100,22 +112,20 @@ function requireRollover(value: unknown): Rollover {
   throw new DataIntegrityError(`Expected rollover to be one of none, debt, balance, got ${value}`);
 }
 
-function requireTimestamp(value: unknown, field: string): Timestamp {
-  if (value == null) {
-    throw new DataIntegrityError(`Expected Timestamp for ${field}, got null`);
-  }
-  if (!(value instanceof Timestamp)) {
-    throw new DataIntegrityError(`Expected Timestamp for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
-
-export async function getTransactions(groupId: null): Promise<Transaction[]>;
-export async function getTransactions(groupId: string, uid: string): Promise<Transaction[]>;
-export async function getTransactions(groupId: string | null, uid?: string): Promise<Transaction[]> {
+/**
+ * Build and execute a group-scoped Firestore query.
+ * When groupId is null, reads the public seed collection (e.g. "seed-transactions").
+ * When groupId is provided, reads the authenticated collection filtered by group membership.
+ */
+async function queryGroupCollection(
+  collectionName: string,
+  seedPrefix: string,
+  groupId: string | null,
+  uid?: string,
+): Promise<QueryDocumentSnapshot<DocumentData, DocumentData>[]> {
   if (groupId && !uid) throw new Error("uid is required when querying by groupId");
-  const collectionName = groupId ? "transactions" : "seed-transactions";
-  const path = nsCollectionPath(NAMESPACE, collectionName);
+  const name = groupId ? collectionName : `${seedPrefix}${collectionName}`;
+  const path = nsCollectionPath(NAMESPACE, name);
   const q = groupId
     ? query(
         collection(db, path),
@@ -124,7 +134,14 @@ export async function getTransactions(groupId: string | null, uid?: string): Pro
       )
     : query(collection(db, path));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((docSnap) => {
+  return snapshot.docs;
+}
+
+export async function getTransactions(groupId: null): Promise<Transaction[]>;
+export async function getTransactions(groupId: string, uid: string): Promise<Transaction[]>;
+export async function getTransactions(groupId: string | null, uid?: string): Promise<Transaction[]> {
+  const docs = await queryGroupCollection("transactions", "seed-", groupId, uid);
+  return docs.map((docSnap) => {
     const data = docSnap.data();
     return {
       id: docSnap.id,
@@ -136,7 +153,7 @@ export async function getTransactions(groupId: string | null, uid?: string): Pro
       category: requireString(data.category, "category"),
       reimbursement: requireReimbursement(data.reimbursement),
       budget: optionalString(data.budget, "budget"),
-      timestamp: asTimestamp(data.timestamp),
+      timestamp: optionalTimestamp(data.timestamp, "timestamp"),
       statementId: optionalString(data.statementId, "statementId"),
       groupId: optionalString(data.groupId, "groupId"),
     };
@@ -160,22 +177,14 @@ export async function updateTransaction(
 export async function getBudgets(groupId: null): Promise<Budget[]>;
 export async function getBudgets(groupId: string, uid: string): Promise<Budget[]>;
 export async function getBudgets(groupId: string | null, uid?: string): Promise<Budget[]> {
-  if (groupId && !uid) throw new Error("uid is required when querying by groupId");
-  const collectionName = groupId ? "budgets" : "seed-budgets";
-  const path = nsCollectionPath(NAMESPACE, collectionName);
-  const q = groupId
-    ? query(
-        collection(db, path),
-        where("groupId", "==", groupId),
-        where("memberUids", "array-contains", uid),
-      )
-    : query(collection(db, path));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((docSnap) => {
+  const docs = await queryGroupCollection("budgets", "seed-", groupId, uid);
+  return docs.map((docSnap) => {
     const data = docSnap.data();
+    const name = requireString(data.name, "name");
+    if (!name) throw new DataIntegrityError("Budget name must be non-empty");
     return {
       id: docSnap.id,
-      name: requireString(data.name, "name"),
+      name,
       weeklyAllowance: requireNonNegativeNumber(data.weeklyAllowance, "weeklyAllowance"),
       rollover: requireRollover(data.rollover),
       groupId: optionalString(data.groupId, "groupId"),
@@ -186,18 +195,8 @@ export async function getBudgets(groupId: string | null, uid?: string): Promise<
 export async function getBudgetPeriods(groupId: null): Promise<BudgetPeriod[]>;
 export async function getBudgetPeriods(groupId: string, uid: string): Promise<BudgetPeriod[]>;
 export async function getBudgetPeriods(groupId: string | null, uid?: string): Promise<BudgetPeriod[]> {
-  if (groupId && !uid) throw new Error("uid is required when querying by groupId");
-  const collectionName = groupId ? "budget-periods" : "seed-budget-periods";
-  const path = nsCollectionPath(NAMESPACE, collectionName);
-  const q = groupId
-    ? query(
-        collection(db, path),
-        where("groupId", "==", groupId),
-        where("memberUids", "array-contains", uid),
-      )
-    : query(collection(db, path));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((docSnap) => {
+  const docs = await queryGroupCollection("budget-periods", "seed-", groupId, uid);
+  return docs.map((docSnap) => {
     const data = docSnap.data();
     const periodStart = requireTimestamp(data.periodStart, "periodStart");
     const periodEnd = requireTimestamp(data.periodEnd, "periodEnd");
@@ -211,7 +210,7 @@ export async function getBudgetPeriods(groupId: string | null, uid?: string): Pr
       budgetId: requireString(data.budgetId, "budgetId"),
       periodStart,
       periodEnd,
-      total: requireNumber(data.total, "total"),
+      total: requireNonNegativeNumber(data.total, "total"),
       groupId: optionalString(data.groupId, "groupId"),
     };
   });

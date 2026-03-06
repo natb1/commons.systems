@@ -46,10 +46,7 @@ function handleClick(action: () => void | Promise<void>, label: string): (e: Eve
 }
 
 function updateInfoPanel(): void {
-  if (!infoPanel) {
-    console.error("updateInfoPanel: #info-panel element not found");
-    return;
-  }
+  if (!infoPanel) throw new Error("updateInfoPanel: #info-panel element not found");
   if (cachedPosts === lastRenderedPosts) return;
 
   if (rssBlobUrl) URL.revokeObjectURL(rssBlobUrl);
@@ -66,10 +63,7 @@ function updateInfoPanel(): void {
 }
 
 function updateNav(): void {
-  if (!nav) {
-    console.error("updateNav: #nav element not found");
-    return;
-  }
+  if (!nav) throw new Error("updateNav: #nav element not found");
   nav.innerHTML = renderNav(currentUser, parseHash().path);
   document.getElementById("sign-in")?.addEventListener("click", handleClick(signIn, "Sign-in"));
   document.getElementById("sign-out")?.addEventListener("click", handleClick(signOut, "Sign-out"));
@@ -157,11 +151,14 @@ if (app) {
     }
   });
 
+  // router.navigate() is fire-and-forget — updateInfoPanel() below may see stale
+  // cachedPosts until the router's async render cycle completes and afterRender
+  // calls updateInfoPanel() again with fresh data.
   async function refreshAfterAuthChange(): Promise<void> {
     updateNav();
     router.navigate();
-    // router.navigate() only loads posts on the home route; re-fetch here so
-    // the info panel populates regardless of which route is active.
+    // router.navigate() only loads posts on the home route; re-fetch on /admin
+    // so the info panel populates even when not on home.
     if (parseHash().path === "/admin") {
       await loadPosts();
     }
@@ -171,6 +168,10 @@ if (app) {
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
     refreshAfterAuthChange().catch((err) => {
+      if (err instanceof TypeError || err instanceof ReferenceError) {
+        setTimeout(() => { throw err; }, 0);
+        return;
+      }
       console.error("Failed to refresh after auth change:", err);
     });
   });

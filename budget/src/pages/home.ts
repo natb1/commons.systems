@@ -29,9 +29,14 @@ function renderRow(txn: Transaction, groupName: string, editable: boolean, budge
   const reimbursementCell = editable
     ? `<input type="number" class="edit-reimbursement" value="${String(txn.reimbursement)}" min="0" max="100" aria-label="Reimbursement">`
     : `${String(txn.reimbursement)}%`;
-  const budgetName = txn.budget
-    ? budgetIdToName.get(txn.budget) ?? (() => { throw new DataIntegrityError(`Transaction ${txn.id} references unknown budget ID: ${txn.budget}`); })()
-    : "";
+  let budgetName = "";
+  if (txn.budget) {
+    const resolved = budgetIdToName.get(txn.budget);
+    if (resolved === undefined) {
+      throw new DataIntegrityError(`Transaction ${txn.id} references unknown budget ID: ${txn.budget}`);
+    }
+    budgetName = resolved;
+  }
   const budgetCell = editable
     ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget">`
     : escapeHtml(budgetName);
@@ -127,12 +132,10 @@ export async function renderHome(options: RenderHomeOptions): Promise<string> {
   let tableHtml: string;
   try {
     const [transactions, budgets] = await Promise.all([
-      group && user
-        ? getTransactions(group.id, user.uid)
-        : getTransactions(null),
-      group && user
-        ? getBudgets(group.id, user.uid)
-        : getBudgets(null),
+      (group && user ? getTransactions(group.id, user.uid) : getTransactions(null))
+        .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
+      (group && user ? getBudgets(group.id, user.uid) : getBudgets(null))
+        .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
     ]);
     transactions.sort(compareByTimestampDesc);
     tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets);
@@ -141,7 +144,7 @@ export async function renderHome(options: RenderHomeOptions): Promise<string> {
         || error instanceof TypeError || error instanceof ReferenceError) {
       throw error;
     }
-    console.error("Failed to load transactions and budgets:", error);
+    // Source-specific error already logged above
     const code = (error as { code?: string })?.code;
     const message = code === "permission-denied"
       ? "Access denied. Please contact support."

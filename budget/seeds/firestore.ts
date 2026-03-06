@@ -57,6 +57,8 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
   },
 ];
 
+// Budget period totals match the seed transaction amounts:
+// food: seed-txn-1 (5.75), housing: seed-txn-2 (142.50), vacation: seed-txn-3 (389.00)
 const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
   {
     id: "food-2025-01-13",

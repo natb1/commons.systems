@@ -72,8 +72,8 @@ service cloud.firestore {
     }
 
     // Budgets are scoped to group members via a denormalized `memberUids` field.
-    // Updates limited to name, weeklyAllowance, and rollover; rollover must be
-    // one of "none", "debt", "balance". Create and delete are explicitly denied.
+    // Updates limited to name, weeklyAllowance (must be non-negative), and rollover;
+    // rollover must be one of "none", "debt", "balance". Create and delete are explicitly denied.
     match /budget/{env}/budgets/{budgetId} {
       allow read: if request.auth != null
         && request.auth.uid in resource.data.memberUids;
@@ -90,8 +90,8 @@ service cloud.firestore {
     }
 
     // Budget periods are scoped to group members via a denormalized `memberUids` field.
-    // Updates limited to total; budgetId, periodStart, periodEnd, groupId, and
-    // memberUids are immutable. Create and delete are explicitly denied.
+    // Updates limited to total (must be non-negative); budgetId, periodStart, periodEnd,
+    // groupId, and memberUids are immutable. Create and delete are explicitly denied.
     match /budget/{env}/budget-periods/{periodId} {
       allow read: if request.auth != null
         && request.auth.uid in resource.data.memberUids;
