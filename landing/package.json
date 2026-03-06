@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@commons-systems/authutil": "file:../authutil",
+    "@commons-systems/router": "file:../router",
     "@commons-systems/firebaseutil": "file:../firebaseutil",
+    "@commons-systems/htmlutil": "file:../htmlutil",
     "@commons-systems/firestoreutil": "file:../firestoreutil",
     "@commons-systems/style": "file:../style",
     "dompurify": "^3.3.1",

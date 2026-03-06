@@ -3,17 +3,6 @@ name: Production Deploy
 on:
   pull_request:
     types: [closed]
-    paths:
-      - "landing/**"
-      - "budget/**"
-      # SCAFFOLD MARKER: prod-deploy-paths - scaffold inserts new app paths above this line
-      - "authutil/**"
-      - "firebaseutil/**"
-      - "firestoreutil/**"
-      - "style/**"
-      - ".claude/skills/ref-pr-workflow/scripts/**"
-      - "firebase.json"
-      - "firestore.rules"
 
 permissions:
   contents: read

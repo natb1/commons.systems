@@ -13,6 +13,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Published posts are public; unpublished posts require admin group membership
     match /landing/{env}/posts/{postId} {
       allow read: if resource.data.published == true || isLandingAdmin(env);
       allow write: if false;

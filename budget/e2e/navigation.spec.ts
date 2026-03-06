@@ -12,7 +12,7 @@ test.describe("navigation", () => {
   test("HTML shell structure @smoke", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("header h1")).toHaveText("Budget");
-    await expect(page.locator("nav")).toBeVisible();
+    await expect(page.locator("app-nav")).toBeVisible();
     await expect(page.locator("main")).toBeVisible();
     await expect(page.locator("footer")).toBeVisible();
   });
@@ -25,7 +25,7 @@ test.describe("navigation", () => {
   test("clicking About nav link shows About heading @smoke", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("main h2")).toHaveText("Transactions", { timeout: 10000 });
-    await page.click('nav a[href="#/about"]');
+    await page.click('app-nav a[href="#/about"]');
     await expect(page.locator("main h2")).toHaveText("About");
     await expect(page.locator("main p")).toContainText(
       "commons.systems app",
@@ -35,7 +35,7 @@ test.describe("navigation", () => {
   test("clicking Home nav link returns to Transactions heading", async ({ page }) => {
     await page.goto("/#/about");
     await expect(page.locator("main h2")).toHaveText("About");
-    await page.click('nav a[href="#/"]');
+    await page.click('app-nav a[href="#/"]');
     await expect(page.locator("main h2")).toHaveText("Transactions");
   });
 

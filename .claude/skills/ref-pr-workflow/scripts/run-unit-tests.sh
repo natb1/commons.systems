@@ -4,6 +4,9 @@ set -euo pipefail
 REPO_ROOT=$(git rev-parse --show-toplevel)
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 
+# shellcheck source=lib.sh
+source "$SCRIPTS/lib.sh"
+
 # Parse options
 declare -A DIRTY_APPS
 RUN_NIX=false
@@ -63,6 +66,7 @@ FAILURES=()
 # Run app unit tests
 for dir in "${APP_DIRS[@]}"; do
   echo "=== Unit tests: $dir ==="
+  install_local_deps "$REPO_ROOT" "$REPO_ROOT/$dir/package.json"
   if (cd "$REPO_ROOT/$dir" && npm ci && npx vitest run); then
     echo "PASS: $dir"
   else
@@ -74,7 +78,7 @@ done
 # Run nix flake check
 if [ "$RUN_NIX" = true ]; then
   echo "=== nix flake check ==="
-  if nix flake check "$REPO_ROOT"; then
+  if nix flake check --impure "$REPO_ROOT"; then
     echo "PASS: nix flake check"
   else
     echo "FAIL: nix flake check" >&2

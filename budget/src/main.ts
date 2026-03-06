@@ -1,7 +1,9 @@
-import { createRouter, parseHash } from "./router.js";
+import { createRouter, parseHash } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
-import { renderNav } from "./components/nav.js";
+import "@commons-systems/style/components/nav";
+import type { AppNavElement } from "@commons-systems/style/components/nav";
+import { escapeHtml } from "@commons-systems/htmlutil";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
 import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/authutil/groups";
@@ -12,8 +14,8 @@ function getUserGroups(user: User): Promise<Group[]> {
   return _getUserGroups(db, NAMESPACE, user);
 }
 
-const nav = document.getElementById("nav");
-if (!nav) throw new Error("#nav element not found");
+const navEl = document.getElementById("nav") as AppNavElement;
+if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
@@ -40,44 +42,65 @@ function selectedGroup(): Group | null {
   return state.groups.find((g) => g.id === param) ?? state.groups[0];
 }
 
+navEl.links = [{ href: "#/", label: "Home" }, { href: "#/about", label: "About" }];
+navEl.addEventListener("sign-in", () => signIn());
+navEl.addEventListener("sign-out", () => {
+  signOut().catch((error) => console.error("Unexpected sign-out error:", error));
+});
+
 function updateNav(user: User | null): void {
+  navEl.user = user;
   const group = selectedGroup();
-  nav.innerHTML = renderNav(user, state.groups, group?.id ?? null);
-  document.getElementById("sign-in")?.addEventListener("click", (e) => {
-    e.preventDefault();
-    signIn();
-  });
-  document.getElementById("sign-out")?.addEventListener("click", (e) => {
-    e.preventDefault();
-    // signOut handles failures internally with a toast; outer catch guards against bugs in the error handler
-    signOut().catch((error) => console.error("Unexpected sign-out error:", error));
-  });
-  document.getElementById("group-select")?.addEventListener("change", (e) => {
-    const select = e.target as HTMLSelectElement;
-    setGroupParam(select.value);
-  });
+  let select = navEl.querySelector("#group-select") as HTMLSelectElement | null;
+  if (user && state.groups.length > 0) {
+    if (!select) {
+      select = document.createElement("select");
+      select.id = "group-select";
+      select.setAttribute("aria-label", "Select group");
+      const authContainer = navEl.querySelector(".nav-auth");
+      if (!authContainer) throw new Error(".nav-auth container not found in app-nav");
+      authContainer.insertBefore(select, authContainer.querySelector("#sign-out"));
+      select.addEventListener("change", (e) => setGroupParam((e.target as HTMLSelectElement).value));
+    }
+    select.innerHTML = state.groups.map(g => {
+      const sel = g.id === (group?.id ?? null) ? " selected" : "";
+      return `<option value="${escapeHtml(g.id)}"${sel}>${escapeHtml(g.name)}</option>`;
+    }).join("");
+  } else if (select) {
+    select.remove();
+  }
 }
 
-// Render nav immediately with unauthenticated state
+// Show login UI immediately; onAuthStateChanged will update once auth resolves.
 updateNav(null);
 
-const router = createRouter(app, [
+const router = createRouter(
+  app,
+  [
+    {
+      path: "/",
+      render: () => {
+        const group = selectedGroup();
+        const user = state.user;
+        if (!user) {
+          return renderHome({ user: null, group: null, groupError: false });
+        }
+        if (group) {
+          return renderHome({ user, group, groupError: false });
+        }
+        return renderHome({ user, group, groupError: state.groupError });
+      },
+    },
+    { path: "/about", render: renderAbout },
+  ],
   {
-    path: "/",
-    render: () => {
-      const group = selectedGroup();
-      const user = state.user;
-      if (!user) {
-        return renderHome({ user: null, group: null, groupError: false });
-      }
-      if (group) {
-        return renderHome({ user, group, groupError: false });
-      }
-      return renderHome({ user, group, groupError: state.groupError });
+    formatError: (error) => {
+      if (error instanceof DataIntegrityError || error instanceof RangeError)
+        return "A data error occurred. Please contact support.";
+      return undefined;
     },
   },
-  { path: "/about", render: renderAbout },
-]);
+);
 
 function transition(next: AppState): void {
   state = next;
@@ -125,13 +148,11 @@ export interface AuthStateDeps {
   getUserGroups: (user: User) => Promise<Group[]>;
   /** Commits final state and triggers nav update + route re-render. */
   transition: (next: AppState) => void;
-  /** Tears down the router (removes hashchange listener) on terminal data errors. */
-  destroyRouter: () => void;
-  /** Replaces app content directly, bypassing the router, for terminal error states. */
-  setAppHtml: (html: string) => void;
+  /** Displays a terminal error message, halting further route navigation. */
+  showTerminalError: (html: string) => void;
   /** Returns the current app state snapshot (used for race-condition guards during async operations). */
   getState: () => AppState;
-  /** Sets intermediate state without triggering re-render (e.g., setting user before async group fetch). */
+  /** Sets intermediate state without updating nav or triggering route re-render (e.g., setting user before async group fetch). */
   setState: (next: AppState) => void;
 }
 
@@ -145,7 +166,7 @@ export function createAuthStateHandler(deps: AuthStateDeps): (user: User | null)
     const currentState = deps.getState();
     deps.setState({
       user,
-      groups: currentState.user === user ? currentState.groups : [],
+      groups: currentState.user === user && !currentState.groupError ? currentState.groups : [],
       groupError: false,
     });
     try {
@@ -155,8 +176,7 @@ export function createAuthStateHandler(deps: AuthStateDeps): (user: User | null)
     } catch (error) {
       if (error instanceof DataIntegrityError) {
         console.error("Data integrity error in user groups:", error);
-        deps.destroyRouter();
-        deps.setAppHtml("<p>A data error occurred. Please contact support.</p>");
+        deps.showTerminalError("<p>A data error occurred. Please contact support.</p>");
         return;
       }
       if (error instanceof TypeError || error instanceof ReferenceError) throw error;
@@ -169,8 +189,7 @@ export function createAuthStateHandler(deps: AuthStateDeps): (user: User | null)
 const handleAuth = createAuthStateHandler({
   getUserGroups,
   transition,
-  destroyRouter: () => router.destroy(),
-  setAppHtml: (html) => { app.innerHTML = html; },
+  showTerminalError: router.showTerminalError,
   getState: () => state,
   setState: (next) => { state = next; },
 });

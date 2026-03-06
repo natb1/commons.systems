@@ -3,17 +3,6 @@ name: PR Checks
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    paths:
-      - "landing/**"
-      - "budget/**"
-      # SCAFFOLD MARKER: pr-checks-paths - scaffold inserts new app paths above this line
-      - "authutil/**"
-      - "firebaseutil/**"
-      - "firestoreutil/**"
-      - "style/**"
-      - ".claude/skills/ref-pr-workflow/scripts/**"
-      - "firebase.json"
-      - "firestore.rules"
 
 permissions:
   contents: read

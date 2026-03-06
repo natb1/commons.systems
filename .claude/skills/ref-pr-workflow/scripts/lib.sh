@@ -45,6 +45,16 @@ install_local_deps() {
     echo "Installing authutil dependency..."
     (cd "$repo_root/authutil" && npm ci)
   fi
+
+  if grep -q '"@commons-systems/htmlutil"' "$app_pkg" 2>/dev/null; then
+    echo "Installing htmlutil dependency..."
+    (cd "$repo_root/htmlutil" && npm ci)
+  fi
+
+  if grep -q '"@commons-systems/style"' "$app_pkg" 2>/dev/null; then
+    echo "Installing style dependency..."
+    (cd "$repo_root/style" && npm ci)
+  fi
 }
 
 # Extract the app name from the app directory path.

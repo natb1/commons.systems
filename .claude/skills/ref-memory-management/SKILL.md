@@ -11,6 +11,22 @@ When creating any plan (issue implementation, review, security review, or ad hoc
 - Read the issue state's `active_skills` list (the canonical store for skills that must be reloaded across sessions). If any skills are listed, add this line to the plan preface: `**Before executing this plan:** Invoke /skill-X and /skill-Y`. The line **must** include the **explicit** instruction to invoke ALL skills from `active_skills` before executing the plan.
 - If plan is being created as part of a multi-step process (eg. pr-workflow, or wiggum-loop), the plan must record which step of the process is active in the preface of the plan.
 
+# Issue Context Loading
+
+When loading issue context (at session start, after context loss, or when a skill requests issue data), load these content types for the branch's primary issue:
+
+| Content type | Detail level | Script |
+|---|---|---|
+| **Primary issue** | Full | `issue-primary` |
+| **Blockers** | Full for each blocking issue | `issue-blocking` |
+| **Sub-issues** | Full for each sub-issue | `issue-sub-issues` |
+| **Parent issue** (if primary is a sub-issue) | Full | `issue-parent` |
+| **Sibling issues** (if primary is a sub-issue) | Full for open siblings; Summary for closed | `issue-siblings` |
+
+Full = `title, body, comments, number, state`. Summary = `title, number, state`. Consumers that need additional fields (e.g., `ref-ready` uses `labels, assignees, projectItems` for evaluation) extend the base set.
+
+Scripts are in `.claude/skills/ref-pr-workflow/scripts/`. All derive the issue number from the current branch name.
+
 # Issue State Rule
 
 Persist workflow state to the issue body so it survives auto-compaction. Use `issue-state-write <issue-number> '<json>'` to update state.

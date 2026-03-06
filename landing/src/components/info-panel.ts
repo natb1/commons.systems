@@ -1,4 +1,5 @@
-import { escapeHtml } from "../escape-html.js";
+import { escapeHtml } from "@commons-systems/htmlutil";
+import { formatUtcDate, monthName } from "../date.js";
 import type { PostMeta } from "../firestore.js";
 import { isPublished, type PublishedPost } from "../post-types.js";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.js";
@@ -8,10 +9,6 @@ interface InfoPanelData {
   topPosts: PostMeta[];
   blogRoll: BlogRollEntry[];
   rssFeedUrl?: string;
-}
-
-function monthName(month: number): string {
-  return new Date(2000, month).toLocaleString("en-US", { month: "long" });
 }
 
 function groupByYearMonth(
@@ -135,15 +132,6 @@ export function renderInfoPanel(data: InfoPanelData): string {
   `;
 }
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 interface FetchResult {
   entry: BlogRollEntry;
   post: LatestPost | null;
@@ -179,7 +167,7 @@ function updateBlogrollEntry(panel: HTMLElement, entry: BlogRollEntry, post: Lat
   placeholder.textContent = post.title;
   entryLink.setAttribute("href", post.url);
   if (dateSpan && post.publishedAt) {
-    dateSpan.textContent = formatDate(post.publishedAt);
+    dateSpan.textContent = formatUtcDate(post.publishedAt, "short");
     dateSpan.setAttribute("data-iso", post.publishedAt);
   }
 }
