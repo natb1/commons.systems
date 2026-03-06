@@ -12,6 +12,8 @@ function getUserGroups(user: User): Promise<Group[]> {
   return _getUserGroups(db, NAMESPACE, user);
 }
 
+// These guards ensure nav/app are non-null at runtime, but TypeScript doesn't
+// narrow module-scoped variables across function boundaries — use ! in functions.
 const nav = document.getElementById("nav");
 if (!nav) throw new Error("#nav element not found");
 const app = document.getElementById("app");
