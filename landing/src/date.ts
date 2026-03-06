@@ -4,10 +4,21 @@ export function formatUtcDate(
   isoDate: string,
   monthFormat: "long" | "short" = "long",
 ): string {
-  return new Date(isoDate).toLocaleDateString("en-US", {
+  const date = new Date(isoDate);
+  if (isNaN(date.getTime())) {
+    throw new Error(`formatUtcDate: invalid ISO date string: "${isoDate}"`);
+  }
+  return date.toLocaleDateString("en-US", {
     month: monthFormat,
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+export function monthName(month: number): string {
+  return new Date(Date.UTC(2000, month)).toLocaleString("en-US", {
+    month: "long",
     timeZone: "UTC",
   });
 }

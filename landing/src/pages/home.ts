@@ -10,14 +10,10 @@ const SCROLL_PADDING_PX = 16;
 // Strip raw HTML from markdown to prevent XSS from post file content.
 marked.use({ renderer: { html: () => "" } });
 
-function formatDate(isoDate: string): string {
-  return formatUtcDate(isoDate, "long");
-}
-
 function renderArticle(p: PostMeta): string {
   const safeId = escapeHtml(p.id);
   const dateHtml = p.publishedAt
-    ? `<time datetime="${escapeHtml(p.publishedAt)}">${escapeHtml(formatDate(p.publishedAt))}</time>`
+    ? `<time datetime="${escapeHtml(p.publishedAt)}">${escapeHtml(formatUtcDate(p.publishedAt))}</time>`
     : "";
   const draftBadge = p.published
     ? ""

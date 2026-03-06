@@ -1,5 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
-import { formatUtcDate } from "../date.js";
+import { formatUtcDate, monthName } from "../date.js";
 import type { PostMeta } from "../firestore.js";
 import { isPublished, type PublishedPost } from "../post-types.js";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.js";
@@ -9,11 +9,6 @@ interface InfoPanelData {
   topPosts: PostMeta[];
   blogRoll: BlogRollEntry[];
   rssFeedUrl?: string;
-}
-
-function monthName(month: number): string {
-  const date = new Date(Date.UTC(2000, month));
-  return date.toLocaleString("en-US", { month: "long", timeZone: "UTC" });
 }
 
 function groupByYearMonth(
@@ -137,10 +132,6 @@ export function renderInfoPanel(data: InfoPanelData): string {
   `;
 }
 
-function formatDate(dateStr: string): string {
-  return formatUtcDate(dateStr, "short");
-}
-
 interface FetchResult {
   entry: BlogRollEntry;
   post: LatestPost | null;
@@ -176,7 +167,7 @@ function updateBlogrollEntry(panel: HTMLElement, entry: BlogRollEntry, post: Lat
   placeholder.textContent = post.title;
   entryLink.setAttribute("href", post.url);
   if (dateSpan && post.publishedAt) {
-    dateSpan.textContent = formatDate(post.publishedAt);
+    dateSpan.textContent = formatUtcDate(post.publishedAt, "short");
     dateSpan.setAttribute("data-iso", post.publishedAt);
   }
 }

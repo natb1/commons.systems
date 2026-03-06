@@ -461,8 +461,7 @@ describe("hydrateInfoPanel", () => {
 
     await vi.waitFor(() => {
       const dateSpan = panel.querySelector("#blogroll-date-test-blog");
-      expect(dateSpan!.textContent).toContain("Feb");
-      expect(dateSpan!.textContent).toContain("2026");
+      expect(dateSpan!.textContent).toBe("Feb 1, 2026");
       expect(dateSpan!.getAttribute("data-iso")).toBe("2026-02-01T00:00:00Z");
     });
   });
