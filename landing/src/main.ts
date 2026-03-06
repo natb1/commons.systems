@@ -161,7 +161,7 @@ if (app) {
     currentUser = user;
     updateNav();
     navigate();
-    updateInfoPanel();
+    void loadPosts().then(() => updateInfoPanel());
   });
 } else {
   console.error("Fatal: #app element not found");
