@@ -113,8 +113,8 @@ if (app) {
       {
         path: /^\/(?:post\/.*)?$/,
         render: () => loadPosts(),
-        afterRender: (outlet, hash) => {
-          const slug = hash.startsWith("/post/") ? hash.slice(6) : undefined;
+        afterRender: (outlet, path) => {
+          const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
           hydrateHome(outlet, cachedPosts, slug);
           updateInfoPanel();
         },

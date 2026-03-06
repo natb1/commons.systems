@@ -12,8 +12,8 @@ export function parseHash(): { path: string; params: URLSearchParams } {
 
 export interface Route {
   readonly path: string | RegExp;
-  readonly render: (hash: string) => string | Promise<string>;
-  readonly afterRender?: (outlet: HTMLElement, hash: string) => void;
+  readonly render: (path: string) => string | Promise<string>;
+  readonly afterRender?: (outlet: HTMLElement, path: string) => void;
 }
 
 export interface RouterOptions {
@@ -52,6 +52,7 @@ export function createRouter(
         try {
           route.afterRender?.(outlet, path);
         } catch (afterError) {
+          if (afterError instanceof TypeError || afterError instanceof ReferenceError) throw afterError;
           console.error("afterRender error:", afterError);
           outlet.insertAdjacentHTML(
             "beforeend",
