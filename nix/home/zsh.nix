@@ -19,6 +19,7 @@
         fi
       }
       precmd_functions+=(__wezterm_set_git_branch)
+      chpwd_functions+=(__wezterm_set_git_branch)
     '';
   };
 }
