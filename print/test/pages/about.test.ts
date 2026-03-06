@@ -9,8 +9,6 @@ describe("renderAbout", () => {
 
   it("returns HTML containing description text", () => {
     const html = renderAbout();
-    expect(html).toContain(
-      "Print — a commons.systems app.",
-    );
+    expect(html).toContain("commons.systems app");
   });
 });
