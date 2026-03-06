@@ -4,19 +4,6 @@ on:
   push:
     branches-ignore:
       - main
-    paths:
-      - "landing/**"
-      - "authutil/**"
-      - "firestoreutil/**"
-      - "budget/**"
-      # SCAFFOLD MARKER: app-paths - scaffold inserts new app paths above this line
-      - "firebaseutil/**"
-      - "style/**"
-      - "nix/**"
-      - "flake.nix"
-      - "flake.lock"
-      - "firestore.rules"
-      - ".claude/skills/ref-pr-workflow/scripts/**"
 
 permissions:
   contents: read
