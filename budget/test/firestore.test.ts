@@ -29,7 +29,7 @@ vi.mock("../src/firebase.js", () => ({
 }));
 
 import { Timestamp } from "firebase/firestore";
-import { getTransactions, updateTransaction } from "../src/firestore";
+import { getTransactions, updateTransaction, getBudgets, getBudgetPeriods } from "../src/firestore";
 
 describe("getTransactions", () => {
   beforeEach(() => {
@@ -266,5 +266,238 @@ describe("data validation", () => {
   it("throws DataIntegrityError for invalid timestamp", async () => {
     mockDocsWithData({ timestamp: "not-a-timestamp" });
     await expect(getTransactions(null)).rejects.toThrow(/Expected Timestamp/);
+  });
+});
+
+describe("getBudgets", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+    mockQuery.mockReturnValue("mock-query");
+    mockWhere.mockReturnValue("mock-where");
+  });
+
+  it("queries seed-budgets when groupId is null", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+
+    await getBudgets(null);
+
+    expect(mockCollection).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/seed-budgets",
+    );
+    expect(mockWhere).not.toHaveBeenCalled();
+  });
+
+  it("queries budgets with filters when groupId provided", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+
+    await getBudgets("household", "user-123");
+
+    expect(mockCollection).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/budgets",
+    );
+    expect(mockWhere).toHaveBeenCalledWith("groupId", "==", "household");
+    expect(mockWhere).toHaveBeenCalledWith("memberUids", "array-contains", "user-123");
+  });
+
+  it("maps Firestore documents to Budget objects", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [
+        {
+          id: "food",
+          data: () => ({
+            name: "Food",
+            weeklyAllowance: 150,
+            rollover: "none",
+            groupId: "household",
+          }),
+        },
+      ],
+    });
+
+    const budgets = await getBudgets(null);
+
+    expect(budgets).toEqual([
+      {
+        id: "food",
+        name: "Food",
+        weeklyAllowance: 150,
+        rollover: "none",
+        groupId: "household",
+      },
+    ]);
+  });
+
+  it("throws when groupId provided without uid", async () => {
+    await expect(getBudgets("household" as Parameters<typeof getBudgets>[0])).rejects.toThrow(
+      "uid is required",
+    );
+  });
+
+  it("throws DataIntegrityError for invalid rollover", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          name: "Bad",
+          weeklyAllowance: 100,
+          rollover: "invalid",
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgets(null)).rejects.toThrow(/Expected rollover to be one of/);
+  });
+
+  it("throws DataIntegrityError for non-string name", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          name: 123,
+          weeklyAllowance: 100,
+          rollover: "none",
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgets(null)).rejects.toThrow(/Expected string for name/);
+  });
+
+  it("throws DataIntegrityError for non-finite weeklyAllowance", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          name: "Bad",
+          weeklyAllowance: NaN,
+          rollover: "none",
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgets(null)).rejects.toThrow(/Expected finite number for weeklyAllowance/);
+  });
+});
+
+describe("getBudgetPeriods", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+    mockQuery.mockReturnValue("mock-query");
+    mockWhere.mockReturnValue("mock-where");
+  });
+
+  it("queries seed-budget-periods when groupId is null", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+
+    await getBudgetPeriods(null);
+
+    expect(mockCollection).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/seed-budget-periods",
+    );
+    expect(mockWhere).not.toHaveBeenCalled();
+  });
+
+  it("queries budget-periods with filters when groupId provided", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+
+    await getBudgetPeriods("household", "user-123");
+
+    expect(mockCollection).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/budget-periods",
+    );
+    expect(mockWhere).toHaveBeenCalledWith("groupId", "==", "household");
+    expect(mockWhere).toHaveBeenCalledWith("memberUids", "array-contains", "user-123");
+  });
+
+  it("maps Firestore documents to BudgetPeriod objects", async () => {
+    const mockStart = Timestamp.fromDate(new Date("2025-01-13"));
+    const mockEnd = Timestamp.fromDate(new Date("2025-01-20"));
+    mockGetDocs.mockResolvedValue({
+      docs: [
+        {
+          id: "food-2025-01-13",
+          data: () => ({
+            budgetId: "food",
+            periodStart: mockStart,
+            periodEnd: mockEnd,
+            total: 5.75,
+            groupId: "household",
+          }),
+        },
+      ],
+    });
+
+    const periods = await getBudgetPeriods(null);
+
+    expect(periods).toEqual([
+      {
+        id: "food-2025-01-13",
+        budgetId: "food",
+        periodStart: mockStart,
+        periodEnd: mockEnd,
+        total: 5.75,
+        groupId: "household",
+      },
+    ]);
+  });
+
+  it("throws when groupId provided without uid", async () => {
+    await expect(getBudgetPeriods("household" as Parameters<typeof getBudgetPeriods>[0])).rejects.toThrow(
+      "uid is required",
+    );
+  });
+
+  it("throws DataIntegrityError for non-Timestamp periodStart", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          budgetId: "food",
+          periodStart: "not-a-timestamp",
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 5.75,
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected Timestamp for periodStart/);
+  });
+
+  it("throws DataIntegrityError for null periodStart", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          budgetId: "food",
+          periodStart: null,
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 5.75,
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected Timestamp for periodStart, got null/);
+  });
+
+  it("throws DataIntegrityError for non-finite total", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: Infinity,
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected finite number for total/);
   });
 });

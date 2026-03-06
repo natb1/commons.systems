@@ -4,6 +4,25 @@ import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
 
+export type Rollover = "none" | "debt" | "balance";
+
+export interface Budget {
+  readonly id: string;
+  readonly name: string;
+  readonly weeklyAllowance: number;
+  readonly rollover: Rollover;
+  readonly groupId: string | null;
+}
+
+export interface BudgetPeriod {
+  readonly id: string;
+  readonly budgetId: string;
+  readonly periodStart: Timestamp;
+  readonly periodEnd: Timestamp;
+  readonly total: number;
+  readonly groupId: string | null;
+}
+
 export interface Transaction {
   readonly id: string;
   readonly institution: string;
@@ -69,6 +88,25 @@ function asTimestamp(value: unknown): Timestamp | null {
   return value;
 }
 
+const ROLLOVER_VALUES = new Set<string>(["none", "debt", "balance"]);
+
+function requireRollover(value: unknown): Rollover {
+  if (typeof value !== "string" || !ROLLOVER_VALUES.has(value)) {
+    throw new DataIntegrityError(`Expected rollover to be one of ${[...ROLLOVER_VALUES].join(", ")}, got ${value}`);
+  }
+  return value as Rollover;
+}
+
+function requireTimestamp(value: unknown, field: string): Timestamp {
+  if (value == null) {
+    throw new DataIntegrityError(`Expected Timestamp for ${field}, got null`);
+  }
+  if (!(value instanceof Timestamp)) {
+    throw new DataIntegrityError(`Expected Timestamp for ${field}, got ${typeof value}`);
+  }
+  return value;
+}
+
 export async function getTransactions(groupId: null): Promise<Transaction[]>;
 export async function getTransactions(groupId: string, uid: string): Promise<Transaction[]>;
 export async function getTransactions(groupId: string | null, uid?: string): Promise<Transaction[]> {
@@ -114,4 +152,57 @@ export async function updateTransaction(
   const path = nsCollectionPath(NAMESPACE, "transactions");
   const ref = doc(db, path, txnId);
   await updateDoc(ref, fields);
+}
+
+export async function getBudgets(groupId: null): Promise<Budget[]>;
+export async function getBudgets(groupId: string, uid: string): Promise<Budget[]>;
+export async function getBudgets(groupId: string | null, uid?: string): Promise<Budget[]> {
+  if (groupId && !uid) throw new Error("uid is required when querying by groupId");
+  const collectionName = groupId ? "budgets" : "seed-budgets";
+  const path = nsCollectionPath(NAMESPACE, collectionName);
+  const q = groupId
+    ? query(
+        collection(db, path),
+        where("groupId", "==", groupId),
+        where("memberUids", "array-contains", uid),
+      )
+    : query(collection(db, path));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      name: requireString(data.name, "name"),
+      weeklyAllowance: requireNumber(data.weeklyAllowance, "weeklyAllowance"),
+      rollover: requireRollover(data.rollover),
+      groupId: optionalString(data.groupId, "groupId"),
+    };
+  });
+}
+
+export async function getBudgetPeriods(groupId: null): Promise<BudgetPeriod[]>;
+export async function getBudgetPeriods(groupId: string, uid: string): Promise<BudgetPeriod[]>;
+export async function getBudgetPeriods(groupId: string | null, uid?: string): Promise<BudgetPeriod[]> {
+  if (groupId && !uid) throw new Error("uid is required when querying by groupId");
+  const collectionName = groupId ? "budget-periods" : "seed-budget-periods";
+  const path = nsCollectionPath(NAMESPACE, collectionName);
+  const q = groupId
+    ? query(
+        collection(db, path),
+        where("groupId", "==", groupId),
+        where("memberUids", "array-contains", uid),
+      )
+    : query(collection(db, path));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      budgetId: requireString(data.budgetId, "budgetId"),
+      periodStart: requireTimestamp(data.periodStart, "periodStart"),
+      periodEnd: requireTimestamp(data.periodEnd, "periodEnd"),
+      total: requireNumber(data.total, "total"),
+      groupId: optionalString(data.groupId, "groupId"),
+    };
+  });
 }
