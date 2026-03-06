@@ -334,6 +334,25 @@ describe("renderInfoPanel", () => {
       expect(months).toEqual(["June", "March"]);
     });
 
+    it("groups UTC midnight post under its UTC month", () => {
+      const boundaryPost: PostMeta[] = [
+        {
+          id: "utc-boundary",
+          title: "UTC Boundary",
+          published: true,
+          publishedAt: "2026-02-01T00:00:00Z",
+          filename: "utc.md",
+        },
+      ];
+      const html = renderInfoPanel({
+        links: [],
+        topPosts: boundaryPost,
+        blogRoll: [],
+      });
+      expect(html).toContain("February");
+      expect(html).not.toContain("January");
+    });
+
     it("archive is empty when no published posts", () => {
       const draftsOnly: PostMeta[] = [
         {
@@ -429,7 +448,7 @@ describe("hydrateInfoPanel", () => {
     const latest: LatestPost = {
       title: "New Article",
       url: "https://example.com/article",
-      publishedAt: "2025-10-08",
+      publishedAt: "2026-02-01T00:00:00Z",
     };
     const strategy: BlogRollStrategy = {
       fetchLatestPost: vi.fn().mockResolvedValue(latest),
@@ -442,9 +461,8 @@ describe("hydrateInfoPanel", () => {
 
     await vi.waitFor(() => {
       const dateSpan = panel.querySelector("#blogroll-date-test-blog");
-      expect(dateSpan!.textContent).toContain("Oct");
-      expect(dateSpan!.textContent).toContain("2025");
-      expect(dateSpan!.getAttribute("data-iso")).toBe("2025-10-08");
+      expect(dateSpan!.textContent).toBe("Feb 1, 2026");
+      expect(dateSpan!.getAttribute("data-iso")).toBe("2026-02-01T00:00:00Z");
     });
   });
 
