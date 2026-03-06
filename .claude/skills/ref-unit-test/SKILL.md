@@ -29,12 +29,12 @@ Iteration counter starts at 1. Each cycle:
 
 ### Progress Report
 
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write evaluation to `$(git rev-parse --show-toplevel)/tmp/unit-eval-<N>.txt`
+- `mkdir -p tmp`
+- Write evaluation to `tmp/unit-eval-<N>.txt`
 - Write checkpoint:
   ```bash
   echo '{"iteration":<N>,"outcome":"<iterate|terminate>","last_eval_file":"tmp/unit-eval-<N>.txt"}' \
-    > "$(git rev-parse --show-toplevel)/tmp/unit-subagent-state.json"
+    > tmp/unit-subagent-state.json
   ```
 
 ### Iterate
@@ -50,7 +50,7 @@ Fix failures. Commit fixes (dangerouslyDisableSandbox). Increment iteration coun
 - Write final checkpoint:
   ```bash
   echo '{"iteration":<N>,"outcome":"terminate","last_eval_file":"tmp/unit-eval-<N>.txt"}' \
-    > "$(git rev-parse --show-toplevel)/tmp/unit-subagent-state.json"
+    > tmp/unit-subagent-state.json
   ```
 
 ## Return Contract

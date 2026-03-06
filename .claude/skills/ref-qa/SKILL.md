@@ -20,7 +20,7 @@ Step 8. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
   - Test steps for each behavior
   - Edge cases to test
   - Expected outcomes
-- Write the QA testing plan to `"$(git rev-parse --show-toplevel)/tmp/qa-plan-<N>.txt"`
+- Write the QA testing plan to `tmp/qa-plan-<N>.txt`
 - Present the plan and App URL (if applicable) to the user
 - **CRITICAL**: The user performs the actual testing (not Claude)
 - Wait for the user to test and report results

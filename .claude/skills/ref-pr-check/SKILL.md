@@ -38,16 +38,16 @@ If the run is in progress, wait for it to complete before returning output.
 
 ### Progress Report
 
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write evaluation to `$(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt`
+- `mkdir -p tmp`
+- Write evaluation to `tmp/acceptance-eval-<N>.txt`
 - Post combined comment:
   ```bash
-  post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/acceptance-eval-<N>.txt"
+  post-pr-comment.sh <pr-num> <output_file> tmp/acceptance-eval-<N>.txt
   ```
 - Write checkpoint:
   ```bash
   echo '{"iteration":<N>,"outcome":"<iterate|terminate>","last_eval_file":"tmp/acceptance-eval-<N>.txt"}' \
-    > "$(git rev-parse --show-toplevel)/tmp/acceptance-subagent-state.json"
+    > tmp/acceptance-subagent-state.json
   ```
 
 ### Iterate
@@ -56,8 +56,8 @@ Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Re
 
 ### Terminate
 
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write final summary to `$(git rev-parse --show-toplevel)/tmp/acceptance-final.txt`:
+- `mkdir -p tmp`
+- Write final summary to `tmp/acceptance-final.txt`:
   ```
   # Acceptance Test Review - Complete ✓
 
@@ -77,7 +77,7 @@ Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Re
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/acceptance-final.txt"
+  post-pr-comment.sh <pr-num> tmp/acceptance-final.txt
   ```
 - Update issue state to step=7/phase=verify:
   ```bash
@@ -99,16 +99,16 @@ Same as Phase 1 Execute (CI monitoring).
 
 ### Progress Report
 
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write evaluation to `$(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt`
+- `mkdir -p tmp`
+- Write evaluation to `tmp/smoke-eval-<N>.txt`
 - Post combined comment:
   ```bash
-  post-pr-comment.sh <pr-num> <output_file> "$(git rev-parse --show-toplevel)/tmp/smoke-eval-<N>.txt"
+  post-pr-comment.sh <pr-num> <output_file> tmp/smoke-eval-<N>.txt
   ```
 - Write checkpoint:
   ```bash
   echo '{"iteration":<N>,"outcome":"<iterate|terminate>","last_eval_file":"tmp/smoke-eval-<N>.txt"}' \
-    > "$(git rev-parse --show-toplevel)/tmp/smoke-subagent-state.json"
+    > tmp/smoke-subagent-state.json
   ```
 
 ### Iterate
@@ -117,8 +117,8 @@ Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Re
 
 ### Terminate
 
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write final summary to `$(git rev-parse --show-toplevel)/tmp/smoke-final.txt`:
+- `mkdir -p tmp`
+- Write final summary to `tmp/smoke-final.txt`:
   ```
   # Smoke Test Review - Complete ✓
 
@@ -138,7 +138,7 @@ Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Re
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/smoke-final.txt"
+  post-pr-comment.sh <pr-num> tmp/smoke-final.txt
   ```
 - Update issue state to step=8/phase=qa:
   ```bash

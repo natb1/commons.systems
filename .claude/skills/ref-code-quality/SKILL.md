@@ -20,9 +20,9 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 - All 7 tasks MUST be launched in a single message (parallel execution) with `run_in_background: true`
 - Wait for all 7 tasks to complete using TaskOutput with `block: true` before proceeding. Note each task's `output_file` path.
 - If any pr-review-toolkit agent fails to launch, log a warning but continue — `/review` results alone are sufficient to proceed
-- Construct `$(git rev-parse --show-toplevel)/tmp/codequality-output-<N>.txt` by concatenating the output files with Bash — do NOT use the Write tool or re-output verbatim content:
+- Construct `tmp/codequality-output-<N>.txt` by concatenating the output files with Bash — do NOT use the Write tool or re-output verbatim content:
   ```bash
-  REPO=$(git rev-parse --show-toplevel) && mkdir -p "$REPO/tmp" && {
+  mkdir -p tmp && {
     printf '## /review Output\n\n'; cat "$REVIEW_OUT";
     printf '\n\n## pr-review-toolkit: code-reviewer\n\n'; cat "$CODE_REVIEWER_OUT";
     printf '\n\n## pr-review-toolkit: code-simplifier\n\n'; cat "$CODE_SIMPLIFIER_OUT";
@@ -30,7 +30,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
     printf '\n\n## pr-review-toolkit: pr-test-analyzer\n\n'; cat "$PR_TEST_ANALYZER_OUT";
     printf '\n\n## pr-review-toolkit: silent-failure-hunter\n\n'; cat "$SILENT_FAILURE_OUT";
     printf '\n\n## pr-review-toolkit: type-design-analyzer\n\n'; cat "$TYPE_DESIGN_OUT";
-  } > "$REPO/tmp/codequality-output-<N>.txt"
+  } > tmp/codequality-output-<N>.txt
   ```
   Substitute each `$*_OUT` variable with the `output_file` path from the corresponding Task result. For unavailable agents, replace `cat` with `echo "Agent unavailable"`.
 
@@ -59,18 +59,18 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 - Do NOT modify files outside the PR's scope. If a finding targets code that was not changed by this PR branch, classify it as out-of-scope.
 
 **Progress report instructions:**
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write evaluation results (user classifications) to `$(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt`
+- `mkdir -p tmp`
+- Write evaluation results (user classifications) to `tmp/codequality-eval-<N>.txt`
 - Post combined comment (constructed from background Task `output_file` paths via the Bash command above):
   ```bash
-  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/codequality-output-<N>.txt" "$(git rev-parse --show-toplevel)/tmp/codequality-eval-<N>.txt"
+  post-pr-comment.sh <pr-num> tmp/codequality-output-<N>.txt tmp/codequality-eval-<N>.txt
   ```
 
 **Termination instructions:**
 - Implement all low-priority required findings from the final evaluation
 - Commit the low-priority implementations
-- `mkdir -p "$(git rev-parse --show-toplevel)/tmp"`
-- Write final summary to `$(git rev-parse --show-toplevel)/tmp/codequality-final.txt` (header must be `# Code Quality Review - Complete ✓`):
+- `mkdir -p tmp`
+- Write final summary to `tmp/codequality-final.txt` (header must be `# Code Quality Review - Complete ✓`):
   ```
   # Code Quality Review - Complete ✓
 
@@ -111,7 +111,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
   ```
 - Post as a separate PR comment (distinct from the progress report already posted by progress report instructions):
   ```bash
-  post-pr-comment.sh <pr-num> "$(git rev-parse --show-toplevel)/tmp/codequality-final.txt"
+  post-pr-comment.sh <pr-num> tmp/codequality-final.txt
   ```
 - Update state to step=10/phase=security via `issue-state-write` with `active_skills: ["ref-memory-management", "ref-pr-workflow", "ref-security"]`
 - Proceed to Step 10
