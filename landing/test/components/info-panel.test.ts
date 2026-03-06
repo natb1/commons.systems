@@ -448,7 +448,7 @@ describe("hydrateInfoPanel", () => {
     const latest: LatestPost = {
       title: "New Article",
       url: "https://example.com/article",
-      publishedAt: "2025-10-08",
+      publishedAt: "2026-02-01T00:00:00Z",
     };
     const strategy: BlogRollStrategy = {
       fetchLatestPost: vi.fn().mockResolvedValue(latest),
@@ -461,9 +461,9 @@ describe("hydrateInfoPanel", () => {
 
     await vi.waitFor(() => {
       const dateSpan = panel.querySelector("#blogroll-date-test-blog");
-      expect(dateSpan!.textContent).toContain("Oct");
-      expect(dateSpan!.textContent).toContain("2025");
-      expect(dateSpan!.getAttribute("data-iso")).toBe("2025-10-08");
+      expect(dateSpan!.textContent).toContain("Feb");
+      expect(dateSpan!.textContent).toContain("2026");
+      expect(dateSpan!.getAttribute("data-iso")).toBe("2026-02-01T00:00:00Z");
     });
   });
 

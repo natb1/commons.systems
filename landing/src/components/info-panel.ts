@@ -1,4 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
+import { formatUtcDate } from "../date.js";
 import type { PostMeta } from "../firestore.js";
 import { isPublished, type PublishedPost } from "../post-types.js";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.js";
@@ -11,7 +12,8 @@ interface InfoPanelData {
 }
 
 function monthName(month: number): string {
-  return new Date(Date.UTC(2000, month)).toLocaleString("en-US", { month: "long", timeZone: "UTC" });
+  const date = new Date(Date.UTC(2000, month));
+  return date.toLocaleString("en-US", { month: "long", timeZone: "UTC" });
 }
 
 function groupByYearMonth(
@@ -136,13 +138,7 @@ export function renderInfoPanel(data: InfoPanelData): string {
 }
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return formatUtcDate(dateStr, "short");
 }
 
 interface FetchResult {

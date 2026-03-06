@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
+import { formatUtcDate } from "../date.js";
 import { fetchPost } from "../github.js";
 import type { PostMeta } from "../firestore.js";
 
@@ -10,12 +11,7 @@ const SCROLL_PADDING_PX = 16;
 marked.use({ renderer: { html: () => "" } });
 
 function formatDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return formatUtcDate(isoDate, "long");
 }
 
 function renderArticle(p: PostMeta): string {
