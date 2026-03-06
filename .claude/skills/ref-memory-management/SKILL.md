@@ -29,7 +29,7 @@ Scripts are in `.claude/skills/ref-pr-workflow/scripts/`. All derive the issue n
 
 # Issue State Rule
 
-Persist workflow state to the issue body so it survives auto-compaction. Use `issue-state-write <issue-number> '<json>'` to update state.
+Persist workflow state to the issue body so it survives auto-compaction. Use `.claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '<json>'` to update state.
 
 State schema:
 ```json
@@ -44,8 +44,8 @@ State schema:
 }
 ```
 
-- **When entering a workflow step or changing phase:** call `issue-state-write` with updated `step`, `step_label`, `phase`, and current `active_skills`
-- **When loading or unloading skills:** include the updated `active_skills` list in the next `issue-state-write` call
+- **When entering a workflow step or changing phase:** call `.claude/skills/ref-pr-workflow/scripts/issue-state-write` with updated `step`, `step_label`, `phase`, and current `active_skills`
+- **When loading or unloading skills:** include the updated `active_skills` list in the next `.claude/skills/ref-pr-workflow/scripts/issue-state-write` call
 - **When entering a wiggum-loop step:** include `wiggum_step` and `wiggum_step_label` in the state
 - **When a wiggum-loop terminates:** omit `wiggum_step` and `wiggum_step_label` from the state
 
