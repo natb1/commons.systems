@@ -1,4 +1,4 @@
-import { createRouter } from "./router.js";
+import { createRouter } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
 import { renderNotes } from "./pages/notes.js";
@@ -25,7 +25,7 @@ function updateNav(user: import("firebase/auth").User | null): void {
 updateNav(null);
 
 if (app) {
-  const navigate = createRouter(app, [
+  const router = createRouter(app, [
     { path: "/", render: renderHome },
     { path: "/about", render: renderAbout },
     { path: "/notes", render: renderNotes },
@@ -33,6 +33,6 @@ if (app) {
 
   onAuthStateChanged(auth, (user) => {
     updateNav(user);
-    navigate();
+    router.navigate();
   });
 }
