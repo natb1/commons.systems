@@ -187,26 +187,6 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 		}
 	}
 
-	// Remove app path triggers from consolidated workflow files
-	for _, wf := range []struct {
-		name   string
-		remove func(string, string) error
-	}{
-		{"unit-tests.yml", RemoveUnitTestsPath},
-		{"pr-checks.yml", RemovePRChecksPath},
-		{"prod-deploy.yml", RemoveProdDeployPath},
-	} {
-		if dryRun {
-			fmt.Printf("[dry-run] Would remove %q path trigger from %s\n", appName, wf.name)
-		} else {
-			fmt.Printf("Removing path trigger from %s...\n", wf.name)
-			if err := wf.remove(repoRoot, appName); err != nil {
-				fmt.Fprintf(os.Stderr, "WARNING: failed to update %s: %v\n", wf.name, err)
-				warnings++
-			}
-		}
-	}
-
 	// Remove app directory
 	if dryRun {
 		fmt.Printf("[dry-run] Would remove app directory %s/\n", appName)
