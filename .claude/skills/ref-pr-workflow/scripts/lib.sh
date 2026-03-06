@@ -23,6 +23,11 @@ detect_features() {
   if grep -rq '"firebase/auth"' "$app_src_dir" 2>/dev/null; then
     USES_AUTH=true
   fi
+
+  USES_STORAGE=false
+  if grep -rq '"firebase/storage"' "$app_src_dir" 2>/dev/null; then
+    USES_STORAGE=true
+  fi
 }
 
 # Install local package dependencies (file: references).
