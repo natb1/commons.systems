@@ -59,6 +59,16 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    match /print/{env}/messages/{messageId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /print/{env}/notes/{noteId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
     // InsertFirestoreRules inserts new rule blocks immediately above this line.
     match /{document=**} {

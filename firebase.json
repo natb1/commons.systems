@@ -1,26 +1,41 @@
 {
   "hosting": [
     {
-      "target": "landing",
-      "public": "landing/dist",
+      "headers": [
+        {
+          "source": "/blogroll.opml",
+          "headers": [
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "Content-Type",
+              "value": "text/x-opml+xml; charset=utf-8"
+            }
+          ]
+        }
+      ],
       "ignore": [
         "firebase.json",
         "**/.*",
         "**/node_modules/**"
       ],
-      "headers": [
-        {
-          "source": "/blogroll.opml",
-          "headers": [
-            { "key": "Access-Control-Allow-Origin", "value": "*" },
-            { "key": "Content-Type", "value": "text/x-opml+xml; charset=utf-8" }
-          ]
-        }
-      ]
+      "public": "landing/dist",
+      "target": "landing"
     },
     {
       "target": "budget",
       "public": "budget/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ]
+    },
+    {
+      "target": "print",
+      "public": "print/dist",
       "ignore": [
         "firebase.json",
         "**/.*",
