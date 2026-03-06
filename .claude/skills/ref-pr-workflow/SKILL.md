@@ -15,6 +15,8 @@ Before proceeding, run these commands via Bash with `dangerouslyDisableSandbox: 
 2. Primary issue: `.claude/skills/ref-pr-workflow/scripts/issue-primary`
 3. Blocking issues: `.claude/skills/ref-pr-workflow/scripts/issue-blocking`
 4. Sub-issues: `.claude/skills/ref-pr-workflow/scripts/issue-sub-issues`
+5. Parent issue: `.claude/skills/ref-pr-workflow/scripts/issue-parent`
+6. Sibling issues: `.claude/skills/ref-pr-workflow/scripts/issue-siblings`
 
 # Dependencies
 Invoke `/ref-memory-management` if not already active.
