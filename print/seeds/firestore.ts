@@ -1,43 +1,84 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
+// Cloud Storage seeding is manual:
+// 1. Download files from the sources listed in each item's sourceNotes
+// 2. Upload to print/{env}/media/{filename} in Firebase Cloud Storage
+// 3. Set custom metadata on each object:
+//    - Public domain: publicDomain=true
+//    - Private: publicDomain=false, {uid}=member (one key per member uid)
+// Example: firebase storage:upload print/prod/media/notebooks-da-vinci.epub --metadata publicDomain=true
+
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
-      name: "messages",
+      name: "media",
       documents: [
         {
-          id: "greeting-1",
+          id: "gutenberg-3296",
           data: {
-            text: "Welcome to print",
-            author: "system",
-            createdAt: "2026-01-01T00:00:00Z",
+            title: "The Notebooks of Leonardo Da Vinci",
+            mediaType: "epub",
+            tags: { source: "Project Gutenberg", gutenbergId: "3296" },
+            publicDomain: true,
+            sourceNotes: "Project Gutenberg eBook #3296: https://www.gutenberg.org/ebooks/3296",
+            storagePath: "media/notebooks-da-vinci.epub",
+            groupId: null,
+            memberUids: [],
+            addedAt: "2026-01-15T00:00:00Z",
           },
         },
         {
-          id: "greeting-2",
+          id: "plato-phaedrus",
           data: {
-            text: "Hello from Print",
-            author: "system",
-            createdAt: "2026-01-01T00:01:00Z",
+            title: "Phaedrus",
+            mediaType: "pdf",
+            tags: { author: "Plato", source: "Platonic Foundation" },
+            publicDomain: true,
+            sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/phaedrus",
+            storagePath: "media/phaedrus.pdf",
+            groupId: null,
+            memberUids: [],
+            addedAt: "2026-01-16T00:00:00Z",
+          },
+        },
+        {
+          id: "plato-republic",
+          data: {
+            title: "Republic",
+            mediaType: "pdf",
+            tags: { author: "Plato", source: "Platonic Foundation" },
+            publicDomain: true,
+            sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/republic/republic-all-books/",
+            storagePath: "media/republic.pdf",
+            groupId: null,
+            memberUids: [],
+            addedAt: "2026-01-17T00:00:00Z",
+          },
+        },
+        {
+          id: "private-collection-1",
+          data: {
+            title: "Private Collection Item",
+            mediaType: "pdf",
+            tags: { source: "rml-media/print" },
+            publicDomain: false,
+            sourceNotes: "Private GCS bucket rml-media/print — re-upload to Firebase Cloud Storage",
+            storagePath: "media/private-collection-1.pdf",
+            groupId: "natb1-library",
+            memberUids: ["test-github-user"],
+            addedAt: "2026-01-18T00:00:00Z",
           },
         },
       ],
     },
     {
-      name: "notes",
+      name: "groups",
       documents: [
         {
-          id: "note-1",
+          id: "natb1-library",
           data: {
-            text: "This note is only visible when signed in.",
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-        },
-        {
-          id: "note-2",
-          data: {
-            text: "Auth-gated content works.",
-            createdAt: "2026-01-01T00:01:00Z",
+            name: "natb1-library",
+            members: ["test-github-user"],
           },
         },
       ],
