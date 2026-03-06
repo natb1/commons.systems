@@ -11,14 +11,14 @@ export function parseHash(): { path: string; params: URLSearchParams } {
 }
 
 export interface Route {
-  readonly path: string | RegExp;
+  readonly path: `/${string}` | RegExp;
   readonly render: (path: string) => string | Promise<string>;
   readonly afterRender?: (outlet: HTMLElement, path: string) => void;
 }
 
 export interface RouterOptions {
   onNavigate?: () => void;
-  /** Map an error to a user-facing message. Return undefined for the default. */
+  /** Map an error to a user-facing message. Return undefined to use "Something went wrong. Please try again." */
   formatError?: (error: unknown) => string | undefined;
 }
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DataIntegrityError } from "../../src/errors";
 
 vi.mock("firebase/firestore", () => ({
@@ -13,12 +13,14 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("../../src/firestore.js", () => ({
   getTransactions: vi.fn(),
+  getBudgets: vi.fn(),
 }));
 
 import { renderHome } from "../../src/pages/home";
-import { getTransactions, type Transaction } from "../../src/firestore";
+import { getTransactions, getBudgets, type Transaction } from "../../src/firestore";
 
 const mockGetTransactions = vi.mocked(getTransactions);
+const mockGetBudgets = vi.mocked(getBudgets);
 
 function mockTimestamp(dateStr: string) {
   const d = new Date(dateStr);
@@ -46,7 +48,16 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
   };
 }
 
+const defaultBudgets = [
+  { id: "food", name: "Food", weeklyAllowance: 150, rollover: "none" as const, groupId: null },
+  { id: "vacation", name: "Vacation", weeklyAllowance: 100, rollover: "balance" as const, groupId: null },
+];
+
 describe("renderHome", () => {
+  beforeEach(() => {
+    mockGetBudgets.mockResolvedValue(defaultBudgets);
+  });
+
   it("returns HTML containing a Transactions heading", async () => {
     mockGetTransactions.mockResolvedValue([]);
     const html = await renderHome({ user: null, group: null, groupError: false });
@@ -86,7 +97,7 @@ describe("renderHome", () => {
   it("renders error fallback when Firestore fails", async () => {
     mockGetTransactions.mockRejectedValue(new Error("connection failed"));
     const html = await renderHome({ user: null, group: null, groupError: false });
-    expect(html).toContain("Could not load transactions");
+    expect(html).toContain("Could not load data");
     expect(html).toContain('id="transactions-error"');
   });
 
@@ -172,6 +183,10 @@ describe("renderHome", () => {
   });
 
   it("renders budget options as data attribute for authorized users", async () => {
+    mockGetBudgets.mockResolvedValue([
+      { id: "food", name: "Food", weeklyAllowance: 150, rollover: "none", groupId: "household" },
+      { id: "vacation", name: "Vacation", weeklyAllowance: 100, rollover: "balance", groupId: "household" },
+    ]);
     mockGetTransactions.mockResolvedValue([
       txn({ category: "Food", budget: "food", groupId: "household" }),
       txn({
@@ -179,15 +194,11 @@ describe("renderHome", () => {
         description: "Hotel", amount: 215, category: "Travel",
         budget: "vacation", timestamp: mockTimestamp("2025-02-01"), groupId: "household",
       }),
-      txn({
-        id: "txn-3", description: "Coffee", amount: 5, category: "Food",
-        budget: "food", timestamp: mockTimestamp("2025-01-20"), groupId: "household",
-      }),
     ]);
     const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain("data-budget-options");
-    expect(html).toContain("food");
-    expect(html).toContain("vacation");
+    expect(html).toContain("Food");
+    expect(html).toContain("Vacation");
   });
 
   it("does not render autocomplete options for unauthorized users", async () => {
@@ -221,6 +232,39 @@ describe("renderHome", () => {
     const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain("<dt>Group</dt>");
     expect(html).toContain("<dd>household</dd>");
+  });
+
+  it("throws DataIntegrityError when transaction references unknown budget ID", async () => {
+    mockGetBudgets.mockResolvedValue([
+      { id: "food", name: "Food", weeklyAllowance: 150, rollover: "none", groupId: null },
+    ]);
+    mockGetTransactions.mockResolvedValue([
+      txn({ budget: "nonexistent-budget" }),
+    ]);
+    await expect(renderHome({ user: null, group: null, groupError: false }))
+      .rejects.toThrow(DataIntegrityError);
+  });
+
+  it("throws DataIntegrityError for duplicate budget names", async () => {
+    mockGetBudgets.mockResolvedValue([
+      { id: "food-1", name: "Food", weeklyAllowance: 150, rollover: "none", groupId: "household" },
+      { id: "food-2", name: "Food", weeklyAllowance: 200, rollover: "none", groupId: "household" },
+    ]);
+    mockGetTransactions.mockResolvedValue([txn()]);
+    await expect(renderHome({ user: mockUser, group: mockGroup, groupError: false }))
+      .rejects.toThrow("Duplicate budget name: Food");
+  });
+
+  it("renders budget name-to-ID map as data attribute for authorized users", async () => {
+    mockGetBudgets.mockResolvedValue([
+      { id: "budget-food", name: "Food", weeklyAllowance: 150, rollover: "none", groupId: "household" },
+    ]);
+    mockGetTransactions.mockResolvedValue([
+      txn({ budget: "budget-food", groupId: "household" }),
+    ]);
+    const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
+    expect(html).toContain("data-budget-map");
+    expect(html).toContain("budget-food");
   });
 
   it("shows access denied message for permission-denied error", async () => {
