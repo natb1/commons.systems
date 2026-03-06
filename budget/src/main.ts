@@ -42,7 +42,7 @@ function selectedGroup(): Group | null {
 
 function updateNav(user: User | null): void {
   const group = selectedGroup();
-  nav.innerHTML = renderNav(user, state.groups, group?.id ?? null);
+  nav!.innerHTML = renderNav(user, state.groups, group?.id ?? null);
   document.getElementById("sign-in")?.addEventListener("click", (e) => {
     e.preventDefault();
     signIn();

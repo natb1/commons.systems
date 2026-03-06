@@ -6,7 +6,7 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 
 # Security Review Loop
 
-Step 10. Start `/wiggum-loop` at Step 0 with these instruction sets:
+Step 10. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
 - Run `/security-review` in a background Task (`run_in_background: true`, exists even if not visible in skill list). Note the `output_file` path from the Task result.

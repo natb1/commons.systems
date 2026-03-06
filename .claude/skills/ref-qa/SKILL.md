@@ -6,7 +6,7 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 
 # QA Review Loop
 
-Step 8. Start `/wiggum-loop` at Step 0 with these instruction sets:
+Step 8. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
 - If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files):
