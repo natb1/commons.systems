@@ -2,37 +2,37 @@ import { createRouter } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
 import { renderNotes } from "./pages/notes.js";
-import { renderNav } from "./components/nav.js";
+import "@commons-systems/style/components/nav";
+import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
 
-const nav = document.getElementById("nav");
+const navEl = document.getElementById("nav") as AppNavElement;
+if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app");
+if (!app) throw new Error("#app element not found");
+
+navEl.links = [
+  { href: "#/", label: "Home" },
+  { href: "#/about", label: "About" },
+  { href: "#/notes", label: "Notes" },
+];
+navEl.addEventListener("sign-in", () => signIn());
+navEl.addEventListener("sign-out", () => void signOut());
 
 function updateNav(user: import("firebase/auth").User | null): void {
-  if (!nav) return;
-  nav.innerHTML = renderNav(user);
-  document.getElementById("sign-in")?.addEventListener("click", (e) => {
-    e.preventDefault();
-    signIn();
-  });
-  document.getElementById("sign-out")?.addEventListener("click", (e) => {
-    e.preventDefault();
-    void signOut();
-  });
+  navEl.user = user;
 }
 
-// Render nav immediately with unauthenticated state
+// Show login UI immediately; onAuthStateChanged will update once auth resolves.
 updateNav(null);
 
-if (app) {
-  const router = createRouter(app, [
-    { path: "/", render: renderHome },
-    { path: "/about", render: renderAbout },
-    { path: "/notes", render: renderNotes },
-  ]);
+const router = createRouter(app, [
+  { path: "/", render: renderHome },
+  { path: "/about", render: renderAbout },
+  { path: "/notes", render: renderNotes },
+]);
 
-  onAuthStateChanged(auth, (user) => {
-    updateNav(user);
-    router.navigate();
-  });
-}
+onAuthStateChanged(auth, (user) => {
+  updateNav(user);
+  router.navigate();
+});

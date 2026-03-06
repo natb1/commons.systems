@@ -4,6 +4,24 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    "./default.css": "./default.css"
+    "./default.css": "./default.css",
+    "./layout.css": "./layout.css",
+    "./components/nav": "./src/components/nav.ts"
+  },
+  "peerDependencies": {
+    "@commons-systems/htmlutil": "*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "lint": "eslint src/"
+  },
+  "devDependencies": {
+    "@commons-systems/htmlutil": "file:../htmlutil",
+    "@eslint/js": "^9.19.0",
+    "eslint": "^9.19.0",
+    "happy-dom": "^17.4.4",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.22.0",
+    "vitest": "^3.0.5"
   }
 }
