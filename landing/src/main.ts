@@ -1,6 +1,6 @@
 import type { User } from "firebase/auth";
 
-import { createRouter, getHashPath } from "./router.js";
+import { createRouter, parseHash } from "@commons-systems/router";
 import { renderHomeHtml, hydrateHome } from "./pages/home.js";
 import { renderAdmin } from "./pages/admin.js";
 import { renderNav } from "./components/nav.js";
@@ -70,7 +70,7 @@ function updateNav(): void {
     console.error("updateNav: #nav element not found");
     return;
   }
-  nav.innerHTML = renderNav(currentUser, getHashPath());
+  nav.innerHTML = renderNav(currentUser, parseHash().path);
   document.getElementById("sign-in")?.addEventListener("click", handleClick(signIn, "Sign-in"));
   document.getElementById("sign-out")?.addEventListener("click", handleClick(signOut, "Sign-out"));
 
@@ -107,7 +107,7 @@ async function loadPosts(): Promise<string> {
 updateNav();
 
 if (app) {
-  const navigate = createRouter(
+  const router = createRouter(
     app,
     [
       {
@@ -160,7 +160,7 @@ if (app) {
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
     updateNav();
-    navigate();
+    router.navigate();
     updateInfoPanel();
   });
 } else {
