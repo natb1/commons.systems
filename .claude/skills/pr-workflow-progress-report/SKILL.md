@@ -9,11 +9,11 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 Args: `FILE_PREFIX=<x> PR_NUM=<n> ITERATION=<n>`
 
 ```bash
-mkdir -p "$(git rev-parse --show-toplevel)/tmp"
+mkdir -p tmp
 ```
 
-- Write evaluation results to `$(git rev-parse --show-toplevel)/tmp/{FILE_PREFIX}-eval-{ITERATION}.txt`
+- Write evaluation results to `tmp/{FILE_PREFIX}-eval-{ITERATION}.txt`
 - Post combined comment:
   ```bash
-  post-pr-comment.sh {PR_NUM} <output_file> "$(git rev-parse --show-toplevel)/tmp/{FILE_PREFIX}-eval-{ITERATION}.txt"
+  post-pr-comment.sh {PR_NUM} <output_file> tmp/{FILE_PREFIX}-eval-{ITERATION}.txt
   ```

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="${1:?Usage: run-acceptance-tests.sh <app-dir>}"
+APP_DIR="${1:?Usage: run-acceptance-tests.sh <app-dir> [base-url]}"
+EXTERNAL_BASE_URL="${2:-}"
 
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
@@ -13,13 +14,26 @@ source "$SCRIPT_DIR/lib.sh"
 
 APP_NAME=$(get_app_name "$APP_DIR")
 
+cd "$REPO_ROOT/$APP_DIR"
+npm ci
+
+# When a base URL is provided, skip emulator setup and run tests directly
+if [ -n "$EXTERNAL_BASE_URL" ]; then
+  if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+    npx playwright install --with-deps chromium
+  fi
+  BASE_URL="$EXTERNAL_BASE_URL" npx playwright test --config e2e/playwright.config.ts
+  exit 0
+fi
+
+cd "$REPO_ROOT"
+
 cleanup_stale_hub
 
 detect_features "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
 cd "$REPO_ROOT/$APP_DIR"
-npm ci
 
 # Find available ports
 HOSTING_PORT=$(find_available_port)

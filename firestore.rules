@@ -59,6 +59,56 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    // Seed budgets are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-budgets/{budgetId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Seed budget periods are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-budget-periods/{periodId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Budgets are scoped to group members via a denormalized `memberUids` field.
+    // Updates limited to name, weeklyAllowance (must be non-negative), and rollover;
+    // rollover must be one of "none", "debt", "balance". Create and delete are explicitly denied.
+    match /budget/{env}/budgets/{budgetId} {
+      allow read: if request.auth != null
+        && request.auth.uid in resource.data.memberUids;
+      allow update: if request.auth != null
+        && request.auth.uid in resource.data.memberUids
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberUids == resource.data.memberUids
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.weeklyAllowance is number
+        && request.resource.data.weeklyAllowance >= 0
+        && request.resource.data.rollover in ["none", "debt", "balance"]
+        && request.resource.data.keys().hasOnly(['name', 'weeklyAllowance', 'rollover', 'groupId', 'memberUids']);
+      allow create, delete: if false;
+    }
+
+    // Budget periods are scoped to group members via a denormalized `memberUids` field.
+    // Updates limited to total (must be non-negative); budgetId, periodStart, periodEnd,
+    // groupId, and memberUids are immutable. Create and delete are explicitly denied.
+    match /budget/{env}/budget-periods/{periodId} {
+      allow read: if request.auth != null
+        && request.auth.uid in resource.data.memberUids;
+      allow update: if request.auth != null
+        && request.auth.uid in resource.data.memberUids
+        && request.resource.data.budgetId == resource.data.budgetId
+        && request.resource.data.periodStart == resource.data.periodStart
+        && request.resource.data.periodEnd == resource.data.periodEnd
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberUids == resource.data.memberUids
+        && request.resource.data.total is number
+        && request.resource.data.total >= 0
+        && request.resource.data.keys().hasOnly(['budgetId', 'periodStart', 'periodEnd', 'total', 'groupId', 'memberUids']);
+      allow create, delete: if false;
+    }
+
     match /print/{env}/messages/{messageId} {
       allow read: if true;
       allow write: if false;

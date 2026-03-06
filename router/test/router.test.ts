@@ -156,6 +156,17 @@ describe("createRouter", () => {
     });
   });
 
+  it("formatError returning undefined falls through to default message", async () => {
+    router = createRouter(
+      outlet,
+      [{ path: "/", render: () => { throw new Error("boom"); } }],
+      { formatError: () => undefined },
+    );
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toContain("Something went wrong. Please try again.");
+    });
+  });
+
   it("strips query params for route matching", async () => {
     location.hash = "#/about?group=household";
     router = createRouter(outlet, routes);
