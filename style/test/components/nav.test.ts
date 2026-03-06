@@ -134,12 +134,12 @@ describe("AppNavElement", () => {
     expect(nav.querySelector("#user-display")).toBeTruthy();
   });
 
-  it("managed containers use display:contents", () => {
+  it("managed containers are span elements", () => {
     const nav = createNav();
     nav.links = [{ href: "#/", label: "Home" }];
-    const linksContainer = nav.querySelector(".nav-links") as HTMLElement;
-    const authContainer = nav.querySelector(".nav-auth") as HTMLElement;
-    expect(linksContainer.style.display).toBe("contents");
-    expect(authContainer.style.display).toBe("contents");
+    const linksContainer = nav.querySelector(".nav-links");
+    const authContainer = nav.querySelector(".nav-auth");
+    expect(linksContainer?.tagName).toBe("SPAN");
+    expect(authContainer?.tagName).toBe("SPAN");
   });
 });

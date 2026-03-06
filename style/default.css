@@ -41,15 +41,35 @@ a:hover {
   text-decoration-thickness: 2px;
 }
 
-nav,
-app-nav {
+nav {
   display: flex;
   align-items: baseline;
 }
 
-nav a,
-app-nav a {
-  margin-right: 1rem;
+nav > app-nav {
+  flex: 1;
+}
+
+app-nav {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+app-nav .nav-links {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+app-nav .nav-auth {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+app-nav > .nav-links + * {
+  margin-left: auto;
 }
 
 header {

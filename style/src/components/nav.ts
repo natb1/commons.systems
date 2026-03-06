@@ -44,7 +44,6 @@ class AppNavElement extends HTMLElement {
     if (!linksContainer) {
       linksContainer = document.createElement("span");
       linksContainer.className = "nav-links";
-      linksContainer.style.display = "contents";
       this.prepend(linksContainer);
     }
 
@@ -56,7 +55,6 @@ class AppNavElement extends HTMLElement {
     if (!authContainer) {
       authContainer = document.createElement("span");
       authContainer.className = "nav-auth";
-      authContainer.style.display = "contents";
       this.append(authContainer);
     }
 
