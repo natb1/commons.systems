@@ -58,7 +58,9 @@ function updateNav(user: User | null): void {
       select = document.createElement("select");
       select.id = "group-select";
       select.setAttribute("aria-label", "Select group");
-      navEl.querySelector(".nav-auth")!.insertBefore(select, navEl.querySelector("#sign-out"));
+      const authContainer = navEl.querySelector(".nav-auth");
+      if (!authContainer) throw new Error(".nav-auth container not found in app-nav");
+      authContainer.insertBefore(select, navEl.querySelector("#sign-out"));
       select.addEventListener("change", (e) => setGroupParam((e.target as HTMLSelectElement).value));
     }
     select.innerHTML = state.groups.map(g => {

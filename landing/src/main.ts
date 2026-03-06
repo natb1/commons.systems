@@ -14,6 +14,7 @@ import { isInGroup } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE } from "./firebase.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
+if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 const infoPanel = document.getElementById("info-panel");
 
@@ -76,7 +77,8 @@ function updateNav(): void {
 }
 
 const toggle = document.getElementById("panel-toggle");
-toggle?.addEventListener("click", () => {
+if (!toggle) throw new Error("#panel-toggle element not found");
+toggle.addEventListener("click", () => {
   if (!infoPanel) return;
   const isOpen = infoPanel.classList.toggle("open");
   toggle.setAttribute("aria-expanded", String(isOpen));

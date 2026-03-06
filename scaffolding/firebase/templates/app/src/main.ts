@@ -7,6 +7,7 @@ import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
+if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 
 navEl.links = [

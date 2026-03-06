@@ -16,7 +16,7 @@ class AppNavElement extends HTMLElement {
   #showAuth = true;
 
   set links(v: NavLink[]) {
-    this.#links = v;
+    this.#links = [...v];
     this.#render();
   }
   get links(): NavLink[] {
@@ -64,7 +64,7 @@ class AppNavElement extends HTMLElement {
     }
 
     if (this.#user) {
-      const display = escapeHtml(this.#user.displayName ?? this.#user.email ?? "User");
+      const display = escapeHtml(this.#user.displayName || this.#user.email || "User");
       authContainer.innerHTML =
         `<span id="user-display">${display}</span>` +
         `<a href="#" id="sign-out">Logout</a>`;

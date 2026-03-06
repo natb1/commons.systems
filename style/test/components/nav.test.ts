@@ -46,6 +46,12 @@ describe("AppNavElement", () => {
     expect(nav.querySelector("#sign-in")).toBeNull();
   });
 
+  it("falls back to email when displayName is empty string", () => {
+    const nav = createNav();
+    nav.user = { displayName: "", email: "test@example.com" };
+    expect(nav.querySelector("#user-display")?.textContent).toBe("test@example.com");
+  });
+
   it("falls back to email when displayName is null", () => {
     const nav = createNav();
     nav.user = { displayName: null, email: "test@example.com" };

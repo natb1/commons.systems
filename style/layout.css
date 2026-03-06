@@ -4,10 +4,6 @@
   gap: 1.5rem;
 }
 
-.sidebar {
-  --sidebar-width: 16rem;
-}
-
 @media (min-width: 768px) {
   .content-grid {
     grid-template-columns: 1fr var(--sidebar-width, 16rem);

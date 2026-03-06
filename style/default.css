@@ -50,18 +50,8 @@ nav > app-nav {
   flex: 1;
 }
 
-app-nav {
-  display: flex;
-  align-items: baseline;
-  gap: 1rem;
-}
-
-app-nav .nav-links {
-  display: flex;
-  align-items: baseline;
-  gap: 1rem;
-}
-
+app-nav,
+app-nav .nav-links,
 app-nav .nav-auth {
   display: flex;
   align-items: baseline;
