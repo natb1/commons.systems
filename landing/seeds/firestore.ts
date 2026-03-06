@@ -19,7 +19,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
           data: {
             title: "Hello World",
             published: true,
-            publishedAt: "2026-02-01T00:00:00Z",
+            publishedAt: "2026-01-15T00:00:00Z",
             filename: "hello-world.md",
           },
         },

@@ -76,7 +76,7 @@ test.describe("blog", () => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
-      page.locator('#post-hello-world time[datetime="2026-02-01T00:00:00Z"]'),
+      page.locator('#post-hello-world time[datetime="2026-01-15T00:00:00Z"]'),
     ).toBeVisible();
   });
 });

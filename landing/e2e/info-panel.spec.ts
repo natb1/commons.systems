@@ -98,6 +98,17 @@ test.describe("info panel — header alignment", () => {
 });
 
 test.describe("info panel — archive", () => {
+  test("shows both January and February month groups", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
+    await page.goto("/");
+    await page.waitForSelector("#posts", { timeout: 30000 });
+    const archiveSection = page.locator(
+      '.panel-section:has(h3:text("Archive"))',
+    );
+    await expect(archiveSection.locator("summary", { hasText: "January" })).toBeVisible();
+    await expect(archiveSection.locator("summary", { hasText: "February" })).toBeVisible();
+  });
+
   test("current month is expanded by default", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
