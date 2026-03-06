@@ -1,46 +1,14 @@
 @import "@commons-systems/style/default.css";
+@import "@commons-systems/style/layout.css";
 
 body {
   --main-max-width: 68rem;
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
 }
 
 main {
   min-width: 0;
   max-inline-size: none;
   margin-inline: 0;
-}
-
-@media (min-width: 768px) {
-  .content-grid {
-    grid-template-columns: 1fr 16rem;
-  }
-
-  body > header {
-    display: grid;
-    grid-template-columns: 1fr 16rem;
-    column-gap: 1.5rem;
-    padding: 1rem 0;
-  }
-
-  body > header > * {
-    grid-column: 1;
-  }
-
-  #info-panel {
-    position: sticky;
-    top: calc(var(--header-height, 5rem) + 2rem);
-    align-self: start;
-  }
-
-  .panel-toggle {
-    display: none;
-  }
 }
 
 #posts article h1,
@@ -161,45 +129,4 @@ main {
 
 .feed-icon:hover {
   opacity: 0.8;
-}
-
-/* Panel toggle button */
-.panel-toggle {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--fg);
-  cursor: pointer;
-  font-size: 1rem;
-  padding: 0.2rem 0.5rem;
-  margin-left: auto;
-  transition: transform 0.2s;
-}
-
-.panel-toggle[aria-expanded="true"] {
-  transform: rotate(180deg);
-}
-
-/* Mobile: panel appears as an overlay anchored to top-right */
-@media (max-width: 767px) {
-  .content-grid {
-    position: relative;
-  }
-
-  #info-panel {
-    display: none;
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 5;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    padding: 1rem;
-    width: 16rem;
-    max-height: 80vh;
-    overflow-y: auto;
-  }
-
-  #info-panel.open {
-    display: block;
-  }
 }
