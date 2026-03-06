@@ -9,13 +9,13 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 
 Self-contained wiggum-loop for Steps 6 (acceptance) and 7 (smoke). Runs in isolated context — cannot invoke other skills.
 
-On load, read issue state via `issue-state-read` to determine entry point:
+On load, read issue state via `.claude/skills/ref-pr-workflow/scripts/issue-state-read` to determine entry point:
 - step=6 → start at Phase 1 (acceptance)
 - step=7 → start at Phase 2 (smoke)
 
 ## Sandbox
 
-Use `dangerouslyDisableSandbox: true` for git write operations (`git add`, `git commit`, `git merge`, `git push`) and all `gh` CLI calls (`gh run list`, `gh run view`, `issue-state-write`, `post-pr-comment.sh`).
+Use `dangerouslyDisableSandbox: true` for git write operations (`git add`, `git commit`, `git merge`, `git push`) and all `gh` CLI calls (`gh run list`, `gh run view`, `.claude/skills/ref-pr-workflow/scripts/issue-state-write`, `.claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh`).
 
 ## Phase 1: Acceptance Tests (Step 6)
 
@@ -42,7 +42,7 @@ If the run is in progress, wait for it to complete before returning output.
 - Write evaluation to `tmp/acceptance-eval-<N>.txt`
 - Post combined comment:
   ```bash
-  post-pr-comment.sh <pr-num> <output_file> tmp/acceptance-eval-<N>.txt
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> <output_file> tmp/acceptance-eval-<N>.txt
   ```
 - Write checkpoint:
   ```bash
@@ -77,11 +77,11 @@ Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Re
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> tmp/acceptance-final.txt
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/acceptance-final.txt
   ```
 - Update issue state to step=7/phase=verify:
   ```bash
-  issue-state-write <issue-number> '{"version":1,"step":7,"step_label":"Smoke Test Loop","phase":"verify","active_skills":["ref-memory-management","ref-pr-workflow"]}'
+  .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":7,"step_label":"Smoke Test Loop","phase":"verify","active_skills":["ref-memory-management","ref-pr-workflow"]}'
   ```
 - Reset iteration counter to 1. Proceed to Phase 2.
 
@@ -103,7 +103,7 @@ Same as Phase 1 Execute (CI monitoring).
 - Write evaluation to `tmp/smoke-eval-<N>.txt`
 - Post combined comment:
   ```bash
-  post-pr-comment.sh <pr-num> <output_file> tmp/smoke-eval-<N>.txt
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> <output_file> tmp/smoke-eval-<N>.txt
   ```
 - Write checkpoint:
   ```bash
@@ -138,11 +138,11 @@ Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Re
   ```
 - Post:
   ```bash
-  post-pr-comment.sh <pr-num> tmp/smoke-final.txt
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/smoke-final.txt
   ```
 - Update issue state to step=8/phase=qa:
   ```bash
-  issue-state-write <issue-number> '{"version":1,"step":8,"step_label":"QA Review Loop","phase":"qa","active_skills":["ref-memory-management","ref-pr-workflow","ref-qa"]}'
+  .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":8,"step_label":"QA Review Loop","phase":"qa","active_skills":["ref-memory-management","ref-pr-workflow","ref-qa"]}'
   ```
 - Go to Return with status `"success"`.
 

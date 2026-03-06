@@ -23,4 +23,4 @@ EOF
 
 Include a separate `Closes #N` for each issue (primary + all implemented dependencies and sub-issues).
 
-On completion → update state to step=6/phase=verify via `issue-state-write` with `active_skills: ["ref-memory-management", "ref-pr-workflow"]`. Return to router for dispatch to verify phase.
+On completion → update state to step=6/phase=verify via `.claude/skills/ref-pr-workflow/scripts/issue-state-write` with `active_skills: ["ref-memory-management", "ref-pr-workflow"]`. Return to router for dispatch to verify phase.
