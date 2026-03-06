@@ -37,7 +37,7 @@ let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const INFO_PANEL_LINKS = [{ label: "Source", url: "https://github.com/natb1/commons.systems" }];
 
-function updateInfoPanel(): void {
+const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
 
   if (rssBlobUrl) URL.revokeObjectURL(rssBlobUrl);
@@ -119,7 +119,7 @@ if (app) {
     { onNavigate: updateNav },
   );
 
-  function closePanel(): void {
+  const closePanel = (): void => {
     infoPanel.classList.remove("open");
     toggle.setAttribute("aria-expanded", "false");
   }
