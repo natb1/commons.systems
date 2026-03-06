@@ -42,7 +42,7 @@ function selectedGroup(): Group | null {
 
 function updateNav(user: User | null): void {
   const group = selectedGroup();
-  nav.innerHTML = renderNav(user, state.groups, group?.id ?? null);
+  nav!.innerHTML = renderNav(user, state.groups, group?.id ?? null);
   document.getElementById("sign-in")?.addEventListener("click", (e) => {
     e.preventDefault();
     signIn();
@@ -145,7 +145,7 @@ export function createAuthStateHandler(deps: AuthStateDeps): (user: User | null)
     const currentState = deps.getState();
     deps.setState({
       user,
-      groups: currentState.user === user ? currentState.groups : [],
+      groups: currentState.user === user ? [...currentState.groups] : [],
       groupError: false,
     });
     try {
