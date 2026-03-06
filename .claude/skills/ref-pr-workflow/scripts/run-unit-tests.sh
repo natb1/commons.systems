@@ -74,7 +74,7 @@ done
 # Run nix flake check
 if [ "$RUN_NIX" = true ]; then
   echo "=== nix flake check ==="
-  if nix flake check "$REPO_ROOT"; then
+  if nix flake check --impure "$REPO_ROOT"; then
     echo "PASS: nix flake check"
   else
     echo "FAIL: nix flake check" >&2
