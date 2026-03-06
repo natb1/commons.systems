@@ -334,6 +334,25 @@ describe("renderInfoPanel", () => {
       expect(months).toEqual(["June", "March"]);
     });
 
+    it("groups UTC midnight post under its UTC month", () => {
+      const boundaryPost: PostMeta[] = [
+        {
+          id: "utc-boundary",
+          title: "UTC Boundary",
+          published: true,
+          publishedAt: "2026-02-01T00:00:00Z",
+          filename: "utc.md",
+        },
+      ];
+      const html = renderInfoPanel({
+        links: [],
+        topPosts: boundaryPost,
+        blogRoll: [],
+      });
+      expect(html).toContain("February");
+      expect(html).not.toContain("January");
+    });
+
     it("archive is empty when no published posts", () => {
       const draftsOnly: PostMeta[] = [
         {

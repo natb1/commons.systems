@@ -11,7 +11,7 @@ interface InfoPanelData {
 }
 
 function monthName(month: number): string {
-  return new Date(2000, month).toLocaleString("en-US", { month: "long" });
+  return new Date(Date.UTC(2000, month)).toLocaleString("en-US", { month: "long", timeZone: "UTC" });
 }
 
 function groupByYearMonth(
@@ -141,6 +141,7 @@ function formatDate(dateStr: string): string {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 

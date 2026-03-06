@@ -72,6 +72,18 @@ describe("renderHomeHtml", () => {
     expect(html).toContain("Loading...");
   });
 
+  it("displays UTC date regardless of local timezone", () => {
+    const utcBoundaryPost: PostMeta = {
+      id: "utc-test",
+      title: "UTC Test",
+      published: true,
+      publishedAt: "2026-02-01T00:00:00Z",
+      filename: "utc-test.md",
+    };
+    const html = renderHomeHtml([utcBoundaryPost]);
+    expect(html).toContain("February 1, 2026");
+  });
+
   it("shows 'No posts yet.' when post list is empty", () => {
     const html = renderHomeHtml([]);
     expect(html).toContain("No posts yet.");
