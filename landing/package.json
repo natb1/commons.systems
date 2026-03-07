@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@commons-systems/authutil": "file:../authutil",
+    "@commons-systems/blog": "file:../blog",
     "@commons-systems/router": "file:../router",
     "@commons-systems/firebaseutil": "file:../firebaseutil",
     "@commons-systems/htmlutil": "file:../htmlutil",

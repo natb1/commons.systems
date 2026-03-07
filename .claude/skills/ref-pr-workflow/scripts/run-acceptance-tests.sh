@@ -13,6 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 APP_NAME=$(get_app_name "$APP_DIR")
+EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 
 cd "$REPO_ROOT/$APP_DIR"
 npm ci
@@ -61,7 +62,7 @@ done
 BUILD_ARGS=()
 EMULATOR_NAMESPACE=""
 if [ "$USES_FIRESTORE" = true ]; then
-  EMULATOR_NAMESPACE=$(get_firestore_namespace "$APP_NAME" "emulator")
+  EMULATOR_NAMESPACE=$(get_firestore_namespace "$APP_NAME" "$(get_env_suffix emulator)")
   BUILD_ARGS+=("VITE_FIRESTORE_EMULATOR_HOST=localhost:${FIRESTORE_PORT}" "VITE_FIRESTORE_NAMESPACE=${EMULATOR_NAMESPACE}")
 fi
 if [ "$USES_AUTH" = true ]; then
@@ -115,14 +116,14 @@ CONFIG_JSON="$CONFIG_JSON, \"emulators\": $EMULATORS_JSON}"
 
 echo "$CONFIG_JSON" > "$TEMP_FIREBASE_JSON"
 
-# Cleanup on exit: kill emulator, remove temp file
+# Cleanup on exit: kill emulator, remove stale hub and temp config files
 EMULATOR_PID=""
 cleanup() {
   if [ -n "$EMULATOR_PID" ]; then
-    kill "$EMULATOR_PID" 2>/dev/null || true
+    kill_tree "$EMULATOR_PID"
     wait "$EMULATOR_PID" 2>/dev/null || true
   fi
-  cleanup_stale_hub
+  cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
   rm -f "$TEMP_FIREBASE_JSON"
 }
 trap cleanup EXIT INT TERM
@@ -139,7 +140,7 @@ if [ "$USES_STORAGE" = true ]; then
   EMULATORS="$EMULATORS,storage"
 fi
 
-npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$FIREBASE_PROJECT_ID" &
+npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
 EMULATOR_PID=$!
 
 # Poll until hosting emulator serves content.

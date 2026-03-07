@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 APP_NAME=$(get_app_name "$APP_DIR")
+EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 
 cleanup_stale_hub
 
@@ -87,21 +88,21 @@ CONFIG_JSON="$CONFIG_JSON\"emulators\": $EMULATORS_JSON}"
 
 echo "$CONFIG_JSON" > "$TEMP_FIREBASE_JSON"
 
-# Cleanup on exit: kill Vite + emulators, remove temp file
+# Cleanup on exit: kill Vite + emulators, remove stale hub and temp config files
 EMULATOR_PID=""
 VITE_PID=""
 cleanup() {
   echo ""
   echo "Shutting down..."
   if [ -n "$VITE_PID" ]; then
-    kill "$VITE_PID" 2>/dev/null || true
+    kill_tree "$VITE_PID"
     wait "$VITE_PID" 2>/dev/null || true
   fi
   if [ -n "$EMULATOR_PID" ]; then
-    kill "$EMULATOR_PID" 2>/dev/null || true
+    kill_tree "$EMULATOR_PID"
     wait "$EMULATOR_PID" 2>/dev/null || true
   fi
-  cleanup_stale_hub
+  cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
   rm -f "$TEMP_FIREBASE_JSON"
   echo "QA server stopped."
 }
@@ -109,7 +110,7 @@ trap cleanup EXIT INT TERM
 
 # Start Firebase emulators in background (if any emulators needed)
 if [ -n "$EMULATOR_LIST" ]; then
-  npx firebase-tools emulators:start --only "$EMULATOR_LIST" --config "$TEMP_FIREBASE_JSON" --project "$FIREBASE_PROJECT_ID" &
+  npx firebase-tools emulators:start --only "$EMULATOR_LIST" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
   EMULATOR_PID=$!
 fi
 
@@ -128,8 +129,8 @@ if [ "$USES_FIRESTORE" = true ]; then
   done
   echo "Firebase Firestore emulator ready on port ${FIRESTORE_PORT}"
 
-  # Seed Firestore with qa namespace
-  NAMESPACE=$(get_firestore_namespace "$APP_NAME" "qa")
+  # Seed Firestore with worktree-scoped qa namespace (e.g., "myapp/qa-main")
+  NAMESPACE=$(get_firestore_namespace "$APP_NAME" "$(get_env_suffix qa)")
   echo "Seeding Firestore (namespace: ${NAMESPACE})..."
   APP_NAME="$APP_NAME" \
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \

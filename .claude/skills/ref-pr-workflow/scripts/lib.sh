@@ -56,6 +56,11 @@ install_local_deps() {
     (cd "$repo_root/htmlutil" && npm ci)
   fi
 
+  if grep -q '"@commons-systems/blog"' "$app_pkg" 2>/dev/null; then
+    echo "Installing blog dependency..."
+    (cd "$repo_root/blog" && npm ci)
+  fi
+
   if grep -q '"@commons-systems/style"' "$app_pkg" 2>/dev/null; then
     echo "Installing style dependency..."
     (cd "$repo_root/style" && npm ci)
@@ -66,6 +71,49 @@ install_local_deps() {
 # Args: $1 = app directory (e.g. "hello" or "/path/to/hello")
 get_app_name() {
   basename "$1"
+}
+
+# Return the name of the current git worktree directory, or empty string
+# for a standard (non-worktree) checkout.
+get_worktree_id() {
+  local git_dir common_dir
+  git_dir="$(git rev-parse --git-dir 2>/dev/null)" || return 0
+  common_dir="$(git rev-parse --git-common-dir 2>/dev/null)" || return 0
+  if [ "$git_dir" != "$common_dir" ]; then
+    basename "$git_dir"
+  fi
+}
+
+# Return the project ID for Firebase emulators.
+# Appends worktree name to prevent hub file collisions across worktrees.
+get_emulator_project_id() {
+  local wt_id
+  wt_id="$(get_worktree_id)"
+  if [ -n "$wt_id" ]; then
+    echo "${FIREBASE_PROJECT_ID}-wt-${wt_id}"
+  else
+    echo "$FIREBASE_PROJECT_ID"
+  fi
+}
+
+# Build an environment suffix with optional worktree qualifier.
+# Args: $1 = base suffix (e.g. "qa", "emulator")
+get_env_suffix() {
+  local wt_id
+  wt_id="$(get_worktree_id)"
+  echo "${1}${wt_id:+-$wt_id}"
+}
+
+# Kill a process and all its descendants.
+# Args: $1 = PID to kill
+kill_tree() {
+  local pid="${1:?kill_tree requires a PID argument}"
+  local children
+  children=$(pgrep -P "$pid" 2>/dev/null) || true
+  for child in $children; do
+    kill_tree "$child"
+  done
+  kill "$pid" 2>/dev/null || true
 }
 
 # Print the hosting site ID for an app from .firebaserc deploy targets.
@@ -120,10 +168,16 @@ delete_preview_channel() {
 }
 
 # Remove the emulator hub file if the PID recorded in it is dead.
-# Safe for concurrent worktrees: only removes if the owning PID has exited.
+# Uses worktree-scoped project ID so each worktree manages its own hub file.
 # (PID recycling could theoretically cause a false positive but is negligible in practice.)
 cleanup_stale_hub() {
-  local hub_file="/tmp/hub-${FIREBASE_PROJECT_ID}.json"
+  # Resolve tmpdir via Node to match the path Firebase emulators use
+  # (os.tmpdir() may differ from shell $TMPDIR on macOS).
+  local tmpdir
+  tmpdir="$(node -e "process.stdout.write(require('os').tmpdir())")"
+  local project_id
+  project_id="$(get_emulator_project_id)"
+  local hub_file="${tmpdir}/hub-${project_id}.json"
   if [ -f "$hub_file" ]; then
     local hub_pid
     hub_pid=$(jq -r '.pid // empty' "$hub_file" 2>/dev/null) || true
