@@ -39,6 +39,12 @@ if [ "$USES_AUTH" = true ]; then
   echo "Auth emulator will use port $AUTH_PORT"
 fi
 
+STORAGE_PORT=""
+if [ "$USES_STORAGE" = true ]; then
+  STORAGE_PORT=$(find_available_port)
+  echo "Storage emulator will use port $STORAGE_PORT"
+fi
+
 # Generate temporary firebase.json (emulators only, no hosting — Vite serves)
 TEMP_FIREBASE_JSON="${REPO_ROOT}/.firebase-qa-$$.json"
 
@@ -58,12 +64,24 @@ if [ "$USES_AUTH" = true ]; then
   fi
   EMULATORS_JSON="$EMULATORS_JSON\"auth\": {\"port\": ${AUTH_PORT}}"
 fi
+if [ "$USES_STORAGE" = true ]; then
+  if [ -n "$EMULATOR_LIST" ]; then
+    EMULATORS_JSON="$EMULATORS_JSON, "
+    EMULATOR_LIST="$EMULATOR_LIST,storage"
+  else
+    EMULATOR_LIST="storage"
+  fi
+  EMULATORS_JSON="$EMULATORS_JSON\"storage\": {\"port\": ${STORAGE_PORT}}"
+fi
 EMULATORS_JSON="$EMULATORS_JSON}"
 
 # Build top-level config
 CONFIG_JSON="{"
 if [ "$USES_FIRESTORE" = true ]; then
   CONFIG_JSON="$CONFIG_JSON\"firestore\": {\"rules\": \"firestore.rules\"}, "
+fi
+if [ "$USES_STORAGE" = true ]; then
+  CONFIG_JSON="$CONFIG_JSON\"storage\": {\"rules\": \"storage.rules\"}, "
 fi
 CONFIG_JSON="$CONFIG_JSON\"emulators\": $EMULATORS_JSON}"
 
@@ -144,6 +162,9 @@ fi
 if [ "$USES_AUTH" = true ]; then
   VITE_ARGS+=("VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}")
 fi
+if [ "$USES_STORAGE" = true ]; then
+  VITE_ARGS+=("VITE_STORAGE_EMULATOR_HOST=localhost:${STORAGE_PORT}")
+fi
 
 # Set GitHub branch for apps that fetch raw content from GitHub
 VITE_ARGS+=("VITE_GITHUB_BRANCH=$(git branch --show-current)")
@@ -188,6 +209,9 @@ if [ "$USES_FIRESTORE" = true ]; then
 fi
 if [ "$USES_AUTH" = true ]; then
   echo "  Auth emulator:      localhost:${AUTH_PORT}"
+fi
+if [ "$USES_STORAGE" = true ]; then
+  echo "  Storage emulator:   localhost:${STORAGE_PORT}"
 fi
 echo ""
 echo "  Press Ctrl+C to stop"
