@@ -76,37 +76,24 @@ function updateNav(user: User | null): void {
 // Show login UI immediately; onAuthStateChanged will update once auth resolves.
 updateNav(null);
 
+type RenderOptions =
+  | { user: null; group: null; groupError: false }
+  | { user: User; group: Group; groupError: false }
+  | { user: User; group: null; groupError: boolean };
+
+function renderOptions(): RenderOptions {
+  const group = selectedGroup();
+  const user = state.user;
+  if (!user) return { user: null, group: null, groupError: false };
+  if (group) return { user, group, groupError: false };
+  return { user, group, groupError: state.groupError };
+}
+
 const router = createRouter(
   app,
   [
-    {
-      path: "/",
-      render: () => {
-        const group = selectedGroup();
-        const user = state.user;
-        if (!user) {
-          return renderHome({ user: null, group: null, groupError: false });
-        }
-        if (group) {
-          return renderHome({ user, group, groupError: false });
-        }
-        return renderHome({ user, group, groupError: state.groupError });
-      },
-    },
-    {
-      path: "/budgets",
-      render: () => {
-        const group = selectedGroup();
-        const user = state.user;
-        if (!user) {
-          return renderBudgets({ user: null, group: null, groupError: false });
-        }
-        if (group) {
-          return renderBudgets({ user, group, groupError: false });
-        }
-        return renderBudgets({ user, group, groupError: state.groupError });
-      },
-    },
+    { path: "/", render: () => renderHome(renderOptions()) },
+    { path: "/budgets", render: () => renderBudgets(renderOptions()) },
   ],
   {
     formatError: (error) => {
@@ -123,11 +110,11 @@ function transition(next: AppState): void {
   router.navigate();
 }
 
-// Hydrate the transaction table whenever it appears in the DOM. Multiple code
-// paths trigger renders (hashchange, auth state changes), so an observer
-// catches all of them. Sets dataset.hydrated to "true" on success or "error"
-// on failure to prevent retry loops.
-// Observer runs for page lifetime: each navigation to "/" produces a new table.
+// Hydrate tables (transactions, budgets) whenever they appear in the DOM.
+// Multiple code paths trigger renders (hashchange, auth state changes), so an
+// observer catches all of them. Sets dataset.hydrated to "true" on success or
+// "error" on failure to prevent retry loops.
+// Observer runs for page lifetime: each route navigation produces a new table.
 function hydrateTable(
   selector: string,
   hydrate: (el: HTMLElement) => void,

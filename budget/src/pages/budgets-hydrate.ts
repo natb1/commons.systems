@@ -1,6 +1,5 @@
 import { updateBudget } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";
-import type { Rollover } from "../firestore.js";
 
 const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
@@ -43,14 +42,17 @@ async function handleSaveError(el: HTMLInputElement | HTMLSelectElement, error: 
   }
 }
 
+function rowBudgetId(el: HTMLElement): string | null {
+  const row = el.closest(".budget-row");
+  if (!(row instanceof HTMLElement)) return null;
+  return row.dataset.budgetId ?? null;
+}
+
 export function hydrateBudgetTable(container: HTMLElement): void {
   container.addEventListener("blur", async (e) => {
     const target = e.target;
     if (!(target instanceof HTMLInputElement)) return;
-
-    const row = target.closest(".budget-row");
-    if (!(row instanceof HTMLElement)) return;
-    const budgetId = row.dataset.budgetId;
+    const budgetId = rowBudgetId(target);
     if (!budgetId) return;
 
     if (target.value === target.defaultValue) return;
@@ -82,19 +84,21 @@ export function hydrateBudgetTable(container: HTMLElement): void {
     const target = e.target;
     if (!(target instanceof HTMLSelectElement)) return;
     if (!target.classList.contains("edit-rollover")) return;
-
-    const row = target.closest(".budget-row");
-    if (!(row instanceof HTMLElement)) return;
-    const budgetId = row.dataset.budgetId;
+    const budgetId = rowBudgetId(target);
     if (!budgetId) return;
 
     const saved = target.querySelector("option[selected]") as HTMLOptionElement | null;
     if (saved && target.value === saved.value) return;
 
     try {
-      await updateBudget(budgetId, { rollover: target.value as Rollover });
+      const value = target.value;
+      if (value !== "none" && value !== "debt" && value !== "balance") {
+        showInputError(target, "Invalid rollover value");
+        return;
+      }
+      await updateBudget(budgetId, { rollover: value });
       if (saved) saved.removeAttribute("selected");
-      const newSelected = target.querySelector(`option[value="${target.value}"]`) as HTMLOptionElement | null;
+      const newSelected = Array.from(target.options).find(o => o.value === value) ?? null;
       if (newSelected) newSelected.setAttribute("selected", "");
     } catch (error) {
       await handleSaveError(target, error);
