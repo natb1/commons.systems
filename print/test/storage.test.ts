@@ -10,7 +10,7 @@ vi.mock("firebase/storage", () => ({
 
 vi.mock("../src/firebase.js", () => ({
   db: { type: "mock-firestore" },
-  NAMESPACE: "app/test",
+  STORAGE_NAMESPACE: "app/test",
   storage: { type: "mock-storage" },
 }));
 

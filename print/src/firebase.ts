@@ -43,4 +43,6 @@ if (!envNamespace && import.meta.env.MODE !== "production") {
 export const NAMESPACE = envNamespace || "print/prod";
 validateNamespace(NAMESPACE);
 
+export const STORAGE_NAMESPACE = "print/prod";
+
 export { db, storage, app };
