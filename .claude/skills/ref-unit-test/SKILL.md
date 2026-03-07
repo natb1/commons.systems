@@ -11,7 +11,7 @@ Self-contained wiggum-loop for Step 4. Runs in isolated context — cannot invok
 
 ## Sandbox
 
-Use `dangerouslyDisableSandbox: true` for git write operations (`git add`, `git commit`, `git merge`, `git push`) and all `gh` CLI calls (`issue-state-write`, `post-pr-comment.sh`).
+Use `dangerouslyDisableSandbox: true` for git write operations (`git add`, `git commit`, `git merge`, `git push`) and all `gh` CLI calls (`.claude/skills/ref-pr-workflow/scripts/issue-state-write`, `.claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh`).
 
 ## Running Tests
 
@@ -56,7 +56,7 @@ Fix failures. Commit fixes (dangerouslyDisableSandbox). Increment iteration coun
 
 - Update issue state to step=5/phase=core:
   ```bash
-  issue-state-write <issue-number> '{"version":1,"step":5,"step_label":"PR Creation","phase":"core","active_skills":["ref-memory-management","ref-pr-workflow","ref-create-pr"]}'
+  .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":5,"step_label":"PR Creation","phase":"core","active_skills":["ref-memory-management","ref-pr-workflow","ref-create-pr"]}'
   ```
 - Write final checkpoint:
   ```bash
