@@ -1,7 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { formatUtcDate, monthName } from "../date.js";
-import type { PostMeta } from "../post-types.js";
-import { isPublished, type PublishedPost } from "../post-types.js";
+import { isPublished, type PostMeta, type PublishedPost } from "../post-types.js";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.js";
 
 export interface LinkSection {

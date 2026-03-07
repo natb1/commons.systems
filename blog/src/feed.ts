@@ -1,6 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
-import type { PostMeta } from "./post-types.js";
-import { isPublished } from "./post-types.js";
+import { isPublished, type PostMeta } from "./post-types.js";
 
 export interface RssConfig {
   title: string;

@@ -110,7 +110,7 @@ describe("AtomStrategy", () => {
     const strategy = new AtomStrategy("https://example.com/feed");
     const result = await strategy.fetchLatestPost();
 
-    // parseXml returns null for unparseable content; function returns early
+    // Unparseable XML produces no results
     expect(result).toBeNull();
 
   });
@@ -128,7 +128,7 @@ describe("AtomStrategy", () => {
     const strategy = new AtomStrategy("https://example.com/feed");
     const result = await strategy.fetchLatestPost();
 
-    // parseXml returns null when feed has no entries; function returns early
+    // Empty feed (no entries) produces no results
     expect(result).toBeNull();
 
   });
