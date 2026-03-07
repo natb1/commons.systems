@@ -20,7 +20,7 @@ Plan mode is mandatory at Steps 0 and 3, regardless of loop complexity.
 
 ## State Persistence
 
-Before executing each step, update the issue body state with `wiggum_step` and `wiggum_step_label` set to the current step number and label via `issue-state-write`. Include all existing state fields (`step`, `step_label`, `phase`, `active_skills`) alongside the updated wiggum fields.
+Before executing each step, update the issue body state with `wiggum_step` and `wiggum_step_label` set to the current step number and label via `.claude/skills/ref-pr-workflow/scripts/issue-state-write`. Include all existing state fields (`step`, `step_label`, `phase`, `active_skills`) alongside the updated wiggum fields.
 
 ## Step 0. Initialize
 
