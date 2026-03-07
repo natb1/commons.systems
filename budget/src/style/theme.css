@@ -81,6 +81,38 @@
   scroll-margin-top: 4rem; /* accommodate sticky header */
 }
 
+.budget-header,
+.budget-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  align-items: center;
+}
+
+.budget-header {
+  font-weight: bold;
+  border-bottom: 2px solid var(--border);
+}
+
+.budget-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.budget-row input,
+.budget-row select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.budget-row select {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
 .autocomplete-dropdown {
   position: absolute;
   z-index: 10;

@@ -22,29 +22,23 @@ test.describe("navigation", () => {
     await expect(page.locator("main h2")).toHaveText("Transactions");
   });
 
-  test("clicking About nav link shows About heading @smoke", async ({ page }) => {
+  test("clicking budgets nav link shows Budgets heading @smoke", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("main h2")).toHaveText("Transactions", { timeout: 10000 });
-    await page.click('app-nav a[href="#/about"]');
-    await expect(page.locator("main h2")).toHaveText("About");
-    await expect(page.locator("main p")).toContainText(
-      "commons.systems app",
-    );
+    await page.click('app-nav a[href="#/budgets"]');
+    await expect(page.locator("main h2")).toHaveText("Budgets");
   });
 
-  test("clicking Home nav link returns to Transactions heading", async ({ page }) => {
-    await page.goto("/#/about");
-    await expect(page.locator("main h2")).toHaveText("About");
+  test("clicking transactions nav link returns to Transactions heading", async ({ page }) => {
+    await page.goto("/#/budgets");
+    await expect(page.locator("main h2")).toHaveText("Budgets");
     await page.click('app-nav a[href="#/"]');
     await expect(page.locator("main h2")).toHaveText("Transactions");
   });
 
-  test("direct URL to #/about loads about page", async ({ page }) => {
-    await page.goto("/#/about");
-    await expect(page.locator("main h2")).toHaveText("About");
-    await expect(page.locator("main p")).toContainText(
-      "commons.systems app",
-    );
+  test("direct URL to #/budgets loads budgets page", async ({ page }) => {
+    await page.goto("/#/budgets");
+    await expect(page.locator("main h2")).toHaveText("Budgets");
   });
 
   test("unknown hash falls back to home page", async ({ page }) => {

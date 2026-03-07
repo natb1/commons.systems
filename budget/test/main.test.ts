@@ -7,9 +7,10 @@ vi.mock("@commons-systems/router", () => ({
   parseHash: () => ({ path: "/", params: new URLSearchParams() }),
 }));
 vi.mock("../src/pages/home.js", () => ({ renderHome: vi.fn().mockResolvedValue("<div>home</div>") }));
-vi.mock("../src/pages/about.js", () => ({ renderAbout: () => "<div>about</div>" }));
 vi.mock("../src/components/nav.js", () => ({ renderNav: () => "<nav>nav</nav>" }));
 vi.mock("../src/pages/home-hydrate.js", () => ({ hydrateTransactionTable: vi.fn() }));
+vi.mock("../src/pages/budgets.js", () => ({ renderBudgets: vi.fn().mockResolvedValue("<div>budgets</div>") }));
+vi.mock("../src/pages/budgets-hydrate.js", () => ({ hydrateBudgetTable: vi.fn() }));
 vi.mock("@commons-systems/authutil/groups", () => ({
   getUserGroups: vi.fn(),
 }));
