@@ -215,3 +215,25 @@ export async function getBudgetPeriods(groupId: string | null, uid?: string): Pr
     };
   });
 }
+
+export async function updateBudget(
+  budgetId: string,
+  fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
+): Promise<void> {
+  if (!budgetId || budgetId.includes("/")) throw new Error("Invalid budget ID");
+  if (Object.keys(fields).length === 0) return;
+  if (fields.name !== undefined && !fields.name) {
+    throw new Error("Budget name cannot be empty");
+  }
+  if (fields.weeklyAllowance !== undefined) {
+    if (!Number.isFinite(fields.weeklyAllowance) || fields.weeklyAllowance < 0) {
+      throw new RangeError("Weekly allowance must be a non-negative number");
+    }
+  }
+  if (fields.rollover !== undefined) {
+    requireRollover(fields.rollover);
+  }
+  const path = nsCollectionPath(NAMESPACE, "budgets");
+  const ref = doc(db, path, budgetId);
+  await updateDoc(ref, fields);
+}
