@@ -35,26 +35,27 @@ install_local_deps "$REPO_ROOT" "$APP_PKG"
 
 cd "$REPO_ROOT/$APP_DIR"
 
-# Find available ports
-HOSTING_PORT=$(find_available_port)
+# Count and allocate all needed ports atomically to avoid OS port recycling
+PORT_COUNT=1  # hosting always needed
+if [ "$USES_FIRESTORE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+if [ "$USES_AUTH" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+if [ "$USES_STORAGE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+
+read -r HOSTING_PORT EXTRA_PORTS <<< "$(find_available_ports "$PORT_COUNT")"
+echo "Hosting emulator will use port $HOSTING_PORT"
 
 FIRESTORE_PORT=""
-if [ "$USES_FIRESTORE" = true ]; then
-  FIRESTORE_PORT=$(find_available_port)
-  echo "Firestore emulator will use port $FIRESTORE_PORT"
-fi
-
 AUTH_PORT=""
-if [ "$USES_AUTH" = true ]; then
-  AUTH_PORT=$(find_available_port)
-  echo "Auth emulator will use port $AUTH_PORT"
-fi
-
 STORAGE_PORT=""
-if [ "$USES_STORAGE" = true ]; then
-  STORAGE_PORT=$(find_available_port)
-  echo "Storage emulator will use port $STORAGE_PORT"
-fi
+for feature in FIRESTORE AUTH STORAGE; do
+  uses_var="USES_${feature}"
+  if [ "${!uses_var}" = true ]; then
+    port="${EXTRA_PORTS%% *}"
+    EXTRA_PORTS="${EXTRA_PORTS#* }"
+    declare "${feature}_PORT=$port"
+    echo "${feature,,} emulator will use port $port"
+  fi
+done
 
 # Build with emulator env vars
 BUILD_ARGS=()
