@@ -1,14 +1,13 @@
 import DOMPurify from "dompurify";
-import { marked } from "marked";
+import { Marked } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { formatUtcDate } from "../date.js";
-import { fetchPost } from "../github.js";
-import type { PostMeta } from "../firestore.js";
+import type { PostMeta } from "../post-types.js";
 
 const SCROLL_PADDING_PX = 16;
 
-// Strip raw HTML from markdown to prevent XSS from post file content.
-marked.use({ renderer: { html: () => "" } });
+// Local instance strips raw HTML from markdown (defense-in-depth; DOMPurify sanitizes below).
+const marked = new Marked({ renderer: { html: () => "" } });
 
 function renderArticle(p: PostMeta): string {
   const safeId = escapeHtml(p.id);
@@ -48,6 +47,7 @@ export function renderHomeHtml(posts: PostMeta[]): string {
 export function hydrateHome(
   outlet: HTMLElement,
   posts: PostMeta[],
+  fetchPost: (filename: string) => Promise<string>,
   scrollTo?: string,
 ): void {
   const container = outlet.querySelector("#posts");
