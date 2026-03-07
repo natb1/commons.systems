@@ -15,7 +15,7 @@ test.describe("media", () => {
   test("titles are visible", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("#media-list")).toContainText("The Notebooks of Leonardo Da Vinci");
+    await expect(page.locator("#media-list")).toContainText("The Confessions of St. Augustine");
     await expect(page.locator("#media-list")).toContainText("Phaedrus");
     await expect(page.locator("#media-list")).toContainText("Republic");
   });

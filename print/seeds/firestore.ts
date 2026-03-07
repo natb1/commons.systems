@@ -6,7 +6,7 @@ import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 // 3. Set custom metadata on each object:
 //    - Public domain: publicDomain=true
 //    - Private: publicDomain=false, {uid}=member (one key per member uid)
-// Example: firebase storage:upload print/prod/media/notebooks-da-vinci.epub --metadata publicDomain=true
+// Example: firebase storage:upload print/prod/media/pg3296-images-3.epub --metadata publicDomain=true
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
@@ -16,12 +16,12 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
         {
           id: "gutenberg-3296",
           data: {
-            title: "The Notebooks of Leonardo Da Vinci",
+            title: "The Confessions of St. Augustine",
             mediaType: "epub",
             tags: { source: "Project Gutenberg", gutenbergId: "3296" },
             publicDomain: true,
             sourceNotes: "Project Gutenberg eBook #3296: https://www.gutenberg.org/ebooks/3296",
-            storagePath: "media/notebooks-da-vinci.epub",
+            storagePath: "media/pg3296-images-3.epub",
             groupId: null,
             memberUids: [],
             addedAt: "2026-01-15T00:00:00Z",
@@ -35,7 +35,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             tags: { author: "Plato", source: "Platonic Foundation" },
             publicDomain: true,
             sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/phaedrus",
-            storagePath: "media/phaedrus.pdf",
+            storagePath: "media/phaedrus-david-horan-translation-7-nov-25.pdf",
             groupId: null,
             memberUids: [],
             addedAt: "2026-01-16T00:00:00Z",
@@ -49,7 +49,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             tags: { author: "Plato", source: "Platonic Foundation" },
             publicDomain: true,
             sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/republic/republic-all-books/",
-            storagePath: "media/republic.pdf",
+            storagePath: "media/republic-i-to-x-david-horan-translation-22-nov-25.pdf",
             groupId: null,
             memberUids: [],
             addedAt: "2026-01-17T00:00:00Z",
