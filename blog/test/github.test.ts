@@ -18,13 +18,13 @@ describe("fetchPost (default branch = main)", () => {
     vi.unstubAllEnvs();
   });
 
-  it("calls fetch with a URL containing main/landing/post/<filename>", async () => {
+  it("calls fetch with a URL containing main/<appPath>/<filename>", async () => {
     const mockFetch = makeFetchMock(true, "# Hello World");
     vi.stubGlobal("fetch", mockFetch);
 
     const { fetchPost } = await import("../src/github");
 
-    await fetchPost("hello-world.md");
+    await fetchPost("landing/post", "hello-world.md");
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const calledUrl: string = mockFetch.mock.calls[0][0] as string;
@@ -37,7 +37,7 @@ describe("fetchPost (default branch = main)", () => {
 
     const { fetchPost } = await import("../src/github");
 
-    const result = await fetchPost("hello-world.md");
+    const result = await fetchPost("landing/post", "hello-world.md");
 
     expect(result).toBe(content);
   });
@@ -47,7 +47,7 @@ describe("fetchPost (default branch = main)", () => {
 
     const { fetchPost } = await import("../src/github");
 
-    await expect(fetchPost("missing.md")).rejects.toThrow("404");
+    await expect(fetchPost("landing/post", "missing.md")).rejects.toThrow("404");
   });
 
   it("throws with the filename in the error message", async () => {
@@ -55,7 +55,7 @@ describe("fetchPost (default branch = main)", () => {
 
     const { fetchPost } = await import("../src/github");
 
-    await expect(fetchPost("missing.md")).rejects.toThrow("missing.md");
+    await expect(fetchPost("landing/post", "missing.md")).rejects.toThrow("missing.md");
   });
 });
 
@@ -75,10 +75,22 @@ describe("fetchPost caching", () => {
 
     const { fetchPost } = await import("../src/github");
 
-    await fetchPost("cached.md");
-    await fetchPost("cached.md");
+    await fetchPost("landing/post", "cached.md");
+    await fetchPost("landing/post", "cached.md");
 
     expect(mockFetch).toHaveBeenCalledOnce();
+  });
+
+  it("caches separately per appPath", async () => {
+    const mockFetch = makeFetchMock(true, "# Content");
+    vi.stubGlobal("fetch", mockFetch);
+
+    const { fetchPost } = await import("../src/github");
+
+    await fetchPost("landing/post", "shared.md");
+    await fetchPost("fellspiral/post", "shared.md");
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -99,9 +111,33 @@ describe("fetchPost (custom branch via VITE_GITHUB_BRANCH)", () => {
 
     const { fetchPost } = await import("../src/github");
 
-    await fetchPost("hello-world.md");
+    await fetchPost("landing/post", "hello-world.md");
 
     const calledUrl: string = mockFetch.mock.calls[0][0] as string;
     expect(calledUrl).toContain("feature-branch/landing/post/hello-world.md");
+  });
+});
+
+describe("createFetchPost", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("returns a bound fetcher for the given appPath", async () => {
+    const mockFetch = makeFetchMock(true, "# Hello");
+    vi.stubGlobal("fetch", mockFetch);
+
+    const { createFetchPost } = await import("../src/github");
+    const fetch_ = createFetchPost("fellspiral/post");
+
+    await fetch_("hello.md");
+
+    const calledUrl: string = mockFetch.mock.calls[0][0] as string;
+    expect(calledUrl).toContain("fellspiral/post/hello.md");
   });
 });

@@ -1,5 +1,5 @@
-import type { BlogRollEntry, BlogRollStrategy } from "./types.js";
-import { StaticStrategy } from "./static-strategy.js";
+import type { BlogRollEntry, BlogRollStrategy } from "@commons-systems/blog/blog-roll/types";
+import { StaticStrategy } from "@commons-systems/blog/blog-roll/static-strategy";
 
 interface BlogRollConfig {
   entry: BlogRollEntry;
