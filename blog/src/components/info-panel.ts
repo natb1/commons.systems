@@ -1,14 +1,19 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { formatUtcDate, monthName } from "../date.js";
-import type { PostMeta } from "../firestore.js";
-import { isPublished, type PublishedPost } from "../post-types.js";
+import { isPublished, type PostMeta, type PublishedPost } from "../post-types.js";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.js";
 
-interface InfoPanelData {
+export interface LinkSection {
+  heading: string;
   links: { label: string; url: string }[];
+}
+
+export interface InfoPanelData {
+  linkSections: LinkSection[];
   topPosts: PostMeta[];
   blogRoll: BlogRollEntry[];
   rssFeedUrl?: string;
+  opmlUrl?: string;
 }
 
 function groupByYearMonth(
@@ -86,12 +91,20 @@ function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string 
 }
 
 export function renderInfoPanel(data: InfoPanelData): string {
-  const linksHtml = data.links
-    .map(
-      (l) =>
-        `<li><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.label)}</a></li>`,
-    )
-    .join("");
+  const linkSectionsHtml = data.linkSections
+    .map((section) => {
+      const linksHtml = section.links
+        .map(
+          (l) =>
+            `<li><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.label)}</a></li>`,
+        )
+        .join("");
+      return `<section class="panel-section">
+      <h3>${escapeHtml(section.heading)}</h3>
+      <ul class="panel-list">${linksHtml}</ul>
+    </section>`;
+    })
+    .join("\n    ");
 
   const published = data.topPosts.filter(isPublished);
 
@@ -101,6 +114,10 @@ export function renderInfoPanel(data: InfoPanelData): string {
         `<li><a href="#/post/${escapeHtml(p.id)}">${escapeHtml(p.title)}</a></li>`,
     )
     .join("");
+
+  const opmlIcon = data.opmlUrl
+    ? ` <a href="${escapeHtml(data.opmlUrl)}" title="OPML"><img src="/icons/opml.svg" class="feed-icon" alt="OPML"></a>`
+    : "";
 
   const blogRollHtml = data.blogRoll
     .map(
@@ -116,16 +133,13 @@ export function renderInfoPanel(data: InfoPanelData): string {
     .join("");
 
   return `
-    <section class="panel-section">
-      <h3>Links</h3>
-      <ul class="panel-list">${linksHtml}</ul>
-    </section>
+    ${linkSectionsHtml}
     <section class="panel-section">
       <h3>Top Posts</h3>
       <ul class="panel-list">${topPostsHtml}</ul>
     </section>
     <section class="panel-section">
-      <h3>Blogroll <a href="/blogroll.opml" title="OPML"><img src="/icons/opml.svg" class="feed-icon" alt="OPML"></a></h3>
+      <h3>Blogroll${opmlIcon}</h3>
       <ul class="panel-list">${blogRollHtml}</ul>
     </section>
     ${renderArchive(published, data.rssFeedUrl)}

@@ -19,13 +19,12 @@ vi.mock("@commons-systems/authutil/groups", () => ({
   isInGroup: (...args: unknown[]) => mockIsInGroup(...args),
 }));
 
-vi.mock("../src/firebase.js", () => ({
-  db: { type: "mock-firestore" },
-  NAMESPACE: "landing/test",
-}));
-
 import { getPosts } from "../src/firestore";
 import type { User } from "firebase/auth";
+import type { Firestore } from "firebase/firestore";
+
+const mockDb = { type: "mock-firestore" } as unknown as Firestore;
+const NAMESPACE = "test/ns";
 
 const publishedPost = {
   id: "hello-world",
@@ -63,18 +62,18 @@ describe("getPosts", () => {
   it("queries the correct namespaced collection path", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getPosts(null);
+    await getPosts(mockDb, NAMESPACE, null);
 
     expect(mockCollection).toHaveBeenCalledWith(
-      { type: "mock-firestore" },
-      "landing/test/posts",
+      mockDb,
+      "test/ns/posts",
     );
   });
 
   it("uses where filter for non-admin queries", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getPosts(null);
+    await getPosts(mockDb, NAMESPACE, null);
 
     expect(mockWhere).toHaveBeenCalledWith("published", "==", true);
     expect(mockOrderBy).not.toHaveBeenCalled();
@@ -84,11 +83,11 @@ describe("getPosts", () => {
     mockIsInGroup.mockResolvedValue(true);
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getPosts(adminUser);
+    await getPosts(mockDb, NAMESPACE, adminUser);
 
     expect(mockIsInGroup).toHaveBeenCalledWith(
-      { type: "mock-firestore" },
-      "landing/test",
+      mockDb,
+      NAMESPACE,
       adminUser,
       "admin",
     );
@@ -99,7 +98,7 @@ describe("getPosts", () => {
   it("returns only published posts when user is null", async () => {
     mockGetDocs.mockResolvedValue({ docs: [publishedPost] });
 
-    const { posts } = await getPosts(null);
+    const { posts } = await getPosts(mockDb, NAMESPACE, null);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].id).toBe("hello-world");
@@ -110,7 +109,7 @@ describe("getPosts", () => {
     mockIsInGroup.mockResolvedValue(true);
     mockGetDocs.mockResolvedValue({ docs: [publishedPost, draftPost] });
 
-    const { posts } = await getPosts(adminUser);
+    const { posts } = await getPosts(mockDb, NAMESPACE, adminUser);
 
     expect(posts).toHaveLength(2);
   });
@@ -119,7 +118,7 @@ describe("getPosts", () => {
     mockIsInGroup.mockResolvedValue(false);
     mockGetDocs.mockResolvedValue({ docs: [publishedPost] });
 
-    const { posts } = await getPosts(regularUser);
+    const { posts } = await getPosts(mockDb, NAMESPACE, regularUser);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].id).toBe("hello-world");
@@ -128,7 +127,7 @@ describe("getPosts", () => {
   it("maps Firestore documents to PostMeta objects", async () => {
     mockGetDocs.mockResolvedValue({ docs: [publishedPost] });
 
-    const { posts } = await getPosts(null);
+    const { posts } = await getPosts(mockDb, NAMESPACE, null);
 
     expect(posts).toEqual([
       {
@@ -144,7 +143,7 @@ describe("getPosts", () => {
   it("returns empty array when there are no published posts and user is null", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    const { posts } = await getPosts(null);
+    const { posts } = await getPosts(mockDb, NAMESPACE, null);
 
     expect(posts).toEqual([]);
   });
@@ -170,7 +169,7 @@ describe("getPosts", () => {
     };
     mockGetDocs.mockResolvedValue({ docs: [jan, feb] });
 
-    const { posts } = await getPosts(null);
+    const { posts } = await getPosts(mockDb, NAMESPACE, null);
 
     expect(posts[0].id).toBe("feb");
     expect(posts[1].id).toBe("jan");
@@ -185,7 +184,7 @@ describe("getPosts", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [publishedPost, noTitle] });
 
-    const { posts, skippedCount } = await getPosts(adminUser);
+    const { posts, skippedCount } = await getPosts(mockDb, NAMESPACE, adminUser);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].id).toBe("hello-world");
@@ -206,7 +205,7 @@ describe("getPosts", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [noFilename] });
 
-    const { posts, skippedCount } = await getPosts(adminUser);
+    const { posts, skippedCount } = await getPosts(mockDb, NAMESPACE, adminUser);
 
     expect(posts).toHaveLength(0);
     expect(skippedCount).toBe(1);
@@ -227,7 +226,7 @@ describe("getPosts", () => {
     };
     mockGetDocs.mockResolvedValue({ docs: [badPublished] });
 
-    const { posts } = await getPosts(adminUser);
+    const { posts } = await getPosts(mockDb, NAMESPACE, adminUser);
 
     expect(posts).toHaveLength(1);
     expect(posts[0].published).toBe(false);
@@ -247,7 +246,7 @@ describe("getPosts", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [invalidDate] });
 
-    const { posts, skippedCount } = await getPosts(adminUser);
+    const { posts, skippedCount } = await getPosts(mockDb, NAMESPACE, adminUser);
 
     expect(posts).toHaveLength(0);
     expect(skippedCount).toBe(1);
@@ -272,7 +271,7 @@ describe("getPosts", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockGetDocs.mockResolvedValue({ docs: [badPublished] });
 
-    const { posts, skippedCount } = await getPosts(adminUser);
+    const { posts, skippedCount } = await getPosts(mockDb, NAMESPACE, adminUser);
 
     expect(posts).toHaveLength(0);
     expect(skippedCount).toBe(1);

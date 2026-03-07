@@ -51,6 +51,11 @@ install_local_deps() {
     (cd "$repo_root/htmlutil" && npm ci)
   fi
 
+  if grep -q '"@commons-systems/blog"' "$app_pkg" 2>/dev/null; then
+    echo "Installing blog dependency..."
+    (cd "$repo_root/blog" && npm ci)
+  fi
+
   if grep -q '"@commons-systems/style"' "$app_pkg" 2>/dev/null; then
     echo "Installing style dependency..."
     (cd "$repo_root/style" && npm ci)

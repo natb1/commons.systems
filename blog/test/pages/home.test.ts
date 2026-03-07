@@ -1,21 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../../src/github.js", () => ({
-  fetchPost: vi.fn(),
-}));
-
 vi.mock("marked", () => ({
-  marked: {
-    parse: vi.fn((md: string) => Promise.resolve(`<p>${md}</p>`)),
-    use: vi.fn(),
+  Marked: class {
+    parse = vi.fn((md: string) => Promise.resolve(`<p>${md}</p>`));
   },
 }));
 
 import { renderHomeHtml, hydrateHome } from "../../src/pages/home";
-import { fetchPost } from "../../src/github";
-import type { PostMeta } from "../../src/firestore";
-
-const mockFetchPost = vi.mocked(fetchPost);
+import type { PostMeta } from "../../src/post-types";
 
 const publishedPost: PostMeta = {
   id: "hello-world",
@@ -98,17 +90,19 @@ describe("renderHomeHtml", () => {
 
 describe("hydrateHome", () => {
   let outlet: HTMLDivElement;
+  let mockFetchPost: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     outlet = document.createElement("div");
+    mockFetchPost = vi.fn();
   });
 
   it("injects fetched content into the placeholder div", async () => {
     outlet.innerHTML = renderHomeHtml([publishedPost]);
     mockFetchPost.mockResolvedValue("# Hello");
 
-    hydrateHome(outlet, [publishedPost]);
+    hydrateHome(outlet, [publishedPost], mockFetchPost);
     await vi.waitFor(() => {
       const content = outlet.querySelector("#post-content-hello-world");
       expect(content?.innerHTML).toContain("<p>");
@@ -120,7 +114,7 @@ describe("hydrateHome", () => {
     outlet.innerHTML = renderHomeHtml([publishedPost]);
     mockFetchPost.mockRejectedValue(new Error("network error"));
 
-    hydrateHome(outlet, [publishedPost]);
+    hydrateHome(outlet, [publishedPost], mockFetchPost);
     await vi.waitFor(() => {
       const content = outlet.querySelector("#post-content-hello-world");
       expect(content?.innerHTML).toContain("Could not load post content. Try refreshing.");
@@ -129,8 +123,6 @@ describe("hydrateHome", () => {
 
   it("does not write to DOM if outlet no longer contains the posts container", async () => {
     outlet.innerHTML = renderHomeHtml([publishedPost]);
-    const originalContent =
-      outlet.querySelector("#post-content-hello-world")?.innerHTML;
 
     // Simulate navigation away by clearing outlet
     let resolveFetch!: (value: string) => void;
@@ -140,7 +132,7 @@ describe("hydrateHome", () => {
       }),
     );
 
-    hydrateHome(outlet, [publishedPost]);
+    hydrateHome(outlet, [publishedPost], mockFetchPost);
     outlet.innerHTML = "<p>Navigated away</p>";
     resolveFetch("# Hello");
 
@@ -152,7 +144,7 @@ describe("hydrateHome", () => {
     outlet.innerHTML = renderHomeHtml([publishedPost]);
     mockFetchPost.mockResolvedValue("# Markdown Title\nBody text here.");
 
-    hydrateHome(outlet, [publishedPost]);
+    hydrateHome(outlet, [publishedPost], mockFetchPost);
     await vi.waitFor(() => {
       const content = outlet.querySelector("#post-content-hello-world");
       expect(content?.innerHTML).not.toContain("Markdown Title");
@@ -177,7 +169,7 @@ describe("hydrateHome", () => {
     const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
 
     try {
-      hydrateHome(outlet, [publishedPost], "hello-world");
+      hydrateHome(outlet, [publishedPost], mockFetchPost, "hello-world");
       await vi.waitFor(() => {
         expect(scrollSpy).toHaveBeenCalled();
       });
