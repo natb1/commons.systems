@@ -1,6 +1,5 @@
-import type { User } from "firebase/auth";
 import { escapeHtml } from "@commons-systems/htmlutil";
-import type { Group } from "@commons-systems/authutil/groups";
+import type { RenderPageOptions } from "./render-options.js";
 import { getBudgets, type Budget, type Rollover } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";
 
@@ -28,8 +27,8 @@ function renderRow(budget: Budget, editable: boolean): string {
     ? `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name">`
     : escapeHtml(budget.name);
   const allowanceCell = editable
-    ? `<input type="number" class="edit-allowance" value="${String(budget.weeklyAllowance)}" min="0" aria-label="Weekly allowance">`
-    : String(budget.weeklyAllowance);
+    ? `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.weeklyAllowance))}" min="0" aria-label="Weekly allowance">`
+    : escapeHtml(String(budget.weeklyAllowance));
   const rolloverCell = renderRolloverCell(budget, editable);
 
   return `<div class="budget-row"${idAttr}>
@@ -57,12 +56,7 @@ function renderBudgetTable(budgets: Budget[], authorized: boolean): string {
     </div>`;
 }
 
-export type RenderBudgetsOptions =
-  | { user: null; group: null; groupError: false }
-  | { user: User; group: Group; groupError: false }
-  | { user: User; group: null; groupError: boolean };
-
-export async function renderBudgets(options: RenderBudgetsOptions): Promise<string> {
+export async function renderBudgets(options: RenderPageOptions): Promise<string> {
   const { user, group, groupError } = options;
   const authorized = group !== null;
 

@@ -21,7 +21,8 @@ function showInputError(el: HTMLInputElement | HTMLSelectElement, title = "Save 
   }, 30000));
 }
 
-async function handleSaveError(el: HTMLInputElement | HTMLSelectElement, error: unknown): Promise<void> {
+function handleSaveError(el: HTMLInputElement | HTMLSelectElement, error: unknown): void {
+  // Programmer errors: rethrow asynchronously so they surface in devtools.
   if (error instanceof TypeError || error instanceof ReferenceError) {
     setTimeout(() => { throw error; }, 0);
     return;
@@ -76,7 +77,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
       }
       target.defaultValue = target.value;
     } catch (error) {
-      await handleSaveError(target, error);
+      handleSaveError(target, error);
     }
   }, true);
 
@@ -97,11 +98,13 @@ export function hydrateBudgetTable(container: HTMLElement): void {
         return;
       }
       await updateBudget(budgetId, { rollover: value });
+      // Update the selected attribute (not just .value) so showInputError can
+      // revert to the last-saved value via option[selected].
       if (saved) saved.removeAttribute("selected");
       const newSelected = Array.from(target.options).find(o => o.value === value) ?? null;
       if (newSelected) newSelected.setAttribute("selected", "");
     } catch (error) {
-      await handleSaveError(target, error);
+      handleSaveError(target, error);
     }
   });
 }

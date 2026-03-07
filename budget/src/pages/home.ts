@@ -1,7 +1,6 @@
-import type { User } from "firebase/auth";
 import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
-import type { Group } from "@commons-systems/authutil/groups";
+import type { RenderPageOptions } from "./render-options.js";
 import { getTransactions, getBudgets, type Transaction, type Budget } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";
 
@@ -112,19 +111,7 @@ function renderTransactionTable(transactions: Transaction[], authorized: boolean
     </div>`;
 }
 
-/**
- * Render-time options after resolving the active group from AppState.
- * Valid state combinations:
- * - { user: null, group: null, groupError: false } — unauthenticated (shows seed data)
- * - { user: User, group: Group, groupError: false } — authenticated with group (editable)
- * - { user: User, group: null, groupError: boolean } — authenticated, no group (error or none exist)
- */
-export type RenderHomeOptions =
-  | { user: null; group: null; groupError: false }
-  | { user: User; group: Group; groupError: false }
-  | { user: User; group: null; groupError: boolean };
-
-export async function renderHome(options: RenderHomeOptions): Promise<string> {
+export async function renderHome(options: RenderPageOptions): Promise<string> {
   const { user, group, groupError } = options;
   const authorized = group !== null;
   const groupName = group?.name ?? "";

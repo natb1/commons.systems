@@ -4,6 +4,7 @@ import { renderBudgets } from "./pages/budgets.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { escapeHtml } from "@commons-systems/htmlutil";
+import type { RenderPageOptions } from "./pages/render-options.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { hydrateBudgetTable } from "./pages/budgets-hydrate.js";
 import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
@@ -17,9 +18,8 @@ function getUserGroups(user: User): Promise<Group[]> {
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
-const appOrNull = document.getElementById("app");
-if (!appOrNull) throw new Error("#app element not found");
-const app: HTMLElement = appOrNull;
+const app = document.getElementById("app") as HTMLElement;
+if (!app) throw new Error("#app element not found");
 
 export type AppState =
   | { user: null; groups: readonly []; groupError: false }
@@ -76,12 +76,7 @@ function updateNav(user: User | null): void {
 // Show login UI immediately; onAuthStateChanged will update once auth resolves.
 updateNav(null);
 
-type RenderOptions =
-  | { user: null; group: null; groupError: false }
-  | { user: User; group: Group; groupError: false }
-  | { user: User; group: null; groupError: boolean };
-
-function renderOptions(): RenderOptions {
+function renderOptions(): RenderPageOptions {
   const group = selectedGroup();
   const user = state.user;
   if (!user) return { user: null, group: null, groupError: false };
@@ -114,7 +109,8 @@ function transition(next: AppState): void {
 // Multiple code paths trigger renders (hashchange, auth state changes), so an
 // observer catches all of them. Sets dataset.hydrated to "true" on success or
 // "error" on failure to prevent retry loops.
-// Observer runs for page lifetime: each route navigation produces a new table.
+// Observer runs for page lifetime: each render replaces page content, so
+// tables start unhydrated and need re-initialization.
 function hydrateTable(
   selector: string,
   hydrate: (el: HTMLElement) => void,
@@ -126,6 +122,8 @@ function hydrateTable(
     table.dataset.hydrated = "true";
   } catch (error) {
     table.dataset.hydrated = "error";
+    // Programmer errors: rethrow asynchronously so they surface in devtools
+    // without killing the MutationObserver.
     if (error instanceof TypeError || error instanceof ReferenceError) {
       setTimeout(() => { throw error; }, 0);
       return;
