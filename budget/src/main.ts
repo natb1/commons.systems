@@ -1,10 +1,12 @@
 import { createRouter, parseHash } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
-import { renderAbout } from "./pages/about.js";
+import { renderBudgets } from "./pages/budgets.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { escapeHtml } from "@commons-systems/htmlutil";
+import type { RenderPageOptions } from "./pages/render-options.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
+import { hydrateBudgetTable } from "./pages/budgets-hydrate.js";
 import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
 import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE } from "./firebase.js";
@@ -16,7 +18,7 @@ function getUserGroups(user: User): Promise<Group[]> {
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
-const app = document.getElementById("app");
+const app = document.getElementById("app") as HTMLElement;
 if (!app) throw new Error("#app element not found");
 
 export type AppState =
@@ -42,7 +44,7 @@ function selectedGroup(): Group | null {
   return state.groups.find((g) => g.id === param) ?? state.groups[0];
 }
 
-navEl.links = [{ href: "#/", label: "Home" }, { href: "#/about", label: "About" }];
+navEl.links = [{ href: "#/", label: "transactions" }, { href: "#/budgets", label: "budgets" }];
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => {
   signOut().catch((error) => console.error("Unexpected sign-out error:", error));
@@ -74,24 +76,19 @@ function updateNav(user: User | null): void {
 // Show login UI immediately; onAuthStateChanged will update once auth resolves.
 updateNav(null);
 
+function renderOptions(): RenderPageOptions {
+  const group = selectedGroup();
+  const user = state.user;
+  if (!user) return { user: null, group: null, groupError: false };
+  if (group) return { user, group, groupError: false };
+  return { user, group, groupError: state.groupError };
+}
+
 const router = createRouter(
   app,
   [
-    {
-      path: "/",
-      render: () => {
-        const group = selectedGroup();
-        const user = state.user;
-        if (!user) {
-          return renderHome({ user: null, group: null, groupError: false });
-        }
-        if (group) {
-          return renderHome({ user, group, groupError: false });
-        }
-        return renderHome({ user, group, groupError: state.groupError });
-      },
-    },
-    { path: "/about", render: renderAbout },
+    { path: "/", render: () => renderHome(renderOptions()) },
+    { path: "/budgets", render: () => renderBudgets(renderOptions()) },
   ],
   {
     formatError: (error) => {
@@ -108,31 +105,32 @@ function transition(next: AppState): void {
   router.navigate();
 }
 
-// Hydrate the transaction table whenever it appears in the DOM. Multiple code
-// paths trigger renders (hashchange, auth state changes), so an observer
-// catches all of them. Sets dataset.hydrated to "true" on success or "error"
-// on failure to prevent retry loops.
-// Observer runs for page lifetime: each navigation to "/" produces a new table.
-const observer = new MutationObserver(() => {
-  const table = app.querySelector("#transactions-table") as HTMLElement | null;
+// Hydrate tables (transactions, budgets) whenever they appear in the DOM.
+// Multiple code paths trigger renders (hashchange, auth state changes), so an
+// observer catches all of them. Sets dataset.hydrated to "true" on success or
+// "error" on failure to prevent retry loops.
+// Observer runs for page lifetime: each render replaces page content, so
+// tables start unhydrated and need re-initialization.
+function hydrateTable(
+  selector: string,
+  hydrate: (el: HTMLElement) => void,
+): void {
+  const table = app.querySelector(selector) as HTMLElement | null;
   if (!table || table.dataset.hydrated) return;
   try {
-    hydrateTransactionTable(table);
+    hydrate(table);
     table.dataset.hydrated = "true";
   } catch (error) {
     table.dataset.hydrated = "error";
-    // TypeError/ReferenceError: deferred via setTimeout so they surface in
-    // devtools without killing the observer. No UI feedback — these are
-    // programmer errors that need code fixes, not user-facing recovery.
+    // Programmer errors: rethrow asynchronously so they surface in devtools
+    // without killing the MutationObserver.
     if (error instanceof TypeError || error instanceof ReferenceError) {
       setTimeout(() => { throw error; }, 0);
       return;
     }
-    // All other errors: inputs are disabled and an error message is appended
-    // to preserve the read-only view while signaling that editing is unavailable.
     console.error("Hydration error:", error);
-    table.querySelectorAll("input").forEach((el) => {
-      el.disabled = true;
+    table.querySelectorAll("input, select").forEach((el) => {
+      (el as HTMLInputElement | HTMLSelectElement).disabled = true;
     });
     const msg = document.createElement("p");
     msg.textContent = error instanceof DataIntegrityError
@@ -140,6 +138,11 @@ const observer = new MutationObserver(() => {
       : "Editing is temporarily unavailable. Try refreshing the page.";
     table.appendChild(msg);
   }
+}
+
+const observer = new MutationObserver(() => {
+  hydrateTable("#transactions-table", hydrateTransactionTable);
+  hydrateTable("#budgets-table", hydrateBudgetTable);
 });
 observer.observe(app, { childList: true, subtree: true });
 

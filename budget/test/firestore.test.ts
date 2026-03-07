@@ -29,7 +29,7 @@ vi.mock("../src/firebase.js", () => ({
 }));
 
 import { Timestamp } from "firebase/firestore";
-import { getTransactions, updateTransaction, getBudgets, getBudgetPeriods } from "../src/firestore";
+import { getTransactions, updateTransaction, updateBudget, getBudgets, getBudgetPeriods } from "../src/firestore";
 
 describe("getTransactions", () => {
   beforeEach(() => {
@@ -574,5 +574,83 @@ describe("getBudgetPeriods", () => {
       }],
     });
     await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected finite number for total/);
+  });
+});
+
+describe("updateBudget", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDoc.mockReturnValue("mock-doc-ref");
+    mockUpdateDoc.mockResolvedValue(undefined);
+  });
+
+  it("updates the correct document in the budgets collection", async () => {
+    await updateBudget("food", { name: "Food & Dining" });
+    expect(mockDoc).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/budgets",
+      "food",
+    );
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { name: "Food & Dining" });
+  });
+
+  it("skips empty updates without calling updateDoc", async () => {
+    await updateBudget("food", {});
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws for empty budgetId", async () => {
+    await expect(updateBudget("", { name: "test" })).rejects.toThrow("Invalid budget ID");
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws for budgetId containing slash", async () => {
+    await expect(updateBudget("a/b", { name: "test" })).rejects.toThrow("Invalid budget ID");
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws for empty name", async () => {
+    await expect(updateBudget("food", { name: "" })).rejects.toThrow("Budget name cannot be empty");
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws RangeError for negative weeklyAllowance", async () => {
+    await expect(updateBudget("food", { weeklyAllowance: -5 })).rejects.toThrow(RangeError);
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws RangeError for non-finite weeklyAllowance", async () => {
+    await expect(updateBudget("food", { weeklyAllowance: NaN })).rejects.toThrow(RangeError);
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("accepts weeklyAllowance of zero", async () => {
+    await updateBudget("food", { weeklyAllowance: 0 });
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { weeklyAllowance: 0 });
+  });
+
+  it("throws DataIntegrityError for invalid rollover", async () => {
+    await expect(updateBudget("food", { rollover: "invalid" as any })).rejects.toThrow(/Expected rollover to be one of/);
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("accepts valid rollover values", async () => {
+    await updateBudget("food", { rollover: "none" });
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { rollover: "none" });
+    mockUpdateDoc.mockClear();
+    await updateBudget("food", { rollover: "debt" });
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { rollover: "debt" });
+    mockUpdateDoc.mockClear();
+    await updateBudget("food", { rollover: "balance" });
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { rollover: "balance" });
+  });
+
+  it("passes multiple fields to updateDoc", async () => {
+    await updateBudget("food", { name: "Food", weeklyAllowance: 200, rollover: "debt" });
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", {
+      name: "Food",
+      weeklyAllowance: 200,
+      rollover: "debt",
+    });
   });
 });
