@@ -25,6 +25,7 @@ const RSS_FEED = `<?xml version="1.0" encoding="UTF-8"?>
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("AtomStrategy", () => {
@@ -43,7 +44,6 @@ describe("AtomStrategy", () => {
       publishedAt: "2026-02-01T00:00:00Z",
     });
 
-    vi.unstubAllGlobals();
   });
 
   it("parses RSS feed and returns latest post", async () => {
@@ -61,7 +61,6 @@ describe("AtomStrategy", () => {
       publishedAt: "Sun, 01 Feb 2026 00:00:00 GMT",
     });
 
-    vi.unstubAllGlobals();
   });
 
   it("falls back to allorigins proxy on CORS error", async () => {
@@ -87,7 +86,6 @@ describe("AtomStrategy", () => {
     expect(proxyUrl).toContain("api.allorigins.win");
     expect(proxyUrl).toContain(encodeURIComponent("https://example.com/feed"));
 
-    vi.unstubAllGlobals();
   });
 
   it("returns null when both direct fetch and proxy fail", async () => {
@@ -101,7 +99,6 @@ describe("AtomStrategy", () => {
 
     expect(result).toBeNull();
 
-    vi.unstubAllGlobals();
   });
 
   it("returns null for unparseable XML", async () => {
@@ -113,10 +110,9 @@ describe("AtomStrategy", () => {
     const strategy = new AtomStrategy("https://example.com/feed");
     const result = await strategy.fetchLatestPost();
 
-    // Falls through to proxy since direct parse returns null
+    // parseXml returns null for unparseable content; function returns early
     expect(result).toBeNull();
 
-    vi.unstubAllGlobals();
   });
 
   it("returns null for empty feed", async () => {
@@ -132,10 +128,9 @@ describe("AtomStrategy", () => {
     const strategy = new AtomStrategy("https://example.com/feed");
     const result = await strategy.fetchLatestPost();
 
-    // Direct parse returns null, falls through to proxy
+    // parseXml returns null when feed has no entries; function returns early
     expect(result).toBeNull();
 
-    vi.unstubAllGlobals();
   });
 
   it("uses updated date when published is absent in Atom feed", async () => {
@@ -157,6 +152,5 @@ describe("AtomStrategy", () => {
 
     expect(result?.publishedAt).toBe("2026-03-01T00:00:00Z");
 
-    vi.unstubAllGlobals();
   });
 });

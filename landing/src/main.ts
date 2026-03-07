@@ -42,7 +42,7 @@ const INFO_PANEL_LINK_SECTIONS = [
   { heading: "Links", links: [{ label: "Source", url: "https://github.com/natb1/commons.systems" }] },
 ];
 
-const updateInfoPanel = (): void => {
+function updateInfoPanel(): void {
   if (cachedPosts === lastRenderedPosts) return;
 
   if (rssBlobUrl) URL.revokeObjectURL(rssBlobUrl);
@@ -125,7 +125,7 @@ if (app) {
     { onNavigate: updateNav },
   );
 
-  const closePanel = (): void => {
+  function closePanel(): void {
     infoPanel.classList.remove("open");
     toggle.setAttribute("aria-expanded", "false");
   }

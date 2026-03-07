@@ -1,13 +1,11 @@
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
-import type { Firestore } from "firebase/firestore";
+import { collection, getDocs, orderBy, query, where, type Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { isInGroup } from "@commons-systems/authutil/groups";
 
-export type { PostMeta, PublishedPost } from "./post-types.js";
+import type { PostMeta, PublishedPost } from "./post-types.js";
+export type { PostMeta, PublishedPost };
 export { isPublished } from "./post-types.js";
-
-import type { PostMeta } from "./post-types.js";
 
 export interface GetPostsResult {
   posts: PostMeta[];

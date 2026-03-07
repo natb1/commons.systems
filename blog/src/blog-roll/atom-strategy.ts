@@ -38,16 +38,20 @@ export class AtomStrategy implements BlogRollStrategy {
     try {
       const response = await fetch(this.feedUrl);
       if (response.ok) {
-        const text = await response.text();
-        return parseXml(text);
+        return parseXml(await response.text());
       }
-    } catch {
-      // CORS or network error — fall through to proxy
+      console.warn(`Feed fetch failed for ${this.feedUrl}: ${response.status}`);
+    } catch (err) {
+      // Network or CORS error — log and fall through to proxy
+      console.warn(`Feed fetch error for ${this.feedUrl}:`, err);
     }
 
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(this.feedUrl)}`;
     const proxyResponse = await fetch(proxyUrl);
-    if (!proxyResponse.ok) return null;
+    if (!proxyResponse.ok) {
+      console.warn(`Proxy fetch failed for ${this.feedUrl}: ${proxyResponse.status}`);
+      return null;
+    }
     const json = (await proxyResponse.json()) as { contents?: string };
     if (!json.contents) return null;
     return parseXml(json.contents);

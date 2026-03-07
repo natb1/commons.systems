@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("marked", () => ({
-  marked: {
-    parse: vi.fn((md: string) => Promise.resolve(`<p>${md}</p>`)),
-    use: vi.fn(),
+  Marked: class {
+    parse = vi.fn((md: string) => Promise.resolve(`<p>${md}</p>`));
   },
 }));
 
