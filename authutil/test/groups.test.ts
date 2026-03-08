@@ -21,7 +21,7 @@ import type { Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 
 const mockDb = { type: "mock-firestore" } as unknown as Firestore;
-const mockUser = { uid: "user-123" } as User;
+const mockUser = { uid: "user-123", email: "user@example.com" } as User;
 
 describe("getUserGroups", () => {
   beforeEach(() => {
@@ -34,8 +34,8 @@ describe("getUserGroups", () => {
   it("returns groups sorted by name", async () => {
     mockGetDocs.mockResolvedValue({
       docs: [
-        { id: "work", data: () => ({ name: "work", members: ["user-123"] }) },
-        { id: "household", data: () => ({ name: "household", members: ["user-123"] }) },
+        { id: "work", data: () => ({ name: "work", members: ["user@example.com"] }) },
+        { id: "household", data: () => ({ name: "household", members: ["user@example.com"] }) },
       ],
     });
 
@@ -46,7 +46,7 @@ describe("getUserGroups", () => {
       { id: "work", name: "work" },
     ]);
     expect(mockCollection).toHaveBeenCalledWith(mockDb, "app/test/groups");
-    expect(mockWhere).toHaveBeenCalledWith("members", "array-contains", "user-123");
+    expect(mockWhere).toHaveBeenCalledWith("members", "array-contains", "user@example.com");
   });
 
   it("returns empty array when no groups", async () => {
@@ -59,7 +59,7 @@ describe("getUserGroups", () => {
 
   it("throws DataIntegrityError for non-string group name", async () => {
     mockGetDocs.mockResolvedValue({
-      docs: [{ id: "bad", data: () => ({ name: 123, members: ["user-123"] }) }],
+      docs: [{ id: "bad", data: () => ({ name: 123, members: ["user@example.com"] }) }],
     });
 
     const { DataIntegrityError } = await import("../src/errors");
@@ -76,7 +76,7 @@ describe("isInGroup", () => {
   it("returns true when user is in group members", async () => {
     mockGetDoc.mockResolvedValue({
       exists: () => true,
-      data: () => ({ name: "admin", members: ["user-123", "user-456"] }),
+      data: () => ({ name: "admin", members: ["user@example.com", "other@example.com"] }),
     });
 
     const result = await isInGroup(mockDb, "app/test", mockUser, "admin");
@@ -106,7 +106,7 @@ describe("isInGroup", () => {
   it("returns false when user is not in members", async () => {
     mockGetDoc.mockResolvedValue({
       exists: () => true,
-      data: () => ({ name: "admin", members: ["user-456"] }),
+      data: () => ({ name: "admin", members: ["other@example.com"] }),
     });
 
     const result = await isInGroup(mockDb, "app/test", mockUser, "admin");
