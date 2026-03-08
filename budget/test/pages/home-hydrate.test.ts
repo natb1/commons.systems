@@ -3,25 +3,39 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("../../src/firestore.js", () => ({
   updateTransaction: vi.fn(),
+  updateBudgetPeriod: vi.fn(),
 }));
 
 import { hydrateTransactionTable, _resetForTest } from "../../src/pages/home-hydrate";
-import { updateTransaction } from "../../src/firestore";
+import { updateTransaction, updateBudgetPeriod } from "../../src/firestore";
 
 const mockUpdateTransaction = vi.mocked(updateTransaction);
+const mockUpdateBudgetPeriod = vi.mocked(updateBudgetPeriod);
 
 function flush(): Promise<void> {
   return new Promise(r => setTimeout(r, 0));
 }
 
-function createContainer(txnId: string): HTMLElement {
+const defaultPeriods = [
+  { id: "food-w1", budgetId: "budget-food", periodStartMs: new Date("2025-01-06").getTime(), periodEndMs: new Date("2025-01-13").getTime(), total: 80 },
+  { id: "food-w2", budgetId: "budget-food", periodStartMs: new Date("2025-01-13").getTime(), periodEndMs: new Date("2025-01-20").getTime(), total: 50 },
+  { id: "vacation-w1", budgetId: "budget-vacation", periodStartMs: new Date("2025-01-13").getTime(), periodEndMs: new Date("2025-01-20").getTime(), total: 30 },
+];
+
+function createContainer(txnId: string, overrides: { budgetId?: string; amount?: number; timestamp?: number; periods?: typeof defaultPeriods } = {}): HTMLElement {
   const container = document.createElement("div");
   container.id = "transactions-table";
   container.dataset.budgetOptions = JSON.stringify(["food", "housing", "vacation"]);
   container.dataset.budgetMap = JSON.stringify({ food: "budget-food", housing: "budget-housing", vacation: "budget-vacation" });
   container.dataset.categoryOptions = JSON.stringify(["Food", "Travel"]);
+  container.dataset.budgetPeriods = JSON.stringify(overrides.periods ?? defaultPeriods);
+
+  const budgetIdAttr = overrides.budgetId ? ` data-budget-id="${overrides.budgetId}"` : "";
+  const amountAttr = overrides.amount !== undefined ? ` data-amount="${overrides.amount}"` : "";
+  const timestampAttr = overrides.timestamp !== undefined ? ` data-timestamp="${overrides.timestamp}"` : "";
+
   container.innerHTML = `
-    <details class="txn-row" data-txn-id="${txnId}">
+    <details class="txn-row" data-txn-id="${txnId}"${budgetIdAttr}${amountAttr}${timestampAttr}>
       <summary class="txn-summary">
         <div class="txn-summary-content">
           <span>Description</span>
@@ -34,6 +48,9 @@ function createContainer(txnId: string): HTMLElement {
         <dl>
           <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="50" min="0" max="100"></dd>
           <dt>Budget</dt><dd><input type="text" class="edit-budget" value="food"></dd>
+          <dt>Budget Balance</dt><dd>100.00</dd>
+          <dt>Group</dt><dd>household</dd>
+          <dt>Statement</dt><dd></dd>
         </dl>
       </div>
     </details>
@@ -47,6 +64,7 @@ describe("hydrateTransactionTable", () => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
     mockUpdateTransaction.mockResolvedValue(undefined);
+    mockUpdateBudgetPeriod.mockResolvedValue(undefined);
     _resetForTest();
   });
 
@@ -211,5 +229,120 @@ describe("hydrateTransactionTable", () => {
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
     expect(mockUpdateTransaction).not.toHaveBeenCalled();
+  });
+
+  describe("budget period updates on budget edit", () => {
+    it("decrements old period and increments new period on budget change", async () => {
+      const container = createContainer("txn-1", {
+        budgetId: "budget-food",
+        amount: 30,
+        timestamp: new Date("2025-01-15").getTime(),
+      });
+      hydrateTransactionTable(container);
+      const input = container.querySelector(".edit-budget") as HTMLInputElement;
+      input.value = "vacation";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
+      // Old period (food-w2, total=50) decremented by 30 → 20
+      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("food-w2", { total: 20 });
+      // New period (vacation-w1, total=30) incremented by 30 → 60
+      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("vacation-w1", { total: 60 });
+    });
+
+    it("only decrements old period when no matching new period exists", async () => {
+      const container = createContainer("txn-1", {
+        budgetId: "budget-food",
+        amount: 30,
+        timestamp: new Date("2025-01-15").getTime(),
+      });
+      hydrateTransactionTable(container);
+      const input = container.querySelector(".edit-budget") as HTMLInputElement;
+      // housing has no matching period for 2025-01-15
+      input.value = "housing";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(mockUpdateBudgetPeriod).toHaveBeenCalledTimes(1);
+      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("food-w2", { total: 20 });
+    });
+
+    it("only increments new period when old budget was null", async () => {
+      const container = createContainer("txn-1", {
+        amount: 30,
+        timestamp: new Date("2025-01-15").getTime(),
+        // no budgetId — was unbudgeted
+      });
+      hydrateTransactionTable(container);
+      const input = container.querySelector(".edit-budget") as HTMLInputElement;
+      input.value = "vacation";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(mockUpdateBudgetPeriod).toHaveBeenCalledTimes(1);
+      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("vacation-w1", { total: 60 });
+    });
+
+    it("updates data-budget-id attribute after save", async () => {
+      const container = createContainer("txn-1", {
+        budgetId: "budget-food",
+        amount: 30,
+        timestamp: new Date("2025-01-15").getTime(),
+      });
+      hydrateTransactionTable(container);
+      const row = container.querySelector(".txn-row") as HTMLElement;
+      const input = container.querySelector(".edit-budget") as HTMLInputElement;
+      input.value = "vacation";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(row.dataset.budgetId).toBe("budget-vacation");
+    });
+
+    it("removes data-budget-id when budget is cleared", async () => {
+      const container = createContainer("txn-1", {
+        budgetId: "budget-food",
+        amount: 30,
+        timestamp: new Date("2025-01-15").getTime(),
+      });
+      hydrateTransactionTable(container);
+      const row = container.querySelector(".txn-row") as HTMLElement;
+      const input = container.querySelector(".edit-budget") as HTMLInputElement;
+      input.value = "";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(row.dataset.budgetId).toBeUndefined();
+    });
+
+    it("does not update periods when amount or timestamp are missing", async () => {
+      // No amount or timestamp data attributes
+      const container = createContainer("txn-1", { budgetId: "budget-food" });
+      hydrateTransactionTable(container);
+      const input = container.querySelector(".edit-budget") as HTMLInputElement;
+      input.value = "vacation";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(mockUpdateTransaction).toHaveBeenCalled();
+      expect(mockUpdateBudgetPeriod).not.toHaveBeenCalled();
+    });
+
+    it("clamps old period total to zero instead of going negative", async () => {
+      const container = createContainer("txn-1", {
+        budgetId: "budget-food",
+        amount: 100, // larger than period total of 50
+        timestamp: new Date("2025-01-15").getTime(),
+      });
+      hydrateTransactionTable(container);
+      const input = container.querySelector(".edit-budget") as HTMLInputElement;
+      input.value = "vacation";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      // Old period (food-w2, total=50) decremented by 100 → clamped to 0
+      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("food-w2", { total: 0 });
+    });
   });
 });

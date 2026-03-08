@@ -1,4 +1,4 @@
-import { updateTransaction } from "../firestore.js";
+import { updateTransaction, updateBudgetPeriod } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";
 
 /**
@@ -43,6 +43,37 @@ function parseBudgetMap(raw: string | undefined): Record<string, string> {
     if (error instanceof DataIntegrityError) throw error;
     throw new DataIntegrityError(`Failed to parse budget map: ${raw}`);
   }
+}
+
+interface HydrationPeriod {
+  id: string;
+  budgetId: string;
+  periodStartMs: number;
+  periodEndMs: number;
+  total: number;
+}
+
+function parseBudgetPeriods(raw: string | undefined): HydrationPeriod[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      throw new DataIntegrityError(`Budget periods is not an array: ${typeof parsed}`);
+    }
+    return parsed as HydrationPeriod[];
+  } catch (error) {
+    if (error instanceof DataIntegrityError) throw error;
+    throw new DataIntegrityError(`Failed to parse budget periods: ${raw}`);
+  }
+}
+
+function findPeriod(periods: HydrationPeriod[], budgetId: string, timestampMs: number): HydrationPeriod | null {
+  for (const p of periods) {
+    if (p.budgetId === budgetId && p.periodStartMs <= timestampMs && timestampMs < p.periodEndMs) {
+      return p;
+    }
+  }
+  return null;
 }
 
 let dropdownController: AbortController | null = null;
@@ -190,6 +221,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
   const budgetOptions = parseJsonArray(container.dataset.budgetOptions);
   const budgetNameToId = parseBudgetMap(container.dataset.budgetMap);
   const categoryOptions = parseJsonArray(container.dataset.categoryOptions);
+  const budgetPeriods = parseBudgetPeriods(container.dataset.budgetPeriods);
 
   function getOptionsForInput(input: HTMLInputElement): string[] {
     if (input.classList.contains("edit-budget")) return budgetOptions;
@@ -250,8 +282,47 @@ export function hydrateTransactionTable(container: HTMLElement): void {
           showInputError(input, `Unknown budget: "${value}"`);
           return;
         }
-        const budgetId = value ? budgetNameToId[value] : null;
-        await updateTransaction(txnId, { budget: budgetId });
+        const newBudgetId = value ? budgetNameToId[value] : null;
+        await updateTransaction(txnId, { budget: newBudgetId });
+
+        // Update budget period totals
+        const amount = Number(row.dataset.amount);
+        const timestampMs = Number(row.dataset.timestamp);
+        const oldBudgetId = row.dataset.budgetId || null;
+
+        if (Number.isFinite(amount) && Number.isFinite(timestampMs)) {
+          // Decrement old period total
+          if (oldBudgetId) {
+            const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
+            if (oldPeriod) {
+              const newTotal = Math.max(0, oldPeriod.total - amount);
+              await updateBudgetPeriod(oldPeriod.id, { total: newTotal });
+              oldPeriod.total = newTotal;
+            }
+          }
+          // Increment new period total
+          if (newBudgetId) {
+            const newPeriod = findPeriod(budgetPeriods, newBudgetId, timestampMs);
+            if (newPeriod) {
+              const newTotal = newPeriod.total + amount;
+              await updateBudgetPeriod(newPeriod.id, { total: newTotal });
+              newPeriod.total = newTotal;
+            }
+          }
+        }
+
+        // Update row's data-budget-id attribute
+        if (newBudgetId) {
+          row.dataset.budgetId = newBudgetId;
+        } else {
+          delete row.dataset.budgetId;
+        }
+
+        // Clear balance display (full recompute needs all transactions; corrects on next page load)
+        const balanceDd = row.querySelector("dt:nth-of-type(6) + dd") as HTMLElement | null;
+        if (balanceDd) {
+          balanceDd.textContent = "";
+        }
       } else {
         return;
       }

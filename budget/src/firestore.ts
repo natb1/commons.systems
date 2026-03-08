@@ -216,6 +216,22 @@ export async function getBudgetPeriods(groupId: string | null, uid?: string): Pr
   });
 }
 
+export async function updateBudgetPeriod(
+  periodId: string,
+  fields: Partial<Pick<BudgetPeriod, "total">>,
+): Promise<void> {
+  if (!periodId || periodId.includes("/")) throw new Error("Invalid period ID");
+  if (Object.keys(fields).length === 0) return;
+  if (fields.total !== undefined) {
+    if (!Number.isFinite(fields.total) || fields.total < 0) {
+      throw new RangeError("Total must be a non-negative number");
+    }
+  }
+  const path = nsCollectionPath(NAMESPACE, "budget-periods");
+  const ref = doc(db, path, periodId);
+  await updateDoc(ref, fields);
+}
+
 export async function updateBudget(
   budgetId: string,
   fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,

@@ -29,7 +29,7 @@ vi.mock("../src/firebase.js", () => ({
 }));
 
 import { Timestamp } from "firebase/firestore";
-import { getTransactions, updateTransaction, updateBudget, getBudgets, getBudgetPeriods } from "../src/firestore";
+import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, getBudgets, getBudgetPeriods } from "../src/firestore";
 
 describe("getTransactions", () => {
   beforeEach(() => {
@@ -652,5 +652,53 @@ describe("updateBudget", () => {
       weeklyAllowance: 200,
       rollover: "debt",
     });
+  });
+});
+
+describe("updateBudgetPeriod", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDoc.mockReturnValue("mock-doc-ref");
+    mockUpdateDoc.mockResolvedValue(undefined);
+  });
+
+  it("updates the correct document in the budget-periods collection", async () => {
+    await updateBudgetPeriod("food-2025-01-13", { total: 50 });
+    expect(mockDoc).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/budget-periods",
+      "food-2025-01-13",
+    );
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { total: 50 });
+  });
+
+  it("skips empty updates without calling updateDoc", async () => {
+    await updateBudgetPeriod("food-2025-01-13", {});
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws for empty periodId", async () => {
+    await expect(updateBudgetPeriod("", { total: 10 })).rejects.toThrow("Invalid period ID");
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws for periodId containing slash", async () => {
+    await expect(updateBudgetPeriod("a/b", { total: 10 })).rejects.toThrow("Invalid period ID");
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws RangeError for negative total", async () => {
+    await expect(updateBudgetPeriod("food-2025-01-13", { total: -5 })).rejects.toThrow(RangeError);
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws RangeError for non-finite total", async () => {
+    await expect(updateBudgetPeriod("food-2025-01-13", { total: NaN })).rejects.toThrow(RangeError);
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("accepts zero total", async () => {
+    await updateBudgetPeriod("food-2025-01-13", { total: 0 });
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { total: 0 });
   });
 });
