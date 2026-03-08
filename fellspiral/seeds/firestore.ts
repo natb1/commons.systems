@@ -14,7 +14,17 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
     },
     {
       name: "posts",
-      documents: [],
+      documents: [
+        {
+          id: "hello-fellspiral",
+          data: {
+            title: "Hello Fellspiral",
+            published: true,
+            publishedAt: "2026-03-01T00:00:00Z",
+            filename: "hello-fellspiral.md",
+          },
+        },
+      ],
     },
   ],
 };
