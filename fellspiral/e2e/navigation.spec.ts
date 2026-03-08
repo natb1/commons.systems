@@ -19,7 +19,7 @@ test.describe("navigation", () => {
 
   test("home page loads @smoke", async ({ page }) => {
     await page.goto("/");
-    await page.waitForSelector("#posts", { timeout: 30000 });
+    await page.waitForSelector("main h2", { timeout: 30000 });
   });
 
   test("admin route accessible @smoke", async ({ page }) => {
@@ -29,7 +29,7 @@ test.describe("navigation", () => {
 
   test("unknown hash falls back to home page", async ({ page }) => {
     await page.goto("/#/nonexistent");
-    await expect(page.locator("#posts")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("main h2")).toBeVisible({ timeout: 30000 });
   });
 
   test("clicking Home nav link shows home", async ({ page }) => {
@@ -46,7 +46,7 @@ test.describe("navigation", () => {
   test("desktop: #info-panel is visible @smoke", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
-    await page.waitForSelector("#posts", { timeout: 30000 });
+    await page.waitForSelector("main h2", { timeout: 30000 });
     await expect(page.locator("#info-panel")).toBeVisible();
   });
 });

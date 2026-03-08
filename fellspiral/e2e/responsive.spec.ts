@@ -4,7 +4,7 @@ test.describe("responsive layout", () => {
   test("main content is visible", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("main")).toBeVisible();
-    await expect(page.locator("#posts")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("main h2")).toBeVisible({ timeout: 30000 });
   });
 
   test("nav links are accessible", async ({ page }) => {
@@ -14,6 +14,6 @@ test.describe("responsive layout", () => {
     await expect(homeLink).toBeVisible();
 
     await homeLink.click();
-    await expect(page.locator("#posts")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("main h2")).toBeVisible({ timeout: 30000 });
   });
 });
