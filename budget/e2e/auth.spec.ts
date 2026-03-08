@@ -6,7 +6,7 @@ test.describe("auth", () => {
     await page.goto("/");
     await expect(page.locator("#seed-data-notice")).toBeVisible();
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(3);
+    await expect(rows).toHaveCount(8);
   });
 
   test("nav shows sign-in link when not signed in", async ({ page }) => {
@@ -47,7 +47,7 @@ test.describe("auth", () => {
     await page.goto("/");
     await signIn(page);
     await expect(page.locator("#transactions-table")).toBeVisible();
-    // Wait for the authenticated re-render (2 rows vs 3 seed rows)
+    // Wait for the authenticated re-render (2 rows vs 8 seed rows)
     await expect(page.locator("#transactions-table .txn-row")).toHaveCount(2);
     // Open a row — click the description text (not an input) to toggle
     const firstRow = page.locator("#transactions-table .txn-row").first();
@@ -81,7 +81,7 @@ test.describe("auth", () => {
     await page.goto("/");
     await signIn(page);
     await expect(page.locator("#transactions-table")).toBeVisible();
-    // Wait for the authenticated re-render (2 rows vs 3 seed rows)
+    // Wait for the authenticated re-render (2 rows vs 8 seed rows)
     await expect(page.locator("#transactions-table .txn-row")).toHaveCount(2);
     // Open the first row — click the description text (not an input)
     const firstRow = page.locator("#transactions-table .txn-row").first();
@@ -116,6 +116,6 @@ test.describe("auth", () => {
     await page.waitForSelector("#sign-in");
     await expect(page.locator("#seed-data-notice")).toBeVisible();
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(3);
+    await expect(rows).toHaveCount(8);
   });
 });
