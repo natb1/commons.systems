@@ -5,11 +5,11 @@ service cloud.firestore {
     // Landing admin: members of the admin group can read unpublished posts
     function isLandingAdmin(env) {
       return request.auth != null
-        && request.auth.uid in get(/databases/$(database)/documents/landing/$(env)/groups/admin).data.members;
+        && request.auth.token.email in get(/databases/$(database)/documents/landing/$(env)/groups/admin).data.members;
     }
 
     match /landing/{env}/groups/{groupId} {
-      allow read: if request.auth != null && request.auth.uid in resource.data.members;
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
       allow write: if false;
     }
 
@@ -107,6 +107,22 @@ service cloud.firestore {
         && request.resource.data.total >= 0
         && request.resource.data.keys().hasOnly(['budgetId', 'periodStart', 'periodEnd', 'total', 'groupId', 'memberUids']);
       allow create, delete: if false;
+    }
+
+    // Fellspiral admin: members of the admin group can read unpublished posts
+    function isFellspiralAdmin(env) {
+      return request.auth != null
+        && request.auth.token.email in get(/databases/$(database)/documents/fellspiral/$(env)/groups/admin).data.members;
+    }
+
+    match /fellspiral/{env}/groups/{groupId} {
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
+      allow write: if false;
+    }
+
+    match /fellspiral/{env}/posts/{postId} {
+      allow read: if resource.data.published == true || isFellspiralAdmin(env);
+      allow write: if false;
     }
 
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
