@@ -1,0 +1,84 @@
+@import "@commons-systems/style/default.css";
+
+.cc-badge {
+  width: 117px;
+  height: 41px;
+  vertical-align: middle;
+}
+
+/* Media list */
+#media-list {
+  list-style: none;
+  padding: 0;
+}
+
+.media-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--muted-fg, #888);
+}
+
+.media-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.media-title {
+  font-weight: 700;
+}
+
+.media-badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--muted-fg, #888);
+  border-radius: 3px;
+}
+
+.media-actions {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.media-view,
+.media-download {
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  padding: 0.25rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.media-download:disabled {
+  opacity: 0.4;
+  cursor: wait;
+}
+
+/* View page */
+.back-link {
+  display: inline-block;
+  margin-bottom: 1rem;
+}
+
+.media-metadata dt {
+  font-weight: 700;
+}
+
+.tags-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tags-table th,
+.tags-table td {
+  text-align: left;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--muted-fg, #888);
+}
