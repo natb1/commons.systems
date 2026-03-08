@@ -153,7 +153,13 @@ if [ "$USES_AUTH" = true ]; then
 
   # Seed auth user
   echo "Seeding auth user..."
-  APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
+  APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" npx tsx authutil/bin/run-auth-seed.ts
+fi
+
+# Seed storage emulator (if used and seed script exists)
+if [ "$USES_STORAGE" = true ] && [ -f "$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts" ]; then
+  echo "Seeding storage emulator..."
+  STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" npx tsx "$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts"
 fi
 
 VITE_ARGS=()
