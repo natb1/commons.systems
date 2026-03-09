@@ -20,7 +20,12 @@ function groupsPath(namespace: string): string {
 }
 
 export async function getUserGroups(db: Firestore, namespace: string, user: User): Promise<Group[]> {
-  if (!user.email) return [];
+  if (!user.email) {
+    throw new Error(
+      `getUserGroups: user "${user.uid}" has no email. ` +
+      `Email-based group membership requires an auth provider that supplies an email address.`,
+    );
+  }
   const q = query(collection(db, groupsPath(namespace)), where("members", "array-contains", user.email));
   const snapshot = await getDocs(q);
   return snapshot.docs
@@ -44,7 +49,13 @@ export async function isInGroup(
   user: User | null,
   groupId: string,
 ): Promise<boolean> {
-  if (!user || !user.email) return false;
+  if (!user) return false;
+  if (!user.email) {
+    throw new Error(
+      `isInGroup: user "${user.uid}" has no email. ` +
+      `Email-based group membership requires an auth provider that supplies an email address.`,
+    );
+  }
   try {
     const docSnap = await getDoc(doc(db, groupsPath(namespace), groupId));
     if (!docSnap.exists()) return false;

@@ -57,6 +57,15 @@ describe("getUserGroups", () => {
     expect(groups).toEqual([]);
   });
 
+  it("throws when user has no email", async () => {
+    const noEmailUser = { uid: "user-no-email" } as User;
+
+    await expect(getUserGroups(mockDb, "app/test", noEmailUser)).rejects.toThrow(
+      /has no email/,
+    );
+    expect(mockGetDocs).not.toHaveBeenCalled();
+  });
+
   it("throws DataIntegrityError for non-string group name", async () => {
     mockGetDocs.mockResolvedValue({
       docs: [{ id: "bad", data: () => ({ name: 123, members: ["user@example.com"] }) }],
@@ -89,6 +98,15 @@ describe("isInGroup", () => {
     const result = await isInGroup(mockDb, "app/test", null, "admin");
 
     expect(result).toBe(false);
+    expect(mockGetDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws when user has no email", async () => {
+    const noEmailUser = { uid: "user-no-email" } as User;
+
+    await expect(isInGroup(mockDb, "app/test", noEmailUser, "admin")).rejects.toThrow(
+      /has no email/,
+    );
     expect(mockGetDoc).not.toHaveBeenCalled();
   });
 

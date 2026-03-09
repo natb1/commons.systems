@@ -99,12 +99,13 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
       name: "groups",
+      testOnly: true,
       documents: [
         {
           id: "household",
           data: {
             name: "household",
-            members: ["test-github-user"],
+            members: ["test@example.com"],
           } satisfies GroupSeedData,
         },
       ],

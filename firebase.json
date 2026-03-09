@@ -45,8 +45,14 @@
         {
           "source": "/blogroll.opml",
           "headers": [
-            { "key": "Access-Control-Allow-Origin", "value": "*" },
-            { "key": "Content-Type", "value": "text/x-opml+xml; charset=utf-8" }
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "Content-Type",
+              "value": "text/x-opml+xml; charset=utf-8"
+            }
           ]
         }
       ]

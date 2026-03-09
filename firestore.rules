@@ -25,9 +25,9 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Groups are readable only by their members (membership check via members array)
+    // Groups are readable only by their members (email-based membership)
     match /budget/{env}/groups/{groupId} {
-      allow read: if request.auth != null && request.auth.uid in resource.data.members;
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
       allow write: if false;
     }
 
@@ -120,6 +120,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Published posts are public; unpublished posts require fellspiral admin group membership
     match /fellspiral/{env}/posts/{postId} {
       allow read: if resource.data.published == true || isFellspiralAdmin(env);
       allow write: if false;

@@ -3,7 +3,7 @@ import type { User } from "firebase/auth";
 import { createRouter, parseHash } from "@commons-systems/router";
 import { renderHomeHtml, hydrateHome } from "@commons-systems/blog/pages/home";
 import { renderAdmin } from "@commons-systems/blog/pages/admin";
-import { renderInfoPanel, hydrateInfoPanel } from "@commons-systems/blog/components/info-panel";
+import { renderInfoPanel, hydrateInfoPanel, type LinkSection } from "@commons-systems/blog/components/info-panel";
 import { createRssBlobUrl } from "@commons-systems/blog/feed";
 import { createFetchPost } from "@commons-systems/blog/github";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
@@ -17,6 +17,7 @@ import { db, NAMESPACE } from "./firebase.js";
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app");
+if (!app) throw new Error("#app element not found");
 const infoPanel = document.getElementById("info-panel");
 if (!infoPanel) throw new Error("#info-panel element not found");
 
@@ -38,7 +39,7 @@ let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("fellspiral/post");
 const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://cs-fellspiral-4e12.web.app" };
-const INFO_PANEL_LINK_SECTIONS: { heading: string; links: { label: string; url: string }[] }[] = [];
+const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [];
 
 const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
@@ -58,7 +59,9 @@ const updateInfoPanel = (): void => {
 }
 
 navEl.links = [{ href: "#/", label: "Home" }];
-navEl.addEventListener("sign-in", () => signIn());
+navEl.addEventListener("sign-in", () => {
+  signIn().catch((err) => console.error("Sign-in failed:", err));
+});
 navEl.addEventListener("sign-out", () => {
   signOut().catch((err) => console.error("Sign-out failed:", err));
 });
@@ -99,76 +102,82 @@ async function loadPosts(): Promise<string> {
 
 updateNav();
 
-if (app) {
-  const router = createRouter(
-    app,
-    [
-      {
-        path: /^\/(?:post\/.*)?$/,
-        render: () => loadPosts(),
-        afterRender: (outlet, path) => {
-          const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
-          hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
-          updateInfoPanel();
-        },
+const router = createRouter(
+  app,
+  [
+    {
+      path: /^\/(?:post\/.*)?$/,
+      render: () => loadPosts(),
+      afterRender: (outlet, path) => {
+        const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
+        hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
+        updateInfoPanel();
       },
-      {
-        path: "/admin",
-        render: async () => {
+    },
+    {
+      path: "/admin",
+      render: async () => {
+        try {
           const admin = await isInGroup(db, NAMESPACE, currentUser, "admin");
           return renderAdmin(currentUser, admin, lastSkippedCount);
-        },
+        } catch (error) {
+          console.error("Failed to check admin group:", error);
+          return `<h2>Admin</h2><p>Could not verify admin access. Try refreshing the page.</p>`;
+        }
       },
-    ],
-    { onNavigate: updateNav },
-  );
+    },
+  ],
+  { onNavigate: updateNav },
+);
 
-  const closePanel = (): void => {
-    infoPanel.classList.remove("open");
-    toggle.setAttribute("aria-expanded", "false");
-  }
-
-  document.addEventListener("click", (e) => {
-    const target = e.target as HTMLElement;
-
-    if (target.closest('a[href="#/"]')) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-
-    if (
-      infoPanel.classList.contains("open") &&
-      !target.closest("#info-panel") &&
-      !target.closest("#panel-toggle")
-    ) {
-      closePanel();
-    }
-  });
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && infoPanel.classList.contains("open")) {
-      closePanel();
-    }
-  });
-
-  async function refreshAfterAuthChange(): Promise<void> {
-    updateNav();
-    router.navigate();
-    if (parseHash().path === "/admin") {
-      await loadPosts();
-    }
-    updateInfoPanel();
-  }
-
-  onAuthStateChanged(auth, (user) => {
-    currentUser = user;
-    refreshAfterAuthChange().catch((err) => {
-      if (err instanceof TypeError || err instanceof ReferenceError) {
-        setTimeout(() => { throw err; }, 0);
-        return;
-      }
-      console.error("Failed to refresh after auth change:", err);
-    });
-  });
-} else {
-  console.error("Fatal: #app element not found");
+const closePanel = (): void => {
+  infoPanel.classList.remove("open");
+  toggle.setAttribute("aria-expanded", "false");
 }
+
+document.addEventListener("click", (e) => {
+  const target = e.target as HTMLElement;
+
+  if (target.closest('a[href="#/"]')) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  if (
+    infoPanel.classList.contains("open") &&
+    !target.closest("#info-panel") &&
+    !target.closest("#panel-toggle")
+  ) {
+    closePanel();
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && infoPanel.classList.contains("open")) {
+    closePanel();
+  }
+});
+
+// router.navigate() is fire-and-forget — updateInfoPanel() below may see stale
+// cachedPosts until the router's async render cycle completes and afterRender
+// calls updateInfoPanel() again with fresh data.
+async function refreshAfterAuthChange(): Promise<void> {
+  updateNav();
+  router.navigate();
+  // router.navigate() only loads posts on the home route; re-fetch on /admin
+  // so the info panel populates even when not on home.
+  if (parseHash().path === "/admin") {
+    await loadPosts();
+  }
+  updateInfoPanel();
+}
+
+onAuthStateChanged(auth, (user) => {
+  currentUser = user;
+  refreshAfterAuthChange().catch((err) => {
+    if (err instanceof TypeError || err instanceof ReferenceError) {
+      setTimeout(() => { throw err; }, 0);
+      return;
+    }
+    console.error("Failed to refresh after auth change:", err);
+  });
+});
