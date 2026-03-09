@@ -73,13 +73,15 @@ export function computeBudgetBalance(
   running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
 
   // Walk same-period transactions up to and including the target transaction
+  const periodStartMs = targetPeriod.periodStart.toMillis();
+  const periodEndMs = targetPeriod.periodEnd.toMillis();
   const samePeriodTxns = allTransactions
     .filter(
       (t) =>
         t.budget === budget.id &&
         t.timestamp !== null &&
-        t.timestamp.toMillis() >= targetPeriod.periodStart.toMillis() &&
-        t.timestamp.toMillis() < targetPeriod.periodEnd.toMillis(),
+        t.timestamp.toMillis() >= periodStartMs &&
+        t.timestamp.toMillis() < periodEndMs,
     )
     .sort(compareByTimestampThenId);
 

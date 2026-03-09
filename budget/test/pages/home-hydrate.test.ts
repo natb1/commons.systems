@@ -3,14 +3,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("../../src/firestore.js", () => ({
   updateTransaction: vi.fn(),
-  updateBudgetPeriod: vi.fn(),
+  adjustBudgetPeriodTotal: vi.fn(),
 }));
 
 import { hydrateTransactionTable, _resetForTest } from "../../src/pages/home-hydrate";
-import { updateTransaction, updateBudgetPeriod } from "../../src/firestore";
+import { updateTransaction, adjustBudgetPeriodTotal } from "../../src/firestore";
 
 const mockUpdateTransaction = vi.mocked(updateTransaction);
-const mockUpdateBudgetPeriod = vi.mocked(updateBudgetPeriod);
+const mockAdjustBudgetPeriodTotal = vi.mocked(adjustBudgetPeriodTotal);
 
 function flush(): Promise<void> {
   return new Promise(r => setTimeout(r, 0));
@@ -65,7 +65,7 @@ describe("hydrateTransactionTable", () => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
     mockUpdateTransaction.mockResolvedValue(undefined);
-    mockUpdateBudgetPeriod.mockResolvedValue(undefined);
+    mockAdjustBudgetPeriodTotal.mockResolvedValue(undefined);
     _resetForTest();
   });
 
@@ -246,10 +246,10 @@ describe("hydrateTransactionTable", () => {
       await flush();
 
       expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
-      // Old period (food-w2, total=50) decremented by 30 → 20
-      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("food-w2", { total: 20 });
-      // New period (vacation-w1, total=30) incremented by 30 → 60
-      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("vacation-w1", { total: 60 });
+      // Old period (food-w2) decremented by net amount 30
+      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -30);
+      // New period (vacation-w1) incremented by net amount 30
+      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("vacation-w1", 30);
     });
 
     it("only decrements old period when no matching new period exists", async () => {
@@ -265,8 +265,8 @@ describe("hydrateTransactionTable", () => {
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      expect(mockUpdateBudgetPeriod).toHaveBeenCalledTimes(1);
-      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("food-w2", { total: 20 });
+      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledTimes(1);
+      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -30);
     });
 
     it("only increments new period when old budget was null", async () => {
@@ -281,8 +281,8 @@ describe("hydrateTransactionTable", () => {
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      expect(mockUpdateBudgetPeriod).toHaveBeenCalledTimes(1);
-      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("vacation-w1", { total: 60 });
+      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledTimes(1);
+      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("vacation-w1", 30);
     });
 
     it("updates data-budget-id attribute after save", async () => {
@@ -327,7 +327,7 @@ describe("hydrateTransactionTable", () => {
       await flush();
 
       expect(mockUpdateTransaction).toHaveBeenCalled();
-      expect(mockUpdateBudgetPeriod).not.toHaveBeenCalled();
+      expect(mockAdjustBudgetPeriodTotal).not.toHaveBeenCalled();
     });
 
     it("clamps old period total to zero instead of going negative", async () => {
@@ -342,8 +342,8 @@ describe("hydrateTransactionTable", () => {
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      // Old period (food-w2, total=50) decremented by 100 → clamped to 0
-      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("food-w2", { total: 0 });
+      // Server gets raw delta -100; Firestore rules enforce non-negative totals
+      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -100);
     });
 
     it("uses net amount (after reimbursement) for period updates", async () => {
@@ -360,10 +360,10 @@ describe("hydrateTransactionTable", () => {
       await flush();
 
       // net = 100 * (1 - 50/100) = 50
-      // Old period (food-w2, total=50) decremented by 50 → 0
-      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("food-w2", { total: 0 });
-      // New period (vacation-w1, total=30) incremented by 50 → 80
-      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("vacation-w1", { total: 80 });
+      // Old period (food-w2) decremented by net 50
+      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -50);
+      // New period (vacation-w1) incremented by net 50
+      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("vacation-w1", 50);
     });
   });
 

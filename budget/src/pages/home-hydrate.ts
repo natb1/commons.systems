@@ -301,16 +301,17 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         const newBudgetId = value ? budgetNameToId[value] : null;
         await updateTransaction(txnId, { budget: newBudgetId });
 
-        // Update budget period totals using server-side increment for atomicity.
-        // If the second write fails, totals drift until manual correction
-        // (page loads read stored totals, not recomputed from transactions).
+        // Update stored period totals for cross-period rollover. Uses server-side
+        // increment for atomicity. If the second write fails, totals drift until
+        // manual correction (page loads read stored totals, not recomputed from
+        // transactions).
         const amount = Number(row.dataset.amount);
         const reimbursement = Number(row.dataset.reimbursement);
         const timestampMs = Number(row.dataset.timestamp);
         const oldBudgetId = row.dataset.budgetId || null;
         const net = computeNetAmount(amount, reimbursement);
 
-        if (Number.isFinite(amount) && Number.isFinite(timestampMs)) {
+        if (Number.isFinite(amount) && Number.isFinite(reimbursement) && Number.isFinite(timestampMs)) {
           try {
             if (oldBudgetId) {
               const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
