@@ -38,4 +38,7 @@ mkdir -p tmp
   ```bash
   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh {PR_NUM} tmp/{FILE_PREFIX}-final.txt
   ```
-- Update issue state to step={NEXT_STEP}/phase={NEXT_PHASE} via `.claude/skills/ref-pr-workflow/scripts/issue-state-write`. If `ACTIVE_SKILLS` is provided, include it as the `active_skills` value in the state JSON.
+- Update issue state to step={NEXT_STEP}/phase={NEXT_PHASE}. If `ACTIVE_SKILLS` is provided, include it as the `active_skills` value in the state JSON:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":{NEXT_STEP},"step_label":"...","phase":"{NEXT_PHASE}","active_skills":{ACTIVE_SKILLS}}'
+  ```

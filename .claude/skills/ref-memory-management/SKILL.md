@@ -54,7 +54,10 @@ State schema:
 When writing commits:
 - Include work done and design/scope decisions to avoid unintentional changes to those decisions
 - If conflicts arise between current plan and previous decisions, ask user questions to clarify intent
-- Merge origin/main and push immediately after every commit.
+- Merge origin/main and push immediately after every commit:
+  ```bash
+  git fetch origin main && git merge origin/main && git push origin HEAD
+  ```
 
 # Branch-Specific Rules
 
