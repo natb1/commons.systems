@@ -1,7 +1,9 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { Group } from "@commons-systems/authutil/groups";
+import type { PostMeta } from "@commons-systems/blog/post-types";
 
 type GroupSeedData = Omit<Group, "id"> & { members: string[] };
+type PostSeedData = Omit<PostMeta, "id">;
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
@@ -25,7 +27,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             published: true,
             publishedAt: "2026-03-01T00:00:00Z",
             filename: "hello-fellspiral.md",
-          },
+          } satisfies PostSeedData,
         },
       ],
     },

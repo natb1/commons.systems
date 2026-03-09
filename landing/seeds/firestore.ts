@@ -1,4 +1,9 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
+import type { Group } from "@commons-systems/authutil/groups";
+import type { PostMeta } from "@commons-systems/blog/post-types";
+
+type GroupSeedData = Omit<Group, "id"> & { members: string[] };
+type PostSeedData = Omit<PostMeta, "id">;
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
@@ -8,7 +13,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
       documents: [
         {
           id: "admin",
-          data: { name: "admin", members: ["test@example.com"] },
+          data: { name: "admin", members: ["test@example.com"] } satisfies GroupSeedData,
         },
       ],
     },
@@ -22,7 +27,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             published: true,
             publishedAt: "2026-01-15T00:00:00Z",
             filename: "hello-world.md",
-          },
+          } satisfies PostSeedData,
         },
         {
           id: "agentic-coding-workflow",
@@ -31,7 +36,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             published: true,
             publishedAt: "2026-02-15T00:00:00Z",
             filename: "agentic-coding-workflow.md",
-          },
+          } satisfies PostSeedData,
         },
         {
           id: "draft-ideas",
@@ -40,7 +45,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             published: false,
             publishedAt: null,
             filename: "draft-ideas.md",
-          },
+          } satisfies PostSeedData,
         },
       ],
     },

@@ -41,6 +41,7 @@ const boundFetchPost = createFetchPost("fellspiral/post");
 const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://cs-fellspiral-4e12.web.app" };
 const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [];
 
+// Arrow function (not declaration) so TS narrows getElementById results as non-null.
 const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
 

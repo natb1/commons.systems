@@ -9,6 +9,9 @@ export interface SeedDocument {
 export interface SeedCollection {
   name: string;
   documents: SeedDocument[];
+  /** When true, skip this collection unless the caller passes includeTestOnly.
+   *  Used for data that should exist in emulators and preview environments
+   *  but not production (e.g., test user group memberships). */
   testOnly?: boolean;
 }
 
