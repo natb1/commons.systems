@@ -18,7 +18,10 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 If no issue number provided, or `$CURRENT_BRANCH` doesn't start with the issue number followed by `-`: invoke `/worktree` instead. Stop.
 
-On completion → update state to step=2/phase=core via `.claude/skills/ref-pr-workflow/scripts/issue-state-write` with `active_skills: ["ref-memory-management", "ref-pr-workflow", "ref-implement"]`, proceed to Step 2.
+On completion → update state to step=2/phase=core, proceed to Step 2:
+```bash
+.claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":2,"step_label":"Planning Phase","phase":"core","active_skills":["ref-memory-management","ref-pr-workflow","ref-implement"]}'
+```
 
 ## Step 2. Planning Phase
 
@@ -31,7 +34,10 @@ Plan must include:
 - Acceptance test strategy: user flows to test with Playwright against Firebase emulators
 - Smoke test strategy: minimal health checks for preview deployments
 
-On completion → update state to step=3/phase=core via `.claude/skills/ref-pr-workflow/scripts/issue-state-write` with `active_skills: ["ref-memory-management", "ref-pr-workflow", "ref-implement"]`, proceed to Step 3.
+On completion → update state to step=3/phase=core, proceed to Step 3:
+```bash
+.claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":3,"step_label":"Implementation","phase":"core","active_skills":["ref-memory-management","ref-pr-workflow","ref-implement"]}'
+```
 
 ## Step 3. Implementation
 
@@ -44,4 +50,7 @@ Use the Task tool to launch parallel general-purpose subagents:
 
 All run concurrently with main implementation.
 
-On completion → update state to step=4/phase=unit via `.claude/skills/ref-pr-workflow/scripts/issue-state-write` with `active_skills: ["ref-memory-management", "ref-pr-workflow"]`. Return to router for dispatch to unit phase.
+On completion → update state to step=4/phase=unit, return to router for dispatch to unit phase:
+```bash
+.claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":4,"step_label":"Unit Test Loop","phase":"unit","active_skills":["ref-memory-management","ref-pr-workflow"]}'
+```

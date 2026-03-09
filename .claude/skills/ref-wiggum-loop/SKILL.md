@@ -22,6 +22,10 @@ Plan mode is mandatory at Steps 0 and 3, regardless of loop complexity.
 
 Before executing each step, update the issue body state with `wiggum_step` and `wiggum_step_label` set to the current step number and label via `.claude/skills/ref-pr-workflow/scripts/issue-state-write`. Include all existing state fields (`step`, `step_label`, `phase`, `active_skills`) alongside the updated wiggum fields.
 
+```bash
+.claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":8,"step_label":"QA Review Loop","phase":"qa","active_skills":["ref-memory-management","ref-pr-workflow","ref-qa","ref-wiggum-loop"],"wiggum_step":1,"wiggum_step_label":"Execute Next Step"}'
+```
+
 ## Step 0. Initialize
 
 Enter plan mode. Write a complete new plan from scratch — do not edit or patch any existing plan file. The plan must include all instruction sets: next step, evaluation, termination, and progress report (if provided).

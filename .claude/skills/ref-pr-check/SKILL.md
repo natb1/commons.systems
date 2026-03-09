@@ -52,7 +52,10 @@ If the run is in progress, wait for it to complete before returning output.
 
 ### Iterate
 
-Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Return to Execute.
+Fix failures. Commit and push. Increment counter. Return to Execute.
+```bash
+git add <files> && git commit -m "..." && git push origin HEAD
+```
 
 ### Terminate
 
@@ -113,7 +116,10 @@ Same as Phase 1 Execute (CI monitoring).
 
 ### Iterate
 
-Fix failures. Commit and push (dangerouslyDisableSandbox). Increment counter. Return to Execute.
+Fix failures. Commit and push. Increment counter. Return to Execute.
+```bash
+git add <files> && git commit -m "..." && git push origin HEAD
+```
 
 ### Terminate
 

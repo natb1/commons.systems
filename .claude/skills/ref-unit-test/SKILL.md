@@ -30,7 +30,10 @@ Iteration counter starts at 1. Each cycle:
 
 ### Execute
 
-- Merge `origin/main` (dangerouslyDisableSandbox)
+- Merge `origin/main`:
+  ```bash
+  git fetch origin main && git merge origin/main
+  ```
 - Run unit tests and linting
 
 ### Evaluate

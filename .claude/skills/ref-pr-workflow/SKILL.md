@@ -27,7 +27,10 @@ Reference only. Do not execute this workflow until directed to do so (eg., by `/
 ## Resume Logic
 
 1. Run `.claude/skills/ref-pr-workflow/scripts/issue-state-read <issue-number>`. If exit 0 → use `step`, `phase`, `active_skills`, and `wiggum_step` from the JSON. Skip fallback.
-2. If exit 1 → use fallback, then write fresh state via `.claude/skills/ref-pr-workflow/scripts/issue-state-write`.
+2. If exit 1 → use fallback, then write fresh state:
+   ```bash
+   .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":2,"step_label":"Planning Phase","phase":"core","active_skills":["ref-memory-management","ref-pr-workflow","ref-implement"]}'
+   ```
 
 **Fallback** (scan **Current PR Scope and Status** above; step=1 is intentionally omitted — branch existence implies prerequisites passed):
 - No PR + implementation commits → step=4, phase=unit
