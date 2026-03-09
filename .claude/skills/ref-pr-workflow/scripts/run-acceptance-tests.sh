@@ -176,6 +176,7 @@ if [ "$USES_FIRESTORE" = true ]; then
   APP_NAME="$APP_NAME" \
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
   FIRESTORE_NAMESPACE="${EMULATOR_NAMESPACE}" \
+  SEED_TEST_ONLY=true \
   npx tsx firestoreutil/bin/run-seed.ts
 fi
 

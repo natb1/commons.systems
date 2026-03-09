@@ -1,6 +1,6 @@
 import { initializeApp, cert, type ServiceAccount } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { seed, type SeedSpec } from "../src/seed.js";
+import { seed, type SeedSpec, type SeedOptions } from "../src/seed.js";
 
 const appName = process.env.APP_NAME;
 if (!appName) {
@@ -57,11 +57,14 @@ if (emulatorHost) {
 
 const db = getFirestore();
 const spec: SeedSpec = { ...appSeed, namespace };
+const seedOptions: SeedOptions = {
+  includeTestOnly: process.env.SEED_TEST_ONLY === "true",
+};
 
 console.log(`Seeding Firestore namespace "${namespace}" for app "${appName}"...`);
 if (emulatorHost) {
   console.log(`Using emulator at ${emulatorHost}`);
 }
 
-await seed(db, spec);
+await seed(db, spec, seedOptions);
 console.log("Seeding complete.");

@@ -17,7 +17,9 @@ navEl.links = [
   { href: "#/notes", label: "Notes" },
 ];
 navEl.addEventListener("sign-in", () => signIn());
-navEl.addEventListener("sign-out", () => void signOut());
+navEl.addEventListener("sign-out", () => {
+  signOut().catch((err) => console.error("Sign-out failed:", err));
+});
 
 function updateNav(user: import("firebase/auth").User | null): void {
   navEl.user = user;

@@ -34,7 +34,7 @@ function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
     sourceNotes: "Public domain source",
     storagePath: "media/test-book.pdf",
     groupId: null,
-    memberUids: [],
+    memberEmails: [],
     addedAt: "2026-01-15T00:00:00Z",
     ...overrides,
   };
@@ -66,17 +66,18 @@ describe("renderHome", () => {
   });
 
   describe("when user is signed in", () => {
-    const mockUser = { uid: "user-123", displayName: "Test" } as {
+    const mockUser = { uid: "user-123", email: "user@example.com", displayName: "Test" } as {
       uid: string;
+      email: string;
       displayName: string;
     };
 
-    it("calls getAllAccessibleMedia with user uid", async () => {
+    it("calls getAllAccessibleMedia with user email", async () => {
       mockGetAllAccessibleMedia.mockResolvedValue([]);
 
       await renderHome(mockUser);
 
-      expect(mockGetAllAccessibleMedia).toHaveBeenCalledWith("user-123");
+      expect(mockGetAllAccessibleMedia).toHaveBeenCalledWith("user@example.com");
       expect(mockGetPublicMedia).not.toHaveBeenCalled();
     });
 
