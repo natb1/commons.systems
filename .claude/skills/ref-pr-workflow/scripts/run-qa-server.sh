@@ -157,10 +157,12 @@ if [ "$USES_AUTH" = true ]; then
   APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" npx tsx authutil/bin/run-auth-seed.ts
 fi
 
-# Poll until Storage emulator is ready (if used)
+# Poll until Storage emulator is ready (if used).
+# The storage emulator root URL returns 404 (not 200 like Firestore), so check
+# for any valid HTTP response — a non-000 status means the server is listening.
 if [ "$USES_STORAGE" = true ]; then
   ELAPSED=0
-  until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${STORAGE_PORT}/" 2>/dev/null | grep -q '^200$'; do
+  until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${STORAGE_PORT}/" 2>/dev/null | grep -qE '^[1-5]'; do
     if [ $ELAPSED -ge $TIMEOUT ]; then
       echo "ERROR: Storage emulator did not start within ${TIMEOUT}s" >&2
       exit 1
