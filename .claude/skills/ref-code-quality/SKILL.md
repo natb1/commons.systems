@@ -113,5 +113,8 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
   ```bash
   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/codequality-final.txt
   ```
-- Update state to step=10/phase=security via `.claude/skills/ref-pr-workflow/scripts/issue-state-write` with `active_skills: ["ref-memory-management", "ref-pr-workflow", "ref-security"]`
+- Update state to step=10/phase=security:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":10,"step_label":"Security Review Loop","phase":"security","active_skills":["ref-memory-management","ref-pr-workflow","ref-security"]}'
+  ```
 - Proceed to Step 10

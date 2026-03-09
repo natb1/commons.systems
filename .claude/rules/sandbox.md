@@ -42,3 +42,37 @@ Sandboxed Bash calls run in an isolated network namespace. Servers started with
 
 Use `dangerouslyDisableSandbox: true` on Bash calls that check local server
 connectivity (e.g., `curl http://localhost:*`, `ss -tlnp`, readiness polls).
+
+## Command pattern matching
+
+`allowedTools` rules match from the start of the command string. Patterns that
+break prefix matching cause permission prompts. Avoid these patterns:
+
+### Avoid `cd && command`
+
+`cd /path && command` doesn't match rules like `Bash(npx vitest:*)`.
+
+Use flags that accept a directory instead:
+- `npm run build --prefix print` (npm `--prefix` flag)
+- `npm ci --prefix print`
+- `npx vitest run --root print` (vitest `--root` flag)
+- For tests, deploys, QA: use the wrapper scripts which handle directory context
+
+### Avoid inline env var prefixes
+
+`VAR=value command` breaks prefix matching.
+
+```bash
+# Bad — breaks allowedTools matching
+VITE_GITHUB_BRANCH="75-prototype-print-viewer" npm run build --prefix print
+
+# Good — use wrapper scripts that set env vars internally
+.claude/skills/ref-pr-workflow/scripts/run-qa-server.sh print
+.claude/skills/ref-pr-workflow/scripts/run-preview-deploy.sh print pr-146
+.claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh print
+```
+
+### CI polling
+
+`sleep && gh run view` loops create repeated permission prompts. Use `gh run watch`
+(single command, pre-approved) instead.
