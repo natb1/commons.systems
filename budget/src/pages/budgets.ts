@@ -62,7 +62,7 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
 
   let tableHtml: string;
   try {
-    const budgets = await (group && user ? getBudgets(group.id, user.uid) : getBudgets(null));
+    const budgets = await (group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null));
     tableHtml = renderBudgetTable(budgets, authorized);
   } catch (error) {
     if (error instanceof RangeError || error instanceof DataIntegrityError

@@ -19,8 +19,19 @@ function groupsPath(namespace: string): string {
   return nsCollectionPath(namespace, "groups");
 }
 
+function requireEmail(caller: string, user: User): string {
+  if (!user.email) {
+    throw new Error(
+      `${caller}: user "${user.uid}" has no email. ` +
+      `Email-based group membership requires an auth provider that supplies an email address.`,
+    );
+  }
+  return user.email;
+}
+
 export async function getUserGroups(db: Firestore, namespace: string, user: User): Promise<Group[]> {
-  const q = query(collection(db, groupsPath(namespace)), where("members", "array-contains", user.uid));
+  const email = requireEmail("getUserGroups", user);
+  const q = query(collection(db, groupsPath(namespace)), where("members", "array-contains", email));
   const snapshot = await getDocs(q);
   return snapshot.docs
     .map((docSnap) => {
@@ -44,19 +55,20 @@ export async function isInGroup(
   groupId: string,
 ): Promise<boolean> {
   if (!user) return false;
+  const email = requireEmail("isInGroup", user);
   try {
     const docSnap = await getDoc(doc(db, groupsPath(namespace), groupId));
     if (!docSnap.exists()) return false;
     const members = docSnap.data().members;
-    return Array.isArray(members) && members.includes(user.uid);
+    return Array.isArray(members) && members.includes(email);
   } catch (error) {
-    // Firestore rules restrict group reads to members (request.auth.uid in
+    // Firestore rules restrict group reads to members (request.auth.token.email in
     // resource.data.members), so permission-denied is the primary signal that
     // the user is not in this group. The membership check on the returned
     // document is a defensive guard for the case where rules and data are
     // inconsistent.
     if (isPermissionDenied(error)) {
-      console.warn(`isInGroup: permission denied for group "${groupId}" (user ${user.uid})`);
+      console.warn(`isInGroup: permission denied for group "${groupId}" (user ${email})`);
       return false;
     }
     throw error;

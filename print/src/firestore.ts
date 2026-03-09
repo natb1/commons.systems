@@ -80,7 +80,7 @@ function toMediaItem(id: string, data: Record<string, unknown>): MediaItem {
     sourceNotes: requireString(data.sourceNotes, "sourceNotes"),
     storagePath: requireString(data.storagePath, "storagePath"),
     groupId: optionalString(data.groupId, "groupId"),
-    memberUids: requireStringArray(data.memberUids, "memberUids"),
+    memberEmails: requireStringArray(data.memberEmails, "memberEmails"),
     addedAt: requireIso8601(data.addedAt, "addedAt"),
   };
 }
@@ -94,20 +94,20 @@ export async function getPublicMedia(): Promise<MediaItem[]> {
   return items;
 }
 
-export async function getUserMedia(uid: string): Promise<MediaItem[]> {
+export async function getUserMedia(email: string): Promise<MediaItem[]> {
   const path = nsCollectionPath(NAMESPACE, "media");
-  const q = query(collection(db, path), where("memberUids", "array-contains", uid));
+  const q = query(collection(db, path), where("memberEmails", "array-contains", email));
   const snapshot = await getDocs(q);
   return snapshot.docs.map((docSnap) => toMediaItem(docSnap.id, docSnap.data()));
 }
 
-export async function getAllAccessibleMedia(uid: string): Promise<MediaItem[]> {
+export async function getAllAccessibleMedia(email: string): Promise<MediaItem[]> {
   const [publicItems, userItems] = await Promise.all([
     getPublicMedia(),
-    getUserMedia(uid),
+    getUserMedia(email),
   ]);
 
-  // Deduplicate by id (a public-domain item might also appear in user's memberUids)
+  // Deduplicate by id (a public-domain item might also appear in user's memberEmails)
   const seen = new Set<string>();
   const merged: MediaItem[] = [];
   for (const item of [...publicItems, ...userItems]) {

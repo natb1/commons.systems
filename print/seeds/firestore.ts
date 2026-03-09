@@ -7,7 +7,7 @@ import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 // 3. Set custom metadata on each object:
 //    - Public domain: gsutil setmeta -h "x-goog-meta-publicDomain:true" gs://.../<file>
 //    - Private: gsutil setmeta -h "x-goog-meta-publicDomain:false" -h "x-goog-meta-{uid}:member" gs://.../<file>
-// Note: Firestore uses memberUids array for access control; Storage uses per-UID custom metadata keys.
+// Note: Firestore uses memberEmails array for access control; Storage uses per-UID custom metadata keys.
 // Both must be kept in sync when granting access to private items (see firestore.rules, storage.rules).
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
@@ -25,7 +25,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sourceNotes: "Project Gutenberg eBook #3296: https://www.gutenberg.org/ebooks/3296",
             storagePath: "media/pg3296-images-3.epub",
             groupId: null,
-            memberUids: [],
+            memberEmails: [],
             addedAt: "2026-01-15T00:00:00Z",
           },
         },
@@ -39,7 +39,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/phaedrus",
             storagePath: "media/phaedrus-david-horan-translation-7-nov-25.pdf",
             groupId: null,
-            memberUids: [],
+            memberEmails: [],
             addedAt: "2026-01-16T00:00:00Z",
           },
         },
@@ -53,7 +53,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/republic/republic-all-books/",
             storagePath: "media/republic-i-to-x-david-horan-translation-22-nov-25.pdf",
             groupId: null,
-            memberUids: [],
+            memberEmails: [],
             addedAt: "2026-01-17T00:00:00Z",
           },
         },
@@ -67,7 +67,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sourceNotes: "Private GCS bucket rml-media/print — re-upload to Firebase Cloud Storage",
             storagePath: "media/private-collection-1.pdf",
             groupId: "natb1-library",
-            memberUids: ["test-github-user"],
+            memberEmails: ["test@example.com"],
             addedAt: "2026-01-18T00:00:00Z",
           },
         },
@@ -75,12 +75,13 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
     },
     {
       name: "groups",
+      testOnly: true,
       documents: [
         {
           id: "natb1-library",
           data: {
             name: "natb1-library",
-            members: ["test-github-user"],
+            members: ["test@example.com"],
           },
         },
       ],

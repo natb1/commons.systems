@@ -44,7 +44,7 @@ function validMediaDoc(
       sourceNotes: "Public domain source",
       storagePath: `media/${id}.pdf`,
       groupId: null,
-      memberUids: ["user-1"],
+      memberEmails: ["user@example.com"],
       addedAt: "2026-01-01T00:00:00Z",
       ...overrides,
     }),
@@ -102,7 +102,7 @@ describe("getPublicMedia", () => {
         sourceNotes: "Public domain source",
         storagePath: "media/doc-2.pdf",
         groupId: null,
-        memberUids: ["user-1"],
+        memberEmails: ["user@example.com"],
         addedAt: "2026-01-02T00:00:00Z",
       },
       {
@@ -114,7 +114,7 @@ describe("getPublicMedia", () => {
         sourceNotes: "Public domain source",
         storagePath: "media/doc-1.pdf",
         groupId: null,
-        memberUids: ["user-1"],
+        memberEmails: ["user@example.com"],
         addedAt: "2026-01-01T00:00:00Z",
       },
     ]);
@@ -182,17 +182,17 @@ describe("getPublicMedia", () => {
     await expect(getPublicMedia()).rejects.toThrow(DataIntegrityError);
   });
 
-  it("throws DataIntegrityError for non-array memberUids", async () => {
+  it("throws DataIntegrityError for non-array memberEmails", async () => {
     mockGetDocs.mockResolvedValue({
-      docs: [validMediaDoc("bad-6", { memberUids: "not-array" })],
+      docs: [validMediaDoc("bad-6", { memberEmails: "not-array" })],
     });
 
     await expect(getPublicMedia()).rejects.toThrow(DataIntegrityError);
   });
 
-  it("throws DataIntegrityError for non-string element in memberUids", async () => {
+  it("throws DataIntegrityError for non-string element in memberEmails", async () => {
     mockGetDocs.mockResolvedValue({
-      docs: [validMediaDoc("bad-7", { memberUids: [123] })],
+      docs: [validMediaDoc("bad-7", { memberEmails: [123] })],
     });
 
     await expect(getPublicMedia()).rejects.toThrow(DataIntegrityError);
@@ -219,7 +219,7 @@ describe("getUserMedia", () => {
   it("queries the correct namespaced collection path", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getUserMedia("user-1");
+    await getUserMedia("user@example.com");
 
     expect(mockCollection).toHaveBeenCalledWith(
       { type: "mock-firestore" },
@@ -227,15 +227,15 @@ describe("getUserMedia", () => {
     );
   });
 
-  it("filters by memberUids array-contains uid", async () => {
+  it("filters by memberEmails array-contains email", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getUserMedia("user-1");
+    await getUserMedia("user@example.com");
 
     expect(mockWhere).toHaveBeenCalledWith(
-      "memberUids",
+      "memberEmails",
       "array-contains",
-      "user-1",
+      "user@example.com",
     );
   });
 
@@ -244,7 +244,7 @@ describe("getUserMedia", () => {
       docs: [validMediaDoc("user-doc-1", { publicDomain: false })],
     });
 
-    const items = await getUserMedia("user-1");
+    const items = await getUserMedia("user@example.com");
 
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe("user-doc-1");
@@ -270,7 +270,7 @@ describe("getAllAccessibleMedia", () => {
         docs: [validMediaDoc("shared-doc")],
       });
 
-    const items = await getAllAccessibleMedia("user-1");
+    const items = await getAllAccessibleMedia("user@example.com");
 
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe("shared-doc");
@@ -285,7 +285,7 @@ describe("getAllAccessibleMedia", () => {
         docs: [validMediaDoc("user-only", { publicDomain: false })],
       });
 
-    const items = await getAllAccessibleMedia("user-1");
+    const items = await getAllAccessibleMedia("user@example.com");
 
     expect(items).toHaveLength(2);
     const ids = items.map((i) => i.id);
@@ -306,7 +306,7 @@ describe("getAllAccessibleMedia", () => {
         ],
       });
 
-    const items = await getAllAccessibleMedia("user-1");
+    const items = await getAllAccessibleMedia("user@example.com");
 
     expect(items[0].id).toBe("newer");
     expect(items[1].id).toBe("older");
@@ -317,7 +317,7 @@ describe("getAllAccessibleMedia", () => {
       .mockResolvedValueOnce({ docs: [] })
       .mockResolvedValueOnce({ docs: [] });
 
-    const items = await getAllAccessibleMedia("user-1");
+    const items = await getAllAccessibleMedia("user@example.com");
 
     expect(items).toEqual([]);
   });
@@ -372,7 +372,7 @@ describe("getMediaItem", () => {
       sourceNotes: "Public domain source",
       storagePath: "media/doc-1.pdf",
       groupId: null,
-      memberUids: ["user-1"],
+      memberEmails: ["user@example.com"],
       addedAt: "2026-01-01T00:00:00Z",
     });
   });

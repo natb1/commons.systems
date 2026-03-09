@@ -10,6 +10,6 @@ export interface MediaItem {
   readonly sourceNotes: string;
   readonly storagePath: string;
   readonly groupId: string | null;
-  readonly memberUids: readonly string[];
+  readonly memberEmails: readonly string[];
   readonly addedAt: string;
 }
