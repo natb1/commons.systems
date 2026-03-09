@@ -54,7 +54,7 @@ function renderRow(opts: RenderRowOptions): string {
     ? `<dt>Budget Balance</dt><dd class="budget-balance">${balance.toFixed(2)}</dd>`
     : "";
 
-  // Data attributes for hydration
+  // Data attributes consumed by syncPeriodTotals / syncPeriodOnReimbursementChange in home-hydrate.ts
   const amountAttr = editable ? ` data-amount="${txn.amount}"` : "";
   const budgetIdAttr = editable && txn.budget ? ` data-budget-id="${escapeHtml(txn.budget)}"` : "";
   const timestampAttr = editable && txn.timestamp ? ` data-timestamp="${txn.timestamp.toMillis()}"` : "";

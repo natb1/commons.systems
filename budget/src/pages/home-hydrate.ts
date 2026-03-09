@@ -118,14 +118,14 @@ async function syncPeriodTotals(
       const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
       if (oldPeriod) {
         await adjustBudgetPeriodTotal(oldPeriod.id, -net);
-        oldPeriod.total = oldPeriod.total - net;
+        oldPeriod.total -= net;
       }
     }
     if (newBudgetId) {
       const newPeriod = findPeriod(budgetPeriods, newBudgetId, timestampMs);
       if (newPeriod) {
         await adjustBudgetPeriodTotal(newPeriod.id, net);
-        newPeriod.total = newPeriod.total + net;
+        newPeriod.total += net;
       }
     }
   } catch (periodError) {
@@ -147,7 +147,13 @@ async function syncPeriodOnReimbursementChange(
   if (!budgetId) return;
   const amount = Number(row.dataset.amount);
   const timestampMs = Number(row.dataset.timestamp);
-  if (!Number.isFinite(amount) || !Number.isFinite(timestampMs)) return;
+  if (!Number.isFinite(amount) || !Number.isFinite(timestampMs)) {
+    console.error(
+      `Cannot update period totals: invalid data attributes ` +
+      `(amount=${row.dataset.amount}, timestamp=${row.dataset.timestamp})`
+    );
+    return;
+  }
   const oldNet = computeNetAmount(amount, oldReimbursement);
   const newNet = computeNetAmount(amount, newReimbursement);
   const delta = newNet - oldNet;
@@ -157,10 +163,18 @@ async function syncPeriodOnReimbursementChange(
     const period = findPeriod(budgetPeriods, budgetId, timestampMs);
     if (period) {
       await adjustBudgetPeriodTotal(period.id, delta);
-      period.total = period.total + delta;
+      period.total += delta;
     }
   } catch (periodError) {
     console.error("Failed to update budget period totals:", periodError);
+  }
+}
+
+/** Replace the displayed balance with "--". Recalculation happens on next page load. */
+function clearBalanceDisplay(row: HTMLElement): void {
+  const balanceDd = row.querySelector(".budget-balance") as HTMLElement | null;
+  if (balanceDd) {
+    balanceDd.textContent = "--";
   }
 }
 
@@ -367,11 +381,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         await updateTransaction(txnId, { reimbursement });
         await syncPeriodOnReimbursementChange(row, oldReimbursement, reimbursement, budgetPeriods);
         row.dataset.reimbursement = String(reimbursement);
-        // Clear balance display (net amount changed; full recompute needs all transactions)
-        const balanceDd = row.querySelector(".budget-balance") as HTMLElement | null;
-        if (balanceDd) {
-          balanceDd.textContent = "--";
-        }
+        clearBalanceDisplay(row);
       } else if (input.classList.contains("edit-budget")) {
         const value = input.value || null;
         if (value !== null && !(value in budgetNameToId)) {
@@ -389,11 +399,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
           delete row.dataset.budgetId;
         }
 
-        // Clear balance display (full recompute needs all transactions)
-        const balanceDd = row.querySelector(".budget-balance") as HTMLElement | null;
-        if (balanceDd) {
-          balanceDd.textContent = "--";
-        }
+        clearBalanceDisplay(row);
       } else {
         return;
       }
