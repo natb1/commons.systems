@@ -10,6 +10,9 @@
         ],
         "landing": [
           "commons-systems"
+        ],
+        "print": [
+          "cs-print-00af"
         ]
       }
     }
