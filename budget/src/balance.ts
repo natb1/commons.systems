@@ -2,15 +2,22 @@ import type { Timestamp } from "firebase/firestore";
 import type { Budget, BudgetPeriod, Rollover, Transaction } from "./firestore.js";
 
 export function computeNetAmount(amount: number, reimbursement: number): number {
+  if (reimbursement < 0 || reimbursement > 100) {
+    throw new RangeError(`reimbursement must be between 0 and 100, got ${reimbursement}`);
+  }
   return amount * (1 - reimbursement / 100);
+}
+
+interface TimestampedTransaction extends Transaction {
+  readonly timestamp: Timestamp;
 }
 
 function netAmount(t: Transaction): number {
   return computeNetAmount(t.amount, t.reimbursement);
 }
 
-function compareByTimestampThenId(a: Transaction, b: Transaction): number {
-  const diff = a.timestamp!.toMillis() - b.timestamp!.toMillis();
+function compareByTimestampThenId(a: TimestampedTransaction, b: TimestampedTransaction): number {
+  const diff = a.timestamp.toMillis() - b.timestamp.toMillis();
   if (diff !== 0) return diff;
   if (a.id < b.id) return -1;
   if (a.id > b.id) return 1;
@@ -26,6 +33,18 @@ function applyRollover(running: number, weeklyAllowance: number, rollover: Rollo
     case "balance":
       return running + weeklyAllowance;
   }
+}
+
+function periodsForBudget(periods: BudgetPeriod[], budgetId: string): BudgetPeriod[] {
+  return periods
+    .filter((p) => p.budgetId === budgetId)
+    .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
+}
+
+function transactionsForBudget(txns: Transaction[], budgetId: string): TimestampedTransaction[] {
+  return txns
+    .filter((t): t is TimestampedTransaction => t.budget === budgetId && t.timestamp !== null)
+    .sort(compareByTimestampThenId);
 }
 
 export function findPeriodForTimestamp(
@@ -50,23 +69,21 @@ export function computeBudgetBalance(
 ): number | null {
   if (txn.budget === null || txn.timestamp === null) return null;
 
-  const budgetPeriodsForBudget = budgetPeriods
-    .filter((p) => p.budgetId === budget.id)
-    .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
+  const periods = periodsForBudget(budgetPeriods, budget.id);
 
   const txnMs = txn.timestamp.toMillis();
-  const targetPeriodIndex = budgetPeriodsForBudget.findIndex(
+  const targetPeriodIndex = periods.findIndex(
     (p) => p.periodStart.toMillis() <= txnMs && txnMs < p.periodEnd.toMillis(),
   );
   if (targetPeriodIndex === -1) return null;
 
-  const targetPeriod = budgetPeriodsForBudget[targetPeriodIndex];
+  const targetPeriod = periods[targetPeriodIndex];
 
   // Accumulate balance through prior periods
   let running = 0;
   for (let i = 0; i < targetPeriodIndex; i++) {
     running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
-    running -= budgetPeriodsForBudget[i].total;
+    running -= periods[i].total;
   }
 
   // Apply rollover entering the target period
@@ -75,15 +92,12 @@ export function computeBudgetBalance(
   // Walk same-period transactions up to and including the target transaction
   const periodStartMs = targetPeriod.periodStart.toMillis();
   const periodEndMs = targetPeriod.periodEnd.toMillis();
-  const samePeriodTxns = allTransactions
+  const samePeriodTxns = transactionsForBudget(allTransactions, budget.id)
     .filter(
       (t) =>
-        t.budget === budget.id &&
-        t.timestamp !== null &&
         t.timestamp.toMillis() >= periodStartMs &&
         t.timestamp.toMillis() < periodEndMs,
-    )
-    .sort(compareByTimestampThenId);
+    );
 
   let found = false;
   for (const t of samePeriodTxns) {
@@ -106,13 +120,8 @@ export function computeAllBudgetBalances(
   const result = new Map<string, number>();
 
   for (const budget of budgets) {
-    const periods = budgetPeriods
-      .filter((p) => p.budgetId === budget.id)
-      .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
-
-    const txns = allTransactions
-      .filter((t) => t.budget === budget.id && t.timestamp !== null)
-      .sort(compareByTimestampThenId);
+    const periods = periodsForBudget(budgetPeriods, budget.id);
+    const txns = transactionsForBudget(allTransactions, budget.id);
 
     let accumulated = 0;
     let txnIdx = 0;
@@ -127,7 +136,7 @@ export function computeAllBudgetBalances(
       // Walk transactions that fall within this period
       while (txnIdx < txns.length) {
         const t = txns[txnIdx];
-        const tMs = t.timestamp!.toMillis();
+        const tMs = t.timestamp.toMillis();
         if (tMs >= periodEndMs) break;
         if (tMs >= periodStartMs) {
           running -= netAmount(t);

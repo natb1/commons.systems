@@ -47,7 +47,7 @@ function createContainer(txnId: string, overrides: { budgetId?: string; amount?:
       </summary>
       <div class="txn-details">
         <dl>
-          <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="50" min="0" max="100"></dd>
+          <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="${overrides.reimbursement ?? 50}" min="0" max="100"></dd>
           <dt>Budget</dt><dd><input type="text" class="edit-budget" value="food"></dd>
           <dt>Budget Balance</dt><dd class="budget-balance">100.00</dd>
           <dt>Group</dt><dd>household</dd>
@@ -317,7 +317,7 @@ describe("hydrateTransactionTable", () => {
       expect(row.dataset.budgetId).toBeUndefined();
     });
 
-    it("does not update periods when amount or timestamp are missing", async () => {
+    it("does not update periods when amount or timestamp are missing and logs error", async () => {
       // No amount or timestamp data attributes
       const container = createContainer("txn-1", { budgetId: "budget-food" });
       hydrateTransactionTable(container);
@@ -328,9 +328,13 @@ describe("hydrateTransactionTable", () => {
 
       expect(mockUpdateTransaction).toHaveBeenCalled();
       expect(mockAdjustBudgetPeriodTotal).not.toHaveBeenCalled();
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining("Cannot update period totals"),
+        // No second arg — the error message is the only argument
+      );
     });
 
-    it("clamps old period total to zero instead of going negative", async () => {
+    it("sends raw negative delta to server without local clamping", async () => {
       const container = createContainer("txn-1", {
         budgetId: "budget-food",
         amount: 100, // larger than period total of 50
@@ -365,6 +369,115 @@ describe("hydrateTransactionTable", () => {
       // New period (vacation-w1) incremented by net 50
       expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("vacation-w1", 50);
     });
+
+    it("clears balance display after budget change", async () => {
+      const container = createContainer("txn-1", {
+        budgetId: "budget-food",
+        amount: 30,
+        timestamp: new Date("2025-01-15").getTime(),
+      });
+      hydrateTransactionTable(container);
+      const balanceDd = container.querySelector(".budget-balance") as HTMLElement;
+      expect(balanceDd.textContent).toBe("100.00");
+
+      const input = container.querySelector(".edit-budget") as HTMLInputElement;
+      input.value = "vacation";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(balanceDd.textContent).toBe("--");
+    });
+
+    it("logs error but preserves transaction save when period adjustment fails", async () => {
+      mockAdjustBudgetPeriodTotal.mockRejectedValue(new Error("firestore unavailable"));
+      const container = createContainer("txn-1", {
+        budgetId: "budget-food",
+        amount: 30,
+        timestamp: new Date("2025-01-15").getTime(),
+      });
+      hydrateTransactionTable(container);
+      const input = container.querySelector(".edit-budget") as HTMLInputElement;
+      input.value = "vacation";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
+      expect(console.error).toHaveBeenCalledWith("Failed to update budget period totals:", expect.any(Error));
+      const row = container.querySelector(".txn-row") as HTMLElement;
+      expect(row.dataset.budgetId).toBe("budget-vacation");
+    });
+  });
+
+  describe("period updates on reimbursement edit", () => {
+    it("adjusts period total when reimbursement changes", async () => {
+      const container = createContainer("txn-1", {
+        budgetId: "budget-food",
+        amount: 100,
+        reimbursement: 0,
+        timestamp: new Date("2025-01-15").getTime(),
+      });
+      hydrateTransactionTable(container);
+      const input = container.querySelector(".edit-reimbursement") as HTMLInputElement;
+      input.value = "50";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { reimbursement: 50 });
+      // oldNet=100, newNet=50, delta=-50
+      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -50);
+    });
+
+    it("does not adjust period when transaction has no budget", async () => {
+      const container = createContainer("txn-1", {
+        amount: 100,
+        reimbursement: 0,
+        timestamp: new Date("2025-01-15").getTime(),
+        // no budgetId
+      });
+      hydrateTransactionTable(container);
+      const input = container.querySelector(".edit-reimbursement") as HTMLInputElement;
+      input.value = "50";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(mockUpdateTransaction).toHaveBeenCalled();
+      expect(mockAdjustBudgetPeriodTotal).not.toHaveBeenCalled();
+    });
+
+    it("updates data-reimbursement attribute after save", async () => {
+      const container = createContainer("txn-1", {
+        budgetId: "budget-food",
+        amount: 100,
+        reimbursement: 0,
+        timestamp: new Date("2025-01-15").getTime(),
+      });
+      hydrateTransactionTable(container);
+      const row = container.querySelector(".txn-row") as HTMLElement;
+      const input = container.querySelector(".edit-reimbursement") as HTMLInputElement;
+      input.value = "50";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(row.dataset.reimbursement).toBe("50");
+    });
+
+    it("clears balance display after reimbursement change", async () => {
+      const container = createContainer("txn-1", {
+        budgetId: "budget-food",
+        amount: 100,
+        reimbursement: 0,
+        timestamp: new Date("2025-01-15").getTime(),
+      });
+      hydrateTransactionTable(container);
+      const balanceDd = container.querySelector(".budget-balance") as HTMLElement;
+
+      const input = container.querySelector(".edit-reimbursement") as HTMLInputElement;
+      input.value = "50";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      expect(balanceDd.textContent).toBe("--");
+    });
   });
 
   describe("parseBudgetPeriods validation", () => {
@@ -390,6 +503,20 @@ describe("hydrateTransactionTable", () => {
       const container = createContainer("txn-1");
       container.dataset.budgetPeriods = JSON.stringify([null]);
       expect(() => hydrateTransactionTable(container)).toThrow("Budget period element is not an object");
+    });
+
+    it("throws DataIntegrityError for non-array budget periods", () => {
+      const container = createContainer("txn-1");
+      container.dataset.budgetPeriods = JSON.stringify({ id: "p1" });
+      expect(() => hydrateTransactionTable(container)).toThrow("Budget periods is not an array");
+    });
+
+    it("throws DataIntegrityError when periodStartMs >= periodEndMs", () => {
+      const container = createContainer("txn-1");
+      container.dataset.budgetPeriods = JSON.stringify([
+        { id: "p1", budgetId: "food", periodStartMs: 1000, periodEndMs: 1000, total: 0 },
+      ]);
+      expect(() => hydrateTransactionTable(container)).toThrow("Budget period has periodStartMs >= periodEndMs");
     });
   });
 });

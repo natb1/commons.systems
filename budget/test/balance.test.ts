@@ -63,6 +63,14 @@ describe("computeNetAmount", () => {
   it("handles fractional reimbursement", () => {
     expect(computeNetAmount(100, 25)).toBe(75);
   });
+
+  it("throws RangeError for reimbursement below 0", () => {
+    expect(() => computeNetAmount(100, -1)).toThrow(RangeError);
+  });
+
+  it("throws RangeError for reimbursement above 100", () => {
+    expect(() => computeNetAmount(100, 101)).toThrow(RangeError);
+  });
 });
 
 describe("findPeriodForTimestamp", () => {
@@ -300,6 +308,36 @@ describe("computeAllBudgetBalances", () => {
     expect(result.get("f1")).toBe(40);
     expect(result.get("f2")).toBe(110);
     expect(result.get("v1")).toBe(30);
+  });
+
+  it("skips transactions in gaps between non-contiguous periods", () => {
+    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const periods = [
+      makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+      makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 30 }),
+    ];
+    const gapTxn = makeTxn({ id: "gap", amount: 25, timestamp: ts("2025-01-15") });
+    const w3Txn = makeTxn({ id: "w3-txn", amount: 30, timestamp: ts("2025-01-22") });
+    const result = computeAllBudgetBalances([gapTxn, w3Txn], [budget], periods);
+    expect(result.has("gap")).toBe(false);
+    // w1: 0+100=100, -50(total)=50; w3: 50+100=150, -30=120
+    expect(result.get("w3-txn")).toBe(120);
+  });
+
+  it("uses period.total (not live transaction sums) for prior-period rollover", () => {
+    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const periods = [
+      // total says 60, but actual transaction sums to 40 — simulating drift
+      makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
+      makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
+    ];
+    const txn1 = makeTxn({ id: "txn-1", amount: 40, timestamp: ts("2025-01-07") });
+    const txn2 = makeTxn({ id: "txn-2", amount: 30, timestamp: ts("2025-01-15") });
+    const result = computeAllBudgetBalances([txn1, txn2], [budget], periods);
+    // w1: 100-40=60 (live balance for txn-1)
+    expect(result.get("txn-1")).toBe(60);
+    // w2 rollover uses period.total=60: 100-60=40, rollover 40+100=140, -30=110
+    expect(result.get("txn-2")).toBe(110);
   });
 
   it("matches computeBudgetBalance cross-check", () => {

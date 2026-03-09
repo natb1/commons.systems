@@ -1,7 +1,7 @@
 import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { RenderPageOptions } from "./render-options.js";
-import { getTransactions, getBudgets, getBudgetPeriods, type Transaction, type Budget, type BudgetPeriod } from "../firestore.js";
+import { getTransactions, getBudgets, getBudgetPeriods, type Transaction, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAllBudgetBalances } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
 
@@ -131,7 +131,7 @@ function renderTransactionTable(
     }
     const budgetMapAttr = escapeHtml(JSON.stringify(budgetNameToId));
     const categoryOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))));
-    const periodsData = budgetPeriods.map((p) => ({
+    const periodsData: SerializedBudgetPeriod[] = budgetPeriods.map((p) => ({
       id: p.id,
       budgetId: p.budgetId,
       periodStartMs: p.periodStart.toMillis(),

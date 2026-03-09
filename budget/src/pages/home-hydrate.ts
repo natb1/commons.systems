@@ -1,4 +1,4 @@
-import { updateTransaction, adjustBudgetPeriodTotal } from "../firestore.js";
+import { updateTransaction, adjustBudgetPeriodTotal, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeNetAmount } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
 
@@ -46,12 +46,8 @@ function parseBudgetMap(raw: string | undefined): Record<string, string> {
   }
 }
 
-interface HydrationPeriod {
-  readonly id: string;
-  readonly budgetId: string;
-  readonly periodStartMs: number;
-  readonly periodEndMs: number;
-  total: number;
+interface HydrationPeriod extends Omit<SerializedBudgetPeriod, "total"> {
+  total: number; // mutable for local updates after adjustBudgetPeriodTotal
 }
 
 function parseBudgetPeriods(raw: string | undefined): HydrationPeriod[] {
@@ -90,6 +86,82 @@ function findPeriod(periods: HydrationPeriod[], budgetId: string, timestampMs: n
     }
   }
   return null;
+}
+
+/**
+ * Adjust stored period totals when a transaction's budget changes.
+ * Each write uses Firestore increment for per-field atomicity, but the two
+ * writes (decrement old period, increment new period) are not wrapped in a
+ * transaction. If either write fails, totals drift until manual correction
+ * (page loads read stored totals, not recomputed from transactions).
+ */
+async function syncPeriodTotals(
+  row: HTMLElement,
+  oldBudgetId: string | null,
+  newBudgetId: string | null,
+  budgetPeriods: HydrationPeriod[],
+): Promise<void> {
+  const amount = Number(row.dataset.amount);
+  const reimbursement = Number(row.dataset.reimbursement);
+  const timestampMs = Number(row.dataset.timestamp);
+  if (!Number.isFinite(amount) || !Number.isFinite(reimbursement) || !Number.isFinite(timestampMs)) {
+    console.error(
+      `Cannot update period totals: invalid data attributes ` +
+      `(amount=${row.dataset.amount}, reimbursement=${row.dataset.reimbursement}, timestamp=${row.dataset.timestamp})`
+    );
+    return;
+  }
+  const net = computeNetAmount(amount, reimbursement);
+
+  try {
+    if (oldBudgetId) {
+      const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
+      if (oldPeriod) {
+        await adjustBudgetPeriodTotal(oldPeriod.id, -net);
+        oldPeriod.total = oldPeriod.total - net;
+      }
+    }
+    if (newBudgetId) {
+      const newPeriod = findPeriod(budgetPeriods, newBudgetId, timestampMs);
+      if (newPeriod) {
+        await adjustBudgetPeriodTotal(newPeriod.id, net);
+        newPeriod.total = newPeriod.total + net;
+      }
+    }
+  } catch (periodError) {
+    console.error("Failed to update budget period totals:", periodError);
+  }
+}
+
+/**
+ * Adjust stored period total when a transaction's reimbursement changes.
+ * The net amount changes, so the period total must be adjusted by the delta.
+ */
+async function syncPeriodOnReimbursementChange(
+  row: HTMLElement,
+  oldReimbursement: number,
+  newReimbursement: number,
+  budgetPeriods: HydrationPeriod[],
+): Promise<void> {
+  const budgetId = row.dataset.budgetId || null;
+  if (!budgetId) return;
+  const amount = Number(row.dataset.amount);
+  const timestampMs = Number(row.dataset.timestamp);
+  if (!Number.isFinite(amount) || !Number.isFinite(timestampMs)) return;
+  const oldNet = computeNetAmount(amount, oldReimbursement);
+  const newNet = computeNetAmount(amount, newReimbursement);
+  const delta = newNet - oldNet;
+  if (delta === 0) return;
+
+  try {
+    const period = findPeriod(budgetPeriods, budgetId, timestampMs);
+    if (period) {
+      await adjustBudgetPeriodTotal(period.id, delta);
+      period.total = period.total + delta;
+    }
+  } catch (periodError) {
+    console.error("Failed to update budget period totals:", periodError);
+  }
 }
 
 let dropdownController: AbortController | null = null;
@@ -291,7 +363,15 @@ export function hydrateTransactionTable(container: HTMLElement): void {
           showInputError(input);
           return;
         }
+        const oldReimbursement = Number(row.dataset.reimbursement);
         await updateTransaction(txnId, { reimbursement });
+        await syncPeriodOnReimbursementChange(row, oldReimbursement, reimbursement, budgetPeriods);
+        row.dataset.reimbursement = String(reimbursement);
+        // Clear balance display (net amount changed; full recompute needs all transactions)
+        const balanceDd = row.querySelector(".budget-balance") as HTMLElement | null;
+        if (balanceDd) {
+          balanceDd.textContent = "--";
+        }
       } else if (input.classList.contains("edit-budget")) {
         const value = input.value || null;
         if (value !== null && !(value in budgetNameToId)) {
@@ -299,38 +379,9 @@ export function hydrateTransactionTable(container: HTMLElement): void {
           return;
         }
         const newBudgetId = value ? budgetNameToId[value] : null;
-        await updateTransaction(txnId, { budget: newBudgetId });
-
-        // Update stored period totals for cross-period rollover. Uses server-side
-        // increment for atomicity. If the second write fails, totals drift until
-        // manual correction (page loads read stored totals, not recomputed from
-        // transactions).
-        const amount = Number(row.dataset.amount);
-        const reimbursement = Number(row.dataset.reimbursement);
-        const timestampMs = Number(row.dataset.timestamp);
         const oldBudgetId = row.dataset.budgetId || null;
-        const net = computeNetAmount(amount, reimbursement);
-
-        if (Number.isFinite(amount) && Number.isFinite(reimbursement) && Number.isFinite(timestampMs)) {
-          try {
-            if (oldBudgetId) {
-              const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
-              if (oldPeriod) {
-                await adjustBudgetPeriodTotal(oldPeriod.id, -net);
-                oldPeriod.total = Math.max(0, oldPeriod.total - net);
-              }
-            }
-            if (newBudgetId) {
-              const newPeriod = findPeriod(budgetPeriods, newBudgetId, timestampMs);
-              if (newPeriod) {
-                await adjustBudgetPeriodTotal(newPeriod.id, net);
-                newPeriod.total = newPeriod.total + net;
-              }
-            }
-          } catch (periodError) {
-            console.error("Failed to update budget period totals:", periodError);
-          }
-        }
+        await updateTransaction(txnId, { budget: newBudgetId });
+        await syncPeriodTotals(row, oldBudgetId, newBudgetId, budgetPeriods);
 
         if (newBudgetId) {
           row.dataset.budgetId = newBudgetId;
@@ -341,7 +392,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         // Clear balance display (full recompute needs all transactions)
         const balanceDd = row.querySelector(".budget-balance") as HTMLElement | null;
         if (balanceDd) {
-          balanceDd.textContent = "";
+          balanceDd.textContent = "--";
         }
       } else {
         return;
