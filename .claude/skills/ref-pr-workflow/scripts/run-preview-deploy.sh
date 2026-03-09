@@ -38,7 +38,7 @@ DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
   --only "$APP_NAME" \
   --project "$FIREBASE_PROJECT_ID" \
   --expires 7d \
-  --json 2>&1) || {
+  --json) || {
   echo "Deploy failed:" >&2
   echo "$DEPLOY_OUTPUT" >&2
   exit 1
