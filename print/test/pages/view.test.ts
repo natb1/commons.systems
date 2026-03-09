@@ -31,7 +31,7 @@ function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
     sourceNotes: "Sourced from archive.org",
     storagePath: "media/test-book.pdf",
     groupId: null,
-    memberUids: ["user-1"],
+    memberEmails: ["user@example.com"],
     addedAt: "2026-01-15T00:00:00Z",
     ...overrides,
   };

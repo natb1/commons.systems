@@ -166,11 +166,11 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
   let tableHtml: string;
   try {
     const [transactions, budgets, budgetPeriods] = await Promise.all([
-      (group && user ? getTransactions(group.id, user.uid) : getTransactions(null))
+      (group && user?.email ? getTransactions(group.id, user.email) : getTransactions(null))
         .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
-      (group && user ? getBudgets(group.id, user.uid) : getBudgets(null))
+      (group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null))
         .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
-      (group && user ? getBudgetPeriods(group.id, user.uid) : getBudgetPeriods(null))
+      (group && user?.email ? getBudgetPeriods(group.id, user.email) : getBudgetPeriods(null))
         .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
     ]);
     transactions.sort(compareByTimestampDesc);

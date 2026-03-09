@@ -130,16 +130,16 @@ async function queryGroupCollection(
   collectionName: string,
   seedPrefix: string,
   groupId: string | null,
-  uid?: string,
+  email?: string,
 ): Promise<QueryDocumentSnapshot<DocumentData, DocumentData>[]> {
-  if (groupId && !uid) throw new Error("uid is required when querying by groupId");
+  if (groupId && !email) throw new Error("email is required when querying by groupId");
   const name = groupId ? collectionName : `${seedPrefix}${collectionName}`;
   const path = nsCollectionPath(NAMESPACE, name);
   const q = groupId
     ? query(
         collection(db, path),
         where("groupId", "==", groupId),
-        where("memberUids", "array-contains", uid),
+        where("memberEmails", "array-contains", email),
       )
     : query(collection(db, path));
   const snapshot = await getDocs(q);
@@ -147,9 +147,9 @@ async function queryGroupCollection(
 }
 
 export async function getTransactions(groupId: null): Promise<Transaction[]>;
-export async function getTransactions(groupId: string, uid: string): Promise<Transaction[]>;
-export async function getTransactions(groupId: string | null, uid?: string): Promise<Transaction[]> {
-  const docs = await queryGroupCollection("transactions", "seed-", groupId, uid);
+export async function getTransactions(groupId: string, email: string): Promise<Transaction[]>;
+export async function getTransactions(groupId: string | null, email?: string): Promise<Transaction[]> {
+  const docs = await queryGroupCollection("transactions", "seed-", groupId, email);
   return docs.map((docSnap) => {
     const data = docSnap.data();
     return {
@@ -188,9 +188,9 @@ export async function updateTransaction(
 }
 
 export async function getBudgets(groupId: null): Promise<Budget[]>;
-export async function getBudgets(groupId: string, uid: string): Promise<Budget[]>;
-export async function getBudgets(groupId: string | null, uid?: string): Promise<Budget[]> {
-  const docs = await queryGroupCollection("budgets", "seed-", groupId, uid);
+export async function getBudgets(groupId: string, email: string): Promise<Budget[]>;
+export async function getBudgets(groupId: string | null, email?: string): Promise<Budget[]> {
+  const docs = await queryGroupCollection("budgets", "seed-", groupId, email);
   return docs.map((docSnap) => {
     const data = docSnap.data();
     const name = requireString(data.name, "name");
@@ -225,9 +225,9 @@ function validateNoOverlappingPeriods(periods: BudgetPeriod[]): void {
 }
 
 export async function getBudgetPeriods(groupId: null): Promise<BudgetPeriod[]>;
-export async function getBudgetPeriods(groupId: string, uid: string): Promise<BudgetPeriod[]>;
-export async function getBudgetPeriods(groupId: string | null, uid?: string): Promise<BudgetPeriod[]> {
-  const docs = await queryGroupCollection("budget-periods", "seed-", groupId, uid);
+export async function getBudgetPeriods(groupId: string, email: string): Promise<BudgetPeriod[]>;
+export async function getBudgetPeriods(groupId: string | null, email?: string): Promise<BudgetPeriod[]> {
+  const docs = await queryGroupCollection("budget-periods", "seed-", groupId, email);
   const periods = docs.map((docSnap) => {
     const data = docSnap.data();
     const periodStart = requireTimestamp(data.periodStart, "periodStart");

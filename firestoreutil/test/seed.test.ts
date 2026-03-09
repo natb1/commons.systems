@@ -69,6 +69,56 @@ describe("seed", () => {
     expect(mockDoc).toHaveBeenCalledWith("app/test/users/u1");
   });
 
+  it("skips testOnly collections when includeTestOnly is not set", async () => {
+    const { db, mockDoc } = createMockFirestore();
+
+    const spec: SeedSpec = {
+      namespace: "app/prod",
+      collections: [
+        { name: "posts", documents: [{ id: "p1", data: { title: "Post" } }] },
+        { name: "groups", testOnly: true, documents: [{ id: "admin", data: { name: "admin" } }] },
+      ],
+    };
+
+    await seed(db, spec);
+
+    expect(mockDoc).toHaveBeenCalledTimes(1);
+    expect(mockDoc).toHaveBeenCalledWith("app/prod/posts/p1");
+  });
+
+  it("includes testOnly collections when includeTestOnly is true", async () => {
+    const { db, mockDoc } = createMockFirestore();
+
+    const spec: SeedSpec = {
+      namespace: "app/test",
+      collections: [
+        { name: "posts", documents: [{ id: "p1", data: { title: "Post" } }] },
+        { name: "groups", testOnly: true, documents: [{ id: "admin", data: { name: "admin" } }] },
+      ],
+    };
+
+    await seed(db, spec, { includeTestOnly: true });
+
+    expect(mockDoc).toHaveBeenCalledTimes(2);
+    expect(mockDoc).toHaveBeenCalledWith("app/test/posts/p1");
+    expect(mockDoc).toHaveBeenCalledWith("app/test/groups/admin");
+  });
+
+  it("skips testOnly collections when includeTestOnly is explicitly false", async () => {
+    const { db, mockDoc } = createMockFirestore();
+
+    const spec: SeedSpec = {
+      namespace: "app/prod",
+      collections: [
+        { name: "groups", testOnly: true, documents: [{ id: "admin", data: { name: "admin" } }] },
+      ],
+    };
+
+    await seed(db, spec, { includeTestOnly: false });
+
+    expect(mockDoc).not.toHaveBeenCalled();
+  });
+
   it("handles empty collections array", async () => {
     const { db, mockDoc } = createMockFirestore();
 

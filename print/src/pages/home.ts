@@ -62,8 +62,8 @@ async function handleDownload(button: HTMLButtonElement): Promise<void> {
 export async function renderHome(user: User | null): Promise<string> {
   let mediaHtml: string;
   try {
-    const items = user
-      ? await getAllAccessibleMedia(user.uid)
+    const items = user?.email
+      ? await getAllAccessibleMedia(user.email)
       : await getPublicMedia();
 
     mediaHtml = renderMediaList(items);

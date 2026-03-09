@@ -8,20 +8,20 @@ import type { Group } from "@commons-systems/authutil/groups";
 /** Seed groups include `members` (used in queries and security rules, omitted from the authutil Group type) */
 type GroupSeedData = Omit<Group, "id"> & { members: string[] };
 
-/** Seed transactions use Date instead of Timestamp and add `memberUids` for security rules (not present in the client Transaction type) */
+/** Seed transactions use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client Transaction type) */
 type TransactionSeedData = Omit<Transaction, "id" | "timestamp"> & {
   timestamp: Date;
-  memberUids: string[];
+  memberEmails: string[];
 };
 
-/** Seed budgets add `memberUids` for security rules (not present in the client Budget type) */
-type BudgetSeedData = Omit<Budget, "id"> & { memberUids: string[] };
+/** Seed budgets add `memberEmails` for security rules (not present in the client Budget type) */
+type BudgetSeedData = Omit<Budget, "id"> & { memberEmails: string[] };
 
-/** Seed budget periods use Date instead of Timestamp and add `memberUids` for security rules (not present in the client BudgetPeriod type) */
+/** Seed budget periods use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client BudgetPeriod type) */
 type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "periodEnd"> & {
   periodStart: Date;
   periodEnd: Date;
-  memberUids: string[];
+  memberEmails: string[];
 };
 
 const budgetDocs: { id: string; data: BudgetSeedData }[] = [
@@ -32,7 +32,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
       weeklyAllowance: 150,
       rollover: "none",
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies BudgetSeedData,
   },
   {
@@ -42,7 +42,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
       weeklyAllowance: 500,
       rollover: "debt",
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies BudgetSeedData,
   },
   {
@@ -52,7 +52,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
       weeklyAllowance: 100,
       rollover: "balance",
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies BudgetSeedData,
   },
 ];
@@ -70,7 +70,7 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodEnd: new Date("2025-01-13"),
       total: 120,
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
   },
   {
@@ -81,7 +81,7 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodEnd: new Date("2025-01-20"),
       total: 5.75,
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
   },
   {
@@ -92,7 +92,7 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodEnd: new Date("2025-01-27"),
       total: 45,
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
   },
   {
@@ -103,7 +103,7 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodEnd: new Date("2025-01-27"),
       total: 142.50,
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
   },
   {
@@ -114,7 +114,7 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodEnd: new Date("2025-02-03"),
       total: 50,
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
   },
   {
@@ -125,7 +125,7 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodEnd: new Date("2025-02-10"),
       total: 0,
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
   },
 ];
@@ -145,7 +145,7 @@ const seedTransactionDocs = [
       timestamp: new Date("2025-01-07"),
       statementId: "stmt-2025-01",
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies TransactionSeedData,
   },
   {
@@ -162,7 +162,7 @@ const seedTransactionDocs = [
       timestamp: new Date("2025-01-09"),
       statementId: "stmt-2025-01",
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies TransactionSeedData,
   },
   {
@@ -179,7 +179,7 @@ const seedTransactionDocs = [
       timestamp: new Date("2025-01-15"),
       statementId: "stmt-2025-01",
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies TransactionSeedData,
   },
   {
@@ -196,7 +196,7 @@ const seedTransactionDocs = [
       timestamp: new Date("2025-01-20"),
       statementId: "stmt-2025-01",
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies TransactionSeedData,
   },
   {
@@ -213,7 +213,7 @@ const seedTransactionDocs = [
       timestamp: new Date("2025-01-21"),
       statementId: "stmt-2025-01",
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies TransactionSeedData,
   },
   {
@@ -230,7 +230,7 @@ const seedTransactionDocs = [
       timestamp: new Date("2025-01-23"),
       statementId: "stmt-2025-01",
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies TransactionSeedData,
   },
   {
@@ -247,7 +247,7 @@ const seedTransactionDocs = [
       timestamp: new Date("2025-01-30"),
       statementId: "stmt-2025-01",
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies TransactionSeedData,
   },
   {
@@ -264,7 +264,7 @@ const seedTransactionDocs = [
       timestamp: new Date("2025-02-05"),
       statementId: "stmt-2025-02",
       groupId: "household",
-      memberUids: ["test-github-user"],
+      memberEmails: ["test@example.com"],
     } satisfies TransactionSeedData,
   },
 ];
@@ -273,12 +273,13 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
       name: "groups",
+      testOnly: true,
       documents: [
         {
           id: "household",
           data: {
             name: "household",
-            members: ["test-github-user"],
+            members: ["test@example.com"],
           } satisfies GroupSeedData,
         },
       ],
@@ -304,7 +305,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-02-10"),
             statementId: "stmt-2025-02",
             groupId: "household",
-            memberUids: ["test-github-user"],
+            memberEmails: ["test@example.com"],
           } satisfies TransactionSeedData,
         },
         {
@@ -321,7 +322,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-02-15"),
             statementId: null,
             groupId: "household",
-            memberUids: ["test-github-user"],
+            memberEmails: ["test@example.com"],
           } satisfies TransactionSeedData,
         },
       ],

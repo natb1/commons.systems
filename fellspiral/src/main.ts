@@ -3,7 +3,7 @@ import type { User } from "firebase/auth";
 import { createRouter, parseHash } from "@commons-systems/router";
 import { renderHomeHtml, hydrateHome } from "@commons-systems/blog/pages/home";
 import { renderAdmin } from "@commons-systems/blog/pages/admin";
-import { renderInfoPanel, hydrateInfoPanel } from "@commons-systems/blog/components/info-panel";
+import { renderInfoPanel, hydrateInfoPanel, type LinkSection } from "@commons-systems/blog/components/info-panel";
 import { createRssBlobUrl } from "@commons-systems/blog/feed";
 import { createFetchPost } from "@commons-systems/blog/github";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
@@ -37,11 +37,9 @@ let lastSkippedCount = 0;
 let rssBlobUrl: string | undefined;
 let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
-const boundFetchPost = createFetchPost("landing/post");
-const RSS_CONFIG = { title: "commons.systems", siteUrl: "https://commons.systems" };
-const INFO_PANEL_LINK_SECTIONS = [
-  { heading: "Links", links: [{ label: "Source", url: "https://github.com/natb1/commons.systems" }] },
-];
+const boundFetchPost = createFetchPost("fellspiral/post");
+const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://cs-fellspiral-4e12.web.app" };
+const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [];
 
 // Arrow function (not declaration) so TS narrows getElementById results as non-null.
 const updateInfoPanel = (): void => {

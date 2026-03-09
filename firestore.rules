@@ -5,11 +5,12 @@ service cloud.firestore {
     // Landing admin: members of the admin group can read unpublished posts
     function isLandingAdmin(env) {
       return request.auth != null
-        && request.auth.uid in get(/databases/$(database)/documents/landing/$(env)/groups/admin).data.members;
+        && request.auth.token.email in get(/databases/$(database)/documents/landing/$(env)/groups/admin).data.members;
     }
 
+    // Groups are readable only by their members (email-based membership)
     match /landing/{env}/groups/{groupId} {
-      allow read: if request.auth != null && request.auth.uid in resource.data.members;
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
       allow write: if false;
     }
 
@@ -25,22 +26,22 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Groups are readable only by their members (membership check via members array)
+    // Groups are readable only by their members (email-based membership)
     match /budget/{env}/groups/{groupId} {
-      allow read: if request.auth != null && request.auth.uid in resource.data.members;
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
       allow write: if false;
     }
 
-    // Transactions are scoped to group members via a denormalized `memberUids` field.
+    // Transactions are scoped to group members via a denormalized `memberEmails` field.
     // Firestore rules can only read the document being accessed, not join across
     // collections, so membership is checked directly on the transaction document.
     // Updates limited to note, category, reimbursement, and budget; reimbursement
     // must be in [0, 100]. Create and delete are explicitly denied.
     match /budget/{env}/transactions/{txnId} {
       allow read: if request.auth != null
-        && request.auth.uid in resource.data.memberUids;
+        && request.auth.token.email in resource.data.memberEmails;
       allow update: if request.auth != null
-        && request.auth.uid in resource.data.memberUids
+        && request.auth.token.email in resource.data.memberEmails
         && request.resource.data.institution == resource.data.institution
         && request.resource.data.account == resource.data.account
         && request.resource.data.description == resource.data.description
@@ -48,14 +49,14 @@ service cloud.firestore {
         && request.resource.data.timestamp == resource.data.timestamp
         && request.resource.data.statementId == resource.data.statementId
         && request.resource.data.groupId == resource.data.groupId
-        && request.resource.data.memberUids == resource.data.memberUids
+        && request.resource.data.memberEmails == resource.data.memberEmails
         && request.resource.data.note is string
         && request.resource.data.category is string
         && (request.resource.data.budget is string || request.resource.data.budget == null)
         && request.resource.data.reimbursement is number
         && request.resource.data.reimbursement >= 0
         && request.resource.data.reimbursement <= 100
-        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'groupId', 'memberUids', 'note', 'category', 'budget', 'reimbursement']);
+        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'groupId', 'memberEmails', 'note', 'category', 'budget', 'reimbursement']);
       allow create, delete: if false;
     }
 
@@ -71,55 +72,73 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Budgets are scoped to group members via a denormalized `memberUids` field.
+    // Budgets are scoped to group members via a denormalized `memberEmails` field.
     // Updates limited to name, weeklyAllowance (must be non-negative), and rollover;
     // rollover must be one of "none", "debt", "balance". Create and delete are explicitly denied.
     match /budget/{env}/budgets/{budgetId} {
       allow read: if request.auth != null
-        && request.auth.uid in resource.data.memberUids;
+        && request.auth.token.email in resource.data.memberEmails;
       allow update: if request.auth != null
-        && request.auth.uid in resource.data.memberUids
+        && request.auth.token.email in resource.data.memberEmails
         && request.resource.data.groupId == resource.data.groupId
-        && request.resource.data.memberUids == resource.data.memberUids
+        && request.resource.data.memberEmails == resource.data.memberEmails
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.weeklyAllowance is number
         && request.resource.data.weeklyAllowance >= 0
         && request.resource.data.rollover in ["none", "debt", "balance"]
-        && request.resource.data.keys().hasOnly(['name', 'weeklyAllowance', 'rollover', 'groupId', 'memberUids']);
+        && request.resource.data.keys().hasOnly(['name', 'weeklyAllowance', 'rollover', 'groupId', 'memberEmails']);
       allow create, delete: if false;
     }
 
-    // Budget periods are scoped to group members via a denormalized `memberUids` field.
+    // Budget periods are scoped to group members via a denormalized `memberEmails` field.
     // Updates limited to total (must be non-negative); budgetId, periodStart, periodEnd,
-    // groupId, and memberUids are immutable. Create and delete are explicitly denied.
+    // groupId, and memberEmails are immutable. Create and delete are explicitly denied.
     match /budget/{env}/budget-periods/{periodId} {
       allow read: if request.auth != null
-        && request.auth.uid in resource.data.memberUids;
+        && request.auth.token.email in resource.data.memberEmails;
       allow update: if request.auth != null
-        && request.auth.uid in resource.data.memberUids
+        && request.auth.token.email in resource.data.memberEmails
         && request.resource.data.budgetId == resource.data.budgetId
         && request.resource.data.periodStart == resource.data.periodStart
         && request.resource.data.periodEnd == resource.data.periodEnd
         && request.resource.data.groupId == resource.data.groupId
-        && request.resource.data.memberUids == resource.data.memberUids
+        && request.resource.data.memberEmails == resource.data.memberEmails
         && request.resource.data.total is number
         && request.resource.data.total >= 0
-        && request.resource.data.keys().hasOnly(['budgetId', 'periodStart', 'periodEnd', 'total', 'groupId', 'memberUids']);
+        && request.resource.data.keys().hasOnly(['budgetId', 'periodStart', 'periodEnd', 'total', 'groupId', 'memberEmails']);
       allow create, delete: if false;
     }
 
-    // Media items are readable by everyone if public domain, or by group members
-    // via denormalized memberUids array. Client writes are denied; data is managed via the Admin SDK.
-    match /print/{env}/media/{mediaId} {
-      allow read: if resource.data.publicDomain == true
-        || (request.auth != null && request.auth.uid in resource.data.memberUids);
+    // Fellspiral admin: members of the admin group can read unpublished posts
+    function isFellspiralAdmin(env) {
+      return request.auth != null
+        && request.auth.token.email in get(/databases/$(database)/documents/fellspiral/$(env)/groups/admin).data.members;
+    }
+
+    // Groups are readable only by their members (email-based membership)
+    match /fellspiral/{env}/groups/{groupId} {
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
       allow write: if false;
     }
 
-    // Groups are readable only by their members
+    // Published posts are public; unpublished posts require fellspiral admin group membership
+    match /fellspiral/{env}/posts/{postId} {
+      allow read: if resource.data.published == true || isFellspiralAdmin(env);
+      allow write: if false;
+    }
+
+    // Media items are readable by everyone if public domain, or by group members
+    // via denormalized memberEmails array. Client writes are denied; data is managed via the Admin SDK.
+    match /print/{env}/media/{mediaId} {
+      allow read: if resource.data.publicDomain == true
+        || (request.auth != null && request.auth.token.email in resource.data.memberEmails);
+      allow write: if false;
+    }
+
+    // Groups are readable only by their members (email-based membership)
     match /print/{env}/groups/{groupId} {
-      allow read: if request.auth != null && request.auth.uid in resource.data.members;
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
       allow write: if false;
     }
 

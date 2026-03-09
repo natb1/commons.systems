@@ -53,17 +53,17 @@ describe("getTransactions", () => {
     expect(mockWhere).not.toHaveBeenCalled();
   });
 
-  it("queries transactions with groupId and memberUids filters when groupId is provided", async () => {
+  it("queries transactions with groupId and memberEmails filters when groupId is provided", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getTransactions("household", "user-123");
+    await getTransactions("household", "user@example.com");
 
     expect(mockCollection).toHaveBeenCalledWith(
       { type: "mock-firestore" },
       "app/test/transactions",
     );
     expect(mockWhere).toHaveBeenCalledWith("groupId", "==", "household");
-    expect(mockWhere).toHaveBeenCalledWith("memberUids", "array-contains", "user-123");
+    expect(mockWhere).toHaveBeenCalledWith("memberEmails", "array-contains", "user@example.com");
   });
 
   it("maps Firestore documents to Transaction objects", async () => {
@@ -212,10 +212,10 @@ describe("getTransactions — input validation", () => {
     mockWhere.mockReturnValue("mock-where");
   });
 
-  it("throws when groupId provided without uid", async () => {
+  it("throws when groupId provided without email", async () => {
     // Cast bypasses overload signatures to test the runtime guard
     await expect(getTransactions("household" as Parameters<typeof getTransactions>[0])).rejects.toThrow(
-      "uid is required",
+      "email is required",
     );
   });
 });
@@ -294,14 +294,14 @@ describe("getBudgets", () => {
   it("queries budgets with filters when groupId provided", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getBudgets("household", "user-123");
+    await getBudgets("household", "user@example.com");
 
     expect(mockCollection).toHaveBeenCalledWith(
       { type: "mock-firestore" },
       "app/test/budgets",
     );
     expect(mockWhere).toHaveBeenCalledWith("groupId", "==", "household");
-    expect(mockWhere).toHaveBeenCalledWith("memberUids", "array-contains", "user-123");
+    expect(mockWhere).toHaveBeenCalledWith("memberEmails", "array-contains", "user@example.com");
   });
 
   it("maps Firestore documents to Budget objects", async () => {
@@ -332,9 +332,9 @@ describe("getBudgets", () => {
     ]);
   });
 
-  it("throws when groupId provided without uid", async () => {
+  it("throws when groupId provided without email", async () => {
     await expect(getBudgets("household" as Parameters<typeof getBudgets>[0])).rejects.toThrow(
-      "uid is required",
+      "email is required",
     );
   });
 
@@ -437,14 +437,14 @@ describe("getBudgetPeriods", () => {
   it("queries budget-periods with filters when groupId provided", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    await getBudgetPeriods("household", "user-123");
+    await getBudgetPeriods("household", "user@example.com");
 
     expect(mockCollection).toHaveBeenCalledWith(
       { type: "mock-firestore" },
       "app/test/budget-periods",
     );
     expect(mockWhere).toHaveBeenCalledWith("groupId", "==", "household");
-    expect(mockWhere).toHaveBeenCalledWith("memberUids", "array-contains", "user-123");
+    expect(mockWhere).toHaveBeenCalledWith("memberEmails", "array-contains", "user@example.com");
   });
 
   it("maps Firestore documents to BudgetPeriod objects", async () => {
@@ -479,9 +479,9 @@ describe("getBudgetPeriods", () => {
     ]);
   });
 
-  it("throws when groupId provided without uid", async () => {
+  it("throws when groupId provided without email", async () => {
     await expect(getBudgetPeriods("household" as Parameters<typeof getBudgetPeriods>[0])).rejects.toThrow(
-      "uid is required",
+      "email is required",
     );
   });
 
