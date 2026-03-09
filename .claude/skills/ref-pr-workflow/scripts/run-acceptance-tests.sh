@@ -36,20 +36,27 @@ install_local_deps "$REPO_ROOT" "$APP_PKG"
 
 cd "$REPO_ROOT/$APP_DIR"
 
-# Find available ports
-HOSTING_PORT=$(find_available_port)
+# Count and allocate all needed ports atomically to avoid OS port recycling
+PORT_COUNT=1  # hosting always needed
+if [ "$USES_FIRESTORE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+if [ "$USES_AUTH" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+if [ "$USES_STORAGE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+
+read -r HOSTING_PORT EXTRA_PORTS <<< "$(find_available_ports "$PORT_COUNT")"
+echo "Hosting emulator will use port $HOSTING_PORT"
 
 FIRESTORE_PORT=""
-if [ "$USES_FIRESTORE" = true ]; then
-  FIRESTORE_PORT=$(find_available_port)
-  echo "Firestore emulator will use port $FIRESTORE_PORT"
-fi
-
 AUTH_PORT=""
-if [ "$USES_AUTH" = true ]; then
-  AUTH_PORT=$(find_available_port)
-  echo "Auth emulator will use port $AUTH_PORT"
-fi
+STORAGE_PORT=""
+for feature in FIRESTORE AUTH STORAGE; do
+  uses_var="USES_${feature}"
+  if [ "${!uses_var}" = true ]; then
+    port="${EXTRA_PORTS%% *}"
+    EXTRA_PORTS="${EXTRA_PORTS#* }"
+    declare "${feature}_PORT=$port"
+    echo "${feature,,} emulator will use port $port"
+  fi
+done
 
 # Build with emulator env vars
 BUILD_ARGS=()
@@ -60,6 +67,9 @@ if [ "$USES_FIRESTORE" = true ]; then
 fi
 if [ "$USES_AUTH" = true ]; then
   BUILD_ARGS+=("VITE_AUTH_EMULATOR_HOST=localhost:${AUTH_PORT}")
+fi
+if [ "$USES_STORAGE" = true ]; then
+  BUILD_ARGS+=("VITE_STORAGE_EMULATOR_HOST=localhost:${STORAGE_PORT}")
 fi
 
 if [ ${#BUILD_ARGS[@]} -gt 0 ]; then
@@ -89,12 +99,18 @@ fi
 if [ "$USES_AUTH" = true ]; then
   EMULATORS_JSON="$EMULATORS_JSON, \"auth\": {\"port\": ${AUTH_PORT}}"
 fi
+if [ "$USES_STORAGE" = true ]; then
+  EMULATORS_JSON="$EMULATORS_JSON, \"storage\": {\"port\": ${STORAGE_PORT}}"
+fi
 EMULATORS_JSON="$EMULATORS_JSON}"
 
 # Build top-level config
 CONFIG_JSON="{\"hosting\": {\"public\": \"${APP_DIR}/dist\", \"ignore\": [\"firebase.json\", \"**/.*\", \"**/node_modules/**\"]}"
 if [ "$USES_FIRESTORE" = true ]; then
   CONFIG_JSON="$CONFIG_JSON, \"firestore\": {\"rules\": \"firestore.rules\"}"
+fi
+if [ "$USES_STORAGE" = true ]; then
+  CONFIG_JSON="$CONFIG_JSON, \"storage\": {\"rules\": \"storage.rules\"}"
 fi
 CONFIG_JSON="$CONFIG_JSON, \"emulators\": $EMULATORS_JSON}"
 
@@ -119,6 +135,9 @@ if [ "$USES_FIRESTORE" = true ]; then
 fi
 if [ "$USES_AUTH" = true ]; then
   EMULATORS="$EMULATORS,auth"
+fi
+if [ "$USES_STORAGE" = true ]; then
+  EMULATORS="$EMULATORS,storage"
 fi
 
 npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
@@ -177,6 +196,22 @@ if [ "$USES_AUTH" = true ]; then
   # Seed auth user
   echo "Seeding auth user..."
   APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" npx tsx authutil/bin/run-auth-seed.ts
+fi
+
+# Poll until Storage emulator is ready (if used).
+# The storage emulator root URL returns 404 (not 200 like Firestore), so check
+# for any valid HTTP response — a non-000 status means the server is listening.
+if [ "$USES_STORAGE" = true ]; then
+  ELAPSED=0
+  until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${STORAGE_PORT}/" 2>/dev/null | grep -qE '^[1-5]'; do
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+      echo "ERROR: Storage emulator did not start within ${TIMEOUT}s" >&2
+      exit 1
+    fi
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+  done
+  echo "Firebase Storage emulator ready on port ${STORAGE_PORT}"
 fi
 
 # Run Playwright acceptance tests

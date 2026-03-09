@@ -11,7 +11,7 @@ describe("firebaseConfig", () => {
     expect(firebaseConfig.apiKey.length).toBeGreaterThan(0);
   });
 
-  it("has authDomain", () => {
+  it("has authDomain fallback in Node.js", () => {
     expect(firebaseConfig.authDomain).toBe(
       "commons-systems.firebaseapp.com",
     );

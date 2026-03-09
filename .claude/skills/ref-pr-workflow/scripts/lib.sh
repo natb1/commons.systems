@@ -4,7 +4,7 @@
 export FIREBASE_PROJECT_ID="commons-systems"
 
 # Detect what Firebase features the app uses by searching source imports.
-# Sets global variables: USES_FIRESTORE, USES_AUTH
+# Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE
 # Args: $1 = path to app src/ directory
 detect_features() {
   local app_src_dir="$1"
@@ -22,6 +22,11 @@ detect_features() {
   USES_AUTH=false
   if grep -rq '"firebase/auth"' "$app_src_dir" 2>/dev/null; then
     USES_AUTH=true
+  fi
+
+  USES_STORAGE=false
+  if grep -rq '"firebase/storage"' "$app_src_dir" 2>/dev/null; then
+    USES_STORAGE=true
   fi
 }
 
@@ -183,10 +188,28 @@ cleanup_stale_hub() {
   fi
 }
 
-# Find an available TCP port by binding to port 0 and reading the assigned port.
-find_available_port() {
+# Find N available TCP ports by binding to port 0 simultaneously.
+# Keeps all servers open until all ports are assigned to avoid OS recycling.
+# Args: $1 = number of ports (default 1)
+# Output: space-separated port numbers
+find_available_ports() {
+  local count="${1:-1}"
   node -e "
-    const s = require('net').createServer();
-    s.listen(0, () => { console.log(s.address().port); s.close(); });
+    const net = require('net');
+    const count = ${count};
+    const servers = [];
+    for (let i = 0; i < count; i++) {
+      const s = net.createServer();
+      servers.push(new Promise(r => s.listen(0, () => r(s))));
+    }
+    Promise.all(servers).then(ss => {
+      console.log(ss.map(s => s.address().port).join(' '));
+      ss.forEach(s => s.close());
+    }).catch(e => { process.stderr.write(e.message + '\n'); process.exit(1); });
   "
+}
+
+# Find a single available TCP port (convenience wrapper).
+find_available_port() {
+  find_available_ports 1
 }

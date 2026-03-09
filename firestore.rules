@@ -128,6 +128,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Media items are readable by everyone if public domain, or by group members
+    // via denormalized memberEmails array. Client writes are denied; data is managed via the Admin SDK.
+    match /print/{env}/media/{mediaId} {
+      allow read: if resource.data.publicDomain == true
+        || (request.auth != null && request.auth.token.email in resource.data.memberEmails);
+      allow write: if false;
+    }
+
+    // Groups are readable only by their members (email-based membership)
+    match /print/{env}/groups/{groupId} {
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
+      allow write: if false;
+    }
+
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
     // InsertFirestoreRules inserts new rule blocks immediately above this line.
     match /{document=**} {
