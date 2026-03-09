@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, query, updateDoc, where, increment, Timestamp, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
+import { requireString, requireNumber, requireNonNegativeNumber, optionalString } from "@commons-systems/firestoreutil/validate";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
@@ -62,26 +63,6 @@ export interface Transaction {
   readonly groupId: string | null;
 }
 
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new DataIntegrityError(`Expected string for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
-
-function requireNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new DataIntegrityError(`Expected finite number for ${field}, got ${value}`);
-  }
-  return value;
-}
-
-function requireNonNegativeNumber(value: unknown, field: string): number {
-  const n = requireNumber(value, field);
-  if (n < 0) throw new DataIntegrityError(`Expected non-negative number for ${field}, got ${n}`);
-  return n;
-}
-
 function validateReimbursementRange(n: number): void {
   if (!Number.isFinite(n) || n < 0 || n > 100) {
     throw new RangeError(`reimbursement must be between 0 and 100, got ${n}`);
@@ -92,14 +73,6 @@ function requireReimbursement(value: unknown): number {
   const n = requireNumber(value, "reimbursement");
   validateReimbursementRange(n);
   return n;
-}
-
-function optionalString(value: unknown, field: string): string | null {
-  if (value == null) return null;
-  if (typeof value !== "string") {
-    throw new DataIntegrityError(`Expected string or null for ${field}, got ${typeof value}`);
-  }
-  return value;
 }
 
 function optionalTimestamp(value: unknown, field: string): Timestamp | null {
