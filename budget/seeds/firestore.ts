@@ -40,7 +40,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
     data: {
       name: "Housing",
       weeklyAllowance: 500,
-      rollover: "balance",
+      rollover: "debt",
       groupId: "household",
       memberUids: ["test-github-user"],
     } satisfies BudgetSeedData,
