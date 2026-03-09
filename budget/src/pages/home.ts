@@ -2,7 +2,7 @@ import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { RenderPageOptions } from "./render-options.js";
 import { getTransactions, getBudgets, getBudgetPeriods, type Transaction, type Budget, type BudgetPeriod } from "../firestore.js";
-import { computeBudgetBalance } from "../balance.js";
+import { computeAllBudgetBalances } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
 
 function formatTimestamp(ts: Timestamp | null): string {
@@ -23,13 +23,11 @@ interface RenderRowOptions {
   groupName: string;
   editable: boolean;
   budgetIdToName: Map<string, string>;
-  allTransactions: Transaction[];
-  budgets: Budget[];
-  budgetPeriods: BudgetPeriod[];
+  balance: number | null;
 }
 
 function renderRow(opts: RenderRowOptions): string {
-  const { txn, groupName, editable, budgetIdToName, allTransactions, budgets, budgetPeriods } = opts;
+  const { txn, groupName, editable, budgetIdToName, balance } = opts;
   const txnIdAttr = editable ? ` data-txn-id="${escapeHtml(txn.id)}"` : "";
   const noteCell = editable
     ? `<input type="text" class="edit-note" value="${escapeHtml(txn.note)}" aria-label="Note">`
@@ -52,24 +50,15 @@ function renderRow(opts: RenderRowOptions): string {
     ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget">`
     : escapeHtml(budgetName);
 
-  // Compute budget balance
-  let balanceDisplay = "";
-  if (txn.budget) {
-    const budget = budgets.find((b) => b.id === txn.budget);
-    if (budget) {
-      const balance = computeBudgetBalance(txn, allTransactions, budget, budgetPeriods);
-      if (balance !== null) {
-        balanceDisplay = balance.toFixed(2);
-      }
-    }
-  }
+  const balanceDisplay = balance !== null ? balance.toFixed(2) : "";
 
   // Data attributes for hydration
   const amountAttr = editable ? ` data-amount="${txn.amount}"` : "";
   const budgetIdAttr = editable && txn.budget ? ` data-budget-id="${escapeHtml(txn.budget)}"` : "";
   const timestampAttr = editable && txn.timestamp ? ` data-timestamp="${txn.timestamp.toMillis()}"` : "";
+  const reimbursementAttr = editable ? ` data-reimbursement="${txn.reimbursement}"` : "";
 
-  return `<details class="txn-row"${txnIdAttr}${amountAttr}${budgetIdAttr}${timestampAttr}>
+  return `<details class="txn-row"${txnIdAttr}${amountAttr}${budgetIdAttr}${timestampAttr}${reimbursementAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(txn.description)}</span>
@@ -85,7 +74,7 @@ function renderRow(opts: RenderRowOptions): string {
         <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
         <dt>Reimbursement</dt><dd>${reimbursementCell}</dd>
         <dt>Budget</dt><dd>${budgetCell}</dd>
-        <dt>Budget Balance</dt><dd>${balanceDisplay}</dd>
+        <dt>Budget Balance</dt><dd class="budget-balance">${balanceDisplay}</dd>
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
       </dl>
@@ -116,8 +105,9 @@ function renderTransactionTable(
   }
 
   const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
+  const balances = computeAllBudgetBalances(transactions, budgets, budgetPeriods);
   const rows = transactions
-    .map((txn) => renderRow({ txn, groupName, editable: authorized, budgetIdToName, allTransactions: transactions, budgets, budgetPeriods }))
+    .map((txn) => renderRow({ txn, groupName, editable: authorized, budgetIdToName, balance: balances.get(txn.id) ?? null }))
     .join("\n");
 
   let dataAttrs = "";
@@ -141,7 +131,12 @@ function renderTransactionTable(
       total: p.total,
     }));
     const periodsAttr = escapeHtml(JSON.stringify(periodsData));
-    dataAttrs = ` data-budget-options="${budgetOpts}" data-budget-map="${budgetMapAttr}" data-category-options="${categoryOpts}" data-budget-periods="${periodsAttr}"`;
+    dataAttrs = [
+      ` data-budget-options="${budgetOpts}"`,
+      ` data-budget-map="${budgetMapAttr}"`,
+      ` data-category-options="${categoryOpts}"`,
+      ` data-budget-periods="${periodsAttr}"`,
+    ].join("");
   }
 
   return `<div id="transactions-table"${dataAttrs}>

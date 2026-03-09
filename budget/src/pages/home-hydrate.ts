@@ -60,6 +60,18 @@ function parseBudgetPeriods(raw: string | undefined): HydrationPeriod[] {
     if (!Array.isArray(parsed)) {
       throw new DataIntegrityError(`Budget periods is not an array: ${typeof parsed}`);
     }
+    for (const item of parsed) {
+      if (typeof item !== "object" || item === null) {
+        throw new DataIntegrityError(`Budget period element is not an object: ${typeof item}`);
+      }
+      if (typeof item.id !== "string" || typeof item.budgetId !== "string") {
+        throw new DataIntegrityError("Budget period missing string id or budgetId");
+      }
+      if (typeof item.periodStartMs !== "number" || typeof item.periodEndMs !== "number"
+          || typeof item.total !== "number") {
+        throw new DataIntegrityError("Budget period missing numeric periodStartMs, periodEndMs, or total");
+      }
+    }
     return parsed as HydrationPeriod[];
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
@@ -287,24 +299,28 @@ export function hydrateTransactionTable(container: HTMLElement): void {
 
         // Update budget period totals
         const amount = Number(row.dataset.amount);
+        const reimbursement = Number(row.dataset.reimbursement);
         const timestampMs = Number(row.dataset.timestamp);
         const oldBudgetId = row.dataset.budgetId || null;
+        const net = Number.isFinite(reimbursement)
+          ? amount * (1 - reimbursement / 100)
+          : amount;
 
         if (Number.isFinite(amount) && Number.isFinite(timestampMs)) {
-          // Decrement old period total
+          // Period total updates are non-atomic: if the second write fails, totals drift
+          // until the next full page load recomputes from source data.
           if (oldBudgetId) {
             const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
             if (oldPeriod) {
-              const newTotal = Math.max(0, oldPeriod.total - amount);
+              const newTotal = Math.max(0, oldPeriod.total - net);
               await updateBudgetPeriod(oldPeriod.id, { total: newTotal });
               oldPeriod.total = newTotal;
             }
           }
-          // Increment new period total
           if (newBudgetId) {
             const newPeriod = findPeriod(budgetPeriods, newBudgetId, timestampMs);
             if (newPeriod) {
-              const newTotal = newPeriod.total + amount;
+              const newTotal = newPeriod.total + net;
               await updateBudgetPeriod(newPeriod.id, { total: newTotal });
               newPeriod.total = newTotal;
             }
@@ -319,7 +335,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         }
 
         // Clear balance display (full recompute needs all transactions; corrects on next page load)
-        const balanceDd = row.querySelector("dt:nth-of-type(6) + dd") as HTMLElement | null;
+        const balanceDd = row.querySelector(".budget-balance") as HTMLElement | null;
         if (balanceDd) {
           balanceDd.textContent = "";
         }

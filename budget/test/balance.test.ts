@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { findPeriodForTimestamp, computeBudgetBalance } from "../src/balance";
+import { findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances } from "../src/balance";
 import type { Budget, BudgetPeriod, Transaction } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -226,5 +226,79 @@ describe("computeBudgetBalance", () => {
     const result = computeBudgetBalance(foodTxn, [foodTxn, housingTxn], budget, [period]);
     // Only food txn counted: 150 - 50 = 100
     expect(result).toBe(100);
+  });
+
+  it("returns null when txn not found in same-period transactions", () => {
+    const txn = makeTxn({ id: "txn-missing", amount: 50, budget: "food" });
+    const otherTxn = makeTxn({ id: "txn-other", amount: 30, budget: "food" });
+    const period = makePeriod({ id: "food-w2", budgetId: "food", total: 30 });
+    const budget = makeBudget();
+    const result = computeBudgetBalance(txn, [otherTxn], budget, [period]);
+    expect(result).toBeNull();
+  });
+
+  it("reimbursement reduces effective amount in balance", () => {
+    const txn = makeTxn({ amount: 100, reimbursement: 50 });
+    const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
+    const budget = makeBudget({ weeklyAllowance: 150 });
+    // net = 100 * (1 - 50/100) = 50; balance = 150 - 50 = 100
+    expect(computeBudgetBalance(txn, [txn], budget, [period])).toBe(100);
+  });
+});
+
+describe("computeAllBudgetBalances", () => {
+  it("returns empty map for no transactions", () => {
+    const result = computeAllBudgetBalances([], [makeBudget()], [
+      makePeriod({ id: "food-w2", budgetId: "food" }),
+    ]);
+    expect(result.size).toBe(0);
+  });
+
+  it("computes balance for single budget and period", () => {
+    const txn = makeTxn({ id: "txn-1", amount: 50 });
+    const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
+    const budget = makeBudget({ weeklyAllowance: 150 });
+    const result = computeAllBudgetBalances([txn], [budget], [period]);
+    expect(result.get("txn-1")).toBe(100);
+  });
+
+  it("computes balances for multi-budget with rollover", () => {
+    const foodBudget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance" });
+    const vacBudget = makeBudget({ id: "vacation", weeklyAllowance: 50, rollover: "none" });
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
+      makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
+      makePeriod({ id: "vac-w1", budgetId: "vacation", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 20 }),
+    ];
+    const txns = [
+      makeTxn({ id: "f1", amount: 60, budget: "food", timestamp: ts("2025-01-07") }),
+      makeTxn({ id: "f2", amount: 30, budget: "food", timestamp: ts("2025-01-15") }),
+      makeTxn({ id: "v1", amount: 20, budget: "vacation", timestamp: ts("2025-01-08") }),
+    ];
+    const result = computeAllBudgetBalances(txns, [foodBudget, vacBudget], periods);
+    // food-w1: 0+100=100, -60=40 → f1 balance=40
+    // food-w2: 40+100=140, -30=110 → f2 balance=110
+    // vac-w1: 0+50=50, -20=30 → v1 balance=30
+    expect(result.get("f1")).toBe(40);
+    expect(result.get("f2")).toBe(110);
+    expect(result.get("v1")).toBe(30);
+  });
+
+  it("matches computeBudgetBalance cross-check", () => {
+    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const periods = [
+      makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
+      makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 25 }),
+    ];
+    const txn1 = makeTxn({ id: "txn-1", amount: 60, timestamp: ts("2025-01-07") });
+    const txn2 = makeTxn({ id: "txn-2", amount: 25, timestamp: ts("2025-01-15") });
+    const allTxns = [txn1, txn2];
+
+    const batch = computeAllBudgetBalances(allTxns, [budget], periods);
+    const single1 = computeBudgetBalance(txn1, allTxns, budget, periods);
+    const single2 = computeBudgetBalance(txn2, allTxns, budget, periods);
+
+    expect(batch.get("txn-1")).toBe(single1);
+    expect(batch.get("txn-2")).toBe(single2);
   });
 });

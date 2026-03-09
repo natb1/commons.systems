@@ -59,7 +59,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
 
 // Budget period totals match the seed transaction amounts within each period.
 // Food (rollover: "none"): 3 periods demonstrating weekly reset
-// Housing (rollover: "balance"): 1 period (baseline)
+// Housing (rollover: "debt"): 1 period (baseline)
 // Vacation (rollover: "balance"): 2 periods demonstrating carry-forward
 const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
   {
@@ -123,7 +123,7 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       budgetId: "vacation",
       periodStart: new Date("2025-02-03"),
       periodEnd: new Date("2025-02-10"),
-      total: 389.00,
+      total: 0,
       groupId: "household",
       memberUids: ["test-github-user"],
     } satisfies BudgetPeriodSeedData,

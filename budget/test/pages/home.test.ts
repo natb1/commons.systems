@@ -18,17 +18,17 @@ vi.mock("../../src/firestore.js", () => ({
 }));
 
 vi.mock("../../src/balance.js", () => ({
-  computeBudgetBalance: vi.fn(),
+  computeAllBudgetBalances: vi.fn(),
 }));
 
 import { renderHome } from "../../src/pages/home";
 import { getTransactions, getBudgets, getBudgetPeriods, type Transaction, type BudgetPeriod } from "../../src/firestore";
-import { computeBudgetBalance } from "../../src/balance";
+import { computeAllBudgetBalances } from "../../src/balance";
 
 const mockGetTransactions = vi.mocked(getTransactions);
 const mockGetBudgets = vi.mocked(getBudgets);
 const mockGetBudgetPeriods = vi.mocked(getBudgetPeriods);
-const mockComputeBalance = vi.mocked(computeBudgetBalance);
+const mockComputeAllBalances = vi.mocked(computeAllBudgetBalances);
 
 function mockTimestamp(dateStr: string) {
   const d = new Date(dateStr);
@@ -77,7 +77,7 @@ describe("renderHome", () => {
     vi.clearAllMocks();
     mockGetBudgets.mockResolvedValue(defaultBudgets);
     mockGetBudgetPeriods.mockResolvedValue(defaultPeriods);
-    mockComputeBalance.mockReturnValue(null);
+    mockComputeAllBalances.mockReturnValue(new Map());
   });
 
   it("returns HTML containing a Transactions heading", async () => {
@@ -322,22 +322,22 @@ describe("renderHome", () => {
   });
 
   it("renders Budget Balance dt/dd in expanded details", async () => {
-    mockComputeBalance.mockReturnValue(144.25);
+    mockComputeAllBalances.mockReturnValue(new Map([["txn-1", 144.25]]));
     mockGetTransactions.mockResolvedValue([
       txn({ budget: "food" }),
     ]);
     const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).toContain("<dt>Budget Balance</dt>");
-    expect(html).toContain("<dd>144.25</dd>");
+    expect(html).toContain('<dd class="budget-balance">144.25</dd>');
   });
 
   it("renders empty budget balance when computeBudgetBalance returns null", async () => {
-    mockComputeBalance.mockReturnValue(null);
+    mockComputeAllBalances.mockReturnValue(new Map());
     mockGetTransactions.mockResolvedValue([
       txn({ budget: "food" }),
     ]);
     const html = await renderHome({ user: null, group: null, groupError: false });
-    expect(html).toContain("<dt>Budget Balance</dt><dd></dd>");
+    expect(html).toContain('<dt>Budget Balance</dt><dd class="budget-balance"></dd>');
   });
 
   it("renders empty budget balance when transaction has no budget", async () => {
@@ -345,22 +345,23 @@ describe("renderHome", () => {
       txn({ budget: null }),
     ]);
     const html = await renderHome({ user: null, group: null, groupError: false });
-    expect(html).toContain("<dt>Budget Balance</dt><dd></dd>");
-    expect(mockComputeBalance).not.toHaveBeenCalled();
+    expect(html).toContain('<dt>Budget Balance</dt><dd class="budget-balance"></dd>');
+    expect(mockComputeAllBalances).toHaveBeenCalled();
   });
 
-  it("renders data-amount, data-budget-id, data-timestamp on rows for authorized users", async () => {
+  it("renders data-amount, data-budget-id, data-timestamp, data-reimbursement on rows for authorized users", async () => {
     const ts = mockTimestamp("2025-01-15");
     mockGetTransactions.mockResolvedValue([
-      txn({ budget: "food", timestamp: ts, amount: 52.30, groupId: "household" }),
+      txn({ budget: "food", timestamp: ts, amount: 52.30, reimbursement: 25, groupId: "household" }),
     ]);
     const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain('data-amount="52.3"');
     expect(html).toContain('data-budget-id="food"');
     expect(html).toContain(`data-timestamp="${ts.toMillis()}"`);
+    expect(html).toContain('data-reimbursement="25"');
   });
 
-  it("does not render data-amount, data-budget-id, data-timestamp for unauthorized users", async () => {
+  it("does not render data-amount, data-budget-id, data-timestamp, data-reimbursement for unauthorized users", async () => {
     mockGetTransactions.mockResolvedValue([
       txn({ budget: "food" }),
     ]);
@@ -368,6 +369,7 @@ describe("renderHome", () => {
     expect(html).not.toContain("data-amount");
     expect(html).not.toContain("data-budget-id");
     expect(html).not.toContain("data-timestamp");
+    expect(html).not.toContain("data-reimbursement");
   });
 
   it("renders data-budget-periods on container for authorized users", async () => {

@@ -22,7 +22,7 @@ const defaultPeriods = [
   { id: "vacation-w1", budgetId: "budget-vacation", periodStartMs: new Date("2025-01-13").getTime(), periodEndMs: new Date("2025-01-20").getTime(), total: 30 },
 ];
 
-function createContainer(txnId: string, overrides: { budgetId?: string; amount?: number; timestamp?: number; periods?: typeof defaultPeriods } = {}): HTMLElement {
+function createContainer(txnId: string, overrides: { budgetId?: string; amount?: number; timestamp?: number; reimbursement?: number; periods?: typeof defaultPeriods } = {}): HTMLElement {
   const container = document.createElement("div");
   container.id = "transactions-table";
   container.dataset.budgetOptions = JSON.stringify(["food", "housing", "vacation"]);
@@ -33,9 +33,10 @@ function createContainer(txnId: string, overrides: { budgetId?: string; amount?:
   const budgetIdAttr = overrides.budgetId ? ` data-budget-id="${overrides.budgetId}"` : "";
   const amountAttr = overrides.amount !== undefined ? ` data-amount="${overrides.amount}"` : "";
   const timestampAttr = overrides.timestamp !== undefined ? ` data-timestamp="${overrides.timestamp}"` : "";
+  const reimbursementAttr = overrides.reimbursement !== undefined ? ` data-reimbursement="${overrides.reimbursement}"` : ` data-reimbursement="0"`;
 
   container.innerHTML = `
-    <details class="txn-row" data-txn-id="${txnId}"${budgetIdAttr}${amountAttr}${timestampAttr}>
+    <details class="txn-row" data-txn-id="${txnId}"${budgetIdAttr}${amountAttr}${timestampAttr}${reimbursementAttr}>
       <summary class="txn-summary">
         <div class="txn-summary-content">
           <span>Description</span>
@@ -48,7 +49,7 @@ function createContainer(txnId: string, overrides: { budgetId?: string; amount?:
         <dl>
           <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="50" min="0" max="100"></dd>
           <dt>Budget</dt><dd><input type="text" class="edit-budget" value="food"></dd>
-          <dt>Budget Balance</dt><dd>100.00</dd>
+          <dt>Budget Balance</dt><dd class="budget-balance">100.00</dd>
           <dt>Group</dt><dd>household</dd>
           <dt>Statement</dt><dd></dd>
         </dl>
@@ -343,6 +344,52 @@ describe("hydrateTransactionTable", () => {
 
       // Old period (food-w2, total=50) decremented by 100 → clamped to 0
       expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("food-w2", { total: 0 });
+    });
+
+    it("uses net amount (after reimbursement) for period updates", async () => {
+      const container = createContainer("txn-1", {
+        budgetId: "budget-food",
+        amount: 100,
+        reimbursement: 50,
+        timestamp: new Date("2025-01-15").getTime(),
+      });
+      hydrateTransactionTable(container);
+      const input = container.querySelector(".edit-budget") as HTMLInputElement;
+      input.value = "vacation";
+      input.dispatchEvent(new Event("blur", { bubbles: true }));
+      await flush();
+
+      // net = 100 * (1 - 50/100) = 50
+      // Old period (food-w2, total=50) decremented by 50 → 0
+      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("food-w2", { total: 0 });
+      // New period (vacation-w1, total=30) incremented by 50 → 80
+      expect(mockUpdateBudgetPeriod).toHaveBeenCalledWith("vacation-w1", { total: 80 });
+    });
+  });
+
+  describe("parseBudgetPeriods validation", () => {
+    it("throws DataIntegrityError for non-object elements", () => {
+      const container = createContainer("txn-1");
+      container.dataset.budgetPeriods = JSON.stringify(["not-an-object"]);
+      expect(() => hydrateTransactionTable(container)).toThrow("Budget period element is not an object");
+    });
+
+    it("throws DataIntegrityError for missing string fields", () => {
+      const container = createContainer("txn-1");
+      container.dataset.budgetPeriods = JSON.stringify([{ id: 123, budgetId: "food", periodStartMs: 0, periodEndMs: 1, total: 0 }]);
+      expect(() => hydrateTransactionTable(container)).toThrow("Budget period missing string id or budgetId");
+    });
+
+    it("throws DataIntegrityError for missing numeric fields", () => {
+      const container = createContainer("txn-1");
+      container.dataset.budgetPeriods = JSON.stringify([{ id: "p1", budgetId: "food", periodStartMs: "not-a-number", periodEndMs: 1, total: 0 }]);
+      expect(() => hydrateTransactionTable(container)).toThrow("Budget period missing numeric periodStartMs, periodEndMs, or total");
+    });
+
+    it("throws DataIntegrityError for null elements", () => {
+      const container = createContainer("txn-1");
+      container.dataset.budgetPeriods = JSON.stringify([null]);
+      expect(() => hydrateTransactionTable(container)).toThrow("Budget period element is not an object");
     });
   });
 });
