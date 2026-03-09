@@ -11,10 +11,10 @@ test.describe("transactions", () => {
     await page.goto("/");
     await expect(page.locator("#transactions-table")).toBeVisible();
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(3);
+    await expect(rows).toHaveCount(8);
     await expect(rows.nth(0)).toContainText("Airline Ticket");
-    await expect(rows.nth(1)).toContainText("Electric Company");
-    await expect(rows.nth(2)).toContainText("Coffee Shop");
+    await expect(rows.nth(1)).toContainText("Travel Guide");
+    await expect(rows.nth(7)).toContainText("Restaurant");
   });
 
   test("seed transactions are read-only", async ({ page }) => {
@@ -34,5 +34,20 @@ test.describe("transactions", () => {
     await expect(details.locator("dt", { hasText: "Date" })).toBeVisible();
     await expect(details.locator("dt", { hasText: "Statement" })).toBeVisible();
     await expect(details.locator("a", { hasText: "statement" })).toBeVisible();
+  });
+
+  test("expanded row shows budget balance for budgeted transaction", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#transactions-table")).toBeVisible();
+    // Coffee Shop is a budgeted transaction in the food budget with a matching period
+    const coffeeRow = page.locator("#transactions-table .txn-row", { hasText: "Coffee Shop" });
+    await coffeeRow.locator("summary").click();
+    const details = coffeeRow.locator(".txn-details");
+    await expect(details).toBeVisible();
+    await expect(details.locator("dt", { hasText: "Budget Balance" })).toBeVisible();
+    const balanceDd = details.locator("dt:has-text('Budget Balance') + dd");
+    const balanceText = await balanceDd.textContent();
+    expect(balanceText).toBeTruthy();
+    expect(Number(balanceText)).not.toBeNaN();
   });
 });

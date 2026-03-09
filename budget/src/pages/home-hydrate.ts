@@ -1,4 +1,5 @@
-import { updateTransaction } from "../firestore.js";
+import { updateTransaction, adjustBudgetPeriodTotal, type SerializedBudgetPeriod } from "../firestore.js";
+import { computeNetAmount } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
 
 /**
@@ -42,6 +43,138 @@ function parseBudgetMap(raw: string | undefined): Record<string, string> {
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
     throw new DataIntegrityError(`Failed to parse budget map: ${raw}`);
+  }
+}
+
+interface HydrationPeriod extends Omit<SerializedBudgetPeriod, "total"> {
+  total: number; // mutable for local updates after adjustBudgetPeriodTotal
+}
+
+function parseBudgetPeriods(raw: string | undefined): HydrationPeriod[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      throw new DataIntegrityError(`Budget periods is not an array: ${typeof parsed}`);
+    }
+    for (const item of parsed) {
+      if (typeof item !== "object" || item === null) {
+        throw new DataIntegrityError(`Budget period element is not an object: ${typeof item}`);
+      }
+      if (typeof item.id !== "string" || typeof item.budgetId !== "string") {
+        throw new DataIntegrityError("Budget period missing string id or budgetId");
+      }
+      if (typeof item.periodStartMs !== "number" || typeof item.periodEndMs !== "number"
+          || typeof item.total !== "number") {
+        throw new DataIntegrityError("Budget period missing numeric periodStartMs, periodEndMs, or total");
+      }
+      if (item.periodStartMs >= item.periodEndMs) {
+        throw new DataIntegrityError("Budget period has periodStartMs >= periodEndMs");
+      }
+    }
+    return parsed as HydrationPeriod[];
+  } catch (error) {
+    if (error instanceof DataIntegrityError) throw error;
+    throw new DataIntegrityError(`Failed to parse budget periods: ${raw}`);
+  }
+}
+
+function findPeriod(periods: HydrationPeriod[], budgetId: string, timestampMs: number): HydrationPeriod | null {
+  for (const p of periods) {
+    if (p.budgetId === budgetId && p.periodStartMs <= timestampMs && timestampMs < p.periodEndMs) {
+      return p;
+    }
+  }
+  return null;
+}
+
+/**
+ * Adjust stored period totals when a transaction's budget changes.
+ * Each write uses Firestore increment for per-field atomicity, but the two
+ * writes (decrement old period, increment new period) are not wrapped in a
+ * transaction. If either write fails, totals drift until manual correction
+ * (page loads read stored totals, not recomputed from transactions).
+ */
+async function syncPeriodTotals(
+  row: HTMLElement,
+  oldBudgetId: string | null,
+  newBudgetId: string | null,
+  budgetPeriods: HydrationPeriod[],
+): Promise<void> {
+  const amount = Number(row.dataset.amount);
+  const reimbursement = Number(row.dataset.reimbursement);
+  const timestampMs = Number(row.dataset.timestamp);
+  if (!Number.isFinite(amount) || !Number.isFinite(reimbursement) || !Number.isFinite(timestampMs)) {
+    console.error(
+      `Cannot update period totals: invalid data attributes ` +
+      `(amount=${row.dataset.amount}, reimbursement=${row.dataset.reimbursement}, timestamp=${row.dataset.timestamp})`
+    );
+    return;
+  }
+  const net = computeNetAmount(amount, reimbursement);
+
+  try {
+    if (oldBudgetId) {
+      const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
+      if (oldPeriod) {
+        await adjustBudgetPeriodTotal(oldPeriod.id, -net);
+        oldPeriod.total -= net;
+      }
+    }
+    if (newBudgetId) {
+      const newPeriod = findPeriod(budgetPeriods, newBudgetId, timestampMs);
+      if (newPeriod) {
+        await adjustBudgetPeriodTotal(newPeriod.id, net);
+        newPeriod.total += net;
+      }
+    }
+  } catch (periodError) {
+    console.error("Failed to update budget period totals:", periodError);
+  }
+}
+
+/**
+ * Adjust stored period total when a transaction's reimbursement changes.
+ * The net amount changes, so the period total must be adjusted by the delta.
+ */
+async function syncPeriodOnReimbursementChange(
+  row: HTMLElement,
+  oldReimbursement: number,
+  newReimbursement: number,
+  budgetPeriods: HydrationPeriod[],
+): Promise<void> {
+  const budgetId = row.dataset.budgetId || null;
+  if (!budgetId) return;
+  const amount = Number(row.dataset.amount);
+  const timestampMs = Number(row.dataset.timestamp);
+  if (!Number.isFinite(amount) || !Number.isFinite(timestampMs)) {
+    console.error(
+      `Cannot update period totals: invalid data attributes ` +
+      `(amount=${row.dataset.amount}, timestamp=${row.dataset.timestamp})`
+    );
+    return;
+  }
+  const oldNet = computeNetAmount(amount, oldReimbursement);
+  const newNet = computeNetAmount(amount, newReimbursement);
+  const delta = newNet - oldNet;
+  if (delta === 0) return;
+
+  try {
+    const period = findPeriod(budgetPeriods, budgetId, timestampMs);
+    if (period) {
+      await adjustBudgetPeriodTotal(period.id, delta);
+      period.total += delta;
+    }
+  } catch (periodError) {
+    console.error("Failed to update budget period totals:", periodError);
+  }
+}
+
+/** Replace the displayed balance with "--". Recalculation happens on next page load. */
+function clearBalanceDisplay(row: HTMLElement): void {
+  const balanceDd = row.querySelector(".budget-balance") as HTMLElement | null;
+  if (balanceDd) {
+    balanceDd.textContent = "--";
   }
 }
 
@@ -190,6 +323,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
   const budgetOptions = parseJsonArray(container.dataset.budgetOptions);
   const budgetNameToId = parseBudgetMap(container.dataset.budgetMap);
   const categoryOptions = parseJsonArray(container.dataset.categoryOptions);
+  const budgetPeriods = parseBudgetPeriods(container.dataset.budgetPeriods);
 
   function getOptionsForInput(input: HTMLInputElement): string[] {
     if (input.classList.contains("edit-budget")) return budgetOptions;
@@ -243,15 +377,29 @@ export function hydrateTransactionTable(container: HTMLElement): void {
           showInputError(input);
           return;
         }
+        const oldReimbursement = Number(row.dataset.reimbursement);
         await updateTransaction(txnId, { reimbursement });
+        await syncPeriodOnReimbursementChange(row, oldReimbursement, reimbursement, budgetPeriods);
+        row.dataset.reimbursement = String(reimbursement);
+        clearBalanceDisplay(row);
       } else if (input.classList.contains("edit-budget")) {
         const value = input.value || null;
         if (value !== null && !(value in budgetNameToId)) {
           showInputError(input, `Unknown budget: "${value}"`);
           return;
         }
-        const budgetId = value ? budgetNameToId[value] : null;
-        await updateTransaction(txnId, { budget: budgetId });
+        const newBudgetId = value ? budgetNameToId[value] : null;
+        const oldBudgetId = row.dataset.budgetId || null;
+        await updateTransaction(txnId, { budget: newBudgetId });
+        await syncPeriodTotals(row, oldBudgetId, newBudgetId, budgetPeriods);
+
+        if (newBudgetId) {
+          row.dataset.budgetId = newBudgetId;
+        } else {
+          delete row.dataset.budgetId;
+        }
+
+        clearBalanceDisplay(row);
       } else {
         return;
       }

@@ -1,1 +1,1 @@
-export { DataIntegrityError } from "@commons-systems/authutil/errors";
+export { DataIntegrityError } from "@commons-systems/firestoreutil/errors";

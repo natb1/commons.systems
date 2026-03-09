@@ -1,12 +1,13 @@
-import { collection, doc, getDocs, query, updateDoc, where, Timestamp, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
+import { collection, doc, getDocs, query, updateDoc, where, increment, Timestamp, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
+import { requireString, requireNumber, requireNonNegativeNumber, optionalString } from "@commons-systems/firestoreutil/validate";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
 
 /**
  * Budget rollover strategy:
- * - "none": unspent allowance resets each period
+ * - "none": balance resets to the weekly allowance each period (no carry-forward)
  * - "debt": only negative balances carry to next period
  * - "balance": full balance (positive or negative) carries over
  */
@@ -25,9 +26,18 @@ export interface BudgetPeriod {
   readonly budgetId: string;
   readonly periodStart: Timestamp;
   readonly periodEnd: Timestamp;
-  /** Sum of transaction amounts in this period. Non-negative per Firestore rules. */
+  /** Sum of net transaction amounts (after reimbursement) in this period. Non-negative per Firestore rules. */
   readonly total: number;
   readonly groupId: string | null;
+}
+
+/** Serialized form of BudgetPeriod for HTML data attributes. Used by both home.ts (serializer) and home-hydrate.ts (parser). */
+export interface SerializedBudgetPeriod {
+  readonly id: string;
+  readonly budgetId: string;
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly total: number;
 }
 
 export interface Transaction {
@@ -53,26 +63,6 @@ export interface Transaction {
   readonly groupId: string | null;
 }
 
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new DataIntegrityError(`Expected string for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
-
-function requireNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new DataIntegrityError(`Expected finite number for ${field}, got ${value}`);
-  }
-  return value;
-}
-
-function requireNonNegativeNumber(value: unknown, field: string): number {
-  const n = requireNumber(value, field);
-  if (n < 0) throw new DataIntegrityError(`Expected non-negative number for ${field}, got ${n}`);
-  return n;
-}
-
 function validateReimbursementRange(n: number): void {
   if (!Number.isFinite(n) || n < 0 || n > 100) {
     throw new RangeError(`reimbursement must be between 0 and 100, got ${n}`);
@@ -83,14 +73,6 @@ function requireReimbursement(value: unknown): number {
   const n = requireNumber(value, "reimbursement");
   validateReimbursementRange(n);
   return n;
-}
-
-function optionalString(value: unknown, field: string): string | null {
-  if (value == null) return null;
-  if (typeof value !== "string") {
-    throw new DataIntegrityError(`Expected string or null for ${field}, got ${typeof value}`);
-  }
-  return value;
 }
 
 function optionalTimestamp(value: unknown, field: string): Timestamp | null {
@@ -160,11 +142,15 @@ export async function getTransactions(groupId: string | null, email?: string): P
   });
 }
 
+function requireDocId(id: string, label: string): void {
+  if (!id || id.includes("/")) throw new Error(`Invalid ${label} ID`);
+}
+
 export async function updateTransaction(
   txnId: string,
   fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget">>,
 ): Promise<void> {
-  if (!txnId || txnId.includes("/")) throw new Error("Invalid transaction ID");
+  requireDocId(txnId, "transaction");
   if (Object.keys(fields).length === 0) return;
   if (fields.reimbursement !== undefined) {
     validateReimbursementRange(fields.reimbursement);
@@ -192,11 +178,30 @@ export async function getBudgets(groupId: string | null, email?: string): Promis
   });
 }
 
+function validateNoOverlappingPeriods(periods: BudgetPeriod[]): void {
+  const byBudget = new Map<string, BudgetPeriod[]>();
+  for (const p of periods) {
+    const list = byBudget.get(p.budgetId);
+    if (list) list.push(p);
+    else byBudget.set(p.budgetId, [p]);
+  }
+  for (const [budgetId, budgetPeriods] of byBudget) {
+    budgetPeriods.sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
+    for (let i = 1; i < budgetPeriods.length; i++) {
+      if (budgetPeriods[i].periodStart.toMillis() < budgetPeriods[i - 1].periodEnd.toMillis()) {
+        throw new DataIntegrityError(
+          `Overlapping budget periods for budget ${budgetId}: ${budgetPeriods[i - 1].id} and ${budgetPeriods[i].id}`
+        );
+      }
+    }
+  }
+}
+
 export async function getBudgetPeriods(groupId: null): Promise<BudgetPeriod[]>;
 export async function getBudgetPeriods(groupId: string, email: string): Promise<BudgetPeriod[]>;
 export async function getBudgetPeriods(groupId: string | null, email?: string): Promise<BudgetPeriod[]> {
   const docs = await queryGroupCollection("budget-periods", "seed-", groupId, email);
-  return docs.map((docSnap) => {
+  const periods = docs.map((docSnap) => {
     const data = docSnap.data();
     const periodStart = requireTimestamp(data.periodStart, "periodStart");
     const periodEnd = requireTimestamp(data.periodEnd, "periodEnd");
@@ -214,13 +219,44 @@ export async function getBudgetPeriods(groupId: string | null, email?: string): 
       groupId: optionalString(data.groupId, "groupId"),
     };
   });
+
+  validateNoOverlappingPeriods(periods);
+  return periods;
+}
+
+export async function updateBudgetPeriod(
+  periodId: string,
+  fields: Partial<Pick<BudgetPeriod, "total">>,
+): Promise<void> {
+  requireDocId(periodId, "period");
+  if (Object.keys(fields).length === 0) return;
+  if (fields.total !== undefined) {
+    if (!Number.isFinite(fields.total) || fields.total < 0) {
+      throw new RangeError("Total must be a non-negative number");
+    }
+  }
+  const path = nsCollectionPath(NAMESPACE, "budget-periods");
+  const ref = doc(db, path, periodId);
+  await updateDoc(ref, fields);
+}
+
+export async function adjustBudgetPeriodTotal(
+  periodId: string,
+  delta: number,
+): Promise<void> {
+  requireDocId(periodId, "period");
+  if (!Number.isFinite(delta)) throw new RangeError("Delta must be a finite number");
+  if (delta === 0) return;
+  const path = nsCollectionPath(NAMESPACE, "budget-periods");
+  const ref = doc(db, path, periodId);
+  await updateDoc(ref, { total: increment(delta) });
 }
 
 export async function updateBudget(
   budgetId: string,
   fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
 ): Promise<void> {
-  if (!budgetId || budgetId.includes("/")) throw new Error("Invalid budget ID");
+  requireDocId(budgetId, "budget");
   if (Object.keys(fields).length === 0) return;
   if (fields.name !== undefined && !fields.name) {
     throw new Error("Budget name cannot be empty");

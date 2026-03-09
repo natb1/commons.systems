@@ -14,13 +14,21 @@ vi.mock("firebase/firestore", () => ({
 vi.mock("../../src/firestore.js", () => ({
   getTransactions: vi.fn(),
   getBudgets: vi.fn(),
+  getBudgetPeriods: vi.fn(),
+}));
+
+vi.mock("../../src/balance.js", () => ({
+  computeAllBudgetBalances: vi.fn(),
 }));
 
 import { renderHome } from "../../src/pages/home";
-import { getTransactions, getBudgets, type Transaction } from "../../src/firestore";
+import { getTransactions, getBudgets, getBudgetPeriods, type Transaction, type BudgetPeriod } from "../../src/firestore";
+import { computeAllBudgetBalances } from "../../src/balance";
 
 const mockGetTransactions = vi.mocked(getTransactions);
 const mockGetBudgets = vi.mocked(getBudgets);
+const mockGetBudgetPeriods = vi.mocked(getBudgetPeriods);
+const mockComputeAllBalances = vi.mocked(computeAllBudgetBalances);
 
 function mockTimestamp(dateStr: string) {
   const d = new Date(dateStr);
@@ -53,9 +61,23 @@ const defaultBudgets = [
   { id: "vacation", name: "Vacation", weeklyAllowance: 100, rollover: "balance" as const, groupId: null },
 ];
 
+const defaultPeriods: BudgetPeriod[] = [
+  {
+    id: "food-2025-01-13",
+    budgetId: "food",
+    periodStart: mockTimestamp("2025-01-13"),
+    periodEnd: mockTimestamp("2025-01-20"),
+    total: 5.75,
+    groupId: null,
+  },
+];
+
 describe("renderHome", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mockGetBudgets.mockResolvedValue(defaultBudgets);
+    mockGetBudgetPeriods.mockResolvedValue(defaultPeriods);
+    mockComputeAllBalances.mockReturnValue(new Map());
   });
 
   it("returns HTML containing a Transactions heading", async () => {
@@ -297,5 +319,73 @@ describe("renderHome", () => {
     const noDateIdx = html.indexOf("No date");
     expect(newerIdx).toBeLessThan(olderIdx);
     expect(olderIdx).toBeLessThan(noDateIdx);
+  });
+
+  it("renders Budget Balance dt/dd in expanded details", async () => {
+    mockComputeAllBalances.mockReturnValue(new Map([["txn-1", 144.25]]));
+    mockGetTransactions.mockResolvedValue([
+      txn({ budget: "food" }),
+    ]);
+    const html = await renderHome({ user: null, group: null, groupError: false });
+    expect(html).toContain("<dt>Budget Balance</dt>");
+    expect(html).toContain('<dd class="budget-balance">144.25</dd>');
+  });
+
+  it("omits budget balance row when computeBudgetBalance returns null", async () => {
+    mockComputeAllBalances.mockReturnValue(new Map());
+    mockGetTransactions.mockResolvedValue([
+      txn({ budget: "food" }),
+    ]);
+    const html = await renderHome({ user: null, group: null, groupError: false });
+    expect(html).not.toContain("<dt>Budget Balance</dt>");
+  });
+
+  it("omits budget balance row when transaction has no budget", async () => {
+    mockGetTransactions.mockResolvedValue([
+      txn({ budget: null }),
+    ]);
+    const html = await renderHome({ user: null, group: null, groupError: false });
+    expect(html).not.toContain("<dt>Budget Balance</dt>");
+    expect(mockComputeAllBalances).toHaveBeenCalled();
+  });
+
+  it("renders data-amount, data-budget-id, data-timestamp, data-reimbursement on rows for authorized users", async () => {
+    const ts = mockTimestamp("2025-01-15");
+    mockGetTransactions.mockResolvedValue([
+      txn({ budget: "food", timestamp: ts, amount: 52.30, reimbursement: 25, groupId: "household" }),
+    ]);
+    const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
+    expect(html).toContain('data-amount="52.3"');
+    expect(html).toContain('data-budget-id="food"');
+    expect(html).toContain(`data-timestamp="${ts.toMillis()}"`);
+    expect(html).toContain('data-reimbursement="25"');
+  });
+
+  it("does not render data-amount, data-budget-id, data-timestamp, data-reimbursement for unauthorized users", async () => {
+    mockGetTransactions.mockResolvedValue([
+      txn({ budget: "food" }),
+    ]);
+    const html = await renderHome({ user: null, group: null, groupError: false });
+    expect(html).not.toContain("data-amount");
+    expect(html).not.toContain("data-budget-id");
+    expect(html).not.toContain("data-timestamp");
+    expect(html).not.toContain("data-reimbursement");
+  });
+
+  it("renders data-budget-periods on container for authorized users", async () => {
+    mockGetTransactions.mockResolvedValue([
+      txn({ budget: "food", groupId: "household" }),
+    ]);
+    const html = await renderHome({ user: mockUser, group: mockGroup, groupError: false });
+    expect(html).toContain("data-budget-periods");
+    expect(html).toContain("food-2025-01-13");
+  });
+
+  it("does not render data-budget-periods for unauthorized users", async () => {
+    mockGetTransactions.mockResolvedValue([
+      txn({ budget: "food" }),
+    ]);
+    const html = await renderHome({ user: null, group: null, groupError: false });
+    expect(html).not.toContain("data-budget-periods");
   });
 });
