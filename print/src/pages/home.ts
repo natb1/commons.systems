@@ -1,10 +1,11 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { User } from "../auth.js";
+import { DataIntegrityError } from "../errors.js";
 import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
 import { getMediaDownloadUrl } from "../storage.js";
-import type { MediaItem } from "../types.js";
+import type { MediaItem, MediaType } from "../types.js";
 
-function mediaTypeBadge(mediaType: string): string {
+function mediaTypeBadge(mediaType: MediaType): string {
   return `<span class="media-badge">${escapeHtml(mediaType)}</span>`;
 }
 
@@ -33,13 +34,26 @@ function renderMediaList(items: MediaItem[]): string {
 
 async function handleDownload(button: HTMLButtonElement): Promise<void> {
   const storagePath = button.dataset.path;
-  if (!storagePath) return;
+  if (!storagePath) {
+    console.error("Download button missing data-path attribute");
+    return;
+  }
   button.disabled = true;
   try {
     const url = await getMediaDownloadUrl(storagePath);
     window.open(url, "_blank");
   } catch (error) {
     console.error("Failed to get download URL:", error);
+    const mediaItem = button.closest(".media-item");
+    if (mediaItem) {
+      const existing = mediaItem.querySelector(".download-error");
+      if (!existing) {
+        const msg = document.createElement("p");
+        msg.className = "download-error";
+        msg.textContent = "Download failed. Please try again.";
+        mediaItem.appendChild(msg);
+      }
+    }
   } finally {
     button.disabled = false;
   }
@@ -52,11 +66,9 @@ export async function renderHome(user: User | null): Promise<string> {
       ? await getAllAccessibleMedia(user.uid)
       : await getPublicMedia();
 
-    // Sort client-side by addedAt descending (getPublicMedia doesn't sort)
-    items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
-
     mediaHtml = renderMediaList(items);
   } catch (error) {
+    if (error instanceof DataIntegrityError) throw error;
     console.error("Failed to load media:", error);
     mediaHtml = '<p id="media-error">Could not load media library.</p>';
   }

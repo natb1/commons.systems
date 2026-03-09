@@ -24,27 +24,28 @@ cd "$REPO_ROOT/$APP_DIR"
 npm ci
 cd "$REPO_ROOT"
 
-# Find available ports
-VITE_PORT=$(find_available_port)
+# Count and allocate all needed ports atomically to avoid OS port recycling
+PORT_COUNT=1  # vite always needed
+if [ "$USES_FIRESTORE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+if [ "$USES_AUTH" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+if [ "$USES_STORAGE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+
+read -r VITE_PORT EXTRA_PORTS <<< "$(find_available_ports "$PORT_COUNT")"
+echo "Vite dev server will use port $VITE_PORT"
 
 NAMESPACE=""
 FIRESTORE_PORT=""
-if [ "$USES_FIRESTORE" = true ]; then
-  FIRESTORE_PORT=$(find_available_port)
-  echo "Firestore emulator will use port $FIRESTORE_PORT"
-fi
-
 AUTH_PORT=""
-if [ "$USES_AUTH" = true ]; then
-  AUTH_PORT=$(find_available_port)
-  echo "Auth emulator will use port $AUTH_PORT"
-fi
-
 STORAGE_PORT=""
-if [ "$USES_STORAGE" = true ]; then
-  STORAGE_PORT=$(find_available_port)
-  echo "Storage emulator will use port $STORAGE_PORT"
-fi
+for feature in FIRESTORE AUTH STORAGE; do
+  uses_var="USES_${feature}"
+  if [ "${!uses_var}" = true ]; then
+    port="${EXTRA_PORTS%% *}"
+    EXTRA_PORTS="${EXTRA_PORTS#* }"
+    declare "${feature}_PORT=$port"
+    echo "${feature,,} emulator will use port $port"
+  fi
+done
 
 # Generate temporary firebase.json (emulators only, no hosting — Vite serves)
 TEMP_FIREBASE_JSON="${REPO_ROOT}/.firebase-qa-$$.json"
@@ -154,6 +155,20 @@ if [ "$USES_AUTH" = true ]; then
   # Seed auth user
   echo "Seeding auth user..."
   APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" npx tsx authutil/bin/run-auth-seed.ts
+fi
+
+# Poll until Storage emulator is ready (if used)
+if [ "$USES_STORAGE" = true ]; then
+  ELAPSED=0
+  until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${STORAGE_PORT}/" 2>/dev/null | grep -q '^200$'; do
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+      echo "ERROR: Storage emulator did not start within ${TIMEOUT}s" >&2
+      exit 1
+    fi
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+  done
+  echo "Firebase Storage emulator ready on port ${STORAGE_PORT}"
 fi
 
 # Seed storage emulator (if used and seed script exists)

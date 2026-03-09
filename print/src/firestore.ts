@@ -3,9 +3,8 @@ import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
+import { MEDIA_TYPES } from "./types.js";
 import type { MediaItem, MediaType } from "./types.js";
-
-const VALID_MEDIA_TYPES: readonly MediaType[] = ["epub", "pdf", "image-archive"];
 
 function requireString(value: unknown, field: string): string {
   if (typeof value !== "string") {
@@ -23,7 +22,7 @@ function requireBoolean(value: unknown, field: string): boolean {
 
 function requireMediaType(value: unknown): MediaType {
   const s = requireString(value, "mediaType");
-  if (!VALID_MEDIA_TYPES.includes(s as MediaType)) {
+  if (!(MEDIA_TYPES as readonly string[]).includes(s)) {
     throw new DataIntegrityError(`Invalid mediaType: "${s}"`);
   }
   return s as MediaType;
@@ -55,6 +54,14 @@ function requireTags(value: unknown): Record<string, string> {
   return result;
 }
 
+function requireIso8601(value: unknown, field: string): string {
+  const s = requireString(value, field);
+  if (isNaN(Date.parse(s))) {
+    throw new DataIntegrityError(`Invalid ISO 8601 date for ${field}: "${s}"`);
+  }
+  return s;
+}
+
 function optionalString(value: unknown, field: string): string | null {
   if (value == null) return null;
   if (typeof value !== "string") {
@@ -74,7 +81,7 @@ function toMediaItem(id: string, data: Record<string, unknown>): MediaItem {
     storagePath: requireString(data.storagePath, "storagePath"),
     groupId: optionalString(data.groupId, "groupId"),
     memberUids: requireStringArray(data.memberUids, "memberUids"),
-    addedAt: requireString(data.addedAt, "addedAt"),
+    addedAt: requireIso8601(data.addedAt, "addedAt"),
   };
 }
 
@@ -82,7 +89,9 @@ export async function getPublicMedia(): Promise<MediaItem[]> {
   const path = nsCollectionPath(NAMESPACE, "media");
   const q = query(collection(db, path), where("publicDomain", "==", true));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((docSnap) => toMediaItem(docSnap.id, docSnap.data()));
+  const items = snapshot.docs.map((docSnap) => toMediaItem(docSnap.id, docSnap.data()));
+  items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
+  return items;
 }
 
 export async function getUserMedia(uid: string): Promise<MediaItem[]> {
@@ -108,7 +117,6 @@ export async function getAllAccessibleMedia(uid: string): Promise<MediaItem[]> {
     }
   }
 
-  // Sort by addedAt descending
   merged.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
   return merged;
 }

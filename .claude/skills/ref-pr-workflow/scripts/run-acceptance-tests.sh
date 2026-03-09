@@ -197,6 +197,20 @@ if [ "$USES_AUTH" = true ]; then
   APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
 fi
 
+# Poll until Storage emulator is ready (if used)
+if [ "$USES_STORAGE" = true ]; then
+  ELAPSED=0
+  until curl -s -o /dev/null -w '%{http_code}' "http://localhost:${STORAGE_PORT}/" 2>/dev/null | grep -q '^200$'; do
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+      echo "ERROR: Storage emulator did not start within ${TIMEOUT}s" >&2
+      exit 1
+    fi
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+  done
+  echo "Firebase Storage emulator ready on port ${STORAGE_PORT}"
+fi
+
 # Run Playwright acceptance tests
 cd "$REPO_ROOT/$APP_DIR"
 BASE_URL="http://localhost:${HOSTING_PORT}" npx playwright test --config e2e/playwright.config.ts

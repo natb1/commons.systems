@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { DataIntegrityError } from "../../src/errors";
 
 const mockGetMediaItem = vi.fn();
 
@@ -113,6 +114,16 @@ describe("renderView", () => {
 
       expect(html).toContain('href="#/"');
       expect(html).toContain('class="back-link"');
+    });
+
+    it("re-throws DataIntegrityError", async () => {
+      mockGetMediaItem.mockRejectedValue(
+        new DataIntegrityError("corrupt data"),
+      );
+
+      await expect(renderView("item-1", null)).rejects.toThrow(
+        DataIntegrityError,
+      );
     });
   });
 

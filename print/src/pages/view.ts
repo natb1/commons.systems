@@ -1,7 +1,20 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { User } from "../auth.js";
+import { DataIntegrityError } from "../errors.js";
 import { getMediaItem } from "../firestore.js";
 import type { MediaItem } from "../types.js";
+
+const BACK_LINK = '<a href="#/" class="back-link">&larr; Back to Library</a>';
+
+function formatDate(iso: string): string {
+  return escapeHtml(
+    new Date(iso).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+  );
+}
 
 function renderTags(tags: Record<string, string>): string {
   const entries = Object.entries(tags);
@@ -15,7 +28,7 @@ function renderTags(tags: Record<string, string>): string {
 function renderMetadata(item: MediaItem): string {
   return `
     <h2>${escapeHtml(item.title)}</h2>
-    <a href="#/" class="back-link">&larr; Back to Library</a>
+    ${BACK_LINK}
     <dl class="media-metadata">
       <dt>Type</dt>
       <dd><span class="media-badge">${escapeHtml(item.mediaType)}</span></dd>
@@ -26,7 +39,7 @@ function renderMetadata(item: MediaItem): string {
       <dt>Storage Path</dt>
       <dd><code>${escapeHtml(item.storagePath)}</code></dd>
       <dt>Added</dt>
-      <dd><time datetime="${escapeHtml(item.addedAt)}">${escapeHtml(new Date(item.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }))}</time></dd>
+      <dd><time datetime="${escapeHtml(item.addedAt)}">${formatDate(item.addedAt)}</time></dd>
       <dt>Current Location</dt>
       <dd>placeholder</dd>
     </dl>
@@ -40,7 +53,7 @@ export async function renderView(id: string, _user: User | null): Promise<string
     return `
       <h2>Not Found</h2>
       <p id="view-not-found">No media item specified.</p>
-      <a href="#/" class="back-link">&larr; Back to Library</a>
+      ${BACK_LINK}
     `;
   }
 
@@ -50,16 +63,17 @@ export async function renderView(id: string, _user: User | null): Promise<string
       return `
         <h2>Not Found</h2>
         <p id="view-not-found">Media item not found.</p>
-        <a href="#/" class="back-link">&larr; Back to Library</a>
+        ${BACK_LINK}
       `;
     }
     return renderMetadata(item);
   } catch (error) {
+    if (error instanceof DataIntegrityError) throw error;
     console.error("Failed to load media item:", error);
     return `
       <h2>Error</h2>
       <p id="view-error">Could not load this media item.</p>
-      <a href="#/" class="back-link">&larr; Back to Library</a>
+      ${BACK_LINK}
     `;
   }
 }

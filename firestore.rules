@@ -110,7 +110,7 @@ service cloud.firestore {
     }
 
     // Media items are readable by everyone if public domain, or by group members
-    // via denormalized memberUids array. Writes are admin-only (not exposed in rules).
+    // via denormalized memberUids array. Client writes are denied; data is managed via the Admin SDK.
     match /print/{env}/media/{mediaId} {
       allow read: if resource.data.publicDomain == true
         || (request.auth != null && request.auth.uid in resource.data.memberUids);

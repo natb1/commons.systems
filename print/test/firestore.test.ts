@@ -94,18 +94,6 @@ describe("getPublicMedia", () => {
 
     expect(items).toEqual([
       {
-        id: "doc-1",
-        title: "Title doc-1",
-        mediaType: "pdf",
-        tags: { genre: "nonfiction" },
-        publicDomain: true,
-        sourceNotes: "Public domain source",
-        storagePath: "media/doc-1.pdf",
-        groupId: null,
-        memberUids: ["user-1"],
-        addedAt: "2026-01-01T00:00:00Z",
-      },
-      {
         id: "doc-2",
         title: "Second Item",
         mediaType: "epub",
@@ -117,6 +105,18 @@ describe("getPublicMedia", () => {
         memberUids: ["user-1"],
         addedAt: "2026-01-02T00:00:00Z",
       },
+      {
+        id: "doc-1",
+        title: "Title doc-1",
+        mediaType: "pdf",
+        tags: { genre: "nonfiction" },
+        publicDomain: true,
+        sourceNotes: "Public domain source",
+        storagePath: "media/doc-1.pdf",
+        groupId: null,
+        memberUids: ["user-1"],
+        addedAt: "2026-01-01T00:00:00Z",
+      },
     ]);
   });
 
@@ -126,6 +126,20 @@ describe("getPublicMedia", () => {
     const items = await getPublicMedia();
 
     expect(items).toEqual([]);
+  });
+
+  it("sorts results by addedAt descending", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [
+        validMediaDoc("older", { addedAt: "2026-01-01T00:00:00Z" }),
+        validMediaDoc("newer", { addedAt: "2026-02-01T00:00:00Z" }),
+      ],
+    });
+
+    const items = await getPublicMedia();
+
+    expect(items[0].id).toBe("newer");
+    expect(items[1].id).toBe("older");
   });
 
   it("throws DataIntegrityError for invalid title type", async () => {
@@ -182,6 +196,15 @@ describe("getPublicMedia", () => {
     });
 
     await expect(getPublicMedia()).rejects.toThrow(DataIntegrityError);
+  });
+
+  it("throws DataIntegrityError for invalid addedAt format", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [validMediaDoc("bad-8", { addedAt: "not-a-date" })],
+    });
+
+    await expect(getPublicMedia()).rejects.toThrow(DataIntegrityError);
+    await expect(getPublicMedia()).rejects.toThrow("Invalid ISO 8601 date");
   });
 });
 

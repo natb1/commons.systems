@@ -61,6 +61,12 @@
   cursor: wait;
 }
 
+.download-error {
+  color: var(--error-fg, #c00);
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+
 /* View page */
 .back-link {
   display: inline-block;

@@ -1,10 +1,11 @@
-export type MediaType = "epub" | "pdf" | "image-archive";
+export const MEDIA_TYPES = ["epub", "pdf", "image-archive"] as const;
+export type MediaType = (typeof MEDIA_TYPES)[number];
 
 export interface MediaItem {
   readonly id: string;
   readonly title: string;
   readonly mediaType: MediaType;
-  readonly tags: Record<string, string>;
+  readonly tags: Readonly<Record<string, string>>;
   readonly publicDomain: boolean;
   readonly sourceNotes: string;
   readonly storagePath: string;

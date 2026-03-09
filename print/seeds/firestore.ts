@@ -1,6 +1,6 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
-// Cloud Storage seeding is manual:
+// Production Cloud Storage seeding is manual (emulator seeding is automated via seeds/run-storage-seed.ts):
 // 1. Download files from the sources listed in each item's sourceNotes
 // 2. Upload to print/{env}/media/{filename} in Firebase Cloud Storage
 // 3. Set custom metadata on each object:

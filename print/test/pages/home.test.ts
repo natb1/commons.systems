@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { DataIntegrityError } from "../../src/errors";
 
 const mockGetPublicMedia = vi.fn();
 const mockGetAllAccessibleMedia = vi.fn();
@@ -171,24 +172,11 @@ describe("renderHome", () => {
     expect(html).toContain("Could not load media library.");
   });
 
-  it("sorts items by addedAt descending", async () => {
-    mockGetPublicMedia.mockResolvedValue([
-      makeMediaItem({
-        id: "older",
-        title: "Older Item",
-        addedAt: "2026-01-01T00:00:00Z",
-      }),
-      makeMediaItem({
-        id: "newer",
-        title: "Newer Item",
-        addedAt: "2026-02-01T00:00:00Z",
-      }),
-    ]);
+  it("re-throws DataIntegrityError", async () => {
+    mockGetPublicMedia.mockRejectedValue(
+      new DataIntegrityError("corrupt data"),
+    );
 
-    const html = await renderHome(null);
-
-    const olderIndex = html.indexOf("Older Item");
-    const newerIndex = html.indexOf("Newer Item");
-    expect(newerIndex).toBeLessThan(olderIndex);
+    await expect(renderHome(null)).rejects.toThrow(DataIntegrityError);
   });
 });
