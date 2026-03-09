@@ -22,6 +22,10 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "21"
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
       - name: Run acceptance tests
         env:
           VITE_GITHUB_BRANCH: ${{ github.head_ref }}
