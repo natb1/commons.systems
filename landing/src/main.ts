@@ -62,9 +62,7 @@ const updateInfoPanel = (): void => {
 }
 
 navEl.links = [{ href: "#/", label: "Home" }];
-navEl.addEventListener("sign-in", () => {
-  signIn().catch((err) => console.error("Sign-in failed:", err));
-});
+navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => {
   signOut().catch((err) => console.error("Sign-out failed:", err));
 });
@@ -88,6 +86,7 @@ async function loadPosts(): Promise<string> {
     lastSkippedCount = result.skippedCount;
     return renderHomeHtml(cachedPosts);
   } catch (error) {
+    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     console.error("Failed to load posts:", error);
     const isPermissionDenied =
       error instanceof Error &&
@@ -124,6 +123,7 @@ const router = createRouter(
           const admin = await isInGroup(db, NAMESPACE, currentUser, "admin");
           return renderAdmin(currentUser, admin, lastSkippedCount);
         } catch (error) {
+          if (error instanceof TypeError || error instanceof ReferenceError) throw error;
           console.error("Failed to check admin group:", error);
           return `<h2>Admin</h2><p>Could not verify admin access. Try refreshing the page.</p>`;
         }

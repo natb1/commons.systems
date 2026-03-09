@@ -19,14 +19,19 @@ function groupsPath(namespace: string): string {
   return nsCollectionPath(namespace, "groups");
 }
 
-export async function getUserGroups(db: Firestore, namespace: string, user: User): Promise<Group[]> {
+function requireEmail(caller: string, user: User): string {
   if (!user.email) {
     throw new Error(
-      `getUserGroups: user "${user.uid}" has no email. ` +
+      `${caller}: user "${user.uid}" has no email. ` +
       `Email-based group membership requires an auth provider that supplies an email address.`,
     );
   }
-  const q = query(collection(db, groupsPath(namespace)), where("members", "array-contains", user.email));
+  return user.email;
+}
+
+export async function getUserGroups(db: Firestore, namespace: string, user: User): Promise<Group[]> {
+  const email = requireEmail("getUserGroups", user);
+  const q = query(collection(db, groupsPath(namespace)), where("members", "array-contains", email));
   const snapshot = await getDocs(q);
   return snapshot.docs
     .map((docSnap) => {
@@ -50,17 +55,12 @@ export async function isInGroup(
   groupId: string,
 ): Promise<boolean> {
   if (!user) return false;
-  if (!user.email) {
-    throw new Error(
-      `isInGroup: user "${user.uid}" has no email. ` +
-      `Email-based group membership requires an auth provider that supplies an email address.`,
-    );
-  }
+  const email = requireEmail("isInGroup", user);
   try {
     const docSnap = await getDoc(doc(db, groupsPath(namespace), groupId));
     if (!docSnap.exists()) return false;
     const members = docSnap.data().members;
-    return Array.isArray(members) && members.includes(user.email);
+    return Array.isArray(members) && members.includes(email);
   } catch (error) {
     // Firestore rules restrict group reads to members (request.auth.token.email in
     // resource.data.members), so permission-denied is the primary signal that
@@ -68,7 +68,7 @@ export async function isInGroup(
     // document is a defensive guard for the case where rules and data are
     // inconsistent.
     if (isPermissionDenied(error)) {
-      console.warn(`isInGroup: permission denied for group "${groupId}" (user ${user.email})`);
+      console.warn(`isInGroup: permission denied for group "${groupId}" (user ${email})`);
       return false;
     }
     throw error;

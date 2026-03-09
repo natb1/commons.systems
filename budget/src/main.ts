@@ -45,9 +45,7 @@ function selectedGroup(): Group | null {
 }
 
 navEl.links = [{ href: "#/", label: "transactions" }, { href: "#/budgets", label: "budgets" }];
-navEl.addEventListener("sign-in", () => {
-  signIn().catch((err) => console.error("Sign-in failed:", err));
-});
+navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => {
   signOut().catch((error) => console.error("Unexpected sign-out error:", error));
 });

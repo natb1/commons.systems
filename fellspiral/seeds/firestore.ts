@@ -1,4 +1,7 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
+import type { Group } from "@commons-systems/authutil/groups";
+
+type GroupSeedData = Omit<Group, "id"> & { members: string[] };
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
@@ -8,7 +11,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
       documents: [
         {
           id: "admin",
-          data: { name: "admin", members: ["test@example.com"] },
+          data: { name: "admin", members: ["test@example.com"] } satisfies GroupSeedData,
         },
       ],
     },
