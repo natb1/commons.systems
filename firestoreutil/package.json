@@ -7,7 +7,9 @@
   "exports": {
     "./namespace": "./src/namespace.ts",
     "./seed": "./src/seed.ts",
-    "./delete-namespace": "./src/delete-namespace.ts"
+    "./delete-namespace": "./src/delete-namespace.ts",
+    "./errors": "./src/errors.ts",
+    "./validate": "./src/validate.ts"
   },
   "scripts": {
     "test": "vitest run",

@@ -46,6 +46,9 @@ func TestInsertFirestoreRules(t *testing.T) {
 		}
 
 		got := readRulesFile(t, dir)
+		if !strings.Contains(got, "match /myapp/{env}/groups/{groupId}") {
+			t.Error("expected groups rule block")
+		}
 		if !strings.Contains(got, "match /myapp/{env}/messages/{messageId}") {
 			t.Error("expected messages rule block")
 		}

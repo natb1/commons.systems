@@ -3,11 +3,11 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import { getNotes } from "../firestore.js";
 
 export async function renderNotes(): Promise<string> {
-  if (!auth.currentUser) {
+  if (!auth.currentUser?.email) {
     return `<h2>Notes</h2><p id="notes-auth-required">Sign in to view private notes.</p>`;
   }
   try {
-    const notes = await getNotes();
+    const notes = await getNotes(auth.currentUser.email);
     const items = notes.map((n) => `<li>${escapeHtml(n.text)}</li>`).join("");
     return `<h2>Notes</h2><ul id="notes-list">${items}</ul>`;
   } catch (error) {

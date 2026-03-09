@@ -1,24 +1,11 @@
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
+import { requireString, requireBoolean, optionalString } from "@commons-systems/firestoreutil/validate";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
 import { MEDIA_TYPES } from "./types.js";
 import type { MediaItem, MediaType } from "./types.js";
-
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new DataIntegrityError(`Expected string for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
-
-function requireBoolean(value: unknown, field: string): boolean {
-  if (typeof value !== "boolean") {
-    throw new DataIntegrityError(`Expected boolean for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
 
 function requireMediaType(value: unknown): MediaType {
   const s = requireString(value, "mediaType");
@@ -60,14 +47,6 @@ function requireIso8601(value: unknown, field: string): string {
     throw new DataIntegrityError(`Invalid ISO 8601 date for ${field}: "${s}"`);
   }
   return s;
-}
-
-function optionalString(value: unknown, field: string): string | null {
-  if (value == null) return null;
-  if (typeof value !== "string") {
-    throw new DataIntegrityError(`Expected string or null for ${field}, got ${typeof value}`);
-  }
-  return value;
 }
 
 function toMediaItem(id: string, data: Record<string, unknown>): MediaItem {

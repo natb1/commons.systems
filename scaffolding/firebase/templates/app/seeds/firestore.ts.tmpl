@@ -3,6 +3,19 @@ import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
+      name: "groups",
+      testOnly: true,
+      documents: [
+        {
+          id: "editors",
+          data: {
+            name: "editors",
+            members: ["test@example.com"],
+          },
+        },
+      ],
+    },
+    {
       name: "messages",
       documents: [
         {
@@ -29,15 +42,19 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
         {
           id: "note-1",
           data: {
-            text: "This note is only visible when signed in.",
+            text: "This note is only visible to group members.",
             createdAt: "2026-01-01T00:00:00Z",
+            groupId: "editors",
+            memberEmails: ["test@example.com"],
           },
         },
         {
           id: "note-2",
           data: {
-            text: "Auth-gated content works.",
+            text: "Group-scoped content works.",
             createdAt: "2026-01-01T00:01:00Z",
+            groupId: "editors",
+            memberEmails: ["test@example.com"],
           },
         },
       ],
