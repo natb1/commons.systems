@@ -331,21 +331,21 @@ describe("renderHome", () => {
     expect(html).toContain('<dd class="budget-balance">144.25</dd>');
   });
 
-  it("renders empty budget balance when computeBudgetBalance returns null", async () => {
+  it("omits budget balance row when computeBudgetBalance returns null", async () => {
     mockComputeAllBalances.mockReturnValue(new Map());
     mockGetTransactions.mockResolvedValue([
       txn({ budget: "food" }),
     ]);
     const html = await renderHome({ user: null, group: null, groupError: false });
-    expect(html).toContain('<dt>Budget Balance</dt><dd class="budget-balance"></dd>');
+    expect(html).not.toContain("<dt>Budget Balance</dt>");
   });
 
-  it("renders empty budget balance when transaction has no budget", async () => {
+  it("omits budget balance row when transaction has no budget", async () => {
     mockGetTransactions.mockResolvedValue([
       txn({ budget: null }),
     ]);
     const html = await renderHome({ user: null, group: null, groupError: false });
-    expect(html).toContain('<dt>Budget Balance</dt><dd class="budget-balance"></dd>');
+    expect(html).not.toContain("<dt>Budget Balance</dt>");
     expect(mockComputeAllBalances).toHaveBeenCalled();
   });
 

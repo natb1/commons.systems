@@ -50,7 +50,9 @@ function renderRow(opts: RenderRowOptions): string {
     ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget">`
     : escapeHtml(budgetName);
 
-  const balanceDisplay = balance !== null ? balance.toFixed(2) : "";
+  const balanceRow = balance !== null
+    ? `<dt>Budget Balance</dt><dd class="budget-balance">${balance.toFixed(2)}</dd>`
+    : "";
 
   // Data attributes for hydration
   const amountAttr = editable ? ` data-amount="${txn.amount}"` : "";
@@ -74,7 +76,7 @@ function renderRow(opts: RenderRowOptions): string {
         <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
         <dt>Reimbursement</dt><dd>${reimbursementCell}</dd>
         <dt>Budget</dt><dd>${budgetCell}</dd>
-        <dt>Budget Balance</dt><dd class="budget-balance">${balanceDisplay}</dd>
+        ${balanceRow}
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
       </dl>
@@ -107,7 +109,13 @@ function renderTransactionTable(
   const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
   const balances = computeAllBudgetBalances(transactions, budgets, budgetPeriods);
   const rows = transactions
-    .map((txn) => renderRow({ txn, groupName, editable: authorized, budgetIdToName, balance: balances.get(txn.id) ?? null }))
+    .map((txn) => renderRow({
+      txn,
+      groupName,
+      editable: authorized,
+      budgetIdToName,
+      balance: balances.get(txn.id) ?? null,
+    }))
     .join("\n");
 
   let dataAttrs = "";

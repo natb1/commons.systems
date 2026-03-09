@@ -57,7 +57,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
   },
 ];
 
-// Budget period totals match the seed transaction amounts within each period.
+// Budget period totals match the seed net transaction amounts (after reimbursement) within each period.
 // Food (rollover: "none"): 3 periods demonstrating weekly reset
 // Housing (rollover: "debt"): 1 period (baseline)
 // Vacation (rollover: "balance"): 2 periods demonstrating carry-forward

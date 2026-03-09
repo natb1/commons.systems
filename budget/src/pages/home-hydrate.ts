@@ -1,4 +1,5 @@
-import { updateTransaction, updateBudgetPeriod } from "../firestore.js";
+import { updateTransaction, adjustBudgetPeriodTotal } from "../firestore.js";
+import { computeNetAmount } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
 
 /**
@@ -46,10 +47,10 @@ function parseBudgetMap(raw: string | undefined): Record<string, string> {
 }
 
 interface HydrationPeriod {
-  id: string;
-  budgetId: string;
-  periodStartMs: number;
-  periodEndMs: number;
+  readonly id: string;
+  readonly budgetId: string;
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
   total: number;
 }
 
@@ -70,6 +71,9 @@ function parseBudgetPeriods(raw: string | undefined): HydrationPeriod[] {
       if (typeof item.periodStartMs !== "number" || typeof item.periodEndMs !== "number"
           || typeof item.total !== "number") {
         throw new DataIntegrityError("Budget period missing numeric periodStartMs, periodEndMs, or total");
+      }
+      if (item.periodStartMs >= item.periodEndMs) {
+        throw new DataIntegrityError("Budget period has periodStartMs >= periodEndMs");
       }
     }
     return parsed as HydrationPeriod[];
@@ -297,44 +301,43 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         const newBudgetId = value ? budgetNameToId[value] : null;
         await updateTransaction(txnId, { budget: newBudgetId });
 
-        // Update budget period totals
+        // Update budget period totals using server-side increment for atomicity.
+        // If the second write fails, totals drift until manual correction
+        // (page loads read stored totals, not recomputed from transactions).
         const amount = Number(row.dataset.amount);
         const reimbursement = Number(row.dataset.reimbursement);
         const timestampMs = Number(row.dataset.timestamp);
         const oldBudgetId = row.dataset.budgetId || null;
-        const net = Number.isFinite(reimbursement)
-          ? amount * (1 - reimbursement / 100)
-          : amount;
+        const net = computeNetAmount(amount, reimbursement);
 
         if (Number.isFinite(amount) && Number.isFinite(timestampMs)) {
-          // Period total updates are non-atomic: if the second write fails, totals drift
-          // until the next full page load recomputes from source data.
-          if (oldBudgetId) {
-            const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
-            if (oldPeriod) {
-              const newTotal = Math.max(0, oldPeriod.total - net);
-              await updateBudgetPeriod(oldPeriod.id, { total: newTotal });
-              oldPeriod.total = newTotal;
+          try {
+            if (oldBudgetId) {
+              const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
+              if (oldPeriod) {
+                await adjustBudgetPeriodTotal(oldPeriod.id, -net);
+                oldPeriod.total = Math.max(0, oldPeriod.total - net);
+              }
             }
-          }
-          if (newBudgetId) {
-            const newPeriod = findPeriod(budgetPeriods, newBudgetId, timestampMs);
-            if (newPeriod) {
-              const newTotal = newPeriod.total + net;
-              await updateBudgetPeriod(newPeriod.id, { total: newTotal });
-              newPeriod.total = newTotal;
+            if (newBudgetId) {
+              const newPeriod = findPeriod(budgetPeriods, newBudgetId, timestampMs);
+              if (newPeriod) {
+                await adjustBudgetPeriodTotal(newPeriod.id, net);
+                newPeriod.total = newPeriod.total + net;
+              }
             }
+          } catch (periodError) {
+            console.error("Failed to update budget period totals:", periodError);
           }
         }
 
-        // Update row's data-budget-id attribute
         if (newBudgetId) {
           row.dataset.budgetId = newBudgetId;
         } else {
           delete row.dataset.budgetId;
         }
 
-        // Clear balance display (full recompute needs all transactions; corrects on next page load)
+        // Clear balance display (full recompute needs all transactions)
         const balanceDd = row.querySelector(".budget-balance") as HTMLElement | null;
         if (balanceDd) {
           balanceDd.textContent = "";

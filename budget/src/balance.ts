@@ -1,8 +1,20 @@
 import type { Timestamp } from "firebase/firestore";
 import type { Budget, BudgetPeriod, Rollover, Transaction } from "./firestore.js";
 
+export function computeNetAmount(amount: number, reimbursement: number): number {
+  return amount * (1 - reimbursement / 100);
+}
+
 function netAmount(t: Transaction): number {
-  return t.amount * (1 - t.reimbursement / 100);
+  return computeNetAmount(t.amount, t.reimbursement);
+}
+
+function compareByTimestampThenId(a: Transaction, b: Transaction): number {
+  const diff = a.timestamp!.toMillis() - b.timestamp!.toMillis();
+  if (diff !== 0) return diff;
+  if (a.id < b.id) return -1;
+  if (a.id > b.id) return 1;
+  return 0;
 }
 
 function applyRollover(running: number, weeklyAllowance: number, rollover: Rollover): number {
@@ -69,13 +81,7 @@ export function computeBudgetBalance(
         t.timestamp.toMillis() >= targetPeriod.periodStart.toMillis() &&
         t.timestamp.toMillis() < targetPeriod.periodEnd.toMillis(),
     )
-    .sort((a, b) => {
-      const diff = a.timestamp!.toMillis() - b.timestamp!.toMillis();
-      if (diff !== 0) return diff;
-      if (a.id < b.id) return -1;
-      if (a.id > b.id) return 1;
-      return 0;
-    });
+    .sort(compareByTimestampThenId);
 
   let found = false;
   for (const t of samePeriodTxns) {
@@ -104,13 +110,7 @@ export function computeAllBudgetBalances(
 
     const txns = allTransactions
       .filter((t) => t.budget === budget.id && t.timestamp !== null)
-      .sort((a, b) => {
-        const diff = a.timestamp!.toMillis() - b.timestamp!.toMillis();
-        if (diff !== 0) return diff;
-        if (a.id < b.id) return -1;
-        if (a.id > b.id) return 1;
-        return 0;
-      });
+      .sort(compareByTimestampThenId);
 
     let accumulated = 0;
     let txnIdx = 0;

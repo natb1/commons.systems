@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, query, updateDoc, where, Timestamp, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
+import { collection, doc, getDocs, query, updateDoc, where, increment, Timestamp, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 
 import { db, NAMESPACE } from "./firebase.js";
@@ -25,7 +25,7 @@ export interface BudgetPeriod {
   readonly budgetId: string;
   readonly periodStart: Timestamp;
   readonly periodEnd: Timestamp;
-  /** Sum of transaction amounts in this period. Non-negative per Firestore rules. */
+  /** Sum of net transaction amounts (after reimbursement) in this period. Non-negative per Firestore rules. */
   readonly total: number;
   readonly groupId: string | null;
 }
@@ -196,7 +196,7 @@ export async function getBudgetPeriods(groupId: null): Promise<BudgetPeriod[]>;
 export async function getBudgetPeriods(groupId: string, uid: string): Promise<BudgetPeriod[]>;
 export async function getBudgetPeriods(groupId: string | null, uid?: string): Promise<BudgetPeriod[]> {
   const docs = await queryGroupCollection("budget-periods", "seed-", groupId, uid);
-  return docs.map((docSnap) => {
+  const periods = docs.map((docSnap) => {
     const data = docSnap.data();
     const periodStart = requireTimestamp(data.periodStart, "periodStart");
     const periodEnd = requireTimestamp(data.periodEnd, "periodEnd");
@@ -214,6 +214,26 @@ export async function getBudgetPeriods(groupId: string | null, uid?: string): Pr
       groupId: optionalString(data.groupId, "groupId"),
     };
   });
+
+  // Detect overlapping periods within the same budget
+  const byBudget = new Map<string, BudgetPeriod[]>();
+  for (const p of periods) {
+    const list = byBudget.get(p.budgetId);
+    if (list) list.push(p);
+    else byBudget.set(p.budgetId, [p]);
+  }
+  for (const [budgetId, budgetPeriods] of byBudget) {
+    budgetPeriods.sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
+    for (let i = 1; i < budgetPeriods.length; i++) {
+      if (budgetPeriods[i].periodStart.toMillis() < budgetPeriods[i - 1].periodEnd.toMillis()) {
+        throw new DataIntegrityError(
+          `Overlapping budget periods for budget ${budgetId}: ${budgetPeriods[i - 1].id} and ${budgetPeriods[i].id}`
+        );
+      }
+    }
+  }
+
+  return periods;
 }
 
 export async function updateBudgetPeriod(
@@ -230,6 +250,18 @@ export async function updateBudgetPeriod(
   const path = nsCollectionPath(NAMESPACE, "budget-periods");
   const ref = doc(db, path, periodId);
   await updateDoc(ref, fields);
+}
+
+export async function adjustBudgetPeriodTotal(
+  periodId: string,
+  delta: number,
+): Promise<void> {
+  if (!periodId || periodId.includes("/")) throw new Error("Invalid period ID");
+  if (!Number.isFinite(delta)) throw new RangeError("Delta must be a finite number");
+  if (delta === 0) return;
+  const path = nsCollectionPath(NAMESPACE, "budget-periods");
+  const ref = doc(db, path, periodId);
+  await updateDoc(ref, { total: increment(delta) });
 }
 
 export async function updateBudget(

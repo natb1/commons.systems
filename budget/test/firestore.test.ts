@@ -6,6 +6,7 @@ const mockQuery = vi.fn();
 const mockWhere = vi.fn();
 const mockDoc = vi.fn();
 const mockUpdateDoc = vi.fn();
+const mockIncrement = vi.fn((n: number) => ({ _increment: n }));
 
 vi.mock("firebase/firestore", () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
@@ -14,6 +15,7 @@ vi.mock("firebase/firestore", () => ({
   where: (...args: unknown[]) => mockWhere(...args),
   doc: (...args: unknown[]) => mockDoc(...args),
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
+  increment: (n: number) => mockIncrement(n),
   Timestamp: class Timestamp {
     _date: Date;
     constructor(d: Date) { this._date = d; }
@@ -29,7 +31,7 @@ vi.mock("../src/firebase.js", () => ({
 }));
 
 import { Timestamp } from "firebase/firestore";
-import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, getBudgets, getBudgetPeriods } from "../src/firestore";
+import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, adjustBudgetPeriodTotal, getBudgets, getBudgetPeriods } from "../src/firestore";
 
 describe("getTransactions", () => {
   beforeEach(() => {
@@ -700,5 +702,150 @@ describe("updateBudgetPeriod", () => {
   it("accepts zero total", async () => {
     await updateBudgetPeriod("food-2025-01-13", { total: 0 });
     expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { total: 0 });
+  });
+});
+
+describe("adjustBudgetPeriodTotal", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDoc.mockReturnValue("mock-doc-ref");
+    mockUpdateDoc.mockResolvedValue(undefined);
+  });
+
+  it("calls updateDoc with increment for positive delta", async () => {
+    await adjustBudgetPeriodTotal("food-2025-01-13", 50);
+    expect(mockDoc).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/budget-periods",
+      "food-2025-01-13",
+    );
+    expect(mockIncrement).toHaveBeenCalledWith(50);
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { total: { _increment: 50 } });
+  });
+
+  it("calls updateDoc with increment for negative delta", async () => {
+    await adjustBudgetPeriodTotal("food-2025-01-13", -30);
+    expect(mockIncrement).toHaveBeenCalledWith(-30);
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { total: { _increment: -30 } });
+  });
+
+  it("skips write when delta is zero", async () => {
+    await adjustBudgetPeriodTotal("food-2025-01-13", 0);
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws for empty periodId", async () => {
+    await expect(adjustBudgetPeriodTotal("", 10)).rejects.toThrow("Invalid period ID");
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws for periodId containing slash", async () => {
+    await expect(adjustBudgetPeriodTotal("a/b", 10)).rejects.toThrow("Invalid period ID");
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws RangeError for non-finite delta", async () => {
+    await expect(adjustBudgetPeriodTotal("food-2025-01-13", NaN)).rejects.toThrow(RangeError);
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("throws RangeError for Infinity delta", async () => {
+    await expect(adjustBudgetPeriodTotal("food-2025-01-13", Infinity)).rejects.toThrow(RangeError);
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+});
+
+describe("getBudgetPeriods — overlap detection", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+    mockQuery.mockReturnValue("mock-query");
+    mockWhere.mockReturnValue("mock-where");
+  });
+
+  it("throws DataIntegrityError for overlapping periods within same budget", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [
+        {
+          id: "food-w1",
+          data: () => ({
+            budgetId: "food",
+            periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+            periodEnd: Timestamp.fromDate(new Date("2025-01-15")),
+            total: 50,
+            groupId: null,
+          }),
+        },
+        {
+          id: "food-w2",
+          data: () => ({
+            budgetId: "food",
+            periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+            periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+            total: 30,
+            groupId: null,
+          }),
+        },
+      ],
+    });
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/Overlapping budget periods for budget food/);
+  });
+
+  it("allows non-overlapping periods for same budget", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [
+        {
+          id: "food-w1",
+          data: () => ({
+            budgetId: "food",
+            periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+            periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+            total: 50,
+            groupId: null,
+          }),
+        },
+        {
+          id: "food-w2",
+          data: () => ({
+            budgetId: "food",
+            periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+            periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+            total: 30,
+            groupId: null,
+          }),
+        },
+      ],
+    });
+    const periods = await getBudgetPeriods(null);
+    expect(periods).toHaveLength(2);
+  });
+
+  it("allows overlapping periods for different budgets", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [
+        {
+          id: "food-w1",
+          data: () => ({
+            budgetId: "food",
+            periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+            periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+            total: 50,
+            groupId: null,
+          }),
+        },
+        {
+          id: "housing-w1",
+          data: () => ({
+            budgetId: "housing",
+            periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+            periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+            total: 100,
+            groupId: null,
+          }),
+        },
+      ],
+    });
+    const periods = await getBudgetPeriods(null);
+    expect(periods).toHaveLength(2);
   });
 });

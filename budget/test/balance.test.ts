@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances } from "../src/balance";
+import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances } from "../src/balance";
 import type { Budget, BudgetPeriod, Transaction } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -46,6 +46,24 @@ function makeTxn(overrides: Partial<Transaction> = {}): Transaction {
     ...overrides,
   };
 }
+
+describe("computeNetAmount", () => {
+  it("returns full amount when reimbursement is 0", () => {
+    expect(computeNetAmount(100, 0)).toBe(100);
+  });
+
+  it("returns zero when reimbursement is 100", () => {
+    expect(computeNetAmount(389, 100)).toBe(0);
+  });
+
+  it("returns half when reimbursement is 50", () => {
+    expect(computeNetAmount(200, 50)).toBe(100);
+  });
+
+  it("handles fractional reimbursement", () => {
+    expect(computeNetAmount(100, 25)).toBe(75);
+  });
+});
 
 describe("findPeriodForTimestamp", () => {
   const periods = [
@@ -301,4 +319,49 @@ describe("computeAllBudgetBalances", () => {
     expect(batch.get("txn-1")).toBe(single1);
     expect(batch.get("txn-2")).toBe(single2);
   });
+});
+
+describe("seed data consistency", () => {
+  // Verify that seed budget period totals match the sum of net amounts
+  // from seed transactions within each period's time range.
+  // This catches drift between seed transactions and period totals.
+
+  interface SeedTxn { amount: number; reimbursement: number; budget: string | null; timestamp: Date }
+  interface SeedPeriod { id: string; budgetId: string; periodStart: Date; periodEnd: Date; total: number }
+
+  const seedTxns: SeedTxn[] = [
+    { amount: 80, reimbursement: 0, budget: "food", timestamp: new Date("2025-01-07") },
+    { amount: 40, reimbursement: 0, budget: "food", timestamp: new Date("2025-01-09") },
+    { amount: 5.75, reimbursement: 0, budget: "food", timestamp: new Date("2025-01-15") },
+    { amount: 142.50, reimbursement: 0, budget: "housing", timestamp: new Date("2025-01-20") },
+    { amount: 25, reimbursement: 0, budget: "food", timestamp: new Date("2025-01-21") },
+    { amount: 20, reimbursement: 0, budget: "food", timestamp: new Date("2025-01-23") },
+    { amount: 50, reimbursement: 0, budget: "vacation", timestamp: new Date("2025-01-30") },
+    { amount: 389, reimbursement: 100, budget: "vacation", timestamp: new Date("2025-02-05") },
+  ];
+
+  const seedPeriods: SeedPeriod[] = [
+    { id: "food-2025-01-06", budgetId: "food", periodStart: new Date("2025-01-06"), periodEnd: new Date("2025-01-13"), total: 120 },
+    { id: "food-2025-01-13", budgetId: "food", periodStart: new Date("2025-01-13"), periodEnd: new Date("2025-01-20"), total: 5.75 },
+    { id: "food-2025-01-20", budgetId: "food", periodStart: new Date("2025-01-20"), periodEnd: new Date("2025-01-27"), total: 45 },
+    { id: "housing-2025-01-20", budgetId: "housing", periodStart: new Date("2025-01-20"), periodEnd: new Date("2025-01-27"), total: 142.50 },
+    { id: "vacation-2025-01-27", budgetId: "vacation", periodStart: new Date("2025-01-27"), periodEnd: new Date("2025-02-03"), total: 50 },
+    { id: "vacation-2025-02-03", budgetId: "vacation", periodStart: new Date("2025-02-03"), periodEnd: new Date("2025-02-10"), total: 0 },
+  ];
+
+  for (const period of seedPeriods) {
+    it(`${period.id}: total matches sum of net transaction amounts`, () => {
+      const txnsInPeriod = seedTxns.filter(
+        (t) =>
+          t.budget === period.budgetId &&
+          t.timestamp.getTime() >= period.periodStart.getTime() &&
+          t.timestamp.getTime() < period.periodEnd.getTime(),
+      );
+      const expectedTotal = txnsInPeriod.reduce(
+        (sum, t) => sum + computeNetAmount(t.amount, t.reimbursement),
+        0,
+      );
+      expect(period.total).toBeCloseTo(expectedTotal, 10);
+    });
+  }
 });
