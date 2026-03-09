@@ -205,7 +205,7 @@ find_available_ports() {
     Promise.all(servers).then(ss => {
       console.log(ss.map(s => s.address().port).join(' '));
       ss.forEach(s => s.close());
-    });
+    }).catch(e => { process.stderr.write(e.message + '\n'); process.exit(1); });
   "
 }
 

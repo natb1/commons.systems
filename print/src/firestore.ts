@@ -56,7 +56,7 @@ function requireTags(value: unknown): Record<string, string> {
 
 function requireIso8601(value: unknown, field: string): string {
   const s = requireString(value, field);
-  if (isNaN(Date.parse(s))) {
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(s) || isNaN(Date.parse(s))) {
     throw new DataIntegrityError(`Invalid ISO 8601 date for ${field}: "${s}"`);
   }
   return s;

@@ -22,12 +22,8 @@ navEl.addEventListener("sign-out", () => void signOut());
 
 let currentUser: User | null = null;
 
-function updateNav(user: User | null): void {
-  navEl.user = user;
-}
-
 // Show login UI immediately; onAuthStateChanged will update once auth resolves.
-updateNav(null);
+navEl.user = null;
 
 const router = createRouter(
   app,
@@ -35,15 +31,11 @@ const router = createRouter(
     {
       path: "/",
       render: () => renderHome(currentUser),
-      afterRender: (outlet) => afterRenderHome(outlet),
+      afterRender: afterRenderHome,
     },
     {
       path: /^\/view\/([^/]+)$/,
-      render: (path) => {
-        const match = path.match(/^\/view\/([^/]+)$/);
-        const id = match ? match[1] : "";
-        return renderView(id, currentUser);
-      },
+      render: (path) => renderView(path.slice("/view/".length), currentUser),
     },
     { path: "/about", render: renderAbout },
   ],
@@ -58,6 +50,6 @@ const router = createRouter(
 
 onAuthStateChanged(auth, (user) => {
   currentUser = user;
-  updateNav(user);
+  navEl.user = user;
   router.navigate();
 });

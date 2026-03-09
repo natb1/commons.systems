@@ -194,7 +194,7 @@ if [ "$USES_AUTH" = true ]; then
 
   # Seed auth user
   echo "Seeding auth user..."
-  APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" npx tsx authutil/bin/run-auth-seed.ts
+  APP_NAME="$APP_NAME" AUTH_EMULATOR_HOST="localhost:${AUTH_PORT}" FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" npx tsx authutil/bin/run-auth-seed.ts
 fi
 
 # Poll until Storage emulator is ready (if used)

@@ -2,11 +2,13 @@ import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
 // Production Cloud Storage seeding is manual (emulator seeding is automated via seeds/run-storage-seed.ts):
 // 1. Download files from the sources listed in each item's sourceNotes
-// 2. Upload to print/{env}/media/{filename} in Firebase Cloud Storage
+// 2. Upload to print/{env}/media/{filename} in Firebase Cloud Storage:
+//      gsutil cp <file> gs://commons-systems.firebasestorage.app/print/prod/media/
 // 3. Set custom metadata on each object:
-//    - Public domain: publicDomain=true
-//    - Private: publicDomain=false, {uid}=member (one key per member uid)
-// Example: firebase storage:upload print/prod/media/pg3296-images-3.epub --metadata publicDomain=true
+//    - Public domain: gsutil setmeta -h "x-goog-meta-publicDomain:true" gs://.../<file>
+//    - Private: gsutil setmeta -h "x-goog-meta-publicDomain:false" -h "x-goog-meta-{uid}:member" gs://.../<file>
+// Note: Firestore uses memberUids array for access control; Storage uses per-UID custom metadata keys.
+// Both must be kept in sync when granting access to private items (see firestore.rules, storage.rules).
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
