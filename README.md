@@ -2,7 +2,9 @@
 
 This repository serves as a monorepo for Nate's agentic coding workflows and proof-of-concept (POC) applications. This can be used as an example for bootstrapping an agentic coding workflow.
 
-> WIP: many of Nate's tools and POC apps are currently being migrated over from rumor-ml/commons.systems
+- [commons.systems](https://commons.systems): More info about this project.
+- [budget.commons.systems](https://budget.commons.systems): Personal finance demo.
+- [print.commons.systems](https://print.commons.systems): Print media reader and library.
 
 ## Table of Contents
 
@@ -150,7 +152,7 @@ run-all-cleanup-preview.sh <pr-number>
 
 For using and/or extending the artifacts in this repo: forking is encouraged. To better understand the agentic coding artifacts a demo is available as a Claude Code [plugin](https://code.claude.com/docs/en/plugins).
 
-> Plugin distribution is WIP. If you encounter errors you can attempt to clone and load pr-workflow skills from this repo.
+> Plugin distribution is WIP. You can clone and load pr-workflow skills from this repo.
 ```
 /plugin marketplace add natb1/commons.systems
 /plugin install pr-workflow-bundle@commons-systems
