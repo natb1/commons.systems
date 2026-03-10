@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
@@ -83,6 +85,19 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 		return nil
 	}
 
+	// Resolve project ID
+	if projectID == "" {
+		projectID = os.Getenv("GOOGLE_CLOUD_PROJECT")
+	}
+	if projectID == "" {
+		p, err := readFirebaseRC()
+		if err != nil {
+			return fmt.Errorf("resolving project ID: %w\nSpecify --project or set GOOGLE_CLOUD_PROJECT", err)
+		}
+		projectID = p
+	}
+	log.Printf("using project %s", projectID)
+
 	// Connect to Firestore
 	ctx := context.Background()
 	client, err := store.NewClient(ctx, projectID, env)
@@ -148,6 +163,36 @@ func resolveGHEmail() (string, error) {
 	}
 
 	return "", fmt.Errorf("could not resolve email; configure git (git config user.email) or grant gh the user scope (gh auth refresh -s user)")
+}
+
+// readFirebaseRC finds the nearest .firebaserc by walking up from the
+// current directory and returns the default project ID.
+func readFirebaseRC() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		path := filepath.Join(dir, ".firebaserc")
+		data, err := os.ReadFile(path)
+		if err == nil {
+			var rc struct {
+				Projects map[string]string `json:"projects"`
+			}
+			if err := json.Unmarshal(data, &rc); err != nil {
+				return "", fmt.Errorf("parsing %s: %w", path, err)
+			}
+			if id, ok := rc.Projects["default"]; ok && id != "" {
+				return id, nil
+			}
+			return "", fmt.Errorf("%s has no default project", path)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("no .firebaserc found")
+		}
+		dir = parent
+	}
 }
 
 func printSummary(parsed []parsedFile, totalTxns, skipped int) {
