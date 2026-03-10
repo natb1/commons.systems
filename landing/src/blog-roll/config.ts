@@ -14,9 +14,9 @@ export const BLOG_ROLL_CONFIG: BlogRollConfig[] = [
       url: "https://www.anthropic.com/engineering",
     },
     strategy: new StaticStrategy({
-      title: "Building a C compiler with a team of parallel Claudes",
-      url: "https://www.anthropic.com/engineering/building-c-compiler",
-      publishedAt: "2026-02-05",
+      title: "Eval awareness in Claude Opus 4.6's BrowseComp performance",
+      url: "https://www.anthropic.com/engineering/eval-awareness-browsecomp",
+      publishedAt: "2026-03-06",
     }),
   },
   {
@@ -26,9 +26,9 @@ export const BLOG_ROLL_CONFIG: BlogRollConfig[] = [
       url: "https://claude.com/blog/category/claude-code",
     },
     strategy: new StaticStrategy({
-      title: "Bringing automated preview, review, and merge to Claude Code on desktop",
-      url: "https://claude.com/blog/preview-review-and-merge-with-claude-code",
-      publishedAt: "2026-02-20",
+      title: "Bringing Code Review to Claude Code",
+      url: "https://claude.com/blog/code-review",
+      publishedAt: "2026-03-09",
     }),
   },
 ];
