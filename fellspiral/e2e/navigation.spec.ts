@@ -29,7 +29,7 @@ test.describe("navigation", () => {
 
   test("unknown hash falls back to home page", async ({ page }) => {
     await page.goto("/#/nonexistent");
-    await expect(page.locator("main h2")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("main h2").first()).toBeVisible({ timeout: 30000 });
   });
 
   test("clicking Home nav link shows home", async ({ page }) => {
