@@ -30,7 +30,7 @@ test.describe("navigation", () => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     const posts = page.locator("#posts article");
-    expect(await posts.count()).toBeGreaterThanOrEqual(2);
+    expect(await posts.count()).toBeGreaterThanOrEqual(1);
   });
 
   test("admin route accessible @smoke", async ({ page }) => {
@@ -40,9 +40,9 @@ test.describe("navigation", () => {
 
   test("post route renders home page with posts @smoke", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Hello World\nThis is the post." }),
+      route.fulfill({ body: "# Underappreciated Advantages of Agentic Coding\nThis is the post." }),
     );
-    await page.goto("/#/post/hello-world");
+    await page.goto("/#/post/underappreciated-advantages-of-agentic-coding");
     await expect(page.locator("#posts")).toBeVisible({ timeout: 30000 });
   });
 

@@ -21,21 +21,12 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
       name: "posts",
       documents: [
         {
-          id: "hello-world",
+          id: "underappreciated-advantages-of-agentic-coding",
           data: {
-            title: "Hello World",
+            title: "Underappreciated Advantages of Agentic Coding",
             published: true,
-            publishedAt: "2026-01-15T00:00:00Z",
-            filename: "hello-world.md",
-          } satisfies PostSeedData,
-        },
-        {
-          id: "agentic-coding-workflow",
-          data: {
-            title: "Agentic Coding Workflow",
-            published: true,
-            publishedAt: "2026-02-15T00:00:00Z",
-            filename: "agentic-coding-workflow.md",
+            publishedAt: "2026-03-10T00:00:00Z",
+            filename: "underappreciated-advantages-of-agentic-coding.md",
           } satisfies PostSeedData,
         },
         {
