@@ -7,7 +7,16 @@ import type { PostMeta } from "../post-types.js";
 const SCROLL_PADDING_PX = 16;
 
 // Local instance strips raw HTML from markdown (defense-in-depth; DOMPurify sanitizes below).
-const marked = new Marked({ renderer: { html: () => "" } });
+// Links open in new tabs by default.
+const marked = new Marked({
+  renderer: {
+    html: () => "",
+    link({ href, text }) {
+      const safeHref = escapeHtml(href);
+      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+    },
+  },
+});
 
 function renderArticle(p: PostMeta): string {
   const safeId = escapeHtml(p.id);
@@ -80,7 +89,9 @@ export function hydrateHome(
 
       const html = await marked.parse(markdown);
       if (!outlet.contains(container)) return;
-      contentDiv.innerHTML = DOMPurify.sanitize(html);
+      contentDiv.innerHTML = DOMPurify.sanitize(html, {
+        ADD_ATTR: ["target"],
+      });
     } catch (error) {
       console.error(`Failed to load post "${post.id}":`, error);
       if (!outlet.contains(container)) return;
