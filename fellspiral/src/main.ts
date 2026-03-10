@@ -43,8 +43,8 @@ const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
   {
     heading: "Find Me",
     links: [
-      { label: "natethenoob", url: "https://natethenoob.itch.io" },
-      { label: "No Land Beyond", url: "https://discord.gg/MxXHfyY3" },
+      { label: "itch.io", url: "https://natethenoob.itch.io" },
+      { label: "No Land Beyond: Find a Local Game in Baltimore", url: "https://discord.gg/MxXHfyY3" },
     ],
   },
   {
