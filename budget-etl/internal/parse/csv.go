@@ -61,8 +61,13 @@ func parseCSV(path string) (ParseResult, error) {
 			return ParseResult{}, fmt.Errorf("%s: line %d: unknown transaction type %q", path, i+2, txnType)
 		}
 
+		txnID := strings.TrimSpace(row[4])
+		if txnID == "" {
+			return ParseResult{}, fmt.Errorf("%s: line %d: missing transaction ID", path, i+2)
+		}
+
 		txns = append(txns, Transaction{
-			TransactionID: strings.TrimSpace(row[4]),
+			TransactionID: txnID,
 			Date:          date,
 			Amount:        amount,
 			Description:   strings.TrimSpace(row[2]),

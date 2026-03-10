@@ -9,7 +9,6 @@ import (
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
-	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -24,13 +23,15 @@ type Client struct {
 // with Application Default Credentials. If projectID is empty, it
 // is inferred from the environment.
 func NewClient(ctx context.Context, projectID, env string) (*Client, error) {
-	var opts []option.ClientOption
+	if env == "" {
+		return nil, fmt.Errorf("env must not be empty")
+	}
 	conf := &firebase.Config{}
 	if projectID != "" {
 		conf.ProjectID = projectID
 	}
 
-	app, err := firebase.NewApp(ctx, conf, opts...)
+	app, err := firebase.NewApp(ctx, conf)
 	if err != nil {
 		return nil, fmt.Errorf("initializing firebase app: %w", err)
 	}
@@ -86,7 +87,6 @@ type TransactionData struct {
 	Account       string
 	Description   string
 	Amount        float64
-	Memo          string
 	Timestamp     time.Time
 	StatementID   string
 	TransactionID string
@@ -155,14 +155,9 @@ func (c *Client) UpsertTransactions(ctx context.Context, group GroupInfo, txns [
 	return result, nil
 }
 
-// TransactionDocID generates a deterministic Firestore document ID
+// transactionDocID generates a deterministic Firestore document ID
 // from a statement ID and transaction ID using sha256.
 func transactionDocID(statementID, transactionID string) string {
 	h := sha256.Sum256([]byte(statementID + "/" + transactionID))
 	return fmt.Sprintf("%x", h[:10]) // 20 hex characters
-}
-
-// TransactionDocID is the exported version for testing.
-func TransactionDocID(statementID, transactionID string) string {
-	return transactionDocID(statementID, transactionID)
 }

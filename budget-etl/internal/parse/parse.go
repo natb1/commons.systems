@@ -112,20 +112,20 @@ type ParseResult struct {
 	SkipReason   string
 }
 
-// ParseFile detects the format of sf and parses its transactions.
-func ParseFile(sf StatementFile) (ParseResult, error) {
-	fmt, err := detectFormat(sf.Path)
+// ParseFile detects the format of the file at path and parses its transactions.
+func ParseFile(path string) (ParseResult, error) {
+	f, err := detectFormat(path)
 	if err != nil {
 		return ParseResult{}, err
 	}
-	switch fmt {
+	switch f {
 	case formatOFX:
-		return parseOFX(sf.Path)
+		return parseOFX(path)
 	case formatSGML:
-		return parseSGML(sf.Path)
+		return parseSGML(path)
 	case formatCSV:
-		return parseCSV(sf.Path)
+		return parseCSV(path)
 	default:
-		return ParseResult{}, &os.PathError{Op: "parse", Path: sf.Path, Err: os.ErrInvalid}
+		return ParseResult{}, &os.PathError{Op: "parse", Path: path, Err: os.ErrInvalid}
 	}
 }

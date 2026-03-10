@@ -65,7 +65,7 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 	var skipped int
 
 	for _, sf := range files {
-		result, err := parse.ParseFile(sf)
+		result, err := parse.ParseFile(sf.Path)
 		if err != nil {
 			return fmt.Errorf("parsing %s: %w", sf.Path, err)
 		}
@@ -118,12 +118,15 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 	for _, pf := range parsed {
 		txnData := make([]store.TransactionData, len(pf.result.Transactions))
 		for i, t := range pf.result.Transactions {
+			desc := t.Description
+			if t.Memo != "" && t.Memo != t.Description {
+				desc = desc + " | " + t.Memo
+			}
 			txnData[i] = store.TransactionData{
 				Institution:   pf.sf.Institution,
 				Account:       pf.sf.Account,
-				Description:   t.Description,
+				Description:   desc,
 				Amount:        t.Amount,
-				Memo:          t.Memo,
 				Timestamp:     t.Date,
 				StatementID:   pf.sf.StatementID(),
 				TransactionID: t.TransactionID,

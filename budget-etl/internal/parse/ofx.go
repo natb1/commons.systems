@@ -98,21 +98,26 @@ func parseOFX(path string) (ParseResult, error) {
 }
 
 func convertOFXTransaction(raw ofxStmtTrn) (Transaction, error) {
+	fitid := strings.TrimSpace(raw.FITID)
+	if fitid == "" {
+		return Transaction{}, fmt.Errorf("STMTTRN missing FITID")
+	}
+
 	date, err := parseOFXDate(raw.DtPosted)
 	if err != nil {
-		return Transaction{}, fmt.Errorf("FITID %s: parsing date %q: %w", raw.FITID, raw.DtPosted, err)
+		return Transaction{}, fmt.Errorf("FITID %s: parsing date %q: %w", fitid, raw.DtPosted, err)
 	}
 
 	amount, err := parseOFXAmount(raw.TrnAmt)
 	if err != nil {
-		return Transaction{}, fmt.Errorf("FITID %s: parsing amount %q: %w", raw.FITID, raw.TrnAmt, err)
+		return Transaction{}, fmt.Errorf("FITID %s: parsing amount %q: %w", fitid, raw.TrnAmt, err)
 	}
 	// OFX: negative = debit (spending), positive = credit (income)
 	// Budget app: positive = spending, negative = income
 	amount = -amount
 
 	return Transaction{
-		TransactionID: strings.TrimSpace(raw.FITID),
+		TransactionID: fitid,
 		Date:          date,
 		Amount:        amount,
 		Description:   strings.TrimSpace(raw.Name),

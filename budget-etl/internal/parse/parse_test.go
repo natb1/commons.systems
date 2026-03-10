@@ -100,8 +100,7 @@ func TestParseFile_Dispatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sf := StatementFile{Path: tt.file}
-			result, err := ParseFile(sf)
+			result, err := ParseFile(tt.file)
 			if err != nil {
 				t.Fatalf("ParseFile: %v", err)
 			}

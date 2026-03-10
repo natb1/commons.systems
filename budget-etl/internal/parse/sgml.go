@@ -1,38 +1,22 @@
 package parse
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"strings"
 )
 
-// parseSGML parses OFX 1.x / QFX SGML files using a line-by-line tag scanner.
+// parseSGML parses OFX 1.x / QFX SGML files by scanning for SGML tags.
 // SGML tags are not self-closing and can't be parsed with encoding/xml.
 // Format: <TAG>value (no closing tags for leaf elements).
 // Aggregates like <STMTTRN> use </STMTTRN> as a closing tag.
 func parseSGML(path string) (ParseResult, error) {
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return ParseResult{}, err
 	}
-	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	// Some SGML files are a single very long line
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024)
-
-	// First pass: read the entire content so we can tokenize SGML tags
-	var content strings.Builder
-	for scanner.Scan() {
-		content.WriteString(scanner.Text())
-		content.WriteByte('\n')
-	}
-	if err := scanner.Err(); err != nil {
-		return ParseResult{}, fmt.Errorf("reading %s: %w", path, err)
-	}
-
-	text := content.String()
+	text := string(data)
 
 	// Check for investment account
 	if strings.Contains(text, "INVSTMTMSGSRSV1") {

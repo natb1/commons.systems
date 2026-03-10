@@ -16,7 +16,7 @@ func TestTransactionDocID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.statementID+"/"+tt.transactionID, func(t *testing.T) {
-			id := TransactionDocID(tt.statementID, tt.transactionID)
+			id := transactionDocID(tt.statementID, tt.transactionID)
 
 			// Must be exactly 20 hex characters
 			if len(id) != 20 {
@@ -29,7 +29,7 @@ func TestTransactionDocID(t *testing.T) {
 			}
 
 			// Must be deterministic
-			id2 := TransactionDocID(tt.statementID, tt.transactionID)
+			id2 := transactionDocID(tt.statementID, tt.transactionID)
 			if id != id2 {
 				t.Errorf("not deterministic: %q != %q", id, id2)
 			}
@@ -37,8 +37,8 @@ func TestTransactionDocID(t *testing.T) {
 	}
 
 	// Different inputs must produce different IDs
-	a := TransactionDocID("stmt-a", "txn-1")
-	b := TransactionDocID("stmt-b", "txn-1")
+	a := transactionDocID("stmt-a", "txn-1")
+	b := transactionDocID("stmt-b", "txn-1")
 	if a == b {
 		t.Errorf("different statements produced same doc ID: %q", a)
 	}
