@@ -15,6 +15,37 @@ test.describe("info panel — desktop", () => {
     await page.goto("/");
     await expect(page.locator("#panel-toggle")).toBeHidden();
   });
+
+  test("shows Find Me section with links @smoke", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
+    await page.goto("/");
+    await page.waitForSelector("main h2", { timeout: 30000 });
+    const panel = page.locator("#info-panel");
+    await expect(panel.locator("h3", { hasText: "Find Me" })).toBeVisible();
+    await expect(panel.locator('a[href="https://natethenoob.itch.io"]')).toBeVisible();
+    await expect(panel.locator('a[href="https://discord.gg/MxXHfyY3"]')).toBeVisible();
+  });
+
+  test("shows Games I'm Playing section with links", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
+    await page.goto("/");
+    await page.waitForSelector("main h2", { timeout: 30000 });
+    const panel = page.locator("#info-panel");
+    await expect(panel.locator("h3", { hasText: "Games I'm Playing" })).toBeVisible();
+    await expect(panel.locator('a[href="https://chrismcdee.itch.io/mythic-bastionland"]')).toBeVisible();
+    await expect(panel.locator('a[href="https://freeleaguepublishing.com/games/alien/"]')).toBeVisible();
+    await expect(panel.locator('a[href="https://cairnrpg.com/"]')).toBeVisible();
+  });
+
+  test("shows blogroll with three entries", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
+    await page.goto("/");
+    await page.waitForSelector("main h2", { timeout: 30000 });
+    const panel = page.locator("#info-panel");
+    await expect(panel.locator("h3", { hasText: "Blogroll" })).toBeVisible();
+    const blogrollItems = panel.locator(".blogroll-entry");
+    await expect(blogrollItems).toHaveCount(3);
+  });
 });
 
 test.describe("info panel — mobile", () => {

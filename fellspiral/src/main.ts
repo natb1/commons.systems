@@ -39,7 +39,23 @@ let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("fellspiral/post");
 const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://cs-fellspiral-4e12.web.app" };
-const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [];
+const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
+  {
+    heading: "Find Me",
+    links: [
+      { label: "natethenoob", url: "https://natethenoob.itch.io" },
+      { label: "No Land Beyond", url: "https://discord.gg/MxXHfyY3" },
+    ],
+  },
+  {
+    heading: "Games I'm Playing",
+    links: [
+      { label: "Mythic Bastionland", url: "https://chrismcdee.itch.io/mythic-bastionland" },
+      { label: "ALIEN", url: "https://freeleaguepublishing.com/games/alien/" },
+      { label: "Cairn", url: "https://cairnrpg.com/" },
+    ],
+  },
+];
 
 // Arrow function (not declaration) so TS narrows getElementById results as non-null.
 const updateInfoPanel = (): void => {
