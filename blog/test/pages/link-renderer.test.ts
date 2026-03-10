@@ -17,62 +17,48 @@ describe("link renderer (real Marked instance)", () => {
     outlet = document.createElement("div");
   });
 
-  it("renders links with target=_blank and rel=noopener noreferrer", async () => {
+  /** Render and hydrate with the given markdown, returning the content element. */
+  async function renderAndHydrate(markdown: string): Promise<Element> {
     outlet.innerHTML = renderHomeHtml([post]);
-    const fetchPost = vi
-      .fn()
-      .mockResolvedValue("Check [example](https://example.com) link");
-
-    hydrateHome(outlet, [post], fetchPost);
+    hydrateHome(outlet, [post], vi.fn().mockResolvedValue(markdown));
+    let content: Element | null = null;
     await vi.waitFor(() => {
-      const content = outlet.querySelector("#post-content-test-post");
-      expect(content?.innerHTML).toContain('target="_blank"');
-      expect(content?.innerHTML).toContain('rel="noopener noreferrer"');
-      expect(content?.innerHTML).toContain('href="https://example.com"');
-      expect(content?.innerHTML).toContain(">example</a>");
+      content = outlet.querySelector("#post-content-test-post");
+      expect(content?.innerHTML).not.toContain("Loading...");
     });
+    return content!;
+  }
+
+  it("renders links with target=_blank and rel=noopener noreferrer", async () => {
+    const content = await renderAndHydrate(
+      "Check [example](https://example.com) link",
+    );
+    expect(content.innerHTML).toContain('target="_blank"');
+    expect(content.innerHTML).toContain('rel="noopener noreferrer"');
+    expect(content.innerHTML).toContain('href="https://example.com"');
+    expect(content.innerHTML).toContain(">example</a>");
   });
 
   it("escapes special characters in href", async () => {
-    outlet.innerHTML = renderHomeHtml([post]);
-    const fetchPost = vi
-      .fn()
-      .mockResolvedValue('[click](https://example.com/a&b "")');
-
-    hydrateHome(outlet, [post], fetchPost);
-    await vi.waitFor(() => {
-      const content = outlet.querySelector("#post-content-test-post");
-      expect(content?.innerHTML).toContain("&amp;");
-    });
+    const content = await renderAndHydrate(
+      '[click](https://example.com/a&b "")',
+    );
+    expect(content.innerHTML).toContain("&amp;");
   });
 
   it("renders title attribute when link has title text", async () => {
-    outlet.innerHTML = renderHomeHtml([post]);
-    const fetchPost = vi
-      .fn()
-      .mockResolvedValue(
-        '[example](https://example.com "Example Title") link',
-      );
-
-    hydrateHome(outlet, [post], fetchPost);
-    await vi.waitFor(() => {
-      const content = outlet.querySelector("#post-content-test-post");
-      expect(content?.innerHTML).toContain('title="Example Title"');
-    });
+    const content = await renderAndHydrate(
+      '[example](https://example.com "Example Title") link',
+    );
+    expect(content.innerHTML).toContain('title="Example Title"');
   });
 
   it("omits title attribute when link has no title", async () => {
-    outlet.innerHTML = renderHomeHtml([post]);
-    const fetchPost = vi
-      .fn()
-      .mockResolvedValue("[example](https://example.com) link");
-
-    hydrateHome(outlet, [post], fetchPost);
-    await vi.waitFor(() => {
-      const content = outlet.querySelector("#post-content-test-post");
-      const anchor = content?.querySelector("a");
-      expect(anchor).toBeTruthy();
-      expect(anchor?.hasAttribute("title")).toBe(false);
-    });
+    const content = await renderAndHydrate(
+      "[example](https://example.com) link",
+    );
+    const anchor = content.querySelector("a");
+    expect(anchor).toBeTruthy();
+    expect(anchor?.hasAttribute("title")).toBe(false);
   });
 });

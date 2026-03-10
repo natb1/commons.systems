@@ -7,7 +7,8 @@ import type { PostMeta } from "../post-types.js";
 const SCROLL_PADDING_PX = 16;
 
 // Local instance strips raw HTML from markdown (defense-in-depth; DOMPurify sanitizes below).
-// Links open in new tabs by default.
+// Post-body links open in new tabs to keep readers on the blog page; rel="noopener noreferrer"
+// prevents reverse tabnapping.
 const marked = new Marked({
   renderer: {
     html: () => "",
@@ -90,7 +91,8 @@ export function hydrateHome(
 
       const html = await marked.parse(markdown);
       if (!outlet.contains(container)) return;
-      // ADD_ATTR preserves target="_blank" set by the custom link renderer above.
+      // DOMPurify strips target attributes by default; ADD_ATTR preserves the
+      // target="_blank" set by the custom link renderer above.
       contentDiv.innerHTML = DOMPurify.sanitize(html, {
         ADD_ATTR: ["target"],
       });
