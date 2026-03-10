@@ -11,9 +11,10 @@ const SCROLL_PADDING_PX = 16;
 const marked = new Marked({
   renderer: {
     html: () => "",
-    link({ href, text }) {
+    link({ href, text, title }) {
       const safeHref = escapeHtml(href);
-      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+      return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
     },
   },
 });
@@ -89,6 +90,7 @@ export function hydrateHome(
 
       const html = await marked.parse(markdown);
       if (!outlet.contains(container)) return;
+      // ADD_ATTR preserves target="_blank" set by the custom link renderer above.
       contentDiv.innerHTML = DOMPurify.sanitize(html, {
         ADD_ATTR: ["target"],
       });

@@ -13,3 +13,8 @@ export interface BlogRollEntry {
 export interface BlogRollStrategy {
   fetchLatestPost(): Promise<LatestPost | null>;
 }
+
+export interface BlogRollConfig {
+  entry: BlogRollEntry;
+  strategy: BlogRollStrategy;
+}
