@@ -26,57 +26,57 @@ test.describe("blog", () => {
 
   test("post URL scrolls to post in home page", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Underappreciated Advantages of Agentic Coding\nPost content here." }),
+      route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nPost content here." }),
     );
-    await page.goto("/#/post/underappreciated-advantages-of-agentic-coding");
+    await page.goto("/#/post/recovering-autonomy-with-coding-agents");
     await page.waitForSelector("#posts", { timeout: 30000 });
-    await expect(page.locator("#post-underappreciated-advantages-of-agentic-coding")).toBeVisible();
+    await expect(page.locator("#post-recovering-autonomy-with-coding-agents")).toBeVisible();
     await expect(
-      page.locator("#post-content-underappreciated-advantages-of-agentic-coding"),
+      page.locator("#post-content-recovering-autonomy-with-coding-agents"),
     ).toBeVisible();
   });
 
   test("post content renders markdown as HTML", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Underappreciated Advantages of Agentic Coding\nThis is the post." }),
+      route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." }),
     );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
-      page.locator("#post-content-underappreciated-advantages-of-agentic-coding"),
+      page.locator("#post-content-recovering-autonomy-with-coding-agents"),
     ).toContainText("This is the post.", { timeout: 30000 });
   });
 
   test("post content does not show error fallback", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Underappreciated Advantages of Agentic Coding\nThis is the post." }),
+      route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." }),
     );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
-      page.locator("#post-content-underappreciated-advantages-of-agentic-coding"),
+      page.locator("#post-content-recovering-autonomy-with-coding-agents"),
     ).not.toContainText("Could not load post content.", { timeout: 30000 });
   });
 
   test("post title has jump link to post URL", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Underappreciated Advantages of Agentic Coding\nThis is the post." }),
+      route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." }),
     );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
-    const link = page.locator('#post-underappreciated-advantages-of-agentic-coding h2 a.post-link');
+    const link = page.locator('#post-recovering-autonomy-with-coding-agents h2 a.post-link');
     await expect(link).toBeVisible();
-    await expect(link).toHaveAttribute("href", "#/post/underappreciated-advantages-of-agentic-coding");
+    await expect(link).toHaveAttribute("href", "#/post/recovering-autonomy-with-coding-agents");
   });
 
   test("post shows publication date", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Underappreciated Advantages of Agentic Coding\nThis is the post." }),
+      route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." }),
     );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
-      page.locator('#post-underappreciated-advantages-of-agentic-coding time[datetime="2026-03-10T00:00:00Z"]'),
+      page.locator('#post-recovering-autonomy-with-coding-agents time[datetime="2026-03-10T00:00:00Z"]'),
     ).toBeVisible();
   });
 });

@@ -40,9 +40,9 @@ test.describe("navigation", () => {
 
   test("post route renders home page with posts @smoke", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Underappreciated Advantages of Agentic Coding\nThis is the post." }),
+      route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." }),
     );
-    await page.goto("/#/post/underappreciated-advantages-of-agentic-coding");
+    await page.goto("/#/post/recovering-autonomy-with-coding-agents");
     await expect(page.locator("#posts")).toBeVisible({ timeout: 30000 });
   });
 

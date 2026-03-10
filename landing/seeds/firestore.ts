@@ -21,12 +21,12 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
       name: "posts",
       documents: [
         {
-          id: "underappreciated-advantages-of-agentic-coding",
+          id: "recovering-autonomy-with-coding-agents",
           data: {
-            title: "Underappreciated Advantages of Agentic Coding",
+            title: "Recovering Autonomy with Coding Agents",
             published: true,
             publishedAt: "2026-03-10T00:00:00Z",
-            filename: "underappreciated-advantages-of-agentic-coding.md",
+            filename: "recovering-autonomy-with-coding-agents.md",
           } satisfies PostSeedData,
         },
         {
