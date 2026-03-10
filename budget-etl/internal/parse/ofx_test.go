@@ -1,0 +1,55 @@
+package parse
+
+import (
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+func TestParseOFX(t *testing.T) {
+	path := filepath.Join("testdata", "capital_one.ofx")
+	result, err := parseOFX(path)
+	if err != nil {
+		t.Fatalf("parseOFX: %v", err)
+	}
+	if result.Skipped {
+		t.Fatal("expected non-skipped result")
+	}
+
+	txns := result.Transactions
+	if len(txns) != 2 {
+		t.Fatalf("expected 2 transactions, got %d", len(txns))
+	}
+
+	// First: DEBIT, TRNAMT=-16.19 → budget amount = +16.19 (spending)
+	t.Run("debit", func(t *testing.T) {
+		txn := txns[0]
+		if txn.TransactionID != "202505221122069" {
+			t.Errorf("TransactionID = %q, want %q", txn.TransactionID, "202505221122069")
+		}
+		wantDate, _ := time.Parse("2006-01-02", "2025-05-22")
+		if !txn.Date.Equal(wantDate) {
+			t.Errorf("Date = %v, want %v", txn.Date, wantDate)
+		}
+		if txn.Amount != 16.19 {
+			t.Errorf("Amount = %f, want %f", txn.Amount, 16.19)
+		}
+		if txn.Description != "CVS/PHARMACY #07952" {
+			t.Errorf("Description = %q, want %q", txn.Description, "CVS/PHARMACY #07952")
+		}
+		if txn.Memo != "CVS/PHARMACY #07952" {
+			t.Errorf("Memo = %q, want %q", txn.Memo, "CVS/PHARMACY #07952")
+		}
+	})
+
+	// Second: CREDIT, TRNAMT=50.00 → budget amount = -50.00 (income)
+	t.Run("credit", func(t *testing.T) {
+		txn := txns[1]
+		if txn.TransactionID != "202505201234567" {
+			t.Errorf("TransactionID = %q, want %q", txn.TransactionID, "202505201234567")
+		}
+		if txn.Amount != -50.00 {
+			t.Errorf("Amount = %f, want %f", txn.Amount, -50.00)
+		}
+	})
+}
