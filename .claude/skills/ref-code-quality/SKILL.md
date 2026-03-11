@@ -1,6 +1,6 @@
 ---
 name: ref-code-quality
-description: Code quality review loop — 7 parallel review agents with wiggum-loop
+description: Code quality review loop — 7 parallel review tasks with wiggum-loop
 allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
@@ -19,7 +19,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
   7. **`pr-review-toolkit:type-design-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:type-design-analyzer"`.
 - All 7 tasks MUST be launched in a single message (parallel execution) with `run_in_background: true`
 - Wait for all 7 tasks to complete using TaskOutput with `block: true` before proceeding. Note each task's `output_file` path.
-- If any pr-review-toolkit agent fails to launch, log a warning but continue — `/review` results alone are sufficient to proceed
+- If any task other than `/review` fails to launch, log a warning but continue — `/review` results alone are sufficient to proceed
 - Construct `tmp/codequality-output-<N>.txt` by concatenating the output files with Bash — do NOT use the Write tool or re-output verbatim content:
   ```bash
   mkdir -p tmp && {
@@ -32,7 +32,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
     printf '\n\n## pr-review-toolkit: type-design-analyzer\n\n'; cat "$TYPE_DESIGN_OUT";
   } > tmp/codequality-output-<N>.txt
   ```
-  Substitute each `$*_OUT` variable with the `output_file` path from the corresponding Task result. For unavailable agents, replace `cat` with `echo "Agent unavailable"`.
+  Substitute each `$*_OUT` variable with the `output_file` path from the corresponding Task result. For unavailable tasks, replace `cat` with `echo "Task unavailable"`.
 
 **Evaluation instructions:**
 - **Aggregate and deduplicate** findings across all agents — merge near-identical findings into single entries noting which agents raised them
@@ -74,7 +74,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
   ```
   # Code Quality Review - Complete ✓
 
-  **Reviewer**: Claude Code (via /review skill + pr-review-toolkit agents)
+  **Reviewer**: Claude Code (via /review + /simplify skills + pr-review-toolkit agents)
   **Date**: [Current date]
   **Outcome**: [Summary of result]
 
