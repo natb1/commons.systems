@@ -459,6 +459,8 @@ describe("getBudgetPeriods", () => {
             periodStart: mockStart,
             periodEnd: mockEnd,
             total: 5.75,
+            count: 2,
+            categoryBreakdown: { "Food:Groceries": 5.75 },
             groupId: "household",
           }),
         },
@@ -474,6 +476,8 @@ describe("getBudgetPeriods", () => {
         periodStart: mockStart,
         periodEnd: mockEnd,
         total: 5.75,
+        count: 2,
+        categoryBreakdown: { "Food:Groceries": 5.75 },
         groupId: "household",
       },
     ]);
@@ -522,7 +526,7 @@ describe("getBudgetPeriods", () => {
       budgetId: "food",
       periodStart: Timestamp.fromDate(new Date("2025-01-13")),
       periodEnd: "not-a-timestamp",
-      total: 5.75, groupId: null,
+      total: 5.75, count: 0, categoryBreakdown: {}, groupId: null,
     })}]});
     await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected Timestamp for periodEnd/);
   });
@@ -532,7 +536,7 @@ describe("getBudgetPeriods", () => {
       budgetId: 123,
       periodStart: Timestamp.fromDate(new Date("2025-01-13")),
       periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
-      total: 5.75, groupId: null,
+      total: 5.75, count: 0, categoryBreakdown: {}, groupId: null,
     })}]});
     await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected string for budgetId/);
   });
@@ -541,7 +545,7 @@ describe("getBudgetPeriods", () => {
     const sameDate = Timestamp.fromDate(new Date("2025-01-13"));
     mockGetDocs.mockResolvedValue({ docs: [{ id: "bad", data: () => ({
       budgetId: "food", periodStart: sameDate, periodEnd: sameDate,
-      total: 5.75, groupId: null,
+      total: 5.75, count: 0, categoryBreakdown: {}, groupId: null,
     })}]});
     await expect(getBudgetPeriods(null)).rejects.toThrow(/periodStart must be before periodEnd/);
   });
@@ -555,6 +559,8 @@ describe("getBudgetPeriods", () => {
           periodStart: Timestamp.fromDate(new Date("2025-01-13")),
           periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
           total: -5,
+          count: 0,
+          categoryBreakdown: {},
           groupId: null,
         }),
       }],
@@ -571,6 +577,8 @@ describe("getBudgetPeriods", () => {
           periodStart: Timestamp.fromDate(new Date("2025-01-13")),
           periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
           total: Infinity,
+          count: 0,
+          categoryBreakdown: {},
           groupId: null,
         }),
       }],
@@ -773,6 +781,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-06")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-15")),
             total: 50,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },
@@ -783,6 +793,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-13")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
             total: 30,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },
@@ -801,6 +813,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-06")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
             total: 50,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },
@@ -811,6 +825,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-13")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
             total: 30,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },
@@ -830,6 +846,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-06")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
             total: 50,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },
@@ -840,6 +858,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-06")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
             total: 100,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },

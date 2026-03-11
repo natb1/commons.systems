@@ -7,10 +7,13 @@ vi.mock("@commons-systems/router", () => ({
   parseHash: () => ({ path: "/", params: new URLSearchParams() }),
 }));
 vi.mock("../src/pages/home.js", () => ({ renderHome: vi.fn().mockResolvedValue("<div>home</div>") }));
-vi.mock("../src/components/nav.js", () => ({ renderNav: () => "<nav>nav</nav>" }));
+vi.mock("@commons-systems/style/components/nav", () => ({}));
+vi.mock("@commons-systems/htmlutil", () => ({ escapeHtml: (s: string) => s }));
 vi.mock("../src/pages/home-hydrate.js", () => ({ hydrateTransactionTable: vi.fn() }));
 vi.mock("../src/pages/budgets.js", () => ({ renderBudgets: vi.fn().mockResolvedValue("<div>budgets</div>") }));
 vi.mock("../src/pages/budgets-hydrate.js", () => ({ hydrateBudgetTable: vi.fn() }));
+vi.mock("../src/pages/rules.js", () => ({ renderRules: vi.fn().mockResolvedValue("<div>rules</div>") }));
+vi.mock("../src/pages/rules-hydrate.js", () => ({ hydrateRulesTable: vi.fn() }));
 vi.mock("@commons-systems/authutil/groups", () => ({
   getUserGroups: vi.fn(),
 }));

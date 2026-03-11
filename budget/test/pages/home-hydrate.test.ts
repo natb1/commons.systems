@@ -17,9 +17,9 @@ function flush(): Promise<void> {
 }
 
 const defaultPeriods = [
-  { id: "food-w1", budgetId: "budget-food", periodStartMs: new Date("2025-01-06").getTime(), periodEndMs: new Date("2025-01-13").getTime(), total: 80 },
-  { id: "food-w2", budgetId: "budget-food", periodStartMs: new Date("2025-01-13").getTime(), periodEndMs: new Date("2025-01-20").getTime(), total: 50 },
-  { id: "vacation-w1", budgetId: "budget-vacation", periodStartMs: new Date("2025-01-13").getTime(), periodEndMs: new Date("2025-01-20").getTime(), total: 30 },
+  { id: "food-w1", budgetId: "budget-food", periodStartMs: new Date("2025-01-06").getTime(), periodEndMs: new Date("2025-01-13").getTime(), total: 80, count: 0, categoryBreakdown: {} },
+  { id: "food-w2", budgetId: "budget-food", periodStartMs: new Date("2025-01-13").getTime(), periodEndMs: new Date("2025-01-20").getTime(), total: 50, count: 0, categoryBreakdown: {} },
+  { id: "vacation-w1", budgetId: "budget-vacation", periodStartMs: new Date("2025-01-13").getTime(), periodEndMs: new Date("2025-01-20").getTime(), total: 30, count: 0, categoryBreakdown: {} },
 ];
 
 function createContainer(txnId: string, overrides: { budgetId?: string; amount?: number; timestamp?: number; reimbursement?: number; periods?: typeof defaultPeriods } = {}): HTMLElement {
@@ -495,8 +495,8 @@ describe("hydrateTransactionTable", () => {
 
     it("throws DataIntegrityError for missing numeric fields", () => {
       const container = createContainer("txn-1");
-      container.dataset.budgetPeriods = JSON.stringify([{ id: "p1", budgetId: "food", periodStartMs: "not-a-number", periodEndMs: 1, total: 0 }]);
-      expect(() => hydrateTransactionTable(container)).toThrow("Budget period missing numeric periodStartMs, periodEndMs, or total");
+      container.dataset.budgetPeriods = JSON.stringify([{ id: "p1", budgetId: "food", periodStartMs: "not-a-number", periodEndMs: 1, total: 0, count: 0, categoryBreakdown: {} }]);
+      expect(() => hydrateTransactionTable(container)).toThrow("Budget period missing numeric periodStartMs, periodEndMs, total, or count");
     });
 
     it("throws DataIntegrityError for null elements", () => {
@@ -514,7 +514,7 @@ describe("hydrateTransactionTable", () => {
     it("throws DataIntegrityError when periodStartMs >= periodEndMs", () => {
       const container = createContainer("txn-1");
       container.dataset.budgetPeriods = JSON.stringify([
-        { id: "p1", budgetId: "food", periodStartMs: 1000, periodEndMs: 1000, total: 0 },
+        { id: "p1", budgetId: "food", periodStartMs: 1000, periodEndMs: 1000, total: 0, count: 0, categoryBreakdown: {} },
       ]);
       expect(() => hydrateTransactionTable(container)).toThrow("Budget period has periodStartMs >= periodEndMs");
     });
