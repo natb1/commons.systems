@@ -1,6 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { RenderPageOptions } from "./render-options.js";
-import { getRules, type Rule, type RuleType } from "../firestore.js";
+import { getRules, getBudgets, type Rule, type RuleType } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";
 
 const typeOptions: { value: RuleType; label: string }[] = [
@@ -9,38 +9,26 @@ const typeOptions: { value: RuleType; label: string }[] = [
 ];
 
 function renderTypeCell(rule: Rule, editable: boolean): string {
-  if (!editable) {
-    const opt = typeOptions.find(o => o.value === rule.type);
-    return opt ? escapeHtml(opt.label) : escapeHtml(rule.type);
-  }
+  const dis = editable ? "" : " disabled";
   const options = typeOptions.map(o => {
     const sel = o.value === rule.type ? " selected" : "";
     return `<option value="${escapeHtml(o.value)}"${sel}>${escapeHtml(o.label)}</option>`;
   }).join("");
-  return `<select class="edit-type" aria-label="Type">${options}</select>`;
+  return `<select class="edit-type" aria-label="Type"${dis}>${options}</select>`;
 }
 
 function renderRow(rule: Rule, editable: boolean): string {
   const idAttr = editable ? ` data-rule-id="${escapeHtml(rule.id)}"` : "";
+  const dis = editable ? "" : " disabled";
   const typeCell = renderTypeCell(rule, editable);
-  const patternCell = editable
-    ? `<input type="text" class="edit-pattern" value="${escapeHtml(rule.pattern)}" aria-label="Pattern">`
-    : escapeHtml(rule.pattern);
-  const targetCell = editable
-    ? `<input type="text" class="edit-target" value="${escapeHtml(rule.target)}" aria-label="Target">`
-    : escapeHtml(rule.target);
-  const priorityCell = editable
-    ? `<input type="number" class="edit-priority" value="${escapeHtml(String(rule.priority))}" aria-label="Priority">`
-    : escapeHtml(String(rule.priority));
-  const institutionCell = editable
-    ? `<input type="text" class="edit-institution" value="${escapeHtml(rule.institution ?? "")}" aria-label="Institution">`
-    : escapeHtml(rule.institution ?? "");
-  const accountCell = editable
-    ? `<input type="text" class="edit-account" value="${escapeHtml(rule.account ?? "")}" aria-label="Account">`
-    : escapeHtml(rule.account ?? "");
+  const patternCell = `<input type="text" class="edit-pattern" value="${escapeHtml(rule.pattern)}" aria-label="Pattern"${dis}>`;
+  const targetCell = `<input type="text" class="edit-target" value="${escapeHtml(rule.target)}" aria-label="Target"${dis}>`;
+  const priorityCell = `<input type="number" class="edit-priority" value="${escapeHtml(String(rule.priority))}" aria-label="Priority"${dis}>`;
+  const institutionCell = `<input type="text" class="edit-institution" value="${escapeHtml(rule.institution ?? "")}" aria-label="Institution"${dis}>`;
+  const accountCell = `<input type="text" class="edit-account" value="${escapeHtml(rule.account ?? "")}" aria-label="Account"${dis}>`;
   const deleteCell = editable
     ? `<button class="delete-rule" aria-label="Delete rule">Delete</button>`
-    : "";
+    : `<span></span>`;
 
   return `<div class="rule-row"${idAttr}>
     <span>${typeCell}</span>
@@ -53,7 +41,17 @@ function renderRow(rule: Rule, editable: boolean): string {
   </div>`;
 }
 
-function renderRulesTable(rules: Rule[], authorized: boolean, groupId: string): string {
+interface RulesTableOptions {
+  rules: Rule[];
+  authorized: boolean;
+  groupId: string;
+  budgetNames: string[];
+  uniqueInstitutions: string[];
+  uniqueAccounts: string[];
+}
+
+function renderRulesTable(opts: RulesTableOptions): string {
+  const { rules, authorized, groupId, budgetNames, uniqueInstitutions, uniqueAccounts } = opts;
   const sorted = [...rules].sort((a, b) => a.priority - b.priority || a.pattern.localeCompare(b.pattern));
   const rows = sorted.map(r => renderRow(r, authorized)).join("\n");
 
@@ -61,7 +59,13 @@ function renderRulesTable(rules: Rule[], authorized: boolean, groupId: string): 
     ? `<button id="add-rule" data-group-id="${escapeHtml(groupId)}">Add Rule</button>`
     : "";
 
-  return `<div id="rules-table">
+  const dataAttrs = authorized
+    ? ` data-budget-options='${escapeHtml(JSON.stringify(budgetNames))}'` +
+      ` data-institution-options='${escapeHtml(JSON.stringify(uniqueInstitutions))}'` +
+      ` data-account-options='${escapeHtml(JSON.stringify(uniqueAccounts))}'`
+    : "";
+
+  return `<div id="rules-table"${dataAttrs}>
       <div class="rule-header">
         <span>Type</span>
         <span>Pattern</span>
@@ -83,7 +87,11 @@ export async function renderRules(options: RenderPageOptions): Promise<string> {
   let tableHtml: string;
   try {
     const rules = await (group && user?.email ? getRules(group.id, user.email) : getRules(null));
-    tableHtml = renderRulesTable(rules, authorized, group?.id ?? "");
+    const budgets = await (group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null));
+    const budgetNames = budgets.map(b => b.name);
+    const uniqueInstitutions = [...new Set(rules.map(r => r.institution).filter((v): v is string => v !== null))];
+    const uniqueAccounts = [...new Set(rules.map(r => r.account).filter((v): v is string => v !== null))];
+    tableHtml = renderRulesTable({ rules, authorized, groupId: group?.id ?? "", budgetNames, uniqueInstitutions, uniqueAccounts });
   } catch (error) {
     if (error instanceof RangeError || error instanceof DataIntegrityError
         || error instanceof TypeError || error instanceof ReferenceError) {

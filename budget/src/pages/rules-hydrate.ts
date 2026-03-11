@@ -1,5 +1,6 @@
 import { updateRule, deleteRule, createRule, getGroupMembers, type RuleType } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";
+import { showDropdown, removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 
 const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
@@ -48,11 +49,45 @@ function rowRuleId(el: HTMLElement): string | null {
   return row.dataset.ruleId ?? null;
 }
 
+function parseJsonArray(raw: string | undefined): string[] {
+  if (!raw) return [];
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) throw new Error(`Expected array, got ${typeof parsed}`);
+  return parsed as string[];
+}
+
 export function hydrateRulesTable(container: HTMLElement): void {
+  registerAutocompleteListeners();
+
+  const budgetOptions = parseJsonArray(container.dataset.budgetOptions);
+  const institutionOptions = parseJsonArray(container.dataset.institutionOptions);
+  const accountOptions = parseJsonArray(container.dataset.accountOptions);
+
+  function getOptionsForInput(input: HTMLInputElement): string[] {
+    if (input.classList.contains("edit-target")) return budgetOptions;
+    if (input.classList.contains("edit-institution")) return institutionOptions;
+    if (input.classList.contains("edit-account")) return accountOptions;
+    return [];
+  }
+
+  // Show all options on focus; filter as user types
+  container.addEventListener("focus", (e: Event) => {
+    if (!(e.target instanceof HTMLInputElement)) return;
+    const options = getOptionsForInput(e.target);
+    if (options.length > 0) showDropdown(e.target, options, "");
+  }, true);
+
+  container.addEventListener("input", (e: Event) => {
+    if (!(e.target instanceof HTMLInputElement)) return;
+    const options = getOptionsForInput(e.target);
+    if (options.length > 0) showDropdown(e.target, options);
+  });
+
   // Blur handler for inline text/number edits
   container.addEventListener("blur", async (e) => {
     const target = e.target;
     if (!(target instanceof HTMLInputElement)) return;
+    removeDropdown();
     const ruleId = rowRuleId(target);
     if (!ruleId) return;
 

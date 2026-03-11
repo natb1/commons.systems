@@ -6,6 +6,13 @@ vi.mock("../../src/firestore.js", () => ({
   adjustBudgetPeriodTotal: vi.fn(),
 }));
 
+vi.mock("@commons-systems/style/components/autocomplete", () => ({
+  showDropdown: vi.fn(),
+  removeDropdown: vi.fn(),
+  registerAutocompleteListeners: vi.fn(),
+  _resetForTest: vi.fn(),
+}));
+
 import { hydrateTransactionTable, _resetForTest } from "../../src/pages/home-hydrate";
 import { updateTransaction, adjustBudgetPeriodTotal } from "../../src/firestore";
 

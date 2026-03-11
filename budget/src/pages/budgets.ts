@@ -10,25 +10,19 @@ const rolloverOptions: { value: Rollover; label: string }[] = [
 ];
 
 function renderRolloverCell(budget: Budget, editable: boolean): string {
-  if (!editable) {
-    const opt = rolloverOptions.find(o => o.value === budget.rollover);
-    return opt ? escapeHtml(opt.label) : escapeHtml(budget.rollover);
-  }
+  const dis = editable ? "" : " disabled";
   const options = rolloverOptions.map(o => {
     const sel = o.value === budget.rollover ? " selected" : "";
     return `<option value="${escapeHtml(o.value)}"${sel}>${escapeHtml(o.label)}</option>`;
   }).join("");
-  return `<select class="edit-rollover" aria-label="Rollover">${options}</select>`;
+  return `<select class="edit-rollover" aria-label="Rollover"${dis}>${options}</select>`;
 }
 
 function renderRow(budget: Budget, editable: boolean): string {
   const idAttr = editable ? ` data-budget-id="${escapeHtml(budget.id)}"` : "";
-  const nameCell = editable
-    ? `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name">`
-    : escapeHtml(budget.name);
-  const allowanceCell = editable
-    ? `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.weeklyAllowance))}" min="0" aria-label="Weekly allowance">`
-    : escapeHtml(String(budget.weeklyAllowance));
+  const dis = editable ? "" : " disabled";
+  const nameCell = `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name"${dis}>`;
+  const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.weeklyAllowance))}" min="0" aria-label="Weekly allowance"${dis}>`;
   const rolloverCell = renderRolloverCell(budget, editable);
 
   return `<div class="budget-row"${idAttr}>

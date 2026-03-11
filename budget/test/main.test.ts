@@ -14,6 +14,12 @@ vi.mock("../src/pages/budgets.js", () => ({ renderBudgets: vi.fn().mockResolvedV
 vi.mock("../src/pages/budgets-hydrate.js", () => ({ hydrateBudgetTable: vi.fn() }));
 vi.mock("../src/pages/rules.js", () => ({ renderRules: vi.fn().mockResolvedValue("<div>rules</div>") }));
 vi.mock("../src/pages/rules-hydrate.js", () => ({ hydrateRulesTable: vi.fn() }));
+vi.mock("@commons-systems/style/components/autocomplete", () => ({
+  showDropdown: vi.fn(),
+  removeDropdown: vi.fn(),
+  registerAutocompleteListeners: vi.fn(),
+  _resetForTest: vi.fn(),
+}));
 vi.mock("@commons-systems/authutil/groups", () => ({
   getUserGroups: vi.fn(),
 }));
