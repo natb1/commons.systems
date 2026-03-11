@@ -12,7 +12,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 - Launch 7 review tasks in parallel using the Task tool. Collect all returned results verbatim — do NOT summarize or paraphrase agent output:
   1. **`/review` skill** — Launch a Task with `subagent_type: "general-purpose"` that invokes the Skill tool with `skill: "review"`. Include the PR diff context in the prompt.
   2. **`pr-review-toolkit:code-reviewer`** — Launch a Task with `subagent_type: "pr-review-toolkit:code-reviewer"`.
-  3. **`pr-review-toolkit:code-simplifier`** — Launch a Task with `subagent_type: "pr-review-toolkit:code-simplifier"`.
+  3. **`/simplify` skill** — Launch a Task with `subagent_type: "general-purpose"` that invokes the Skill tool with `skill: "simplify"`. Include the PR diff context in the prompt.
   4. **`pr-review-toolkit:comment-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:comment-analyzer"`.
   5. **`pr-review-toolkit:pr-test-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:pr-test-analyzer"`.
   6. **`pr-review-toolkit:silent-failure-hunter`** — Launch a Task with `subagent_type: "pr-review-toolkit:silent-failure-hunter"`.
@@ -25,7 +25,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
   mkdir -p tmp && {
     printf '## /review Output\n\n'; cat "$REVIEW_OUT";
     printf '\n\n## pr-review-toolkit: code-reviewer\n\n'; cat "$CODE_REVIEWER_OUT";
-    printf '\n\n## pr-review-toolkit: code-simplifier\n\n'; cat "$CODE_SIMPLIFIER_OUT";
+    printf '\n\n## /simplify Output\n\n'; cat "$SIMPLIFY_OUT";
     printf '\n\n## pr-review-toolkit: comment-analyzer\n\n'; cat "$COMMENT_ANALYZER_OUT";
     printf '\n\n## pr-review-toolkit: pr-test-analyzer\n\n'; cat "$PR_TEST_ANALYZER_OUT";
     printf '\n\n## pr-review-toolkit: silent-failure-hunter\n\n'; cat "$SILENT_FAILURE_OUT";
