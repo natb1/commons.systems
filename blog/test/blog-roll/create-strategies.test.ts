@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createStrategies } from "../../src/blog-roll/types";
-import type { BlogRollConfig } from "../../src/blog-roll/types";
+import { createStrategies, type BlogRollConfig } from "../../src/blog-roll/types";
 import { StaticStrategy } from "../../src/blog-roll/static-strategy";
 
 const strategy = new StaticStrategy({

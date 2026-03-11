@@ -63,12 +63,12 @@ describe("AtomStrategy", () => {
 
   });
 
-  it("falls back to allorigins proxy on CORS error", async () => {
+  it("falls back to corsproxy on CORS error", async () => {
     const mockFetch = vi.fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ contents: ATOM_FEED }),
+        text: () => Promise.resolve(ATOM_FEED),
       });
     vi.stubGlobal("fetch", mockFetch);
 
@@ -83,7 +83,7 @@ describe("AtomStrategy", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     const proxyUrl = mockFetch.mock.calls[1][0] as string;
-    expect(proxyUrl).toContain("api.allorigins.win");
+    expect(proxyUrl).toContain("corsproxy.io");
     expect(proxyUrl).toContain(encodeURIComponent("https://example.com/feed"));
 
   });
@@ -110,7 +110,6 @@ describe("AtomStrategy", () => {
     const strategy = new AtomStrategy("https://example.com/feed");
     const result = await strategy.fetchLatestPost();
 
-    // Unparseable XML produces no results
     expect(result).toBeNull();
 
   });
@@ -128,9 +127,34 @@ describe("AtomStrategy", () => {
     const strategy = new AtomStrategy("https://example.com/feed");
     const result = await strategy.fetchLatestPost();
 
-    // Empty feed (no entries) produces no results
     expect(result).toBeNull();
 
+  });
+
+  it("prefers rel=alternate link over rel=self in Atom feed", async () => {
+    const bloggerFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Blogger Post</title>
+    <link rel="self" type="application/atom+xml" href="https://example.blogspot.com/feeds/posts/default/123"/>
+    <link rel="alternate" type="text/html" href="https://example.blogspot.com/2026/03/blogger-post.html"/>
+    <link rel="replies" type="application/atom+xml" href="https://example.blogspot.com/feeds/123/comments/default"/>
+    <published>2026-03-01T00:00:00Z</published>
+  </entry>
+</feed>`;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(bloggerFeed),
+    }));
+
+    const strategy = new AtomStrategy("https://example.com/feed");
+    const result = await strategy.fetchLatestPost();
+
+    expect(result).toEqual({
+      title: "Blogger Post",
+      url: "https://example.blogspot.com/2026/03/blogger-post.html",
+      publishedAt: "2026-03-01T00:00:00Z",
+    });
   });
 
   it("uses updated date when published is absent in Atom feed", async () => {

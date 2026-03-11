@@ -22,12 +22,21 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
       convergent: true,
       documents: [
         {
-          id: "hello-fellspiral",
+          id: "running-mythic-bastionland",
           data: {
-            title: "Hello Fellspiral",
+            title: "Running Mythic Bastionland",
             published: true,
-            publishedAt: "2026-03-01T00:00:00Z",
-            filename: "hello-fellspiral.md",
+            publishedAt: "2026-03-05T00:00:00Z",
+            filename: "running-mythic-bastionland.md",
+          } satisfies PostSeedData,
+        },
+        {
+          id: "what-cairn-taught-me-about-combat",
+          data: {
+            title: "What Cairn Taught Me About Combat",
+            published: true,
+            publishedAt: "2026-03-08T00:00:00Z",
+            filename: "what-cairn-taught-me-about-combat.md",
           } satisfies PostSeedData,
         },
       ],
