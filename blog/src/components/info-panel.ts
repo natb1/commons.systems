@@ -68,6 +68,13 @@ function renderYearBlock(
       </details>`;
 }
 
+function renderLink(l: LinkSection["links"][number]): string {
+  const subtitleHtml = l.subtitle
+    ? `<span class="link-subtitle">${escapeHtml(l.subtitle)}</span>`
+    : "";
+  return `<li><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.label)}${subtitleHtml}</a></li>`;
+}
+
 function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string {
   if (published.length === 0) return "";
 
@@ -93,16 +100,7 @@ function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string 
 export function renderInfoPanel(data: InfoPanelData): string {
   const linkSectionsHtml = data.linkSections
     .map((section) => {
-      const linksHtml = section.links
-        .map(
-          (l) => {
-            const subtitleHtml = l.subtitle
-              ? `<span class="link-subtitle">${escapeHtml(l.subtitle)}</span>`
-              : "";
-            return `<li><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.label)}${subtitleHtml}</a></li>`;
-          },
-        )
-        .join("");
+      const linksHtml = section.links.map(renderLink).join("");
       return `<section class="panel-section">
       <h3>${escapeHtml(section.heading)}</h3>
       <ul class="panel-list">${linksHtml}</ul>
