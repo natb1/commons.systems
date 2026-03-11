@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"math"
+	"sort"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -211,4 +213,214 @@ func transactionDocID(statementID, transactionID string) string {
 	}
 	h := sha256.Sum256([]byte(statementID + "/" + transactionID))
 	return fmt.Sprintf("%x", h[:10])
+}
+
+// RuleDoc holds a rule document read from Firestore.
+type RuleDoc struct {
+	ID          string
+	Type        string
+	Pattern     string
+	Target      string
+	Priority    int
+	Institution string
+	Account     string
+}
+
+// LoadRules reads rules from budget/{env}/rules, filtered by groupId, sorted by priority.
+func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, error) {
+	col := c.fs.Collection(fmt.Sprintf("budget/%s/rules", c.env))
+	docs, err := col.Where("groupId", "==", groupID).Documents(ctx).GetAll()
+	if err != nil {
+		return nil, fmt.Errorf("querying rules: %w", err)
+	}
+
+	result := make([]RuleDoc, 0, len(docs))
+	for _, doc := range docs {
+		d := doc.Data()
+		r := RuleDoc{
+			ID: doc.Ref.ID,
+		}
+		if v, ok := d["type"].(string); ok {
+			r.Type = v
+		}
+		if v, ok := d["pattern"].(string); ok {
+			r.Pattern = v
+		}
+		if v, ok := d["target"].(string); ok {
+			r.Target = v
+		}
+		if v, ok := d["priority"].(int64); ok {
+			r.Priority = int(v)
+		} else if v, ok := d["priority"].(float64); ok {
+			r.Priority = int(v)
+		}
+		if v, ok := d["institution"].(string); ok {
+			r.Institution = v
+		}
+		if v, ok := d["account"].(string); ok {
+			r.Account = v
+		}
+		result = append(result, r)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Priority < result[j].Priority
+	})
+
+	log.Printf("loaded %d rules for group %s", len(result), groupID)
+	return result, nil
+}
+
+// PeriodStart returns the Monday 00:00 UTC at or before t.
+func PeriodStart(t time.Time) time.Time {
+	t = t.UTC().Truncate(24 * time.Hour)
+	weekday := t.Weekday()
+	if weekday == time.Sunday {
+		weekday = 7
+	}
+	offset := int(weekday) - int(time.Monday)
+	return t.AddDate(0, 0, -offset)
+}
+
+// PeriodEnd returns the Monday 00:00 UTC after start (start + 7 days).
+func PeriodEnd(start time.Time) time.Time {
+	return start.AddDate(0, 0, 7)
+}
+
+// PeriodID returns the canonical period document ID: "{budgetID}-{YYYY-MM-DD}".
+func PeriodID(budgetID string, start time.Time) string {
+	return fmt.Sprintf("%s-%s", budgetID, start.Format("2006-01-02"))
+}
+
+// RecalculatePeriods recomputes total, count, and categoryBreakdown for all
+// budget periods overlapping [minTime, maxTime) for the given group.
+func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTime, maxTime time.Time) error {
+	periodStart := PeriodStart(minTime)
+	periodEnd := PeriodEnd(PeriodStart(maxTime))
+
+	// Load existing budget periods overlapping the time range
+	periodCol := c.fs.Collection(fmt.Sprintf("budget/%s/budget-periods", c.env))
+	periodDocs, err := periodCol.
+		Where("groupId", "==", group.ID).
+		Where("periodStart", ">=", periodStart).
+		Where("periodStart", "<", periodEnd).
+		Documents(ctx).GetAll()
+	if err != nil {
+		return fmt.Errorf("querying budget periods: %w", err)
+	}
+
+	existingPeriods := make(map[string]bool, len(periodDocs))
+	for _, doc := range periodDocs {
+		existingPeriods[doc.Ref.ID] = true
+	}
+
+	// Load all transactions for the group in [periodStart, periodEnd)
+	txnCol := c.fs.Collection(fmt.Sprintf("budget/%s/transactions", c.env))
+	txnDocs, err := txnCol.
+		Where("groupId", "==", group.ID).
+		Where("timestamp", ">=", periodStart).
+		Where("timestamp", "<", periodEnd).
+		Documents(ctx).GetAll()
+	if err != nil {
+		return fmt.Errorf("querying transactions for recalculation: %w", err)
+	}
+
+	// Group transactions by period key (budgetId + period start)
+	type periodData struct {
+		budgetID          string
+		start             time.Time
+		total             float64
+		count             int
+		categoryBreakdown map[string]float64
+	}
+	periods := make(map[string]*periodData)
+
+	for _, doc := range txnDocs {
+		d := doc.Data()
+		budgetID, _ := d["budget"].(string)
+		if budgetID == "" {
+			continue // unassigned transactions don't affect periods
+		}
+		timestamp, ok := d["timestamp"].(time.Time)
+		if !ok {
+			continue
+		}
+		amount, _ := d["amount"].(float64)
+		reimbursement, _ := d["reimbursement"].(float64)
+		category, _ := d["category"].(string)
+
+		net := amount * (1 - reimbursement/100)
+
+		ps := PeriodStart(timestamp)
+		key := PeriodID(budgetID, ps)
+
+		pd, exists := periods[key]
+		if !exists {
+			pd = &periodData{
+				budgetID:          budgetID,
+				start:             ps,
+				categoryBreakdown: make(map[string]float64),
+			}
+			periods[key] = pd
+		}
+		pd.total += net
+		pd.count++
+		if category != "" {
+			pd.categoryBreakdown[category] += net
+		}
+	}
+
+	// Batch-write period updates and creates
+	batch := c.fs.Batch()
+	var updates, creates int
+
+	for key, pd := range periods {
+		ref := periodCol.Doc(key)
+		// Round to 2 decimal places to avoid floating-point drift
+		total := math.Round(pd.total*100) / 100
+
+		fields := map[string]interface{}{
+			"budgetId":          pd.budgetID,
+			"periodStart":       pd.start,
+			"periodEnd":         PeriodEnd(pd.start),
+			"total":             total,
+			"count":             pd.count,
+			"categoryBreakdown": pd.categoryBreakdown,
+			"groupId":           group.ID,
+			"memberEmails":      group.MemberEmails,
+		}
+
+		batch.Set(ref, fields)
+		if existingPeriods[key] {
+			updates++
+		} else {
+			creates++
+		}
+	}
+
+	// Also update existing periods that have no transactions in this range (set total/count to 0)
+	for id := range existingPeriods {
+		if _, hasTransactions := periods[id]; !hasTransactions {
+			ref := periodCol.Doc(id)
+			batch.Set(ref, map[string]interface{}{
+				"total":             0,
+				"count":             0,
+				"categoryBreakdown": map[string]float64{},
+			}, firestore.Merge(
+				firestore.FieldPath{"total"},
+				firestore.FieldPath{"count"},
+				firestore.FieldPath{"categoryBreakdown"},
+			))
+			updates++
+		}
+	}
+
+	if updates+creates > 0 {
+		if _, err := batch.Commit(ctx); err != nil {
+			return fmt.Errorf("committing period batch: %w", err)
+		}
+	}
+
+	log.Printf("periods recalculated: %d updated, %d created", updates, creates)
+	return nil
 }
