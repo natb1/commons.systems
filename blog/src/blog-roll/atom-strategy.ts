@@ -11,6 +11,7 @@ function parseAtomFeed(doc: Document): LatestPost | null {
     entry.querySelector("updated")?.textContent ??
     undefined;
   if (!title || !url) return null;
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
   return { title, url, publishedAt: published };
 }
 
@@ -21,6 +22,7 @@ function parseRssFeed(doc: Document): LatestPost | null {
   const url = item.querySelector("link")?.textContent ?? "";
   const pubDate = item.querySelector("pubDate")?.textContent ?? undefined;
   if (!title || !url) return null;
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
   return { title, url, publishedAt: pubDate };
 }
 
