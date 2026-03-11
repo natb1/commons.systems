@@ -5,7 +5,7 @@ import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/t
 
 export interface LinkSection {
   heading: string;
-  links: { label: string; url: string }[];
+  links: { label: string; subtitle?: string; url: string }[];
 }
 
 export interface InfoPanelData {
@@ -95,8 +95,12 @@ export function renderInfoPanel(data: InfoPanelData): string {
     .map((section) => {
       const linksHtml = section.links
         .map(
-          (l) =>
-            `<li><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.label)}</a></li>`,
+          (l) => {
+            const subtitleHtml = l.subtitle
+              ? `<span class="link-subtitle">${escapeHtml(l.subtitle)}</span>`
+              : "";
+            return `<li><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.label)}${subtitleHtml}</a></li>`;
+          },
         )
         .join("");
       return `<section class="panel-section">

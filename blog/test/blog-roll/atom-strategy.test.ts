@@ -63,12 +63,12 @@ describe("AtomStrategy", () => {
 
   });
 
-  it("falls back to allorigins proxy on CORS error", async () => {
+  it("falls back to corsproxy on CORS error", async () => {
     const mockFetch = vi.fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ contents: ATOM_FEED }),
+        text: () => Promise.resolve(ATOM_FEED),
       });
     vi.stubGlobal("fetch", mockFetch);
 
@@ -83,7 +83,7 @@ describe("AtomStrategy", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     const proxyUrl = mockFetch.mock.calls[1][0] as string;
-    expect(proxyUrl).toContain("api.allorigins.win");
+    expect(proxyUrl).toContain("corsproxy.io");
     expect(proxyUrl).toContain(encodeURIComponent("https://example.com/feed"));
 
   });

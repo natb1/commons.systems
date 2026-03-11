@@ -70,6 +70,12 @@
   font-size: 0.85rem;
 }
 
+.link-subtitle {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
 .blogroll-entry {
   display: block;
   text-decoration: none;

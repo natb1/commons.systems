@@ -23,7 +23,9 @@ test.describe("info panel — desktop", () => {
     const panel = page.locator("#info-panel");
     await expect(panel.locator("h3", { hasText: "Find Me" })).toBeVisible();
     await expect(panel.locator('a[href="https://natethenoob.itch.io"]')).toBeVisible();
-    await expect(panel.locator('a[href="https://discord.gg/MxXHfyY3"]')).toBeVisible();
+    const nlbLink = panel.locator('a[href="https://discord.gg/MxXHfyY3"]');
+    await expect(nlbLink).toBeVisible();
+    await expect(nlbLink.locator(".link-subtitle")).toHaveText("Find a Local Game in Baltimore");
   });
 
   test("shows Games I'm Playing section with links", async ({ page }, testInfo) => {
