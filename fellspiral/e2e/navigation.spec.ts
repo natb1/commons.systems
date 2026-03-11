@@ -50,10 +50,9 @@ test.describe("navigation", () => {
     await expect(page.locator("#info-panel")).toBeVisible();
   });
 
-  test("home page shows both post titles", async ({ page }) => {
+  test("home page shows post title", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
-    await expect(page.locator("main")).toContainText("Running Mythic Bastionland");
-    await expect(page.locator("main")).toContainText("What Cairn Taught Me About Combat");
+    await expect(page.locator("main")).toContainText("Scenes from a Hat");
   });
 });

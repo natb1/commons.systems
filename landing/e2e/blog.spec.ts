@@ -1,33 +1,37 @@
 import { test, expect } from "@playwright/test";
 
+// Posts are fetched as raw markdown from GitHub at runtime.
+// Intercept those requests with deterministic stub content so tests
+// do not depend on network access or repository state.
+test.beforeEach(async ({ page }) => {
+  await page.route("https://raw.githubusercontent.com/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/landing/post/recovering-autonomy-with-coding-agents.md")) {
+      return route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." });
+    }
+    return route.abort("connectionfailed");
+  });
+});
+
 test.describe("blog", () => {
   test("home page shows published posts", async ({ page }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Test\nPost content here." }),
-    );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     const posts = page.locator("#posts article");
     expect(await posts.count()).toBeGreaterThanOrEqual(1);
     // h1 extraction replaces Firestore titles with the markdown heading
-    await expect(posts.first()).toContainText("Test");
+    await expect(posts.first()).toContainText("Recovering Autonomy with Coding Agents");
   });
 
   test("home page does not show draft posts to unauthenticated user", async ({
     page,
   }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Test\nPost content here." }),
-    );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(page.locator("#posts")).not.toContainText("Draft Ideas");
   });
 
   test("post URL scrolls to post in home page", async ({ page }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nPost content here." }),
-    );
     await page.goto("/#/post/recovering-autonomy-with-coding-agents");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(page.locator("#post-recovering-autonomy-with-coding-agents")).toBeVisible();
@@ -37,9 +41,6 @@ test.describe("blog", () => {
   });
 
   test("post content renders markdown as HTML", async ({ page }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." }),
-    );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
@@ -48,9 +49,6 @@ test.describe("blog", () => {
   });
 
   test("post content does not show error fallback", async ({ page }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." }),
-    );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
@@ -59,9 +57,6 @@ test.describe("blog", () => {
   });
 
   test("post title has jump link to post URL", async ({ page }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." }),
-    );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     const link = page.locator('#post-recovering-autonomy-with-coding-agents h2 a.post-link');
@@ -69,10 +64,8 @@ test.describe("blog", () => {
     await expect(link).toHaveAttribute("href", "#/post/recovering-autonomy-with-coding-agents");
   });
 
+  // datetime must match publishedAt in landing/seeds/firestore.ts
   test("post shows publication date", async ({ page }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." }),
-    );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
