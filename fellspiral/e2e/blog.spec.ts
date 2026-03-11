@@ -1,10 +1,20 @@
 import { test, expect } from "@playwright/test";
 
+// Posts are fetched as raw markdown from GitHub at runtime.
+// Intercept those requests with deterministic stub content so tests
+// do not depend on network access or repository state.
+test.beforeEach(async ({ page }) => {
+  await page.route("https://raw.githubusercontent.com/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/fellspiral/post/scenes-from-a-hat.md")) {
+      return route.fulfill({ body: "# Scenes from a Hat\nThis is the post." });
+    }
+    return route.abort("connectionfailed");
+  });
+});
+
 test.describe("blog", () => {
   test("home page shows published posts", async ({ page }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Scenes from a Hat\nPost content here." }),
-    );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     const posts = page.locator("#posts article");
@@ -13,9 +23,6 @@ test.describe("blog", () => {
   });
 
   test("post URL scrolls to post in home page", async ({ page }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Scenes from a Hat\nPost content here." }),
-    );
     await page.goto("/#/post/scenes-from-a-hat");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(page.locator("#post-scenes-from-a-hat")).toBeVisible();
@@ -25,9 +32,6 @@ test.describe("blog", () => {
   });
 
   test("post content renders markdown as HTML", async ({ page }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Scenes from a Hat\nThis is the post." }),
-    );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
@@ -35,10 +39,8 @@ test.describe("blog", () => {
     ).toContainText("This is the post.", { timeout: 30000 });
   });
 
+  // datetime must match publishedAt in fellspiral/seeds/firestore.ts
   test("post shows publication date", async ({ page }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Scenes from a Hat\nPost content here." }),
-    );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
@@ -47,9 +49,6 @@ test.describe("blog", () => {
   });
 
   test("post title has jump link", async ({ page }) => {
-    await page.route("https://raw.githubusercontent.com/**", (route) =>
-      route.fulfill({ body: "# Scenes from a Hat\nPost content here." }),
-    );
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     const link = page.locator('#post-scenes-from-a-hat h2 a.post-link');
