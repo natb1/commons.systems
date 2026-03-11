@@ -14,6 +14,8 @@ export interface SeedCollection {
    *  but not production (e.g., test user group memberships). */
   testOnly?: boolean;
   /** When true, delete existing documents not present in the seed spec.
+   *  All seed documents are written first (via set, which upserts), then
+   *  any documents in the collection not present in the spec are deleted.
    *  Makes the seed spec the source of truth for this collection. */
   convergent?: boolean;
 }
@@ -34,19 +36,54 @@ export async function seed(db: Firestore, spec: SeedSpec, options?: SeedOptions)
       continue;
     }
     const path = nsCollectionPath(spec.namespace, collection.name);
+    const ids = collection.documents.map((d) => d.id);
+    const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+    if (dupes.length > 0) {
+      throw new Error(`duplicate document ids in "${collection.name}": ${[...new Set(dupes)].join(", ")}`);
+    }
     for (const doc of collection.documents) {
       if (!doc.id) throw new Error(`seed document in "${collection.name}" has empty id`);
-      await db.doc(`${path}/${doc.id}`).set(doc.data);
+      try {
+        await db.doc(`${path}/${doc.id}`).set(doc.data);
+      } catch (err) {
+        throw new Error(
+          `Failed to write seed document "${doc.id}" in "${collection.name}" (path: ${path}/${doc.id}): ${err instanceof Error ? err.message : err}`,
+        );
+      }
     }
     if (collection.convergent) {
-      const seedIds = new Set(collection.documents.map((d) => d.id));
-      const existing = await db.collection(path).listDocuments();
+      if (collection.documents.length === 0) {
+        throw new Error(
+          `Convergent collection "${collection.name}" has no documents. ` +
+          `This would delete all existing documents. Remove the collection from the seed spec instead.`,
+        );
+      }
+      const seedIds = new Set(ids);
+      let existing: { id: string; delete: () => Promise<unknown> }[];
+      try {
+        existing = await db.collection(path).listDocuments();
+      } catch (err) {
+        throw new Error(
+          `Failed to list documents in "${path}" during convergent seed of "${collection.name}": ${err instanceof Error ? err.message : err}`,
+        );
+      }
+      let deletedCount = 0;
       for (const ref of existing) {
         if (!seedIds.has(ref.id)) {
           console.log(`Deleting stale document "${ref.id}" from "${collection.name}"`);
-          await ref.delete();
+          try {
+            await ref.delete();
+          } catch (err) {
+            throw new Error(
+              `Failed to delete stale document "${ref.id}" in "${collection.name}" (path: ${path}/${ref.id}): ${err instanceof Error ? err.message : err}`,
+            );
+          }
+          deletedCount++;
         }
       }
+      console.log(
+        `Convergent check for "${collection.name}": ${deletedCount} stale document(s) deleted, ${seedIds.size} retained`,
+      );
     }
   }
 }
