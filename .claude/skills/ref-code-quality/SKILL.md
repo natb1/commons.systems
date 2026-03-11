@@ -1,6 +1,6 @@
 ---
 name: ref-code-quality
-description: Code quality review loop — 7 parallel review agents with wiggum-loop
+description: Code quality review loop — 7 parallel review tasks with wiggum-loop
 allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
@@ -9,33 +9,33 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Launch 7 review tasks in parallel using the Task tool. Collect all returned results verbatim — do NOT summarize or paraphrase agent output:
+- Launch 7 review tasks in parallel using the Task tool. Collect all returned results verbatim — do NOT summarize or paraphrase task output:
   1. **`/review` skill** — Launch a Task with `subagent_type: "general-purpose"` that invokes the Skill tool with `skill: "review"`. Include the PR diff context in the prompt.
   2. **`pr-review-toolkit:code-reviewer`** — Launch a Task with `subagent_type: "pr-review-toolkit:code-reviewer"`.
-  3. **`pr-review-toolkit:code-simplifier`** — Launch a Task with `subagent_type: "pr-review-toolkit:code-simplifier"`.
+  3. **`/simplify` skill** — Launch a Task with `subagent_type: "general-purpose"` that invokes the Skill tool with `skill: "simplify"`. Include the PR diff context in the prompt.
   4. **`pr-review-toolkit:comment-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:comment-analyzer"`.
   5. **`pr-review-toolkit:pr-test-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:pr-test-analyzer"`.
   6. **`pr-review-toolkit:silent-failure-hunter`** — Launch a Task with `subagent_type: "pr-review-toolkit:silent-failure-hunter"`.
   7. **`pr-review-toolkit:type-design-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:type-design-analyzer"`.
 - All 7 tasks MUST be launched in a single message (parallel execution) with `run_in_background: true`
 - Wait for all 7 tasks to complete using TaskOutput with `block: true` before proceeding. Note each task's `output_file` path.
-- If any pr-review-toolkit agent fails to launch, log a warning but continue — `/review` results alone are sufficient to proceed
+- If any task other than `/review` fails to launch, log a warning but continue — `/review` results alone are sufficient to proceed
 - Construct `tmp/codequality-output-<N>.txt` by concatenating the output files with Bash — do NOT use the Write tool or re-output verbatim content:
   ```bash
   mkdir -p tmp && {
     printf '## /review Output\n\n'; cat "$REVIEW_OUT";
     printf '\n\n## pr-review-toolkit: code-reviewer\n\n'; cat "$CODE_REVIEWER_OUT";
-    printf '\n\n## pr-review-toolkit: code-simplifier\n\n'; cat "$CODE_SIMPLIFIER_OUT";
+    printf '\n\n## /simplify Output\n\n'; cat "$SIMPLIFY_OUT";
     printf '\n\n## pr-review-toolkit: comment-analyzer\n\n'; cat "$COMMENT_ANALYZER_OUT";
     printf '\n\n## pr-review-toolkit: pr-test-analyzer\n\n'; cat "$PR_TEST_ANALYZER_OUT";
     printf '\n\n## pr-review-toolkit: silent-failure-hunter\n\n'; cat "$SILENT_FAILURE_OUT";
     printf '\n\n## pr-review-toolkit: type-design-analyzer\n\n'; cat "$TYPE_DESIGN_OUT";
   } > tmp/codequality-output-<N>.txt
   ```
-  Substitute each `$*_OUT` variable with the `output_file` path from the corresponding Task result. For unavailable agents, replace `cat` with `echo "Agent unavailable"`.
+  Substitute each `$*_OUT` variable with the `output_file` path from the corresponding Task result. For unavailable tasks, replace `cat` with `echo "Task unavailable"`.
 
 **Evaluation instructions:**
-- **Aggregate and deduplicate** findings across all agents — merge near-identical findings into single entries noting which agents raised them
+- **Aggregate and deduplicate** findings across all tasks — merge near-identical findings into single entries noting which tasks raised them
 - **Prior iteration context:** Read all prior `tmp/codequality-eval-*.txt` before classifying comment improvements; pick the strongest comment version for maintainability autonomously without reopening for user review
 - **Classify each finding as required / out of scope / false positive:**
   - Code quality (maintainability, readability) and code simplification → **required** unless high effort + low impact → **out of scope**
@@ -74,7 +74,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
   ```
   # Code Quality Review - Complete ✓
 
-  **Reviewer**: Claude Code (via /review skill + pr-review-toolkit agents)
+  **Reviewer**: Claude Code (via /review + /simplify skills + pr-review-toolkit agents)
   **Date**: [Current date]
   **Outcome**: [Summary of result]
 
