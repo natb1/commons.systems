@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, query, updateDoc, where, increment, Timestamp, addDoc, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, updateDoc, where, increment, Timestamp, addDoc, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { requireString, requireNumber, requireNonNegativeNumber, optionalString } from "@commons-systems/firestoreutil/validate";
 
@@ -136,6 +136,15 @@ async function queryGroupCollection(
     : query(collection(db, path));
   const snapshot = await getDocs(q);
   return snapshot.docs;
+}
+
+export async function getGroupMembers(groupId: string): Promise<string[]> {
+  const path = nsCollectionPath(NAMESPACE, "groups");
+  const docSnap = await getDoc(doc(db, path, groupId));
+  if (!docSnap.exists()) throw new Error(`Group ${groupId} not found`);
+  const members = docSnap.data().members;
+  if (!Array.isArray(members)) throw new DataIntegrityError(`Group ${groupId}: members is not an array`);
+  return members.filter((m: unknown): m is string => typeof m === "string");
 }
 
 export async function getTransactions(groupId: null): Promise<Transaction[]>;
