@@ -22,21 +22,12 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
       convergent: true,
       documents: [
         {
-          id: "running-mythic-bastionland",
+          id: "scenes-from-a-hat",
           data: {
-            title: "Running Mythic Bastionland",
+            title: "Scenes from a Hat",
             published: true,
-            publishedAt: "2026-03-05T00:00:00Z",
-            filename: "running-mythic-bastionland.md",
-          } satisfies PostSeedData,
-        },
-        {
-          id: "what-cairn-taught-me-about-combat",
-          data: {
-            title: "What Cairn Taught Me About Combat",
-            published: true,
-            publishedAt: "2026-03-08T00:00:00Z",
-            filename: "what-cairn-taught-me-about-combat.md",
+            publishedAt: "2026-03-11T00:00:00Z",
+            filename: "scenes-from-a-hat.md",
           } satisfies PostSeedData,
         },
       ],
