@@ -13,6 +13,9 @@ export interface SeedCollection {
    *  Used for data that should exist in emulators and preview environments
    *  but not production (e.g., test user group memberships). */
   testOnly?: boolean;
+  /** When true, delete existing documents not present in the seed spec.
+   *  Makes the seed spec the source of truth for this collection. */
+  convergent?: boolean;
 }
 
 export interface SeedSpec {
@@ -34,6 +37,16 @@ export async function seed(db: Firestore, spec: SeedSpec, options?: SeedOptions)
     for (const doc of collection.documents) {
       if (!doc.id) throw new Error(`seed document in "${collection.name}" has empty id`);
       await db.doc(`${path}/${doc.id}`).set(doc.data);
+    }
+    if (collection.convergent) {
+      const seedIds = new Set(collection.documents.map((d) => d.id));
+      const existing = await db.collection(path).listDocuments();
+      for (const ref of existing) {
+        if (!seedIds.has(ref.id)) {
+          console.log(`Deleting stale document "${ref.id}" from "${collection.name}"`);
+          await ref.delete();
+        }
+      }
     }
   }
 }

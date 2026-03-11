@@ -286,10 +286,12 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
     },
     {
       name: "seed-transactions",
+      convergent: true,
       documents: seedTransactionDocs,
     },
     {
       name: "transactions",
+      testOnly: true,
       documents: [
         {
           id: "user-txn-1",
@@ -327,10 +329,10 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
         },
       ],
     },
-    { name: "seed-budgets", documents: budgetDocs },
-    { name: "budgets", documents: budgetDocs },
-    { name: "seed-budget-periods", documents: budgetPeriodDocs },
-    { name: "budget-periods", documents: budgetPeriodDocs },
+    { name: "seed-budgets", convergent: true, documents: budgetDocs },
+    { name: "budgets", testOnly: true, documents: budgetDocs },
+    { name: "seed-budget-periods", convergent: true, documents: budgetPeriodDocs },
+    { name: "budget-periods", testOnly: true, documents: budgetPeriodDocs },
   ],
 };
 

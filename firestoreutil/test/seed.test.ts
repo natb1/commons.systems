@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { seed, type SeedSpec } from "../src/seed.js";
 
-function createMockFirestore() {
+function createMockFirestore(existingDocs: Record<string, string[]> = {}) {
   const setCalls: { path: string; data: Record<string, unknown> }[] = [];
+  const deletedRefs: string[] = [];
 
   const mockSet = vi.fn(async (data: Record<string, unknown>) => {
     // Data is captured in the doc() call below
@@ -14,9 +15,20 @@ function createMockFirestore() {
     return { set: mockSet };
   });
 
-  const db = { doc: mockDoc } as unknown as import("firebase-admin/firestore").Firestore;
+  const mockCollection = vi.fn((path: string) => ({
+    listDocuments: vi.fn(async () =>
+      (existingDocs[path] ?? []).map((id) => ({
+        id,
+        delete: vi.fn(async () => {
+          deletedRefs.push(`${path}/${id}`);
+        }),
+      })),
+    ),
+  }));
 
-  return { db, mockDoc, mockSet, setCalls };
+  const db = { doc: mockDoc, collection: mockCollection } as unknown as import("firebase-admin/firestore").Firestore;
+
+  return { db, mockDoc, mockSet, mockCollection, setCalls, deletedRefs };
 }
 
 describe("seed", () => {
@@ -130,5 +142,91 @@ describe("seed", () => {
     await seed(db, spec);
 
     expect(mockDoc).not.toHaveBeenCalled();
+  });
+
+  it("deletes stale documents when convergent is true", async () => {
+    const { db, mockDoc, deletedRefs } = createMockFirestore({
+      "app/prod/posts": ["keep-me", "stale-post", "another-stale"],
+    });
+
+    const spec: SeedSpec = {
+      namespace: "app/prod",
+      collections: [
+        {
+          name: "posts",
+          convergent: true,
+          documents: [{ id: "keep-me", data: { title: "Keeper" } }],
+        },
+      ],
+    };
+
+    await seed(db, spec);
+
+    expect(mockDoc).toHaveBeenCalledWith("app/prod/posts/keep-me");
+    expect(deletedRefs).toEqual(["app/prod/posts/stale-post", "app/prod/posts/another-stale"]);
+  });
+
+  it("does not delete when convergent is not set", async () => {
+    const { db, mockCollection } = createMockFirestore({
+      "app/prod/posts": ["keep-me", "also-keep"],
+    });
+
+    const spec: SeedSpec = {
+      namespace: "app/prod",
+      collections: [
+        {
+          name: "posts",
+          documents: [{ id: "keep-me", data: { title: "Keeper" } }],
+        },
+      ],
+    };
+
+    await seed(db, spec);
+
+    expect(mockCollection).not.toHaveBeenCalled();
+  });
+
+  it("skips convergent phase for testOnly collections that are skipped", async () => {
+    const { db, mockDoc, mockCollection } = createMockFirestore({
+      "app/prod/groups": ["admin", "stale-group"],
+    });
+
+    const spec: SeedSpec = {
+      namespace: "app/prod",
+      collections: [
+        {
+          name: "groups",
+          testOnly: true,
+          convergent: true,
+          documents: [{ id: "admin", data: { name: "admin" } }],
+        },
+      ],
+    };
+
+    await seed(db, spec);
+
+    expect(mockDoc).not.toHaveBeenCalled();
+    expect(mockCollection).not.toHaveBeenCalled();
+  });
+
+  it("handles convergent with empty existing collection", async () => {
+    const { db, deletedRefs } = createMockFirestore({
+      "app/prod/posts": [],
+    });
+
+    const spec: SeedSpec = {
+      namespace: "app/prod",
+      collections: [
+        {
+          name: "posts",
+          convergent: true,
+          documents: [{ id: "p1", data: { title: "Post" } }],
+        },
+      ],
+    };
+
+    await seed(db, spec);
+
+    expect(deletedRefs).toEqual([]);
   });
 });
