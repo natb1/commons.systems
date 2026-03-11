@@ -7,7 +7,18 @@ import type { PostMeta } from "../post-types.js";
 const SCROLL_PADDING_PX = 16;
 
 // Local instance strips raw HTML from markdown (defense-in-depth; DOMPurify sanitizes below).
-const marked = new Marked({ renderer: { html: () => "" } });
+// Post-body links open in new tabs to keep readers on the blog page; rel="noopener noreferrer"
+// prevents reverse tabnapping.
+const marked = new Marked({
+  renderer: {
+    html: () => "",
+    link({ href, text, title }) {
+      const safeHref = escapeHtml(href);
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+      return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+    },
+  },
+});
 
 function renderArticle(p: PostMeta): string {
   const safeId = escapeHtml(p.id);
@@ -80,7 +91,11 @@ export function hydrateHome(
 
       const html = await marked.parse(markdown);
       if (!outlet.contains(container)) return;
-      contentDiv.innerHTML = DOMPurify.sanitize(html);
+      // DOMPurify strips target attributes by default; ADD_ATTR preserves the
+      // target="_blank" set by the custom link renderer above.
+      contentDiv.innerHTML = DOMPurify.sanitize(html, {
+        ADD_ATTR: ["target"],
+      });
     } catch (error) {
       console.error(`Failed to load post "${post.id}":`, error);
       if (!outlet.contains(container)) return;
