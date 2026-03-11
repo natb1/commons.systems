@@ -54,6 +54,10 @@ func parseSGMLTransactions(text, path string) (ParseResult, error) {
 		txns = append(txns, t)
 	}
 
+	if len(txns) == 0 {
+		return ParseResult{}, fmt.Errorf("no transactions found in %s", path)
+	}
+
 	return ParseResult{Transactions: txns}, nil
 }
 
@@ -70,36 +74,13 @@ func indexFrom(s, substr string, start int) int {
 
 // parseSGMLBlock extracts tag values from a single <STMTTRN> block.
 func parseSGMLBlock(block string) (Transaction, error) {
-	fitid := sgmlTagValue(block, "FITID")
-	dtPosted := sgmlTagValue(block, "DTPOSTED")
-	trnAmt := sgmlTagValue(block, "TRNAMT")
-	name := sgmlTagValue(block, "NAME")
-	memo := sgmlTagValue(block, "MEMO")
-
-	if fitid == "" {
-		return Transaction{}, fmt.Errorf("STMTTRN block missing FITID")
-	}
-
-	date, err := parseOFXDate(dtPosted)
-	if err != nil {
-		return Transaction{}, fmt.Errorf("FITID %s: parsing date %q: %w", fitid, dtPosted, err)
-	}
-
-	amount, err := parseOFXAmount(trnAmt)
-	if err != nil {
-		return Transaction{}, fmt.Errorf("FITID %s: parsing amount %q: %w", fitid, trnAmt, err)
-	}
-	// OFX/SGML: negative = debit (spending), positive = credit (income)
-	// Budget app: positive = spending, negative = income
-	amount = -amount
-
-	return Transaction{
-		TransactionID: fitid,
-		Date:          date,
-		Amount:        amount,
-		Description:   name,
-		Memo:          memo,
-	}, nil
+	return convertRawTransaction(rawTransaction{
+		FITID:    sgmlTagValue(block, "FITID"),
+		DtPosted: sgmlTagValue(block, "DTPOSTED"),
+		TrnAmt:   sgmlTagValue(block, "TRNAMT"),
+		Name:     sgmlTagValue(block, "NAME"),
+		Memo:     sgmlTagValue(block, "MEMO"),
+	})
 }
 
 // sgmlTagValue extracts the value following <TAG> in SGML content.

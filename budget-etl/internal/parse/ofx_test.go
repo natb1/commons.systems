@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -52,4 +53,16 @@ func TestParseOFX(t *testing.T) {
 			t.Errorf("Amount = %f, want %f", txn.Amount, -50.00)
 		}
 	})
+}
+
+func TestParseOFX_NoMessageBlocks(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "empty.ofx")
+	content := `<?xml version="1.0" encoding="UTF-8"?>` + "\n" + `<OFX></OFX>`
+	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := parseOFX(tmp)
+	if err == nil {
+		t.Fatal("expected error for OFX with no message blocks")
+	}
 }

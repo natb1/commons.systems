@@ -65,17 +65,23 @@ func (c *Client) LookupGroup(ctx context.Context, email, groupName string) (Grou
 	}
 
 	for _, doc := range docs {
-		name, _ := doc.Data()["name"].(string)
-		if name == groupName {
-			members, _ := doc.Data()["members"].([]interface{})
-			emails := make([]string, 0, len(members))
-			for _, m := range members {
-				if s, ok := m.(string); ok {
-					emails = append(emails, s)
-				}
-			}
-			return GroupInfo{ID: doc.Ref.ID, MemberEmails: emails}, nil
+		name, ok := doc.Data()["name"].(string)
+		if !ok || name != groupName {
+			continue
 		}
+		members, ok := doc.Data()["members"].([]interface{})
+		if !ok {
+			return GroupInfo{}, fmt.Errorf("group %q: members field is not an array", groupName)
+		}
+		emails := make([]string, 0, len(members))
+		for _, m := range members {
+			s, ok := m.(string)
+			if !ok {
+				return GroupInfo{}, fmt.Errorf("group %q: non-string member value: %v", groupName, m)
+			}
+			emails = append(emails, s)
+		}
+		return GroupInfo{ID: doc.Ref.ID, MemberEmails: emails}, nil
 	}
 
 	return GroupInfo{}, fmt.Errorf("no group named %q found containing member %s", groupName, email)

@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -49,6 +50,18 @@ func TestParseSGML(t *testing.T) {
 			t.Errorf("Amount = %f, want %f", txn.Amount, -3001.83)
 		}
 	})
+}
+
+func TestParseSGML_NoTransactions(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "empty.qfx")
+	content := "OFXHEADER:100\nDATA:OFXSGML\n<OFX>\n<BANKMSGSRSV1>\n</BANKMSGSRSV1>\n</OFX>\n"
+	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := parseSGML(tmp)
+	if err == nil {
+		t.Fatal("expected error for SGML with no transactions")
+	}
 }
 
 func TestParseSGML_InvestmentSkip(t *testing.T) {

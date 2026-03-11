@@ -48,7 +48,6 @@ type ofxBankTranList struct {
 }
 
 type ofxStmtTrn struct {
-	TrnType string `xml:"TRNTYPE"`
 	DtPosted string `xml:"DTPOSTED"`
 	TrnAmt  string `xml:"TRNAMT"`
 	FITID   string `xml:"FITID"`
@@ -77,6 +76,10 @@ func parseOFX(path string) (ParseResult, error) {
 		return ParseResult{Skipped: true, SkipReason: "investment account (INVSTMTMSGSRSV1)"}, nil
 	}
 
+	if doc.BankMsgs == nil && doc.CCMsgs == nil {
+		return ParseResult{}, fmt.Errorf("no bank or credit card message blocks in %s", path)
+	}
+
 	var rawTxns []ofxStmtTrn
 	if doc.BankMsgs != nil {
 		rawTxns = append(rawTxns, doc.BankMsgs.StmtTrnRs.StmtRs.BankTranList.Transactions...)
@@ -87,7 +90,13 @@ func parseOFX(path string) (ParseResult, error) {
 
 	txns := make([]Transaction, 0, len(rawTxns))
 	for _, raw := range rawTxns {
-		t, err := convertOFXTransaction(raw)
+		t, err := convertRawTransaction(rawTransaction{
+			FITID:    raw.FITID,
+			DtPosted: raw.DtPosted,
+			TrnAmt:   raw.TrnAmt,
+			Name:     raw.Name,
+			Memo:     raw.Memo,
+		})
 		if err != nil {
 			return ParseResult{}, fmt.Errorf("%s: %w", path, err)
 		}
@@ -95,32 +104,4 @@ func parseOFX(path string) (ParseResult, error) {
 	}
 
 	return ParseResult{Transactions: txns}, nil
-}
-
-func convertOFXTransaction(raw ofxStmtTrn) (Transaction, error) {
-	fitid := strings.TrimSpace(raw.FITID)
-	if fitid == "" {
-		return Transaction{}, fmt.Errorf("STMTTRN missing FITID")
-	}
-
-	date, err := parseOFXDate(raw.DtPosted)
-	if err != nil {
-		return Transaction{}, fmt.Errorf("FITID %s: parsing date %q: %w", fitid, raw.DtPosted, err)
-	}
-
-	amount, err := parseOFXAmount(raw.TrnAmt)
-	if err != nil {
-		return Transaction{}, fmt.Errorf("FITID %s: parsing amount %q: %w", fitid, raw.TrnAmt, err)
-	}
-	// OFX: negative = debit (spending), positive = credit (income)
-	// Budget app: positive = spending, negative = income
-	amount = -amount
-
-	return Transaction{
-		TransactionID: fitid,
-		Date:          date,
-		Amount:        amount,
-		Description:   strings.TrimSpace(raw.Name),
-		Memo:          strings.TrimSpace(raw.Memo),
-	}, nil
 }

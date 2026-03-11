@@ -156,6 +156,7 @@ func resolveGHEmail() (string, error) {
 	}
 
 	// Fallback: git config user.email
+	log.Printf("warning: gh API unavailable, falling back to git config user.email")
 	cmd = exec.Command("git", "config", "user.email")
 	out, err = cmd.Output()
 	if err == nil {

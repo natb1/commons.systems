@@ -5,7 +5,6 @@ go 1.23.3
 require (
 	cloud.google.com/go/firestore v1.17.0
 	firebase.google.com/go/v4 v4.15.1
-	google.golang.org/api v0.209.0
 	google.golang.org/grpc v1.67.3
 )
 
@@ -41,6 +40,7 @@ require (
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.20.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
+	google.golang.org/api v0.209.0 // indirect
 	google.golang.org/appengine/v2 v2.0.2 // indirect
 	google.golang.org/genproto v0.0.0-20241113202542-65e8d215514f // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241104194629-dd2ea8efbc28 // indirect

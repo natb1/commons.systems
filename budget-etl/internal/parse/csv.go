@@ -11,7 +11,7 @@ import (
 
 // parseCSV parses a PNC-format CSV file.
 // PNC CSV format:
-//   Line 1: account header (skipped)
+//   Line 1: account metadata (skipped)
 //   Lines 2+: Date,Amount,Description,,TransactionID,Type
 // Amount is always positive in the file. Type is "DEBIT" or "CREDIT".
 // Convention: DEBIT → positive (spending), CREDIT → negative (income).
@@ -32,10 +32,11 @@ func parseCSV(path string) (ParseResult, error) {
 	}
 
 	if len(records) < 2 {
-		return ParseResult{}, nil
+		return ParseResult{}, fmt.Errorf("%s: CSV file has no data rows", path)
 	}
 
 	var txns []Transaction
+	idCounts := make(map[string]int)
 	for i, row := range records[1:] {
 		if len(row) < 6 {
 			return ParseResult{}, fmt.Errorf("%s: line %d: expected 6 fields, got %d", path, i+2, len(row))
@@ -64,6 +65,11 @@ func parseCSV(path string) (ParseResult, error) {
 		txnID := strings.TrimSpace(row[4])
 		if txnID == "" {
 			return ParseResult{}, fmt.Errorf("%s: line %d: missing transaction ID", path, i+2)
+		}
+
+		idCounts[txnID]++
+		if n := idCounts[txnID]; n > 1 {
+			txnID = fmt.Sprintf("%s-%d", txnID, n)
 		}
 
 		txns = append(txns, Transaction{

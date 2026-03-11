@@ -114,6 +114,17 @@ func TestParseFile_Dispatch(t *testing.T) {
 	}
 }
 
+func TestDetectFormat_Unrecognized(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "unknown.txt")
+	if err := os.WriteFile(tmp, []byte("some random content without commas"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := detectFormat(tmp)
+	if err == nil {
+		t.Fatal("expected error for unrecognized format")
+	}
+}
+
 func TestStatementID(t *testing.T) {
 	sf := StatementFile{Institution: "pnc", Account: "5111", Period: "2025-07"}
 	if got := sf.StatementID(); got != "pnc-5111-2025-07" {

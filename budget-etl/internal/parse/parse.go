@@ -18,7 +18,7 @@ type Transaction struct {
 }
 
 // StatementFile identifies a statement file and the metadata extracted from its directory path.
-// Expected directory layout: {institution}/{last4}/{period}/{file}
+// Expected directory layout: {institution}/{account}/{period}/{file}
 type StatementFile struct {
 	Path        string
 	Institution string
@@ -32,7 +32,7 @@ func (sf StatementFile) StatementID() string {
 }
 
 // DiscoverFiles walks dir looking for files matching the expected
-// {institution}/{last4}/{period}/{file} layout. It returns one StatementFile
+// {institution}/{account}/{period}/{file} layout. It returns one StatementFile
 // per file found, skipping dotfiles (like .DS_Store).
 func DiscoverFiles(dir string) ([]StatementFile, error) {
 	dir = filepath.Clean(dir)
@@ -101,7 +101,10 @@ func detectFormat(path string) (format, error) {
 	if strings.HasPrefix(header, "OFXHEADER:") {
 		return formatSGML, nil
 	}
-	return formatCSV, nil
+	if strings.Contains(header, ",") {
+		return formatCSV, nil
+	}
+	return 0, fmt.Errorf("unrecognized statement format in %s", path)
 }
 
 // ParseResult holds the transactions parsed from a single statement file,
