@@ -3,7 +3,7 @@ import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { firebaseConfig } from "@commons-systems/firebaseutil/config";
 import { validateNamespace } from "@commons-systems/firestoreutil/namespace";
-import { initAnalytics } from "@commons-systems/analyticsutil";
+import { initAnalytics, withMeasurementId } from "@commons-systems/analyticsutil";
 
 function parseEmulatorHost(envVar: string, value: string): { hostname: string; port: number } {
   const url = new URL(`http://${value}`);
@@ -14,11 +14,8 @@ function parseEmulatorHost(envVar: string, value: string): { hostname: string; p
   return { hostname: url.hostname, port };
 }
 
-const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID as
-  | string
-  | undefined;
 const app = initializeApp(
-  measurementId ? { ...firebaseConfig, measurementId } : firebaseConfig,
+  withMeasurementId(firebaseConfig, import.meta.env.VITE_GA_MEASUREMENT_ID),
 );
 const db = getFirestore(app);
 

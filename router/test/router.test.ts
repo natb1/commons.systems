@@ -321,6 +321,21 @@ describe("createRouter", () => {
     expect(() => deferred[0]()).toThrow(ErrorClass);
   });
 
+  it("throwing onNavigate does not prevent route rendering", async () => {
+    const onNavigate = vi.fn(() => {
+      throw new Error("analytics down");
+    });
+    router = createRouter(outlet, routes, { onNavigate });
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+    expect(onNavigate).toHaveBeenCalledWith("/");
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "onNavigate error:",
+      expect.any(Error),
+    );
+  });
+
   it("onNavigate callback fires with path on each navigation", async () => {
     const onNavigate = vi.fn();
     router = createRouter(outlet, routes, { onNavigate });

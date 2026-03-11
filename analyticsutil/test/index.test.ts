@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { FirebaseApp } from "firebase/app";
 
 vi.mock("firebase/analytics", () => ({
@@ -7,7 +7,23 @@ vi.mock("firebase/analytics", () => ({
 }));
 
 import { initializeAnalytics, logEvent } from "firebase/analytics";
-import { initAnalytics } from "../src/index";
+import { initAnalytics, withMeasurementId } from "../src/index";
+
+beforeEach(() => vi.clearAllMocks());
+
+describe("withMeasurementId", () => {
+  it("adds measurementId when present", () => {
+    const config = { apiKey: "test" };
+    const result = withMeasurementId(config, "G-TEST");
+    expect(result).toEqual({ apiKey: "test", measurementId: "G-TEST" });
+  });
+
+  it("returns config unchanged when measurementId is undefined", () => {
+    const config = { apiKey: "test" };
+    const result = withMeasurementId(config, undefined);
+    expect(result).toBe(config);
+  });
+});
 
 describe("initAnalytics", () => {
   it("returns no-op tracker when measurementId is missing", () => {
@@ -41,5 +57,44 @@ describe("initAnalytics", () => {
     expect(logEvent).toHaveBeenCalledWith(fakeAnalytics, "page_view", {
       page_path: "/about",
     });
+  });
+
+  it("returns no-op and logs error when initializeAnalytics throws", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(initializeAnalytics).mockImplementation(() => {
+      throw new Error("CSP blocked");
+    });
+
+    const app = { options: { measurementId: "G-TEST" } } as unknown as FirebaseApp;
+    const tracker = initAnalytics(app);
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Failed to initialize analytics:",
+      expect.any(Error),
+    );
+
+    tracker("/about");
+    expect(logEvent).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("swallows and logs error when logEvent throws", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
+    vi.mocked(logEvent).mockImplementation(() => {
+      throw new Error("bad state");
+    });
+
+    const app = { options: { measurementId: "G-TEST" } } as unknown as FirebaseApp;
+    const tracker = initAnalytics(app);
+
+    expect(() => tracker("/about")).not.toThrow();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Failed to log page view:",
+      expect.any(Error),
+    );
+
+    consoleErrorSpy.mockRestore();
   });
 });

@@ -17,6 +17,7 @@ export interface Route {
 }
 
 export interface RouterOptions {
+  /** Called with the parsed hash path at the start of each navigation, before route matching. */
   onNavigate?: (path: string) => void;
   /** Map an error to a user-facing message. Return undefined to use "Something went wrong. Please try again." */
   formatError?: (error: unknown) => string | undefined;
@@ -40,7 +41,11 @@ export function createRouter(
     if (destroyed) return;
     const id = ++navigationId;
     const { path } = parseHash();
-    options?.onNavigate?.(path);
+    try {
+      options?.onNavigate?.(path);
+    } catch (e) {
+      console.error("onNavigate error:", e);
+    }
     const route =
       routes.find((r) =>
         typeof r.path === "string" ? r.path === path : r.path.test(path),
