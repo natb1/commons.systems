@@ -38,9 +38,6 @@ func TestParseOFX(t *testing.T) {
 		if txn.Description != "CVS/PHARMACY #07952" {
 			t.Errorf("Description = %q, want %q", txn.Description, "CVS/PHARMACY #07952")
 		}
-		if txn.Memo != "CVS/PHARMACY #07952" {
-			t.Errorf("Memo = %q, want %q", txn.Memo, "CVS/PHARMACY #07952")
-		}
 	})
 
 	// Second: CREDIT, TRNAMT=50.00 → budget amount = -5000 cents (income)

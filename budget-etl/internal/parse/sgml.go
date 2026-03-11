@@ -9,7 +9,8 @@ import (
 // parseSGML parses OFX 1.x / QFX SGML files by scanning for SGML tags.
 // SGML leaf elements have no closing tags (e.g., <FITID>12345 instead of
 // <FITID>12345</FITID>), so encoding/xml cannot parse them.
-// Aggregates like <STMTTRN> use </STMTTRN> as a closing tag.
+// Aggregates like <STMTTRN> use </STMTTRN> as a closing tag. If </STMTTRN>
+// is absent, the next <STMTTRN> or end-of-file is used as the block boundary.
 func parseSGML(path string) (ParseResult, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

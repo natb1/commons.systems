@@ -131,14 +131,10 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 	for _, pf := range parsed {
 		txnData := make([]store.TransactionData, len(pf.result.Transactions))
 		for i, t := range pf.result.Transactions {
-			desc := t.Description
-			if t.Memo != "" && t.Memo != t.Description {
-				desc = desc + " | " + t.Memo
-			}
 			txnData[i] = store.TransactionData{
 				Institution:   pf.sf.Institution,
 				Account:       pf.sf.Account,
-				Description:   desc,
+				Description:   t.Description,
 				Amount:        t.Amount,
 				Timestamp:     t.Date,
 				StatementID:   pf.sf.StatementID(),

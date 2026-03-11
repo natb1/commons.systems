@@ -57,7 +57,6 @@ func parseCSV(path string) (ParseResult, error) {
 		txnType := strings.TrimSpace(row[5])
 		switch txnType {
 		case "DEBIT":
-			// positive = spending (already positive)
 		case "CREDIT":
 			amount = -amount
 		default:

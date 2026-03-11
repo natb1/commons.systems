@@ -43,12 +43,17 @@ func convertRawTransaction(raw rawTransaction) (Transaction, error) {
 	// Transaction.Amount: positive = spending, negative = income
 	amount = -amount
 
+	desc := strings.TrimSpace(raw.Name)
+	memo := strings.TrimSpace(raw.Memo)
+	if memo != "" && memo != desc {
+		desc = desc + " | " + memo
+	}
+
 	return Transaction{
 		TransactionID: fitid,
 		Date:          date,
 		Amount:        amount,
-		Description:   strings.TrimSpace(raw.Name),
-		Memo:          strings.TrimSpace(raw.Memo),
+		Description:   desc,
 	}, nil
 }
 
@@ -100,13 +105,13 @@ func parseCents(s string) (int64, error) {
 	if len(parts) == 2 && len(parts[1]) > 0 {
 		frac := parts[1]
 		if len(frac) > 2 {
-			frac = frac[:2]
+			return 0, fmt.Errorf("more than 2 decimal places in %q", s)
 		}
 		c, err := strconv.ParseInt(frac, 10, 64)
 		if err != nil {
 			return 0, err
 		}
-		if len(parts[1]) == 1 {
+		if len(frac) == 1 {
 			c *= 10
 		}
 		cents = c

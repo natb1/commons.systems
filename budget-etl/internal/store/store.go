@@ -18,18 +18,14 @@ type Client struct {
 }
 
 // NewClient creates a Firestore client using the Firebase Admin SDK
-// with Application Default Credentials. If projectID is empty, it
-// is inferred from the environment.
+// with Application Default Credentials. If projectID is empty, the
+// Firebase SDK attempts to infer it (e.g., from metadata server).
+// Callers should resolve the project ID explicitly when possible.
 func NewClient(ctx context.Context, projectID, env string) (*Client, error) {
 	if env == "" {
 		return nil, fmt.Errorf("env must not be empty")
 	}
-	conf := &firebase.Config{}
-	if projectID != "" {
-		conf.ProjectID = projectID
-	}
-
-	app, err := firebase.NewApp(ctx, conf)
+	app, err := firebase.NewApp(ctx, &firebase.Config{ProjectID: projectID})
 	if err != nil {
 		return nil, fmt.Errorf("initializing firebase app: %w", err)
 	}
@@ -90,7 +86,7 @@ type TransactionData struct {
 	Institution   string
 	Account       string
 	Description   string
-	Amount        int64 // cents
+	Amount        int64 // cents; positive = spending, negative = income/credit
 	Timestamp     time.Time
 	StatementID   string
 	TransactionID string
@@ -171,22 +167,18 @@ func (c *Client) UpsertTransactions(ctx context.Context, group GroupInfo, txns [
 	return result, nil
 }
 
+// dollarAmount converts int64 cents to float64 dollars for the Firestore schema.
+func dollarAmount(cents int64) float64 { return float64(cents) / 100 }
+
 // allFields returns a map of all transaction document fields including user-editable defaults.
+// Amount is converted from int64 cents to float64 dollars for the Firestore schema.
 func allFields(txn TransactionData, group GroupInfo) map[string]interface{} {
-	return map[string]interface{}{
-		"institution":   txn.Institution,
-		"account":       txn.Account,
-		"description":   txn.Description,
-		"amount":        float64(txn.Amount) / 100, // cents to dollars for Firestore
-		"note":          "",
-		"category":      "",
-		"reimbursement": 0,
-		"budget":        nil,
-		"timestamp":     txn.Timestamp,
-		"statementId":   txn.StatementID,
-		"groupId":       group.ID,
-		"memberEmails":  group.MemberEmails,
-	}
+	m := importFields(txn, group)
+	m["note"] = ""
+	m["category"] = ""
+	m["reimbursement"] = 0
+	m["budget"] = nil
+	return m
 }
 
 // importFields returns a map of only the import-sourced fields for merge updates.
@@ -195,7 +187,7 @@ func importFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 		"institution":  txn.Institution,
 		"account":      txn.Account,
 		"description":  txn.Description,
-		"amount":       float64(txn.Amount) / 100, // cents to dollars for Firestore
+		"amount":       dollarAmount(txn.Amount),
 		"timestamp":    txn.Timestamp,
 		"statementId":  txn.StatementID,
 		"groupId":      group.ID,
@@ -208,6 +200,9 @@ func importFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 // 20 hex characters). Collision probability is negligible for the expected
 // transaction volume (< 1 million documents).
 func transactionDocID(statementID, transactionID string) string {
+	if statementID == "" || transactionID == "" {
+		panic(fmt.Sprintf("transactionDocID: empty input (statement=%q, txn=%q)", statementID, transactionID))
+	}
 	h := sha256.Sum256([]byte(statementID + "/" + transactionID))
-	return fmt.Sprintf("%x", h[:10]) // 20 hex characters
+	return fmt.Sprintf("%x", h[:10])
 }

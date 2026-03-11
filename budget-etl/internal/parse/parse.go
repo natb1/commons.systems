@@ -9,12 +9,12 @@ import (
 )
 
 // Transaction holds a single parsed transaction from any statement format.
+// For OFX/SGML, if Memo differs from Name, Description is "Name | Memo".
 type Transaction struct {
 	TransactionID string
 	Date          time.Time
-	Amount        int64  // cents; positive = spending, negative = income/credit
+	Amount        int64 // cents; positive = spending, negative = income/credit
 	Description   string
-	Memo          string
 }
 
 // ParseError wraps a parse failure with the source file path.
@@ -93,7 +93,9 @@ const (
 	formatSGML
 )
 
-// detectFormat reads the first bytes of a file to determine its format.
+// detectFormat reads the first 512 bytes of a file to determine its format.
+// OFX XML is identified by a <?xml prefix, SGML by an OFXHEADER: prefix.
+// CSV is a fallback: any file containing a comma in its header is treated as CSV.
 func detectFormat(path string) (format, error) {
 	f, err := os.Open(path)
 	if err != nil {

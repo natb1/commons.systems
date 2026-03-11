@@ -36,7 +36,7 @@ func TestParseCents(t *testing.T) {
 }
 
 func TestParseCents_Errors(t *testing.T) {
-	for _, input := range []string{"", "abc", "12.ab"} {
+	for _, input := range []string{"", "abc", "12.ab", "1.999"} {
 		_, err := parseCents(input)
 		if err == nil {
 			t.Errorf("parseCents(%q): expected error", input)
