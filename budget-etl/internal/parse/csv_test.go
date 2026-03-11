@@ -26,14 +26,14 @@ func TestParseCSV(t *testing.T) {
 		idx    int
 		id     string
 		date   string
-		amount float64
+		amount int64 // cents
 		desc   string
 		typ    string // for documentation
 	}{
-		{0, "088790257", "2025-06-11", -400.00, "Mobile Deposit Reference No.  088790257", "CREDIT"},
-		{1, "000251620", "2025-06-13", -3001.83, "Direct Deposit - Reg-Salary Johns Hopkins", "CREDIT"},
-		{2, "MACEX03922", "2025-06-16", 202.00, "ATM Withdrawal 15555 Eastern Ave baltimore MD", "DEBIT"},
-		{3, "MACEX03922-2", "2025-06-16", 3.00, "ATM Transaction Fee - Withdrawal", "DEBIT"},
+		{0, "088790257", "2025-06-11", -40000, "Mobile Deposit Reference No.  088790257", "CREDIT"},
+		{1, "000251620", "2025-06-13", -300183, "Direct Deposit - Reg-Salary Johns Hopkins", "CREDIT"},
+		{2, "MACEX03922", "2025-06-16", 20200, "ATM Withdrawal 15555 Eastern Ave baltimore MD", "DEBIT"},
+		{3, "MACEX03922-2", "2025-06-16", 300, "ATM Transaction Fee - Withdrawal", "DEBIT"},
 	}
 
 	for _, tt := range tests {
@@ -47,7 +47,7 @@ func TestParseCSV(t *testing.T) {
 				t.Errorf("Date = %v, want %v", txn.Date, wantDate)
 			}
 			if txn.Amount != tt.amount {
-				t.Errorf("Amount = %f, want %f", txn.Amount, tt.amount)
+				t.Errorf("Amount = %d, want %d", txn.Amount, tt.amount)
 			}
 			if txn.Description != tt.desc {
 				t.Errorf("Description = %q, want %q", txn.Description, tt.desc)

@@ -4,15 +4,17 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
 
 // parseCSV parses a PNC-format CSV file.
 // PNC CSV format:
-//   Line 1: account metadata (skipped)
-//   Lines 2+: Date,Amount,Description,,TransactionID,Type
+//
+//	Line 1: account metadata (account number, dates, balances) — skipped
+//	Lines 2+: positional data rows with 6 fields:
+//	  [0] Date, [1] Amount, [2] Description, [3] (empty), [4] TransactionID, [5] Type
+//
 // Amount is always positive in the file. Type is "DEBIT" or "CREDIT".
 // Convention: DEBIT → positive (spending), CREDIT → negative (income).
 func parseCSV(path string) (ParseResult, error) {
@@ -23,7 +25,7 @@ func parseCSV(path string) (ParseResult, error) {
 	defer f.Close()
 
 	reader := csv.NewReader(f)
-	// PNC CSV has variable field counts: the header line has 5 fields,
+	// PNC CSV has variable field counts: the metadata line has 5 fields,
 	// data lines have 6. Disable field count checking.
 	reader.FieldsPerRecord = -1
 	records, err := reader.ReadAll()
@@ -47,7 +49,7 @@ func parseCSV(path string) (ParseResult, error) {
 			return ParseResult{}, fmt.Errorf("%s: line %d: parsing date %q: %w", path, i+2, row[0], err)
 		}
 
-		amount, err := strconv.ParseFloat(row[1], 64)
+		amount, err := parseCents(row[1])
 		if err != nil {
 			return ParseResult{}, fmt.Errorf("%s: line %d: parsing amount %q: %w", path, i+2, row[1], err)
 		}

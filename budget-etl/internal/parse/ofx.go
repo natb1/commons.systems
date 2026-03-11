@@ -9,50 +9,32 @@ import (
 
 // OFX 2.x XML structures. We parse only the transaction list from both
 // BANKMSGSRSV1 (bank accounts) and CREDITCARDMSGSRSV1 (credit cards).
+// Intermediate wrapper elements (STMTTRNRS>STMTRS, CCSTMTTRNRS>CCSTMTRS)
+// are traversed via nested XML path tags.
 
 type ofxDoc struct {
-	XMLName  xml.Name       `xml:"OFX"`
-	BankMsgs *ofxBankMsgs   `xml:"BANKMSGSRSV1"`
-	CCMsgs   *ofxCCMsgs     `xml:"CREDITCARDMSGSRSV1"`
-	InvMsgs  *ofxInvMsgs    `xml:"INVSTMTMSGSRSV1"`
-}
-
-type ofxBankMsgs struct {
-	StmtTrnRs ofxStmtTrnRs `xml:"STMTTRNRS"`
-}
-
-type ofxCCMsgs struct {
-	CCStmtTrnRs ofxCCStmtTrnRs `xml:"CCSTMTTRNRS"`
-}
-
-type ofxInvMsgs struct{}
-
-type ofxStmtTrnRs struct {
-	StmtRs ofxStmtRs `xml:"STMTRS"`
-}
-
-type ofxCCStmtTrnRs struct {
-	CCStmtRs ofxCCStmtRs `xml:"CCSTMTRS"`
-}
-
-type ofxStmtRs struct {
-	BankTranList ofxBankTranList `xml:"BANKTRANLIST"`
-}
-
-type ofxCCStmtRs struct {
-	BankTranList ofxBankTranList `xml:"BANKTRANLIST"`
-}
-
-type ofxBankTranList struct {
-	Transactions []ofxStmtTrn `xml:"STMTTRN"`
+	XMLName  xml.Name     `xml:"OFX"`
+	BankTxns []ofxStmtTrn `xml:"BANKMSGSRSV1>STMTTRNRS>STMTRS>BANKTRANLIST>STMTTRN"`
+	CCTxns   []ofxStmtTrn `xml:"CREDITCARDMSGSRSV1>CCSTMTTRNRS>CCSTMTRS>BANKTRANLIST>STMTTRN"`
+	InvMsgs  *struct{}    `xml:"INVSTMTMSGSRSV1"`
 }
 
 type ofxStmtTrn struct {
 	DtPosted string `xml:"DTPOSTED"`
-	TrnAmt  string `xml:"TRNAMT"`
-	FITID   string `xml:"FITID"`
-	Name    string `xml:"NAME"`
-	Memo    string `xml:"MEMO"`
+	TrnAmt   string `xml:"TRNAMT"`
+	FITID    string `xml:"FITID"`
+	Name     string `xml:"NAME"`
+	Memo     string `xml:"MEMO"`
+}
+
+func (t ofxStmtTrn) raw() rawTransaction {
+	return rawTransaction{
+		FITID:    t.FITID,
+		DtPosted: t.DtPosted,
+		TrnAmt:   t.TrnAmt,
+		Name:     t.Name,
+		Memo:     t.Memo,
+	}
 }
 
 func parseOFX(path string) (ParseResult, error) {
@@ -76,27 +58,14 @@ func parseOFX(path string) (ParseResult, error) {
 		return ParseResult{Skipped: true, SkipReason: "investment account (INVSTMTMSGSRSV1)"}, nil
 	}
 
-	if doc.BankMsgs == nil && doc.CCMsgs == nil {
-		return ParseResult{}, fmt.Errorf("no bank or credit card message blocks in %s", path)
-	}
-
-	var rawTxns []ofxStmtTrn
-	if doc.BankMsgs != nil {
-		rawTxns = append(rawTxns, doc.BankMsgs.StmtTrnRs.StmtRs.BankTranList.Transactions...)
-	}
-	if doc.CCMsgs != nil {
-		rawTxns = append(rawTxns, doc.CCMsgs.CCStmtTrnRs.CCStmtRs.BankTranList.Transactions...)
+	rawTxns := append(doc.BankTxns, doc.CCTxns...)
+	if len(rawTxns) == 0 {
+		return ParseResult{}, fmt.Errorf("no bank or credit card transactions in %s", path)
 	}
 
 	txns := make([]Transaction, 0, len(rawTxns))
-	for _, raw := range rawTxns {
-		t, err := convertRawTransaction(rawTransaction{
-			FITID:    raw.FITID,
-			DtPosted: raw.DtPosted,
-			TrnAmt:   raw.TrnAmt,
-			Name:     raw.Name,
-			Memo:     raw.Memo,
-		})
+	for _, st := range rawTxns {
+		t, err := convertRawTransaction(st.raw())
 		if err != nil {
 			return ParseResult{}, fmt.Errorf("%s: %w", path, err)
 		}

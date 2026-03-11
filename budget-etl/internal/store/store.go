@@ -9,8 +9,6 @@ import (
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // Client wraps a Firestore client with budget-specific operations.
@@ -92,7 +90,7 @@ type TransactionData struct {
 	Institution   string
 	Account       string
 	Description   string
-	Amount        float64
+	Amount        int64 // cents
 	Timestamp     time.Time
 	StatementID   string
 	TransactionID string
@@ -104,65 +102,111 @@ type UpsertResult struct {
 	Updated int
 }
 
-// UpsertTransactions writes transactions to Firestore. For each transaction:
-// - Generate deterministic doc ID from sha256(statementId/transactionId)
-// - Try Create with all fields (defaults: note="", category="", reimbursement=0, budget=nil)
-// - On AlreadyExists, Update only import-sourced fields to preserve user edits
+// importFieldPaths lists the fields set by import that overwrite on re-import.
+// Any field set as a default on create but excluded from this list is
+// user-editable and preserved across re-imports (note, category,
+// reimbursement, budget).
+var importFieldPaths = []firestore.FieldPath{
+	{"institution"},
+	{"account"},
+	{"description"},
+	{"amount"},
+	{"timestamp"},
+	{"statementId"},
+	{"groupId"},
+	{"memberEmails"},
+}
+
+// UpsertTransactions writes transactions to Firestore in batches.
+// For each batch of up to 500 transactions:
+//   - Batch-read existing documents via GetAll
+//   - New documents: Set with all fields (defaults: note="", category="", reimbursement=0, budget=nil)
+//   - Existing documents: Set with merge to update only import-sourced fields, preserving user edits
 func (c *Client) UpsertTransactions(ctx context.Context, group GroupInfo, txns []TransactionData) (UpsertResult, error) {
 	col := c.fs.Collection(fmt.Sprintf("budget/%s/transactions", c.env))
 	var result UpsertResult
 
-	for _, txn := range txns {
-		docID := transactionDocID(txn.StatementID, txn.TransactionID)
-		ref := col.Doc(docID)
+	const maxBatch = 500
+	for i := 0; i < len(txns); i += maxBatch {
+		end := i + maxBatch
+		if end > len(txns) {
+			end = len(txns)
+		}
+		chunk := txns[i:end]
 
-		_, err := ref.Create(ctx, map[string]interface{}{
-			"institution":  txn.Institution,
-			"account":      txn.Account,
-			"description":  txn.Description,
-			"amount":       txn.Amount,
-			"note":         "",
-			"category":     "",
-			"reimbursement": 0,
-			"budget":       nil,
-			"timestamp":    txn.Timestamp,
-			"statementId":  txn.StatementID,
-			"groupId":      group.ID,
-			"memberEmails": group.MemberEmails,
-		})
-		if err == nil {
-			result.Created++
-			continue
+		// Build document references
+		refs := make([]*firestore.DocumentRef, len(chunk))
+		for j, txn := range chunk {
+			refs[j] = col.Doc(transactionDocID(txn.StatementID, txn.TransactionID))
 		}
 
-		if status.Code(err) != codes.AlreadyExists {
-			return result, fmt.Errorf("creating transaction %s: %w", docID, err)
-		}
-
-		// Document exists — update only import-sourced fields, preserving user edits
-		// (note, category, reimbursement, budget).
-		_, err = ref.Update(ctx, []firestore.Update{
-			{Path: "institution", Value: txn.Institution},
-			{Path: "account", Value: txn.Account},
-			{Path: "description", Value: txn.Description},
-			{Path: "amount", Value: txn.Amount},
-			{Path: "timestamp", Value: txn.Timestamp},
-			{Path: "statementId", Value: txn.StatementID},
-			{Path: "groupId", Value: group.ID},
-			{Path: "memberEmails", Value: group.MemberEmails},
-		})
+		// Batch read to check which documents exist
+		snaps, err := c.fs.GetAll(ctx, refs)
 		if err != nil {
-			return result, fmt.Errorf("updating transaction %s: %w", docID, err)
+			// GetAll returns NotFound for missing docs in the snapshot array,
+			// not as an error. A top-level error means a real failure.
+			return result, fmt.Errorf("checking existing transactions: %w", err)
 		}
-		result.Updated++
+
+		// Batch write: Set new docs, merge-update existing docs
+		batch := c.fs.Batch()
+		var creates, updates int
+		for j, txn := range chunk {
+			if snaps[j].Exists() {
+				batch.Set(refs[j], importFields(txn, group), firestore.Merge(importFieldPaths...))
+				updates++
+			} else {
+				batch.Set(refs[j], allFields(txn, group))
+				creates++
+			}
+		}
+		if _, err := batch.Commit(ctx); err != nil {
+			return result, fmt.Errorf("committing transaction batch: %w", err)
+		}
+		result.Created += creates
+		result.Updated += updates
 	}
 
 	log.Printf("upsert complete: %d created, %d updated", result.Created, result.Updated)
 	return result, nil
 }
 
-// transactionDocID generates a deterministic Firestore document ID
-// from a statement ID and transaction ID using sha256.
+// allFields returns a map of all transaction document fields including user-editable defaults.
+func allFields(txn TransactionData, group GroupInfo) map[string]interface{} {
+	return map[string]interface{}{
+		"institution":   txn.Institution,
+		"account":       txn.Account,
+		"description":   txn.Description,
+		"amount":        float64(txn.Amount) / 100, // cents to dollars for Firestore
+		"note":          "",
+		"category":      "",
+		"reimbursement": 0,
+		"budget":        nil,
+		"timestamp":     txn.Timestamp,
+		"statementId":   txn.StatementID,
+		"groupId":       group.ID,
+		"memberEmails":  group.MemberEmails,
+	}
+}
+
+// importFields returns a map of only the import-sourced fields for merge updates.
+func importFields(txn TransactionData, group GroupInfo) map[string]interface{} {
+	return map[string]interface{}{
+		"institution":  txn.Institution,
+		"account":      txn.Account,
+		"description":  txn.Description,
+		"amount":       float64(txn.Amount) / 100, // cents to dollars for Firestore
+		"timestamp":    txn.Timestamp,
+		"statementId":  txn.StatementID,
+		"groupId":      group.ID,
+		"memberEmails": group.MemberEmails,
+	}
+}
+
+// transactionDocID generates a deterministic Firestore document ID from a
+// statement ID and transaction ID using a truncated sha256 hash (10 bytes /
+// 20 hex characters). Collision probability is negligible for the expected
+// transaction volume (< 1 million documents).
 func transactionDocID(statementID, transactionID string) string {
 	h := sha256.Sum256([]byte(statementID + "/" + transactionID))
 	return fmt.Sprintf("%x", h[:10]) // 20 hex characters

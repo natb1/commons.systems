@@ -7,8 +7,8 @@ import (
 )
 
 // parseSGML parses OFX 1.x / QFX SGML files by scanning for SGML tags.
-// SGML tags are not self-closing and can't be parsed with encoding/xml.
-// Format: <TAG>value (no closing tags for leaf elements).
+// SGML leaf elements have no closing tags (e.g., <FITID>12345 instead of
+// <FITID>12345</FITID>), so encoding/xml cannot parse them.
 // Aggregates like <STMTTRN> use </STMTTRN> as a closing tag.
 func parseSGML(path string) (ParseResult, error) {
 	data, err := os.ReadFile(path)

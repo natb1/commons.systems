@@ -23,18 +23,24 @@ func convertRawTransaction(raw rawTransaction) (Transaction, error) {
 	if fitid == "" {
 		return Transaction{}, fmt.Errorf("STMTTRN missing FITID")
 	}
+	if strings.TrimSpace(raw.DtPosted) == "" {
+		return Transaction{}, fmt.Errorf("FITID %s: missing DTPOSTED", fitid)
+	}
+	if strings.TrimSpace(raw.TrnAmt) == "" {
+		return Transaction{}, fmt.Errorf("FITID %s: missing TRNAMT", fitid)
+	}
 
 	date, err := parseOFXDate(raw.DtPosted)
 	if err != nil {
 		return Transaction{}, fmt.Errorf("FITID %s: parsing date %q: %w", fitid, raw.DtPosted, err)
 	}
 
-	amount, err := parseOFXAmount(raw.TrnAmt)
+	amount, err := parseCents(raw.TrnAmt)
 	if err != nil {
 		return Transaction{}, fmt.Errorf("FITID %s: parsing amount %q: %w", fitid, raw.TrnAmt, err)
 	}
 	// OFX/SGML: negative = debit (spending), positive = credit (income)
-	// Budget app: positive = spending, negative = income
+	// Transaction.Amount: positive = spending, negative = income
 	amount = -amount
 
 	return Transaction{
@@ -46,7 +52,11 @@ func convertRawTransaction(raw rawTransaction) (Transaction, error) {
 	}, nil
 }
 
-// parseOFXDate parses OFX date formats:
+// parseOFXDate parses the date portion (YYYYMMDD) from OFX date strings.
+// Timezone offsets and intraday timestamps are discarded because OFX files
+// use varying offsets and transaction dates are business dates.
+//
+// Accepted input formats:
 //
 //	"20250522000000.000"         — 14-digit timestamp
 //	"20251023083735.186[-4:EDT]" — timestamp with timezone offset
@@ -65,17 +75,45 @@ func parseOFXDate(s string) (time.Time, error) {
 	if len(s) < 8 {
 		return time.Time{}, fmt.Errorf("OFX date too short: %q", s)
 	}
-	switch len(s) {
-	case 8:
-		return time.Parse("20060102", s)
-	case 14:
-		return time.Parse("20060102150405", s)
-	default:
-		return time.Time{}, fmt.Errorf("unexpected OFX date format: %q", s)
-	}
+	// Use only the date portion to avoid timezone offset issues.
+	return time.Parse("20060102", s[:8])
 }
 
-// parseOFXAmount parses an OFX amount string like "-16.19" or "400.00".
-func parseOFXAmount(s string) (float64, error) {
-	return strconv.ParseFloat(strings.TrimSpace(s), 64)
+// parseCents parses a decimal amount string to integer cents.
+// Handles formats like "400.00", "-16.19", "3001.83".
+func parseCents(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty amount")
+	}
+	neg := false
+	if s[0] == '-' {
+		neg = true
+		s = s[1:]
+	}
+	parts := strings.SplitN(s, ".", 2)
+	dollars, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	var cents int64
+	if len(parts) == 2 && len(parts[1]) > 0 {
+		frac := parts[1]
+		if len(frac) > 2 {
+			frac = frac[:2]
+		}
+		c, err := strconv.ParseInt(frac, 10, 64)
+		if err != nil {
+			return 0, err
+		}
+		if len(parts[1]) == 1 {
+			c *= 10
+		}
+		cents = c
+	}
+	total := dollars*100 + cents
+	if neg {
+		total = -total
+	}
+	return total, nil
 }

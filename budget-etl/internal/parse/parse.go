@@ -12,10 +12,19 @@ import (
 type Transaction struct {
 	TransactionID string
 	Date          time.Time
-	Amount        float64 // positive = spending, negative = income/credit
+	Amount        int64  // cents; positive = spending, negative = income/credit
 	Description   string
 	Memo          string
 }
+
+// ParseError wraps a parse failure with the source file path.
+type ParseError struct {
+	Path string
+	Err  error
+}
+
+func (e *ParseError) Error() string { return fmt.Sprintf("%s: %v", e.Path, e.Err) }
+func (e *ParseError) Unwrap() error { return e.Err }
 
 // StatementFile identifies a statement file and the metadata extracted from its directory path.
 // Expected directory layout: {institution}/{account}/{period}/{file}
@@ -33,7 +42,7 @@ func (sf StatementFile) StatementID() string {
 
 // DiscoverFiles walks dir looking for files matching the expected
 // {institution}/{account}/{period}/{file} layout. It returns one StatementFile
-// per file found, skipping dotfiles (like .DS_Store).
+// per file found, skipping dot-prefixed directories and files (like .DS_Store).
 func DiscoverFiles(dir string) ([]StatementFile, error) {
 	dir = filepath.Clean(dir)
 	var files []StatementFile
@@ -43,6 +52,9 @@ func DiscoverFiles(dir string) ([]StatementFile, error) {
 			return err
 		}
 		if info.IsDir() {
+			if path != dir && strings.HasPrefix(info.Name(), ".") {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if strings.HasPrefix(info.Name(), ".") {
@@ -75,7 +87,8 @@ func DiscoverFiles(dir string) ([]StatementFile, error) {
 type format int
 
 const (
-	formatCSV format = iota
+	formatUnknown format = iota
+	formatCSV
 	formatOFX
 	formatSGML
 )
@@ -119,16 +132,21 @@ type ParseResult struct {
 func ParseFile(path string) (ParseResult, error) {
 	f, err := detectFormat(path)
 	if err != nil {
-		return ParseResult{}, err
+		return ParseResult{}, &ParseError{Path: path, Err: err}
 	}
+	var result ParseResult
 	switch f {
 	case formatOFX:
-		return parseOFX(path)
+		result, err = parseOFX(path)
 	case formatSGML:
-		return parseSGML(path)
+		result, err = parseSGML(path)
 	case formatCSV:
-		return parseCSV(path)
+		result, err = parseCSV(path)
 	default:
-		return ParseResult{}, &os.PathError{Op: "parse", Path: path, Err: os.ErrInvalid}
+		panic(fmt.Sprintf("unhandled format %d for %s", f, path))
 	}
+	if err != nil {
+		return ParseResult{}, &ParseError{Path: path, Err: err}
+	}
+	return result, nil
 }

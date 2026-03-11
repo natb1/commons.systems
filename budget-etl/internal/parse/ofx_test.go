@@ -22,7 +22,7 @@ func TestParseOFX(t *testing.T) {
 		t.Fatalf("expected 2 transactions, got %d", len(txns))
 	}
 
-	// First: DEBIT, TRNAMT=-16.19 → budget amount = +16.19 (spending)
+	// First: DEBIT, TRNAMT=-16.19 → budget amount = +1619 cents (spending)
 	t.Run("debit", func(t *testing.T) {
 		txn := txns[0]
 		if txn.TransactionID != "202505221122069" {
@@ -32,8 +32,8 @@ func TestParseOFX(t *testing.T) {
 		if !txn.Date.Equal(wantDate) {
 			t.Errorf("Date = %v, want %v", txn.Date, wantDate)
 		}
-		if txn.Amount != 16.19 {
-			t.Errorf("Amount = %f, want %f", txn.Amount, 16.19)
+		if txn.Amount != 1619 {
+			t.Errorf("Amount = %d, want %d", txn.Amount, 1619)
 		}
 		if txn.Description != "CVS/PHARMACY #07952" {
 			t.Errorf("Description = %q, want %q", txn.Description, "CVS/PHARMACY #07952")
@@ -43,14 +43,14 @@ func TestParseOFX(t *testing.T) {
 		}
 	})
 
-	// Second: CREDIT, TRNAMT=50.00 → budget amount = -50.00 (income)
+	// Second: CREDIT, TRNAMT=50.00 → budget amount = -5000 cents (income)
 	t.Run("credit", func(t *testing.T) {
 		txn := txns[1]
 		if txn.TransactionID != "202505201234567" {
 			t.Errorf("TransactionID = %q, want %q", txn.TransactionID, "202505201234567")
 		}
-		if txn.Amount != -50.00 {
-			t.Errorf("Amount = %f, want %f", txn.Amount, -50.00)
+		if txn.Amount != -5000 {
+			t.Errorf("Amount = %d, want %d", txn.Amount, -5000)
 		}
 	})
 }

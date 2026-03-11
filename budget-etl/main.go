@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -59,23 +60,35 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 	}
 	log.Printf("discovered %d statement files", len(files))
 
-	// Parse all files
+	// Parse all files concurrently
+	type fileResult struct {
+		sf     parse.StatementFile
+		result parse.ParseResult
+		err    error
+	}
+	ch := make(chan fileResult, len(files))
+	for _, sf := range files {
+		go func() {
+			result, err := parse.ParseFile(sf.Path)
+			ch <- fileResult{sf: sf, result: result, err: err}
+		}()
+	}
+
 	var parsed []parsedFile
 	var totalTxns int
 	var skipped int
-
-	for _, sf := range files {
-		result, err := parse.ParseFile(sf.Path)
-		if err != nil {
-			return fmt.Errorf("parsing %s: %w", sf.Path, err)
+	for range files {
+		r := <-ch
+		if r.err != nil {
+			return r.err
 		}
-		if result.Skipped {
-			log.Printf("skipping %s: %s", sf.Path, result.SkipReason)
+		if r.result.Skipped {
+			log.Printf("skipping %s: %s", r.sf.Path, r.result.SkipReason)
 			skipped++
 			continue
 		}
-		parsed = append(parsed, parsedFile{sf: sf, result: result})
-		totalTxns += len(result.Transactions)
+		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
+		totalTxns += len(r.result.Transactions)
 	}
 
 	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
@@ -145,28 +158,16 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 }
 
 func resolveGHEmail() (string, error) {
-	// Try gh api user/emails (requires "user" scope)
 	cmd := exec.Command("gh", "api", "user/emails", "--jq", `.[] | select(.primary) | .email`)
 	out, err := cmd.Output()
-	if err == nil {
-		email := strings.TrimSpace(string(out))
-		if email != "" {
-			return email, nil
-		}
+	if err != nil {
+		return "", fmt.Errorf("resolving email via gh CLI: %w\nRun: gh auth login && gh auth refresh -s user", err)
 	}
-
-	// Fallback: git config user.email
-	log.Printf("warning: gh API unavailable, falling back to git config user.email")
-	cmd = exec.Command("git", "config", "user.email")
-	out, err = cmd.Output()
-	if err == nil {
-		email := strings.TrimSpace(string(out))
-		if email != "" {
-			return email, nil
-		}
+	email := strings.TrimSpace(string(out))
+	if email == "" {
+		return "", fmt.Errorf("gh returned no primary email; run: gh auth refresh -s user")
 	}
-
-	return "", fmt.Errorf("could not resolve email; configure git (git config user.email) or grant gh the user scope (gh auth refresh -s user)")
+	return email, nil
 }
 
 // readFirebaseRC finds the nearest .firebaserc by walking up from the
@@ -190,6 +191,9 @@ func readFirebaseRC() (string, error) {
 				return id, nil
 			}
 			return "", fmt.Errorf("%s has no default project", path)
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("reading %s: %w", path, err)
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
