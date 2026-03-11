@@ -9,7 +9,7 @@ allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUG
 Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
-- Launch 7 review tasks in parallel using the Task tool. Collect all returned results verbatim — do NOT summarize or paraphrase agent output:
+- Launch 7 review tasks in parallel using the Task tool. Collect all returned results verbatim — do NOT summarize or paraphrase task output:
   1. **`/review` skill** — Launch a Task with `subagent_type: "general-purpose"` that invokes the Skill tool with `skill: "review"`. Include the PR diff context in the prompt.
   2. **`pr-review-toolkit:code-reviewer`** — Launch a Task with `subagent_type: "pr-review-toolkit:code-reviewer"`.
   3. **`/simplify` skill** — Launch a Task with `subagent_type: "general-purpose"` that invokes the Skill tool with `skill: "simplify"`. Include the PR diff context in the prompt.
@@ -35,7 +35,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
   Substitute each `$*_OUT` variable with the `output_file` path from the corresponding Task result. For unavailable tasks, replace `cat` with `echo "Task unavailable"`.
 
 **Evaluation instructions:**
-- **Aggregate and deduplicate** findings across all agents — merge near-identical findings into single entries noting which agents raised them
+- **Aggregate and deduplicate** findings across all tasks — merge near-identical findings into single entries noting which tasks raised them
 - **Prior iteration context:** Read all prior `tmp/codequality-eval-*.txt` before classifying comment improvements; pick the strongest comment version for maintainability autonomously without reopening for user review
 - **Classify each finding as required / out of scope / false positive:**
   - Code quality (maintainability, readability) and code simplification → **required** unless high effort + low impact → **out of scope**
