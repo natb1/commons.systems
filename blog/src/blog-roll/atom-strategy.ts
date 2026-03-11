@@ -4,7 +4,7 @@ function parseAtomFeed(doc: Document): LatestPost | null {
   const entry = doc.querySelector("feed > entry");
   if (!entry) return null;
   const title = entry.querySelector("title")?.textContent ?? "";
-  const linkEl = entry.querySelector("link[href]");
+  const linkEl = entry.querySelector('link[rel="alternate"][href]') ?? entry.querySelector("link[href]");
   const url = linkEl?.getAttribute("href") ?? "";
   const published =
     entry.querySelector("published")?.textContent ??
