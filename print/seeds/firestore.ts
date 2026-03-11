@@ -14,6 +14,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
       name: "media",
+      convergent: true,
       documents: [
         {
           id: "gutenberg-3296",

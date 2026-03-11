@@ -19,6 +19,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
     },
     {
       name: "posts",
+      convergent: true,
       documents: [
         {
           id: "recovering-autonomy-with-coding-agents",
