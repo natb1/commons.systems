@@ -2,12 +2,62 @@
 @import "@commons-systems/style/layout.css";
 @import "@commons-systems/blog/blog.css";
 
+:root {
+  --font-body: "EB Garamond", "Georgia", "Times New Roman", serif;
+  --font-heading: "Uncial Antiqua", "EB Garamond", serif;
+
+  --fg: #2a1f14;
+  --bg: #f5eed6;
+  --accent: #8b1a1a;
+  --muted: #6b5e4f;
+  --border: #c4a96a;
+  --surface: #efe6cc;
+
+  --gold: #b8860b;
+  --vermillion: #8b1a1a;
+  --deep-blue: #1a3a5c;
+
+  color-scheme: light;
+}
+
 body {
   --main-max-width: 68rem;
+  font-size: 1.125rem;
+  line-height: 1.6;
 }
 
 main {
   min-width: 0;
   max-inline-size: none;
   margin-inline: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  text-transform: none;
+  letter-spacing: 0.02em;
+  text-shadow: none;
+  color: var(--deep-blue);
+}
+
+h1 {
+  font-size: 2rem;
+}
+
+a {
+  color: var(--vermillion);
+}
+
+a:hover {
+  color: var(--gold);
+}
+
+header {
+  border-bottom: 3px double var(--border);
+}
+
+footer {
+  border-top: 3px double var(--border);
 }
