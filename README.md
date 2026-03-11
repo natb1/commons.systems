@@ -20,7 +20,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 
 - **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
 - **Version Control** (git): Created a repo.
-- **Agentic Coding Tools** (Claude Code): `home-manager switch --flake .#default --impure`
+- **Agentic Coding Tools** (Claude Code): `nix flake update && home-manager switch --flake .#default --impure`
 - **Infrastructure** (Firebase): Hosting and storage.
 
 ## Design Principles
