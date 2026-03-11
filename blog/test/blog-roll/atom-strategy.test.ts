@@ -110,7 +110,6 @@ describe("AtomStrategy", () => {
     const strategy = new AtomStrategy("https://example.com/feed");
     const result = await strategy.fetchLatestPost();
 
-    // Unparseable XML produces no results
     expect(result).toBeNull();
 
   });
@@ -128,7 +127,6 @@ describe("AtomStrategy", () => {
     const strategy = new AtomStrategy("https://example.com/feed");
     const result = await strategy.fetchLatestPost();
 
-    // Empty feed (no entries) produces no results
     expect(result).toBeNull();
 
   });

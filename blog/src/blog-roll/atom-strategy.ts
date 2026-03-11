@@ -43,6 +43,7 @@ export class AtomStrategy implements BlogRollStrategy {
       // Non-OK status — fall through to proxy
       console.warn(`Feed fetch failed for ${this.feedUrl}: ${response.status}`);
     } catch (err) {
+      if (err instanceof ReferenceError) throw err;
       // Network or CORS error — log and fall through to proxy
       console.warn(`Feed fetch error for ${this.feedUrl}:`, err);
     }
@@ -56,6 +57,7 @@ export class AtomStrategy implements BlogRollStrategy {
       }
       return parseXml(await proxyResponse.text());
     } catch (err) {
+      if (err instanceof ReferenceError) throw err;
       console.warn(`Proxy fetch error for ${this.feedUrl}:`, err);
       return null;
     }
