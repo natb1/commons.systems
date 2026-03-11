@@ -90,6 +90,8 @@ type TransactionData struct {
 	Timestamp     time.Time
 	StatementID   string
 	TransactionID string
+	Category      string // set by categorization rules; preserved across re-imports
+	Budget        string // set by budget assignment rules; preserved across re-imports
 }
 
 // UpsertResult tracks how many transactions were created vs updated.
@@ -175,9 +177,13 @@ func dollarAmount(cents int64) float64 { return float64(cents) / 100 }
 func allFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 	m := importFields(txn, group)
 	m["note"] = ""
-	m["category"] = ""
+	m["category"] = txn.Category
 	m["reimbursement"] = 0
-	m["budget"] = nil
+	if txn.Budget != "" {
+		m["budget"] = txn.Budget
+	} else {
+		m["budget"] = nil
+	}
 	return m
 }
 
