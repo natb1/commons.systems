@@ -137,6 +137,8 @@ function renderTransactionTable(
       periodStartMs: p.periodStart.toMillis(),
       periodEndMs: p.periodEnd.toMillis(),
       total: p.total,
+      count: p.count,
+      categoryBreakdown: p.categoryBreakdown,
     }));
     const periodsAttr = escapeHtml(JSON.stringify(periodsData));
     dataAttrs = [

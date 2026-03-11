@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, query, updateDoc, where, increment, Timestamp, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
+import { collection, doc, getDocs, query, updateDoc, where, increment, Timestamp, addDoc, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { requireString, requireNumber, requireNonNegativeNumber, optionalString } from "@commons-systems/firestoreutil/validate";
 
@@ -28,6 +28,8 @@ export interface BudgetPeriod {
   readonly periodEnd: Timestamp;
   /** Sum of net transaction amounts (after reimbursement) in this period. Non-negative per Firestore rules. */
   readonly total: number;
+  readonly count: number;
+  readonly categoryBreakdown: Record<string, number>;
   readonly groupId: string | null;
 }
 
@@ -38,6 +40,8 @@ export interface SerializedBudgetPeriod {
   readonly periodStartMs: number;
   readonly periodEndMs: number;
   readonly total: number;
+  readonly count: number;
+  readonly categoryBreakdown: Record<string, number>;
 }
 
 export interface Transaction {
@@ -87,6 +91,21 @@ function requireTimestamp(value: unknown, field: string): Timestamp {
   const ts = optionalTimestamp(value, field);
   if (ts === null) throw new DataIntegrityError(`Expected Timestamp for ${field}, got null`);
   return ts;
+}
+
+function requireCategoryBreakdown(value: unknown): Record<string, number> {
+  if (value == null) return {};
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new DataIntegrityError(`Expected object for categoryBreakdown, got ${typeof value}`);
+  }
+  const result: Record<string, number> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof val !== "number" || !Number.isFinite(val)) {
+      throw new DataIntegrityError(`categoryBreakdown[${key}] is not a finite number`);
+    }
+    result[key] = val;
+  }
+  return result;
 }
 
 function requireRollover(value: unknown): Rollover {
@@ -216,6 +235,8 @@ export async function getBudgetPeriods(groupId: string | null, email?: string): 
       periodStart,
       periodEnd,
       total: requireNonNegativeNumber(data.total, "total"),
+      count: requireNonNegativeNumber(data.count, "count"),
+      categoryBreakdown: requireCategoryBreakdown(data.categoryBreakdown),
       groupId: optionalString(data.groupId, "groupId"),
     };
   });
@@ -272,4 +293,84 @@ export async function updateBudget(
   const path = nsCollectionPath(NAMESPACE, "budgets");
   const ref = doc(db, path, budgetId);
   await updateDoc(ref, fields);
+}
+
+// --- Rules ---
+
+export type RuleType = "categorization" | "budget_assignment";
+
+export interface Rule {
+  readonly id: string;
+  readonly type: RuleType;
+  readonly pattern: string;
+  readonly target: string;
+  readonly priority: number;
+  readonly institution: string | null;
+  readonly account: string | null;
+  readonly groupId: string | null;
+}
+
+function requireRuleType(value: unknown): RuleType {
+  if (value === "categorization" || value === "budget_assignment") return value;
+  throw new DataIntegrityError(`Expected rule type to be categorization or budget_assignment, got ${value}`);
+}
+
+export async function getRules(groupId: string, email: string): Promise<Rule[]>;
+export async function getRules(groupId: null): Promise<Rule[]>;
+export async function getRules(groupId: string | null, email?: string): Promise<Rule[]> {
+  const docs = await queryGroupCollection("rules", "seed-", groupId, email);
+  return docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      type: requireRuleType(data.type),
+      pattern: requireString(data.pattern, "pattern"),
+      target: requireString(data.target, "target"),
+      priority: requireNumber(data.priority, "priority"),
+      institution: optionalString(data.institution, "institution"),
+      account: optionalString(data.account, "account"),
+      groupId: optionalString(data.groupId, "groupId"),
+    };
+  });
+}
+
+export async function createRule(
+  groupId: string,
+  memberEmails: string[],
+  fields: Omit<Rule, "id" | "groupId">,
+): Promise<string> {
+  requireRuleType(fields.type);
+  if (!fields.pattern) throw new Error("Rule pattern cannot be empty");
+  if (!fields.target) throw new Error("Rule target cannot be empty");
+  const path = nsCollectionPath(NAMESPACE, "rules");
+  const ref = await addDoc(collection(db, path), {
+    type: fields.type,
+    pattern: fields.pattern,
+    target: fields.target,
+    priority: fields.priority,
+    institution: fields.institution,
+    account: fields.account,
+    groupId,
+    memberEmails,
+  });
+  return ref.id;
+}
+
+export async function updateRule(
+  ruleId: string,
+  fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account">>,
+): Promise<void> {
+  requireDocId(ruleId, "rule");
+  if (Object.keys(fields).length === 0) return;
+  if (fields.type !== undefined) requireRuleType(fields.type);
+  const path = nsCollectionPath(NAMESPACE, "rules");
+  const ref = doc(db, path, ruleId);
+  await updateDoc(ref, fields);
+}
+
+export async function deleteRule(ruleId: string): Promise<void> {
+  requireDocId(ruleId, "rule");
+  const path = nsCollectionPath(NAMESPACE, "rules");
+  const ref = doc(db, path, ruleId);
+  await deleteDoc(ref);
 }

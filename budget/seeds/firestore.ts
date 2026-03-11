@@ -2,7 +2,7 @@
 // The firestoreutil seed runner writes these specs to Firestore using the Admin SDK,
 // which converts Date objects to Timestamps on write.
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { Transaction, Budget, BudgetPeriod } from "../src/firestore.js";
+import type { Transaction, Budget, BudgetPeriod, Rule } from "../src/firestore.js";
 import type { Group } from "@commons-systems/authutil/groups";
 
 /** Seed groups include `members` (used in queries and security rules, omitted from the authutil Group type) */
@@ -23,6 +23,9 @@ type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "periodEnd
   periodEnd: Date;
   memberEmails: string[];
 };
+
+/** Seed rules include `memberEmails` for security rules and `groupId` for query filtering */
+type RuleSeedData = Omit<Rule, "id"> & { memberEmails: string[] };
 
 const budgetDocs: { id: string; data: BudgetSeedData }[] = [
   {
@@ -69,6 +72,8 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodStart: new Date("2025-01-06"),
       periodEnd: new Date("2025-01-13"),
       total: 120,
+      count: 2,
+      categoryBreakdown: { "Food:Dining": 120 },
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
@@ -80,6 +85,8 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodStart: new Date("2025-01-13"),
       periodEnd: new Date("2025-01-20"),
       total: 5.75,
+      count: 1,
+      categoryBreakdown: { "Food:Coffee": 5.75 },
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
@@ -91,6 +98,8 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodStart: new Date("2025-01-20"),
       periodEnd: new Date("2025-01-27"),
       total: 45,
+      count: 2,
+      categoryBreakdown: { "Food:Dining": 25, "Food:Coffee": 20 },
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
@@ -102,6 +111,8 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodStart: new Date("2025-01-20"),
       periodEnd: new Date("2025-01-27"),
       total: 142.50,
+      count: 1,
+      categoryBreakdown: { "Housing:Utilities:Electric": 142.50 },
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
@@ -113,6 +124,8 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodStart: new Date("2025-01-27"),
       periodEnd: new Date("2025-02-03"),
       total: 50,
+      count: 1,
+      categoryBreakdown: { "Travel:Books": 50 },
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
@@ -124,6 +137,8 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodStart: new Date("2025-02-03"),
       periodEnd: new Date("2025-02-10"),
       total: 0,
+      count: 1,
+      categoryBreakdown: {},
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
@@ -269,6 +284,87 @@ const seedTransactionDocs = [
   },
 ];
 
+const seedRuleDocs: { id: string; data: RuleSeedData }[] = [
+  {
+    id: "cat-restaurant",
+    data: {
+      type: "categorization",
+      pattern: "restaurant",
+      target: "Food:Dining",
+      priority: 10,
+      institution: null,
+      account: null,
+      groupId: "household",
+      memberEmails: ["test@example.com"],
+    } satisfies RuleSeedData,
+  },
+  {
+    id: "cat-coffee",
+    data: {
+      type: "categorization",
+      pattern: "coffee",
+      target: "Food:Coffee",
+      priority: 10,
+      institution: null,
+      account: null,
+      groupId: "household",
+      memberEmails: ["test@example.com"],
+    } satisfies RuleSeedData,
+  },
+  {
+    id: "cat-electric",
+    data: {
+      type: "categorization",
+      pattern: "electric",
+      target: "Housing:Utilities:Electric",
+      priority: 10,
+      institution: null,
+      account: null,
+      groupId: "household",
+      memberEmails: ["test@example.com"],
+    } satisfies RuleSeedData,
+  },
+  {
+    id: "budget-food",
+    data: {
+      type: "budget_assignment",
+      pattern: "food",
+      target: "food",
+      priority: 100,
+      institution: null,
+      account: null,
+      groupId: "household",
+      memberEmails: ["test@example.com"],
+    } satisfies RuleSeedData,
+  },
+  {
+    id: "budget-housing",
+    data: {
+      type: "budget_assignment",
+      pattern: "housing",
+      target: "housing",
+      priority: 100,
+      institution: null,
+      account: null,
+      groupId: "household",
+      memberEmails: ["test@example.com"],
+    } satisfies RuleSeedData,
+  },
+  {
+    id: "budget-travel",
+    data: {
+      type: "budget_assignment",
+      pattern: "travel",
+      target: "vacation",
+      priority: 100,
+      institution: null,
+      account: null,
+      groupId: "household",
+      memberEmails: ["test@example.com"],
+    } satisfies RuleSeedData,
+  },
+];
+
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
@@ -333,6 +429,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
     { name: "budgets", testOnly: true, documents: budgetDocs },
     { name: "seed-budget-periods", convergent: true, documents: budgetPeriodDocs },
     { name: "budget-periods", testOnly: true, documents: budgetPeriodDocs },
+    { name: "seed-rules", convergent: true, documents: seedRuleDocs },
+    { name: "rules", testOnly: true, documents: seedRuleDocs },
   ],
 };
 

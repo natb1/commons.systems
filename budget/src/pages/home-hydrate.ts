@@ -65,8 +65,11 @@ function parseBudgetPeriods(raw: string | undefined): HydrationPeriod[] {
         throw new DataIntegrityError("Budget period missing string id or budgetId");
       }
       if (typeof item.periodStartMs !== "number" || typeof item.periodEndMs !== "number"
-          || typeof item.total !== "number") {
-        throw new DataIntegrityError("Budget period missing numeric periodStartMs, periodEndMs, or total");
+          || typeof item.total !== "number" || typeof item.count !== "number") {
+        throw new DataIntegrityError("Budget period missing numeric periodStartMs, periodEndMs, total, or count");
+      }
+      if (typeof item.categoryBreakdown !== "object" || item.categoryBreakdown === null || Array.isArray(item.categoryBreakdown)) {
+        throw new DataIntegrityError("Budget period categoryBreakdown is not an object");
       }
       if (item.periodStartMs >= item.periodEndMs) {
         throw new DataIntegrityError("Budget period has periodStartMs >= periodEndMs");
