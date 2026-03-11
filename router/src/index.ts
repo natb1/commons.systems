@@ -17,7 +17,7 @@ export interface Route {
 }
 
 export interface RouterOptions {
-  onNavigate?: () => void;
+  onNavigate?: (path: string) => void;
   /** Map an error to a user-facing message. Return undefined to use "Something went wrong. Please try again." */
   formatError?: (error: unknown) => string | undefined;
 }
@@ -38,9 +38,9 @@ export function createRouter(
 
   async function navigate(): Promise<void> {
     if (destroyed) return;
-    options?.onNavigate?.();
     const id = ++navigationId;
     const { path } = parseHash();
+    options?.onNavigate?.(path);
     const route =
       routes.find((r) =>
         typeof r.path === "string" ? r.path === path : r.path.test(path),

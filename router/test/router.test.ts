@@ -321,14 +321,13 @@ describe("createRouter", () => {
     expect(() => deferred[0]()).toThrow(ErrorClass);
   });
 
-  it("onNavigate callback fires on each navigation", async () => {
+  it("onNavigate callback fires with path on each navigation", async () => {
     const onNavigate = vi.fn();
     router = createRouter(outlet, routes, { onNavigate });
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>Home</h2>");
     });
-    expect(onNavigate).toHaveBeenCalled();
-    const callsBefore = onNavigate.mock.calls.length;
+    expect(onNavigate).toHaveBeenCalledWith("/");
 
     location.hash = "#/about";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
@@ -336,7 +335,7 @@ describe("createRouter", () => {
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>About</h2>");
     });
-    expect(onNavigate.mock.calls.length).toBeGreaterThan(callsBefore);
+    expect(onNavigate).toHaveBeenCalledWith("/about");
   });
 
   it("navigate() re-renders current route", async () => {
