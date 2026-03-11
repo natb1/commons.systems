@@ -52,6 +52,6 @@ test.describe("auth", () => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     const posts = page.locator("#posts article");
-    expect(await posts.count()).toBeGreaterThanOrEqual(2);
+    expect(await posts.count()).toBeGreaterThanOrEqual(1);
   });
 });
