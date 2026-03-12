@@ -105,8 +105,7 @@ type UpsertResult struct {
 // Any field set as a default on create but excluded from this list is
 // user-editable and preserved across re-imports (note, reimbursement).
 // Category and budget are set by the rule engine on first import and
-// preserved across re-imports. On re-import, existing transactions retain
-// their original category and budget even if rules have changed.
+// preserved across re-imports, even if rules have changed.
 var importFieldPaths = []firestore.FieldPath{
 	{"institution"},
 	{"account"},
@@ -121,10 +120,10 @@ var importFieldPaths = []firestore.FieldPath{
 // UpsertTransactions writes transactions to Firestore in batches.
 // For each batch of up to 500 transactions:
 //   - Batch-read existing documents via GetAll
-//   - New documents: Set with all fields (defaults: note="", reimbursement=0;
-//     category and budget are set by the rule engine before upsert.
+//   - New documents: Set with all fields. Defaults: note="", reimbursement=0.
+//     Category and budget are set by the rule engine before upsert.
 //     ApplyCategorization enforces 100% coverage, so category is always
-//     non-empty for new transactions. Budget is nil when no assignment rule matches)
+//     non-empty for new transactions. Budget is nil when no assignment rule matches.
 //   - Existing documents: Set with merge to update only import-sourced fields, preserving user edits
 func (c *Client) UpsertTransactions(ctx context.Context, group GroupInfo, txns []TransactionData) (UpsertResult, error) {
 	col := c.fs.Collection(fmt.Sprintf("budget/%s/transactions", c.env))
@@ -181,7 +180,8 @@ func dollarAmount(cents int64) float64 { return float64(cents) / 100 }
 // allFields returns a map of all transaction document fields including user-editable defaults.
 // Amount is converted from int64 cents to float64 dollars for the Firestore schema.
 // Budget is nil (not "") when unassigned so the client can distinguish "no budget" from
-// "empty string budget"; category uses "" for unmatched since all categories are non-empty strings.
+// "empty string budget". Category is expected to be non-empty; ApplyCategorization
+// enforces 100% coverage before upsert.
 func allFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 	m := importFields(txn, group)
 	m["note"] = ""
@@ -369,8 +369,9 @@ func aggregateTransactionData(txns []txnFieldMap) (map[string]*periodData, error
 		}
 		pd.total += net
 		pd.count++
-		// total includes all transactions; categoryBreakdown only includes
-		// categorized ones, so they may differ when uncategorized transactions exist.
+		// total includes all transactions; categoryBreakdown skips those with empty
+		// category. Currently ApplyCategorization enforces 100% coverage, but this
+		// guard handles legacy data or future callers that skip categorization.
 		if category != "" {
 			pd.categoryBreakdown[category] += net
 		}

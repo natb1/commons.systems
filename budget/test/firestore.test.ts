@@ -575,6 +575,80 @@ describe("getBudgetPeriods", () => {
     expect(periods[0].total).toBe(-5);
   });
 
+  it("throws DataIntegrityError when categoryBreakdown is an array", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 5.75,
+          count: 0,
+          categoryBreakdown: [1, 2, 3],
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected object for categoryBreakdown/);
+  });
+
+  it("throws DataIntegrityError when categoryBreakdown contains non-finite number", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 5.75,
+          count: 0,
+          categoryBreakdown: { "Food": NaN },
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/categoryBreakdown\[Food\] is not a finite number/);
+  });
+
+  it("returns empty object when categoryBreakdown is null", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "food-2025-01-13",
+        data: () => ({
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 5.75,
+          count: 0,
+          categoryBreakdown: null,
+          groupId: null,
+        }),
+      }],
+    });
+    const periods = await getBudgetPeriods(null);
+    expect(periods[0].categoryBreakdown).toEqual({});
+  });
+
+  it("passes valid categoryBreakdown with multiple entries", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "food-2025-01-13",
+        data: () => ({
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 16.25,
+          count: 3,
+          categoryBreakdown: { "Food:Groceries": 5.75, "Food:Dining": 10.50 },
+          groupId: null,
+        }),
+      }],
+    });
+    const periods = await getBudgetPeriods(null);
+    expect(periods[0].categoryBreakdown).toEqual({ "Food:Groceries": 5.75, "Food:Dining": 10.50 });
+  });
+
   it("throws DataIntegrityError for non-finite total", async () => {
     mockGetDocs.mockResolvedValue({
       docs: [{

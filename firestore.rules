@@ -117,6 +117,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Validates rule field types and constraints on both create and update.
+    function isValidRuleData() {
+      return request.resource.data.type in ["categorization", "budget_assignment"]
+        && request.resource.data.pattern is string
+        && request.resource.data.pattern.size() > 0
+        && request.resource.data.target is string
+        && request.resource.data.target.size() > 0
+        && request.resource.data.priority is number
+        && (!('institution' in request.resource.data) || request.resource.data.institution is string || request.resource.data.institution == null)
+        && (!('account' in request.resource.data) || request.resource.data.account is string || request.resource.data.account == null)
+        && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
+    }
+
     // Rules are scoped to group members via a denormalized `memberEmails` field.
     // CRUD operations require membership. groupId and memberEmails are immutable on update.
     match /budget/{env}/rules/{ruleId} {
@@ -124,28 +137,12 @@ service cloud.firestore {
         && request.auth.token.email in resource.data.memberEmails;
       allow create: if request.auth != null
         && request.auth.token.email in request.resource.data.memberEmails
-        && request.resource.data.type in ["categorization", "budget_assignment"]
-        && request.resource.data.pattern is string
-        && request.resource.data.pattern.size() > 0
-        && request.resource.data.target is string
-        && request.resource.data.target.size() > 0
-        && request.resource.data.priority is number
-        && (!('institution' in request.resource.data) || request.resource.data.institution is string || request.resource.data.institution == null)
-        && (!('account' in request.resource.data) || request.resource.data.account is string || request.resource.data.account == null)
-        && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
+        && isValidRuleData();
       allow update: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails
         && request.resource.data.groupId == resource.data.groupId
         && request.resource.data.memberEmails == resource.data.memberEmails
-        && request.resource.data.type in ["categorization", "budget_assignment"]
-        && request.resource.data.pattern is string
-        && request.resource.data.pattern.size() > 0
-        && request.resource.data.target is string
-        && request.resource.data.target.size() > 0
-        && request.resource.data.priority is number
-        && (!('institution' in request.resource.data) || request.resource.data.institution is string || request.resource.data.institution == null)
-        && (!('account' in request.resource.data) || request.resource.data.account is string || request.resource.data.account == null)
-        && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
+        && isValidRuleData();
       allow delete: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;
     }

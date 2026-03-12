@@ -324,7 +324,7 @@ describe("hydrateTransactionTable", () => {
       expect(row.dataset.budgetId).toBeUndefined();
     });
 
-    it("does not update periods when amount or timestamp are missing and logs error", async () => {
+    it("shows data integrity error when amount or timestamp data attributes are missing", async () => {
       // No amount or timestamp data attributes
       const container = createContainer("txn-1", { budgetId: "budget-food" });
       hydrateTransactionTable(container);
@@ -336,9 +336,10 @@ describe("hydrateTransactionTable", () => {
       expect(mockUpdateTransaction).toHaveBeenCalled();
       expect(mockAdjustBudgetPeriodTotal).not.toHaveBeenCalled();
       expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining("Cannot update period totals"),
-        // No second arg — the error message is the only argument
+        "Data integrity error:",
+        expect.objectContaining({ message: expect.stringContaining("Cannot update period totals") }),
       );
+      expect(input.classList.contains("save-error")).toBe(true);
     });
 
     it("sends raw negative delta to server without local clamping", async () => {

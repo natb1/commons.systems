@@ -89,11 +89,10 @@ async function syncPeriodTotals(
   const reimbursement = Number(row.dataset.reimbursement);
   const timestampMs = Number(row.dataset.timestamp);
   if (!Number.isFinite(amount) || !Number.isFinite(reimbursement) || !Number.isFinite(timestampMs)) {
-    console.error(
+    throw new DataIntegrityError(
       `Cannot update period totals: invalid data attributes ` +
       `(amount=${row.dataset.amount}, reimbursement=${row.dataset.reimbursement}, timestamp=${row.dataset.timestamp})`
     );
-    return;
   }
   const net = computeNetAmount(amount, reimbursement);
 
@@ -114,6 +113,7 @@ async function syncPeriodTotals(
     }
   } catch (periodError) {
     console.error("Failed to update budget period totals:", periodError);
+    clearBalanceDisplay(row);
   }
 }
 
@@ -132,11 +132,10 @@ async function syncPeriodOnReimbursementChange(
   const amount = Number(row.dataset.amount);
   const timestampMs = Number(row.dataset.timestamp);
   if (!Number.isFinite(amount) || !Number.isFinite(timestampMs)) {
-    console.error(
+    throw new DataIntegrityError(
       `Cannot update period totals: invalid data attributes ` +
       `(amount=${row.dataset.amount}, timestamp=${row.dataset.timestamp})`
     );
-    return;
   }
   const oldNet = computeNetAmount(amount, oldReimbursement);
   const newNet = computeNetAmount(amount, newReimbursement);
@@ -151,6 +150,7 @@ async function syncPeriodOnReimbursementChange(
     }
   } catch (periodError) {
     console.error("Failed to update budget period totals:", periodError);
+    clearBalanceDisplay(row);
   }
 }
 

@@ -26,7 +26,7 @@ export interface BudgetPeriod {
   readonly budgetId: string;
   readonly periodStart: Timestamp;
   readonly periodEnd: Timestamp;
-  /** Sum of net transaction amounts (after reimbursement) in this period. May be negative when credits/refunds exceed debits. */
+  /** Sum of net transaction amounts (after reimbursement) in this period. May be negative when credits/refunds exceed debits. Client-updatable. */
   readonly total: number;
   /** Number of transactions in this period. Non-negative, immutable by client. */
   readonly count: number;

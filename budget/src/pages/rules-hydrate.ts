@@ -152,7 +152,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
         };
         const newId = await createRule(groupId, memberEmails, defaultFields);
 
-        const newRule: Rule = { id: newId, groupId: null, ...defaultFields };
+        const newRule: Rule = { id: newId, groupId, ...defaultFields };
         const wrapper = document.createElement("div");
         wrapper.innerHTML = renderRow(newRule, true);
         const newRow = wrapper.firstElementChild as HTMLElement;

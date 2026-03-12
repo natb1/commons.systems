@@ -2,19 +2,10 @@ import { DataIntegrityError } from "../errors.js";
 
 const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
-/**
- * Revert an input/select to its last-saved value, show a visual error indicator,
- * and auto-clear after 30 seconds.
- */
-export function showInputError(el: HTMLInputElement | HTMLSelectElement, title = "Save failed \u2014 value reverted"): void {
+/** Show a timed error indicator (save-error class + title) on an element. Auto-clears after 30 seconds. */
+function showError(el: HTMLElement, title: string): void {
   const existing = errorTimers.get(el);
   if (existing) clearTimeout(existing);
-  if (el instanceof HTMLSelectElement) {
-    const saved = el.querySelector("option[selected]") as HTMLOptionElement | null;
-    if (saved) el.value = saved.value;
-  } else {
-    el.value = el.defaultValue;
-  }
   el.classList.add("save-error");
   el.title = title;
   errorTimers.set(el, setTimeout(() => {
@@ -22,6 +13,20 @@ export function showInputError(el: HTMLInputElement | HTMLSelectElement, title =
     el.title = "";
     errorTimers.delete(el);
   }, 30000));
+}
+
+/**
+ * Revert an input/select to its last-saved value, show a visual error indicator,
+ * and auto-clear after 30 seconds.
+ */
+export function showInputError(el: HTMLInputElement | HTMLSelectElement, title = "Save failed \u2014 value reverted"): void {
+  if (el instanceof HTMLSelectElement) {
+    const saved = el.querySelector("option[selected]") as HTMLOptionElement | null;
+    if (saved) el.value = saved.value;
+  } else {
+    el.value = el.defaultValue;
+  }
+  showError(el, title);
 }
 
 /**
@@ -54,15 +59,7 @@ export function handleSaveError(el: HTMLInputElement | HTMLSelectElement, error:
  * Adds a `save-error` class and title, auto-clears after 30 seconds.
  */
 export function showActionError(el: HTMLElement, title = "Action failed"): void {
-  const existing = errorTimers.get(el);
-  if (existing) clearTimeout(existing);
-  el.classList.add("save-error");
-  el.title = title;
-  errorTimers.set(el, setTimeout(() => {
-    el.classList.remove("save-error");
-    el.title = "";
-    errorTimers.delete(el);
-  }, 30000));
+  showError(el, title);
 }
 
 /**
