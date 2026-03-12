@@ -11,6 +11,7 @@
   --surface: light-dark(#ece5d8, #252017);
 
   --main-max-width: 48rem;
+  --line-length: var(--main-max-width);
 
   color-scheme: light dark;
 }

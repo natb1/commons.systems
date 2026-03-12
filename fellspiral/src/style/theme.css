@@ -8,6 +8,4 @@ body {
 
 main {
   min-width: 0;
-  max-inline-size: none;
-  margin-inline: 0;
 }
