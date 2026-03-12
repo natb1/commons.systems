@@ -7,6 +7,7 @@ import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
+import { trackPageView } from "./firebase.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -40,6 +41,7 @@ const router = createRouter(
     { path: "/about", render: renderAbout },
   ],
   {
+    onNavigate: ({ path }) => trackPageView(path),
     formatError: (error) => {
       if (error instanceof DataIntegrityError)
         return "A data error occurred. Please contact support.";

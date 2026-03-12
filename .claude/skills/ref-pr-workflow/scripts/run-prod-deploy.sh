@@ -17,6 +17,12 @@ HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
 detect_features "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
+# Resolve per-app GA measurement ID from environment (e.g. GA_MEASUREMENT_ID_LANDING).
+# Empty/unset silently disables analytics for the app (initAnalytics returns a no-op).
+GA_VAR="GA_MEASUREMENT_ID_$(echo "$APP_NAME" | tr '[:lower:]' '[:upper:]')"
+VITE_GA_MEASUREMENT_ID="${!GA_VAR:-}"
+export VITE_GA_MEASUREMENT_ID
+
 # Install app dependencies and build.
 # Production build uses the app's compiled-in fallback namespace (e.g. "<app>/prod" from firebase.ts).
 cd "$REPO_ROOT/$APP_DIR"

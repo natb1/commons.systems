@@ -9,7 +9,7 @@ import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { hydrateBudgetTable } from "./pages/budgets-hydrate.js";
 import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
 import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/authutil/groups";
-import { db, NAMESPACE } from "./firebase.js";
+import { db, NAMESPACE, trackPageView } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
 
 function getUserGroups(user: User): Promise<Group[]> {
@@ -91,6 +91,7 @@ const router = createRouter(
     { path: "/budgets", render: () => renderBudgets(renderOptions()) },
   ],
   {
+    onNavigate: ({ path }) => trackPageView(path),
     formatError: (error) => {
       if (error instanceof DataIntegrityError || error instanceof RangeError)
         return "A data error occurred. Please contact support.";

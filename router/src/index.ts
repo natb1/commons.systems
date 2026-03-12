@@ -17,7 +17,8 @@ export interface Route {
 }
 
 export interface RouterOptions {
-  onNavigate?: () => void;
+  /** Called with the parsed hash path and query params at the start of each navigation, before route matching. Exceptions do not prevent the route from rendering. TypeError and ReferenceError are deferred as uncaught errors; other exceptions are caught and logged. */
+  onNavigate?: (nav: { path: string; params: URLSearchParams }) => void;
   /** Map an error to a user-facing message. Return undefined to use "Something went wrong. Please try again." */
   formatError?: (error: unknown) => string | undefined;
 }
@@ -38,9 +39,18 @@ export function createRouter(
 
   async function navigate(): Promise<void> {
     if (destroyed) return;
-    options?.onNavigate?.();
     const id = ++navigationId;
-    const { path } = parseHash();
+    const { path, params } = parseHash();
+    try {
+      options?.onNavigate?.({ path, params });
+    } catch (e) {
+      if (e instanceof TypeError || e instanceof ReferenceError) {
+        // Defer programming errors so they surface as uncaught in devtools
+        setTimeout(() => { throw e; }, 0);
+      } else {
+        console.error("onNavigate error:", e);
+      }
+    }
     const route =
       routes.find((r) =>
         typeof r.path === "string" ? r.path === path : r.path.test(path),
