@@ -122,8 +122,9 @@ var importFieldPaths = []firestore.FieldPath{
 // For each batch of up to 500 transactions:
 //   - Batch-read existing documents via GetAll
 //   - New documents: Set with all fields (defaults: note="", reimbursement=0;
-//     category and budget are set by the rule engine — category is "" when no
-//     rule matches, budget is nil when unassigned)
+//     category and budget are set by the rule engine before upsert.
+//     ApplyCategorization enforces 100% coverage, so category is always
+//     non-empty for new transactions. Budget is nil when no assignment rule matches)
 //   - Existing documents: Set with merge to update only import-sourced fields, preserving user edits
 func (c *Client) UpsertTransactions(ctx context.Context, group GroupInfo, txns []TransactionData) (UpsertResult, error) {
 	col := c.fs.Collection(fmt.Sprintf("budget/%s/transactions", c.env))
@@ -304,6 +305,80 @@ func PeriodID(budgetID string, start time.Time) string {
 	return fmt.Sprintf("%s-%s", budgetID, start.Format("2006-01-02"))
 }
 
+// periodData holds aggregated transaction data for a single budget period.
+type periodData struct {
+	budgetID          string
+	start             time.Time
+	total             float64
+	count             int
+	categoryBreakdown map[string]float64
+}
+
+// txnFieldMap holds a transaction document's ID and field map for aggregation.
+type txnFieldMap struct {
+	id   string
+	data map[string]interface{}
+}
+
+// aggregateTransactionData groups transactions by budget period and computes
+// total, count, and categoryBreakdown for each period. Transactions with an
+// empty budget are skipped (unassigned). Returns a map keyed by period ID.
+func aggregateTransactionData(txns []txnFieldMap) (map[string]*periodData, error) {
+	periods := make(map[string]*periodData)
+
+	for _, txn := range txns {
+		d := txn.data
+		budgetID, _ := d["budget"].(string)
+		if budgetID == "" {
+			continue // unassigned transactions don't affect periods
+		}
+		timestamp, ok := d["timestamp"].(time.Time)
+		if !ok {
+			return nil, fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", txn.id, d["timestamp"])
+		}
+		amount, ok := d["amount"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", txn.id, d["amount"])
+		}
+		var reimbursement float64
+		switch v := d["reimbursement"].(type) {
+		case float64:
+			reimbursement = v
+		case int64:
+			reimbursement = float64(v)
+		default:
+			if v != nil {
+				return nil, fmt.Errorf("transaction %s: field 'reimbursement' is not a number (got %T)", txn.id, v)
+			}
+		}
+		category, _ := d["category"].(string)
+
+		net := amount * (1 - reimbursement/100)
+
+		ps := PeriodStart(timestamp)
+		key := PeriodID(budgetID, ps)
+
+		pd, exists := periods[key]
+		if !exists {
+			pd = &periodData{
+				budgetID:          budgetID,
+				start:             ps,
+				categoryBreakdown: make(map[string]float64),
+			}
+			periods[key] = pd
+		}
+		pd.total += net
+		pd.count++
+		// total includes all transactions; categoryBreakdown only includes
+		// categorized ones, so they may differ when uncategorized transactions exist.
+		if category != "" {
+			pd.categoryBreakdown[category] += net
+		}
+	}
+
+	return periods, nil
+}
+
 // RecalculatePeriods recomputes total, count, and categoryBreakdown for all
 // budget periods overlapping [minTime, maxTime] for the given group.
 func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTime, maxTime time.Time) error {
@@ -337,64 +412,14 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 		return fmt.Errorf("querying transactions for recalculation: %w", err)
 	}
 
-	// Group transactions by period key (budgetId + period start)
-	type periodData struct {
-		budgetID          string
-		start             time.Time
-		total             float64
-		count             int
-		categoryBreakdown map[string]float64
-	}
-	periods := make(map[string]*periodData)
-
+	// Extract transaction field maps for aggregation
+	txnMaps := make([]txnFieldMap, 0, len(txnDocs))
 	for _, doc := range txnDocs {
-		d := doc.Data()
-		budgetID, _ := d["budget"].(string)
-		if budgetID == "" {
-			continue // unassigned transactions don't affect periods
-		}
-		timestamp, ok := d["timestamp"].(time.Time)
-		if !ok {
-			return fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", doc.Ref.ID, d["timestamp"])
-		}
-		amount, ok := d["amount"].(float64)
-		if !ok {
-			return fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", doc.Ref.ID, d["amount"])
-		}
-		var reimbursement float64
-		switch v := d["reimbursement"].(type) {
-		case float64:
-			reimbursement = v
-		case int64:
-			reimbursement = float64(v)
-		default:
-			if v != nil {
-				return fmt.Errorf("transaction %s: field 'reimbursement' is not a number (got %T)", doc.Ref.ID, v)
-			}
-		}
-		category, _ := d["category"].(string)
-
-		net := amount * (1 - reimbursement/100)
-
-		ps := PeriodStart(timestamp)
-		key := PeriodID(budgetID, ps)
-
-		pd, exists := periods[key]
-		if !exists {
-			pd = &periodData{
-				budgetID:          budgetID,
-				start:             ps,
-				categoryBreakdown: make(map[string]float64),
-			}
-			periods[key] = pd
-		}
-		pd.total += net
-		pd.count++
-		// total includes all transactions; categoryBreakdown only includes
-		// categorized ones, so total >= sum(categoryBreakdown).
-		if category != "" {
-			pd.categoryBreakdown[category] += net
-		}
+		txnMaps = append(txnMaps, txnFieldMap{id: doc.Ref.ID, data: doc.Data()})
+	}
+	periods, err := aggregateTransactionData(txnMaps)
+	if err != nil {
+		return err
 	}
 
 	// Collect all batch operations

@@ -26,7 +26,7 @@ export interface BudgetPeriod {
   readonly budgetId: string;
   readonly periodStart: Timestamp;
   readonly periodEnd: Timestamp;
-  /** Sum of net transaction amounts (after reimbursement) in this period. Client writes enforce non-negative via security rules; ETL writes via Admin SDK are unconstrained. */
+  /** Sum of net transaction amounts (after reimbursement) in this period. May be negative when credits/refunds exceed debits. */
   readonly total: number;
   /** Number of transactions in this period. Non-negative, immutable by client. */
   readonly count: number;
@@ -249,7 +249,7 @@ export async function getBudgetPeriods(groupId: string | null, email?: string): 
       budgetId: requireString(data.budgetId, "budgetId"),
       periodStart,
       periodEnd,
-      total: requireNonNegativeNumber(data.total, "total"),
+      total: requireNumber(data.total, "total"),
       count: requireNonNegativeNumber(data.count, "count"),
       categoryBreakdown: requireCategoryBreakdown(data.categoryBreakdown),
       groupId: optionalString(data.groupId, "groupId"),
@@ -267,8 +267,8 @@ export async function updateBudgetPeriod(
   requireDocId(periodId, "period");
   if (Object.keys(fields).length === 0) return;
   if (fields.total !== undefined) {
-    if (!Number.isFinite(fields.total) || fields.total < 0) {
-      throw new RangeError("Total must be a non-negative number");
+    if (!Number.isFinite(fields.total)) {
+      throw new RangeError("Total must be a finite number");
     }
   }
   const path = nsCollectionPath(NAMESPACE, "budget-periods");

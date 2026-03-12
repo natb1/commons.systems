@@ -556,22 +556,23 @@ describe("getBudgetPeriods", () => {
     await expect(getBudgetPeriods(null)).rejects.toThrow(/periodStart must be before periodEnd/);
   });
 
-  it("throws DataIntegrityError for negative total", async () => {
+  it("accepts negative total (credits exceeding debits)", async () => {
     mockGetDocs.mockResolvedValue({
       docs: [{
-        id: "bad",
+        id: "food-2025-01-13",
         data: () => ({
           budgetId: "food",
           periodStart: Timestamp.fromDate(new Date("2025-01-13")),
           periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
           total: -5,
-          count: 0,
+          count: 1,
           categoryBreakdown: {},
           groupId: null,
         }),
       }],
     });
-    await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected non-negative number for total/);
+    const periods = await getBudgetPeriods(null);
+    expect(periods[0].total).toBe(-5);
   });
 
   it("throws DataIntegrityError for non-finite total", async () => {
@@ -703,9 +704,9 @@ describe("updateBudgetPeriod", () => {
     expect(mockUpdateDoc).not.toHaveBeenCalled();
   });
 
-  it("throws RangeError for negative total", async () => {
-    await expect(updateBudgetPeriod("food-2025-01-13", { total: -5 })).rejects.toThrow(RangeError);
-    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  it("accepts negative total", async () => {
+    await updateBudgetPeriod("food-2025-01-13", { total: -5 });
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { total: -5 });
   });
 
   it("throws RangeError for non-finite total", async () => {

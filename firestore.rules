@@ -92,8 +92,8 @@ service cloud.firestore {
     }
 
     // Budget periods are scoped to group members via a denormalized `memberEmails` field.
-    // Client updates may only change total (must be non-negative). All other fields
-    // must be present but unchanged. Create and delete are explicitly denied.
+    // Client updates may only change total. All other fields must be present but
+    // unchanged. Create and delete are explicitly denied.
     match /budget/{env}/budget-periods/{periodId} {
       allow read: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;
@@ -107,7 +107,6 @@ service cloud.firestore {
         && request.resource.data.count == resource.data.count
         && request.resource.data.categoryBreakdown == resource.data.categoryBreakdown
         && request.resource.data.total is number
-        && request.resource.data.total >= 0
         && request.resource.data.keys().hasOnly(['budgetId', 'periodStart', 'periodEnd', 'total', 'count', 'categoryBreakdown', 'groupId', 'memberEmails']);
       allow create, delete: if false;
     }
@@ -131,8 +130,8 @@ service cloud.firestore {
         && request.resource.data.target is string
         && request.resource.data.target.size() > 0
         && request.resource.data.priority is number
-        && (!('institution' in request.resource.data) || request.resource.data.institution is string)
-        && (!('account' in request.resource.data) || request.resource.data.account is string)
+        && (!('institution' in request.resource.data) || request.resource.data.institution is string || request.resource.data.institution == null)
+        && (!('account' in request.resource.data) || request.resource.data.account is string || request.resource.data.account == null)
         && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
       allow update: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails
@@ -144,8 +143,8 @@ service cloud.firestore {
         && request.resource.data.target is string
         && request.resource.data.target.size() > 0
         && request.resource.data.priority is number
-        && (!('institution' in request.resource.data) || request.resource.data.institution is string)
-        && (!('account' in request.resource.data) || request.resource.data.account is string)
+        && (!('institution' in request.resource.data) || request.resource.data.institution is string || request.resource.data.institution == null)
+        && (!('account' in request.resource.data) || request.resource.data.account is string || request.resource.data.account == null)
         && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
       allow delete: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;
