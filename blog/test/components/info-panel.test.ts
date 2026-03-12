@@ -97,6 +97,24 @@ describe("renderInfoPanel", () => {
     expect(firstSection.querySelector("ul.panel-list")).not.toBeNull();
   });
 
+  it("renders mixed heading and headingless sections together", () => {
+    const html = renderInfoPanel({
+      linkSections: [
+        { links: [{ label: "itch.io", url: "https://itch.io" }] },
+        { heading: "Games", links: [{ label: "Cairn", url: "https://cairnrpg.com" }] },
+      ],
+      topPosts: [],
+      blogRoll: [],
+    });
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const sections = container.querySelectorAll(".panel-section");
+    expect(sections[0].querySelector("h3")).toBeNull();
+    expect(sections[0].querySelector("ul.panel-list")).not.toBeNull();
+    expect(sections[1].querySelector("h3")?.textContent).toBe("Games");
+    expect(sections[1].querySelector("ul.panel-list")).not.toBeNull();
+  });
+
   it("top posts section contains links to published posts", () => {
     const html = renderInfoPanel(defaultData());
     expect(html).toContain('href="#/post/post-1"');
