@@ -5,6 +5,7 @@ export default defineConfig({
     dedupe: [
       "firebase",
       "firebase/app",
+      "firebase/analytics",
       "firebase/auth",
       "firebase/firestore",
       "firebase/storage",

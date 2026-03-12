@@ -2,8 +2,11 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { firebaseConfig } from "@commons-systems/firebaseutil/config";
 import { validateNamespace } from "@commons-systems/firestoreutil/namespace";
+import { initAnalytics, withMeasurementId } from "@commons-systems/analyticsutil";
 
-const app = initializeApp(firebaseConfig);
+const app = initializeApp(
+  withMeasurementId(firebaseConfig, import.meta.env.VITE_GA_MEASUREMENT_ID),
+);
 const db = getFirestore(app);
 
 const emulatorHost = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST;
@@ -27,5 +30,7 @@ if (!envNamespace && import.meta.env.MODE !== "production") {
 }
 export const NAMESPACE = envNamespace || "fellspiral/prod";
 validateNamespace(NAMESPACE);
+
+export const trackPageView = initAnalytics(app);
 
 export { db, app };

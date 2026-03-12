@@ -12,7 +12,7 @@ import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup } from "@commons-systems/authutil/groups";
-import { db, NAMESPACE } from "./firebase.js";
+import { db, NAMESPACE, trackPageView } from "./firebase.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -67,8 +67,8 @@ navEl.addEventListener("sign-out", () => {
   signOut().catch((err) => console.error("Sign-out failed:", err));
 });
 
-function updateNav(): void {
-  navEl.showAuth = parseHash().path === "/admin";
+function updateNav(path: string): void {
+  navEl.showAuth = path === "/admin";
   navEl.user = currentUser;
 }
 
@@ -102,7 +102,7 @@ async function loadPosts(): Promise<string> {
   }
 }
 
-updateNav();
+updateNav(parseHash().path);
 
 const router = createRouter(
   app,
@@ -130,7 +130,12 @@ const router = createRouter(
       },
     },
   ],
-  { onNavigate: updateNav },
+  {
+    onNavigate: ({ path }) => {
+      updateNav(path);
+      trackPageView(path);
+    },
+  },
 );
 
 const closePanel = (): void => {
@@ -164,7 +169,7 @@ document.addEventListener("keydown", (e) => {
 // cachedPosts until the router's async render cycle completes and afterRender
 // calls updateInfoPanel() again with fresh data.
 async function refreshAfterAuthChange(): Promise<void> {
-  updateNav();
+  updateNav(parseHash().path);
   router.navigate();
   // router.navigate() only loads posts on the home route; re-fetch on /admin
   // so the info panel populates even when not on home.

@@ -321,14 +321,63 @@ describe("createRouter", () => {
     expect(() => deferred[0]()).toThrow(ErrorClass);
   });
 
-  it("onNavigate callback fires on each navigation", async () => {
+  it("throwing onNavigate does not prevent route rendering", async () => {
+    const onNavigate = vi.fn(() => {
+      throw new Error("analytics down");
+    });
+    router = createRouter(outlet, routes, { onNavigate });
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+    expect(onNavigate).toHaveBeenCalledWith({ path: "/", params: expect.any(URLSearchParams) });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "onNavigate error:",
+      expect.any(Error),
+    );
+  });
+
+  it.each([
+    ["TypeError", TypeError],
+    ["ReferenceError", ReferenceError],
+  ] as const)("onNavigate %s is deferred, not swallowed", async (_name, ErrorClass) => {
+    const deferred: Array<() => void> = [];
+    const realSetTimeout = globalThis.setTimeout;
+    vi.stubGlobal("setTimeout", (fn: TimerHandler, ...rest: unknown[]) => {
+      if (typeof fn === "function" && (!rest[0] || rest[0] === 0)) {
+        deferred.push(fn as () => void);
+        return 0;
+      }
+      return realSetTimeout(fn, ...(rest as [number?]));
+    });
+
+    const onNavigate = vi.fn(() => {
+      throw new ErrorClass("test error");
+    });
+    router = createRouter(outlet, routes, { onNavigate });
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+    vi.stubGlobal("setTimeout", realSetTimeout);
+
+    // Route still renders despite error
+    expect(outlet.innerHTML).not.toContain("Something went wrong");
+    // Error deferred via setTimeout, not swallowed
+    expect(deferred).toHaveLength(1);
+    expect(() => deferred[0]()).toThrow(ErrorClass);
+    // Not logged to console.error (deferred instead)
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+      "onNavigate error:",
+      expect.any(ErrorClass),
+    );
+  });
+
+  it("onNavigate callback fires with path on each navigation", async () => {
     const onNavigate = vi.fn();
     router = createRouter(outlet, routes, { onNavigate });
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>Home</h2>");
     });
-    expect(onNavigate).toHaveBeenCalled();
-    const callsBefore = onNavigate.mock.calls.length;
+    expect(onNavigate).toHaveBeenCalledWith({ path: "/", params: expect.any(URLSearchParams) });
 
     location.hash = "#/about";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
@@ -336,7 +385,7 @@ describe("createRouter", () => {
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>About</h2>");
     });
-    expect(onNavigate.mock.calls.length).toBeGreaterThan(callsBefore);
+    expect(onNavigate).toHaveBeenCalledWith({ path: "/about", params: expect.any(URLSearchParams) });
   });
 
   it("navigate() re-renders current route", async () => {

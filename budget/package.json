@@ -12,6 +12,7 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@commons-systems/analyticsutil": "file:../analyticsutil",
     "@commons-systems/authutil": "file:../authutil",
     "@commons-systems/router": "file:../router",
     "@commons-systems/firebaseutil": "file:../firebaseutil",
