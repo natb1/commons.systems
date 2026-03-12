@@ -105,7 +105,8 @@ type UpsertResult struct {
 // Any field set as a default on create but excluded from this list is
 // user-editable and preserved across re-imports (note, reimbursement).
 // Category and budget are set by the rule engine on first import and
-// preserved across re-imports.
+// preserved across re-imports. On re-import, existing transactions retain
+// their original category and budget even if rules have changed.
 var importFieldPaths = []firestore.FieldPath{
 	{"institution"},
 	{"account"},
@@ -354,14 +355,23 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 		}
 		timestamp, ok := d["timestamp"].(time.Time)
 		if !ok {
-			log.Printf("WARNING: transaction %s has non-time timestamp field (got %T), skipping", doc.Ref.ID, d["timestamp"])
-			continue
+			return fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", doc.Ref.ID, d["timestamp"])
 		}
 		amount, ok := d["amount"].(float64)
 		if !ok {
 			return fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", doc.Ref.ID, d["amount"])
 		}
-		reimbursement, _ := d["reimbursement"].(float64)
+		var reimbursement float64
+		switch v := d["reimbursement"].(type) {
+		case float64:
+			reimbursement = v
+		case int64:
+			reimbursement = float64(v)
+		default:
+			if v != nil {
+				return fmt.Errorf("transaction %s: field 'reimbursement' is not a number (got %T)", doc.Ref.ID, v)
+			}
+		}
 		category, _ := d["category"].(string)
 
 		net := amount * (1 - reimbursement/100)
@@ -380,6 +390,8 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 		}
 		pd.total += net
 		pd.count++
+		// total includes all transactions; categoryBreakdown only includes
+		// categorized ones, so total >= sum(categoryBreakdown).
 		if category != "" {
 			pd.categoryBreakdown[category] += net
 		}

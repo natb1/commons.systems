@@ -21,7 +21,7 @@ export function removeDropdown(): void {
 function handleOutsideClick(e: Event): void {
   const target = e.target;
   if (!(target instanceof HTMLElement)) return;
-  if (target.closest(".autocomplete-dropdown, .edit-budget, .edit-category, .edit-institution, .edit-account, .edit-target")) return;
+  if (target.closest(".autocomplete-dropdown, [data-autocomplete]")) return;
   removeDropdown();
 }
 

@@ -36,7 +36,6 @@ func (r Rule) Match(description, institution, account string) bool {
 	return true
 }
 
-// sortByPriority returns a copy of rules sorted by priority ascending.
 func sortByPriority(rules []Rule) []Rule {
 	sorted := make([]Rule, len(rules))
 	copy(sorted, rules)

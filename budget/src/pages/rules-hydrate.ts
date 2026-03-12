@@ -1,4 +1,5 @@
-import { updateRule, deleteRule, createRule, getGroupMembers, type RuleType } from "../firestore.js";
+import { updateRule, deleteRule, createRule, getGroupMembers, type RuleType, type Rule } from "../firestore.js";
+import { renderRow } from "./rules.js";
 import { showDropdown, removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, showActionError, parseJsonArray } from "./hydrate-util.js";
 
@@ -151,28 +152,13 @@ export function hydrateRulesTable(container: HTMLElement): void {
         };
         const newId = await createRule(groupId, memberEmails, defaultFields);
 
-        const newRow = document.createElement("details");
-        newRow.className = "expand-row rule-row";
-        newRow.dataset.ruleId = newId;
-        newRow.dataset.ruleType = ruleType;
+        const newRule: Rule = { id: newId, groupId: null, ...defaultFields };
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = renderRow(newRule, true);
+        const newRow = wrapper.firstElementChild as HTMLElement;
         if (window.innerWidth >= 768) {
           newRow.setAttribute("open", "");
         }
-        const defaultTarget = defaultFields.target;
-        newRow.innerHTML = `
-          <summary>
-            <div class="rule-summary-content">
-              <span><input type="text" class="edit-pattern" value="new rule" aria-label="Pattern"></span>
-              <span><input type="text" class="edit-target" value="${defaultTarget}" aria-label="Target"></span>
-            </div>
-          </summary>
-          <div class="rule-details">
-            <span><input type="number" class="edit-priority" value="100" aria-label="Priority"></span>
-            <span><input type="text" class="edit-institution" value="" aria-label="Institution"></span>
-            <span><input type="text" class="edit-account" value="" aria-label="Account"></span>
-            <span><button class="delete-rule" aria-label="Delete rule">Delete</button></span>
-          </div>
-        `;
         container.insertBefore(newRow, target);
       } catch (error) {
         if (error instanceof TypeError || error instanceof ReferenceError) {

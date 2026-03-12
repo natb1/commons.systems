@@ -26,7 +26,7 @@ export interface BudgetPeriod {
   readonly budgetId: string;
   readonly periodStart: Timestamp;
   readonly periodEnd: Timestamp;
-  /** Sum of net transaction amounts (after reimbursement) in this period. Non-negative per Firestore rules. */
+  /** Sum of net transaction amounts (after reimbursement) in this period. Client writes enforce non-negative via security rules; ETL writes via Admin SDK are unconstrained. */
   readonly total: number;
   /** Number of transactions in this period. Non-negative, immutable by client. */
   readonly count: number;

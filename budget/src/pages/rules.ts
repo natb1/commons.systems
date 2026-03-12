@@ -2,15 +2,16 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import type { RenderPageOptions } from "./render-options.js";
 import { getRules, getBudgets, type Rule } from "../firestore.js";
 import { DataIntegrityError } from "../errors.js";
+import { uniqueSorted } from "./home.js";
 
-function renderRow(rule: Rule, editable: boolean): string {
+export function renderRow(rule: Rule, editable: boolean): string {
   const idAttr = editable ? ` data-rule-id="${escapeHtml(rule.id)}"` : "";
   const dis = editable ? "" : " disabled";
   const patternCell = `<input type="text" class="edit-pattern" value="${escapeHtml(rule.pattern)}" aria-label="Pattern"${dis}>`;
-  const targetCell = `<input type="text" class="edit-target" value="${escapeHtml(rule.target)}" aria-label="Target"${dis}>`;
+  const targetCell = `<input type="text" class="edit-target" value="${escapeHtml(rule.target)}" aria-label="Target" data-autocomplete${dis}>`;
   const priorityCell = `<input type="number" class="edit-priority" value="${escapeHtml(String(rule.priority))}" aria-label="Priority"${dis}>`;
-  const institutionCell = `<input type="text" class="edit-institution" value="${escapeHtml(rule.institution ?? "")}" aria-label="Institution"${dis}>`;
-  const accountCell = `<input type="text" class="edit-account" value="${escapeHtml(rule.account ?? "")}" aria-label="Account"${dis}>`;
+  const institutionCell = `<input type="text" class="edit-institution" value="${escapeHtml(rule.institution ?? "")}" aria-label="Institution" data-autocomplete${dis}>`;
+  const accountCell = `<input type="text" class="edit-account" value="${escapeHtml(rule.account ?? "")}" aria-label="Account" data-autocomplete${dis}>`;
   const deleteCell = editable
     ? `<button class="delete-rule" aria-label="Delete rule">Delete</button>`
     : `<span></span>`;
@@ -83,14 +84,14 @@ export async function renderRules(options: RenderPageOptions): Promise<string> {
 
   let tableHtml: string;
   try {
-    const rules = await (group && user?.email ? getRules(group.id, user.email) : getRules(null));
-    const budgets = await (group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null));
+    const [rules, budgets] = await Promise.all([
+      group && user?.email ? getRules(group.id, user.email) : getRules(null),
+      group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null),
+    ]);
     const budgetNames = budgets.map(b => b.name);
-    const categoryTargets = [...new Set(
-      rules.filter(r => r.type === "categorization").map(r => r.target),
-    )].sort();
-    const uniqueInstitutions = [...new Set(rules.map(r => r.institution).filter((v): v is string => v !== null))];
-    const uniqueAccounts = [...new Set(rules.map(r => r.account).filter((v): v is string => v !== null))];
+    const categoryTargets = uniqueSorted(rules.filter(r => r.type === "categorization").map(r => r.target));
+    const uniqueInstitutions = uniqueSorted(rules.map(r => r.institution));
+    const uniqueAccounts = uniqueSorted(rules.map(r => r.account));
     tableHtml = renderRulesTable({ rules, authorized, groupId: group?.id ?? "", budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts });
   } catch (error) {
     if (error instanceof RangeError || error instanceof DataIntegrityError

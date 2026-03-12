@@ -77,6 +77,7 @@ function findPeriod(periods: HydrationPeriod[], budgetId: string, timestampMs: n
  * writes (decrement old period, increment new period) are not wrapped in a
  * transaction. If either write fails, totals drift until manual correction
  * (page loads read stored totals, not recomputed from transactions).
+ * The ETL's RecalculatePeriods corrects any drift on the next import.
  */
 async function syncPeriodTotals(
   row: HTMLElement,

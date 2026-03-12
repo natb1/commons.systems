@@ -33,7 +33,7 @@ function renderRow(opts: RenderRowOptions): string {
     ? `<input type="text" class="edit-note" value="${escapeHtml(txn.note)}" aria-label="Note">`
     : escapeHtml(txn.note);
   const categoryCell = editable
-    ? `<input type="text" class="edit-category" value="${escapeHtml(txn.category)}" aria-label="Category">`
+    ? `<input type="text" class="edit-category" value="${escapeHtml(txn.category)}" aria-label="Category" data-autocomplete>`
     : formatCategory(txn.category);
   const reimbursementCell = editable
     ? `<input type="number" class="edit-reimbursement" value="${String(txn.reimbursement)}" min="0" max="100" aria-label="Reimbursement">`
@@ -47,7 +47,7 @@ function renderRow(opts: RenderRowOptions): string {
     budgetName = resolved;
   }
   const budgetCell = editable
-    ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget">`
+    ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget" data-autocomplete>`
     : escapeHtml(budgetName);
 
   const balanceRow = balance !== null
@@ -91,7 +91,7 @@ function compareByTimestampDesc(a: Transaction, b: Transaction): number {
   return b.timestamp.toMillis() - a.timestamp.toMillis();
 }
 
-function uniqueSorted(values: (string | null)[]): string[] {
+export function uniqueSorted(values: (string | null)[]): string[] {
   return [...new Set(values.filter((v): v is string => v != null))].sort();
 }
 

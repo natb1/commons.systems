@@ -138,7 +138,7 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       periodEnd: new Date("2025-02-10"),
       total: 0,
       count: 1,
-      categoryBreakdown: {},
+      categoryBreakdown: { "Travel:Flights": 0 },
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,

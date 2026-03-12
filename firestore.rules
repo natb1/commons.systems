@@ -131,6 +131,8 @@ service cloud.firestore {
         && request.resource.data.target is string
         && request.resource.data.target.size() > 0
         && request.resource.data.priority is number
+        && (!('institution' in request.resource.data) || request.resource.data.institution is string)
+        && (!('account' in request.resource.data) || request.resource.data.account is string)
         && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
       allow update: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails
@@ -142,6 +144,8 @@ service cloud.firestore {
         && request.resource.data.target is string
         && request.resource.data.target.size() > 0
         && request.resource.data.priority is number
+        && (!('institution' in request.resource.data) || request.resource.data.institution is string)
+        && (!('account' in request.resource.data) || request.resource.data.account is string)
         && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
       allow delete: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;
