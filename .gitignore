@@ -2,6 +2,7 @@ worktrees/
 CLAUDE.local.md
 node_modules/
 dist/
+functions/lib/
 .firebase/
 .firebase-acceptance-*
 .firebase-qa-*

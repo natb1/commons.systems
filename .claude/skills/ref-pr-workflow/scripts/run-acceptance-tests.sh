@@ -34,6 +34,12 @@ cleanup_stale_hub
 detect_features "$REPO_ROOT/$APP_DIR/src/"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
 
+# Detect if app uses Cloud Functions (has /api/ rewrite in firebase.json)
+USES_FUNCTIONS=false
+if [ -d "$REPO_ROOT/functions" ] && jq -e '.hosting[] | select(.target == "'"$APP_NAME"'") | .rewrites[]? | select(.source | startswith("/api/"))' "$REPO_ROOT/firebase.json" >/dev/null 2>&1; then
+  USES_FUNCTIONS=true
+fi
+
 cd "$REPO_ROOT/$APP_DIR"
 
 # Count and allocate all needed ports atomically to avoid OS port recycling
@@ -41,6 +47,7 @@ PORT_COUNT=1  # hosting always needed
 if [ "$USES_FIRESTORE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 if [ "$USES_AUTH" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 if [ "$USES_STORAGE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+if [ "$USES_FUNCTIONS" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 
 read -r HOSTING_PORT EXTRA_PORTS <<< "$(find_available_ports "$PORT_COUNT")"
 echo "Hosting emulator will use port $HOSTING_PORT"
@@ -48,7 +55,8 @@ echo "Hosting emulator will use port $HOSTING_PORT"
 FIRESTORE_PORT=""
 AUTH_PORT=""
 STORAGE_PORT=""
-for feature in FIRESTORE AUTH STORAGE; do
+FUNCTIONS_PORT=""
+for feature in FIRESTORE AUTH STORAGE FUNCTIONS; do
   uses_var="USES_${feature}"
   if [ "${!uses_var}" = true ]; then
     port="${EXTRA_PORTS%% *}"
@@ -102,6 +110,9 @@ fi
 if [ "$USES_STORAGE" = true ]; then
   EMULATORS_JSON="$EMULATORS_JSON, \"storage\": {\"port\": ${STORAGE_PORT}}"
 fi
+if [ "$USES_FUNCTIONS" = true ]; then
+  EMULATORS_JSON="$EMULATORS_JSON, \"functions\": {\"port\": ${FUNCTIONS_PORT}}"
+fi
 EMULATORS_JSON="$EMULATORS_JSON}"
 
 # Build top-level config
@@ -111,6 +122,9 @@ if [ "$USES_FIRESTORE" = true ]; then
 fi
 if [ "$USES_STORAGE" = true ]; then
   CONFIG_JSON="$CONFIG_JSON, \"storage\": {\"rules\": \"storage.rules\"}"
+fi
+if [ "$USES_FUNCTIONS" = true ]; then
+  CONFIG_JSON="$CONFIG_JSON, \"functions\": {\"source\": \"functions\", \"runtime\": \"nodejs22\"}"
 fi
 CONFIG_JSON="$CONFIG_JSON, \"emulators\": $EMULATORS_JSON}"
 
@@ -138,6 +152,15 @@ if [ "$USES_AUTH" = true ]; then
 fi
 if [ "$USES_STORAGE" = true ]; then
   EMULATORS="$EMULATORS,storage"
+fi
+if [ "$USES_FUNCTIONS" = true ]; then
+  EMULATORS="$EMULATORS,functions"
+fi
+
+# Build functions before starting emulator (if used)
+if [ "$USES_FUNCTIONS" = true ]; then
+  echo "Building Cloud Functions..."
+  (cd "$REPO_ROOT/functions" && npm ci && npm run build)
 fi
 
 npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &

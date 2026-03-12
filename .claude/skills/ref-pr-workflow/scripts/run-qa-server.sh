@@ -24,11 +24,18 @@ cd "$REPO_ROOT/$APP_DIR"
 npm ci
 cd "$REPO_ROOT"
 
+# Detect if app uses Cloud Functions (has /api/ rewrite in firebase.json)
+USES_FUNCTIONS=false
+if [ -d "$REPO_ROOT/functions" ] && jq -e '.hosting[] | select(.target == "'"$APP_NAME"'") | .rewrites[]? | select(.source | startswith("/api/"))' "$REPO_ROOT/firebase.json" >/dev/null 2>&1; then
+  USES_FUNCTIONS=true
+fi
+
 # Count and allocate all needed ports atomically to avoid OS port recycling
 PORT_COUNT=1  # vite always needed
 if [ "$USES_FIRESTORE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 if [ "$USES_AUTH" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 if [ "$USES_STORAGE" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
+if [ "$USES_FUNCTIONS" = true ]; then PORT_COUNT=$((PORT_COUNT + 1)); fi
 
 read -r VITE_PORT EXTRA_PORTS <<< "$(find_available_ports "$PORT_COUNT")"
 echo "Vite dev server will use port $VITE_PORT"
@@ -37,7 +44,8 @@ NAMESPACE=""
 FIRESTORE_PORT=""
 AUTH_PORT=""
 STORAGE_PORT=""
-for feature in FIRESTORE AUTH STORAGE; do
+FUNCTIONS_PORT=""
+for feature in FIRESTORE AUTH STORAGE FUNCTIONS; do
   uses_var="USES_${feature}"
   if [ "${!uses_var}" = true ]; then
     port="${EXTRA_PORTS%% *}"
@@ -75,6 +83,15 @@ if [ "$USES_STORAGE" = true ]; then
   fi
   EMULATORS_JSON="$EMULATORS_JSON\"storage\": {\"port\": ${STORAGE_PORT}}"
 fi
+if [ "$USES_FUNCTIONS" = true ]; then
+  if [ -n "$EMULATOR_LIST" ]; then
+    EMULATORS_JSON="$EMULATORS_JSON, "
+    EMULATOR_LIST="$EMULATOR_LIST,functions"
+  else
+    EMULATOR_LIST="functions"
+  fi
+  EMULATORS_JSON="$EMULATORS_JSON\"functions\": {\"port\": ${FUNCTIONS_PORT}}"
+fi
 EMULATORS_JSON="$EMULATORS_JSON}"
 
 # Build top-level config
@@ -84,6 +101,9 @@ if [ "$USES_FIRESTORE" = true ]; then
 fi
 if [ "$USES_STORAGE" = true ]; then
   CONFIG_JSON="$CONFIG_JSON\"storage\": {\"rules\": \"storage.rules\"}, "
+fi
+if [ "$USES_FUNCTIONS" = true ]; then
+  CONFIG_JSON="$CONFIG_JSON\"functions\": {\"source\": \"functions\", \"runtime\": \"nodejs22\"}, "
 fi
 CONFIG_JSON="$CONFIG_JSON\"emulators\": $EMULATORS_JSON}"
 
@@ -108,6 +128,12 @@ cleanup() {
   echo "QA server stopped."
 }
 trap cleanup EXIT INT TERM
+
+# Build functions before starting emulator (if used)
+if [ "$USES_FUNCTIONS" = true ]; then
+  echo "Building Cloud Functions..."
+  (cd "$REPO_ROOT/functions" && npm ci && npm run build)
+fi
 
 # Start Firebase emulators in background (if any emulators needed)
 if [ -n "$EMULATOR_LIST" ]; then
@@ -190,6 +216,9 @@ fi
 if [ "$USES_STORAGE" = true ]; then
   VITE_ARGS+=("VITE_STORAGE_EMULATOR_HOST=localhost:${STORAGE_PORT}")
 fi
+if [ "$USES_FUNCTIONS" = true ]; then
+  VITE_ARGS+=("VITE_FUNCTIONS_EMULATOR_PORT=${FUNCTIONS_PORT}")
+fi
 
 # Set GitHub branch for apps that fetch raw content from GitHub
 VITE_ARGS+=("VITE_GITHUB_BRANCH=$(git branch --show-current)")
@@ -237,6 +266,9 @@ if [ "$USES_AUTH" = true ]; then
 fi
 if [ "$USES_STORAGE" = true ]; then
   echo "  Storage emulator:   localhost:${STORAGE_PORT}"
+fi
+if [ "$USES_FUNCTIONS" = true ]; then
+  echo "  Functions emulator: localhost:${FUNCTIONS_PORT}"
 fi
 echo ""
 echo "  Press Ctrl+C to stop"

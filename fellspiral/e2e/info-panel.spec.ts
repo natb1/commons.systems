@@ -48,6 +48,19 @@ test.describe("info panel — desktop", () => {
     const blogrollItems = panel.locator(".blogroll-entry");
     await expect(blogrollItems).toHaveCount(3);
   });
+
+  test("blogroll entries have populated latest post content @smoke", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop");
+    await page.goto("/");
+    await page.waitForSelector("main h2", { timeout: 30000 });
+    const panel = page.locator("#info-panel");
+    const latestPosts = panel.locator(".blogroll-entry .latest-post");
+    const count = await latestPosts.count();
+    expect(count).toBeGreaterThan(0);
+    const texts = await latestPosts.allTextContents();
+    const hasContent = texts.some((t) => t.trim().length > 0);
+    expect(hasContent).toBe(true);
+  });
 });
 
 test.describe("info panel — mobile", () => {

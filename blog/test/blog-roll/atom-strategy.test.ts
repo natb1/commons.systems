@@ -63,7 +63,7 @@ describe("AtomStrategy", () => {
 
   });
 
-  it("falls back to corsproxy on CORS error", async () => {
+  it("falls back to proxy path on CORS error", async () => {
     const mockFetch = vi.fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce({
@@ -83,9 +83,30 @@ describe("AtomStrategy", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     const proxyUrl = mockFetch.mock.calls[1][0] as string;
-    expect(proxyUrl).toContain("corsproxy.io");
-    expect(proxyUrl).toContain(encodeURIComponent("https://example.com/feed"));
+    expect(proxyUrl).toBe(`/api/feed-proxy?url=${encodeURIComponent("https://example.com/feed")}`);
+  });
 
+  it("uses custom proxy path", async () => {
+    const mockFetch = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(ATOM_FEED),
+      });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const strategy = new AtomStrategy("https://example.com/feed", "/custom/proxy");
+    const result = await strategy.fetchLatestPost();
+
+    expect(result).toEqual({
+      title: "Latest Atom Post",
+      url: "https://example.com/atom-post",
+      publishedAt: "2026-02-01T00:00:00Z",
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const proxyUrl = mockFetch.mock.calls[1][0] as string;
+    expect(proxyUrl).toBe(`/custom/proxy?url=${encodeURIComponent("https://example.com/feed")}`);
   });
 
   it("returns null when both direct fetch and proxy fail", async () => {
