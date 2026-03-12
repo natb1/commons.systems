@@ -12,13 +12,29 @@
 
   --main-max-width: 48rem;
 
+  /* Apps override on :root to lock a specific scheme (e.g., color-scheme: dark) */
   color-scheme: light dark;
 }
 
 body {
   font-family: var(--font-body);
   color: var(--fg);
-  background: var(--bg);
+  background:
+    repeating-linear-gradient(
+      to right,
+      rgba(224, 216, 200, 0.04) 0px,
+      rgba(224, 216, 200, 0.04) 1px,
+      transparent 1px,
+      transparent 24px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(224, 216, 200, 0.04) 0px,
+      rgba(224, 216, 200, 0.04) 1px,
+      transparent 1px,
+      transparent 24px
+    ),
+    var(--bg);
 }
 
 .page {
