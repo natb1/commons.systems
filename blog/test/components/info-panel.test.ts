@@ -67,16 +67,52 @@ describe("renderInfoPanel", () => {
   it("renders multiple link sections with their headings", () => {
     const html = renderInfoPanel({
       linkSections: [
-        { heading: "Find Me", links: [{ label: "GitHub", url: "https://github.com" }] },
+        { heading: "Social", links: [{ label: "GitHub", url: "https://github.com" }] },
         { heading: "Games", links: [{ label: "Cairn", url: "https://cairnrpg.com" }] },
       ],
       topPosts: [],
       blogRoll: [],
     });
-    expect(html).toContain("Find Me");
+    expect(html).toContain("Social");
     expect(html).toContain("Games");
     expect(html).toContain("GitHub");
     expect(html).toContain("Cairn");
+  });
+
+  it("renders link section without heading when heading is omitted", () => {
+    const html = renderInfoPanel({
+      linkSections: [
+        { links: [{ label: "itch.io", url: "https://itch.io" }] },
+      ],
+      topPosts: [],
+      blogRoll: [],
+    });
+    expect(html).toContain("itch.io");
+    expect(html).toContain('href="https://itch.io"');
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const sections = container.querySelectorAll(".panel-section");
+    const firstSection = sections[0];
+    expect(firstSection.querySelector("h3")).toBeNull();
+    expect(firstSection.querySelector("ul.panel-list")).not.toBeNull();
+  });
+
+  it("renders mixed heading and headingless sections together", () => {
+    const html = renderInfoPanel({
+      linkSections: [
+        { links: [{ label: "itch.io", url: "https://itch.io" }] },
+        { heading: "Games", links: [{ label: "Cairn", url: "https://cairnrpg.com" }] },
+      ],
+      topPosts: [],
+      blogRoll: [],
+    });
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const sections = container.querySelectorAll(".panel-section");
+    expect(sections[0].querySelector("h3")).toBeNull();
+    expect(sections[0].querySelector("ul.panel-list")).not.toBeNull();
+    expect(sections[1].querySelector("h3")?.textContent).toBe("Games");
+    expect(sections[1].querySelector("ul.panel-list")).not.toBeNull();
   });
 
   it("top posts section contains links to published posts", () => {
