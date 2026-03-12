@@ -25,7 +25,6 @@ body {
   max-width: var(--main-max-width);
   margin: 0 auto;
   padding-inline: 1rem;
-  padding-block: 0;
 }
 
 h1,

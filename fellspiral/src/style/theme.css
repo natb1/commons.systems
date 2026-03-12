@@ -14,7 +14,6 @@
   --surface: #efe6cc;
 
   --gold: #b8860b;
-  --vermillion: #8b1a1a;
   --deep-blue: #1a3a5c;
 
   color-scheme: light;
@@ -115,17 +114,12 @@ h1 {
   font-size: 2rem;
 }
 
-a {
-  color: var(--vermillion);
-}
-
 a:hover {
   color: var(--gold);
 }
 
 header {
-  border-bottom-style: double;
-  border-bottom-width: 3px;
+  border-bottom: 3px double var(--border);
 }
 
 footer {

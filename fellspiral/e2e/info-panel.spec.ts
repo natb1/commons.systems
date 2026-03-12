@@ -85,7 +85,7 @@ test.describe("info panel — mobile", () => {
 });
 
 test.describe("info panel — header alignment", () => {
-  test("header h1 left edge aligns with main content left edge", async ({ page }, testInfo) => {
+  test("header left edge aligns with main content left edge", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
