@@ -41,7 +41,7 @@ const router = createRouter(
     { path: "/about", render: renderAbout },
   ],
   {
-    onNavigate: trackPageView,
+    onNavigate: ({ path }) => trackPageView(path),
     formatError: (error) => {
       if (error instanceof DataIntegrityError)
         return "A data error occurred. Please contact support.";

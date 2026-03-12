@@ -91,7 +91,7 @@ const router = createRouter(
     { path: "/budgets", render: () => renderBudgets(renderOptions()) },
   ],
   {
-    onNavigate: trackPageView,
+    onNavigate: ({ path }) => trackPageView(path),
     formatError: (error) => {
       if (error instanceof DataIntegrityError || error instanceof RangeError)
         return "A data error occurred. Please contact support.";

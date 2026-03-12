@@ -17,8 +17,8 @@ export interface Route {
 }
 
 export interface RouterOptions {
-  /** Called with the parsed hash path at the start of each navigation, before route matching. */
-  onNavigate?: (path: string) => void;
+  /** Called with the parsed hash path and query params at the start of each navigation, before route matching. Exceptions are caught and logged (they do not prevent the route from rendering). */
+  onNavigate?: (nav: { path: string; params: URLSearchParams }) => void;
   /** Map an error to a user-facing message. Return undefined to use "Something went wrong. Please try again." */
   formatError?: (error: unknown) => string | undefined;
 }
@@ -40,11 +40,15 @@ export function createRouter(
   async function navigate(): Promise<void> {
     if (destroyed) return;
     const id = ++navigationId;
-    const { path } = parseHash();
+    const { path, params } = parseHash();
     try {
-      options?.onNavigate?.(path);
+      options?.onNavigate?.({ path, params });
     } catch (e) {
-      console.error("onNavigate error:", e);
+      if (e instanceof TypeError || e instanceof ReferenceError) {
+        setTimeout(() => { throw e; }, 0);
+      } else {
+        console.error("onNavigate error:", e);
+      }
     }
     const route =
       routes.find((r) =>

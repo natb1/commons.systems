@@ -329,10 +329,42 @@ describe("createRouter", () => {
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>Home</h2>");
     });
-    expect(onNavigate).toHaveBeenCalledWith("/");
+    expect(onNavigate).toHaveBeenCalledWith({ path: "/", params: expect.any(URLSearchParams) });
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       "onNavigate error:",
       expect.any(Error),
+    );
+  });
+
+  it("onNavigate TypeError is deferred, not swallowed", async () => {
+    const deferred: Array<() => void> = [];
+    const realSetTimeout = globalThis.setTimeout;
+    vi.stubGlobal("setTimeout", (fn: TimerHandler, ...rest: unknown[]) => {
+      if (typeof fn === "function" && (!rest[0] || rest[0] === 0)) {
+        deferred.push(fn as () => void);
+        return 0;
+      }
+      return realSetTimeout(fn, ...(rest as [number?]));
+    });
+
+    const onNavigate = vi.fn(() => {
+      throw new TypeError("cannot read property of undefined");
+    });
+    router = createRouter(outlet, routes, { onNavigate });
+    await vi.waitFor(() => {
+      expect(outlet.innerHTML).toBe("<h2>Home</h2>");
+    });
+    vi.stubGlobal("setTimeout", realSetTimeout);
+
+    // Route still renders despite TypeError
+    expect(outlet.innerHTML).not.toContain("Something went wrong");
+    // TypeError deferred via setTimeout, not swallowed
+    expect(deferred).toHaveLength(1);
+    expect(() => deferred[0]()).toThrow(TypeError);
+    // Not logged to console.error (deferred instead)
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+      "onNavigate error:",
+      expect.any(TypeError),
     );
   });
 
@@ -342,7 +374,7 @@ describe("createRouter", () => {
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>Home</h2>");
     });
-    expect(onNavigate).toHaveBeenCalledWith("/");
+    expect(onNavigate).toHaveBeenCalledWith({ path: "/", params: expect.any(URLSearchParams) });
 
     location.hash = "#/about";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
@@ -350,7 +382,7 @@ describe("createRouter", () => {
     await vi.waitFor(() => {
       expect(outlet.innerHTML).toBe("<h2>About</h2>");
     });
-    expect(onNavigate).toHaveBeenCalledWith("/about");
+    expect(onNavigate).toHaveBeenCalledWith({ path: "/about", params: expect.any(URLSearchParams) });
   });
 
   it("navigate() re-renders current route", async () => {

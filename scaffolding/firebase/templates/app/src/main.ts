@@ -36,7 +36,7 @@ const router = createRouter(
     { path: "/about", render: renderAbout },
     { path: "/notes", render: renderNotes },
   ],
-  { onNavigate: trackPageView },
+  { onNavigate: ({ path }) => trackPageView(path) },
 );
 
 onAuthStateChanged(auth, (user) => {

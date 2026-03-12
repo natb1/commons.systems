@@ -131,7 +131,7 @@ const router = createRouter(
     },
   ],
   {
-    onNavigate: (path) => {
+    onNavigate: ({ path }) => {
       updateNav(path);
       trackPageView(path);
     },
