@@ -9,6 +9,7 @@ export default defineConfig({
       "firebase/auth",
       "firebase/firestore",
       "firebase/storage",
+      "pdfjs-dist",
     ],
   },
   test: {
