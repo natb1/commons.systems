@@ -28,7 +28,9 @@ export interface BudgetPeriod {
   readonly periodEnd: Timestamp;
   /** Sum of net transaction amounts (after reimbursement) in this period. Non-negative per Firestore rules. */
   readonly total: number;
+  /** Number of transactions in this period. Non-negative, immutable by client. */
   readonly count: number;
+  /** Net amounts broken down by category. Immutable by client. */
   readonly categoryBreakdown: Record<string, number>;
   readonly groupId: string | null;
 }

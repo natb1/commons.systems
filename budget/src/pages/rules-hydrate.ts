@@ -158,7 +158,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
         if (window.innerWidth >= 768) {
           newRow.setAttribute("open", "");
         }
-        const defaultTarget = ruleType === "budget_assignment" ? "Unassigned" : "Uncategorized";
+        const defaultTarget = defaultFields.target;
         newRow.innerHTML = `
           <summary>
             <div class="rule-summary-content">

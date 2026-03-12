@@ -75,14 +75,14 @@ export function parseJsonArray(raw: string | undefined): string[] {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      throw new DataIntegrityError(`Autocomplete options is not an array: ${typeof parsed}`);
+      throw new DataIntegrityError(`Expected a JSON string array, got ${typeof parsed}`);
     }
     if (!parsed.every((item: unknown) => typeof item === "string")) {
-      throw new DataIntegrityError("Autocomplete options contains non-string element");
+      throw new DataIntegrityError("JSON string array contains non-string element");
     }
     return parsed;
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
-    throw new DataIntegrityError(`Failed to parse autocomplete options: ${raw}`);
+    throw new DataIntegrityError(`Failed to parse JSON string array: ${raw}`);
   }
 }

@@ -195,7 +195,7 @@ describe("hydrateTransactionTable", () => {
   it("throws DataIntegrityError for malformed JSON in data attributes", () => {
     const container = createContainer("txn-1");
     container.dataset.budgetOptions = "not-json";
-    expect(() => hydrateTransactionTable(container)).toThrow("Failed to parse autocomplete options: not-json");
+    expect(() => hydrateTransactionTable(container)).toThrow("Failed to parse JSON string array: not-json");
   });
 
   it("shows error for unknown budget name and does not save", async () => {

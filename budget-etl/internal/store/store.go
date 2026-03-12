@@ -230,7 +230,7 @@ type RuleDoc struct {
 	Account     string
 }
 
-// LoadRules reads rules from budget/{env}/rules, filtered by groupId, sorted by priority ascending.
+// LoadRules reads rules from budget/{env}/rules, filtered by groupId.
 func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, error) {
 	col := c.fs.Collection(fmt.Sprintf("budget/%s/rules", c.env))
 	docs, err := col.Where("groupId", "==", groupID).Documents(ctx).GetAll()
@@ -249,6 +249,9 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 			return nil, fmt.Errorf("rule %s: field 'type' is not a string (got %T)", doc.Ref.ID, d["type"])
 		}
 		r.Type = v
+		if v != "categorization" && v != "budget_assignment" {
+			return nil, fmt.Errorf("rule %s: unknown type %q (expected categorization or budget_assignment)", doc.Ref.ID, v)
+		}
 		v, ok = d["pattern"].(string)
 		if !ok {
 			return nil, fmt.Errorf("rule %s: field 'pattern' is not a string (got %T)", doc.Ref.ID, d["pattern"])
@@ -263,6 +266,8 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 			r.Priority = int(p)
 		} else if p, ok := d["priority"].(float64); ok {
 			r.Priority = int(p)
+		} else {
+			return nil, fmt.Errorf("rule %s: field 'priority' is not a number (got %T)", doc.Ref.ID, d["priority"])
 		}
 		if v, ok := d["institution"].(string); ok {
 			r.Institution = v
@@ -380,8 +385,13 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 		}
 	}
 
-	// Batch-write period updates and creates
-	batch := c.fs.Batch()
+	// Collect all batch operations
+	type batchOp struct {
+		ref      *firestore.DocumentRef
+		fields   map[string]interface{}
+		mergeOpt []firestore.SetOption
+	}
+	var ops []batchOp
 	var updates, creates int
 
 	for key, pd := range periods {
@@ -405,7 +415,7 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 			"memberEmails":      group.MemberEmails,
 		}
 
-		batch.Set(ref, fields)
+		ops = append(ops, batchOp{ref: ref, fields: fields})
 		if existingPeriods[key] {
 			updates++
 		} else {
@@ -417,20 +427,34 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 	for id := range existingPeriods {
 		if _, hasTransactions := periods[id]; !hasTransactions {
 			ref := periodCol.Doc(id)
-			batch.Set(ref, map[string]interface{}{
-				"total":             0,
-				"count":             0,
-				"categoryBreakdown": map[string]float64{},
-			}, firestore.Merge(
-				firestore.FieldPath{"total"},
-				firestore.FieldPath{"count"},
-				firestore.FieldPath{"categoryBreakdown"},
-			))
+			ops = append(ops, batchOp{
+				ref: ref,
+				fields: map[string]interface{}{
+					"total":             0,
+					"count":             0,
+					"categoryBreakdown": map[string]float64{},
+				},
+				mergeOpt: []firestore.SetOption{firestore.Merge(
+					firestore.FieldPath{"total"},
+					firestore.FieldPath{"count"},
+					firestore.FieldPath{"categoryBreakdown"},
+				)},
+			})
 			updates++
 		}
 	}
 
-	if updates+creates > 0 {
+	// Write in chunks of 500 (Firestore batch limit)
+	const maxBatch = 500
+	for i := 0; i < len(ops); i += maxBatch {
+		end := i + maxBatch
+		if end > len(ops) {
+			end = len(ops)
+		}
+		batch := c.fs.Batch()
+		for _, op := range ops[i:end] {
+			batch.Set(op.ref, op.fields, op.mergeOpt...)
+		}
 		if _, err := batch.Commit(ctx); err != nil {
 			return fmt.Errorf("committing period batch: %w", err)
 		}
