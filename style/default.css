@@ -12,6 +12,7 @@
 
   --main-max-width: 48rem;
 
+  /* Apps override on :root to lock a specific scheme (e.g., color-scheme: dark) */
   color-scheme: light dark;
 }
 
