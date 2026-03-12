@@ -21,7 +21,7 @@ if (!app) throw new Error("#app element not found");
 const infoPanel = document.getElementById("info-panel");
 if (!infoPanel) throw new Error("#info-panel element not found");
 
-const header = document.querySelector("body > header");
+const header = document.querySelector(".page > header");
 if (header) {
   new ResizeObserver(([entry]) => {
     document.documentElement.style.setProperty(

@@ -90,11 +90,11 @@ test.describe("info panel — header alignment", () => {
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
 
-    const h1Box = await page.locator("header h1").boundingBox();
+    const headerBox = await page.locator("header").boundingBox();
     const mainBox = await page.locator("main").boundingBox();
 
-    expect(h1Box).not.toBeNull();
+    expect(headerBox).not.toBeNull();
     expect(mainBox).not.toBeNull();
-    expect(Math.abs(h1Box!.x - mainBox!.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(headerBox!.x - mainBox!.x)).toBeLessThanOrEqual(2);
   });
 });
