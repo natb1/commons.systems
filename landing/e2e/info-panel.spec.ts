@@ -83,17 +83,17 @@ test.describe("info panel — mobile", () => {
 });
 
 test.describe("info panel — header alignment", () => {
-  test("header h1 left edge aligns with main content left edge", async ({ page }, testInfo) => {
+  test("header left edge aligns with main content left edge", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
 
-    const h1Box = await page.locator("header h1").boundingBox();
+    const headerBox = await page.locator("header").boundingBox();
     const mainBox = await page.locator("main").boundingBox();
 
-    expect(h1Box).not.toBeNull();
+    expect(headerBox).not.toBeNull();
     expect(mainBox).not.toBeNull();
-    expect(Math.abs(h1Box!.x - mainBox!.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(headerBox!.x - mainBox!.x)).toBeLessThanOrEqual(2);
   });
 });
 
