@@ -8,6 +8,12 @@ service cloud.firestore {
         && request.auth.token.email in get(/databases/$(database)/documents/landing/$(env)/groups/admin).data.members;
     }
 
+    // Budget group member: verify actual membership via groups collection
+    function isBudgetGroupMember(env, groupId) {
+      return request.auth != null
+        && request.auth.token.email in get(/databases/$(database)/documents/budget/$(env)/groups/$(groupId)).data.members;
+    }
+
     // Groups are readable only by their members (email-based membership)
     match /landing/{env}/groups/{groupId} {
       allow read: if request.auth != null && request.auth.token.email in resource.data.members;
@@ -135,8 +141,7 @@ service cloud.firestore {
     match /budget/{env}/rules/{ruleId} {
       allow read: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;
-      allow create: if request.auth != null
-        && request.auth.token.email in request.resource.data.memberEmails
+      allow create: if isBudgetGroupMember(env, request.resource.data.groupId)
         && isValidRuleData();
       allow update: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails
