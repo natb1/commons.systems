@@ -4,7 +4,7 @@ import type { ContentRenderer } from "./types.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
-export function createPdfRenderer(): ContentRenderer {
+export function createPdfRenderer(onError?: (err: unknown) => void): ContentRenderer {
   let pdfDoc: PDFDocumentProxy | null = null;
   let _currentPage = 0;
   let _pageCount = 0;
@@ -24,6 +24,7 @@ export function createPdfRenderer(): ContentRenderer {
     }
 
     const page = await pdfDoc.getPage(pageNum);
+    if (destroyed || !container) return;
     const containerRect = container.getBoundingClientRect();
     if (containerRect.width === 0 || containerRect.height === 0) return;
 
@@ -76,7 +77,7 @@ export function createPdfRenderer(): ContentRenderer {
         if (resizeTimer) clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
           resizeTimer = null;
-          renderPage(_currentPage).catch(console.error);
+          renderPage(_currentPage).catch(onError ?? console.error);
         }, 150);
       });
       resizeObserver.observe(container);

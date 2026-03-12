@@ -65,6 +65,5 @@ export function afterRenderView(outlet: HTMLElement): void {
 
   if (item.mediaType !== "pdf") return;
 
-  const renderer = createPdfRenderer();
-  cleanupFn = initViewer(outlet, renderer, url);
+  cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url);
 }

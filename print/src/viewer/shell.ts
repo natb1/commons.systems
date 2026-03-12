@@ -40,7 +40,7 @@ export function renderViewerShell(item: MediaItem): string {
 
 export function initViewer(
   outlet: HTMLElement,
-  renderer: ContentRenderer,
+  createRenderer: (onError: (err: unknown) => void) => ContentRenderer,
   url: string,
 ): () => void {
   const viewer = outlet.querySelector(".viewer") as HTMLElement;
@@ -54,6 +54,13 @@ export function initViewer(
   const panel = viewer.querySelector(".viewer-panel") as HTMLElement;
 
   document.body.classList.add("viewer-active");
+
+  function handleRenderError(err: unknown) {
+    console.error("Render failed:", err);
+    position.textContent = "Render failed";
+  }
+
+  const renderer = createRenderer(handleRenderError);
 
   // Orientation detection
   const orientationQuery = matchMedia("(orientation: landscape)");
