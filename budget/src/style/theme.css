@@ -10,7 +10,7 @@
 @media (min-width: 768px) {
   body { --main-max-width: none; --line-length: 100vw; }
   .content-grid { max-width: none; }
-  body > header, body > footer { padding-left: 1rem; padding-right: 1rem; }
+  main { max-inline-size: none; }
 }
 
 #transactions-table {
