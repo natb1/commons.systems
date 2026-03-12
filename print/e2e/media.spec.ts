@@ -35,8 +35,7 @@ test.describe("media", () => {
     await page.goto("/");
     await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
     await page.locator("#media-list .media-view").first().click();
-    // Should navigate to a view page with metadata
-    await expect(page.locator("main h2")).not.toHaveText("Library");
+    // Viewer shell replaces the library page (no h2 on the viewer page)
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
   });
 
