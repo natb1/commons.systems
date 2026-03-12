@@ -1,4 +1,5 @@
 @import "@commons-systems/style/default.css";
+@import "./viewer.css";
 
 .cc-badge {
   width: 117px;

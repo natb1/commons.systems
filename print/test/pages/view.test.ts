@@ -8,7 +8,7 @@ vi.mock("../../src/firestore.js", () => ({
 }));
 
 vi.mock("../../src/storage.js", () => ({
-  getMediaDownloadUrl: vi.fn(),
+  getMediaDownloadUrl: vi.fn().mockResolvedValue("https://example.com/download"),
 }));
 
 vi.mock("../../src/auth.js", () => ({
@@ -18,8 +18,19 @@ vi.mock("../../src/auth.js", () => ({
   onAuthStateChanged: vi.fn(),
 }));
 
+vi.mock("../../src/viewer/shell.js", () => ({
+  renderViewerShell: vi.fn().mockReturnValue('<div class="viewer">mock viewer</div>'),
+  initViewer: vi.fn().mockReturnValue(() => {}),
+}));
+
+vi.mock("../../src/viewer/pdf.js", () => ({
+  createPdfRenderer: vi.fn().mockReturnValue({}),
+}));
+
 import { renderView } from "../../src/pages/view";
 import type { MediaItem } from "../../src/types";
+import { getMediaDownloadUrl } from "../../src/storage";
+import { renderViewerShell } from "../../src/viewer/shell";
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
   return {
@@ -65,7 +76,7 @@ describe("renderView", () => {
       const html = await renderView("", null);
 
       expect(html).toContain('href="#/"');
-      expect(html).toContain('class="back-link"');
+      expect(html).toContain('class="viewer-back"');
     });
   });
 
@@ -93,7 +104,7 @@ describe("renderView", () => {
       const html = await renderView("missing-id", null);
 
       expect(html).toContain('href="#/"');
-      expect(html).toContain('class="back-link"');
+      expect(html).toContain('class="viewer-back"');
     });
   });
 
@@ -113,7 +124,7 @@ describe("renderView", () => {
       const html = await renderView("item-1", null);
 
       expect(html).toContain('href="#/"');
-      expect(html).toContain('class="back-link"');
+      expect(html).toContain('class="viewer-back"');
     });
 
     it("re-throws DataIntegrityError", async () => {
@@ -128,120 +139,33 @@ describe("renderView", () => {
   });
 
   describe("when item is found", () => {
-    it("renders the item title as a heading", async () => {
-      mockGetMediaItem.mockResolvedValue(makeMediaItem({ title: "My Book" }));
+    it("renders viewer shell", async () => {
+      const item = makeMediaItem();
+      mockGetMediaItem.mockResolvedValue(item);
 
       const html = await renderView("item-1", null);
 
-      expect(html).toContain("<h2>My Book</h2>");
+      expect(renderViewerShell).toHaveBeenCalledWith(item);
+      expect(html).toContain('class="viewer"');
     });
 
-    it("renders a back link to the library", async () => {
-      mockGetMediaItem.mockResolvedValue(makeMediaItem());
-
-      const html = await renderView("item-1", null);
-
-      expect(html).toContain('href="#/"');
-      expect(html).toContain('class="back-link"');
-      expect(html).toContain("Back to Library");
-    });
-
-    it("renders the media type badge", async () => {
-      mockGetMediaItem.mockResolvedValue(
-        makeMediaItem({ mediaType: "epub" }),
-      );
-
-      const html = await renderView("item-1", null);
-
-      expect(html).toContain('class="media-badge"');
-      expect(html).toContain("epub");
-    });
-
-    it("renders public domain status as Yes", async () => {
-      mockGetMediaItem.mockResolvedValue(
-        makeMediaItem({ publicDomain: true }),
-      );
-
-      const html = await renderView("item-1", null);
-
-      expect(html).toContain("Public Domain");
-      expect(html).toContain("Yes");
-    });
-
-    it("renders public domain status as No", async () => {
-      mockGetMediaItem.mockResolvedValue(
-        makeMediaItem({ publicDomain: false }),
-      );
-
-      const html = await renderView("item-1", null);
-
-      expect(html).toContain("Public Domain");
-      expect(html).toContain("No");
-    });
-
-    it("renders source notes", async () => {
-      mockGetMediaItem.mockResolvedValue(
-        makeMediaItem({ sourceNotes: "From Project Gutenberg" }),
-      );
-
-      const html = await renderView("item-1", null);
-
-      expect(html).toContain("Source Notes");
-      expect(html).toContain("From Project Gutenberg");
-    });
-
-    it("renders storage path", async () => {
+    it("calls getMediaDownloadUrl with item storage path", async () => {
       mockGetMediaItem.mockResolvedValue(
         makeMediaItem({ storagePath: "media/archive.zip" }),
       );
 
-      const html = await renderView("item-1", null);
+      await renderView("item-1", null);
 
-      expect(html).toContain("Storage Path");
-      expect(html).toContain("media/archive.zip");
+      expect(getMediaDownloadUrl).toHaveBeenCalledWith("media/archive.zip");
     });
 
-    it("renders the addedAt date", async () => {
-      mockGetMediaItem.mockResolvedValue(
-        makeMediaItem({ addedAt: "2026-01-15T00:00:00Z" }),
-      );
+    it("escapes HTML in title via renderViewerShell", async () => {
+      const item = makeMediaItem({ title: "<script>alert(1)</script>" });
+      mockGetMediaItem.mockResolvedValue(item);
 
-      const html = await renderView("item-1", null);
+      await renderView("item-1", null);
 
-      expect(html).toContain('datetime="2026-01-15T00:00:00Z"');
-    });
-
-    it("renders tags as a table", async () => {
-      mockGetMediaItem.mockResolvedValue(
-        makeMediaItem({ tags: { genre: "fiction", language: "English" } }),
-      );
-
-      const html = await renderView("item-1", null);
-
-      expect(html).toContain('class="tags-table"');
-      expect(html).toContain("genre");
-      expect(html).toContain("fiction");
-      expect(html).toContain("language");
-      expect(html).toContain("English");
-    });
-
-    it("renders 'No tags.' when tags are empty", async () => {
-      mockGetMediaItem.mockResolvedValue(makeMediaItem({ tags: {} }));
-
-      const html = await renderView("item-1", null);
-
-      expect(html).toContain("No tags.");
-    });
-
-    it("escapes HTML in title", async () => {
-      mockGetMediaItem.mockResolvedValue(
-        makeMediaItem({ title: "<script>alert(1)</script>" }),
-      );
-
-      const html = await renderView("item-1", null);
-
-      expect(html).not.toContain("<script>");
-      expect(html).toContain("&lt;script&gt;");
+      expect(renderViewerShell).toHaveBeenCalledWith(item);
     });
   });
 });

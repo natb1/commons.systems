@@ -37,23 +37,23 @@ test.describe("media", () => {
     await page.locator("#media-list .media-view").first().click();
     // Should navigate to a view page with metadata
     await expect(page.locator("main h2")).not.toHaveText("Library");
-    await expect(page.locator(".back-link")).toBeVisible();
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
   });
 
   test("metadata display on view page", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
     await page.locator("#media-list .media-view").first().click();
-    await expect(page.locator(".media-metadata")).toBeVisible();
-    await expect(page.locator(".back-link")).toBeVisible();
+    await expect(page.locator(".viewer-panel")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-back")).toBeVisible();
   });
 
   test("back link returns to library", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
     await page.locator("#media-list .media-view").first().click();
-    await expect(page.locator(".back-link")).toBeVisible();
-    await page.locator(".back-link").click();
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await page.locator(".viewer-back").click();
     await expect(page.locator("main h2")).toHaveText("Library");
   });
 });
