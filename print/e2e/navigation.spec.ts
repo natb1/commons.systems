@@ -9,6 +9,18 @@ test.describe("navigation", () => {
     expect(errors).toHaveLength(0);
   });
 
+  test("no analytics console errors", async ({ page }) => {
+    const analyticsErrors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error" && /analytics|gtag/i.test(msg.text())) {
+        analyticsErrors.push(msg.text());
+      }
+    });
+    await page.goto("/");
+    await page.waitForLoadState("load");
+    expect(analyticsErrors).toHaveLength(0);
+  });
+
   test("HTML shell structure @smoke", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("header h1")).toHaveText("Print");

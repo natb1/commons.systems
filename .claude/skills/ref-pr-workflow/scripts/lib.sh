@@ -61,6 +61,11 @@ install_local_deps() {
     (cd "$repo_root/blog" && npm ci)
   fi
 
+  if grep -q '"@commons-systems/analyticsutil"' "$app_pkg" 2>/dev/null; then
+    echo "Installing analyticsutil dependency..."
+    (cd "$repo_root/analyticsutil" && npm ci)
+  fi
+
   if grep -q '"@commons-systems/style"' "$app_pkg" 2>/dev/null; then
     echo "Installing style dependency..."
     (cd "$repo_root/style" && npm ci)

@@ -5,6 +5,7 @@ import { renderNotes } from "./pages/notes.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
+import { trackPageView } from "./firebase.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -28,11 +29,15 @@ function updateNav(user: import("firebase/auth").User | null): void {
 // Show login UI immediately; onAuthStateChanged will update once auth resolves.
 updateNav(null);
 
-const router = createRouter(app, [
-  { path: "/", render: renderHome },
-  { path: "/about", render: renderAbout },
-  { path: "/notes", render: renderNotes },
-]);
+const router = createRouter(
+  app,
+  [
+    { path: "/", render: renderHome },
+    { path: "/about", render: renderAbout },
+    { path: "/notes", render: renderNotes },
+  ],
+  { onNavigate: ({ path }) => trackPageView(path) },
+);
 
 onAuthStateChanged(auth, (user) => {
   updateNav(user);

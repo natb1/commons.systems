@@ -26,6 +26,11 @@ jobs:
           echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE" >> "$GITHUB_ENV"
           echo "CREDS_FILE=$CREDS_FILE" >> "$GITHUB_ENV"
       - name: Deploy to production and run smoke tests
+        env:
+          GA_MEASUREMENT_ID_LANDING: ${{ secrets.GA_MEASUREMENT_ID_LANDING }}
+          GA_MEASUREMENT_ID_BUDGET: ${{ secrets.GA_MEASUREMENT_ID_BUDGET }}
+          GA_MEASUREMENT_ID_FELLSPIRAL: ${{ secrets.GA_MEASUREMENT_ID_FELLSPIRAL }}
+          GA_MEASUREMENT_ID_PRINT: ${{ secrets.GA_MEASUREMENT_ID_PRINT }}
         run: .claude/skills/ref-pr-workflow/scripts/run-all-prod-deploy-smoke.sh
       - name: Cleanup credentials
         if: always()

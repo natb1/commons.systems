@@ -26,6 +26,7 @@ vi.mock("@commons-systems/authutil/groups", () => ({
 vi.mock("../src/firebase.js", () => ({
   db: { type: "mock-firestore" },
   NAMESPACE: "app/test",
+  trackPageView: vi.fn(),
 }));
 vi.mock("../src/auth.js", () => ({
   auth: {},

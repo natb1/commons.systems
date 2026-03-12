@@ -1,37 +1,50 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, Page } from "@playwright/test";
+
+async function expectLightBackground(page: Page) {
+  const bg = await page.evaluate(() =>
+    getComputedStyle(document.body).getPropertyValue("background-color"),
+  );
+
+  // Parchment background — all RGB channels should be high
+  const match = bg.match(/\d+/g)?.map(Number);
+  expect(match, `background-color returned unexpected format: "${bg}"`).not.toBeNull();
+  expect(match!.length).toBeGreaterThanOrEqual(3);
+  expect(match[0]).toBeGreaterThan(180);
+  expect(match[1]).toBeGreaterThan(180);
+  expect(match[2]).toBeGreaterThan(180);
+}
 
 test.describe("theme", () => {
-  test("dark color scheme applies dark background", async ({ page }) => {
-    await page.emulateMedia({ colorScheme: "dark" });
+  test("light-only theme applies parchment background", async ({ page }) => {
     await page.goto("/");
-
-    const bg = await page.evaluate(() =>
-      getComputedStyle(document.body).getPropertyValue("background-color"),
-    );
-
-    // Dark theme --bg is #1a1714 which is rgb(26, 23, 20)
-    const match = bg.match(/\d+/g)?.map(Number) ?? [];
-    expect(match.length).toBeGreaterThanOrEqual(3);
-    // All RGB channels should be low (dark background)
-    expect(match[0]).toBeLessThan(80);
-    expect(match[1]).toBeLessThan(80);
-    expect(match[2]).toBeLessThan(80);
+    await expectLightBackground(page);
   });
 
-  test("light color scheme applies light background", async ({ page }) => {
-    await page.emulateMedia({ colorScheme: "light" });
+  test("dark color scheme preference has no effect", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto("/");
+    await expectLightBackground(page);
+  });
+
+  test("uses serif body font", async ({ page }) => {
     await page.goto("/");
 
-    const bg = await page.evaluate(() =>
-      getComputedStyle(document.body).getPropertyValue("background-color"),
+    const fontFamily = await page.evaluate(() =>
+      getComputedStyle(document.body).getPropertyValue("font-family"),
     );
 
-    // Light theme --bg is #f5f0e8 which is rgb(245, 240, 232)
-    const match = bg.match(/\d+/g)?.map(Number) ?? [];
-    expect(match.length).toBeGreaterThanOrEqual(3);
-    // All RGB channels should be high (light background)
-    expect(match[0]).toBeGreaterThan(180);
-    expect(match[1]).toBeGreaterThan(180);
-    expect(match[2]).toBeGreaterThan(180);
+    expect(fontFamily).toContain("EB Garamond");
+  });
+
+  test("headings use manuscript titling font", async ({ page }) => {
+    await page.goto("/");
+
+    const h1Font = await page.evaluate(() => {
+      const h1 = document.querySelector("h1");
+      if (!h1) throw new Error("No <h1> element found on page");
+      return getComputedStyle(h1).getPropertyValue("font-family");
+    });
+
+    expect(h1Font).toContain("Uncial Antiqua");
   });
 });
