@@ -16,4 +16,10 @@ describe("firebaseConfig", () => {
       "commons-systems.firebaseapp.com",
     );
   });
+
+  it("has appId", () => {
+    expect(firebaseConfig.appId).toBe(
+      "1:1043497797028:web:2aa63913a15aa053062d31",
+    );
+  });
 });

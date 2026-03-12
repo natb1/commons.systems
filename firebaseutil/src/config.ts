@@ -8,4 +8,5 @@ export const firebaseConfig = {
       ? location.hostname
       : "commons-systems.firebaseapp.com",
   storageBucket: "commons-systems.firebasestorage.app",
+  appId: "1:1043497797028:web:2aa63913a15aa053062d31",
 };
