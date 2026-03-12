@@ -43,7 +43,7 @@ function createContainer(txnId: string, overrides: { budgetId?: string; amount?:
   const reimbursementAttr = overrides.reimbursement !== undefined ? ` data-reimbursement="${overrides.reimbursement}"` : ` data-reimbursement="0"`;
 
   container.innerHTML = `
-    <details class="txn-row" data-txn-id="${txnId}"${budgetIdAttr}${amountAttr}${timestampAttr}${reimbursementAttr}>
+    <details class="expand-row txn-row" data-txn-id="${txnId}"${budgetIdAttr}${amountAttr}${timestampAttr}${reimbursementAttr}>
       <summary class="txn-summary">
         <div class="txn-summary-content">
           <span>Description</span>
@@ -52,7 +52,7 @@ function createContainer(txnId: string, overrides: { budgetId?: string; amount?:
           <span class="amount">$52.30</span>
         </div>
       </summary>
-      <div class="txn-details">
+      <div class="expand-details txn-details">
         <dl>
           <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="${overrides.reimbursement ?? 50}" min="0" max="100"></dd>
           <dt>Budget</dt><dd><input type="text" class="edit-budget" value="food"></dd>

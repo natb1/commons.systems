@@ -1,47 +1,6 @@
 import { updateRule, deleteRule, createRule, getGroupMembers, type RuleType } from "../firestore.js";
-import { DataIntegrityError } from "../errors.js";
 import { showDropdown, removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
-
-const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
-
-function showInputError(el: HTMLInputElement | HTMLSelectElement, title = "Save failed \u2014 value reverted"): void {
-  const existing = errorTimers.get(el);
-  if (existing) clearTimeout(existing);
-  if (el instanceof HTMLSelectElement) {
-    const saved = el.querySelector("option[selected]") as HTMLOptionElement | null;
-    if (saved) el.value = saved.value;
-  } else {
-    el.value = el.defaultValue;
-  }
-  el.classList.add("save-error");
-  el.title = title;
-  errorTimers.set(el, setTimeout(() => {
-    el.classList.remove("save-error");
-    el.title = "";
-    errorTimers.delete(el);
-  }, 30000));
-}
-
-function handleSaveError(el: HTMLInputElement | HTMLSelectElement, error: unknown): void {
-  if (error instanceof TypeError || error instanceof ReferenceError) {
-    setTimeout(() => { throw error; }, 0);
-    return;
-  }
-  if (error instanceof DataIntegrityError) {
-    console.error("Data integrity error:", error);
-    showInputError(el, "Data error \u2014 please reload");
-    return;
-  }
-  console.error("Failed to save rule:", error);
-  const code = (error as { code?: string })?.code;
-  if (code === "permission-denied") {
-    showInputError(el, "Access denied. Please contact support.");
-  } else if (error instanceof RangeError) {
-    showInputError(el, "Value out of range");
-  } else {
-    showInputError(el);
-  }
-}
+import { showInputError, handleSaveError, showActionError, parseJsonArray } from "./hydrate-util.js";
 
 function rowRuleId(el: HTMLElement): string | null {
   const row = el.closest(".rule-row");
@@ -49,26 +8,62 @@ function rowRuleId(el: HTMLElement): string | null {
   return row.dataset.ruleId ?? null;
 }
 
-function parseJsonArray(raw: string | undefined): string[] {
-  if (!raw) return [];
-  const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed)) throw new Error(`Expected array, got ${typeof parsed}`);
-  return parsed as string[];
-}
-
 export function hydrateRulesTable(container: HTMLElement): void {
   registerAutocompleteListeners();
 
   const budgetOptions = parseJsonArray(container.dataset.budgetOptions);
+  const categoryOptions = parseJsonArray(container.dataset.categoryOptions);
   const institutionOptions = parseJsonArray(container.dataset.institutionOptions);
   const accountOptions = parseJsonArray(container.dataset.accountOptions);
 
+  // Type filter
+  const filterSelect = document.getElementById("rule-type-filter") as HTMLSelectElement | null;
+  if (filterSelect) {
+    container.dataset.activeFilter = filterSelect.value;
+    filterSelect.addEventListener("change", () => {
+      container.dataset.activeFilter = filterSelect.value;
+      removeDropdown();
+    });
+  }
+
+  function activeFilterType(): RuleType {
+    const val = container.dataset.activeFilter;
+    if (val === "budget_assignment") return "budget_assignment";
+    return "categorization";
+  }
+
   function getOptionsForInput(input: HTMLInputElement): string[] {
-    if (input.classList.contains("edit-target")) return budgetOptions;
+    if (input.classList.contains("edit-target")) {
+      const row = input.closest(".rule-row");
+      if (row instanceof HTMLElement && row.dataset.ruleType === "budget_assignment") {
+        return budgetOptions;
+      }
+      return categoryOptions;
+    }
     if (input.classList.contains("edit-institution")) return institutionOptions;
     if (input.classList.contains("edit-account")) return accountOptions;
     return [];
   }
+
+  // Desktop: open all rows so details are visible in the flat grid.
+  // Rows render closed by default (no `open` attr) for mobile.
+  if (window.innerWidth >= 768) {
+    for (const row of container.querySelectorAll(".rule-row")) {
+      row.setAttribute("open", "");
+    }
+  }
+
+  // On medium+ screens, prevent toggle on summary click (flat grid, no expand/collapse)
+  container.addEventListener("click", (e: Event) => {
+    if (window.innerWidth < 768) return;
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    const summary = target.closest("summary");
+    if (!summary) return;
+    if (!summary.closest(".rule-row")) return;
+    if (target instanceof HTMLInputElement || target instanceof HTMLButtonElement) return;
+    e.preventDefault();
+  });
 
   // Show all options on focus; filter as user types
   container.addEventListener("focus", (e: Event) => {
@@ -114,35 +109,9 @@ export function hydrateRulesTable(container: HTMLElement): void {
       }
       target.defaultValue = target.value;
     } catch (error) {
-      handleSaveError(target, error);
+      handleSaveError(target, error, "rule");
     }
   }, true);
-
-  // Change handler for type select
-  container.addEventListener("change", async (e) => {
-    const target = e.target;
-    if (!(target instanceof HTMLSelectElement)) return;
-    if (!target.classList.contains("edit-type")) return;
-    const ruleId = rowRuleId(target);
-    if (!ruleId) return;
-
-    const saved = target.querySelector("option[selected]") as HTMLOptionElement | null;
-    if (saved && target.value === saved.value) return;
-
-    try {
-      const value = target.value;
-      if (value !== "categorization" && value !== "budget_assignment") {
-        showInputError(target, "Invalid rule type");
-        return;
-      }
-      await updateRule(ruleId, { type: value });
-      if (saved) saved.removeAttribute("selected");
-      const newSelected = Array.from(target.options).find(o => o.value === value) ?? null;
-      if (newSelected) newSelected.setAttribute("selected", "");
-    } catch (error) {
-      handleSaveError(target, error);
-    }
-  });
 
   // Click handler for delete and add
   container.addEventListener("click", async (e) => {
@@ -162,6 +131,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
           return;
         }
         console.error("Failed to delete rule:", error);
+        showActionError(target, "Delete failed");
       }
     }
 
@@ -169,32 +139,39 @@ export function hydrateRulesTable(container: HTMLElement): void {
       const groupId = target.dataset.groupId;
       if (!groupId) return;
       try {
+        const ruleType = activeFilterType();
         const memberEmails = await getGroupMembers(groupId);
         const defaultFields = {
-          type: "categorization" as RuleType,
-          pattern: "",
-          target: "",
+          type: ruleType,
+          pattern: "new rule",
+          target: ruleType === "budget_assignment" ? "Unassigned" : "Uncategorized",
           priority: 100,
           institution: null,
           account: null,
         };
         const newId = await createRule(groupId, memberEmails, defaultFields);
 
-        // Insert new row before the add button
-        const newRow = document.createElement("div");
-        newRow.className = "rule-row";
+        const newRow = document.createElement("details");
+        newRow.className = "expand-row rule-row";
         newRow.dataset.ruleId = newId;
+        newRow.dataset.ruleType = ruleType;
+        if (window.innerWidth >= 768) {
+          newRow.setAttribute("open", "");
+        }
+        const defaultTarget = ruleType === "budget_assignment" ? "Unassigned" : "Uncategorized";
         newRow.innerHTML = `
-          <span><select class="edit-type" aria-label="Type">
-            <option value="categorization" selected>Categorization</option>
-            <option value="budget_assignment">Budget Assignment</option>
-          </select></span>
-          <span><input type="text" class="edit-pattern" value="" aria-label="Pattern"></span>
-          <span><input type="text" class="edit-target" value="" aria-label="Target"></span>
-          <span><input type="number" class="edit-priority" value="100" aria-label="Priority"></span>
-          <span><input type="text" class="edit-institution" value="" aria-label="Institution"></span>
-          <span><input type="text" class="edit-account" value="" aria-label="Account"></span>
-          <span><button class="delete-rule" aria-label="Delete rule">Delete</button></span>
+          <summary>
+            <div class="rule-summary-content">
+              <span><input type="text" class="edit-pattern" value="new rule" aria-label="Pattern"></span>
+              <span><input type="text" class="edit-target" value="${defaultTarget}" aria-label="Target"></span>
+            </div>
+          </summary>
+          <div class="rule-details">
+            <span><input type="number" class="edit-priority" value="100" aria-label="Priority"></span>
+            <span><input type="text" class="edit-institution" value="" aria-label="Institution"></span>
+            <span><input type="text" class="edit-account" value="" aria-label="Account"></span>
+            <span><button class="delete-rule" aria-label="Delete rule">Delete</button></span>
+          </div>
         `;
         container.insertBefore(newRow, target);
       } catch (error) {
@@ -203,6 +180,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
           return;
         }
         console.error("Failed to add rule:", error);
+        showActionError(target, "Add failed");
       }
     }
   });

@@ -60,7 +60,7 @@ function renderRow(opts: RenderRowOptions): string {
   const timestampAttr = editable && txn.timestamp ? ` data-timestamp="${txn.timestamp.toMillis()}"` : "";
   const reimbursementAttr = editable ? ` data-reimbursement="${txn.reimbursement}"` : "";
 
-  return `<details class="txn-row"${txnIdAttr}${amountAttr}${budgetIdAttr}${timestampAttr}${reimbursementAttr}>
+  return `<details class="expand-row txn-row"${txnIdAttr}${amountAttr}${budgetIdAttr}${timestampAttr}${reimbursementAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(txn.description)}</span>
@@ -69,7 +69,7 @@ function renderRow(opts: RenderRowOptions): string {
         <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
       </div>
     </summary>
-    <div class="txn-details">
+    <div class="expand-details txn-details">
       <dl>
         <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
         <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>

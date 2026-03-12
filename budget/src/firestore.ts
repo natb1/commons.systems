@@ -144,7 +144,11 @@ export async function getGroupMembers(groupId: string): Promise<string[]> {
   if (!docSnap.exists()) throw new Error(`Group ${groupId} not found`);
   const members = docSnap.data().members;
   if (!Array.isArray(members)) throw new DataIntegrityError(`Group ${groupId}: members is not an array`);
-  return members.filter((m: unknown): m is string => typeof m === "string");
+  const nonStrings = members.filter((m: unknown) => typeof m !== "string");
+  if (nonStrings.length > 0) {
+    throw new DataIntegrityError(`Group ${groupId}: members contains non-string elements`);
+  }
+  return members as string[];
 }
 
 export async function getTransactions(groupId: null): Promise<Transaction[]>;
@@ -372,6 +376,8 @@ export async function updateRule(
   requireDocId(ruleId, "rule");
   if (Object.keys(fields).length === 0) return;
   if (fields.type !== undefined) requireRuleType(fields.type);
+  if (fields.pattern !== undefined && !fields.pattern) throw new Error("Rule pattern cannot be empty");
+  if (fields.target !== undefined && !fields.target) throw new Error("Rule target cannot be empty");
   const path = nsCollectionPath(NAMESPACE, "rules");
   const ref = doc(db, path, ruleId);
   await updateDoc(ref, fields);

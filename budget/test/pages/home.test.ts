@@ -68,6 +68,8 @@ const defaultPeriods: BudgetPeriod[] = [
     periodStart: mockTimestamp("2025-01-13"),
     periodEnd: mockTimestamp("2025-01-20"),
     total: 5.75,
+    count: 0,
+    categoryBreakdown: {},
     groupId: null,
   },
 ];
@@ -178,10 +180,10 @@ describe("renderHome", () => {
       txn({ budget: "food", statementId: "stmt-2025-01" }),
     ]);
     const html = await renderHome({ user: null, group: null, groupError: false });
-    expect(html).toContain('class="txn-row"');
+    expect(html).toContain('class="expand-row txn-row"');
     expect(html).toContain('class="txn-summary"');
     expect(html).toContain('class="txn-summary-content"');
-    expect(html).toContain('class="txn-details"');
+    expect(html).toContain('class="expand-details txn-details"');
     expect(html).toContain("Bank A");
     expect(html).toContain("Checking");
   });

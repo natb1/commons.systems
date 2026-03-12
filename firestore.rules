@@ -92,9 +92,8 @@ service cloud.firestore {
     }
 
     // Budget periods are scoped to group members via a denormalized `memberEmails` field.
-    // Updates limited to total (must be non-negative); budgetId, periodStart, periodEnd,
-    // count, categoryBreakdown, groupId, and memberEmails are immutable from client.
-    // Create and delete are explicitly denied.
+    // Client updates may only change total (must be non-negative). All other fields
+    // must be present but unchanged. Create and delete are explicitly denied.
     match /budget/{env}/budget-periods/{periodId} {
       allow read: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;
@@ -128,7 +127,9 @@ service cloud.firestore {
         && request.auth.token.email in request.resource.data.memberEmails
         && request.resource.data.type in ["categorization", "budget_assignment"]
         && request.resource.data.pattern is string
+        && request.resource.data.pattern.size() > 0
         && request.resource.data.target is string
+        && request.resource.data.target.size() > 0
         && request.resource.data.priority is number
         && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
       allow update: if request.auth != null
@@ -137,7 +138,9 @@ service cloud.firestore {
         && request.resource.data.memberEmails == resource.data.memberEmails
         && request.resource.data.type in ["categorization", "budget_assignment"]
         && request.resource.data.pattern is string
+        && request.resource.data.pattern.size() > 0
         && request.resource.data.target is string
+        && request.resource.data.target.size() > 0
         && request.resource.data.priority is number
         && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
       allow delete: if request.auth != null

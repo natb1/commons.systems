@@ -2,28 +2,7 @@ import { updateTransaction, adjustBudgetPeriodTotal, type SerializedBudgetPeriod
 import { computeNetAmount } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
 import { showDropdown, removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
-
-/**
- * Parse the JSON array from a data attribute.
- * Returns [] when the attribute is absent (unauthorized users).
- * Throws DataIntegrityError for non-empty values that are not valid JSON arrays.
- */
-function parseJsonArray(raw: string | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      throw new DataIntegrityError(`Autocomplete options is not an array: ${typeof parsed}`);
-    }
-    if (!parsed.every((item: unknown) => typeof item === "string")) {
-      throw new DataIntegrityError("Autocomplete options contains non-string element");
-    }
-    return parsed;
-  } catch (error) {
-    if (error instanceof DataIntegrityError) throw error;
-    throw new DataIntegrityError(`Failed to parse autocomplete options: ${raw}`);
-  }
-}
+import { showInputError, handleSaveError, parseJsonArray } from "./hydrate-util.js";
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
@@ -182,21 +161,6 @@ function clearBalanceDisplay(row: HTMLElement): void {
   }
 }
 
-const errorTimers = new WeakMap<HTMLInputElement, ReturnType<typeof setTimeout>>();
-
-function showInputError(input: HTMLInputElement, title = "Save failed \u2014 value reverted"): void {
-  const existing = errorTimers.get(input);
-  if (existing) clearTimeout(existing);
-  input.value = input.defaultValue;
-  input.classList.add("save-error");
-  input.title = title;
-  errorTimers.set(input, setTimeout(() => {
-    input.classList.remove("save-error");
-    input.title = "";
-    errorTimers.delete(input);
-  }, 30000));
-}
-
 export { _resetAutocomplete as _resetForTest };
 
 export function hydrateTransactionTable(container: HTMLElement): void {
@@ -287,24 +251,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       }
       input.defaultValue = input.value;
     } catch (error) {
-      if (error instanceof TypeError || error instanceof ReferenceError) {
-        setTimeout(() => { throw error; }, 0);
-        return;
-      }
-      if (error instanceof DataIntegrityError) {
-        console.error("Data integrity error:", error);
-        showInputError(input, "Data error \u2014 please reload");
-        return;
-      }
-      console.error("Failed to save transaction:", error);
-      const code = (error as { code?: string })?.code;
-      if (code === "permission-denied") {
-        showInputError(input, "Access denied. Please contact support.");
-      } else if (error instanceof RangeError) {
-        showInputError(input, "Value out of range");
-      } else {
-        showInputError(input);
-      }
+      handleSaveError(input, error, "transaction");
     }
   }, true);
 }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"sort"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -104,8 +103,9 @@ type UpsertResult struct {
 
 // importFieldPaths lists the fields set by import that overwrite on re-import.
 // Any field set as a default on create but excluded from this list is
-// user-editable and preserved across re-imports (note, category,
-// reimbursement, budget).
+// user-editable and preserved across re-imports (note, reimbursement).
+// Category and budget are set by the rule engine on first import and
+// preserved across re-imports.
 var importFieldPaths = []firestore.FieldPath{
 	{"institution"},
 	{"account"},
@@ -120,7 +120,9 @@ var importFieldPaths = []firestore.FieldPath{
 // UpsertTransactions writes transactions to Firestore in batches.
 // For each batch of up to 500 transactions:
 //   - Batch-read existing documents via GetAll
-//   - New documents: Set with all fields (defaults: note="", category="", reimbursement=0, budget=nil)
+//   - New documents: Set with all fields (defaults: note="", reimbursement=0;
+//     category and budget are set by the rule engine — category is "" when no
+//     rule matches, budget is nil when unassigned)
 //   - Existing documents: Set with merge to update only import-sourced fields, preserving user edits
 func (c *Client) UpsertTransactions(ctx context.Context, group GroupInfo, txns []TransactionData) (UpsertResult, error) {
 	col := c.fs.Collection(fmt.Sprintf("budget/%s/transactions", c.env))
@@ -176,6 +178,8 @@ func dollarAmount(cents int64) float64 { return float64(cents) / 100 }
 
 // allFields returns a map of all transaction document fields including user-editable defaults.
 // Amount is converted from int64 cents to float64 dollars for the Firestore schema.
+// Budget is nil (not "") when unassigned so the client can distinguish "no budget" from
+// "empty string budget"; category uses "" for unmatched since all categories are non-empty strings.
 func allFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 	m := importFields(txn, group)
 	m["note"] = ""
@@ -226,7 +230,7 @@ type RuleDoc struct {
 	Account     string
 }
 
-// LoadRules reads rules from budget/{env}/rules, filtered by groupId, sorted by priority.
+// LoadRules reads rules from budget/{env}/rules, filtered by groupId, sorted by priority ascending.
 func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, error) {
 	col := c.fs.Collection(fmt.Sprintf("budget/%s/rules", c.env))
 	docs, err := col.Where("groupId", "==", groupID).Documents(ctx).GetAll()
@@ -240,19 +244,25 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 		r := RuleDoc{
 			ID: doc.Ref.ID,
 		}
-		if v, ok := d["type"].(string); ok {
-			r.Type = v
+		v, ok := d["type"].(string)
+		if !ok {
+			return nil, fmt.Errorf("rule %s: field 'type' is not a string (got %T)", doc.Ref.ID, d["type"])
 		}
-		if v, ok := d["pattern"].(string); ok {
-			r.Pattern = v
+		r.Type = v
+		v, ok = d["pattern"].(string)
+		if !ok {
+			return nil, fmt.Errorf("rule %s: field 'pattern' is not a string (got %T)", doc.Ref.ID, d["pattern"])
 		}
-		if v, ok := d["target"].(string); ok {
-			r.Target = v
+		r.Pattern = v
+		v, ok = d["target"].(string)
+		if !ok {
+			return nil, fmt.Errorf("rule %s: field 'target' is not a string (got %T)", doc.Ref.ID, d["target"])
 		}
-		if v, ok := d["priority"].(int64); ok {
-			r.Priority = int(v)
-		} else if v, ok := d["priority"].(float64); ok {
-			r.Priority = int(v)
+		r.Target = v
+		if p, ok := d["priority"].(int64); ok {
+			r.Priority = int(p)
+		} else if p, ok := d["priority"].(float64); ok {
+			r.Priority = int(p)
 		}
 		if v, ok := d["institution"].(string); ok {
 			r.Institution = v
@@ -262,10 +272,6 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 		}
 		result = append(result, r)
 	}
-
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Priority < result[j].Priority
-	})
 
 	log.Printf("loaded %d rules for group %s", len(result), groupID)
 	return result, nil
@@ -293,7 +299,7 @@ func PeriodID(budgetID string, start time.Time) string {
 }
 
 // RecalculatePeriods recomputes total, count, and categoryBreakdown for all
-// budget periods overlapping [minTime, maxTime) for the given group.
+// budget periods overlapping [minTime, maxTime] for the given group.
 func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTime, maxTime time.Time) error {
 	periodStart := PeriodStart(minTime)
 	periodEnd := PeriodEnd(PeriodStart(maxTime))
@@ -343,9 +349,13 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 		}
 		timestamp, ok := d["timestamp"].(time.Time)
 		if !ok {
+			log.Printf("WARNING: transaction %s has non-time timestamp field (got %T), skipping", doc.Ref.ID, d["timestamp"])
 			continue
 		}
-		amount, _ := d["amount"].(float64)
+		amount, ok := d["amount"].(float64)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", doc.Ref.ID, d["amount"])
+		}
 		reimbursement, _ := d["reimbursement"].(float64)
 		category, _ := d["category"].(string)
 
@@ -379,13 +389,18 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 		// Round to 2 decimal places to avoid floating-point drift
 		total := math.Round(pd.total*100) / 100
 
+		roundedBreakdown := make(map[string]float64, len(pd.categoryBreakdown))
+		for cat, val := range pd.categoryBreakdown {
+			roundedBreakdown[cat] = math.Round(val*100) / 100
+		}
+
 		fields := map[string]interface{}{
 			"budgetId":          pd.budgetID,
 			"periodStart":       pd.start,
 			"periodEnd":         PeriodEnd(pd.start),
 			"total":             total,
 			"count":             pd.count,
-			"categoryBreakdown": pd.categoryBreakdown,
+			"categoryBreakdown": roundedBreakdown,
 			"groupId":           group.ID,
 			"memberEmails":      group.MemberEmails,
 		}

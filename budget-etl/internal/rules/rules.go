@@ -13,7 +13,7 @@ type Rule struct {
 	ID          string
 	Type        string // "categorization" or "budget_assignment"
 	Pattern     string // case-insensitive substring to match against description
-	Target      string // category name or budget ID
+	Target      string // categorization: category path (e.g. "Food:Coffee"); budget_assignment: budget ID
 	Priority    int    // lower number = higher priority
 	Institution string // optional: restrict to this institution
 	Account     string // optional: restrict to this account

@@ -7,14 +7,20 @@ const mockWhere = vi.fn();
 const mockDoc = vi.fn();
 const mockUpdateDoc = vi.fn();
 const mockIncrement = vi.fn((n: number) => ({ _increment: n }));
+const mockAddDoc = vi.fn();
+const mockDeleteDoc = vi.fn();
+const mockGetDoc = vi.fn();
 
 vi.mock("firebase/firestore", () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
+  getDoc: (...args: unknown[]) => mockGetDoc(...args),
   query: (...args: unknown[]) => mockQuery(...args),
   where: (...args: unknown[]) => mockWhere(...args),
   doc: (...args: unknown[]) => mockDoc(...args),
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
+  addDoc: (...args: unknown[]) => mockAddDoc(...args),
+  deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
   increment: (n: number) => mockIncrement(n),
   Timestamp: class Timestamp {
     _date: Date;
@@ -31,7 +37,7 @@ vi.mock("../src/firebase.js", () => ({
 }));
 
 import { Timestamp } from "firebase/firestore";
-import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, adjustBudgetPeriodTotal, getBudgets, getBudgetPeriods } from "../src/firestore";
+import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, adjustBudgetPeriodTotal, getBudgets, getBudgetPeriods, getRules, createRule, updateRule, deleteRule } from "../src/firestore";
 
 describe("getTransactions", () => {
   beforeEach(() => {
@@ -867,5 +873,194 @@ describe("getBudgetPeriods — overlap detection", () => {
     });
     const periods = await getBudgetPeriods(null);
     expect(periods).toHaveLength(2);
+  });
+});
+
+describe("getRules", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+    mockQuery.mockReturnValue("mock-query");
+    mockWhere.mockReturnValue("mock-where");
+  });
+
+  it("queries seed-rules when groupId is null", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+    await getRules(null);
+    expect(mockCollection).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/seed-rules",
+    );
+  });
+
+  it("queries rules with groupId filter when groupId is provided", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+    await getRules("household", "user@example.com");
+    expect(mockCollection).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/rules",
+    );
+    expect(mockWhere).toHaveBeenCalledWith("groupId", "==", "household");
+  });
+
+  it("maps rule document fields correctly", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "rule-1",
+        data: () => ({
+          type: "categorization",
+          pattern: "coffee",
+          target: "Food:Coffee",
+          priority: 10,
+          institution: "Bank",
+          account: "Checking",
+          groupId: "household",
+        }),
+      }],
+    });
+    const rules = await getRules(null);
+    expect(rules).toEqual([{
+      id: "rule-1",
+      type: "categorization",
+      pattern: "coffee",
+      target: "Food:Coffee",
+      priority: 10,
+      institution: "Bank",
+      account: "Checking",
+      groupId: "household",
+    }]);
+  });
+
+  it("throws on invalid rule type", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "rule-bad",
+        data: () => ({ type: "invalid", pattern: "x", target: "y", priority: 1 }),
+      }],
+    });
+    await expect(getRules(null)).rejects.toThrow("rule type");
+  });
+
+  it("throws on missing required string field", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "rule-bad",
+        data: () => ({ type: "categorization", pattern: 123, target: "y", priority: 1 }),
+      }],
+    });
+    await expect(getRules(null)).rejects.toThrow("pattern");
+  });
+
+  it("throws on missing required number field", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "rule-bad",
+        data: () => ({ type: "categorization", pattern: "x", target: "y", priority: "not a number" }),
+      }],
+    });
+    await expect(getRules(null)).rejects.toThrow("priority");
+  });
+});
+
+describe("createRule", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+  });
+
+  it("creates a rule with valid fields", async () => {
+    mockAddDoc.mockResolvedValue({ id: "new-rule-id" });
+    const id = await createRule("household", ["a@b.com"], {
+      type: "categorization",
+      pattern: "coffee",
+      target: "Food",
+      priority: 10,
+      institution: null,
+      account: null,
+    });
+    expect(id).toBe("new-rule-id");
+    expect(mockAddDoc).toHaveBeenCalledWith("mock-collection-ref", {
+      type: "categorization",
+      pattern: "coffee",
+      target: "Food",
+      priority: 10,
+      institution: null,
+      account: null,
+      groupId: "household",
+      memberEmails: ["a@b.com"],
+    });
+  });
+
+  it("rejects empty pattern", async () => {
+    await expect(createRule("g", ["a@b.com"], {
+      type: "categorization",
+      pattern: "",
+      target: "Food",
+      priority: 10,
+      institution: null,
+      account: null,
+    })).rejects.toThrow("pattern cannot be empty");
+  });
+
+  it("rejects empty target", async () => {
+    await expect(createRule("g", ["a@b.com"], {
+      type: "categorization",
+      pattern: "x",
+      target: "",
+      priority: 10,
+      institution: null,
+      account: null,
+    })).rejects.toThrow("target cannot be empty");
+  });
+});
+
+describe("updateRule", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDoc.mockReturnValue("mock-doc-ref");
+    mockUpdateDoc.mockResolvedValue(undefined);
+  });
+
+  it("updates a rule with partial fields", async () => {
+    await updateRule("rule-1", { pattern: "new pattern" });
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { pattern: "new pattern" });
+  });
+
+  it("skips update when fields are empty", async () => {
+    await updateRule("rule-1", {});
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty pattern", async () => {
+    await expect(updateRule("rule-1", { pattern: "" })).rejects.toThrow("pattern cannot be empty");
+  });
+
+  it("rejects empty target", async () => {
+    await expect(updateRule("rule-1", { target: "" })).rejects.toThrow("target cannot be empty");
+  });
+
+  it("rejects invalid rule type", async () => {
+    await expect(updateRule("rule-1", { type: "bad" as "categorization" })).rejects.toThrow("rule type");
+  });
+});
+
+describe("deleteRule", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDoc.mockReturnValue("mock-doc-ref");
+    mockDeleteDoc.mockResolvedValue(undefined);
+  });
+
+  it("deletes a rule by ID", async () => {
+    await deleteRule("rule-1");
+    expect(mockDeleteDoc).toHaveBeenCalledWith("mock-doc-ref");
+  });
+
+  it("rejects empty rule ID", async () => {
+    await expect(deleteRule("")).rejects.toThrow("Invalid rule ID");
+  });
+
+  it("rejects rule ID with slash", async () => {
+    await expect(deleteRule("a/b")).rejects.toThrow("Invalid rule ID");
   });
 });
