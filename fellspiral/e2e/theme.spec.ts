@@ -6,8 +6,9 @@ async function expectLightBackground(page: Page) {
   );
 
   // Parchment background — all RGB channels should be high
-  const match = bg.match(/\d+/g)?.map(Number) ?? [];
-  expect(match.length).toBeGreaterThanOrEqual(3);
+  const match = bg.match(/\d+/g)?.map(Number);
+  expect(match, `background-color returned unexpected format: "${bg}"`).not.toBeNull();
+  expect(match!.length).toBeGreaterThanOrEqual(3);
   expect(match[0]).toBeGreaterThan(180);
   expect(match[1]).toBeGreaterThan(180);
   expect(match[2]).toBeGreaterThan(180);

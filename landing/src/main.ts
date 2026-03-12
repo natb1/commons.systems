@@ -22,14 +22,13 @@ const infoPanel = document.getElementById("info-panel");
 if (!infoPanel) throw new Error("#info-panel element not found");
 
 const header = document.querySelector(".page > header");
-if (header) {
-  new ResizeObserver(([entry]) => {
-    document.documentElement.style.setProperty(
-      "--header-height",
-      `${entry.borderBoxSize[0].blockSize}px`,
-    );
-  }).observe(header);
-}
+if (!header) throw new Error(".page > header element not found");
+new ResizeObserver(([entry]) => {
+  document.documentElement.style.setProperty(
+    "--header-height",
+    `${entry.borderBoxSize[0].blockSize}px`,
+  );
+}).observe(header);
 
 let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
