@@ -9,18 +9,17 @@
     grid-template-columns: 1fr var(--sidebar-width, 16rem);
   }
 
-  body > header {
+  .page > header {
     display: grid;
     grid-template-columns: 1fr var(--sidebar-width, 16rem);
     column-gap: 1.5rem;
-    padding: 1rem 0;
   }
 
-  body > header > * {
+  .page > header > * {
     grid-column: 1;
   }
 
-  body > header > nav {
+  .page > header > nav {
     grid-column: 1 / -1;
   }
 

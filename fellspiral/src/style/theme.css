@@ -2,12 +2,126 @@
 @import "@commons-systems/style/layout.css";
 @import "@commons-systems/blog/blog.css";
 
+:root {
+  --font-body: "EB Garamond", "Georgia", "Times New Roman", serif;
+  --font-heading: "Uncial Antiqua", "EB Garamond", serif;
+
+  --fg: #2a1f14;
+  --bg: #f5eed6;
+  --accent: #8b1a1a;
+  --muted: #6b5e4f;
+  --border: #c4a96a;
+  --surface: #efe6cc;
+
+  --gold: #b8860b;
+  --deep-blue: #1a3a5c;
+
+  color-scheme: light;
+}
+
 body {
   --main-max-width: 68rem;
+  --filigree-width: 12px;
+  font-size: 1.125rem;
+  line-height: 1.6;
+  background:
+    repeating-conic-gradient(
+      rgba(139, 119, 85, 0.03) 0% 25%,
+      transparent 0% 50%
+    )
+      0 0 / 40px 40px,
+    repeating-conic-gradient(
+      rgba(101, 78, 50, 0.025) 0% 25%,
+      transparent 0% 50%
+    )
+      20px 20px / 60px 60px,
+    radial-gradient(
+      ellipse at 30% 20%,
+      rgba(180, 155, 110, 0.12),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse at 70% 80%,
+      rgba(160, 130, 80, 0.1),
+      transparent 60%
+    ),
+    var(--bg);
+}
+
+.page {
+  position: relative;
+  padding: 0 calc(1rem + var(--filigree-width));
+}
+
+/* filigree side borders */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: var(--filigree-width);
+  z-index: 20;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='80' viewBox='0 0 12 80'%3E%3Crect x='1' width='1' height='80' fill='%23c4a96a' opacity='.4'/%3E%3Crect x='3' width='1' height='80' fill='%23c4a96a' opacity='.7'/%3E%3Crect x='5' width='2' height='80' fill='%23c4a96a'/%3E%3Crect x='8' width='1' height='80' fill='%23c4a96a' opacity='.7'/%3E%3Crect x='10' width='1' height='80' fill='%23c4a96a' opacity='.4'/%3E%3Ccircle cx='6' cy='10' r='3' fill='none' stroke='%23c4a96a' stroke-width='.7' opacity='.6'/%3E%3Ccircle cx='6' cy='40' r='4' fill='none' stroke='%23c4a96a' stroke-width='.7' opacity='.5'/%3E%3Ccircle cx='6' cy='70' r='3' fill='none' stroke='%23c4a96a' stroke-width='.7' opacity='.6'/%3E%3Cpath d='M6 5 Q9 10 6 15 Q3 10 6 5z' fill='none' stroke='%23a8894a' stroke-width='.5' opacity='.5'/%3E%3Cpath d='M6 25 Q10 32.5 6 40 Q2 32.5 6 25z' fill='none' stroke='%23a8894a' stroke-width='.5' opacity='.4'/%3E%3Cpath d='M6 55 Q10 62.5 6 70 Q2 62.5 6 55z' fill='none' stroke='%23a8894a' stroke-width='.5' opacity='.4'/%3E%3Cpath d='M6 15 Q8 20 6 25' fill='none' stroke='%23c4a96a' stroke-width='.4' opacity='.4'/%3E%3Cpath d='M6 40 Q4 47.5 6 55' fill='none' stroke='%23c4a96a' stroke-width='.4' opacity='.4'/%3E%3C/svg%3E");
+  background-repeat: repeat-y;
+  background-size: 12px 80px;
+  pointer-events: none;
+}
+
+body::before {
+  left: 0;
+}
+
+body::after {
+  right: 0;
+}
+
+/* horizontal filigree bands — break out of .page to span viewport, inset by side filigree width */
+.page::before,
+.page::after {
+  content: "";
+  display: block;
+  width: calc(100vw - 2 * var(--filigree-width));
+  margin-left: calc(-50vw + 50% + var(--filigree-width));
+  height: 20px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='20' viewBox='0 0 120 20'%3E%3Crect y='2' width='120' height='1' fill='%23c4a96a' opacity='.4'/%3E%3Crect y='5' width='120' height='1' fill='%23c4a96a' opacity='.7'/%3E%3Crect y='8' width='120' height='2' fill='%23c4a96a'/%3E%3Crect y='12' width='120' height='1' fill='%23c4a96a' opacity='.7'/%3E%3Crect y='15' width='120' height='1' fill='%23c4a96a' opacity='.4'/%3E%3Cpath d='M10 10 Q15 5 20 10 Q15 15 10 10z' fill='none' stroke='%23a8894a' stroke-width='.5' opacity='.5'/%3E%3Cpath d='M50 10 Q55 4 60 10 Q55 16 50 10z' fill='none' stroke='%23a8894a' stroke-width='.5' opacity='.5'/%3E%3Cpath d='M90 10 Q95 5 100 10 Q95 15 90 10z' fill='none' stroke='%23a8894a' stroke-width='.5' opacity='.5'/%3E%3Ccircle cx='35' cy='10' r='3' fill='none' stroke='%23c4a96a' stroke-width='.7' opacity='.5'/%3E%3Ccircle cx='75' cy='10' r='3' fill='none' stroke='%23c4a96a' stroke-width='.7' opacity='.5'/%3E%3Ccircle cx='115' cy='10' r='3' fill='none' stroke='%23c4a96a' stroke-width='.7' opacity='.5'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-size: 120px 20px;
+  pointer-events: none;
+}
+
+.page::after {
+  margin-top: 0.5rem;
 }
 
 main {
   min-width: 0;
   max-inline-size: none;
   margin-inline: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  text-transform: none;
+  letter-spacing: 0.02em;
+  text-shadow: none;
+  color: var(--deep-blue);
+}
+
+h1 {
+  font-size: 2rem;
+}
+
+a:hover {
+  color: var(--gold);
+}
+
+header {
+  border-bottom: 3px double var(--border);
+}
+
+footer {
+  border-top: 3px double var(--border);
 }
