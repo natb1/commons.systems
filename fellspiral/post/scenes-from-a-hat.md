@@ -4,7 +4,7 @@ Like many American millennials, my home from school indulgence was "The Price is
 
 ---
 
-["The Smiling Fox"](https://podcasts.apple.com/us/podcast/the-smiling-fox/id1833673068) Mythic Bastionland fan podcast hosted a guest [Amanda P.](https://weirdwonder.bearblog.dev/) She referred to Mythic Bastionland Myths as "game technology". The way I understand this is that it's a little different than a story emerging from the roll, it's emerging from "scenes in the hat".
+["The Smiling Fox"](https://podcasts.apple.com/us/podcast/the-smiling-fox/id1833673068) Mythic Bastionland fan podcast hosted a guest [Amanda P.](https://weirdwonder.bearblog.dev/) She referred to Mythic Bastionland Myths as "game technology". The dice tell a story, but there's another layer of narrative that emerges when "scenes from a hat" collide.
 
 This week I am participating in [William's Woland realm](https://halfawormandabittenapple.blogspot.com/). I rolled tile 10.
 
