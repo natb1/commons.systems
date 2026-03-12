@@ -1,37 +1,39 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, Page } from "@playwright/test";
+
+async function expectDarkBackground(page: Page) {
+  const bg = await page.evaluate(() =>
+    getComputedStyle(document.body).getPropertyValue("background-color"),
+  );
+
+  // All RGB channels should be low (dark background)
+  const match = bg.match(/\d+/g)?.map(Number);
+  expect(match, `background-color returned unexpected format: "${bg}"`).not.toBeNull();
+  expect(match!.length).toBeGreaterThanOrEqual(3);
+  expect(match![0]).toBeLessThan(80);
+  expect(match![1]).toBeLessThan(80);
+  expect(match![2]).toBeLessThan(80);
+}
 
 test.describe("theme", () => {
   test("dark color scheme applies dark background", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/");
-
-    const bg = await page.evaluate(() =>
-      getComputedStyle(document.body).getPropertyValue("background-color"),
-    );
-
-    // Dark theme --bg is #1a1714 which is rgb(26, 23, 20)
-    const match = bg.match(/\d+/g)?.map(Number) ?? [];
-    expect(match.length).toBeGreaterThanOrEqual(3);
-    // All RGB channels should be low (dark background)
-    expect(match[0]).toBeLessThan(80);
-    expect(match[1]).toBeLessThan(80);
-    expect(match[2]).toBeLessThan(80);
+    await expectDarkBackground(page);
   });
 
-  test("light color scheme applies light background", async ({ page }) => {
+  test("forced dark mode ignores light preference", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "light" });
     await page.goto("/");
+    await expectDarkBackground(page);
+  });
 
-    const bg = await page.evaluate(() =>
-      getComputedStyle(document.body).getPropertyValue("background-color"),
+  test("body has grid texture background", async ({ page }) => {
+    await page.goto("/");
+
+    const bgImage = await page.evaluate(() =>
+      getComputedStyle(document.body).getPropertyValue("background-image"),
     );
 
-    // Light theme --bg is #f5f0e8 which is rgb(245, 240, 232)
-    const match = bg.match(/\d+/g)?.map(Number) ?? [];
-    expect(match.length).toBeGreaterThanOrEqual(3);
-    // All RGB channels should be high (light background)
-    expect(match[0]).toBeGreaterThan(180);
-    expect(match[1]).toBeGreaterThan(180);
-    expect(match[2]).toBeGreaterThan(180);
+    expect(bgImage).toContain("repeating-linear-gradient");
   });
 });

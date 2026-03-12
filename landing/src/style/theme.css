@@ -2,6 +2,10 @@
 @import "@commons-systems/style/layout.css";
 @import "@commons-systems/blog/blog.css";
 
+:root {
+  color-scheme: dark;
+}
+
 body {
   --main-max-width: 68rem;
 }
