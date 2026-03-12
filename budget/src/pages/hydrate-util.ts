@@ -58,8 +58,21 @@ export function handleSaveError(el: HTMLInputElement | HTMLSelectElement, error:
  * Show a temporary error indicator on a button or row element.
  * Adds a `save-error` class and title, auto-clears after 30 seconds.
  */
-export function showActionError(el: HTMLElement, title = "Action failed"): void {
+function showActionError(el: HTMLElement, title = "Action failed"): void {
   showError(el, title);
+}
+
+/**
+ * Classify an action error (button click, etc.) and show the appropriate error.
+ * Programmer errors (TypeError, ReferenceError) are rethrown asynchronously.
+ */
+export function handleActionError(el: HTMLElement, error: unknown, action: string): void {
+  if (error instanceof TypeError || error instanceof ReferenceError) {
+    setTimeout(() => { throw error; }, 0);
+    return;
+  }
+  console.error(`Failed to ${action}:`, error);
+  showActionError(el, `${action.charAt(0).toUpperCase() + action.slice(1)} failed`);
 }
 
 /**

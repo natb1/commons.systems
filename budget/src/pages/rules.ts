@@ -1,7 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
-import type { RenderPageOptions } from "./render-options.js";
+import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { getRules, getBudgets, type Rule } from "../firestore.js";
-import { DataIntegrityError } from "../errors.js";
 import { uniqueSorted } from "./home.js";
 
 export function renderRow(rule: Rule, editable: boolean): string {
@@ -79,7 +78,7 @@ function renderRulesTable(opts: RulesTableOptions): string {
 }
 
 export async function renderRules(options: RenderPageOptions): Promise<string> {
-  const { user, group, groupError } = options;
+  const { user, group } = options;
   const authorized = group !== null;
 
   let tableHtml: string;
@@ -94,33 +93,13 @@ export async function renderRules(options: RenderPageOptions): Promise<string> {
     const uniqueAccounts = uniqueSorted(rules.map(r => r.account));
     tableHtml = renderRulesTable({ rules, authorized, groupId: group?.id ?? "", budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts });
   } catch (error) {
-    if (error instanceof RangeError || error instanceof DataIntegrityError
-        || error instanceof TypeError || error instanceof ReferenceError) {
-      throw error;
-    }
     console.error("Failed to load rules:", error);
-    const code = (error as { code?: string })?.code;
-    const message = code === "permission-denied"
-      ? "Access denied. Please contact support."
-      : "Could not load data. Try refreshing the page.";
-    tableHtml = `<p id="rules-error">${message}</p>`;
-  }
-
-  const groupErrorNotice = groupError && user
-    ? '<p id="group-error" class="auth-error">Could not load group data. Showing example data. Try refreshing the page.</p>'
-    : "";
-
-  let seedNotice = "";
-  if (!authorized && !groupError) {
-    seedNotice = user
-      ? '<p id="seed-data-notice">Viewing example data. You are not a member of any groups.</p>'
-      : '<p id="seed-data-notice">Viewing example data. Sign in to see your rules.</p>';
+    tableHtml = renderLoadError(error, "rules-error");
   }
 
   return `
     <h2>Rules</h2>
-    ${groupErrorNotice}
-    ${seedNotice}
+    ${renderPageNotices(options, "rules")}
     ${tableHtml}
   `;
 }

@@ -78,6 +78,7 @@ function findPeriod(periods: HydrationPeriod[], budgetId: string, timestampMs: n
  * transaction. If either write fails, totals drift until manual correction
  * (page loads read stored totals, not recomputed from transactions).
  * The ETL's RecalculatePeriods corrects any drift on the next import.
+ * categoryBreakdown is not updated by client-side changes; it reflects the last ETL run.
  */
 async function syncPeriodTotals(
   row: HTMLElement,
@@ -112,6 +113,9 @@ async function syncPeriodTotals(
       }
     }
   } catch (periodError) {
+    if (periodError instanceof TypeError || periodError instanceof ReferenceError) {
+      throw periodError;
+    }
     console.error("Failed to update budget period totals:", periodError);
     clearBalanceDisplay(row);
   }
@@ -149,6 +153,9 @@ async function syncPeriodOnReimbursementChange(
       period.total += delta;
     }
   } catch (periodError) {
+    if (periodError instanceof TypeError || periodError instanceof ReferenceError) {
+      throw periodError;
+    }
     console.error("Failed to update budget period totals:", periodError);
     clearBalanceDisplay(row);
   }

@@ -37,7 +37,7 @@ vi.mock("../src/firebase.js", () => ({
 }));
 
 import { Timestamp } from "firebase/firestore";
-import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, adjustBudgetPeriodTotal, getBudgets, getBudgetPeriods, getRules, createRule, updateRule, deleteRule } from "../src/firestore";
+import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, adjustBudgetPeriodTotal, getBudgets, getBudgetPeriods, getRules, createRule, updateRule, deleteRule, getGroupMembers } from "../src/firestore";
 
 describe("getTransactions", () => {
   beforeEach(() => {
@@ -1137,5 +1137,44 @@ describe("deleteRule", () => {
 
   it("rejects rule ID with slash", async () => {
     await expect(deleteRule("a/b")).rejects.toThrow("Invalid rule ID");
+  });
+});
+
+describe("getGroupMembers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDoc.mockReturnValue("mock-doc-ref");
+  });
+
+  it("returns members for an existing group", async () => {
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ members: ["a@b.com", "c@d.com"] }),
+    });
+    const members = await getGroupMembers("group-1");
+    expect(members).toEqual(["a@b.com", "c@d.com"]);
+  });
+
+  it("throws when group does not exist", async () => {
+    mockGetDoc.mockResolvedValue({
+      exists: () => false,
+    });
+    await expect(getGroupMembers("missing")).rejects.toThrow("not found");
+  });
+
+  it("throws DataIntegrityError when members is not an array", async () => {
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ members: "not-an-array" }),
+    });
+    await expect(getGroupMembers("group-1")).rejects.toThrow(/members is not an array/);
+  });
+
+  it("throws DataIntegrityError when members contains non-string", async () => {
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ members: ["valid", 123] }),
+    });
+    await expect(getGroupMembers("group-1")).rejects.toThrow(/non-string/);
   });
 });

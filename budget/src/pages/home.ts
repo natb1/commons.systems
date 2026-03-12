@@ -1,6 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
-import type { RenderPageOptions } from "./render-options.js";
+import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { getTransactions, getBudgets, getBudgetPeriods, type Transaction, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAllBudgetBalances } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
@@ -161,7 +161,7 @@ function renderTransactionTable(
 }
 
 export async function renderHome(options: RenderPageOptions): Promise<string> {
-  const { user, group, groupError } = options;
+  const { user, group } = options;
   const authorized = group !== null;
   const groupName = group?.name ?? "";
 
@@ -178,33 +178,12 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
     transactions.sort(compareByTimestampDesc);
     tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets, budgetPeriods);
   } catch (error) {
-    if (error instanceof RangeError || error instanceof DataIntegrityError
-        || error instanceof TypeError || error instanceof ReferenceError) {
-      throw error;
-    }
-    // Source-specific error already logged above
-    const code = (error as { code?: string })?.code;
-    const message = code === "permission-denied"
-      ? "Access denied. Please contact support."
-      : "Could not load data. Try refreshing the page.";
-    tableHtml = `<p id="transactions-error">${message}</p>`;
-  }
-
-  const groupErrorNotice = groupError && user
-    ? '<p id="group-error" class="auth-error">Could not load group data. Showing example data. Try refreshing the page.</p>'
-    : "";
-
-  let seedNotice = "";
-  if (!authorized && !groupError) {
-    seedNotice = user
-      ? '<p id="seed-data-notice">Viewing example data. You are not a member of any groups.</p>'
-      : '<p id="seed-data-notice">Viewing example data. Sign in to see your transactions.</p>';
+    tableHtml = renderLoadError(error, "transactions-error");
   }
 
   return `
     <h2>Transactions</h2>
-    ${groupErrorNotice}
-    ${seedNotice}
+    ${renderPageNotices(options, "transactions")}
     ${tableHtml}
   `;
 }

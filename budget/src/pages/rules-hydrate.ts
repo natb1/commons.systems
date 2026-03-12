@@ -1,7 +1,7 @@
 import { updateRule, deleteRule, createRule, getGroupMembers, type RuleType, type Rule } from "../firestore.js";
 import { renderRow } from "./rules.js";
 import { showDropdown, removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
-import { showInputError, handleSaveError, showActionError, parseJsonArray } from "./hydrate-util.js";
+import { showInputError, handleSaveError, handleActionError, parseJsonArray } from "./hydrate-util.js";
 
 function rowRuleId(el: HTMLElement): string | null {
   const row = el.closest(".rule-row");
@@ -127,12 +127,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
         const row = target.closest(".rule-row");
         if (row) row.remove();
       } catch (error) {
-        if (error instanceof TypeError || error instanceof ReferenceError) {
-          setTimeout(() => { throw error; }, 0);
-          return;
-        }
-        console.error("Failed to delete rule:", error);
-        showActionError(target, "Delete failed");
+        handleActionError(target, error, "delete rule");
       }
     }
 
@@ -161,12 +156,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
         }
         container.insertBefore(newRow, target);
       } catch (error) {
-        if (error instanceof TypeError || error instanceof ReferenceError) {
-          setTimeout(() => { throw error; }, 0);
-          return;
-        }
-        console.error("Failed to add rule:", error);
-        showActionError(target, "Add failed");
+        handleActionError(target, error, "add rule");
       }
     }
   });

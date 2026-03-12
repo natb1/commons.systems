@@ -273,9 +273,13 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 		}
 		if v, ok := d["institution"].(string); ok {
 			r.Institution = v
+		} else if d["institution"] != nil {
+			return nil, fmt.Errorf("rule %s: field 'institution' is not a string (got %T)", doc.Ref.ID, d["institution"])
 		}
 		if v, ok := d["account"].(string); ok {
 			r.Account = v
+		} else if d["account"] != nil {
+			return nil, fmt.Errorf("rule %s: field 'account' is not a string (got %T)", doc.Ref.ID, d["account"])
 		}
 		result = append(result, r)
 	}
@@ -321,8 +325,8 @@ type txnFieldMap struct {
 }
 
 // aggregateTransactionData groups transactions by budget period and computes
-// total, count, and categoryBreakdown for each period. Transactions with an
-// empty budget are skipped (unassigned). Returns a map keyed by period ID.
+// total, count, and categoryBreakdown for each period. Transactions with a
+// nil or empty budget are skipped (unassigned). Returns a map keyed by period ID.
 func aggregateTransactionData(txns []txnFieldMap) (map[string]*periodData, error) {
 	periods := make(map[string]*periodData)
 
@@ -382,6 +386,8 @@ func aggregateTransactionData(txns []txnFieldMap) (map[string]*periodData, error
 
 // RecalculatePeriods recomputes total, count, and categoryBreakdown for all
 // budget periods overlapping [minTime, maxTime] for the given group.
+// Aggregates stored category and budget values, which may reflect different
+// rule versions for different transactions.
 func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTime, maxTime time.Time) error {
 	periodStart := PeriodStart(minTime)
 	periodEnd := PeriodEnd(PeriodStart(maxTime))
