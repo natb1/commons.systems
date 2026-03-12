@@ -13,6 +13,7 @@ export function createPdfRenderer(): ContentRenderer {
   let resizeObserver: ResizeObserver | null = null;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let renderTask: RenderTask | null = null;
+  let destroyed = false;
 
   async function renderPage(pageNum: number): Promise<void> {
     if (!pdfDoc || !canvas || !container) return;
@@ -26,6 +27,7 @@ export function createPdfRenderer(): ContentRenderer {
     const containerRect = container.getBoundingClientRect();
     if (containerRect.width === 0 || containerRect.height === 0) return;
 
+    // Scale to fit container; render at devicePixelRatio for sharp text.
     const baseViewport = page.getViewport({ scale: 1 });
     const scaleX = containerRect.width / baseViewport.width;
     const scaleY = containerRect.height / baseViewport.height;
@@ -39,7 +41,8 @@ export function createPdfRenderer(): ContentRenderer {
     canvas.style.width = `${viewport.width / window.devicePixelRatio}px`;
     canvas.style.height = `${viewport.height / window.devicePixelRatio}px`;
 
-    const ctx = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not acquire 2D canvas context");
     renderTask = page.render({ canvasContext: ctx, viewport });
 
     try {
@@ -57,11 +60,17 @@ export function createPdfRenderer(): ContentRenderer {
       if (!canvas) throw new Error("Canvas element not found in container");
 
       const loadingTask = pdfjsLib.getDocument(url);
-      pdfDoc = await loadingTask.promise;
+      const doc = await loadingTask.promise;
+      if (destroyed) {
+        doc.destroy();
+        return;
+      }
+      pdfDoc = doc;
       _pageCount = pdfDoc.numPages;
       _currentPage = 1;
 
       await renderPage(1);
+      if (destroyed) return;
 
       resizeObserver = new ResizeObserver(() => {
         if (resizeTimer) clearTimeout(resizeTimer);
@@ -87,6 +96,7 @@ export function createPdfRenderer(): ContentRenderer {
     },
 
     destroy(): void {
+      destroyed = true;
       if (resizeTimer) {
         clearTimeout(resizeTimer);
         resizeTimer = null;

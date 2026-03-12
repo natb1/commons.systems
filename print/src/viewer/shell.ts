@@ -77,6 +77,11 @@ export function initViewer(
     nextBtn.disabled = renderer.currentPage >= renderer.pageCount;
   }
 
+  function handleNavError(err: unknown) {
+    console.error("Page navigation failed:", err);
+    position.textContent = "Navigation failed";
+  }
+
   async function goPrev() {
     if (renderer.currentPage > 1) {
       await renderer.goToPage(renderer.currentPage - 1);
@@ -92,16 +97,16 @@ export function initViewer(
   }
 
   prevBtn.addEventListener("click", () => {
-    goPrev().catch(console.error);
+    goPrev().catch(handleNavError);
   });
   nextBtn.addEventListener("click", () => {
-    goNext().catch(console.error);
+    goNext().catch(handleNavError);
   });
 
   // Keyboard navigation
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "ArrowLeft") goPrev().catch(console.error);
-    else if (e.key === "ArrowRight") goNext().catch(console.error);
+    if (e.key === "ArrowLeft") goPrev().catch(handleNavError);
+    else if (e.key === "ArrowRight") goNext().catch(handleNavError);
   }
   document.addEventListener("keydown", handleKeydown);
 
