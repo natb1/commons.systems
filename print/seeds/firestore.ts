@@ -6,15 +6,17 @@ import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 //      gsutil cp <file> gs://commons-systems.firebasestorage.app/print/prod/media/
 // 3. Set custom metadata on each object:
 //    - Public domain: gsutil setmeta -h "x-goog-meta-publicDomain:true" gs://.../<file>
-//    - Private: gsutil setmeta -h "x-goog-meta-publicDomain:false" -h "x-goog-meta-{uid}:member" gs://.../<file>
-// Note: Firestore uses memberEmails array for access control; Storage uses per-UID custom metadata keys.
+//    - Private: gsutil setmeta -h "x-goog-meta-publicDomain:false" -h "x-goog-meta-{email}:member" gs://.../<file>
+// Note: Firestore uses memberEmails array for access control; Storage uses per-email custom metadata keys.
 // Both must be kept in sync when granting access to private items (see firestore.rules, storage.rules).
+//
+// Private media documents and groups are managed manually (not in this seed).
+// The media collection is non-convergent so prod deploys won't delete private items.
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
       name: "media",
-      convergent: true,
       documents: [
         {
           id: "gutenberg-3296",
@@ -59,15 +61,15 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
           },
         },
         {
-          id: "private-collection-1",
+          id: "test-private-item",
           data: {
-            title: "Private Collection Item",
+            title: "Test Private Item",
             mediaType: "pdf",
-            tags: { source: "rml-media/print" },
+            tags: { source: "test" },
             publicDomain: false,
-            sourceNotes: "Private GCS bucket rml-media/print — re-upload to Firebase Cloud Storage",
-            storagePath: "media/private-collection-1.pdf",
-            groupId: "natb1-library",
+            sourceNotes: "Test-only private item for emulator testing",
+            storagePath: "media/test-private-item.pdf",
+            groupId: "test-group",
             memberEmails: ["test@example.com"],
             addedAt: "2026-01-18T00:00:00Z",
           },
@@ -79,9 +81,9 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
       testOnly: true,
       documents: [
         {
-          id: "natb1-library",
+          id: "test-group",
           data: {
-            name: "natb1-library",
+            name: "test-group",
             members: ["test@example.com"],
           },
         },
