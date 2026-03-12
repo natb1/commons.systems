@@ -17,7 +17,7 @@ test.describe("theme", () => {
     expect(match[2]).toBeLessThan(80);
   });
 
-  test("light color scheme applies light background", async ({ page }) => {
+  test("forced dark mode ignores light preference", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "light" });
     await page.goto("/");
 
@@ -25,11 +25,21 @@ test.describe("theme", () => {
       getComputedStyle(document.body).getPropertyValue("background-color"),
     );
 
-    // --bg should resolve to a light color (all RGB channels above 180)
+    // color-scheme: dark in theme.css forces dark values even with light preference
     const match = bg.match(/\d+/g)?.map(Number) ?? [];
     expect(match.length).toBeGreaterThanOrEqual(3);
-    expect(match[0]).toBeGreaterThan(180);
-    expect(match[1]).toBeGreaterThan(180);
-    expect(match[2]).toBeGreaterThan(180);
+    expect(match[0]).toBeLessThan(80);
+    expect(match[1]).toBeLessThan(80);
+    expect(match[2]).toBeLessThan(80);
+  });
+
+  test("body has grid texture background", async ({ page }) => {
+    await page.goto("/");
+
+    const bgImage = await page.evaluate(() =>
+      getComputedStyle(document.body).getPropertyValue("background-image"),
+    );
+
+    expect(bgImage).toContain("repeating-linear-gradient");
   });
 });

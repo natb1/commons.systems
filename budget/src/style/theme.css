@@ -1,5 +1,9 @@
 @import "@commons-systems/style/default.css";
 
+:root {
+  color-scheme: dark;
+}
+
 .content-grid {
   max-width: 64rem;
   margin-inline: auto;
