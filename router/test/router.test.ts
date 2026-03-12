@@ -336,7 +336,10 @@ describe("createRouter", () => {
     );
   });
 
-  it("onNavigate TypeError is deferred, not swallowed", async () => {
+  it.each([
+    ["TypeError", TypeError],
+    ["ReferenceError", ReferenceError],
+  ] as const)("onNavigate %s is deferred, not swallowed", async (_name, ErrorClass) => {
     const deferred: Array<() => void> = [];
     const realSetTimeout = globalThis.setTimeout;
     vi.stubGlobal("setTimeout", (fn: TimerHandler, ...rest: unknown[]) => {
@@ -348,7 +351,7 @@ describe("createRouter", () => {
     });
 
     const onNavigate = vi.fn(() => {
-      throw new TypeError("cannot read property of undefined");
+      throw new ErrorClass("test error");
     });
     router = createRouter(outlet, routes, { onNavigate });
     await vi.waitFor(() => {
@@ -356,15 +359,15 @@ describe("createRouter", () => {
     });
     vi.stubGlobal("setTimeout", realSetTimeout);
 
-    // Route still renders despite TypeError
+    // Route still renders despite error
     expect(outlet.innerHTML).not.toContain("Something went wrong");
-    // TypeError deferred via setTimeout, not swallowed
+    // Error deferred via setTimeout, not swallowed
     expect(deferred).toHaveLength(1);
-    expect(() => deferred[0]()).toThrow(TypeError);
+    expect(() => deferred[0]()).toThrow(ErrorClass);
     // Not logged to console.error (deferred instead)
     expect(consoleErrorSpy).not.toHaveBeenCalledWith(
       "onNavigate error:",
-      expect.any(TypeError),
+      expect.any(ErrorClass),
     );
   });
 
