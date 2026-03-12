@@ -11,6 +11,7 @@ export function createPdfRenderer(): ContentRenderer {
   let canvas: HTMLCanvasElement | null = null;
   let container: HTMLElement | null = null;
   let resizeObserver: ResizeObserver | null = null;
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let renderTask: RenderTask | null = null;
 
   async function renderPage(pageNum: number): Promise<void> {
@@ -63,7 +64,11 @@ export function createPdfRenderer(): ContentRenderer {
       await renderPage(1);
 
       resizeObserver = new ResizeObserver(() => {
-        renderPage(_currentPage).catch(console.error);
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          resizeTimer = null;
+          renderPage(_currentPage).catch(console.error);
+        }, 150);
       });
       resizeObserver.observe(container);
     },
@@ -82,6 +87,10 @@ export function createPdfRenderer(): ContentRenderer {
     },
 
     destroy(): void {
+      if (resizeTimer) {
+        clearTimeout(resizeTimer);
+        resizeTimer = null;
+      }
       if (renderTask) {
         renderTask.cancel();
         renderTask = null;

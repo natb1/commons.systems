@@ -22,8 +22,6 @@ export function cleanupView(): void {
 }
 
 export async function renderView(id: string, _user: User | null): Promise<string> {
-  cleanupView();
-
   if (!id) {
     return `
       <h2>Not Found</h2>

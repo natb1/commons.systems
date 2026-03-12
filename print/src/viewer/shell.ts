@@ -111,7 +111,10 @@ export function initViewer(
     .then(() => {
       updateNav();
     })
-    .catch(console.error);
+    .catch((err) => {
+      console.error("Failed to load document:", err);
+      position.textContent = "Failed to load";
+    });
 
   return () => {
     document.body.classList.remove("viewer-active");
