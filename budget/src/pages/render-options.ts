@@ -31,7 +31,7 @@ export function renderPageNotices(options: RenderPageOptions, entityLabel: strin
 
 /**
  * Convert a page-level data loading error to user-facing HTML.
- * Rethrows programmer errors (TypeError, ReferenceError) and data integrity errors.
+ * Rethrows programmer errors (TypeError, ReferenceError), range errors (RangeError), and data integrity errors.
  */
 export function renderLoadError(error: unknown, errorId: string): string {
   if (error instanceof RangeError || error instanceof DataIntegrityError

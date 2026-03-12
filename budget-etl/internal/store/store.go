@@ -104,7 +104,7 @@ type UpsertResult struct {
 // importFieldPaths lists the fields set by import that overwrite on re-import.
 // Any field set as a default on create but excluded from this list is
 // user-editable and preserved across re-imports (note, reimbursement).
-// Category and budget are set by the rule engine on first import and
+// Category and budget are set by the rule engine for new transactions and
 // preserved across re-imports, even if rules have changed.
 var importFieldPaths = []firestore.FieldPath{
 	{"institution"},
@@ -375,7 +375,7 @@ func aggregateTransactionData(txns []txnFieldMap) (map[string]*periodData, error
 		pd.count++
 		// total includes all transactions; categoryBreakdown skips those with empty
 		// category. Currently ApplyCategorization enforces 100% coverage, but this
-		// guard handles legacy data or future callers that skip categorization.
+		// guard handles legacy data that may lack category values.
 		if category != "" {
 			pd.categoryBreakdown[category] += net
 		}
@@ -500,7 +500,7 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 			batch.Set(op.ref, op.fields, op.mergeOpt...)
 		}
 		if _, err := batch.Commit(ctx); err != nil {
-			return fmt.Errorf("committing period batch: %w", err)
+			return fmt.Errorf("committing period batch %d/%d: %w", i/maxBatch+1, (len(ops)+maxBatch-1)/maxBatch, err)
 		}
 	}
 

@@ -1,4 +1,5 @@
 import { DataIntegrityError } from "../errors.js";
+import { showDropdown } from "@commons-systems/style/components/autocomplete";
 
 const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
@@ -71,8 +72,44 @@ export function handleActionError(el: HTMLElement, error: unknown, action: strin
     setTimeout(() => { throw error; }, 0);
     return;
   }
+  if (error instanceof DataIntegrityError) {
+    console.error("Data integrity error:", error);
+    showActionError(el, "Data error \u2014 please reload");
+    return;
+  }
   console.error(`Failed to ${action}:`, error);
-  showActionError(el, `${action.charAt(0).toUpperCase() + action.slice(1)} failed`);
+  const code = (error as { code?: string })?.code;
+  if (code === "permission-denied") {
+    showActionError(el, "Access denied. Please contact support.");
+  } else {
+    showActionError(el, `${action.charAt(0).toUpperCase() + action.slice(1)} failed`);
+  }
+}
+
+/**
+ * Wire up focus and input listeners for autocomplete on inputs within a container.
+ * On focus, shows all options (unfiltered). On input, filters as user types.
+ * The getOptionsForInput callback maps each input to its autocomplete options.
+ */
+export function addAutocompleteListeners(
+  container: HTMLElement,
+  getOptionsForInput: (input: HTMLInputElement) => string[],
+): void {
+  container.addEventListener("focus", (e: Event) => {
+    if (!(e.target instanceof HTMLInputElement)) return;
+    const options = getOptionsForInput(e.target);
+    if (options.length > 0) showDropdown(e.target, options, "");
+  }, true);
+
+  container.addEventListener("input", (e: Event) => {
+    if (!(e.target instanceof HTMLInputElement)) return;
+    const options = getOptionsForInput(e.target);
+    if (options.length > 0) showDropdown(e.target, options);
+  });
+}
+
+export function uniqueSorted(values: (string | null)[]): string[] {
+  return [...new Set(values.filter((v): v is string => v != null))].sort();
 }
 
 /**

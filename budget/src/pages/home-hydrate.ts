@@ -1,8 +1,8 @@
 import { updateTransaction, adjustBudgetPeriodTotal, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeNetAmount } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
-import { showDropdown, removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
-import { showInputError, handleSaveError, parseJsonArray } from "./hydrate-util.js";
+import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
+import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
@@ -193,18 +193,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     }
   });
 
-  // Show all options on focus; filter as user types
-  container.addEventListener("focus", (e: Event) => {
-    if (!(e.target instanceof HTMLInputElement)) return;
-    const options = getOptionsForInput(e.target);
-    if (options.length > 0) showDropdown(e.target, options, "");
-  }, true);
-
-  container.addEventListener("input", (e: Event) => {
-    if (!(e.target instanceof HTMLInputElement)) return;
-    const options = getOptionsForInput(e.target);
-    if (options.length > 0) showDropdown(e.target, options);
-  });
+  addAutocompleteListeners(container, getOptionsForInput);
 
   container.addEventListener("blur", async (e) => {
     const target = e.target as HTMLElement;

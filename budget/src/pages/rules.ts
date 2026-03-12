@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { getRules, getBudgets, type Rule } from "../firestore.js";
-import { uniqueSorted } from "./home.js";
+import { uniqueSorted } from "./hydrate-util.js";
 
 export function renderRow(rule: Rule, editable: boolean): string {
   const idAttr = editable ? ` data-rule-id="${escapeHtml(rule.id)}"` : "";

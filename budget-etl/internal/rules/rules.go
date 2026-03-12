@@ -36,13 +36,18 @@ func (r Rule) Match(description, institution, account string) bool {
 	return true
 }
 
-func sortByPriority(rules []Rule) []Rule {
-	sorted := make([]Rule, len(rules))
-	copy(sorted, rules)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Priority < sorted[j].Priority
+// rulesOfType filters rules by type and returns them sorted by priority (ascending).
+func rulesOfType(rules []Rule, ruleType string) []Rule {
+	filtered := make([]Rule, 0, len(rules))
+	for _, r := range rules {
+		if r.Type == ruleType {
+			filtered = append(filtered, r)
+		}
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Priority < filtered[j].Priority
 	})
-	return sorted
+	return filtered
 }
 
 // ApplyCategorization applies categorization rules to transactions.
@@ -50,13 +55,7 @@ func sortByPriority(rules []Rule) []Rule {
 // Only transactions with an empty Category field are categorized.
 // Returns an error listing uncategorized transactions if any remain.
 func ApplyCategorization(txns []store.TransactionData, rules []Rule) error {
-	catRules := make([]Rule, 0, len(rules))
-	for _, r := range rules {
-		if r.Type == "categorization" {
-			catRules = append(catRules, r)
-		}
-	}
-	catRules = sortByPriority(catRules)
+	catRules := rulesOfType(rules, "categorization")
 
 	var uncategorized []string
 	for i := range txns {
@@ -89,13 +88,7 @@ func ApplyCategorization(txns []store.TransactionData, rules []Rule) error {
 // Only transactions with an empty Budget field are assigned.
 // Unmatched transactions are left with an empty budget (no error).
 func ApplyBudgetAssignment(txns []store.TransactionData, rules []Rule) {
-	budgetRules := make([]Rule, 0, len(rules))
-	for _, r := range rules {
-		if r.Type == "budget_assignment" {
-			budgetRules = append(budgetRules, r)
-		}
-	}
-	budgetRules = sortByPriority(budgetRules)
+	budgetRules := rulesOfType(rules, "budget_assignment")
 
 	for i := range txns {
 		if txns[i].Budget != "" {

@@ -4,6 +4,7 @@ import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./re
 import { getTransactions, getBudgets, getBudgetPeriods, type Transaction, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAllBudgetBalances } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
+import { uniqueSorted } from "./hydrate-util.js";
 
 function formatTimestamp(ts: Timestamp | null): string {
   if (!ts) return "";
@@ -89,10 +90,6 @@ function compareByTimestampDesc(a: Transaction, b: Transaction): number {
   if (!a.timestamp) return 1;
   if (!b.timestamp) return -1;
   return b.timestamp.toMillis() - a.timestamp.toMillis();
-}
-
-export function uniqueSorted(values: (string | null)[]): string[] {
-  return [...new Set(values.filter((v): v is string => v != null))].sort();
 }
 
 function renderTransactionTable(

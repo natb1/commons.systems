@@ -150,6 +150,7 @@ export async function getGroupMembers(groupId: string): Promise<string[]> {
   if (nonStrings.length > 0) {
     throw new DataIntegrityError(`Group ${groupId}: members contains non-string elements`);
   }
+  if (members.length === 0) throw new DataIntegrityError(`Group ${groupId}: members array is empty`);
   return members as string[];
 }
 
@@ -355,6 +356,7 @@ export async function createRule(
   fields: Omit<Rule, "id" | "groupId">,
 ): Promise<string> {
   requireRuleType(fields.type);
+  if (!Number.isFinite(fields.priority)) throw new RangeError("Rule priority must be a finite number");
   if (!fields.pattern) throw new Error("Rule pattern cannot be empty");
   if (!fields.target) throw new Error("Rule target cannot be empty");
   const path = nsCollectionPath(NAMESPACE, "rules");
@@ -378,6 +380,7 @@ export async function updateRule(
   requireDocId(ruleId, "rule");
   if (Object.keys(fields).length === 0) return;
   if (fields.type !== undefined) requireRuleType(fields.type);
+  if (fields.priority !== undefined && !Number.isFinite(fields.priority)) throw new RangeError("Rule priority must be a finite number");
   if (fields.pattern !== undefined && !fields.pattern) throw new Error("Rule pattern cannot be empty");
   if (fields.target !== undefined && !fields.target) throw new Error("Rule target cannot be empty");
   const path = nsCollectionPath(NAMESPACE, "rules");

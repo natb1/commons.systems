@@ -1,7 +1,7 @@
 import { updateRule, deleteRule, createRule, getGroupMembers, type RuleType, type Rule } from "../firestore.js";
 import { renderRow } from "./rules.js";
-import { showDropdown, removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
-import { showInputError, handleSaveError, handleActionError, parseJsonArray } from "./hydrate-util.js";
+import { removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
+import { showInputError, handleSaveError, handleActionError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
 
 function rowRuleId(el: HTMLElement): string | null {
   const row = el.closest(".rule-row");
@@ -17,7 +17,6 @@ export function hydrateRulesTable(container: HTMLElement): void {
   const institutionOptions = parseJsonArray(container.dataset.institutionOptions);
   const accountOptions = parseJsonArray(container.dataset.accountOptions);
 
-  // Type filter
   const filterSelect = document.getElementById("rule-type-filter") as HTMLSelectElement | null;
   if (filterSelect) {
     container.dataset.activeFilter = filterSelect.value;
@@ -66,18 +65,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
     e.preventDefault();
   });
 
-  // Show all options on focus; filter as user types
-  container.addEventListener("focus", (e: Event) => {
-    if (!(e.target instanceof HTMLInputElement)) return;
-    const options = getOptionsForInput(e.target);
-    if (options.length > 0) showDropdown(e.target, options, "");
-  }, true);
-
-  container.addEventListener("input", (e: Event) => {
-    if (!(e.target instanceof HTMLInputElement)) return;
-    const options = getOptionsForInput(e.target);
-    if (options.length > 0) showDropdown(e.target, options);
-  });
+  addAutocompleteListeners(container, getOptionsForInput);
 
   // Blur handler for inline text/number edits
   container.addEventListener("blur", async (e) => {
@@ -114,7 +102,6 @@ export function hydrateRulesTable(container: HTMLElement): void {
     }
   }, true);
 
-  // Click handler for delete and add
   container.addEventListener("click", async (e) => {
     const target = e.target;
     if (!(target instanceof HTMLButtonElement)) return;
@@ -133,7 +120,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
 
     if (target.id === "add-rule") {
       const groupId = target.dataset.groupId;
-      if (!groupId) return;
+      if (!groupId) { console.error("add-rule button missing data-group-id"); return; }
       try {
         const ruleType = activeFilterType();
         const memberEmails = await getGroupMembers(groupId);
