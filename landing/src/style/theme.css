@@ -12,4 +12,5 @@ body {
 
 main {
   min-width: 0;
+  margin-inline: 0;
 }
