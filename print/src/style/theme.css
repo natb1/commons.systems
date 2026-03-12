@@ -1,6 +1,10 @@
 @import "@commons-systems/style/default.css";
 @import "./viewer.css";
 
+:root {
+  color-scheme: dark;
+}
+
 .cc-badge {
   width: 117px;
   height: 41px;
