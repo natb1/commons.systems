@@ -264,8 +264,7 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 			normUpdates = append(normUpdates, store.NormalizationUpdate{
 				DocID:                 td.ID,
 				NormalizedID:          "",
-				// NormalizedPrimary true so the transaction counts toward budget totals as a standalone entry
-			NormalizedPrimary:     true,
+				NormalizedPrimary:     true, // standalone entry counts toward budget totals
 				NormalizedDescription: "",
 			})
 		}

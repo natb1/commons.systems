@@ -321,8 +321,8 @@ func TestApplyNormalization_AmountGrouping(t *testing.T) {
 		Pattern:              "netflix",
 		CanonicalDescription: "Netflix",
 
-		DateWindowDays:       30,
-		Priority:             1,
+		DateWindowDays: 30,
+		Priority:       1,
 	}}
 
 	updates, err := ApplyNormalization(txns, rules)
@@ -355,8 +355,8 @@ func TestApplyNormalization_DateWindow(t *testing.T) {
 		Pattern:              "electric",
 		CanonicalDescription: "Electric Company",
 
-		DateWindowDays:       7,
-		Priority:             1,
+		DateWindowDays: 7,
+		Priority:       1,
 	}}
 
 	updates, err := ApplyNormalization(txns, rules)
@@ -390,8 +390,8 @@ func TestApplyNormalization_PrimarySelection(t *testing.T) {
 		Pattern:              "water bill",
 		CanonicalDescription: "Water Bill",
 
-		DateWindowDays:       30,
-		Priority:             1,
+		DateWindowDays: 30,
+		Priority:       1,
 	}}
 
 	updates, err := ApplyNormalization(txns, rules)
@@ -448,17 +448,17 @@ func TestApplyNormalization_FirstMatchWins(t *testing.T) {
 			ID:                   "low-priority",
 			Pattern:              "electric",
 			CanonicalDescription: "Electric Bill",
-	
-			DateWindowDays:       30,
-			Priority:             10, // evaluated first
+
+			DateWindowDays: 30,
+			Priority:       10, // evaluated first
 		},
 		{
 			ID:                   "high-priority-number",
 			Pattern:              "acme",
 			CanonicalDescription: "ACME Corp",
-	
-			DateWindowDays:       30,
-			Priority:             20, // evaluated second
+
+			DateWindowDays: 30,
+			Priority:       20, // evaluated second
 		},
 	}
 
@@ -606,8 +606,8 @@ func TestApplyNormalization_SingleMatch(t *testing.T) {
 		Pattern:              "unique",
 		CanonicalDescription: "Unique Payment",
 
-		DateWindowDays:       30,
-		Priority:             1,
+		DateWindowDays: 30,
+		Priority:       1,
 	}}
 
 	updates, err := ApplyNormalization(txns, rules)

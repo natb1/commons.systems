@@ -121,8 +121,8 @@ func makeTxn(budget, category string, amount, reimbursement float64, ts time.Tim
 }
 
 func TestAggregateTransactionData(t *testing.T) {
-	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)  // Monday
-	wed := time.Date(2025, 1, 8, 10, 0, 0, 0, time.UTC)   // Wednesday same week
+	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)     // Monday
+	wed := time.Date(2025, 1, 8, 10, 0, 0, 0, time.UTC)     // Wednesday same week
 	nextMon := time.Date(2025, 1, 13, 9, 0, 0, 0, time.UTC) // Next Monday
 
 	t.Run("single transaction", func(t *testing.T) {
@@ -406,13 +406,13 @@ func TestAggregateTransactionData_SkipsNonPrimary(t *testing.T) {
 	txn := txnFieldMap{
 		id: "txn-norm-secondary",
 		data: map[string]interface{}{
-			"budget":             "food",
-			"category":           "Food:Groceries",
-			"amount":             50.0,
-			"reimbursement":      0.0,
-			"timestamp":          mon,
-			"normalizedId":       "some-id",
-			"normalizedPrimary":  false,
+			"budget":            "food",
+			"category":          "Food:Groceries",
+			"amount":            50.0,
+			"reimbursement":     0.0,
+			"timestamp":         mon,
+			"normalizedId":      "some-id",
+			"normalizedPrimary": false,
 		},
 	}
 	periods, err := aggregateTransactionData([]txnFieldMap{txn})
@@ -429,13 +429,13 @@ func TestAggregateTransactionData_PrimaryIncluded(t *testing.T) {
 	txn := txnFieldMap{
 		id: "txn-norm-primary",
 		data: map[string]interface{}{
-			"budget":             "food",
-			"category":           "Food:Groceries",
-			"amount":             75.0,
-			"reimbursement":      0.0,
-			"timestamp":          mon,
-			"normalizedId":       "some-id",
-			"normalizedPrimary":  true,
+			"budget":            "food",
+			"category":          "Food:Groceries",
+			"amount":            75.0,
+			"reimbursement":     0.0,
+			"timestamp":         mon,
+			"normalizedId":      "some-id",
+			"normalizedPrimary": true,
 		},
 	}
 	periods, err := aggregateTransactionData([]txnFieldMap{txn})
@@ -462,12 +462,12 @@ func TestAggregateTransactionData_NullNormalizedId(t *testing.T) {
 	txn := txnFieldMap{
 		id: "txn-no-norm",
 		data: map[string]interface{}{
-			"budget":             "food",
-			"category":           "Food:Dining",
-			"amount":             30.0,
-			"reimbursement":      0.0,
-			"timestamp":          mon,
-			"normalizedId":       nil,
+			"budget":        "food",
+			"category":      "Food:Dining",
+			"amount":        30.0,
+			"reimbursement": 0.0,
+			"timestamp":     mon,
+			"normalizedId":  nil,
 		},
 	}
 	periods, err := aggregateTransactionData([]txnFieldMap{txn})

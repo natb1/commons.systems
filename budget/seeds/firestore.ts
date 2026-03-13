@@ -436,7 +436,7 @@ const seedNormalizationRuleDocs: { id: string; data: NormalizationRuleSeedData }
     id: "norm-cafe-nero",
     data: {
       pattern: "cafe nero",
-      patternType: null,
+      patternType: "substring",
       canonicalDescription: "Cafe Nero",
 
       dateWindowDays: 7,
@@ -451,7 +451,7 @@ const seedNormalizationRuleDocs: { id: string; data: NormalizationRuleSeedData }
     id: "norm-electric",
     data: {
       pattern: "electric",
-      patternType: null,
+      patternType: "substring",
       canonicalDescription: "Electric Utility",
 
       dateWindowDays: 5,
