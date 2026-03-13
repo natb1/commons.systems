@@ -27,6 +27,11 @@
     position: sticky;
     top: calc(var(--header-height, 5rem) + 2rem);
     align-self: start;
+    max-height: calc(100vh - var(--header-height, 5rem) - 2rem);
+    overflow-y: auto;
+    margin-block: 0;
+    border-block: none;
+    padding-bottom: 1rem;
   }
 
   .panel-toggle {

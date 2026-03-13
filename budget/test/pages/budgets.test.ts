@@ -114,12 +114,12 @@ describe("renderBudgets", () => {
     expect(html).toContain('aria-label="Rollover"');
   });
 
-  it("renders read-only cells for unauthorized users", async () => {
+  it("renders disabled inputs for unauthorized users", async () => {
     mockGetBudgets.mockResolvedValue([budget()]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
-    expect(html).not.toContain('class="edit-name"');
-    expect(html).not.toContain('class="edit-allowance"');
-    expect(html).not.toContain('class="edit-rollover"');
+    expect(html).toContain('class="edit-name"');
+    expect(html).toContain("disabled");
+    expect(html).not.toContain('data-budget-id=');
     expect(html).toContain("Food");
     expect(html).toContain("150");
     expect(html).toContain("None");

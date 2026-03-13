@@ -8,6 +8,14 @@ service cloud.firestore {
         && request.auth.token.email in get(/databases/$(database)/documents/landing/$(env)/groups/admin).data.members;
     }
 
+    // Budget group member: verify actual membership via groups collection
+    function isBudgetGroupMember(env, groupId, memberEmails) {
+      let group = get(/databases/$(database)/documents/budget/$(env)/groups/$(groupId)).data;
+      return request.auth != null
+        && request.auth.token.email in group.members
+        && memberEmails == group.members;
+    }
+
     // Groups are readable only by their members (email-based membership)
     match /landing/{env}/groups/{groupId} {
       allow read: if request.auth != null && request.auth.token.email in resource.data.members;
@@ -92,8 +100,8 @@ service cloud.firestore {
     }
 
     // Budget periods are scoped to group members via a denormalized `memberEmails` field.
-    // Updates limited to total (must be non-negative); budgetId, periodStart, periodEnd,
-    // groupId, and memberEmails are immutable. Create and delete are explicitly denied.
+    // Client updates may only change total. All other fields must be present but
+    // unchanged. Create and delete are explicitly denied.
     match /budget/{env}/budget-periods/{periodId} {
       allow read: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;
@@ -104,10 +112,46 @@ service cloud.firestore {
         && request.resource.data.periodEnd == resource.data.periodEnd
         && request.resource.data.groupId == resource.data.groupId
         && request.resource.data.memberEmails == resource.data.memberEmails
+        && request.resource.data.count == resource.data.count
+        && request.resource.data.categoryBreakdown == resource.data.categoryBreakdown
         && request.resource.data.total is number
-        && request.resource.data.total >= 0
-        && request.resource.data.keys().hasOnly(['budgetId', 'periodStart', 'periodEnd', 'total', 'groupId', 'memberEmails']);
+        && request.resource.data.keys().hasOnly(['budgetId', 'periodStart', 'periodEnd', 'total', 'count', 'categoryBreakdown', 'groupId', 'memberEmails']);
       allow create, delete: if false;
+    }
+
+    // Seed rules are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-rules/{ruleId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Validates rule field types and constraints on both create and update.
+    function isValidRuleData() {
+      return request.resource.data.type in ["categorization", "budget_assignment"]
+        && request.resource.data.pattern is string
+        && request.resource.data.pattern.size() > 0
+        && request.resource.data.target is string
+        && request.resource.data.target.size() > 0
+        && request.resource.data.priority is number
+        && (!('institution' in request.resource.data) || request.resource.data.institution is string || request.resource.data.institution == null)
+        && (!('account' in request.resource.data) || request.resource.data.account is string || request.resource.data.account == null)
+        && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
+    }
+
+    // Rules are scoped to group members via a denormalized `memberEmails` field.
+    // CRUD operations require membership. groupId and memberEmails are immutable on update.
+    match /budget/{env}/rules/{ruleId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow create: if isBudgetGroupMember(env, request.resource.data.groupId, request.resource.data.memberEmails)
+        && isValidRuleData();
+      allow update: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberEmails == resource.data.memberEmails
+        && isValidRuleData();
+      allow delete: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
     }
 
     // Fellspiral admin: members of the admin group can read unpublished posts

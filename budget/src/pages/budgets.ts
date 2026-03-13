@@ -1,7 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
-import type { RenderPageOptions } from "./render-options.js";
+import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { getBudgets, type Budget, type Rollover } from "../firestore.js";
-import { DataIntegrityError } from "../errors.js";
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
   { value: "none", label: "None" },
@@ -10,25 +9,19 @@ const rolloverOptions: { value: Rollover; label: string }[] = [
 ];
 
 function renderRolloverCell(budget: Budget, editable: boolean): string {
-  if (!editable) {
-    const opt = rolloverOptions.find(o => o.value === budget.rollover);
-    return opt ? escapeHtml(opt.label) : escapeHtml(budget.rollover);
-  }
+  const dis = editable ? "" : " disabled";
   const options = rolloverOptions.map(o => {
     const sel = o.value === budget.rollover ? " selected" : "";
     return `<option value="${escapeHtml(o.value)}"${sel}>${escapeHtml(o.label)}</option>`;
   }).join("");
-  return `<select class="edit-rollover" aria-label="Rollover">${options}</select>`;
+  return `<select class="edit-rollover" aria-label="Rollover"${dis}>${options}</select>`;
 }
 
 function renderRow(budget: Budget, editable: boolean): string {
   const idAttr = editable ? ` data-budget-id="${escapeHtml(budget.id)}"` : "";
-  const nameCell = editable
-    ? `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name">`
-    : escapeHtml(budget.name);
-  const allowanceCell = editable
-    ? `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.weeklyAllowance))}" min="0" aria-label="Weekly allowance">`
-    : escapeHtml(String(budget.weeklyAllowance));
+  const dis = editable ? "" : " disabled";
+  const nameCell = `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name"${dis}>`;
+  const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.weeklyAllowance))}" min="0" aria-label="Weekly allowance"${dis}>`;
   const rolloverCell = renderRolloverCell(budget, editable);
 
   return `<div class="budget-row"${idAttr}>
@@ -57,7 +50,7 @@ function renderBudgetTable(budgets: Budget[], authorized: boolean): string {
 }
 
 export async function renderBudgets(options: RenderPageOptions): Promise<string> {
-  const { user, group, groupError } = options;
+  const { user, group } = options;
   const authorized = group !== null;
 
   let tableHtml: string;
@@ -65,33 +58,13 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
     const budgets = await (group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null));
     tableHtml = renderBudgetTable(budgets, authorized);
   } catch (error) {
-    if (error instanceof RangeError || error instanceof DataIntegrityError
-        || error instanceof TypeError || error instanceof ReferenceError) {
-      throw error;
-    }
     console.error("Failed to load budgets:", error);
-    const code = (error as { code?: string })?.code;
-    const message = code === "permission-denied"
-      ? "Access denied. Please contact support."
-      : "Could not load data. Try refreshing the page.";
-    tableHtml = `<p id="budgets-error">${message}</p>`;
-  }
-
-  const groupErrorNotice = groupError && user
-    ? '<p id="group-error" class="auth-error">Could not load group data. Showing example data. Try refreshing the page.</p>'
-    : "";
-
-  let seedNotice = "";
-  if (!authorized && !groupError) {
-    seedNotice = user
-      ? '<p id="seed-data-notice">Viewing example data. You are not a member of any groups.</p>'
-      : '<p id="seed-data-notice">Viewing example data. Sign in to see your budgets.</p>';
+    tableHtml = renderLoadError(error, "budgets-error");
   }
 
   return `
     <h2>Budgets</h2>
-    ${groupErrorNotice}
-    ${seedNotice}
+    ${renderPageNotices(options, "budgets")}
     ${tableHtml}
   `;
 }

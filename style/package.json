@@ -6,7 +6,9 @@
   "exports": {
     "./default.css": "./default.css",
     "./layout.css": "./layout.css",
-    "./components/nav": "./src/components/nav.ts"
+    "./components/nav": "./src/components/nav.ts",
+    "./components/autocomplete": "./src/components/autocomplete.ts",
+    "./expandable-row.css": "./expandable-row.css"
   },
   "peerDependencies": {
     "@commons-systems/htmlutil": "*"

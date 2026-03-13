@@ -1,4 +1,5 @@
 @import "@commons-systems/style/default.css";
+@import "./viewer.css";
 
 :root {
   color-scheme: dark;
@@ -69,26 +70,4 @@
   color: var(--error-fg, #c00);
   font-size: 0.85rem;
   margin: 0.25rem 0 0;
-}
-
-/* View page */
-.back-link {
-  display: inline-block;
-  margin-bottom: 1rem;
-}
-
-.media-metadata dt {
-  font-weight: 700;
-}
-
-.tags-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.tags-table th,
-.tags-table td {
-  text-align: left;
-  padding: 0.25rem 0.5rem;
-  border-bottom: 1px solid var(--muted-fg, #888);
 }

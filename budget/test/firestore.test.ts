@@ -7,14 +7,20 @@ const mockWhere = vi.fn();
 const mockDoc = vi.fn();
 const mockUpdateDoc = vi.fn();
 const mockIncrement = vi.fn((n: number) => ({ _increment: n }));
+const mockAddDoc = vi.fn();
+const mockDeleteDoc = vi.fn();
+const mockGetDoc = vi.fn();
 
 vi.mock("firebase/firestore", () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
+  getDoc: (...args: unknown[]) => mockGetDoc(...args),
   query: (...args: unknown[]) => mockQuery(...args),
   where: (...args: unknown[]) => mockWhere(...args),
   doc: (...args: unknown[]) => mockDoc(...args),
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
+  addDoc: (...args: unknown[]) => mockAddDoc(...args),
+  deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
   increment: (n: number) => mockIncrement(n),
   Timestamp: class Timestamp {
     _date: Date;
@@ -31,7 +37,7 @@ vi.mock("../src/firebase.js", () => ({
 }));
 
 import { Timestamp } from "firebase/firestore";
-import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, adjustBudgetPeriodTotal, getBudgets, getBudgetPeriods } from "../src/firestore";
+import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, adjustBudgetPeriodTotal, getBudgets, getBudgetPeriods, getRules, createRule, updateRule, deleteRule, getGroupMembers } from "../src/firestore";
 
 describe("getTransactions", () => {
   beforeEach(() => {
@@ -459,6 +465,8 @@ describe("getBudgetPeriods", () => {
             periodStart: mockStart,
             periodEnd: mockEnd,
             total: 5.75,
+            count: 2,
+            categoryBreakdown: { "Food:Groceries": 5.75 },
             groupId: "household",
           }),
         },
@@ -474,6 +482,8 @@ describe("getBudgetPeriods", () => {
         periodStart: mockStart,
         periodEnd: mockEnd,
         total: 5.75,
+        count: 2,
+        categoryBreakdown: { "Food:Groceries": 5.75 },
         groupId: "household",
       },
     ]);
@@ -522,7 +532,7 @@ describe("getBudgetPeriods", () => {
       budgetId: "food",
       periodStart: Timestamp.fromDate(new Date("2025-01-13")),
       periodEnd: "not-a-timestamp",
-      total: 5.75, groupId: null,
+      total: 5.75, count: 0, categoryBreakdown: {}, groupId: null,
     })}]});
     await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected Timestamp for periodEnd/);
   });
@@ -532,7 +542,7 @@ describe("getBudgetPeriods", () => {
       budgetId: 123,
       periodStart: Timestamp.fromDate(new Date("2025-01-13")),
       periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
-      total: 5.75, groupId: null,
+      total: 5.75, count: 0, categoryBreakdown: {}, groupId: null,
     })}]});
     await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected string for budgetId/);
   });
@@ -541,12 +551,31 @@ describe("getBudgetPeriods", () => {
     const sameDate = Timestamp.fromDate(new Date("2025-01-13"));
     mockGetDocs.mockResolvedValue({ docs: [{ id: "bad", data: () => ({
       budgetId: "food", periodStart: sameDate, periodEnd: sameDate,
-      total: 5.75, groupId: null,
+      total: 5.75, count: 0, categoryBreakdown: {}, groupId: null,
     })}]});
     await expect(getBudgetPeriods(null)).rejects.toThrow(/periodStart must be before periodEnd/);
   });
 
-  it("throws DataIntegrityError for negative total", async () => {
+  it("accepts negative total (credits exceeding debits)", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "food-2025-01-13",
+        data: () => ({
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: -5,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        }),
+      }],
+    });
+    const periods = await getBudgetPeriods(null);
+    expect(periods[0].total).toBe(-5);
+  });
+
+  it("throws DataIntegrityError when categoryBreakdown is an array", async () => {
     mockGetDocs.mockResolvedValue({
       docs: [{
         id: "bad",
@@ -554,12 +583,70 @@ describe("getBudgetPeriods", () => {
           budgetId: "food",
           periodStart: Timestamp.fromDate(new Date("2025-01-13")),
           periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
-          total: -5,
+          total: 5.75,
+          count: 0,
+          categoryBreakdown: [1, 2, 3],
           groupId: null,
         }),
       }],
     });
-    await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected non-negative number for total/);
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/Expected object for categoryBreakdown/);
+  });
+
+  it("throws DataIntegrityError when categoryBreakdown contains non-finite number", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "bad",
+        data: () => ({
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 5.75,
+          count: 0,
+          categoryBreakdown: { "Food": NaN },
+          groupId: null,
+        }),
+      }],
+    });
+    await expect(getBudgetPeriods(null)).rejects.toThrow(/categoryBreakdown\[Food\] is not a finite number/);
+  });
+
+  it("returns empty object when categoryBreakdown is null", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "food-2025-01-13",
+        data: () => ({
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 5.75,
+          count: 0,
+          categoryBreakdown: null,
+          groupId: null,
+        }),
+      }],
+    });
+    const periods = await getBudgetPeriods(null);
+    expect(periods[0].categoryBreakdown).toEqual({});
+  });
+
+  it("passes valid categoryBreakdown with multiple entries", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "food-2025-01-13",
+        data: () => ({
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 16.25,
+          count: 3,
+          categoryBreakdown: { "Food:Groceries": 5.75, "Food:Dining": 10.50 },
+          groupId: null,
+        }),
+      }],
+    });
+    const periods = await getBudgetPeriods(null);
+    expect(periods[0].categoryBreakdown).toEqual({ "Food:Groceries": 5.75, "Food:Dining": 10.50 });
   });
 
   it("throws DataIntegrityError for non-finite total", async () => {
@@ -571,6 +658,8 @@ describe("getBudgetPeriods", () => {
           periodStart: Timestamp.fromDate(new Date("2025-01-13")),
           periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
           total: Infinity,
+          count: 0,
+          categoryBreakdown: {},
           groupId: null,
         }),
       }],
@@ -689,9 +778,9 @@ describe("updateBudgetPeriod", () => {
     expect(mockUpdateDoc).not.toHaveBeenCalled();
   });
 
-  it("throws RangeError for negative total", async () => {
-    await expect(updateBudgetPeriod("food-2025-01-13", { total: -5 })).rejects.toThrow(RangeError);
-    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  it("accepts negative total", async () => {
+    await updateBudgetPeriod("food-2025-01-13", { total: -5 });
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { total: -5 });
   });
 
   it("throws RangeError for non-finite total", async () => {
@@ -773,6 +862,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-06")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-15")),
             total: 50,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },
@@ -783,6 +874,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-13")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
             total: 30,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },
@@ -801,6 +894,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-06")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
             total: 50,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },
@@ -811,6 +906,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-13")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
             total: 30,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },
@@ -830,6 +927,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-06")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
             total: 50,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },
@@ -840,6 +939,8 @@ describe("getBudgetPeriods — overlap detection", () => {
             periodStart: Timestamp.fromDate(new Date("2025-01-06")),
             periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
             total: 100,
+            count: 0,
+            categoryBreakdown: {},
             groupId: null,
           }),
         },
@@ -847,5 +948,233 @@ describe("getBudgetPeriods — overlap detection", () => {
     });
     const periods = await getBudgetPeriods(null);
     expect(periods).toHaveLength(2);
+  });
+});
+
+describe("getRules", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+    mockQuery.mockReturnValue("mock-query");
+    mockWhere.mockReturnValue("mock-where");
+  });
+
+  it("queries seed-rules when groupId is null", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+    await getRules(null);
+    expect(mockCollection).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/seed-rules",
+    );
+  });
+
+  it("queries rules with groupId filter when groupId is provided", async () => {
+    mockGetDocs.mockResolvedValue({ docs: [] });
+    await getRules("household", "user@example.com");
+    expect(mockCollection).toHaveBeenCalledWith(
+      { type: "mock-firestore" },
+      "app/test/rules",
+    );
+    expect(mockWhere).toHaveBeenCalledWith("groupId", "==", "household");
+  });
+
+  it("maps rule document fields correctly", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "rule-1",
+        data: () => ({
+          type: "categorization",
+          pattern: "coffee",
+          target: "Food:Coffee",
+          priority: 10,
+          institution: "Bank",
+          account: "Checking",
+          groupId: "household",
+        }),
+      }],
+    });
+    const rules = await getRules(null);
+    expect(rules).toEqual([{
+      id: "rule-1",
+      type: "categorization",
+      pattern: "coffee",
+      target: "Food:Coffee",
+      priority: 10,
+      institution: "Bank",
+      account: "Checking",
+      groupId: "household",
+    }]);
+  });
+
+  it("throws on invalid rule type", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "rule-bad",
+        data: () => ({ type: "invalid", pattern: "x", target: "y", priority: 1 }),
+      }],
+    });
+    await expect(getRules(null)).rejects.toThrow("rule type");
+  });
+
+  it("throws on missing required string field", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "rule-bad",
+        data: () => ({ type: "categorization", pattern: 123, target: "y", priority: 1 }),
+      }],
+    });
+    await expect(getRules(null)).rejects.toThrow("pattern");
+  });
+
+  it("throws on missing required number field", async () => {
+    mockGetDocs.mockResolvedValue({
+      docs: [{
+        id: "rule-bad",
+        data: () => ({ type: "categorization", pattern: "x", target: "y", priority: "not a number" }),
+      }],
+    });
+    await expect(getRules(null)).rejects.toThrow("priority");
+  });
+});
+
+describe("createRule", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+  });
+
+  it("creates a rule with valid fields", async () => {
+    mockAddDoc.mockResolvedValue({ id: "new-rule-id" });
+    const id = await createRule("household", ["a@b.com"], {
+      type: "categorization",
+      pattern: "coffee",
+      target: "Food",
+      priority: 10,
+      institution: null,
+      account: null,
+    });
+    expect(id).toBe("new-rule-id");
+    expect(mockAddDoc).toHaveBeenCalledWith("mock-collection-ref", {
+      type: "categorization",
+      pattern: "coffee",
+      target: "Food",
+      priority: 10,
+      institution: null,
+      account: null,
+      groupId: "household",
+      memberEmails: ["a@b.com"],
+    });
+  });
+
+  it("rejects empty pattern", async () => {
+    await expect(createRule("g", ["a@b.com"], {
+      type: "categorization",
+      pattern: "",
+      target: "Food",
+      priority: 10,
+      institution: null,
+      account: null,
+    })).rejects.toThrow("pattern cannot be empty");
+  });
+
+  it("rejects empty target", async () => {
+    await expect(createRule("g", ["a@b.com"], {
+      type: "categorization",
+      pattern: "x",
+      target: "",
+      priority: 10,
+      institution: null,
+      account: null,
+    })).rejects.toThrow("target cannot be empty");
+  });
+});
+
+describe("updateRule", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDoc.mockReturnValue("mock-doc-ref");
+    mockUpdateDoc.mockResolvedValue(undefined);
+  });
+
+  it("updates a rule with partial fields", async () => {
+    await updateRule("rule-1", { pattern: "new pattern" });
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { pattern: "new pattern" });
+  });
+
+  it("skips update when fields are empty", async () => {
+    await updateRule("rule-1", {});
+    expect(mockUpdateDoc).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty pattern", async () => {
+    await expect(updateRule("rule-1", { pattern: "" })).rejects.toThrow("pattern cannot be empty");
+  });
+
+  it("rejects empty target", async () => {
+    await expect(updateRule("rule-1", { target: "" })).rejects.toThrow("target cannot be empty");
+  });
+
+  it("rejects invalid rule type", async () => {
+    await expect(updateRule("rule-1", { type: "bad" as "categorization" })).rejects.toThrow("rule type");
+  });
+});
+
+describe("deleteRule", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDoc.mockReturnValue("mock-doc-ref");
+    mockDeleteDoc.mockResolvedValue(undefined);
+  });
+
+  it("deletes a rule by ID", async () => {
+    await deleteRule("rule-1");
+    expect(mockDeleteDoc).toHaveBeenCalledWith("mock-doc-ref");
+  });
+
+  it("rejects empty rule ID", async () => {
+    await expect(deleteRule("")).rejects.toThrow("Invalid rule ID");
+  });
+
+  it("rejects rule ID with slash", async () => {
+    await expect(deleteRule("a/b")).rejects.toThrow("Invalid rule ID");
+  });
+});
+
+describe("getGroupMembers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDoc.mockReturnValue("mock-doc-ref");
+  });
+
+  it("returns members for an existing group", async () => {
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ members: ["a@b.com", "c@d.com"] }),
+    });
+    const members = await getGroupMembers("group-1");
+    expect(members).toEqual(["a@b.com", "c@d.com"]);
+  });
+
+  it("throws when group does not exist", async () => {
+    mockGetDoc.mockResolvedValue({
+      exists: () => false,
+    });
+    await expect(getGroupMembers("missing")).rejects.toThrow("not found");
+  });
+
+  it("throws DataIntegrityError when members is not an array", async () => {
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ members: "not-an-array" }),
+    });
+    await expect(getGroupMembers("group-1")).rejects.toThrow(/members is not an array/);
+  });
+
+  it("throws DataIntegrityError when members contains non-string", async () => {
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ members: ["valid", 123] }),
+    });
+    await expect(getGroupMembers("group-1")).rejects.toThrow(/non-string/);
   });
 });

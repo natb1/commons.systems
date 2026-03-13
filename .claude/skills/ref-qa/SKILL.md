@@ -37,7 +37,12 @@ Step 8. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Evaluation instructions:**
 - User reports "passed"/"approved" → **Terminate**
-- User reports issues/bugs → **Iterate** (Claude fixes issues, user retests)
+- User reports issues/bugs → **Iterate**
+
+**Iterate instructions:**
+- Fix all issues reported by the user
+- Re-run acceptance tests after fixes to verify no regressions
+- Keep the QA server running for the user to retest
 
 **Progress report instructions:**
 - Invoke `/pr-workflow-progress-report` with `FILE_PREFIX=qa PR_NUM=<pr-num> ITERATION=<N>`, using `qa-plan-<N>.txt` as the output file

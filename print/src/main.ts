@@ -1,7 +1,7 @@
 import { createRouter } from "@commons-systems/router";
 import { DataIntegrityError } from "./errors.js";
 import { renderHome, afterRenderHome } from "./pages/home.js";
-import { renderView } from "./pages/view.js";
+import { renderView, afterRenderView, cleanupView } from "./pages/view.js";
 import { renderAbout } from "./pages/about.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
@@ -37,11 +37,15 @@ const router = createRouter(
     {
       path: /^\/view\/([^/]+)$/,
       render: (path) => renderView(path.slice("/view/".length), currentUser),
+      afterRender: afterRenderView,
     },
     { path: "/about", render: renderAbout },
   ],
   {
-    onNavigate: ({ path }) => trackPageView(path),
+    onNavigate: ({ path }) => {
+      cleanupView();
+      trackPageView(path);
+    },
     formatError: (error) => {
       if (error instanceof DataIntegrityError)
         return "A data error occurred. Please contact support.";
