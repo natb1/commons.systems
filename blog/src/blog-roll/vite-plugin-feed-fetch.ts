@@ -15,9 +15,6 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
   return {
     name: "blog-roll-feed-fetch",
     async buildStart() {
-      const { Window } = await import("happy-dom");
-      const window = new Window();
-
       const results = await Promise.all(
         feeds.map(async ({ id, url }): Promise<[string, LatestPost | null]> => {
           try {
@@ -29,14 +26,10 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
               return [id, null];
             }
             const text = await response.text();
-            const parser = new window.DOMParser();
-            const doc = parser.parseFromString(text, "application/xml");
-            if (doc.querySelector("parsererror")) {
-              console.warn(`[feed-fetch] ${id}: XML parse error`);
-              return [id, null];
+            const post = parseAtomFeedXml(text) ?? parseRssFeedXml(text);
+            if (!post) {
+              console.warn(`[feed-fetch] ${id}: no entries found in feed`);
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const post = parseAtomFeed(doc as any) ?? parseRssFeed(doc as any);
             return [id, post];
           } catch (err) {
             console.warn(`[feed-fetch] ${id}: fetch error`, err);
@@ -58,28 +51,63 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
   };
 }
 
-// Duplicated parsing logic (runs in Node at build time — cannot share browser DOMParser code)
-function parseAtomFeed(doc: Document): LatestPost | null {
-  const entry = doc.querySelector("feed > entry");
-  if (!entry) return null;
-  const title = entry.querySelector("title")?.textContent ?? "";
-  const linkEl = entry.querySelector('link[rel="alternate"][href]') ?? entry.querySelector("link[href]");
-  const url = linkEl?.getAttribute("href") ?? "";
-  const published =
-    entry.querySelector("published")?.textContent ??
-    entry.querySelector("updated")?.textContent ??
-    undefined;
+// Regex-based XML parsing for build time. happy-dom's DOMParser cannot
+// parse Atom feeds with XML namespaces (it produces false parseerror
+// results and parses as HTML). These functions extract the first entry/item
+// from Atom and RSS feeds using regex, which is sufficient for extracting
+// the latest post title, URL, and date.
+
+function xmlText(xml: string, tag: string): string | undefined {
+  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i");
+  const m = xml.match(re);
+  return m ? decodeXmlEntities(m[1].trim()) : undefined;
+}
+
+function xmlAttr(xml: string, tag: string, attr: string): string | undefined {
+  const tagRe = new RegExp(`<${tag}\\s[^>]*${attr}=["']([^"']*)["'][^>]*/?>`, "i");
+  const m = xml.match(tagRe);
+  return m ? decodeXmlEntities(m[1]) : undefined;
+}
+
+function decodeXmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'");
+}
+
+function parseAtomFeedXml(xml: string): LatestPost | null {
+  // Match the first <entry>...</entry> block
+  const entryMatch = xml.match(/<entry[\s>]([\s\S]*?)<\/entry>/i);
+  if (!entryMatch) return null;
+  const entry = entryMatch[1];
+
+  const title = xmlText(entry, "title") ?? "";
+  // Prefer link[rel="alternate"], fall back to any link with href.
+  // Handles both single and double quoted attributes (Blogger uses single quotes).
+  const altLinkMatch = entry.match(/<link[^>]*rel=["']alternate["'][^>]*href=["']([^"']*)["'][^>]*\/?>/i);
+  const anyLinkMatch = entry.match(/<link[^>]*href=["']([^"']*)["'][^>]*\/?>/i);
+  const url = decodeXmlEntities((altLinkMatch ?? anyLinkMatch)?.[1] ?? "");
+  const published = xmlText(entry, "published") ?? xmlText(entry, "updated");
+
   if (!title || !url) return null;
   if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
   return { title, url, publishedAt: published };
 }
 
-function parseRssFeed(doc: Document): LatestPost | null {
-  const item = doc.querySelector("rss > channel > item");
-  if (!item) return null;
-  const title = item.querySelector("title")?.textContent ?? "";
-  const url = item.querySelector("link")?.textContent ?? "";
-  const pubDate = item.querySelector("pubDate")?.textContent ?? undefined;
+function parseRssFeedXml(xml: string): LatestPost | null {
+  // Match the first <item>...</item> block
+  const itemMatch = xml.match(/<item[\s>]([\s\S]*?)<\/item>/i);
+  if (!itemMatch) return null;
+  const item = itemMatch[1];
+
+  const title = xmlText(item, "title") ?? "";
+  const url = xmlText(item, "link") ?? "";
+  const pubDate = xmlText(item, "pubDate");
+
   if (!title || !url) return null;
   if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
   return { title, url, publishedAt: pubDate };

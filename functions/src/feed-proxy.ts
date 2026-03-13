@@ -20,9 +20,16 @@ export async function handleFeedProxy(req: Request, res: Response) {
     return;
   }
 
-  const upstream = await fetch(url, {
-    headers: { "User-Agent": "commons-systems-feed-proxy/1.0" },
-  });
+  let upstream: globalThis.Response;
+  try {
+    upstream = await fetch(url, {
+      headers: { "User-Agent": "commons-systems-feed-proxy/1.0" },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(502).send(`Failed to fetch upstream feed: ${message}`);
+    return;
+  }
 
   if (!upstream.ok) {
     res.status(upstream.status).send(`Upstream returned ${upstream.status}`);
