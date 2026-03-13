@@ -7,13 +7,20 @@ describe("firebaseConfig", () => {
   });
 
   it("has apiKey", () => {
-    expect(typeof firebaseConfig.apiKey).toBe("string");
-    expect(firebaseConfig.apiKey.length).toBeGreaterThan(0);
+    expect(firebaseConfig.apiKey).toBe(
+      "AIzaSyCeT2nQbB_RCtu2Ybt9D3828okcodri4wc",
+    );
   });
 
   it("has authDomain fallback in Node.js", () => {
     expect(firebaseConfig.authDomain).toBe(
       "commons-systems.firebaseapp.com",
+    );
+  });
+
+  it("has storageBucket", () => {
+    expect(firebaseConfig.storageBucket).toBe(
+      "commons-systems.firebasestorage.app",
     );
   });
 
