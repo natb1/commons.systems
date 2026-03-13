@@ -7,9 +7,7 @@ description: Monitor CI runs on a branch until completion
 
 Args: `BRANCH=<x>`
 
-Run in a background Task (`run_in_background: true`). Note the `output_file` path:
+Run in a background Task (`run_in_background: true`). Use `dangerouslyDisableSandbox: true`. Wait for the initial CI run to start, then monitor it:
 ```bash
-gh run list --branch {BRANCH} --limit 5
-gh run view <run-id>
+sleep 240 && gh run watch -i 30 --exit-status <run-id>
 ```
-If the run is in progress, wait for it to complete before returning output.
