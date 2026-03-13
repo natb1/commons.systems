@@ -12,11 +12,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
-install_local_deps "$REPO_ROOT" "$APP_PKG"
+if [ "${NPM_DEPS_INSTALLED:-}" != "1" ]; then
+  (cd "$REPO_ROOT" && npm ci)
+fi
 
-# Install app dependencies
 cd "$REPO_ROOT/$APP_DIR"
-npm ci
 
 # Install Playwright browsers (skip if nix provides them via PLAYWRIGHT_BROWSERS_PATH)
 if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then

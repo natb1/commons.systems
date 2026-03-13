@@ -63,11 +63,15 @@ fi
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
 
+# Install all dependencies once at the workspace root
+if [ ${#APP_DIRS[@]} -gt 0 ]; then
+  (cd "$REPO_ROOT" && npm ci)
+fi
+
 # Run app unit tests
 for dir in "${APP_DIRS[@]}"; do
   echo "=== Unit tests: $dir ==="
-  install_local_deps "$REPO_ROOT" "$REPO_ROOT/$dir/package.json"
-  if (cd "$REPO_ROOT/$dir" && npm ci && npx vitest run); then
+  if (cd "$REPO_ROOT" && npm run -w "$dir" test); then
     echo "PASS: $dir"
   else
     echo "FAIL: $dir" >&2

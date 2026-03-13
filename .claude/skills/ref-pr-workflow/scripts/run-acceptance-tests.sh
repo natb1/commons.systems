@@ -15,8 +15,11 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 
+if [ "${NPM_DEPS_INSTALLED:-}" != "1" ]; then
+  (cd "$REPO_ROOT" && npm ci)
+fi
+
 cd "$REPO_ROOT/$APP_DIR"
-npm ci
 
 # When a base URL is provided, skip emulator setup and run tests directly
 if [ -n "$EXTERNAL_BASE_URL" ]; then
@@ -32,7 +35,6 @@ cd "$REPO_ROOT"
 cleanup_stale_hub
 
 detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
-install_local_deps "$REPO_ROOT" "$APP_PKG"
 
 cd "$REPO_ROOT/$APP_DIR"
 
@@ -166,7 +168,7 @@ fi
 # Build functions before starting emulator (if used)
 if [ "$USES_FUNCTIONS" = true ]; then
   echo "Building Cloud Functions..."
-  (cd "$REPO_ROOT/functions" && npm ci && npm run build)
+  (cd "$REPO_ROOT" && npm run -w functions build)
 fi
 
 npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &

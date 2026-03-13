@@ -16,12 +16,13 @@ EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 
 cleanup_stale_hub
 
-detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
-install_local_deps "$REPO_ROOT" "$APP_PKG"
+if [ "${NPM_DEPS_INSTALLED:-}" != "1" ]; then
+  (cd "$REPO_ROOT" && npm ci)
+fi
 
-# Install app dependencies
+detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
+
 cd "$REPO_ROOT/$APP_DIR"
-npm ci
 cd "$REPO_ROOT"
 
 # Count and allocate all needed ports atomically to avoid OS port recycling
@@ -126,7 +127,7 @@ trap cleanup EXIT INT TERM
 # Build functions before starting emulator (if used)
 if [ "$USES_FUNCTIONS" = true ]; then
   echo "Building Cloud Functions..."
-  (cd "$REPO_ROOT/functions" && npm ci && npm run build)
+  (cd "$REPO_ROOT" && npm run -w functions build)
 fi
 
 # Start Firebase emulators in background (if any emulators needed)

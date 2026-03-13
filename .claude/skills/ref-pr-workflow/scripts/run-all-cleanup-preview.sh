@@ -12,6 +12,8 @@ source "$SCRIPT_DIR/lib.sh"
 # Post-merge context: origin/main == HEAD, so use HEAD~1 as base
 CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" --base HEAD~1)
 
+(cd "$REPO_ROOT" && npm ci) && export NPM_DEPS_INSTALLED=1
+
 FAILURES=()
 CLEANED=0
 

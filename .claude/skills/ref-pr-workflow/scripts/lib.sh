@@ -38,48 +38,6 @@ detect_features() {
   fi
 }
 
-# Install local package dependencies (file: references).
-# Args: $1 = repo root, $2 = path to app package.json
-install_local_deps() {
-  local repo_root="$1"
-  local app_pkg="$2"
-
-  if grep -q '"@commons-systems/firebaseutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing firebaseutil dependency..."
-    (cd "$repo_root/firebaseutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/firestoreutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing firestoreutil dependency..."
-    (cd "$repo_root/firestoreutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/authutil"' "$app_pkg" 2>/dev/null || [ "${USES_AUTH:-false}" = true ]; then
-    echo "Installing authutil dependency..."
-    (cd "$repo_root/authutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/htmlutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing htmlutil dependency..."
-    (cd "$repo_root/htmlutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/blog"' "$app_pkg" 2>/dev/null; then
-    echo "Installing blog dependency..."
-    (cd "$repo_root/blog" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/analyticsutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing analyticsutil dependency..."
-    (cd "$repo_root/analyticsutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/style"' "$app_pkg" 2>/dev/null; then
-    echo "Installing style dependency..."
-    (cd "$repo_root/style" && npm ci)
-  fi
-}
-
 # Extract the app name from the app directory path.
 # Args: $1 = app directory (e.g. "hello" or "/path/to/hello")
 get_app_name() {

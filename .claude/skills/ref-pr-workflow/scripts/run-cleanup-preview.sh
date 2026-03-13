@@ -15,6 +15,10 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
 
+if [ "${NPM_DEPS_INSTALLED:-}" != "1" ]; then
+  (cd "$REPO_ROOT" && npm ci)
+fi
+
 detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
 
 CHANNEL_ID="pr-${PR_NUMBER}"
@@ -27,8 +31,6 @@ delete_preview_channel "$CHANNEL_ID" "$HOSTING_SITE"
 if [ "$USES_FIRESTORE" = true ]; then
   NAMESPACE=$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")
   echo "Deleting Firestore namespace '${NAMESPACE}'..."
-  install_local_deps "$REPO_ROOT" "$APP_PKG"
-  (cd "$REPO_ROOT/firestoreutil" && npm ci)
   FIRESTORE_NAMESPACE="$NAMESPACE" npx tsx firestoreutil/bin/run-delete-namespace.ts
 fi
 

@@ -6,6 +6,8 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 
 CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" "$@")
 
+(cd "$REPO_ROOT" && npm ci) && export NPM_DEPS_INSTALLED=1
+
 FAILURES=()
 TESTED=0
 

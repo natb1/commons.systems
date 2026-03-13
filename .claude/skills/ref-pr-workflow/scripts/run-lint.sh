@@ -60,10 +60,15 @@ fi
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
 
+# Install all dependencies once at the workspace root
+if [ ${#APP_DIRS[@]} -gt 0 ]; then
+  (cd "$REPO_ROOT" && npm ci)
+fi
+
 # Run eslint on detected app dirs
 for dir in "${APP_DIRS[@]}"; do
   echo "=== Lint: $dir ==="
-  if (cd "$REPO_ROOT/$dir" && npm ci && npx eslint src/); then
+  if (cd "$REPO_ROOT" && npm run -w "$dir" lint); then
     echo "PASS: $dir"
   else
     echo "FAIL: $dir" >&2

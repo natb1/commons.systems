@@ -11,6 +11,8 @@ source "$SCRIPT_DIR/lib.sh"
 
 CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh")
 
+(cd "$REPO_ROOT" && npm ci) && export NPM_DEPS_INSTALLED=1
+
 FAILURES=()
 DEPLOYED=0
 PREVIEW_COMMENT=""
