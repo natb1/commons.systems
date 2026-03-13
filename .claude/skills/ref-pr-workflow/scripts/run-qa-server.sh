@@ -16,7 +16,7 @@ EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 
 cleanup_stale_hub
 
-if [ "${NPM_DEPS_INSTALLED:-}" != "1" ]; then
+if [ ! -d "$REPO_ROOT/node_modules" ]; then
   (cd "$REPO_ROOT" && npm ci)
 fi
 

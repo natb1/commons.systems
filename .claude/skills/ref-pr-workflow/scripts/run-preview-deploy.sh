@@ -15,7 +15,7 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
 
-if [ "${NPM_DEPS_INSTALLED:-}" != "1" ]; then
+if [ ! -d "$REPO_ROOT/node_modules" ]; then
   (cd "$REPO_ROOT" && npm ci)
 fi
 

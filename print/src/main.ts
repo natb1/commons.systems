@@ -1,3 +1,5 @@
+import "missing.css";
+import "./style/theme.css";
 import { createRouter } from "@commons-systems/router";
 import { DataIntegrityError } from "./errors.js";
 import { renderHome, afterRenderHome } from "./pages/home.js";

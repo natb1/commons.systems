@@ -15,7 +15,7 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 
-if [ "${NPM_DEPS_INSTALLED:-}" != "1" ]; then
+if [ ! -d "$REPO_ROOT/node_modules" ]; then
   (cd "$REPO_ROOT" && npm ci)
 fi
 

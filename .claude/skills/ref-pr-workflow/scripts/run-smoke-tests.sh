@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
-if [ "${NPM_DEPS_INSTALLED:-}" != "1" ]; then
+if [ ! -d "$REPO_ROOT/node_modules" ]; then
   (cd "$REPO_ROOT" && npm ci)
 fi
 
