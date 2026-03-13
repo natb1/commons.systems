@@ -56,14 +56,12 @@ jobs:
         if: steps.changes.outputs.changed == 'true'
         with:
           node-version: "22"
-      - name: Install function dependencies
+      - name: Install dependencies
         if: steps.changes.outputs.changed == 'true'
         run: npm ci
-        working-directory: functions
       - name: Build functions
         if: steps.changes.outputs.changed == 'true'
-        run: npm run build
-        working-directory: functions
+        run: npm run -w functions build
       - name: Authenticate with Firebase
         if: steps.changes.outputs.changed == 'true'
         run: |
