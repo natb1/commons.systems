@@ -61,8 +61,7 @@ test.describe("info panel — desktop", () => {
       await page.waitForSelector("main h2", { timeout: 30000 });
       const panel = page.locator("#info-panel");
       // Wait for at least one blogroll entry to show a latest post title.
-      // Feeds are fetched asynchronously after page load — the external feed
-      // requests and proxy fallbacks can take several seconds for large feeds.
+      // Feeds are fetched asynchronously via the proxy after page load.
       await expect(panel.locator(".blogroll-entry .blogroll-latest").first())
         .not.toHaveText("", { timeout: 15000 });
     }).toPass({ timeout: 90000, intervals: [5000] });

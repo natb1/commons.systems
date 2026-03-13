@@ -1,16 +1,13 @@
 import { defineConfig } from "vite";
 import { feedFetchPlugin } from "@commons-systems/blog/blog-roll/vite-plugin-feed-fetch";
+import { FEED_REGISTRY } from "@commons-systems/blog/blog-roll/feed-registry";
 
 const FUNCTIONS_PORT = process.env.VITE_FUNCTIONS_EMULATOR_PORT ?? "5001";
 const FIREBASE_PROJECT_ID = process.env.VITE_FIREBASE_PROJECT_ID;
 
 export default defineConfig({
   plugins: [
-    feedFetchPlugin([
-      { id: "bastionland", url: "https://www.bastionland.com/feeds/posts/default" },
-      { id: "new-school-revolution", url: "https://newschoolrevolution.com/feed/" },
-      { id: "half-a-worm", url: "https://halfawormandabittenapple.blogspot.com/feeds/posts/default" },
-    ]),
+    feedFetchPlugin(FEED_REGISTRY.map((f) => ({ id: f.id, url: f.feedUrl }))),
   ],
   resolve: {
     dedupe: ["firebase", "firebase/app", "firebase/analytics", "firebase/auth", "firebase/firestore"],

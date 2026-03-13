@@ -51,11 +51,11 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
   };
 }
 
-// Regex-based XML parsing for build time. happy-dom's DOMParser cannot
-// parse Atom feeds with XML namespaces (it produces false parseerror
-// results and parses as HTML). These functions extract the first entry/item
-// from Atom and RSS feeds using regex, which is sufficient for extracting
-// the latest post title, URL, and date.
+// Regex-based XML parsing for build time. The Node build environment has
+// no native DOMParser, and happy-dom's implementation cannot parse Atom
+// feeds with XML namespaces correctly. These functions extract the first
+// entry/item from Atom and RSS feeds using regex, which is sufficient for
+// extracting the latest post title, URL, and date.
 
 function xmlText(xml: string, tag: string): string | undefined {
   const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i");
@@ -73,8 +73,7 @@ function decodeXmlEntities(text: string): string {
     .replace(/&#39;/g, "'");
 }
 
-function parseAtomFeedXml(xml: string): LatestPost | null {
-  // Match the first <entry>...</entry> block
+export function parseAtomFeedXml(xml: string): LatestPost | null {
   const entryMatch = xml.match(/<entry[\s>]([\s\S]*?)<\/entry>/i);
   if (!entryMatch) return null;
   const entry = entryMatch[1];
@@ -92,8 +91,7 @@ function parseAtomFeedXml(xml: string): LatestPost | null {
   return { title, url, publishedAt: published };
 }
 
-function parseRssFeedXml(xml: string): LatestPost | null {
-  // Match the first <item>...</item> block
+export function parseRssFeedXml(xml: string): LatestPost | null {
   const itemMatch = xml.match(/<item[\s>]([\s\S]*?)<\/item>/i);
   if (!itemMatch) return null;
   const item = itemMatch[1];

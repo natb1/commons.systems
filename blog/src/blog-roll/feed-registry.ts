@@ -1,0 +1,27 @@
+export interface FeedRegistryEntry {
+  id: string;
+  name: string;
+  homeUrl: string;
+  feedUrl: string;
+}
+
+export const FEED_REGISTRY: readonly FeedRegistryEntry[] = [
+  {
+    id: "bastionland",
+    name: "BASTIONLAND",
+    homeUrl: "https://www.bastionland.com/",
+    feedUrl: "https://www.bastionland.com/feeds/posts/default",
+  },
+  {
+    id: "new-school-revolution",
+    name: "New School Revolution",
+    homeUrl: "https://newschoolrevolution.com/",
+    feedUrl: "https://newschoolrevolution.com/feed/",
+  },
+  {
+    id: "half-a-worm",
+    name: "Half a Worm and a Bitten Apple",
+    homeUrl: "https://halfawormandabittenapple.blogspot.com/",
+    feedUrl: "https://halfawormandabittenapple.blogspot.com/feeds/posts/default",
+  },
+];

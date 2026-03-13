@@ -34,7 +34,6 @@ export function parseXml(text: string): LatestPost | null {
   const parser = new DOMParser();
   const doc = parser.parseFromString(cleaned, "application/xml");
   if (doc.querySelector("parsererror")) {
-    console.warn("XML parse error in feed response");
     return null;
   }
   return parseAtomFeed(doc) ?? parseRssFeed(doc);

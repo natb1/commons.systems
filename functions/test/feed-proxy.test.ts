@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { handleFeedProxy, ALLOWED_FEED_URLS } from "../src/feed-proxy";
+import { FEED_REGISTRY } from "../../blog/src/blog-roll/feed-registry";
 
 function createMockRes() {
   const res = {
@@ -116,20 +117,29 @@ describe("handleFeedProxy", () => {
     expect(res.body).toBe("Upstream returned 502");
   });
 
-  it("allowlist contains expected feed URLs", () => {
-    expect(ALLOWED_FEED_URLS.size).toBe(3);
-    expect(
-      ALLOWED_FEED_URLS.has(
-        "https://www.bastionland.com/feeds/posts/default",
-      ),
-    ).toBe(true);
-    expect(
-      ALLOWED_FEED_URLS.has("https://newschoolrevolution.com/feed/"),
-    ).toBe(true);
-    expect(
-      ALLOWED_FEED_URLS.has(
-        "https://halfawormandabittenapple.blogspot.com/feeds/posts/default",
-      ),
-    ).toBe(true);
+  it("returns 502 when reading upstream response body fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.reject(new Error("body stream interrupted")),
+        headers: new Headers(),
+      }),
+    );
+
+    const allowedUrl = [...ALLOWED_FEED_URLS][0];
+    const res = createMockRes();
+    await handleFeedProxy(createMockReq({ url: allowedUrl }), res as never);
+
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toBe(
+      "Failed to read upstream response body: body stream interrupted",
+    );
+  });
+
+  it("ALLOWED_FEED_URLS matches feed registry", () => {
+    const registryUrls = new Set(FEED_REGISTRY.map((f) => f.feedUrl));
+    expect(ALLOWED_FEED_URLS).toEqual(registryUrls);
   });
 });

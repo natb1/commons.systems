@@ -14,6 +14,7 @@
     "./blog-roll/atom-strategy": "./src/blog-roll/atom-strategy.ts",
     "./blog-roll/parse-feed": "./src/blog-roll/parse-feed.ts",
     "./blog-roll/fallback-strategy": "./src/blog-roll/fallback-strategy.ts",
+    "./blog-roll/feed-registry": "./src/blog-roll/feed-registry.ts",
     "./blog-roll/vite-plugin-feed-fetch": "./src/blog-roll/vite-plugin-feed-fetch.ts",
     "./pages/home": "./src/pages/home.ts",
     "./pages/admin": "./src/pages/admin.ts",
