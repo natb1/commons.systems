@@ -64,7 +64,10 @@ service cloud.firestore {
         && request.resource.data.reimbursement is number
         && request.resource.data.reimbursement >= 0
         && request.resource.data.reimbursement <= 100
-        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'groupId', 'memberEmails', 'note', 'category', 'budget', 'reimbursement']);
+        && (!('normalizedId' in request.resource.data) || request.resource.data.normalizedId is string || request.resource.data.normalizedId == null)
+        && (!('normalizedPrimary' in request.resource.data) || request.resource.data.normalizedPrimary is bool)
+        && (!('normalizedDescription' in request.resource.data) || request.resource.data.normalizedDescription is string || request.resource.data.normalizedDescription == null)
+        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'groupId', 'memberEmails', 'note', 'category', 'budget', 'reimbursement', 'normalizedId', 'normalizedPrimary', 'normalizedDescription']);
       allow create, delete: if false;
     }
 
@@ -117,6 +120,43 @@ service cloud.firestore {
         && request.resource.data.total is number
         && request.resource.data.keys().hasOnly(['budgetId', 'periodStart', 'periodEnd', 'total', 'count', 'categoryBreakdown', 'groupId', 'memberEmails']);
       allow create, delete: if false;
+    }
+
+    // Seed normalization rules are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-normalization-rules/{ruleId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Validates normalization rule field types and constraints on both create and update.
+    function isValidNormalizationRuleData() {
+      return request.resource.data.pattern is string
+        && request.resource.data.pattern.size() > 0
+        && request.resource.data.canonicalDescription is string
+        && request.resource.data.canonicalDescription.size() > 0
+        && request.resource.data.priority is number
+        && (!('patternType' in request.resource.data) || request.resource.data.patternType in ["substring", "regex"])
+        && (!('amountMatch' in request.resource.data) || request.resource.data.amountMatch is bool)
+        && (!('dateWindowDays' in request.resource.data) || request.resource.data.dateWindowDays is number)
+        && (!('institution' in request.resource.data) || request.resource.data.institution is string || request.resource.data.institution == null)
+        && (!('account' in request.resource.data) || request.resource.data.account is string || request.resource.data.account == null)
+        && request.resource.data.keys().hasOnly(['pattern', 'patternType', 'canonicalDescription', 'amountMatch', 'dateWindowDays', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
+    }
+
+    // Normalization rules are scoped to group members via a denormalized `memberEmails` field.
+    // CRUD operations require membership. groupId and memberEmails are immutable on update.
+    match /budget/{env}/normalization-rules/{ruleId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow create: if isBudgetGroupMember(env, request.resource.data.groupId, request.resource.data.memberEmails)
+        && isValidNormalizationRuleData();
+      allow update: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberEmails == resource.data.memberEmails
+        && isValidNormalizationRuleData();
+      allow delete: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
     }
 
     // Seed rules are public read-only example data for unauthenticated users

@@ -206,3 +206,33 @@
   height: 41px;
   vertical-align: middle;
 }
+
+/* --- Normalized transaction groups --- */
+
+.normalized-group {
+  border-left: 3px solid var(--accent, #6c8);
+}
+
+.normalized-originals {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.normalized-originals h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.875rem;
+}
+
+.normalized-original {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.875rem;
+  opacity: 0.8;
+}
+
+.normalized-original .amount {
+  text-align: right;
+}

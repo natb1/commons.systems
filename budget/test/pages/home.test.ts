@@ -52,6 +52,9 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
     timestamp: mockTimestamp("2025-01-15"),
     statementId: null,
     groupId: null,
+    normalizedId: null,
+    normalizedPrimary: true,
+    normalizedDescription: null,
     ...overrides,
   };
 }

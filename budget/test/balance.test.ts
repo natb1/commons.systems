@@ -45,6 +45,9 @@ function makeTxn(overrides: Partial<Transaction> = {}): Transaction {
     timestamp: ts("2025-01-15"),
     statementId: null,
     groupId: null,
+    normalizedId: null,
+    normalizedPrimary: true,
+    normalizedDescription: null,
     ...overrides,
   };
 }

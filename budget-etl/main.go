@@ -7,10 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
@@ -175,6 +177,59 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 		return fmt.Errorf("upserting transactions: %w", err)
 	}
 	log.Printf("upsert: %d created, %d updated across %d statements", result.Created, result.Updated, len(parsed))
+
+	// Apply normalization rules (post-upsert, pre-recalculation)
+	normRuleDocs, err := client.LoadNormalizationRules(ctx, groupInfo.ID)
+	if err != nil {
+		return err
+	}
+	if len(normRuleDocs) > 0 {
+		allDocs, err := client.LoadAllTransactions(ctx, groupInfo)
+		if err != nil {
+			return err
+		}
+		normTxns := make([]store.NormTxn, 0, len(allDocs))
+		for _, td := range allDocs {
+			desc, _ := td.Data["description"].(string)
+			inst, _ := td.Data["institution"].(string)
+			acct, _ := td.Data["account"].(string)
+			amt, _ := td.Data["amount"].(float64)
+			ts, _ := td.Data["timestamp"].(time.Time)
+			stmtID, _ := td.Data["statementId"].(string)
+			normTxns = append(normTxns, store.NormTxn{
+				DocID:       td.ID,
+				Description: desc,
+				Institution: inst,
+				Account:     acct,
+				Amount:      int64(math.Round(amt * 100)),
+				Timestamp:   ts,
+				StatementID: stmtID,
+			})
+		}
+		normRules := make([]rules.NormalizationRule, len(normRuleDocs))
+		for i, rd := range normRuleDocs {
+			normRules[i] = rules.NormalizationRule{
+				ID:                   rd.ID,
+				Pattern:              rd.Pattern,
+				PatternType:          rd.PatternType,
+				CanonicalDescription: rd.CanonicalDescription,
+				AmountMatch:          rd.AmountMatch,
+				DateWindowDays:       rd.DateWindowDays,
+				Institution:          rd.Institution,
+				Account:              rd.Account,
+				Priority:             rd.Priority,
+			}
+		}
+		normUpdates, err := rules.ApplyNormalization(normTxns, normRules)
+		if err != nil {
+			return fmt.Errorf("normalization: %w", err)
+		}
+		if len(normUpdates) > 0 {
+			if err := client.UpdateNormalization(ctx, normUpdates); err != nil {
+				return fmt.Errorf("updating normalization: %w", err)
+			}
+		}
+	}
 
 	// Recalculate affected budget periods
 	if len(allTxns) > 0 {

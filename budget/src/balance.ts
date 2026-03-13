@@ -43,7 +43,10 @@ function periodsForBudget(periods: BudgetPeriod[], budgetId: string): BudgetPeri
 
 function transactionsForBudget(txns: Transaction[], budgetId: string): TimestampedTransaction[] {
   return txns
-    .filter((t): t is TimestampedTransaction => t.budget === budgetId && t.timestamp !== null)
+    .filter((t): t is TimestampedTransaction =>
+      t.budget === budgetId
+      && t.timestamp !== null
+      && (t.normalizedId === null || t.normalizedPrimary))
     .sort(compareByTimestampThenId);
 }
 

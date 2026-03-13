@@ -2,8 +2,10 @@ package rules
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/natb1/commons.systems/budget-etl/internal/store"
 )
@@ -101,4 +103,163 @@ func ApplyBudgetAssignment(txns []store.TransactionData, rules []Rule) {
 			}
 		}
 	}
+}
+
+// NormalizationRule defines a rule for grouping duplicate transactions.
+type NormalizationRule struct {
+	ID                   string
+	Pattern              string // case-insensitive substring (or regex if PatternType=="regex")
+	PatternType          string // "substring" (default) or "regex"
+	CanonicalDescription string
+	AmountMatch          bool // require exact amount equality for grouping
+	DateWindowDays       int  // max days between adjacent grouped transactions (single-linkage)
+	Institution          string
+	Account              string
+	Priority             int
+}
+
+// compiledNormRule holds a normalization rule with a pre-compiled regex (nil for substring).
+type compiledNormRule struct {
+	rule  NormalizationRule
+	regex *regexp.Regexp
+}
+
+// matchNormRule returns true if the rule matches the given transaction.
+func matchNormRule(rule NormalizationRule, re *regexp.Regexp, txn store.NormTxn) bool {
+	if re != nil {
+		if !re.MatchString(txn.Description) {
+			return false
+		}
+	} else {
+		if !strings.Contains(strings.ToLower(txn.Description), strings.ToLower(rule.Pattern)) {
+			return false
+		}
+	}
+	if rule.Institution != "" && !strings.EqualFold(rule.Institution, txn.Institution) {
+		return false
+	}
+	if rule.Account != "" && !strings.EqualFold(rule.Account, txn.Account) {
+		return false
+	}
+	return true
+}
+
+// groupByAmountAndDate partitions matched transactions by amount (if required)
+// then clusters by date using single-linkage within DateWindowDays.
+func groupByAmountAndDate(matches []store.NormTxn, rule NormalizationRule) [][]store.NormTxn {
+	if len(matches) == 0 {
+		return nil
+	}
+
+	// Partition by amount if AmountMatch is set
+	type amountKey = int64
+	partitions := make(map[amountKey][]store.NormTxn)
+	if rule.AmountMatch {
+		for _, txn := range matches {
+			partitions[txn.Amount] = append(partitions[txn.Amount], txn)
+		}
+	} else {
+		partitions[0] = matches
+	}
+
+	var groups [][]store.NormTxn
+	window := time.Duration(rule.DateWindowDays) * 24 * time.Hour
+
+	for _, partition := range partitions {
+		// Sort by timestamp for single-linkage clustering
+		sort.Slice(partition, func(i, j int) bool {
+			return partition[i].Timestamp.Before(partition[j].Timestamp)
+		})
+
+		if rule.DateWindowDays <= 0 {
+			// No date window: all matches in one group
+			groups = append(groups, partition)
+			continue
+		}
+
+		// Single-linkage: start new cluster when gap exceeds window
+		cluster := []store.NormTxn{partition[0]}
+		for i := 1; i < len(partition); i++ {
+			if partition[i].Timestamp.Sub(partition[i-1].Timestamp) <= window {
+				cluster = append(cluster, partition[i])
+			} else {
+				groups = append(groups, cluster)
+				cluster = []store.NormTxn{partition[i]}
+			}
+		}
+		groups = append(groups, cluster)
+	}
+
+	return groups
+}
+
+// selectPrimary picks the primary transaction from a group: latest statement
+// period (alphabetically greatest StatementID), then doc ID as tiebreak.
+func selectPrimary(group []store.NormTxn) store.NormTxn {
+	best := group[0]
+	for _, txn := range group[1:] {
+		if txn.StatementID > best.StatementID ||
+			(txn.StatementID == best.StatementID && txn.DocID > best.DocID) {
+			best = txn
+		}
+	}
+	return best
+}
+
+// ApplyNormalization groups duplicate transactions using normalization rules
+// and returns updates that assign normalizedId, normalizedPrimary, and
+// normalizedDescription. Rules are evaluated in priority order; each
+// transaction is claimed by the first rule whose group it joins.
+func ApplyNormalization(txns []store.NormTxn, rules []NormalizationRule) ([]store.NormalizationUpdate, error) {
+	sorted := make([]NormalizationRule, len(rules))
+	copy(sorted, rules)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Priority < sorted[j].Priority
+	})
+
+	compiled := make([]compiledNormRule, len(sorted))
+	for i, r := range sorted {
+		compiled[i].rule = r
+		if r.PatternType == "regex" {
+			re, err := regexp.Compile("(?i)" + r.Pattern)
+			if err != nil {
+				return nil, fmt.Errorf("normalization rule %s: invalid regex %q: %w", r.ID, r.Pattern, err)
+			}
+			compiled[i].regex = re
+		}
+	}
+
+	normalized := make(map[string]bool)
+	var updates []store.NormalizationUpdate
+
+	for _, cr := range compiled {
+		var matches []store.NormTxn
+		for _, txn := range txns {
+			if normalized[txn.DocID] {
+				continue
+			}
+			if matchNormRule(cr.rule, cr.regex, txn) {
+				matches = append(matches, txn)
+			}
+		}
+
+		groups := groupByAmountAndDate(matches, cr.rule)
+		for _, group := range groups {
+			if len(group) < 2 {
+				continue
+			}
+			primary := selectPrimary(group)
+			for _, txn := range group {
+				normalized[txn.DocID] = true
+				updates = append(updates, store.NormalizationUpdate{
+					DocID:                 txn.DocID,
+					NormalizedID:          primary.DocID,
+					NormalizedPrimary:     txn.DocID == primary.DocID,
+					NormalizedDescription: cr.rule.CanonicalDescription,
+				})
+			}
+		}
+	}
+
+	return updates, nil
 }
