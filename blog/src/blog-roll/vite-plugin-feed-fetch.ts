@@ -63,12 +63,6 @@ function xmlText(xml: string, tag: string): string | undefined {
   return m ? decodeXmlEntities(m[1].trim()) : undefined;
 }
 
-function xmlAttr(xml: string, tag: string, attr: string): string | undefined {
-  const tagRe = new RegExp(`<${tag}\\s[^>]*${attr}=["']([^"']*)["'][^>]*/?>`, "i");
-  const m = xml.match(tagRe);
-  return m ? decodeXmlEntities(m[1]) : undefined;
-}
-
 function decodeXmlEntities(text: string): string {
   return text
     .replace(/&amp;/g, "&")
