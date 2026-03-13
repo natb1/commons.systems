@@ -51,15 +51,19 @@ test.describe("info panel — desktop", () => {
 
   test("blogroll entries have populated latest post content @smoke", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop");
-    await page.goto("/");
-    await page.waitForSelector("main h2", { timeout: 30000 });
-    const panel = page.locator("#info-panel");
-    // Wait for async feed hydration to populate at least one blogroll entry.
-    // Uses polling because hydration populates spans asynchronously after page load.
+    // Hydration fetches feeds once on page load. If the feed proxy isn't ready
+    // yet (e.g., functions emulator still starting), the spans stay empty and
+    // won't retry. Reload the page on each poll attempt so a fresh hydration
+    // cycle runs against a (hopefully) ready proxy.
     await expect(async () => {
+      await page.goto("/");
+      await page.waitForSelector("main h2", { timeout: 30000 });
+      // Wait briefly for async hydration to settle after page load
+      await page.waitForTimeout(2000);
+      const panel = page.locator("#info-panel");
       const texts = await panel.locator(".blogroll-entry .blogroll-latest").allTextContents();
       expect(texts.some((t) => t.trim().length > 0)).toBe(true);
-    }).toPass({ timeout: 15000 });
+    }).toPass({ timeout: 30000, intervals: [3000] });
   });
 });
 
