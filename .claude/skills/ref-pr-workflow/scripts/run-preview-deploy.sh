@@ -28,18 +28,6 @@ VITE_FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" \
   npm run build
 cd "$REPO_ROOT"
 
-# Deploy Cloud Functions if the app uses function rewrites
-USES_FUNCTIONS=false
-if [ -d "$REPO_ROOT/functions" ] && jq -e '.hosting[] | select(.target == "'"$APP_NAME"'") | .rewrites[]? | select(.source | startswith("/api/"))' "$REPO_ROOT/firebase.json" >/dev/null 2>&1; then
-  USES_FUNCTIONS=true
-fi
-
-if [ "$USES_FUNCTIONS" = true ]; then
-  echo "Building and deploying Cloud Functions..."
-  (cd "$REPO_ROOT/functions" && npm ci && npm run build)
-  npx firebase-tools deploy --only functions --project "$FIREBASE_PROJECT_ID"
-fi
-
 # Delete existing channel if present
 echo "Cleaning up existing preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
 delete_preview_channel "$CHANNEL_ID" "$HOSTING_SITE"
