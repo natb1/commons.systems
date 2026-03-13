@@ -218,6 +218,7 @@ if [ "$USES_STORAGE" = true ]; then
 fi
 if [ "$USES_FUNCTIONS" = true ]; then
   VITE_ARGS+=("VITE_FUNCTIONS_EMULATOR_PORT=${FUNCTIONS_PORT}")
+  VITE_ARGS+=("VITE_FIREBASE_PROJECT_ID=${EMULATOR_PROJECT_ID}")
 fi
 
 # Set GitHub branch for apps that fetch raw content from GitHub

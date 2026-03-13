@@ -9,27 +9,16 @@ export class AtomStrategy implements BlogRollStrategy {
 
   async fetchLatestPost(): Promise<LatestPost | null> {
     try {
-      const response = await fetch(this.feedUrl);
-      if (response.ok) {
-        return parseXml(await response.text());
-      }
-      console.warn(`Feed fetch failed for ${this.feedUrl}: ${response.status}`);
-    } catch (err) {
-      if (err instanceof ReferenceError) throw err;
-      console.warn(`Feed fetch error for ${this.feedUrl}:`, err);
-    }
-
-    try {
       const proxyUrl = `${this.proxyPath}?url=${encodeURIComponent(this.feedUrl)}`;
-      const proxyResponse = await fetch(proxyUrl);
-      if (!proxyResponse.ok) {
-        console.warn(`Proxy fetch failed for ${this.feedUrl}: ${proxyResponse.status}`);
+      const response = await fetch(proxyUrl);
+      if (!response.ok) {
+        console.warn(`Feed proxy failed for ${this.feedUrl}: ${response.status}`);
         return null;
       }
-      return parseXml(await proxyResponse.text());
+      return parseXml(await response.text());
     } catch (err) {
       if (err instanceof ReferenceError) throw err;
-      console.warn(`Proxy fetch error for ${this.feedUrl}:`, err);
+      console.warn(`Feed proxy error for ${this.feedUrl}:`, err);
       return null;
     }
   }

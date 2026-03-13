@@ -27,8 +27,12 @@ function parseRssFeed(doc: Document): LatestPost | null {
 }
 
 export function parseXml(text: string): LatestPost | null {
+  // Strip default XML namespace declarations so querySelector matches element
+  // local names in all browsers. Firefox requires null-namespace for unqualified
+  // CSS selectors on XML documents; Chrome is lenient and ignores namespaces.
+  const cleaned = text.replace(/ xmlns="[^"]*"/g, "");
   const parser = new DOMParser();
-  const doc = parser.parseFromString(text, "application/xml");
+  const doc = parser.parseFromString(cleaned, "application/xml");
   if (doc.querySelector("parsererror")) {
     console.warn("XML parse error in feed response");
     return null;
