@@ -15,7 +15,7 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
 
-detect_features "$REPO_ROOT/$APP_DIR/src/"
+detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
 
 CHANNEL_ID="pr-${PR_NUMBER}"
 
