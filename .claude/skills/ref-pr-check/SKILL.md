@@ -1,6 +1,6 @@
 ---
 name: ref-pr-check
-description: Forked verify loop — runs Steps 6 and 7 in isolated context
+description: Forked verify loop with CI monitoring — runs Steps 6 and 7 in isolated context
 context: fork
 allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
@@ -15,7 +15,7 @@ On load, read issue state via `.claude/skills/ref-pr-workflow/scripts/issue-stat
 
 ## Sandbox
 
-Use `dangerouslyDisableSandbox: true` for git write operations (`git add`, `git commit`, `git merge`, `git push`) and all `gh` CLI calls (`gh run list`, `gh run view`, `.claude/skills/ref-pr-workflow/scripts/issue-state-write`, `.claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh`).
+Use `dangerouslyDisableSandbox: true` for git write operations (`git add`, `git commit`, `git merge`, `git push`) and all `gh` CLI calls (`gh run watch`, `.claude/skills/ref-pr-workflow/scripts/issue-state-write`, `.claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh`).
 
 ## Phase 1: Acceptance Tests (Step 6)
 
@@ -23,12 +23,10 @@ Iteration counter starts at 1.
 
 ### Execute
 
-Run in a background Task (`run_in_background: true`). Note the `output_file` path:
+Run in a background Task (`run_in_background: true`). Use `dangerouslyDisableSandbox: true`. Wait for the initial CI run to start, then monitor it:
 ```bash
-gh run list --branch <branch> --limit 5
-gh run view <run-id>
+sleep 240 && gh run watch -i 30 --exit-status <run-id>
 ```
-If the run is in progress, wait for it to complete before returning output.
 
 ### Evaluate
 
@@ -92,7 +90,10 @@ git add <files> && git commit -m "..." && git push origin HEAD
 
 ### Execute
 
-Same as Phase 1 Execute (CI monitoring).
+Same as Phase 1 Execute — run in a background Task with `dangerouslyDisableSandbox: true`:
+```bash
+sleep 240 && gh run watch -i 30 --exit-status <run-id>
+```
 
 ### Evaluate
 
