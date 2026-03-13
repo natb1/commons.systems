@@ -7,16 +7,10 @@
 # - SSH agent integration
 # - Security-focused defaults (modern ciphers, key algorithms)
 # - Host-specific configurations
-# - Automatic key management
 #
 # To add a new host, add an entry to programs.ssh.matchBlocks
 
-{
-  config,
-  pkgs,
-  lib,
-  ...
-}:
+{ ... }:
 
 {
   programs.ssh = {
@@ -41,10 +35,10 @@
         serverAliveInterval = 60;
         serverAliveCountMax = 3;
         hashKnownHosts = true;
+        addKeysToAgent = "no";
         extraOptions = {
           StrictHostKeyChecking = "ask";
           VerifyHostKeyDNS = "yes";
-          AddKeysToAgent = "no";
         };
       };
 
