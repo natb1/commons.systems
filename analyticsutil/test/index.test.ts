@@ -24,6 +24,12 @@ describe("withMeasurementId", () => {
     expect(result).toBe(config);
   });
 
+  it("returns config unchanged when measurementId is empty string", () => {
+    const config = { apiKey: "test" };
+    const result = withMeasurementId(config, "");
+    expect(result).toBe(config);
+  });
+
   it("throws when measurementId does not start with G-", () => {
     const config = { apiKey: "test" };
     expect(() => withMeasurementId(config, "13891425074")).toThrow(
@@ -81,26 +87,14 @@ describe("initAnalytics", () => {
     });
   });
 
-  it("returns no-op and logs error when initializeAnalytics throws", () => {
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("propagates error when initializeAnalytics throws", () => {
     vi.mocked(initializeAnalytics).mockImplementation(() => {
       throw new Error("CSP blocked");
     });
 
     const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
-    const tracker = initAnalytics(app);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "Failed to initialize analytics (appId: %s, measurementId: %s):",
-      "1:test:web:abc",
-      "G-TEST",
-      expect.any(Error),
-    );
-
-    tracker("/about");
-    expect(logEvent).not.toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
+    expect(() => initAnalytics(app)).toThrow("CSP blocked");
   });
 
   it("swallows and logs error when logEvent throws", () => {

@@ -47,6 +47,13 @@ validateNamespace(NAMESPACE);
 // duplicated per preview branch. All environments read from prod storage.
 export const STORAGE_NAMESPACE = "print/prod";
 
-export const trackPageView = initAnalytics(app);
+let trackPageView: (path: string) => void;
+try {
+  trackPageView = initAnalytics(app);
+} catch (error) {
+  console.error("Analytics initialization failed:", error);
+  trackPageView = () => {};
+}
+export { trackPageView };
 
 export { db, storage, app };

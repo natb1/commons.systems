@@ -34,6 +34,13 @@ if (!envNamespace) {
 export const NAMESPACE = envNamespace || "budget/prod";
 validateNamespace(NAMESPACE);
 
-export const trackPageView = initAnalytics(app);
+let trackPageView: (path: string) => void;
+try {
+  trackPageView = initAnalytics(app);
+} catch (error) {
+  console.error("Analytics initialization failed:", error);
+  trackPageView = () => {};
+}
+export { trackPageView };
 
 export { db, app };
