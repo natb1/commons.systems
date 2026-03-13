@@ -23,6 +23,13 @@ describe("withMeasurementId", () => {
     const result = withMeasurementId(config, undefined);
     expect(result).toBe(config);
   });
+
+  it("throws when measurementId does not start with G-", () => {
+    const config = { apiKey: "test" };
+    expect(() => withMeasurementId(config, "13891425074")).toThrow(
+      'Invalid measurement ID "13891425074": must start with "G-".',
+    );
+  });
 });
 
 describe("initAnalytics", () => {

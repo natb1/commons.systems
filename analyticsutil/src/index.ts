@@ -5,7 +5,13 @@ export function withMeasurementId<T extends FirebaseOptions>(
   config: T,
   measurementId: string | undefined,
 ): T {
-  return measurementId ? { ...config, measurementId } : config;
+  if (!measurementId) return config;
+  if (!/^G-/.test(measurementId)) {
+    throw new Error(
+      `Invalid measurement ID "${measurementId}": must start with "G-".`,
+    );
+  }
+  return { ...config, measurementId };
 }
 
 export function initAnalytics(app: FirebaseApp): (path: string) => void {
