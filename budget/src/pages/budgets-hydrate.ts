@@ -1,47 +1,5 @@
 import { updateBudget } from "../firestore.js";
-import { DataIntegrityError } from "../errors.js";
-
-const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
-
-function showInputError(el: HTMLInputElement | HTMLSelectElement, title = "Save failed \u2014 value reverted"): void {
-  const existing = errorTimers.get(el);
-  if (existing) clearTimeout(existing);
-  if (el instanceof HTMLSelectElement) {
-    const saved = el.querySelector("option[selected]") as HTMLOptionElement | null;
-    if (saved) el.value = saved.value;
-  } else {
-    el.value = el.defaultValue;
-  }
-  el.classList.add("save-error");
-  el.title = title;
-  errorTimers.set(el, setTimeout(() => {
-    el.classList.remove("save-error");
-    el.title = "";
-    errorTimers.delete(el);
-  }, 30000));
-}
-
-function handleSaveError(el: HTMLInputElement | HTMLSelectElement, error: unknown): void {
-  // Programmer errors: rethrow asynchronously so they surface in devtools.
-  if (error instanceof TypeError || error instanceof ReferenceError) {
-    setTimeout(() => { throw error; }, 0);
-    return;
-  }
-  if (error instanceof DataIntegrityError) {
-    console.error("Data integrity error:", error);
-    showInputError(el, "Data error \u2014 please reload");
-    return;
-  }
-  console.error("Failed to save budget:", error);
-  const code = (error as { code?: string })?.code;
-  if (code === "permission-denied") {
-    showInputError(el, "Access denied. Please contact support.");
-  } else if (error instanceof RangeError) {
-    showInputError(el, "Value out of range");
-  } else {
-    showInputError(el);
-  }
-}
+import { showInputError, handleSaveError } from "./hydrate-util.js";
 
 function rowBudgetId(el: HTMLElement): string | null {
   const row = el.closest(".budget-row");
@@ -77,7 +35,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
       }
       target.defaultValue = target.value;
     } catch (error) {
-      handleSaveError(target, error);
+      handleSaveError(target, error, "budget");
     }
   }, true);
 
@@ -104,7 +62,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
       const newSelected = Array.from(target.options).find(o => o.value === value) ?? null;
       if (newSelected) newSelected.setAttribute("selected", "");
     } catch (error) {
-      handleSaveError(target, error);
+      handleSaveError(target, error, "budget");
     }
   });
 }

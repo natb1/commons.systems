@@ -1,9 +1,10 @@
 import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
-import type { RenderPageOptions } from "./render-options.js";
+import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { getTransactions, getBudgets, getBudgetPeriods, type Transaction, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAllBudgetBalances } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
+import { uniqueSorted } from "./hydrate-util.js";
 
 function formatTimestamp(ts: Timestamp | null): string {
   if (!ts) return "";
@@ -33,7 +34,7 @@ function renderRow(opts: RenderRowOptions): string {
     ? `<input type="text" class="edit-note" value="${escapeHtml(txn.note)}" aria-label="Note">`
     : escapeHtml(txn.note);
   const categoryCell = editable
-    ? `<input type="text" class="edit-category" value="${escapeHtml(txn.category)}" aria-label="Category">`
+    ? `<input type="text" class="edit-category" value="${escapeHtml(txn.category)}" aria-label="Category" data-autocomplete>`
     : formatCategory(txn.category);
   const reimbursementCell = editable
     ? `<input type="number" class="edit-reimbursement" value="${String(txn.reimbursement)}" min="0" max="100" aria-label="Reimbursement">`
@@ -47,7 +48,7 @@ function renderRow(opts: RenderRowOptions): string {
     budgetName = resolved;
   }
   const budgetCell = editable
-    ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget">`
+    ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget" data-autocomplete>`
     : escapeHtml(budgetName);
 
   const balanceRow = balance !== null
@@ -60,7 +61,7 @@ function renderRow(opts: RenderRowOptions): string {
   const timestampAttr = editable && txn.timestamp ? ` data-timestamp="${txn.timestamp.toMillis()}"` : "";
   const reimbursementAttr = editable ? ` data-reimbursement="${txn.reimbursement}"` : "";
 
-  return `<details class="txn-row"${txnIdAttr}${amountAttr}${budgetIdAttr}${timestampAttr}${reimbursementAttr}>
+  return `<details class="expand-row txn-row"${txnIdAttr}${amountAttr}${budgetIdAttr}${timestampAttr}${reimbursementAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(txn.description)}</span>
@@ -69,7 +70,7 @@ function renderRow(opts: RenderRowOptions): string {
         <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
       </div>
     </summary>
-    <div class="txn-details">
+    <div class="expand-details txn-details">
       <dl>
         <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
         <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
@@ -89,10 +90,6 @@ function compareByTimestampDesc(a: Transaction, b: Transaction): number {
   if (!a.timestamp) return 1;
   if (!b.timestamp) return -1;
   return b.timestamp.toMillis() - a.timestamp.toMillis();
-}
-
-function uniqueSorted(values: (string | null)[]): string[] {
-  return [...new Set(values.filter((v): v is string => v != null))].sort();
 }
 
 function renderTransactionTable(
@@ -137,6 +134,8 @@ function renderTransactionTable(
       periodStartMs: p.periodStart.toMillis(),
       periodEndMs: p.periodEnd.toMillis(),
       total: p.total,
+      count: p.count,
+      categoryBreakdown: p.categoryBreakdown,
     }));
     const periodsAttr = escapeHtml(JSON.stringify(periodsData));
     dataAttrs = [
@@ -159,7 +158,7 @@ function renderTransactionTable(
 }
 
 export async function renderHome(options: RenderPageOptions): Promise<string> {
-  const { user, group, groupError } = options;
+  const { user, group } = options;
   const authorized = group !== null;
   const groupName = group?.name ?? "";
 
@@ -176,33 +175,12 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
     transactions.sort(compareByTimestampDesc);
     tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets, budgetPeriods);
   } catch (error) {
-    if (error instanceof RangeError || error instanceof DataIntegrityError
-        || error instanceof TypeError || error instanceof ReferenceError) {
-      throw error;
-    }
-    // Source-specific error already logged above
-    const code = (error as { code?: string })?.code;
-    const message = code === "permission-denied"
-      ? "Access denied. Please contact support."
-      : "Could not load data. Try refreshing the page.";
-    tableHtml = `<p id="transactions-error">${message}</p>`;
-  }
-
-  const groupErrorNotice = groupError && user
-    ? '<p id="group-error" class="auth-error">Could not load group data. Showing example data. Try refreshing the page.</p>'
-    : "";
-
-  let seedNotice = "";
-  if (!authorized && !groupError) {
-    seedNotice = user
-      ? '<p id="seed-data-notice">Viewing example data. You are not a member of any groups.</p>'
-      : '<p id="seed-data-notice">Viewing example data. Sign in to see your transactions.</p>';
+    tableHtml = renderLoadError(error, "transactions-error");
   }
 
   return `
     <h2>Transactions</h2>
-    ${groupErrorNotice}
-    ${seedNotice}
+    ${renderPageNotices(options, "transactions")}
     ${tableHtml}
   `;
 }

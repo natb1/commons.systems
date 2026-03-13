@@ -6,6 +6,13 @@ vi.mock("../../src/firestore.js", () => ({
   adjustBudgetPeriodTotal: vi.fn(),
 }));
 
+vi.mock("@commons-systems/style/components/autocomplete", () => ({
+  showDropdown: vi.fn(),
+  removeDropdown: vi.fn(),
+  registerAutocompleteListeners: vi.fn(),
+  _resetForTest: vi.fn(),
+}));
+
 import { hydrateTransactionTable, _resetForTest } from "../../src/pages/home-hydrate";
 import { updateTransaction, adjustBudgetPeriodTotal } from "../../src/firestore";
 
@@ -17,9 +24,9 @@ function flush(): Promise<void> {
 }
 
 const defaultPeriods = [
-  { id: "food-w1", budgetId: "budget-food", periodStartMs: new Date("2025-01-06").getTime(), periodEndMs: new Date("2025-01-13").getTime(), total: 80 },
-  { id: "food-w2", budgetId: "budget-food", periodStartMs: new Date("2025-01-13").getTime(), periodEndMs: new Date("2025-01-20").getTime(), total: 50 },
-  { id: "vacation-w1", budgetId: "budget-vacation", periodStartMs: new Date("2025-01-13").getTime(), periodEndMs: new Date("2025-01-20").getTime(), total: 30 },
+  { id: "food-w1", budgetId: "budget-food", periodStartMs: new Date("2025-01-06").getTime(), periodEndMs: new Date("2025-01-13").getTime(), total: 80, count: 0, categoryBreakdown: {} },
+  { id: "food-w2", budgetId: "budget-food", periodStartMs: new Date("2025-01-13").getTime(), periodEndMs: new Date("2025-01-20").getTime(), total: 50, count: 0, categoryBreakdown: {} },
+  { id: "vacation-w1", budgetId: "budget-vacation", periodStartMs: new Date("2025-01-13").getTime(), periodEndMs: new Date("2025-01-20").getTime(), total: 30, count: 0, categoryBreakdown: {} },
 ];
 
 function createContainer(txnId: string, overrides: { budgetId?: string; amount?: number; timestamp?: number; reimbursement?: number; periods?: typeof defaultPeriods } = {}): HTMLElement {
@@ -36,7 +43,7 @@ function createContainer(txnId: string, overrides: { budgetId?: string; amount?:
   const reimbursementAttr = overrides.reimbursement !== undefined ? ` data-reimbursement="${overrides.reimbursement}"` : ` data-reimbursement="0"`;
 
   container.innerHTML = `
-    <details class="txn-row" data-txn-id="${txnId}"${budgetIdAttr}${amountAttr}${timestampAttr}${reimbursementAttr}>
+    <details class="expand-row txn-row" data-txn-id="${txnId}"${budgetIdAttr}${amountAttr}${timestampAttr}${reimbursementAttr}>
       <summary class="txn-summary">
         <div class="txn-summary-content">
           <span>Description</span>
@@ -45,7 +52,7 @@ function createContainer(txnId: string, overrides: { budgetId?: string; amount?:
           <span class="amount">$52.30</span>
         </div>
       </summary>
-      <div class="txn-details">
+      <div class="expand-details txn-details">
         <dl>
           <dt>Reimbursement</dt><dd><input type="number" class="edit-reimbursement" value="${overrides.reimbursement ?? 50}" min="0" max="100"></dd>
           <dt>Budget</dt><dd><input type="text" class="edit-budget" value="food"></dd>
@@ -188,7 +195,7 @@ describe("hydrateTransactionTable", () => {
   it("throws DataIntegrityError for malformed JSON in data attributes", () => {
     const container = createContainer("txn-1");
     container.dataset.budgetOptions = "not-json";
-    expect(() => hydrateTransactionTable(container)).toThrow("Failed to parse autocomplete options: not-json");
+    expect(() => hydrateTransactionTable(container)).toThrow("Failed to parse JSON string array: not-json");
   });
 
   it("shows error for unknown budget name and does not save", async () => {
@@ -317,7 +324,7 @@ describe("hydrateTransactionTable", () => {
       expect(row.dataset.budgetId).toBeUndefined();
     });
 
-    it("does not update periods when amount or timestamp are missing and logs error", async () => {
+    it("shows data integrity error when amount or timestamp data attributes are missing", async () => {
       // No amount or timestamp data attributes
       const container = createContainer("txn-1", { budgetId: "budget-food" });
       hydrateTransactionTable(container);
@@ -329,9 +336,10 @@ describe("hydrateTransactionTable", () => {
       expect(mockUpdateTransaction).toHaveBeenCalled();
       expect(mockAdjustBudgetPeriodTotal).not.toHaveBeenCalled();
       expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining("Cannot update period totals"),
-        // No second arg — the error message is the only argument
+        "Data integrity error:",
+        expect.objectContaining({ message: expect.stringContaining("Cannot update period totals") }),
       );
+      expect(input.classList.contains("save-error")).toBe(true);
     });
 
     it("sends raw negative delta to server without local clamping", async () => {
@@ -495,8 +503,8 @@ describe("hydrateTransactionTable", () => {
 
     it("throws DataIntegrityError for missing numeric fields", () => {
       const container = createContainer("txn-1");
-      container.dataset.budgetPeriods = JSON.stringify([{ id: "p1", budgetId: "food", periodStartMs: "not-a-number", periodEndMs: 1, total: 0 }]);
-      expect(() => hydrateTransactionTable(container)).toThrow("Budget period missing numeric periodStartMs, periodEndMs, or total");
+      container.dataset.budgetPeriods = JSON.stringify([{ id: "p1", budgetId: "food", periodStartMs: "not-a-number", periodEndMs: 1, total: 0, count: 0, categoryBreakdown: {} }]);
+      expect(() => hydrateTransactionTable(container)).toThrow("Budget period missing numeric periodStartMs, periodEndMs, total, or count");
     });
 
     it("throws DataIntegrityError for null elements", () => {
@@ -514,7 +522,7 @@ describe("hydrateTransactionTable", () => {
     it("throws DataIntegrityError when periodStartMs >= periodEndMs", () => {
       const container = createContainer("txn-1");
       container.dataset.budgetPeriods = JSON.stringify([
-        { id: "p1", budgetId: "food", periodStartMs: 1000, periodEndMs: 1000, total: 0 },
+        { id: "p1", budgetId: "food", periodStartMs: 1000, periodEndMs: 1000, total: 0, count: 0, categoryBreakdown: {} },
       ]);
       expect(() => hydrateTransactionTable(container)).toThrow("Budget period has periodStartMs >= periodEndMs");
     });

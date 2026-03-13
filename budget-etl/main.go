@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
+	"github.com/natb1/commons.systems/budget-etl/internal/rules"
 	"github.com/natb1/commons.systems/budget-etl/internal/store"
 )
 
@@ -93,6 +94,22 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 
 	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
+	// Build all TransactionData across all files
+	allTxns := make([]store.TransactionData, 0, totalTxns)
+	for _, pf := range parsed {
+		for _, t := range pf.result.Transactions {
+			allTxns = append(allTxns, store.TransactionData{
+				Institution:   pf.sf.Institution,
+				Account:       pf.sf.Account,
+				Description:   t.Description,
+				Amount:        t.Amount,
+				Timestamp:     t.Date,
+				StatementID:   pf.sf.StatementID(),
+				TransactionID: t.TransactionID,
+			})
+		}
+	}
+
 	if dryRun {
 		printSummary(parsed, totalTxns, skipped)
 		return nil
@@ -126,30 +143,57 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 	}
 	log.Printf("group %q (id=%s, members=%v)", groupName, groupInfo.ID, groupInfo.MemberEmails)
 
-	// Upsert transactions
-	var totalCreated, totalUpdated int
-	for _, pf := range parsed {
-		txnData := make([]store.TransactionData, len(pf.result.Transactions))
-		for i, t := range pf.result.Transactions {
-			txnData[i] = store.TransactionData{
-				Institution:   pf.sf.Institution,
-				Account:       pf.sf.Account,
-				Description:   t.Description,
-				Amount:        t.Amount,
-				Timestamp:     t.Date,
-				StatementID:   pf.sf.StatementID(),
-				TransactionID: t.TransactionID,
-			}
+	// Load rules from Firestore
+	ruleDocs, err := client.LoadRules(ctx, groupInfo.ID)
+	if err != nil {
+		return err
+	}
+	ruleSet := make([]rules.Rule, len(ruleDocs))
+	for i, rd := range ruleDocs {
+		ruleSet[i] = rules.Rule{
+			ID:          rd.ID,
+			Type:        rd.Type,
+			Pattern:     rd.Pattern,
+			Target:      rd.Target,
+			Priority:    rd.Priority,
+			Institution: rd.Institution,
+			Account:     rd.Account,
 		}
-		result, err := client.UpsertTransactions(ctx, groupInfo, txnData)
-		if err != nil {
-			return fmt.Errorf("upserting %s: %w", pf.sf.StatementID(), err)
-		}
-		totalCreated += result.Created
-		totalUpdated += result.Updated
 	}
 
-	log.Printf("done: %d created, %d updated across %d statements", totalCreated, totalUpdated, len(parsed))
+	// Apply categorization rules (error if <100% coverage)
+	if err := rules.ApplyCategorization(allTxns, ruleSet); err != nil {
+		return fmt.Errorf("categorization: %w", err)
+	}
+
+	// Apply budget assignment rules
+	rules.ApplyBudgetAssignment(allTxns, ruleSet)
+
+	// Upsert all transactions
+	result, err := client.UpsertTransactions(ctx, groupInfo, allTxns)
+	if err != nil {
+		return fmt.Errorf("upserting transactions: %w", err)
+	}
+	log.Printf("upsert: %d created, %d updated across %d statements", result.Created, result.Updated, len(parsed))
+
+	// Recalculate affected budget periods
+	if len(allTxns) > 0 {
+		minTime := allTxns[0].Timestamp
+		maxTime := allTxns[0].Timestamp
+		for _, txn := range allTxns[1:] {
+			if txn.Timestamp.Before(minTime) {
+				minTime = txn.Timestamp
+			}
+			if txn.Timestamp.After(maxTime) {
+				maxTime = txn.Timestamp
+			}
+		}
+		if err := client.RecalculatePeriods(ctx, groupInfo, minTime, maxTime); err != nil {
+			return fmt.Errorf("recalculating periods: %w", err)
+		}
+	}
+
+	log.Printf("done")
 	return nil
 }
 

@@ -1,0 +1,41 @@
+.expand-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.expand-row > summary {
+  cursor: pointer;
+  list-style: none;
+  position: relative;
+  padding-left: 1.5rem;
+}
+
+.expand-row > summary::-webkit-details-marker {
+  display: none;
+}
+
+.expand-row > summary::before {
+  content: "\25B6";
+  font-size: 0.7em;
+  transition: transform 0.15s;
+  position: absolute;
+  left: 0.5rem;
+}
+
+.expand-row[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.expand-row .expand-details {
+  padding: 0.5rem 1rem 1rem;
+}
+
+.expand-row .expand-details dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+}
+
+.expand-row .expand-details dt {
+  font-weight: bold;
+}
