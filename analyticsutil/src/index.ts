@@ -1,15 +1,21 @@
 import { initializeAnalytics, logEvent } from "firebase/analytics";
 import type { FirebaseApp, FirebaseOptions } from "firebase/app";
 
-export function withMeasurementId(
-  config: FirebaseOptions,
+export function withMeasurementId<T extends FirebaseOptions>(
+  config: T,
   measurementId: string | undefined,
-): FirebaseOptions {
+): T {
   return measurementId ? { ...config, measurementId } : config;
 }
 
 export function initAnalytics(app: FirebaseApp): (path: string) => void {
-  if (!app.options.measurementId) return () => {};
+  if (!app.options.measurementId) {
+    console.debug("Analytics disabled: measurementId not set.");
+    return () => {};
+  }
+  if (!app.options.appId) {
+    throw new Error("Analytics requires appId in Firebase config.");
+  }
   try {
     // Disable automatic page views — the returned tracker fires them manually.
     const analytics = initializeAnalytics(app, {
@@ -19,11 +25,16 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
       try {
         logEvent(analytics, "page_view", { page_path: path });
       } catch (error) {
-        console.error("Failed to log page view:", error);
+        console.error("Failed to log page view (path: %s):", path, error);
       }
     };
   } catch (error) {
-    console.error("Failed to initialize analytics:", error);
+    console.error(
+      "Failed to initialize analytics (appId: %s, measurementId: %s):",
+      app.options.appId,
+      app.options.measurementId,
+      error,
+    );
     return () => {};
   }
 }

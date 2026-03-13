@@ -26,18 +26,33 @@ describe("withMeasurementId", () => {
 });
 
 describe("initAnalytics", () => {
-  it("returns no-op tracker when measurementId is missing", () => {
+  it("returns no-op tracker and logs debug when measurementId is missing", () => {
+    const consoleDebugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
     const app = { options: {} } as unknown as FirebaseApp;
     const tracker = initAnalytics(app);
 
     tracker("/some-page");
 
+    expect(consoleDebugSpy).toHaveBeenCalledWith(
+      "Analytics disabled: measurementId not set.",
+    );
     expect(initializeAnalytics).not.toHaveBeenCalled();
     expect(logEvent).not.toHaveBeenCalled();
+
+    consoleDebugSpy.mockRestore();
+  });
+
+  it("throws when appId is missing", () => {
+    const app = { options: { measurementId: "G-TEST" } } as unknown as FirebaseApp;
+
+    expect(() => initAnalytics(app)).toThrow(
+      "Analytics requires appId in Firebase config.",
+    );
+    expect(initializeAnalytics).not.toHaveBeenCalled();
   });
 
   it("calls initializeAnalytics with send_page_view: false", () => {
-    const app = { options: { measurementId: "G-TEST" } } as unknown as FirebaseApp;
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
     initAnalytics(app);
 
     expect(initializeAnalytics).toHaveBeenCalledWith(app, {
@@ -49,7 +64,7 @@ describe("initAnalytics", () => {
     const fakeAnalytics = { app: {} };
     vi.mocked(initializeAnalytics).mockReturnValue(fakeAnalytics as never);
 
-    const app = { options: { measurementId: "G-TEST" } } as unknown as FirebaseApp;
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
     const tracker = initAnalytics(app);
 
     tracker("/about");
@@ -65,11 +80,13 @@ describe("initAnalytics", () => {
       throw new Error("CSP blocked");
     });
 
-    const app = { options: { measurementId: "G-TEST" } } as unknown as FirebaseApp;
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
     const tracker = initAnalytics(app);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "Failed to initialize analytics:",
+      "Failed to initialize analytics (appId: %s, measurementId: %s):",
+      "1:test:web:abc",
+      "G-TEST",
       expect.any(Error),
     );
 
@@ -86,12 +103,13 @@ describe("initAnalytics", () => {
       throw new Error("bad state");
     });
 
-    const app = { options: { measurementId: "G-TEST" } } as unknown as FirebaseApp;
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
     const tracker = initAnalytics(app);
 
     expect(() => tracker("/about")).not.toThrow();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "Failed to log page view:",
+      "Failed to log page view (path: %s):",
+      "/about",
       expect.any(Error),
     );
 
