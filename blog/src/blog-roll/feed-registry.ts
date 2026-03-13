@@ -1,8 +1,8 @@
 export interface FeedRegistryEntry {
-  id: string;
-  name: string;
-  homeUrl: string;
-  feedUrl: string;
+  readonly id: string;
+  readonly name: string;
+  readonly homeUrl: string;
+  readonly feedUrl: string;
 }
 
 export const FEED_REGISTRY: readonly FeedRegistryEntry[] = [

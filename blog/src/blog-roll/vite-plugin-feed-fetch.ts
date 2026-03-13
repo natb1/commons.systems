@@ -51,11 +51,11 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
   };
 }
 
-// Regex-based XML parsing for build time. The Node build environment has
-// no native DOMParser, and happy-dom's implementation cannot parse Atom
-// feeds with XML namespaces correctly. These functions extract the first
-// entry/item from Atom and RSS feeds using regex, which is sufficient for
-// extracting the latest post title, URL, and date.
+// Regex-based XML parsing for build time. The browser-side parser
+// (parse-feed.ts) uses DOMParser, which is only available at runtime.
+// At build time in Node, we use regex extraction instead — sufficient
+// for extracting the latest post title, URL, and date from the first
+// entry/item of Atom and RSS feeds.
 
 function xmlText(xml: string, tag: string): string | undefined {
   const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i");
