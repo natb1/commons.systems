@@ -13,6 +13,8 @@ function makePeriod(overrides: Partial<BudgetPeriod> & { id: string; budgetId: s
     periodStart: ts("2025-01-13"),
     periodEnd: ts("2025-01-20"),
     total: 0,
+    count: 0,
+    categoryBreakdown: {},
     groupId: null,
     ...overrides,
   };

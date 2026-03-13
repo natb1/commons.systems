@@ -1,12 +1,14 @@
 import { createRouter, parseHash } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderBudgets } from "./pages/budgets.js";
+import { renderRules } from "./pages/rules.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { RenderPageOptions } from "./pages/render-options.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { hydrateBudgetTable } from "./pages/budgets-hydrate.js";
+import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
 import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView } from "./firebase.js";
@@ -44,7 +46,7 @@ function selectedGroup(): Group | null {
   return state.groups.find((g) => g.id === param) ?? state.groups[0];
 }
 
-navEl.links = [{ href: "#/", label: "transactions" }, { href: "#/budgets", label: "budgets" }];
+navEl.links = [{ href: "#/", label: "transactions" }, { href: "#/budgets", label: "budgets" }, { href: "#/rules", label: "rules" }];
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => {
   signOut().catch((error) => console.error("Unexpected sign-out error:", error));
@@ -89,6 +91,7 @@ const router = createRouter(
   [
     { path: "/", render: () => renderHome(renderOptions()) },
     { path: "/budgets", render: () => renderBudgets(renderOptions()) },
+    { path: "/rules", render: () => renderRules(renderOptions()) },
   ],
   {
     onNavigate: ({ path }) => trackPageView(path),
@@ -144,6 +147,7 @@ function hydrateTable(
 const observer = new MutationObserver(() => {
   hydrateTable("#transactions-table", hydrateTransactionTable);
   hydrateTable("#budgets-table", hydrateBudgetTable);
+  hydrateTable("#rules-table", hydrateRulesTable);
 });
 observer.observe(app, { childList: true, subtree: true });
 
