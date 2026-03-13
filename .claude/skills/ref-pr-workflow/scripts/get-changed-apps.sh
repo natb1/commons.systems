@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Outputs one changed app name per line based on git diff.
-# An "app" is a top-level directory containing both package.json and package-lock.json.
+# An "app" is a workspace listed in the root package.json.
 #
 # Usage: get-changed-apps.sh [--base <ref>]
 #   --base <ref>  Override comparison base (default: origin/main)
@@ -34,27 +34,26 @@ if ! CHANGED=$(git diff --name-only "$BASE"...HEAD); then
   exit 1
 fi
 
-# Discover all apps (top-level dirs with both package.json and package-lock.json)
+# Discover all apps from workspace list in root package.json
 declare -A ALL_APPS
-for dir in "$REPO_ROOT"/*/; do
-  base=$(basename "$dir")
-  [ -f "$dir/package.json" ] && [ -f "$dir/package-lock.json" ] && ALL_APPS["$base"]=1
-done
+while IFS= read -r ws; do
+  [ -z "$ws" ] && continue
+  ALL_APPS["$ws"]=1
+done < <(jq -r '.workspaces[]' "$REPO_ROOT/package.json")
 
 # No changed files — nothing to output
 if [ -z "$CHANGED" ]; then
   exit 0
 fi
 
-# Build a map of shared packages to their dependents by scanning package.json for file: references
+# Build a map of shared packages to their dependents by scanning package.json for @commons-systems/* deps
 declare -A SHARED_PKGS
 for app in "${!ALL_APPS[@]}"; do
   pkg="$REPO_ROOT/$app/package.json"
-  # Extract file: dependency paths (e.g. "file:../authutil" -> "authutil")
   while IFS= read -r dep_dir; do
     [ -z "$dep_dir" ] && continue
     SHARED_PKGS["$dep_dir"]+="$app "
-  done < <(grep -o '"file:\.\./[^"]*"' "$pkg" 2>/dev/null | sed 's/"file:\.\.\/\(.*\)"/\1/' || true)
+  done < <(jq -r '(.dependencies // {}) + (.devDependencies // {}) | keys[] | select(startswith("@commons-systems/")) | sub("@commons-systems/"; "")' "$pkg" 2>/dev/null)
 done
 
 declare -A DIRTY_APPS
