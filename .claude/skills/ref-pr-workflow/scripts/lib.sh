@@ -3,11 +3,13 @@
 
 export FIREBASE_PROJECT_ID="commons-systems"
 
-# Detect what Firebase features the app uses by searching source imports.
-# Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE
-# Args: $1 = path to app src/ directory
+# Detect what Firebase features the app uses.
+# Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE, USES_FUNCTIONS
+# Args: $1 = path to app src/ directory, $2 = repo root, $3 = app name
 detect_features() {
   local app_src_dir="$1"
+  local repo_root="$2"
+  local app_name="$3"
 
   if [ ! -d "$app_src_dir" ]; then
     echo "ERROR: app source directory not found: $app_src_dir" >&2
@@ -27,6 +29,12 @@ detect_features() {
   USES_STORAGE=false
   if grep -rq '"firebase/storage"' "$app_src_dir" 2>/dev/null; then
     USES_STORAGE=true
+  fi
+
+  # Detect Cloud Functions by checking for /api/ rewrites in firebase.json
+  USES_FUNCTIONS=false
+  if [ -d "$repo_root/functions" ] && jq -e '.hosting[] | select(.target == "'"$app_name"'") | .rewrites[]? | select(.source | startswith("/api/"))' "$repo_root/firebase.json" >/dev/null 2>&1; then
+    USES_FUNCTIONS=true
   fi
 }
 

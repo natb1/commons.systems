@@ -1,4 +1,8 @@
 {
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  },
   "hosting": [
     {
       "headers": [
@@ -54,6 +58,14 @@
               "value": "text/x-opml+xml; charset=utf-8"
             }
           ]
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "/api/feed-proxy",
+          "function": {
+            "functionId": "feedProxy"
+          }
         }
       ]
     },

@@ -29,11 +29,12 @@ afterEach(() => {
 });
 
 describe("AtomStrategy", () => {
-  it("parses Atom feed and returns latest post", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+  it("parses Atom feed via proxy and returns latest post", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       text: () => Promise.resolve(ATOM_FEED),
-    }));
+    });
+    vi.stubGlobal("fetch", mockFetch);
 
     const strategy = new AtomStrategy("https://example.com/feed");
     const result = await strategy.fetchLatestPost();
@@ -44,9 +45,13 @@ describe("AtomStrategy", () => {
       publishedAt: "2026-02-01T00:00:00Z",
     });
 
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      `/api/feed-proxy?url=${encodeURIComponent("https://example.com/feed")}`,
+    );
   });
 
-  it("parses RSS feed and returns latest post", async () => {
+  it("parses RSS feed via proxy and returns latest post", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
       text: () => Promise.resolve(RSS_FEED),
@@ -60,19 +65,16 @@ describe("AtomStrategy", () => {
       url: "https://example.com/rss-post",
       publishedAt: "Sun, 01 Feb 2026 00:00:00 GMT",
     });
-
   });
 
-  it("falls back to corsproxy on CORS error", async () => {
-    const mockFetch = vi.fn()
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce({
-        ok: true,
-        text: () => Promise.resolve(ATOM_FEED),
-      });
+  it("uses custom proxy path", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(ATOM_FEED),
+    });
     vi.stubGlobal("fetch", mockFetch);
 
-    const strategy = new AtomStrategy("https://example.com/feed");
+    const strategy = new AtomStrategy("https://example.com/feed", "/custom/proxy");
     const result = await strategy.fetchLatestPost();
 
     expect(result).toEqual({
@@ -81,24 +83,28 @@ describe("AtomStrategy", () => {
       publishedAt: "2026-02-01T00:00:00Z",
     });
 
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    const proxyUrl = mockFetch.mock.calls[1][0] as string;
-    expect(proxyUrl).toContain("corsproxy.io");
-    expect(proxyUrl).toContain(encodeURIComponent("https://example.com/feed"));
-
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      `/custom/proxy?url=${encodeURIComponent("https://example.com/feed")}`,
+    );
   });
 
-  it("returns null when both direct fetch and proxy fail", async () => {
-    const mockFetch = vi.fn()
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce({ ok: false, status: 500 });
-    vi.stubGlobal("fetch", mockFetch);
+  it("returns null when proxy returns non-ok status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
 
     const strategy = new AtomStrategy("https://example.com/feed");
     const result = await strategy.fetchLatestPost();
 
     expect(result).toBeNull();
+  });
 
+  it("returns null when proxy fetch throws", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Network error")));
+
+    const strategy = new AtomStrategy("https://example.com/feed");
+    const result = await strategy.fetchLatestPost();
+
+    expect(result).toBeNull();
   });
 
   it("returns null for unparseable XML", async () => {
@@ -111,7 +117,6 @@ describe("AtomStrategy", () => {
     const result = await strategy.fetchLatestPost();
 
     expect(result).toBeNull();
-
   });
 
   it("returns null for empty feed", async () => {
@@ -128,7 +133,6 @@ describe("AtomStrategy", () => {
     const result = await strategy.fetchLatestPost();
 
     expect(result).toBeNull();
-
   });
 
   it("prefers rel=alternate link over rel=self in Atom feed", async () => {
@@ -175,6 +179,5 @@ describe("AtomStrategy", () => {
     const result = await strategy.fetchLatestPost();
 
     expect(result?.publishedAt).toBe("2026-03-01T00:00:00Z");
-
   });
 });
