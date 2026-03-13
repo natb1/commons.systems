@@ -1,7 +1,7 @@
 export interface LatestPost {
-  title: string;
-  url: string;
-  publishedAt?: string;
+  readonly title: string;
+  readonly url: string;
+  readonly publishedAt?: string;
 }
 
 export interface BlogRollEntry {
@@ -11,6 +11,8 @@ export interface BlogRollEntry {
 }
 
 export interface BlogRollStrategy {
+  /** Returns the latest post, or null if the feed is unavailable or empty.
+   *  Implementations should catch recoverable errors and return null. */
   fetchLatestPost(): Promise<LatestPost | null>;
 }
 
