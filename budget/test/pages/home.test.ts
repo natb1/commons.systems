@@ -393,4 +393,94 @@ describe("renderHome", () => {
     const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).not.toContain("data-budget-periods");
   });
+
+  describe("normalized transaction groups", () => {
+    it("renders normalized group as single row", async () => {
+      mockGetTransactions.mockResolvedValue([
+        txn({
+          id: "txn-a",
+          description: "Store A",
+          amount: 50,
+          normalizedId: "norm-1",
+          normalizedPrimary: true,
+          timestamp: mockTimestamp("2025-01-15"),
+        }),
+        txn({
+          id: "txn-b",
+          description: "Store B",
+          amount: 30,
+          normalizedId: "norm-1",
+          normalizedPrimary: false,
+          timestamp: mockTimestamp("2025-01-14"),
+        }),
+      ]);
+      const html = await renderHome({ user: null, group: null, groupError: false });
+      expect(html).toContain('class="expand-row txn-row normalized-group"');
+      // Only one summary row for the group
+      const summaryMatches = html.match(/class="txn-summary"/g);
+      expect(summaryMatches).toHaveLength(1);
+    });
+
+    it("renders originals section with all member descriptions", async () => {
+      mockGetTransactions.mockResolvedValue([
+        txn({
+          id: "txn-a",
+          description: "Store Alpha",
+          amount: 50,
+          normalizedId: "norm-1",
+          normalizedPrimary: true,
+          timestamp: mockTimestamp("2025-01-15"),
+        }),
+        txn({
+          id: "txn-b",
+          description: "Store Beta",
+          amount: 30,
+          normalizedId: "norm-1",
+          normalizedPrimary: false,
+          timestamp: mockTimestamp("2025-01-14"),
+        }),
+      ]);
+      const html = await renderHome({ user: null, group: null, groupError: false });
+      expect(html).toContain('class="normalized-originals"');
+      expect(html).toContain("Original Transactions");
+      expect(html).toContain("Store Alpha");
+      expect(html).toContain("Store Beta");
+    });
+
+    it("uses normalizedDescription in summary", async () => {
+      mockGetTransactions.mockResolvedValue([
+        txn({
+          id: "txn-a",
+          description: "Raw Desc",
+          amount: 50,
+          normalizedId: "norm-1",
+          normalizedPrimary: true,
+          normalizedDescription: "Canonical Desc",
+          timestamp: mockTimestamp("2025-01-15"),
+        }),
+      ]);
+      const html = await renderHome({ user: null, group: null, groupError: false });
+      expect(html).toContain("Canonical Desc");
+      // The raw description should appear in the originals section, not the summary
+      const summaryStart = html.indexOf('class="txn-summary-content"');
+      const summaryEnd = html.indexOf("</summary>");
+      const summarySlice = html.slice(summaryStart, summaryEnd);
+      expect(summarySlice).toContain("Canonical Desc");
+      expect(summarySlice).not.toContain("Raw Desc");
+    });
+
+    it("renders ungrouped transaction without normalized-group class", async () => {
+      mockGetTransactions.mockResolvedValue([
+        txn({
+          id: "txn-plain",
+          description: "Plain purchase",
+          normalizedId: null,
+          normalizedPrimary: true,
+        }),
+      ]);
+      const html = await renderHome({ user: null, group: null, groupError: false });
+      expect(html).toContain('class="expand-row txn-row"');
+      expect(html).not.toContain("normalized-group");
+    });
+  });
 });

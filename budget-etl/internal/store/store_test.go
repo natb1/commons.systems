@@ -400,3 +400,91 @@ func TestAggregateTransactionData(t *testing.T) {
 		}
 	})
 }
+
+func TestAggregateTransactionData_SkipsNonPrimary(t *testing.T) {
+	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)
+	txn := txnFieldMap{
+		id: "txn-norm-secondary",
+		data: map[string]interface{}{
+			"budget":             "food",
+			"category":           "Food:Groceries",
+			"amount":             50.0,
+			"reimbursement":      0.0,
+			"timestamp":          mon,
+			"normalizedId":       "some-id",
+			"normalizedPrimary":  false,
+		},
+	}
+	periods, err := aggregateTransactionData([]txnFieldMap{txn})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(periods) != 0 {
+		t.Errorf("got %d periods, want 0 (non-primary normalized txn should be skipped)", len(periods))
+	}
+}
+
+func TestAggregateTransactionData_PrimaryIncluded(t *testing.T) {
+	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)
+	txn := txnFieldMap{
+		id: "txn-norm-primary",
+		data: map[string]interface{}{
+			"budget":             "food",
+			"category":           "Food:Groceries",
+			"amount":             75.0,
+			"reimbursement":      0.0,
+			"timestamp":          mon,
+			"normalizedId":       "some-id",
+			"normalizedPrimary":  true,
+		},
+	}
+	periods, err := aggregateTransactionData([]txnFieldMap{txn})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(periods) != 1 {
+		t.Fatalf("got %d periods, want 1", len(periods))
+	}
+	pd := periods["food-2025-01-06"]
+	if pd == nil {
+		t.Fatal("missing period food-2025-01-06")
+	}
+	if pd.total != 75.0 {
+		t.Errorf("total = %v, want 75.0", pd.total)
+	}
+	if pd.count != 1 {
+		t.Errorf("count = %d, want 1", pd.count)
+	}
+}
+
+func TestAggregateTransactionData_NullNormalizedId(t *testing.T) {
+	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)
+	txn := txnFieldMap{
+		id: "txn-no-norm",
+		data: map[string]interface{}{
+			"budget":             "food",
+			"category":           "Food:Dining",
+			"amount":             30.0,
+			"reimbursement":      0.0,
+			"timestamp":          mon,
+			"normalizedId":       nil,
+		},
+	}
+	periods, err := aggregateTransactionData([]txnFieldMap{txn})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(periods) != 1 {
+		t.Fatalf("got %d periods, want 1", len(periods))
+	}
+	pd := periods["food-2025-01-06"]
+	if pd == nil {
+		t.Fatal("missing period food-2025-01-06")
+	}
+	if pd.total != 30.0 {
+		t.Errorf("total = %v, want 30.0", pd.total)
+	}
+	if pd.count != 1 {
+		t.Errorf("count = %d, want 1", pd.count)
+	}
+}
