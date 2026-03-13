@@ -44,7 +44,7 @@ test.describe("rules", () => {
     }
   });
 
-  test("seed data renders all six example rules with filter", async ({ page }) => {
+  test("seed data renders all example rules with filter", async ({ page }) => {
     await page.goto("/#/rules");
     await expect(page.locator("#rules-table")).toBeVisible();
     // All 8 rows exist in the DOM (3 categorization + 3 budget + 2 normalization)
@@ -109,7 +109,7 @@ test.describe("rules", () => {
     const rows = page.locator("#rules-table .rule-row");
     await expect(rows).toHaveCount(8);
     // 6 regular rules have pattern/target/priority/institution/account;
-    // 2 normalization rules have pattern/canonical/priority/date-window/amount-match
+    // 2 normalization rules have pattern/canonical/priority/date-window
     await expect(page.locator(".edit-pattern")).toHaveCount(8);
     await expect(page.locator(".edit-target")).toHaveCount(6);
     await expect(page.locator(".edit-canonical")).toHaveCount(2);

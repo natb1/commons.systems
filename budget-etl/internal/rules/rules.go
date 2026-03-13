@@ -283,6 +283,8 @@ func ApplyNormalization(txns []store.NormTxn, rules []NormalizationRule) ([]stor
 				return nil, fmt.Errorf("normalization rule %s: invalid regex %q: %w", r.ID, r.Pattern, err)
 			}
 			compiled[i].regex = re
+		} else if r.PatternType != "" && r.PatternType != "substring" {
+			return nil, fmt.Errorf("normalization rule %s: unknown patternType %q (expected \"substring\" or \"regex\")", r.ID, r.PatternType)
 		}
 	}
 

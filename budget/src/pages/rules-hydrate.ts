@@ -125,7 +125,6 @@ export function hydrateRulesTable(container: HTMLElement): void {
     }
   }, true);
 
-
   container.addEventListener("click", async (e) => {
     const target = e.target;
     if (!(target instanceof HTMLButtonElement)) return;

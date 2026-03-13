@@ -1,9 +1,7 @@
 // Seed data definitions for normalization acceptance tests.
 //
-// To activate these in the emulator, add the documents below to the
-// `seed-transactions` and `seed-budget-periods` collections in
-// budget/seeds/firestore.ts.  The normalized group consists of two
-// transactions sharing the same normalizedId ("norm-group-1"):
+// The normalized group consists of two transactions sharing the same
+// normalizedId ("norm-group-1"):
 //
 //   - seed-norm-primary  (primary, amount 25.00, stmt-2025-01)
 //   - seed-norm-secondary (non-primary, amount 25.00, stmt-2025-02)

@@ -347,8 +347,9 @@ type txnFieldMap struct {
 }
 
 // aggregateTransactionData groups transactions by budget period and computes
-// total, count, and categoryBreakdown for each period. Transactions with a
-// nil or empty budget are skipped (unassigned). Returns a map keyed by period ID.
+// total, count, and categoryBreakdown for each period. Non-primary normalized
+// transactions are excluded. Transactions with a nil or empty budget are
+// skipped (unassigned). Returns a map keyed by period ID.
 func aggregateTransactionData(txns []txnFieldMap) (map[string]*periodData, error) {
 	periods := make(map[string]*periodData)
 
@@ -578,6 +579,8 @@ func (c *Client) LoadNormalizationRules(ctx context.Context, groupID string) ([]
 			r.DateWindowDays = int(p)
 		} else if p, ok := d["dateWindowDays"].(float64); ok {
 			r.DateWindowDays = int(p)
+		} else if d["dateWindowDays"] != nil {
+			return nil, fmt.Errorf("normalization rule %s: field 'dateWindowDays' is not a number (got %T)", doc.Ref.ID, d["dateWindowDays"])
 		}
 		if v, ok := d["institution"].(string); ok {
 			r.Institution = v
@@ -589,6 +592,8 @@ func (c *Client) LoadNormalizationRules(ctx context.Context, groupID string) ([]
 			r.Priority = int(p)
 		} else if p, ok := d["priority"].(float64); ok {
 			r.Priority = int(p)
+		} else if d["priority"] != nil {
+			return nil, fmt.Errorf("normalization rule %s: field 'priority' is not a number (got %T)", doc.Ref.ID, d["priority"])
 		}
 		result = append(result, r)
 	}

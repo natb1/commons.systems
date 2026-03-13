@@ -177,7 +177,7 @@ export async function getTransactions(groupId: string | null, email?: string): P
       statementId: optionalString(data.statementId, "statementId"),
       groupId: optionalString(data.groupId, "groupId"),
       normalizedId: optionalString(data.normalizedId, "normalizedId"),
-      normalizedPrimary: data.normalizedPrimary === false ? false : true,
+      normalizedPrimary: data.normalizedPrimary !== false,
       normalizedDescription: optionalString(data.normalizedDescription, "normalizedDescription"),
     };
   });
@@ -452,7 +452,7 @@ export async function createNormalizationRule(
     memberEmails,
   };
   if (fields.patternType) data.patternType = fields.patternType;
-  if (fields.dateWindowDays) data.dateWindowDays = fields.dateWindowDays;
+  if (fields.dateWindowDays != null) data.dateWindowDays = fields.dateWindowDays;
   if (fields.institution) data.institution = fields.institution;
   if (fields.account) data.account = fields.account;
   const ref = await addDoc(collection(db, path), data);

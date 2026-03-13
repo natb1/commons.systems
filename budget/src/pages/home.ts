@@ -19,16 +19,21 @@ function formatCategory(category: string): string {
   return category.split(":").map(escapeHtml).join(" &gt; ");
 }
 
-interface RenderRowOptions {
-  txn: Transaction;
-  groupName: string;
-  editable: boolean;
-  budgetIdToName: Map<string, string>;
-  balance: number | null;
+interface RowParts {
+  txnIdAttr: string;
+  noteCell: string;
+  categoryCell: string;
+  reimbursementCell: string;
+  budgetCell: string;
+  balanceRow: string;
+  amountAttr: string;
+  budgetIdAttr: string;
+  timestampAttr: string;
+  reimbursementAttr: string;
+  detailDl: string;
 }
 
-function renderRow(opts: RenderRowOptions): string {
-  const { txn, groupName, editable, budgetIdToName, balance } = opts;
+function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<string, string>, balance: number | null, groupName: string): RowParts {
   const txnIdAttr = editable ? ` data-txn-id="${escapeHtml(txn.id)}"` : "";
   const noteCell = editable
     ? `<input type="text" class="edit-note" value="${escapeHtml(txn.note)}" aria-label="Note">`
@@ -50,28 +55,14 @@ function renderRow(opts: RenderRowOptions): string {
   const budgetCell = editable
     ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget" data-autocomplete>`
     : escapeHtml(budgetName);
-
   const balanceRow = balance !== null
     ? `<dt>Budget Balance</dt><dd class="budget-balance">${balance.toFixed(2)}</dd>`
     : "";
-
-  // Data attributes consumed by syncPeriodTotals / syncPeriodOnReimbursementChange in home-hydrate.ts
   const amountAttr = editable ? ` data-amount="${txn.amount}"` : "";
   const budgetIdAttr = editable && txn.budget ? ` data-budget-id="${escapeHtml(txn.budget)}"` : "";
   const timestampAttr = editable && txn.timestamp ? ` data-timestamp="${txn.timestamp.toMillis()}"` : "";
   const reimbursementAttr = editable ? ` data-reimbursement="${txn.reimbursement}"` : "";
-
-  return `<details class="expand-row txn-row"${txnIdAttr}${amountAttr}${budgetIdAttr}${timestampAttr}${reimbursementAttr}>
-    <summary class="txn-summary">
-      <div class="txn-summary-content">
-        <span>${escapeHtml(txn.description)}</span>
-        <span>${noteCell}</span>
-        <span>${categoryCell}</span>
-        <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
-      </div>
-    </summary>
-    <div class="expand-details txn-details">
-      <dl>
+  const detailDl = `<dl>
         <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
         <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
         <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
@@ -80,7 +71,33 @@ function renderRow(opts: RenderRowOptions): string {
         ${balanceRow}
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
-      </dl>
+      </dl>`;
+  return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, detailDl };
+}
+
+interface RenderRowOptions {
+  txn: Transaction;
+  groupName: string;
+  editable: boolean;
+  budgetIdToName: Map<string, string>;
+  balance: number | null;
+}
+
+function renderRow(opts: RenderRowOptions): string {
+  const { txn, groupName, editable, budgetIdToName, balance } = opts;
+  const p = buildRowParts(txn, editable, budgetIdToName, balance, groupName);
+
+  return `<details class="expand-row txn-row"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}>
+    <summary class="txn-summary">
+      <div class="txn-summary-content">
+        <span>${escapeHtml(txn.description)}</span>
+        <span>${p.noteCell}</span>
+        <span>${p.categoryCell}</span>
+        <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
+      </div>
+    </summary>
+    <div class="expand-details txn-details">
+      ${p.detailDl}
     </div>
   </details>`;
 }
@@ -97,34 +114,7 @@ interface RenderGroupOptions {
 function renderNormalizedGroup(opts: RenderGroupOptions): string {
   const { primary, members, groupName, editable, budgetIdToName, balance } = opts;
   const description = primary.normalizedDescription ?? primary.description;
-  const txnIdAttr = editable ? ` data-txn-id="${escapeHtml(primary.id)}"` : "";
-  const noteCell = editable
-    ? `<input type="text" class="edit-note" value="${escapeHtml(primary.note)}" aria-label="Note">`
-    : escapeHtml(primary.note);
-  const categoryCell = editable
-    ? `<input type="text" class="edit-category" value="${escapeHtml(primary.category)}" aria-label="Category" data-autocomplete>`
-    : formatCategory(primary.category);
-  const reimbursementCell = editable
-    ? `<input type="number" class="edit-reimbursement" value="${String(primary.reimbursement)}" min="0" max="100" aria-label="Reimbursement">`
-    : `${String(primary.reimbursement)}%`;
-  let budgetName = "";
-  if (primary.budget) {
-    const resolved = budgetIdToName.get(primary.budget);
-    if (resolved === undefined) {
-      throw new DataIntegrityError(`Transaction ${primary.id} references unknown budget ID: ${primary.budget}`);
-    }
-    budgetName = resolved;
-  }
-  const budgetCell = editable
-    ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget" data-autocomplete>`
-    : escapeHtml(budgetName);
-  const balanceRow = balance !== null
-    ? `<dt>Budget Balance</dt><dd class="budget-balance">${balance.toFixed(2)}</dd>`
-    : "";
-  const amountAttr = editable ? ` data-amount="${primary.amount}"` : "";
-  const budgetIdAttr = editable && primary.budget ? ` data-budget-id="${escapeHtml(primary.budget)}"` : "";
-  const timestampAttr = editable && primary.timestamp ? ` data-timestamp="${primary.timestamp.toMillis()}"` : "";
-  const reimbursementAttr = editable ? ` data-reimbursement="${primary.reimbursement}"` : "";
+  const p = buildRowParts(primary, editable, budgetIdToName, balance, groupName);
 
   const originalRows = members.map(txn =>
     `<div class="normalized-original">
@@ -135,26 +125,17 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
     </div>`
   ).join("\n");
 
-  return `<details class="expand-row txn-row normalized-group"${txnIdAttr}${amountAttr}${budgetIdAttr}${timestampAttr}${reimbursementAttr}>
+  return `<details class="expand-row txn-row normalized-group"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(description)}</span>
-        <span>${noteCell}</span>
-        <span>${categoryCell}</span>
+        <span>${p.noteCell}</span>
+        <span>${p.categoryCell}</span>
         <span class="amount">${escapeHtml(primary.amount.toFixed(2))}</span>
       </div>
     </summary>
     <div class="expand-details txn-details">
-      <dl>
-        <dt>Date</dt><dd>${formatTimestamp(primary.timestamp)}</dd>
-        <dt>Institution</dt><dd>${escapeHtml(primary.institution)}</dd>
-        <dt>Account</dt><dd>${escapeHtml(primary.account)}</dd>
-        <dt>Reimbursement</dt><dd>${reimbursementCell}</dd>
-        <dt>Budget</dt><dd>${budgetCell}</dd>
-        ${balanceRow}
-        <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
-        <dt>Statement</dt><dd>${primary.statementId ? `<a href="#">statement</a>` : ""}</dd>
-      </dl>
+      ${p.detailDl}
       <div class="normalized-originals">
         <h4>Original Transactions</h4>
         ${originalRows}

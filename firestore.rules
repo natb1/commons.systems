@@ -43,8 +43,9 @@ service cloud.firestore {
     // Transactions are scoped to group members via a denormalized `memberEmails` field.
     // Firestore rules can only read the document being accessed, not join across
     // collections, so membership is checked directly on the transaction document.
-    // Updates limited to note, category, reimbursement, and budget; reimbursement
-    // must be in [0, 100]. Create and delete are explicitly denied.
+    // Updates limited to note, category, reimbursement, budget, and normalization
+    // fields (normalizedId, normalizedPrimary, normalizedDescription);
+    // reimbursement must be in [0, 100]. Create and delete are explicitly denied.
     match /budget/{env}/transactions/{txnId} {
       allow read: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;

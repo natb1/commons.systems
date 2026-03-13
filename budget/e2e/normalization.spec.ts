@@ -7,8 +7,7 @@ import {
 
 // These tests require the normalized seed transactions (seed-norm-primary and
 // seed-norm-secondary from normalization-seed.ts) to be present in the
-// seed-transactions Firestore collection.  See normalization-seed.ts for
-// instructions on integrating them into budget/seeds/firestore.ts.
+// seed-transactions Firestore collection.
 
 test.describe("normalization", () => {
   test("normalized transactions render as single row with canonical description", async ({

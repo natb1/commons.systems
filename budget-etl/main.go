@@ -189,12 +189,30 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 	}
 	normTxns := make([]store.NormTxn, 0, len(allDocs))
 	for _, td := range allDocs {
-		desc, _ := td.Data["description"].(string)
-		inst, _ := td.Data["institution"].(string)
-		acct, _ := td.Data["account"].(string)
-		amt, _ := td.Data["amount"].(float64)
-		ts, _ := td.Data["timestamp"].(time.Time)
-		stmtID, _ := td.Data["statementId"].(string)
+		desc, ok := td.Data["description"].(string)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'description' is not a string (got %T)", td.ID, td.Data["description"])
+		}
+		inst, ok := td.Data["institution"].(string)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'institution' is not a string (got %T)", td.ID, td.Data["institution"])
+		}
+		acct, ok := td.Data["account"].(string)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'account' is not a string (got %T)", td.ID, td.Data["account"])
+		}
+		amt, ok := td.Data["amount"].(float64)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", td.ID, td.Data["amount"])
+		}
+		ts, ok := td.Data["timestamp"].(time.Time)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", td.ID, td.Data["timestamp"])
+		}
+		stmtID, ok := td.Data["statementId"].(string)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'statementId' is not a string (got %T)", td.ID, td.Data["statementId"])
+		}
 		normTxns = append(normTxns, store.NormTxn{
 			DocID:       td.ID,
 			Description: desc,
@@ -221,6 +239,25 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 	normUpdates, err := rules.ApplyNormalization(normTxns, normRules)
 	if err != nil {
 		return fmt.Errorf("normalization: %w", err)
+	}
+	// Clear stale normalization on transactions that were previously normalized
+	// but are no longer part of any group
+	updatedDocIDs := make(map[string]bool, len(normUpdates))
+	for _, u := range normUpdates {
+		updatedDocIDs[u.DocID] = true
+	}
+	for _, td := range allDocs {
+		if updatedDocIDs[td.ID] {
+			continue
+		}
+		if td.Data["normalizedId"] != nil {
+			normUpdates = append(normUpdates, store.NormalizationUpdate{
+				DocID:                 td.ID,
+				NormalizedID:          "",
+				NormalizedPrimary:     true,
+				NormalizedDescription: "",
+			})
+		}
 	}
 	if len(normUpdates) > 0 {
 		if err := client.UpdateNormalization(ctx, normUpdates); err != nil {
