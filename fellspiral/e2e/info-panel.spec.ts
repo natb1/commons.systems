@@ -54,7 +54,7 @@ test.describe("info panel — desktop", () => {
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
     const panel = page.locator("#info-panel");
-    const latestPosts = panel.locator(".blogroll-entry .latest-post");
+    const latestPosts = panel.locator(".blogroll-entry .blogroll-latest");
     const count = await latestPosts.count();
     expect(count).toBeGreaterThan(0);
     const texts = await latestPosts.allTextContents();
