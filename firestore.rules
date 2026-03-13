@@ -8,12 +8,6 @@ service cloud.firestore {
         && request.auth.token.email in get(/databases/$(database)/documents/$(appName)/$(env)/groups/admin).data.members;
     }
 
-    // Shared group membership check: members of a specific group
-    function isGroupMember(appName, env, groupId) {
-      return request.auth != null
-        && request.auth.token.email in get(/databases/$(database)/documents/$(appName)/$(env)/groups/$(groupId)).data.members;
-    }
-
     // Budget group member: verify actual membership via groups collection
     function isBudgetGroupMember(env, groupId, memberEmails) {
       let group = get(/databases/$(database)/documents/budget/$(env)/groups/$(groupId)).data;
@@ -22,9 +16,12 @@ service cloud.firestore {
         && memberEmails == group.members;
     }
 
-    // Groups are readable only by their members (email-based membership)
+    // Groups are readable only by their members (email-based membership).
+    // Uses resource.data directly instead of isGroupMember() because getUserGroups
+    // performs a list query (where + getDocs) and Firestore cannot resolve get()
+    // calls at query planning time for list queries.
     match /landing/{env}/groups/{groupId} {
-      allow read: if isGroupMember("landing", env, groupId);
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
       allow write: if false;
     }
 
@@ -40,9 +37,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Groups are readable only by their members (email-based membership)
+    // Groups are readable only by their members (email-based membership).
+    // Uses resource.data directly instead of isGroupMember() because getUserGroups
+    // performs a list query (where + getDocs) and Firestore cannot resolve get()
+    // calls at query planning time for list queries.
     match /budget/{env}/groups/{groupId} {
-      allow read: if isGroupMember("budget", env, groupId);
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
       allow write: if false;
     }
 
@@ -160,9 +160,12 @@ service cloud.firestore {
         && request.auth.token.email in resource.data.memberEmails;
     }
 
-    // Groups are readable only by their members (email-based membership)
+    // Groups are readable only by their members (email-based membership).
+    // Uses resource.data directly instead of isGroupMember() because getUserGroups
+    // performs a list query (where + getDocs) and Firestore cannot resolve get()
+    // calls at query planning time for list queries.
     match /fellspiral/{env}/groups/{groupId} {
-      allow read: if isGroupMember("fellspiral", env, groupId);
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
       allow write: if false;
     }
 
@@ -180,9 +183,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Groups are readable only by their members (email-based membership)
+    // Groups are readable only by their members (email-based membership).
+    // Uses resource.data directly instead of isGroupMember() because getUserGroups
+    // performs a list query (where + getDocs) and Firestore cannot resolve get()
+    // calls at query planning time for list queries.
     match /print/{env}/groups/{groupId} {
-      allow read: if isGroupMember("print", env, groupId);
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
       allow write: if false;
     }
 
