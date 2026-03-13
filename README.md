@@ -1,6 +1,6 @@
-# commons.systems: Agentic Coding Workflow
+# commons.systems: Nate's Agentic Coding Workflow
 
-This repository serves as a monorepo for Nate's agentic coding workflows and proof-of-concept (POC) applications. This can be used as an example for bootstrapping an agentic coding workflow.
+This repository serves as a monorepo for Nate's agentic coding workflows and proof-of-concept (POC) applications. This is built to my own specification and it is not intended to be a platform or a distributed library. This can be used as a reference for bootstrapping your own agentic coding workflow.
 
 - [commons.systems](https://commons.systems): More info about this project.
 - [budget.commons.systems](https://budget.commons.systems): Personal finance demo.
