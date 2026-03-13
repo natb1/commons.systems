@@ -1,4 +1,4 @@
-import { updateRule, deleteRule, createRule, getGroupMembers, type RuleType, type Rule } from "../firestore.js";
+import { updateRule, deleteRule, createRule, getGroupMembers, type RuleType, type Rule, type GroupId } from "../firestore.js";
 import { renderRow } from "./rules.js";
 import { removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, handleActionError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
@@ -119,7 +119,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
     }
 
     if (target.id === "add-rule") {
-      const groupId = target.dataset.groupId;
+      const groupId = target.dataset.groupId as GroupId | undefined;
       if (!groupId) { console.error("add-rule button missing data-group-id"); return; }
       try {
         const ruleType = activeFilterType();

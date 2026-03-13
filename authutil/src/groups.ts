@@ -4,6 +4,11 @@ import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { DataIntegrityError } from "./errors.js";
 
+declare const __brand: unique symbol;
+type Brand<B extends string> = string & { readonly [__brand]: B };
+
+export type GroupId = Brand<"GroupId">;
+
 /**
  * Client-side view of a Firestore group document.
  * The stored document includes a `members` array (used for access control in
@@ -11,7 +16,7 @@ import { DataIntegrityError } from "./errors.js";
  * exposes id and display name since members is not needed in the UI.
  */
 export interface Group {
-  readonly id: string;
+  readonly id: GroupId;
   readonly name: string;
 }
 
@@ -39,7 +44,7 @@ export async function getUserGroups(db: Firestore, namespace: string, user: User
       if (typeof name !== "string") {
         throw new DataIntegrityError(`Expected string for groups.name, got ${typeof name}`);
       }
-      return { id: docSnap.id, name };
+      return { id: docSnap.id as GroupId, name };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -52,7 +57,7 @@ export async function isInGroup(
   db: Firestore,
   namespace: string,
   user: User | null,
-  groupId: string,
+  groupId: GroupId,
 ): Promise<boolean> {
   if (!user) return false;
   const email = requireEmail("isInGroup", user);
