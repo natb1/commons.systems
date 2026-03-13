@@ -54,12 +54,12 @@ test.describe("info panel — desktop", () => {
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
     const panel = page.locator("#info-panel");
-    const latestPosts = panel.locator(".blogroll-entry .blogroll-latest");
-    const count = await latestPosts.count();
-    expect(count).toBeGreaterThan(0);
-    const texts = await latestPosts.allTextContents();
-    const hasContent = texts.some((t) => t.trim().length > 0);
-    expect(hasContent).toBe(true);
+    // Wait for async feed hydration to populate at least one blogroll entry.
+    // Uses polling because hydration populates spans asynchronously after page load.
+    await expect(async () => {
+      const texts = await panel.locator(".blogroll-entry .blogroll-latest").allTextContents();
+      expect(texts.some((t) => t.trim().length > 0)).toBe(true);
+    }).toPass({ timeout: 15000 });
   });
 });
 

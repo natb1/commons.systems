@@ -115,8 +115,20 @@ if [ "$USES_FUNCTIONS" = true ]; then
 fi
 EMULATORS_JSON="$EMULATORS_JSON}"
 
+# Build hosting config, preserving rewrites and headers from the original firebase.json
+HOSTING_JSON="{\"public\": \"${APP_DIR}/dist\", \"ignore\": [\"firebase.json\", \"**/.*\", \"**/node_modules/**\"]"
+APP_REWRITES=$(jq -c ".hosting[] | select(.target == \"$APP_NAME\") | .rewrites // empty" "$REPO_ROOT/firebase.json" 2>/dev/null || true)
+if [ -n "$APP_REWRITES" ]; then
+  HOSTING_JSON="$HOSTING_JSON, \"rewrites\": $APP_REWRITES"
+fi
+APP_HEADERS=$(jq -c ".hosting[] | select(.target == \"$APP_NAME\") | .headers // empty" "$REPO_ROOT/firebase.json" 2>/dev/null || true)
+if [ -n "$APP_HEADERS" ]; then
+  HOSTING_JSON="$HOSTING_JSON, \"headers\": $APP_HEADERS"
+fi
+HOSTING_JSON="$HOSTING_JSON}"
+
 # Build top-level config
-CONFIG_JSON="{\"hosting\": {\"public\": \"${APP_DIR}/dist\", \"ignore\": [\"firebase.json\", \"**/.*\", \"**/node_modules/**\"]}"
+CONFIG_JSON="{\"hosting\": $HOSTING_JSON"
 if [ "$USES_FIRESTORE" = true ]; then
   CONFIG_JSON="$CONFIG_JSON, \"firestore\": {\"rules\": \"firestore.rules\"}"
 fi
