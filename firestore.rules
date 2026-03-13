@@ -2,10 +2,16 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Landing admin: members of the admin group can read unpublished posts
-    function isLandingAdmin(env) {
+    // Shared admin check: members of the admin group for an app
+    function isAppAdmin(appName, env) {
       return request.auth != null
-        && request.auth.token.email in get(/databases/$(database)/documents/landing/$(env)/groups/admin).data.members;
+        && request.auth.token.email in get(/databases/$(database)/documents/$(appName)/$(env)/groups/admin).data.members;
+    }
+
+    // Shared group membership check: members of a specific group
+    function isGroupMember(appName, env, groupId) {
+      return request.auth != null
+        && request.auth.token.email in get(/databases/$(database)/documents/$(appName)/$(env)/groups/$(groupId)).data.members;
     }
 
     // Budget group member: verify actual membership via groups collection
@@ -18,13 +24,13 @@ service cloud.firestore {
 
     // Groups are readable only by their members (email-based membership)
     match /landing/{env}/groups/{groupId} {
-      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
+      allow read: if isGroupMember("landing", env, groupId);
       allow write: if false;
     }
 
     // Published posts are public; unpublished posts require admin group membership
     match /landing/{env}/posts/{postId} {
-      allow read: if resource.data.published == true || isLandingAdmin(env);
+      allow read: if resource.data.published == true || isAppAdmin("landing", env);
       allow write: if false;
     }
 
@@ -36,7 +42,7 @@ service cloud.firestore {
 
     // Groups are readable only by their members (email-based membership)
     match /budget/{env}/groups/{groupId} {
-      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
+      allow read: if isGroupMember("budget", env, groupId);
       allow write: if false;
     }
 
@@ -154,21 +160,15 @@ service cloud.firestore {
         && request.auth.token.email in resource.data.memberEmails;
     }
 
-    // Fellspiral admin: members of the admin group can read unpublished posts
-    function isFellspiralAdmin(env) {
-      return request.auth != null
-        && request.auth.token.email in get(/databases/$(database)/documents/fellspiral/$(env)/groups/admin).data.members;
-    }
-
     // Groups are readable only by their members (email-based membership)
     match /fellspiral/{env}/groups/{groupId} {
-      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
+      allow read: if isGroupMember("fellspiral", env, groupId);
       allow write: if false;
     }
 
     // Published posts are public; unpublished posts require fellspiral admin group membership
     match /fellspiral/{env}/posts/{postId} {
-      allow read: if resource.data.published == true || isFellspiralAdmin(env);
+      allow read: if resource.data.published == true || isAppAdmin("fellspiral", env);
       allow write: if false;
     }
 
@@ -182,7 +182,7 @@ service cloud.firestore {
 
     // Groups are readable only by their members (email-based membership)
     match /print/{env}/groups/{groupId} {
-      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
+      allow read: if isGroupMember("print", env, groupId);
       allow write: if false;
     }
 

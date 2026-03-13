@@ -183,7 +183,7 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 	block := fmt.Sprintf(
 		"    // Groups are readable only by their members (email-based membership)\n"+
 			"    match /%s/{env}/groups/{groupId} {\n"+
-			"      allow read: if request.auth != null && request.auth.token.email in resource.data.members;\n"+
+			"      allow read: if isGroupMember(\"%s\", env, groupId);\n"+
 			"      allow write: if false;\n"+
 			"    }\n\n"+
 			"    match /%s/{env}/messages/{messageId} {\n"+
@@ -196,7 +196,7 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 			"        && request.auth.token.email in resource.data.memberEmails;\n"+
 			"      allow write: if false;\n"+
 			"    }\n\n",
-		appName, appName, appName)
+		appName, appName, appName, appName)
 
 	catchAll := "    " + firestoreRulesCatchAll
 	idx := strings.Index(content, catchAll)
