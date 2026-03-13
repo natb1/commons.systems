@@ -85,8 +85,22 @@
 /* --- Rules table --- */
 
 #rules-table[data-active-filter="categorization"] .rule-row[data-rule-type="budget_assignment"],
-#rules-table[data-active-filter="budget_assignment"] .rule-row[data-rule-type="categorization"] {
+#rules-table[data-active-filter="categorization"] .rule-row[data-rule-type="normalization"],
+#rules-table[data-active-filter="budget_assignment"] .rule-row[data-rule-type="categorization"],
+#rules-table[data-active-filter="budget_assignment"] .rule-row[data-rule-type="normalization"],
+#rules-table[data-active-filter="normalization"] .rule-row[data-rule-type="categorization"],
+#rules-table[data-active-filter="normalization"] .rule-row[data-rule-type="budget_assignment"] {
   display: none;
+}
+
+.rule-header-normalization {
+  display: none;
+}
+#rules-table[data-active-filter="normalization"] .rule-header-default {
+  display: none;
+}
+#rules-table[data-active-filter="normalization"] .rule-header-normalization {
+  display: grid;
 }
 
 .rule-row input {
@@ -110,6 +124,12 @@
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: subgrid;
+  }
+  .rule-header-normalization {
+    display: none;
+  }
+  #rules-table[data-active-filter="normalization"] .rule-header-normalization {
+    display: grid;
   }
   .rule-header > span {
     font-weight: bold;
@@ -210,7 +230,6 @@
 /* --- Normalized transaction groups --- */
 
 .normalized-group {
-  border-left: 3px solid var(--accent, #6c8);
 }
 
 .normalized-originals {

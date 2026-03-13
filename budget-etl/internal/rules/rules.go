@@ -111,8 +111,7 @@ type NormalizationRule struct {
 	Pattern              string // case-insensitive substring (or regex if PatternType=="regex")
 	PatternType          string // "substring" (default) or "regex"
 	CanonicalDescription string
-	AmountMatch          bool // require exact amount equality for grouping
-	DateWindowDays       int  // max days between adjacent grouped transactions (single-linkage)
+	DateWindowDays       int // max days between adjacent grouped transactions (single-linkage)
 	Institution          string
 	Account              string
 	Priority             int
@@ -144,22 +143,19 @@ func matchNormRule(rule NormalizationRule, re *regexp.Regexp, txn store.NormTxn)
 	return true
 }
 
-// groupByAmountAndDate partitions matched transactions by amount (if required)
+// groupByAmountAndDate partitions matched transactions by exact amount
 // then clusters by date using single-linkage within DateWindowDays.
 func groupByAmountAndDate(matches []store.NormTxn, rule NormalizationRule) [][]store.NormTxn {
 	if len(matches) == 0 {
 		return nil
 	}
 
-	// Partition by amount if AmountMatch is set
+	// Partition by exact amount — duplicates from overlapping statements
+	// always have the same amount.
 	type amountKey = int64
 	partitions := make(map[amountKey][]store.NormTxn)
-	if rule.AmountMatch {
-		for _, txn := range matches {
-			partitions[txn.Amount] = append(partitions[txn.Amount], txn)
-		}
-	} else {
-		partitions[0] = matches
+	for _, txn := range matches {
+		partitions[txn.Amount] = append(partitions[txn.Amount], txn)
 	}
 
 	var groups [][]store.NormTxn
@@ -206,11 +202,72 @@ func selectPrimary(group []store.NormTxn) store.NormTxn {
 	return best
 }
 
-// ApplyNormalization groups duplicate transactions using normalization rules
-// and returns updates that assign normalizedId, normalizedPrimary, and
-// normalizedDescription. Rules are evaluated in priority order; each
-// transaction is claimed by the first rule whose group it joins.
+// autoNormKey is the grouping key for auto-normalization.
+type autoNormKey struct {
+	description string // lowercased
+	amount      int64
+	day         string // "2006-01-02" in UTC
+}
+
+// autoNormalize groups transactions with identical description, amount, and
+// date from different statements. These are exact duplicates from overlapping
+// statement periods that don't require a rule.
+func autoNormalize(txns []store.NormTxn, normalized map[string]bool) []store.NormalizationUpdate {
+	groups := make(map[autoNormKey][]store.NormTxn)
+	for _, txn := range txns {
+		key := autoNormKey{
+			description: strings.ToLower(txn.Description),
+			amount:      txn.Amount,
+			day:         txn.Timestamp.UTC().Truncate(24 * time.Hour).Format("2006-01-02"),
+		}
+		groups[key] = append(groups[key], txn)
+	}
+
+	var updates []store.NormalizationUpdate
+	for _, group := range groups {
+		if len(group) < 2 {
+			continue
+		}
+		// Only form groups where 2+ transactions have different StatementID values
+		stmtIDs := make(map[string]bool)
+		for _, txn := range group {
+			stmtIDs[txn.StatementID] = true
+		}
+		if len(stmtIDs) < 2 {
+			continue
+		}
+
+		primary := selectPrimary(group)
+		for _, txn := range group {
+			normalized[txn.DocID] = true
+			updates = append(updates, store.NormalizationUpdate{
+				DocID:                 txn.DocID,
+				NormalizedID:          primary.DocID,
+				NormalizedPrimary:     txn.DocID == primary.DocID,
+				NormalizedDescription: primary.Description,
+			})
+		}
+	}
+	return updates
+}
+
+// ApplyNormalization groups duplicate transactions and returns updates that
+// assign normalizedId, normalizedPrimary, and normalizedDescription.
+//
+// Step 1: Auto-normalize — transactions with identical description, amount,
+// and date from different statements are grouped without a rule.
+//
+// Step 2: Rule-based — remaining transactions are matched against rules
+// evaluated in priority order; each transaction is claimed by the first
+// rule whose group it joins.
 func ApplyNormalization(txns []store.NormTxn, rules []NormalizationRule) ([]store.NormalizationUpdate, error) {
+	normalized := make(map[string]bool)
+	var updates []store.NormalizationUpdate
+
+	// Step 1: Auto-normalize exact duplicates across different statements
+	updates = append(updates, autoNormalize(txns, normalized)...)
+
+	// Step 2: Rule-based normalization
 	sorted := make([]NormalizationRule, len(rules))
 	copy(sorted, rules)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -228,9 +285,6 @@ func ApplyNormalization(txns []store.NormTxn, rules []NormalizationRule) ([]stor
 			compiled[i].regex = re
 		}
 	}
-
-	normalized := make(map[string]bool)
-	var updates []store.NormalizationUpdate
 
 	for _, cr := range compiled {
 		var matches []store.NormTxn

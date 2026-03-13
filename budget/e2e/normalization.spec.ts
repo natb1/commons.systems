@@ -81,16 +81,11 @@ test.describe("normalization", () => {
     const balance = Number(balanceText);
     expect(balance).not.toBeNaN();
 
-    // The balance should reflect only the primary's amount (25.00), not the
-    // secondary's (12.50).  With the food budget (weeklyAllowance 150,
-    // rollover "none") in the 2025-01-20 period, the balance after
-    // seed-txn-5 (25.00 Pizza Delivery on 01/21), seed-norm-primary
-    // (25.00 on 01/22), and seed-txn-6 (20.00 Bakery on 01/23) depends on
-    // timestamp ordering.  Rather than hard-coding the exact number (which
-    // couples tightly to all other seed data in the same period), we verify
-    // the balance is a finite number and that it does NOT include the
-    // secondary amount.  If the secondary were counted, the balance would
-    // be 12.50 lower.
+    // The balance should reflect only the primary's amount (25.00), not
+    // both the primary and secondary (which share the same amount since
+    // they represent the same real-world transaction from overlapping
+    // statements).  We verify the balance is a finite number — if the
+    // secondary were also counted, the balance would be 25.00 lower.
     expect(Number.isFinite(balance)).toBe(true);
   });
 

@@ -5,16 +5,12 @@
 // budget/seeds/firestore.ts.  The normalized group consists of two
 // transactions sharing the same normalizedId ("norm-group-1"):
 //
-//   - seed-norm-primary  (primary, amount 25.00, budget "food")
-//   - seed-norm-secondary (non-primary, amount 12.50, no budget effect)
+//   - seed-norm-primary  (primary, amount 25.00, stmt-2025-01)
+//   - seed-norm-secondary (non-primary, amount 25.00, stmt-2025-02)
 //
-// The primary transaction falls in the food-2025-01-20 budget period,
-// so its budget balance can be verified.  The non-primary transaction
-// must NOT affect the budget balance.
-//
-// A new budget period (food-2025-02-03) is included so the primary's
-// balance depends only on seed-norm-primary and seed-txn-5/seed-txn-6
-// in the same period.
+// Both represent the same real-world transaction appearing in overlapping
+// statement periods.  The primary transaction falls in the food-2025-01-20
+// budget period.  The non-primary must NOT affect the budget balance.
 
 /** Normalized primary transaction -- renders as the visible row. */
 export const seedNormPrimary = {
@@ -44,14 +40,14 @@ export const seedNormSecondary = {
   data: {
     institution: "Example Bank",
     account: "Checking",
-    description: "CAFE NERO TIP 01/22",
-    amount: 12.5,
+    description: "CAFE NERO 01/22 DEBIT CARD",
+    amount: 25.0,
     note: "",
     category: "Food:Coffee",
     reimbursement: 0,
     budget: "food",
     timestamp: new Date("2025-01-22"),
-    statementId: "stmt-2025-01",
+    statementId: "stmt-2025-02",
     groupId: "household",
     memberEmails: ["test@example.com"],
     normalizedId: "norm-group-1",

@@ -542,7 +542,6 @@ type NormalizationRuleDoc struct {
 	Pattern              string
 	PatternType          string
 	CanonicalDescription string
-	AmountMatch          bool
 	DateWindowDays       int
 	Institution          string
 	Account              string
@@ -575,9 +574,6 @@ func (c *Client) LoadNormalizationRules(ctx context.Context, groupID string) ([]
 			return nil, fmt.Errorf("normalization rule %s: field 'canonicalDescription' is not a string (got %T)", doc.Ref.ID, d["canonicalDescription"])
 		}
 		r.CanonicalDescription = v
-		if b, ok := d["amountMatch"].(bool); ok {
-			r.AmountMatch = b
-		}
 		if p, ok := d["dateWindowDays"].(int64); ok {
 			r.DateWindowDays = int(p)
 		} else if p, ok := d["dateWindowDays"].(float64); ok {

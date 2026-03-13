@@ -408,7 +408,6 @@ export interface NormalizationRule {
   readonly pattern: string;
   readonly patternType: string | null;
   readonly canonicalDescription: string;
-  readonly amountMatch: boolean;
   readonly dateWindowDays: number;
   readonly institution: string | null;
   readonly account: string | null;
@@ -427,7 +426,6 @@ export async function getNormalizationRules(groupId: string | null, email?: stri
       pattern: requireString(data.pattern, "pattern"),
       patternType: optionalString(data.patternType, "patternType"),
       canonicalDescription: requireString(data.canonicalDescription, "canonicalDescription"),
-      amountMatch: data.amountMatch === true,
       dateWindowDays: typeof data.dateWindowDays === "number" ? data.dateWindowDays : 0,
       institution: optionalString(data.institution, "institution"),
       account: optionalString(data.account, "account"),
@@ -454,7 +452,6 @@ export async function createNormalizationRule(
     memberEmails,
   };
   if (fields.patternType) data.patternType = fields.patternType;
-  if (fields.amountMatch) data.amountMatch = fields.amountMatch;
   if (fields.dateWindowDays) data.dateWindowDays = fields.dateWindowDays;
   if (fields.institution) data.institution = fields.institution;
   if (fields.account) data.account = fields.account;
@@ -464,7 +461,7 @@ export async function createNormalizationRule(
 
 export async function updateNormalizationRule(
   ruleId: string,
-  fields: Partial<Pick<NormalizationRule, "pattern" | "patternType" | "canonicalDescription" | "amountMatch" | "dateWindowDays" | "priority" | "institution" | "account">>,
+  fields: Partial<Pick<NormalizationRule, "pattern" | "patternType" | "canonicalDescription" | "dateWindowDays" | "priority" | "institution" | "account">>,
 ): Promise<void> {
   requireDocId(ruleId, "normalization rule");
   if (Object.keys(fields).length === 0) return;

@@ -1,6 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { getRules, getBudgets, type Rule } from "../firestore.js";
+import { getRules, getBudgets, getNormalizationRules, type Rule, type NormalizationRule } from "../firestore.js";
 import { uniqueSorted } from "./hydrate-util.js";
 
 export function renderRow(rule: Rule, editable: boolean): string {
@@ -31,8 +31,36 @@ export function renderRow(rule: Rule, editable: boolean): string {
   </details>`;
 }
 
+export function renderNormalizationRow(rule: NormalizationRule, editable: boolean): string {
+  const idAttr = editable ? ` data-rule-id="${escapeHtml(rule.id)}"` : "";
+  const dis = editable ? "" : " disabled";
+  const patternCell = `<input type="text" class="edit-pattern" value="${escapeHtml(rule.pattern)}" aria-label="Pattern"${dis}>`;
+  const canonicalCell = `<input type="text" class="edit-canonical" value="${escapeHtml(rule.canonicalDescription)}" aria-label="Canonical Description"${dis}>`;
+  const priorityCell = `<input type="number" class="edit-priority" value="${escapeHtml(String(rule.priority))}" aria-label="Priority"${dis}>`;
+  const dateWindowCell = `<input type="number" class="edit-date-window" value="${escapeHtml(String(rule.dateWindowDays))}" aria-label="Date Window"${dis}>`;
+  const deleteCell = editable
+    ? `<button class="delete-rule" aria-label="Delete rule">Delete</button>`
+    : `<span></span>`;
+
+  return `<details class="expand-row rule-row" data-rule-type="normalization"${idAttr}>
+    <summary>
+      <div class="rule-summary-content">
+        <span>${patternCell}</span>
+        <span>${canonicalCell}</span>
+      </div>
+    </summary>
+    <div class="rule-details">
+      <span>${priorityCell}</span>
+      <span>${dateWindowCell}</span>
+      <span></span>
+      <span>${deleteCell}</span>
+    </div>
+  </details>`;
+}
+
 interface RulesTableOptions {
   rules: Rule[];
+  normalizationRules: NormalizationRule[];
   authorized: boolean;
   groupId: string;
   budgetNames: string[];
@@ -42,9 +70,11 @@ interface RulesTableOptions {
 }
 
 function renderRulesTable(opts: RulesTableOptions): string {
-  const { rules, authorized, groupId, budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts } = opts;
+  const { rules, normalizationRules, authorized, groupId, budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts } = opts;
   const sorted = [...rules].sort((a, b) => a.priority - b.priority || a.pattern.localeCompare(b.pattern));
   const rows = sorted.map(r => renderRow(r, authorized)).join("\n");
+  const sortedNorm = [...normalizationRules].sort((a, b) => a.priority - b.priority || a.pattern.localeCompare(b.pattern));
+  const normRows = sortedNorm.map(r => renderNormalizationRow(r, authorized)).join("\n");
 
   const addButton = authorized
     ? `<button id="add-rule" data-group-id="${escapeHtml(groupId)}">Add Rule</button>`
@@ -60,11 +90,12 @@ function renderRulesTable(opts: RulesTableOptions): string {
   const filterSelect = `<select id="rule-type-filter">
       <option value="categorization" selected>Categorization</option>
       <option value="budget_assignment">Budget Assignment</option>
+      <option value="normalization">Normalization</option>
     </select>`;
 
   return `${filterSelect}
     <div id="rules-table"${dataAttrs}>
-      <div class="rule-header">
+      <div class="rule-header rule-header-default">
         <span>Pattern</span>
         <span>Target</span>
         <span>Priority</span>
@@ -72,7 +103,15 @@ function renderRulesTable(opts: RulesTableOptions): string {
         <span>Account</span>
         <span></span>
       </div>
+      <div class="rule-header rule-header-normalization">
+        <span>Pattern</span>
+        <span>Canonical Desc</span>
+        <span>Priority</span>
+        <span>Date Window</span>
+        <span></span>
+      </div>
       ${rows}
+      ${normRows}
       ${addButton}
     </div>`;
 }
@@ -83,15 +122,16 @@ export async function renderRules(options: RenderPageOptions): Promise<string> {
 
   let tableHtml: string;
   try {
-    const [rules, budgets] = await Promise.all([
+    const [rules, budgets, normalizationRules] = await Promise.all([
       group && user?.email ? getRules(group.id, user.email) : getRules(null),
       group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null),
+      group && user?.email ? getNormalizationRules(group.id, user.email) : getNormalizationRules(null),
     ]);
     const budgetNames = budgets.map(b => b.name);
     const categoryTargets = uniqueSorted(rules.filter(r => r.type === "categorization").map(r => r.target));
     const uniqueInstitutions = uniqueSorted(rules.map(r => r.institution));
     const uniqueAccounts = uniqueSorted(rules.map(r => r.account));
-    tableHtml = renderRulesTable({ rules, authorized, groupId: group?.id ?? "", budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts });
+    tableHtml = renderRulesTable({ rules, normalizationRules, authorized, groupId: group?.id ?? "", budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts });
   } catch (error) {
     console.error("Failed to load rules:", error);
     tableHtml = renderLoadError(error, "rules-error");

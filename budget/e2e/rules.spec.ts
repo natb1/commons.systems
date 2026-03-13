@@ -34,7 +34,7 @@ test.describe("rules", () => {
     // Headers only visible on medium+ screens
     const viewportSize = page.viewportSize();
     if (viewportSize && viewportSize.width >= 768) {
-      const header = page.locator("#rules-table .rule-header");
+      const header = page.locator("#rules-table .rule-header-default");
       await expect(header).toBeVisible();
       await expect(header.locator("span").nth(0)).toHaveText("Pattern");
       await expect(header.locator("span").nth(1)).toHaveText("Target");
@@ -47,9 +47,9 @@ test.describe("rules", () => {
   test("seed data renders all six example rules with filter", async ({ page }) => {
     await page.goto("/#/rules");
     await expect(page.locator("#rules-table")).toBeVisible();
-    // All 6 rows exist in the DOM
+    // All 8 rows exist in the DOM (3 categorization + 3 budget + 2 normalization)
     const allRows = page.locator("#rules-table .rule-row");
-    await expect(allRows).toHaveCount(6);
+    await expect(allRows).toHaveCount(8);
     // Default filter is "categorization" — 3 visible
     const visibleCatRows = page.locator('#rules-table .rule-row[data-rule-type="categorization"]');
     await expect(visibleCatRows).toHaveCount(3);
@@ -107,14 +107,14 @@ test.describe("rules", () => {
 
     // Authenticated view renders inputs for inline editing
     const rows = page.locator("#rules-table .rule-row");
-    await expect(rows).toHaveCount(6);
-    await expect(page.locator(".edit-pattern")).toHaveCount(6);
+    await expect(rows).toHaveCount(8);
+    // 6 regular rules have pattern/target/priority/institution/account;
+    // 2 normalization rules have pattern/canonical/priority/date-window/amount-match
+    await expect(page.locator(".edit-pattern")).toHaveCount(8);
     await expect(page.locator(".edit-target")).toHaveCount(6);
-    await expect(page.locator(".edit-priority")).toHaveCount(6);
-    await expect(page.locator(".edit-institution")).toHaveCount(6);
-    await expect(page.locator(".edit-account")).toHaveCount(6);
+    await expect(page.locator(".edit-canonical")).toHaveCount(2);
     await expect(page.locator("#add-rule")).toBeVisible();
-    await expect(page.locator(".delete-rule")).toHaveCount(6);
+    await expect(page.locator(".delete-rule")).toHaveCount(8);
   });
 
   test("clicking rules nav link navigates to rules page", async ({ page }) => {

@@ -279,11 +279,12 @@ func TestNormalizationRuleMatch_Regex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// For regex rules, ApplyNormalization compiles with (?i) prefix.
 			// Here we test via the full pipeline with 2 txns to form a group.
+			// Use the same statement ID so auto-normalization doesn't interfere.
 			txn2 := tt.txn
 			txn2.DocID = "doc-2"
 			tt.txn.DocID = "doc-1"
 			tt.txn.StatementID = "s1"
-			txn2.StatementID = "s2"
+			txn2.StatementID = "s1"
 			updates, err := ApplyNormalization(
 				[]store.NormTxn{tt.txn, txn2},
 				[]NormalizationRule{tt.rule},
@@ -319,7 +320,7 @@ func TestApplyNormalization_AmountGrouping(t *testing.T) {
 		ID:                   "r1",
 		Pattern:              "netflix",
 		CanonicalDescription: "Netflix",
-		AmountMatch:          true,
+
 		DateWindowDays:       30,
 		Priority:             1,
 	}}
@@ -353,7 +354,7 @@ func TestApplyNormalization_DateWindow(t *testing.T) {
 		ID:                   "r1",
 		Pattern:              "electric",
 		CanonicalDescription: "Electric Company",
-		AmountMatch:          true,
+
 		DateWindowDays:       7,
 		Priority:             1,
 	}}
@@ -388,7 +389,7 @@ func TestApplyNormalization_PrimarySelection(t *testing.T) {
 		ID:                   "r1",
 		Pattern:              "water bill",
 		CanonicalDescription: "Water Bill",
-		AmountMatch:          true,
+
 		DateWindowDays:       30,
 		Priority:             1,
 	}}
@@ -447,7 +448,7 @@ func TestApplyNormalization_FirstMatchWins(t *testing.T) {
 			ID:                   "low-priority",
 			Pattern:              "electric",
 			CanonicalDescription: "Electric Bill",
-			AmountMatch:          true,
+	
 			DateWindowDays:       30,
 			Priority:             10, // evaluated first
 		},
@@ -455,7 +456,7 @@ func TestApplyNormalization_FirstMatchWins(t *testing.T) {
 			ID:                   "high-priority-number",
 			Pattern:              "acme",
 			CanonicalDescription: "ACME Corp",
-			AmountMatch:          true,
+	
 			DateWindowDays:       30,
 			Priority:             20, // evaluated second
 		},
@@ -477,6 +478,124 @@ func TestApplyNormalization_FirstMatchWins(t *testing.T) {
 	}
 }
 
+func TestApplyNormalization_AutoNormalize(t *testing.T) {
+	base := time.Date(2025, 1, 22, 10, 0, 0, 0, time.UTC)
+	txns := []store.NormTxn{
+		{DocID: "a1", Description: "CAFE NERO #1234", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-01"},
+		{DocID: "a2", Description: "CAFE NERO #1234", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-02"},
+	}
+	// No rules — auto-normalization only
+	updates, err := ApplyNormalization(txns, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(updates) != 2 {
+		t.Fatalf("got %d updates, want 2", len(updates))
+	}
+	// Both should share the same normalizedID (the primary's doc ID)
+	if updates[0].NormalizedID != updates[1].NormalizedID {
+		t.Error("auto-normalized transactions should share the same NormalizedID")
+	}
+	// Primary should be a2 (lexicographically greatest StatementID)
+	for _, u := range updates {
+		if u.NormalizedID != "a2" {
+			t.Errorf("NormalizedID = %q, want a2", u.NormalizedID)
+		}
+		if u.DocID == "a2" && !u.NormalizedPrimary {
+			t.Error("a2 should be NormalizedPrimary=true")
+		}
+		if u.DocID == "a1" && u.NormalizedPrimary {
+			t.Error("a1 should be NormalizedPrimary=false")
+		}
+	}
+}
+
+func TestApplyNormalization_AutoNormalize_SameStatement(t *testing.T) {
+	base := time.Date(2025, 1, 22, 10, 0, 0, 0, time.UTC)
+	txns := []store.NormTxn{
+		{DocID: "a1", Description: "CAFE NERO", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-01"},
+		{DocID: "a2", Description: "CAFE NERO", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-01"},
+	}
+	updates, err := ApplyNormalization(txns, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(updates) != 0 {
+		t.Errorf("got %d updates, want 0 (same statement should not auto-normalize)", len(updates))
+	}
+}
+
+func TestApplyNormalization_AutoNormalize_DifferentDescription(t *testing.T) {
+	base := time.Date(2025, 1, 22, 10, 0, 0, 0, time.UTC)
+	txns := []store.NormTxn{
+		{DocID: "a1", Description: "CAFE NERO #1234 01/22", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-01"},
+		{DocID: "a2", Description: "CAFE NERO 01/22 DEBIT CARD", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-02"},
+	}
+	updates, err := ApplyNormalization(txns, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(updates) != 0 {
+		t.Errorf("got %d updates, want 0 (different descriptions need a rule)", len(updates))
+	}
+}
+
+func TestApplyNormalization_AutoAndRules(t *testing.T) {
+	base := time.Date(2025, 1, 22, 10, 0, 0, 0, time.UTC)
+	txns := []store.NormTxn{
+		// Auto-normalizable pair (identical descriptions, different statements)
+		{DocID: "auto-1", Description: "EXACT MATCH", Amount: 1000, Timestamp: base, StatementID: "s1"},
+		{DocID: "auto-2", Description: "EXACT MATCH", Amount: 1000, Timestamp: base, StatementID: "s2"},
+		// Rule-normalizable pair (different descriptions, different statements)
+		{DocID: "rule-1", Description: "CAFE NERO #1234", Amount: 2500, Timestamp: base, StatementID: "s1"},
+		{DocID: "rule-2", Description: "CAFE NERO DEBIT", Amount: 2500, Timestamp: base, StatementID: "s2"},
+	}
+	rules := []NormalizationRule{{
+		ID:                   "r1",
+		Pattern:              "cafe nero",
+		CanonicalDescription: "Cafe Nero",
+		DateWindowDays:       7,
+		Priority:             1,
+	}}
+
+	updates, err := ApplyNormalization(txns, rules)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// 2 auto-normalized + 2 rule-normalized = 4 updates
+	if len(updates) != 4 {
+		t.Fatalf("got %d updates, want 4", len(updates))
+	}
+
+	autoUpdates := make(map[string]store.NormalizationUpdate)
+	ruleUpdates := make(map[string]store.NormalizationUpdate)
+	for _, u := range updates {
+		if u.DocID == "auto-1" || u.DocID == "auto-2" {
+			autoUpdates[u.DocID] = u
+		} else {
+			ruleUpdates[u.DocID] = u
+		}
+	}
+	if len(autoUpdates) != 2 {
+		t.Fatalf("expected 2 auto updates, got %d", len(autoUpdates))
+	}
+	if len(ruleUpdates) != 2 {
+		t.Fatalf("expected 2 rule updates, got %d", len(ruleUpdates))
+	}
+	// Auto-normalized: description should be the primary's description
+	for _, u := range autoUpdates {
+		if u.NormalizedDescription != "EXACT MATCH" {
+			t.Errorf("auto NormalizedDescription = %q, want EXACT MATCH", u.NormalizedDescription)
+		}
+	}
+	// Rule-normalized: description should be the canonical description from the rule
+	for _, u := range ruleUpdates {
+		if u.NormalizedDescription != "Cafe Nero" {
+			t.Errorf("rule NormalizedDescription = %q, want Cafe Nero", u.NormalizedDescription)
+		}
+	}
+}
+
 func TestApplyNormalization_SingleMatch(t *testing.T) {
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
 	txns := []store.NormTxn{
@@ -486,7 +605,7 @@ func TestApplyNormalization_SingleMatch(t *testing.T) {
 		ID:                   "r1",
 		Pattern:              "unique",
 		CanonicalDescription: "Unique Payment",
-		AmountMatch:          true,
+
 		DateWindowDays:       30,
 		Priority:             1,
 	}}
