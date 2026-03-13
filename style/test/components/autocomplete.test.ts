@@ -28,6 +28,12 @@ function pressKey(el: HTMLElement, key: string): void {
   el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
 }
 
+function expectAriaCleared(input: HTMLInputElement): void {
+  expect(input.hasAttribute("aria-activedescendant")).toBe(false);
+  expect(input.hasAttribute("aria-controls")).toBe(false);
+  expect(input.hasAttribute("aria-autocomplete")).toBe(false);
+}
+
 describe("showDropdown", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
@@ -54,6 +60,7 @@ describe("showDropdown", () => {
   it("uses filterOverride instead of input value", () => {
     const input = createInput();
     input.value = "ignored";
+    // filterOverride is used as-is (not lowercased), unlike input.value
     showDropdown(input, ["Alpha", "Beta"], "al");
     const items = getItems();
     expect(items).toHaveLength(1);
@@ -75,9 +82,7 @@ describe("showDropdown", () => {
 
     input.value = "zzz";
     showDropdown(input, ["Alpha"]);
-    expect(input.hasAttribute("aria-autocomplete")).toBe(false);
-    expect(input.hasAttribute("aria-controls")).toBe(false);
-    expect(input.hasAttribute("aria-activedescendant")).toBe(false);
+    expectAriaCleared(input);
   });
 
   it("sets ARIA attributes on the input", () => {
@@ -96,6 +101,22 @@ describe("showDropdown", () => {
     const items = getItems();
     expect(items[0].getAttribute("role")).toBe("option");
     expect(items[1].getAttribute("role")).toBe("option");
+  });
+
+  it("mousedown on item selects it and removes dropdown", () => {
+    const input = createInput();
+    input.value = "";
+    showDropdown(input, ["Apple", "Banana"]);
+
+    let blurred = false;
+    input.addEventListener("blur", () => { blurred = true; });
+
+    const items = getItems();
+    items[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+
+    expect(input.value).toBe("Apple");
+    expect(getDropdown()).toBeNull();
+    expect(blurred).toBe(true);
   });
 });
 
@@ -170,9 +191,7 @@ describe("keyboard navigation", () => {
     expect(input.value).toBe("Apple");
     expect(getDropdown()).toBeNull();
     expect(blurred).toBe(true);
-    expect(input.hasAttribute("aria-activedescendant")).toBe(false);
-    expect(input.hasAttribute("aria-controls")).toBe(false);
-    expect(input.hasAttribute("aria-autocomplete")).toBe(false);
+    expectAriaCleared(input);
   });
 
   it("Enter does nothing when no item is selected", () => {
@@ -193,9 +212,7 @@ describe("keyboard navigation", () => {
 
     pressKey(input, "Escape");
     expect(getDropdown()).toBeNull();
-    expect(input.hasAttribute("aria-activedescendant")).toBe(false);
-    expect(input.hasAttribute("aria-controls")).toBe(false);
-    expect(input.hasAttribute("aria-autocomplete")).toBe(false);
+    expectAriaCleared(input);
   });
 });
 
@@ -213,9 +230,7 @@ describe("removeDropdown", () => {
 
     removeDropdown();
     expect(getDropdown()).toBeNull();
-    expect(input.hasAttribute("aria-activedescendant")).toBe(false);
-    expect(input.hasAttribute("aria-controls")).toBe(false);
-    expect(input.hasAttribute("aria-autocomplete")).toBe(false);
+    expectAriaCleared(input);
   });
 
   it("aborts keydown listener", () => {
@@ -276,5 +291,29 @@ describe("registerAutocompleteListeners", () => {
 
     input.click();
     expect(getDropdown()).not.toBeNull();
+  });
+
+  it("scroll dismisses dropdown", () => {
+    registerAutocompleteListeners();
+    const input = createInput();
+    input.value = "";
+    showDropdown(input, ["A"]);
+    expect(getDropdown()).not.toBeNull();
+
+    window.dispatchEvent(new Event("scroll"));
+
+    expect(getDropdown()).toBeNull();
+  });
+
+  it("resize dismisses dropdown", () => {
+    registerAutocompleteListeners();
+    const input = createInput();
+    input.value = "";
+    showDropdown(input, ["A"]);
+    expect(getDropdown()).not.toBeNull();
+
+    window.dispatchEvent(new Event("resize"));
+
+    expect(getDropdown()).toBeNull();
   });
 });
