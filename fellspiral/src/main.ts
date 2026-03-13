@@ -40,7 +40,6 @@ const boundFetchPost = createFetchPost("fellspiral/post");
 const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://cs-fellspiral-4e12.web.app" };
 const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
   {
-    heading: "Find Me",
     links: [
       { label: "itch.io", url: "https://natethenoob.itch.io" },
       { label: "No Land Beyond", subtitle: "Find a Local Game in Baltimore", url: "https://discord.gg/MxXHfyY3" },

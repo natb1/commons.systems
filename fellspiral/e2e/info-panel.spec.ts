@@ -16,12 +16,12 @@ test.describe("info panel — desktop", () => {
     await expect(page.locator("#panel-toggle")).toBeHidden();
   });
 
-  test("shows Find Me section with links @smoke", async ({ page }, testInfo) => {
+  test("shows itch.io and No Land Beyond links without Find Me heading @smoke", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
     const panel = page.locator("#info-panel");
-    await expect(panel.locator("h3", { hasText: "Find Me" })).toBeVisible();
+    await expect(panel.locator("h3", { hasText: "Find Me" })).toHaveCount(0);
     await expect(panel.locator('a[href="https://natethenoob.itch.io"]')).toBeVisible();
     const nlbLink = panel.locator('a[href="https://discord.gg/MxXHfyY3"]');
     await expect(nlbLink).toBeVisible();

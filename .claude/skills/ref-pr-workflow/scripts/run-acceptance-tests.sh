@@ -247,6 +247,13 @@ if [ "$USES_STORAGE" = true ]; then
     ELAPSED=$((ELAPSED + 1))
   done
   echo "Firebase Storage emulator ready on port ${STORAGE_PORT}"
+
+  # Seed Storage (if the app provides a storage seed script)
+  STORAGE_SEED="$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts"
+  if [ -f "$STORAGE_SEED" ]; then
+    echo "Seeding Storage..."
+    STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" npx tsx "$STORAGE_SEED"
+  fi
 fi
 
 # Run Playwright acceptance tests

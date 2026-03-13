@@ -4,7 +4,7 @@ import { isPublished, type PostMeta, type PublishedPost } from "../post-types.js
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.js";
 
 export interface LinkSection {
-  heading: string;
+  heading?: string;
   links: { label: string; subtitle?: string; url: string }[];
 }
 
@@ -101,9 +101,11 @@ export function renderInfoPanel(data: InfoPanelData): string {
   const linkSectionsHtml = data.linkSections
     .map((section) => {
       const linksHtml = section.links.map(renderLink).join("");
+      const headingHtml = section.heading
+        ? `<h3>${escapeHtml(section.heading)}</h3>\n      `
+        : "";
       return `<section class="panel-section">
-      <h3>${escapeHtml(section.heading)}</h3>
-      <ul class="panel-list">${linksHtml}</ul>
+      ${headingHtml}<ul class="panel-list">${linksHtml}</ul>
     </section>`;
     })
     .join("\n    ");
