@@ -31,14 +31,8 @@ cd "$REPO_ROOT"
 
 cleanup_stale_hub
 
-detect_features "$REPO_ROOT/$APP_DIR/src/"
+detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
 install_local_deps "$REPO_ROOT" "$APP_PKG"
-
-# Detect if app uses Cloud Functions (has /api/ rewrite in firebase.json)
-USES_FUNCTIONS=false
-if [ -d "$REPO_ROOT/functions" ] && jq -e '.hosting[] | select(.target == "'"$APP_NAME"'") | .rewrites[]? | select(.source | startswith("/api/"))' "$REPO_ROOT/firebase.json" >/dev/null 2>&1; then
-  USES_FUNCTIONS=true
-fi
 
 cd "$REPO_ROOT/$APP_DIR"
 

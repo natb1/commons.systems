@@ -79,8 +79,9 @@ export function parseAtomFeedXml(xml: string): LatestPost | null {
   const entry = entryMatch[1];
 
   const title = xmlText(entry, "title") ?? "";
-  // Prefer link[rel="alternate"], fall back to any link with href.
-  // Handles both single and double quoted attributes (Blogger uses single quotes).
+  // Prefer link[rel="alternate"] when rel precedes href in element attributes.
+  // Falls back to any link with href if alternate match fails (e.g., reversed attribute order).
+  // Both single and double quoted attributes accepted (Blogger uses single quotes).
   const altLinkMatch = entry.match(/<link[^>]*rel=["']alternate["'][^>]*href=["']([^"']*)["'][^>]*\/?>/i);
   const anyLinkMatch = entry.match(/<link[^>]*href=["']([^"']*)["'][^>]*\/?>/i);
   const url = decodeXmlEntities((altLinkMatch ?? anyLinkMatch)?.[1] ?? "");

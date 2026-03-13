@@ -1,7 +1,7 @@
 export interface LatestPost {
-  title: string;
-  url: string;
-  publishedAt?: string;
+  readonly title: string;
+  readonly url: string;
+  readonly publishedAt?: string;
 }
 
 export interface BlogRollEntry {
