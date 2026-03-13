@@ -116,7 +116,7 @@ type NormalizationRule struct {
 	Pattern              string // case-insensitive substring (or regex if PatternType=="regex")
 	PatternType          string // "substring" (default) or "regex"
 	CanonicalDescription string
-	DateWindowDays       int // max days between adjacent grouped transactions (single-linkage)
+	DateWindowDays       int // max days between adjacent grouped transactions (single-linkage); <= 0 means no date window (all matches in one group)
 	Institution          string
 	Account              string
 	Priority             int
@@ -136,14 +136,9 @@ func matchNormRule(rule NormalizationRule, re *regexp.Regexp, txn store.NormTxn)
 		if !re.MatchString(txn.Description) {
 			return false
 		}
-		// Regex matched description; still need institution/account filters.
-		if rule.Institution != "" && !strings.EqualFold(rule.Institution, txn.Institution) {
-			return false
-		}
-		if rule.Account != "" && !strings.EqualFold(rule.Account, txn.Account) {
-			return false
-		}
-		return true
+		// Regex matched description; delegate institution/account filtering
+		// to matchFields with an empty pattern (always passes substring check).
+		return matchFields("", rule.Institution, rule.Account, txn.Description, txn.Institution, txn.Account)
 	}
 	return matchFields(rule.Pattern, rule.Institution, rule.Account, txn.Description, txn.Institution, txn.Account)
 }
@@ -263,7 +258,10 @@ func autoNormalize(txns []store.NormTxn, normalized map[string]bool) []store.Nor
 //
 // Step 2: Rule-based — remaining transactions are matched against rules
 // evaluated in priority order; each transaction is claimed by the first
-// rule whose group it joins.
+// rule whose group it joins. Regex rules use case-insensitive matching.
+//
+// Returns an error if a rule has an invalid regex pattern or an unrecognized
+// PatternType.
 func ApplyNormalization(txns []store.NormTxn, rules []NormalizationRule) ([]store.NormalizationUpdate, error) {
 	normalized := make(map[string]bool)
 	var updates []store.NormalizationUpdate

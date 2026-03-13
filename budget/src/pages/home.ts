@@ -190,7 +190,10 @@ function renderTransactionTable(
       if (seenGroups.has(txn.normalizedId)) return "";
       seenGroups.add(txn.normalizedId);
       const members = normalizedGroups.get(txn.normalizedId)!;
-      const primary = members.find(t => t.normalizedPrimary) ?? members[0];
+      const primary = members.find(t => t.normalizedPrimary);
+      if (!primary) {
+        throw new DataIntegrityError(`Normalized group ${txn.normalizedId} has no primary transaction`);
+      }
       return renderNormalizedGroup({
         primary,
         members,

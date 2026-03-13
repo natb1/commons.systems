@@ -41,6 +41,7 @@ function periodsForBudget(periods: BudgetPeriod[], budgetId: string): BudgetPeri
     .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
 }
 
+// Exclude non-primary normalized transactions to avoid double-counting duplicates
 function transactionsForBudget(txns: Transaction[], budgetId: string): TimestampedTransaction[] {
   return txns
     .filter((t): t is TimestampedTransaction =>

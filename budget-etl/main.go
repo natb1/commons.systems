@@ -179,14 +179,24 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 	log.Printf("upsert: %d created, %d updated across %d statements", result.Created, result.Updated, len(parsed))
 
 	// Apply normalization (auto + rules, post-upsert, pre-recalculation)
-	normRuleDocs, err := client.LoadNormalizationRules(ctx, groupInfo.ID)
-	if err != nil {
-		return err
+	type normRulesResult struct {
+		docs []store.NormalizationRuleDoc
+		err  error
 	}
+	normRulesCh := make(chan normRulesResult, 1)
+	go func() {
+		docs, err := client.LoadNormalizationRules(ctx, groupInfo.ID)
+		normRulesCh <- normRulesResult{docs, err}
+	}()
 	allDocs, err := client.LoadAllTransactions(ctx, groupInfo)
 	if err != nil {
 		return err
 	}
+	normRulesRes := <-normRulesCh
+	if normRulesRes.err != nil {
+		return normRulesRes.err
+	}
+	normRuleDocs := normRulesRes.docs
 	normTxns := make([]store.NormTxn, 0, len(allDocs))
 	for _, td := range allDocs {
 		desc, ok := td.Data["description"].(string)
@@ -254,7 +264,8 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 			normUpdates = append(normUpdates, store.NormalizationUpdate{
 				DocID:                 td.ID,
 				NormalizedID:          "",
-				NormalizedPrimary:     true,
+				// NormalizedPrimary true so the transaction counts toward budget totals as a standalone entry
+			NormalizedPrimary:     true,
 				NormalizedDescription: "",
 			})
 		}

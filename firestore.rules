@@ -137,7 +137,7 @@ service cloud.firestore {
         && request.resource.data.canonicalDescription.size() > 0
         && request.resource.data.priority is number
         && (!('patternType' in request.resource.data) || request.resource.data.patternType in ["substring", "regex"])
-        && (!('dateWindowDays' in request.resource.data) || request.resource.data.dateWindowDays is number)
+        && (!('dateWindowDays' in request.resource.data) || (request.resource.data.dateWindowDays is number && request.resource.data.dateWindowDays >= 0))
         && (!('institution' in request.resource.data) || request.resource.data.institution is string || request.resource.data.institution == null)
         && (!('account' in request.resource.data) || request.resource.data.account is string || request.resource.data.account == null)
         && request.resource.data.keys().hasOnly(['pattern', 'patternType', 'canonicalDescription', 'dateWindowDays', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);

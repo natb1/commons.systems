@@ -152,6 +152,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
         const filterType = activeFilterType();
         const memberEmails = await getGroupMembers(groupId);
 
+        let rowHtml: string;
         if (filterType === "normalization") {
           const defaultFields = {
             pattern: "new rule",
@@ -163,12 +164,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
             account: null as string | null,
           };
           const newId = await createNormalizationRule(groupId, memberEmails, defaultFields);
-          const newRule = { id: newId, groupId, ...defaultFields };
-          const wrapper = document.createElement("div");
-          wrapper.innerHTML = renderNormalizationRow(newRule, true);
-          const newRow = wrapper.firstElementChild as HTMLElement;
-          if (window.innerWidth >= 768) newRow.setAttribute("open", "");
-          container.insertBefore(newRow, target);
+          rowHtml = renderNormalizationRow({ id: newId, groupId, ...defaultFields }, true);
         } else {
           const ruleType = filterType;
           const defaultFields = {
@@ -181,12 +177,13 @@ export function hydrateRulesTable(container: HTMLElement): void {
           };
           const newId = await createRule(groupId, memberEmails, defaultFields);
           const newRule: Rule = { id: newId, groupId, ...defaultFields };
-          const wrapper = document.createElement("div");
-          wrapper.innerHTML = renderRow(newRule, true);
-          const newRow = wrapper.firstElementChild as HTMLElement;
-          if (window.innerWidth >= 768) newRow.setAttribute("open", "");
-          container.insertBefore(newRow, target);
+          rowHtml = renderRow(newRule, true);
         }
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = rowHtml;
+        const newRow = wrapper.firstElementChild as HTMLElement;
+        if (window.innerWidth >= 768) newRow.setAttribute("open", "");
+        container.insertBefore(newRow, target);
       } catch (error) {
         handleActionError(target, error, "add rule");
       }

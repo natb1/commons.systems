@@ -438,9 +438,9 @@ describe("computeAllBudgetBalances", () => {
 });
 
 describe("seed data consistency", () => {
-  // Verify that seed budget period totals match the sum of net amounts
-  // from seed transactions within each period's time range.
-  // This catches drift between seed transactions and period totals.
+  // Verify budget period totals against a curated subset of seed transactions
+  // that excludes normalized duplicates. The actual seed file includes
+  // seed-norm-primary/secondary, but this test validates only standalone transactions.
 
   interface SeedTxn { amount: number; reimbursement: number; budget: string | null; timestamp: Date }
   interface SeedPeriod { id: string; budgetId: string; periodStart: Date; periodEnd: Date; total: number }
