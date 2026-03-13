@@ -1,3 +1,5 @@
+import type { FirebaseOptions } from "firebase/app";
+
 export const firebaseConfig = {
   projectId: "commons-systems",
   apiKey: "AIzaSyCeT2nQbB_RCtu2Ybt9D3828okcodri4wc",
@@ -8,4 +10,6 @@ export const firebaseConfig = {
       ? location.hostname
       : "commons-systems.firebaseapp.com",
   storageBucket: "commons-systems.firebasestorage.app",
-};
+  // Required by Firebase Analytics — without it, initialization fails.
+  appId: "1:1043497797028:web:2aa63913a15aa053062d31",
+} satisfies FirebaseOptions;
