@@ -124,7 +124,8 @@ type UpsertResult struct {
 // Any field set as a default on create but excluded from this list is
 // user-editable and preserved across re-imports (note, reimbursement).
 // Category and budget are set by the rule engine for new transactions and
-// preserved across re-imports, even if rules have changed.
+// preserved across re-imports, even if rules have changed. Normalization
+// fields are also excluded; they are managed by the post-upsert normalization step.
 var importFieldPaths = []firestore.FieldPath{
 	{"institution"},
 	{"account"},
@@ -201,6 +202,8 @@ func dollarAmount(cents int64) float64 { return float64(cents) / 100 }
 // Budget is nil (not "") when unassigned so the client can distinguish "no budget" from
 // "empty string budget". Category is expected to be non-empty; ApplyCategorization
 // enforces 100% coverage before upsert.
+// Normalization fields default to unnormalized: normalizedId=nil, normalizedPrimary=true,
+// normalizedDescription=nil.
 func allFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 	m := importFields(txn, group)
 	m["note"] = ""
@@ -569,6 +572,8 @@ func (c *Client) LoadNormalizationRules(ctx context.Context, groupID string) ([]
 		r.Pattern = v
 		if v, ok := d["patternType"].(string); ok {
 			r.PatternType = v
+		} else if d["patternType"] != nil {
+			return nil, fmt.Errorf("normalization rule %s: field 'patternType' is not a string (got %T)", doc.Ref.ID, d["patternType"])
 		}
 		v, ok = d["canonicalDescription"].(string)
 		if !ok {
@@ -584,15 +589,19 @@ func (c *Client) LoadNormalizationRules(ctx context.Context, groupID string) ([]
 		}
 		if v, ok := d["institution"].(string); ok {
 			r.Institution = v
+		} else if d["institution"] != nil {
+			return nil, fmt.Errorf("normalization rule %s: field 'institution' is not a string (got %T)", doc.Ref.ID, d["institution"])
 		}
 		if v, ok := d["account"].(string); ok {
 			r.Account = v
+		} else if d["account"] != nil {
+			return nil, fmt.Errorf("normalization rule %s: field 'account' is not a string (got %T)", doc.Ref.ID, d["account"])
 		}
 		if p, ok := d["priority"].(int64); ok {
 			r.Priority = int(p)
 		} else if p, ok := d["priority"].(float64); ok {
 			r.Priority = int(p)
-		} else if d["priority"] != nil {
+		} else {
 			return nil, fmt.Errorf("normalization rule %s: field 'priority' is not a number (got %T)", doc.Ref.ID, d["priority"])
 		}
 		result = append(result, r)

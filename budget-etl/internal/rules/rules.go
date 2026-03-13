@@ -21,21 +21,26 @@ type Rule struct {
 	Account     string // optional: restrict to this account
 }
 
-// Match returns true if the rule matches the given transaction fields.
-// Pattern is matched as a case-insensitive substring of description.
-// Institution and Account filters are optional; when non-empty, they must
-// match exactly (case-insensitive).
-func (r Rule) Match(description, institution, account string) bool {
-	if !strings.Contains(strings.ToLower(description), strings.ToLower(r.Pattern)) {
+// matchFields checks whether a pattern/institution/account filter matches the
+// given transaction fields. Pattern is a case-insensitive substring of description.
+// Institution and account filters are optional; when non-empty they must match
+// exactly (case-insensitive).
+func matchFields(pattern, ruleInstitution, ruleAccount, description, institution, account string) bool {
+	if !strings.Contains(strings.ToLower(description), strings.ToLower(pattern)) {
 		return false
 	}
-	if r.Institution != "" && !strings.EqualFold(r.Institution, institution) {
+	if ruleInstitution != "" && !strings.EqualFold(ruleInstitution, institution) {
 		return false
 	}
-	if r.Account != "" && !strings.EqualFold(r.Account, account) {
+	if ruleAccount != "" && !strings.EqualFold(ruleAccount, account) {
 		return false
 	}
 	return true
+}
+
+// Match returns true if the rule matches the given transaction fields.
+func (r Rule) Match(description, institution, account string) bool {
+	return matchFields(r.Pattern, r.Institution, r.Account, description, institution, account)
 }
 
 // rulesOfType filters rules by type and returns them sorted by priority (ascending).
@@ -124,23 +129,23 @@ type compiledNormRule struct {
 }
 
 // matchNormRule returns true if the rule matches the given transaction.
+// When re is non-nil (regex pattern), it is used for description matching
+// instead of a substring check.
 func matchNormRule(rule NormalizationRule, re *regexp.Regexp, txn store.NormTxn) bool {
 	if re != nil {
 		if !re.MatchString(txn.Description) {
 			return false
 		}
-	} else {
-		if !strings.Contains(strings.ToLower(txn.Description), strings.ToLower(rule.Pattern)) {
+		// Regex matched description; still need institution/account filters.
+		if rule.Institution != "" && !strings.EqualFold(rule.Institution, txn.Institution) {
 			return false
 		}
+		if rule.Account != "" && !strings.EqualFold(rule.Account, txn.Account) {
+			return false
+		}
+		return true
 	}
-	if rule.Institution != "" && !strings.EqualFold(rule.Institution, txn.Institution) {
-		return false
-	}
-	if rule.Account != "" && !strings.EqualFold(rule.Account, txn.Account) {
-		return false
-	}
-	return true
+	return matchFields(rule.Pattern, rule.Institution, rule.Account, txn.Description, txn.Institution, txn.Account)
 }
 
 // groupByAmountAndDate partitions matched transactions by exact amount
@@ -152,8 +157,7 @@ func groupByAmountAndDate(matches []store.NormTxn, rule NormalizationRule) [][]s
 
 	// Partition by exact amount — duplicates from overlapping statements
 	// always have the same amount.
-	type amountKey = int64
-	partitions := make(map[amountKey][]store.NormTxn)
+	partitions := make(map[int64][]store.NormTxn)
 	for _, txn := range matches {
 		partitions[txn.Amount] = append(partitions[txn.Amount], txn)
 	}

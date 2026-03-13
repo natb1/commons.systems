@@ -241,7 +241,7 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 		return fmt.Errorf("normalization: %w", err)
 	}
 	// Clear stale normalization on transactions that were previously normalized
-	// but are no longer part of any group
+	// but are no longer part of any normalization group
 	updatedDocIDs := make(map[string]bool, len(normUpdates))
 	for _, u := range normUpdates {
 		updatedDocIDs[u.DocID] = true

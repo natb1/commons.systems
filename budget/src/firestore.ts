@@ -177,6 +177,7 @@ export async function getTransactions(groupId: string | null, email?: string): P
       statementId: optionalString(data.statementId, "statementId"),
       groupId: optionalString(data.groupId, "groupId"),
       normalizedId: optionalString(data.normalizedId, "normalizedId"),
+      // Defaults to true for un-normalized transactions (field may be missing or null)
       normalizedPrimary: data.normalizedPrimary !== false,
       normalizedDescription: optionalString(data.normalizedDescription, "normalizedDescription"),
     };
@@ -426,7 +427,7 @@ export async function getNormalizationRules(groupId: string | null, email?: stri
       pattern: requireString(data.pattern, "pattern"),
       patternType: optionalString(data.patternType, "patternType"),
       canonicalDescription: requireString(data.canonicalDescription, "canonicalDescription"),
-      dateWindowDays: typeof data.dateWindowDays === "number" ? data.dateWindowDays : 0,
+      dateWindowDays: data.dateWindowDays == null ? 0 : requireNumber(data.dateWindowDays, "dateWindowDays"),
       institution: optionalString(data.institution, "institution"),
       account: optionalString(data.account, "account"),
       priority: requireNumber(data.priority, "priority"),
