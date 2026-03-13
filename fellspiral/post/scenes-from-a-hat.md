@@ -21,3 +21,7 @@ On approaching any landmark in tile 10, roll 2 scenes from this table. Some comb
 8. A surreal purple hue reflects off the horizon to hold your attention. Roll a clarity save. If you fail, you slip (or your horse bucks you) at the edge of a hidden sink hole. You fall 30 feet into a cenote below. A single ray of sun (or moon) light pierces the darkness and bends to illuminate the emerald green pool.
 9. A frail woman with kind eyes struggles to catch her breath as she rests on a stump at the base of a hill. She wears an odd style of thick glasses, and a fine pendant around her neck. She has come to see the view from the hill top and begs your aid. After ascending the hill she looks out on the landscape, smiles and closes her eyes in breathless slumber.
 10. You are hailed by a woman's voice from the top of a hill. She frantically rushes down the hill - part running, part tumbling. Before you can introduce yourself, or protest, she grabs you by the ears and pulls you down to a smush her lips against yours. Her strange, thick glasses scrape your nose. "It worked!" she exclaims. Without pause, she races off for a belated rendezvous, shouting back only terse, jubilant courtesies. She drops her fine pendant.
+
+## Tile 10: Armadillo Crag
+
+![Tile 10: Armadillo Crag](/tile10-armadillo-crag.png)
