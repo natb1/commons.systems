@@ -117,6 +117,13 @@ get_env_suffix() {
   echo "${1}${wt_id:+-$wt_id}"
 }
 
+# Resolve the tmp directory that Firebase emulators use.
+# Uses Node os.tmpdir() to match the path Firebase writes hub files to.
+# Can be overridden in tests by redefining this function.
+get_tmpdir() {
+  node -e "process.stdout.write(require('os').tmpdir())"
+}
+
 # Kill a process and all its descendants.
 # Args: $1 = PID to kill
 kill_tree() {
@@ -187,7 +194,7 @@ cleanup_stale_hub() {
   # Resolve tmpdir via Node to match the path Firebase emulators use
   # (os.tmpdir() may differ from shell $TMPDIR on macOS).
   local tmpdir
-  tmpdir="$(node -e "process.stdout.write(require('os').tmpdir())")"
+  tmpdir="$(get_tmpdir)"
   local project_id
   project_id="$(get_emulator_project_id)"
   local hub_file="${tmpdir}/hub-${project_id}.json"
@@ -199,6 +206,113 @@ cleanup_stale_hub() {
       rm -f "$hub_file"
     fi
   fi
+}
+
+# Write a PID file recording child processes for orphan cleanup.
+# The file is scoped to the current worktree via get_emulator_project_id().
+# Args: pairs of pid:command_name (e.g., "12345:node" "12346:java")
+write_pid_file() {
+  local tmpdir
+  tmpdir="$(get_tmpdir)"
+  local project_id
+  project_id="$(get_emulator_project_id)"
+  local worktree_path
+  worktree_path="$(git rev-parse --show-toplevel)"
+
+  local processes="["
+  local first=true
+  for entry in "$@"; do
+    local pid="${entry%%:*}"
+    local cmd="${entry#*:}"
+    if [ "$first" = true ]; then
+      first=false
+    else
+      processes="$processes, "
+    fi
+    processes="$processes{\"pid\": $pid, \"cmd\": \"$cmd\"}"
+  done
+  processes="$processes]"
+
+  local pid_file="${tmpdir}/pids-${project_id}.json"
+  cat > "$pid_file" <<EOF
+{"hub_pid": $$, "worktree_path": "$worktree_path", "processes": $processes}
+EOF
+}
+
+# Remove the PID file for the current worktree.
+# Called during normal trap cleanup.
+remove_pid_file() {
+  local tmpdir
+  tmpdir="$(get_tmpdir)"
+  local project_id
+  project_id="$(get_emulator_project_id)"
+  rm -f "${tmpdir}/pids-${project_id}.json"
+}
+
+# Scan all PID files for the project and clean up orphaned processes.
+# Orphans arise from two cases:
+#   1. The owning worktree directory was deleted
+#   2. The hub PID (parent script) is dead but child processes survived
+# Skips PID files whose hub process is still alive (active server in another worktree).
+cleanup_all_stale_processes() {
+  local tmpdir
+  tmpdir="$(get_tmpdir)"
+
+  local pid_files
+  pid_files=$(ls "${tmpdir}"/pids-${FIREBASE_PROJECT_ID}*.json 2>/dev/null) || true
+  if [ -z "$pid_files" ]; then
+    return 0
+  fi
+
+  local pid_file
+  for pid_file in $pid_files; do
+    local worktree_path hub_pid
+    worktree_path=$(jq -r '.worktree_path // empty' "$pid_file" 2>/dev/null) || continue
+    hub_pid=$(jq -r '.hub_pid // empty' "$pid_file" 2>/dev/null) || continue
+
+    local is_orphan=false
+    if [ -n "$worktree_path" ] && [ ! -d "$worktree_path" ]; then
+      echo "Orphan detected: worktree deleted ($worktree_path)"
+      is_orphan=true
+    elif [ -n "$hub_pid" ] && ! kill -0 "$hub_pid" 2>/dev/null; then
+      echo "Orphan detected: hub PID $hub_pid is dead"
+      is_orphan=true
+    fi
+
+    if [ "$is_orphan" = true ]; then
+      local process_count
+      process_count=$(jq '.processes | length' "$pid_file" 2>/dev/null) || continue
+      local i=0
+      while [ "$i" -lt "$process_count" ]; do
+        local proc_pid proc_cmd actual_cmd
+        proc_pid=$(jq -r ".processes[$i].pid" "$pid_file")
+        proc_cmd=$(jq -r ".processes[$i].cmd" "$pid_file")
+
+        # Verify command name matches before killing (guards PID recycling)
+        actual_cmd=$(ps -p "$proc_pid" -o comm= 2>/dev/null) || actual_cmd=""
+        if [ -n "$actual_cmd" ] && [ "$actual_cmd" = "$proc_cmd" ]; then
+          echo "Killing orphaned process: PID $proc_pid ($proc_cmd)"
+          kill_tree "$proc_pid"
+        elif [ -n "$actual_cmd" ]; then
+          echo "Skipping PID $proc_pid: expected $proc_cmd but found $actual_cmd (PID recycled)"
+        fi
+        i=$((i + 1))
+      done
+
+      # Remove the PID file
+      rm -f "$pid_file"
+
+      # Remove corresponding hub file if it exists
+      local project_id
+      project_id="${pid_file##*/pids-}"
+      project_id="${project_id%.json}"
+      local hub_file="${tmpdir}/hub-${project_id}.json"
+      if [ -f "$hub_file" ]; then
+        echo "Removing stale hub file: $hub_file"
+        rm -f "$hub_file"
+      fi
+    fi
+  done
 }
 
 # Find N available TCP ports by binding to port 0 simultaneously.
