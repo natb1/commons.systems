@@ -20,7 +20,11 @@ export function initAnalyticsSafe(app: FirebaseApp): (path: string) => void {
     return initAnalytics(app);
   } catch (error) {
     if (error instanceof TypeError || error instanceof ReferenceError) throw error;
-    console.error("Analytics initialization failed:", error);
+    reportError(
+      new Error(
+        `Failed to initialize analytics (appId: ${app.options.appId}, measurementId: ${app.options.measurementId}): ${error instanceof Error ? error.message : error}`,
+      ),
+    );
     return () => {};
   }
 }
@@ -42,7 +46,11 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
       logEvent(analytics, "page_view", { page_path: path });
     } catch (error) {
       if (error instanceof TypeError || error instanceof ReferenceError) throw error;
-      console.error("Failed to log page view (path: %s):", path, error);
+      reportError(
+        new Error(
+          `Failed to log page view (path: ${path}): ${error instanceof Error ? error.message : error}`,
+        ),
+      );
     }
   };
 }

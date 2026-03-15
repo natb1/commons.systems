@@ -9,6 +9,12 @@ vi.mock("firebase/analytics", () => ({
 import { initializeAnalytics, logEvent } from "firebase/analytics";
 import { initAnalytics, initAnalyticsSafe, withMeasurementId } from "../src/index";
 
+// reportError is a browser API not available in Node — stub it so tests that
+// don't mock it fail loudly rather than silently swallowing errors.
+globalThis.reportError ??= (error: unknown) => {
+  throw error;
+};
+
 beforeEach(() => vi.clearAllMocks());
 
 describe("withMeasurementId", () => {
@@ -97,43 +103,68 @@ describe("initAnalytics", () => {
     expect(() => initAnalytics(app)).toThrow("CSP blocked");
   });
 
-  it("propagates error from initAnalyticsSafe as no-op with console.error", () => {
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.mocked(initializeAnalytics).mockImplementation(() => {
-      throw new Error("CSP blocked");
-    });
-
-    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
-    const tracker = initAnalyticsSafe(app);
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "Analytics initialization failed:",
-      expect.any(Error),
-    );
-
-    tracker("/about");
-    expect(logEvent).not.toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  it("swallows and logs error when logEvent throws", () => {
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("reports error when logEvent throws", () => {
+    const reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
     vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
+    const badStateError = new Error("bad state");
     vi.mocked(logEvent).mockImplementation(() => {
-      throw new Error("bad state");
+      throw badStateError;
     });
 
     const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
     const tracker = initAnalytics(app);
 
     expect(() => tracker("/about")).not.toThrow();
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "Failed to log page view (path: %s):",
-      "/about",
-      expect.any(Error),
+    const reported = reportErrorSpy.mock.calls[0][0] as Error;
+    expect(reported.message).toBe(
+      "Failed to log page view (path: /about): bad state",
     );
 
-    consoleErrorSpy.mockRestore();
+    reportErrorSpy.mockRestore();
+  });
+
+  it("re-throws TypeError from logEvent", () => {
+    vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
+    vi.mocked(logEvent).mockImplementation(() => {
+      throw new TypeError("invalid argument");
+    });
+
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
+    const tracker = initAnalytics(app);
+
+    expect(() => tracker("/about")).toThrow(TypeError);
+  });
+});
+
+describe("initAnalyticsSafe", () => {
+  it("returns no-op and reports error when initializeAnalytics throws", () => {
+    const reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+    const cspError = new Error("CSP blocked");
+    vi.mocked(initializeAnalytics).mockImplementation(() => {
+      throw cspError;
+    });
+
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
+    const tracker = initAnalyticsSafe(app);
+
+    const reported = reportErrorSpy.mock.calls[0][0] as Error;
+    expect(reported.message).toBe(
+      "Failed to initialize analytics (appId: 1:test:web:abc, measurementId: G-TEST): CSP blocked",
+    );
+
+    tracker("/about");
+    expect(logEvent).not.toHaveBeenCalled();
+
+    reportErrorSpy.mockRestore();
+  });
+
+  it("re-throws TypeError from initializeAnalytics", () => {
+    vi.mocked(initializeAnalytics).mockImplementation(() => {
+      throw new TypeError("invalid config");
+    });
+
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
+
+    expect(() => initAnalyticsSafe(app)).toThrow(TypeError);
   });
 });
