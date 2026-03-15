@@ -77,6 +77,9 @@ export interface Transaction {
   readonly timestamp: Timestamp | null;
   readonly statementId: StatementId | null;
   readonly groupId: GroupId | null;
+  readonly normalizedId: string | null;
+  readonly normalizedPrimary: boolean;
+  readonly normalizedDescription: string | null;
 }
 
 function validateReimbursementRange(n: number): void {
@@ -183,6 +186,10 @@ export async function getTransactions(groupId: GroupId | null, email?: string): 
       timestamp: optionalTimestamp(data.timestamp, "timestamp"),
       statementId: optionalString(data.statementId, "statementId") as StatementId | null,
       groupId: optionalString(data.groupId, "groupId") as GroupId | null,
+      normalizedId: optionalString(data.normalizedId, "normalizedId"),
+      // Defaults to true for un-normalized transactions (field may be missing or null)
+      normalizedPrimary: data.normalizedPrimary !== false,
+      normalizedDescription: optionalString(data.normalizedDescription, "normalizedDescription"),
     };
   });
 }
@@ -193,7 +200,7 @@ function requireDocId(id: string, label: string): void {
 
 export async function updateTransaction(
   txnId: TransactionId,
-  fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget">>,
+  fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
 ): Promise<void> {
   requireDocId(txnId, "transaction");
   if (Object.keys(fields).length === 0) return;
@@ -401,6 +408,85 @@ export async function updateRule(
 export async function deleteRule(ruleId: RuleId): Promise<void> {
   requireDocId(ruleId, "rule");
   const path = nsCollectionPath(NAMESPACE, "rules");
+  const ref = doc(db, path, ruleId);
+  await deleteDoc(ref);
+}
+
+// --- Normalization Rules ---
+
+export interface NormalizationRule {
+  readonly id: string;
+  readonly pattern: string;
+  readonly patternType: string | null;
+  readonly canonicalDescription: string;
+  readonly dateWindowDays: number;
+  readonly institution: string | null;
+  readonly account: string | null;
+  readonly priority: number;
+  readonly groupId: GroupId | null;
+}
+
+export async function getNormalizationRules(groupId: GroupId, email: string): Promise<NormalizationRule[]>;
+export async function getNormalizationRules(groupId: null): Promise<NormalizationRule[]>;
+export async function getNormalizationRules(groupId: GroupId | null, email?: string): Promise<NormalizationRule[]> {
+  const docs = await queryGroupCollection("normalization-rules", "seed-", groupId, email);
+  return docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      pattern: requireString(data.pattern, "pattern"),
+      patternType: optionalString(data.patternType, "patternType"),
+      canonicalDescription: requireString(data.canonicalDescription, "canonicalDescription"),
+      dateWindowDays: data.dateWindowDays == null ? 0 : requireNumber(data.dateWindowDays, "dateWindowDays"),
+      institution: optionalString(data.institution, "institution"),
+      account: optionalString(data.account, "account"),
+      priority: requireNumber(data.priority, "priority"),
+      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
+    };
+  });
+}
+
+export async function createNormalizationRule(
+  groupId: GroupId,
+  memberEmails: string[],
+  fields: Omit<NormalizationRule, "id" | "groupId">,
+): Promise<string> {
+  if (!fields.pattern) throw new Error("Normalization rule pattern cannot be empty");
+  if (!fields.canonicalDescription) throw new Error("Normalization rule canonical description cannot be empty");
+  if (!Number.isFinite(fields.priority)) throw new RangeError("Normalization rule priority must be a finite number");
+  const path = nsCollectionPath(NAMESPACE, "normalization-rules");
+  const data: Record<string, unknown> = {
+    pattern: fields.pattern,
+    canonicalDescription: fields.canonicalDescription,
+    priority: fields.priority,
+    groupId,
+    memberEmails,
+  };
+  if (fields.patternType) data.patternType = fields.patternType;
+  if (fields.dateWindowDays != null) data.dateWindowDays = fields.dateWindowDays;
+  if (fields.institution) data.institution = fields.institution;
+  if (fields.account) data.account = fields.account;
+  const ref = await addDoc(collection(db, path), data);
+  return ref.id;
+}
+
+export async function updateNormalizationRule(
+  ruleId: string,
+  fields: Partial<Pick<NormalizationRule, "pattern" | "patternType" | "canonicalDescription" | "dateWindowDays" | "priority" | "institution" | "account">>,
+): Promise<void> {
+  requireDocId(ruleId, "normalization rule");
+  if (Object.keys(fields).length === 0) return;
+  if (fields.pattern !== undefined && !fields.pattern) throw new Error("Normalization rule pattern cannot be empty");
+  if (fields.canonicalDescription !== undefined && !fields.canonicalDescription) throw new Error("Normalization rule canonical description cannot be empty");
+  if (fields.priority !== undefined && !Number.isFinite(fields.priority)) throw new RangeError("Normalization rule priority must be a finite number");
+  const path = nsCollectionPath(NAMESPACE, "normalization-rules");
+  const ref = doc(db, path, ruleId);
+  await updateDoc(ref, fields);
+}
+
+export async function deleteNormalizationRule(ruleId: string): Promise<void> {
+  requireDocId(ruleId, "normalization rule");
+  const path = nsCollectionPath(NAMESPACE, "normalization-rules");
   const ref = doc(db, path, ruleId);
   await deleteDoc(ref);
 }

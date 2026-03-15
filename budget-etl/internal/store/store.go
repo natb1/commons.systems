@@ -95,6 +95,25 @@ type TransactionData struct {
 	Budget        string // set by budget assignment rules; preserved across re-imports
 }
 
+// NormTxn is a read-only view of a transaction used by normalization rules.
+type NormTxn struct {
+	DocID       string
+	Description string
+	Institution string
+	Account     string
+	Amount      int64 // cents
+	Timestamp   time.Time
+	StatementID string
+}
+
+// NormalizationUpdate holds the normalization fields to write back to a transaction document.
+type NormalizationUpdate struct {
+	DocID                 string
+	NormalizedID          string // primary's doc ID; empty to clear
+	NormalizedPrimary     bool
+	NormalizedDescription string // canonical description; empty to clear
+}
+
 // UpsertResult tracks how many transactions were created vs updated.
 type UpsertResult struct {
 	Created int
@@ -105,7 +124,8 @@ type UpsertResult struct {
 // Any field set as a default on create but excluded from this list is
 // user-editable and preserved across re-imports (note, reimbursement).
 // Category and budget are set by the rule engine for new transactions and
-// preserved across re-imports, even if rules have changed.
+// preserved across re-imports, even if rules have changed. Normalization
+// fields are also excluded; they are managed by the post-upsert normalization step.
 var importFieldPaths = []firestore.FieldPath{
 	{"institution"},
 	{"account"},
@@ -182,6 +202,8 @@ func dollarAmount(cents int64) float64 { return float64(cents) / 100 }
 // Budget is nil (not "") when unassigned so the client can distinguish "no budget" from
 // "empty string budget". Category is expected to be non-empty; ApplyCategorization
 // enforces 100% coverage before upsert.
+// Normalization fields default to unnormalized: normalizedId=nil, normalizedPrimary=true,
+// normalizedDescription=nil.
 func allFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 	m := importFields(txn, group)
 	m["note"] = ""
@@ -192,6 +214,9 @@ func allFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 	} else {
 		m["budget"] = nil
 	}
+	m["normalizedId"] = nil
+	m["normalizedPrimary"] = true
+	m["normalizedDescription"] = nil
 	return m
 }
 
@@ -325,13 +350,20 @@ type txnFieldMap struct {
 }
 
 // aggregateTransactionData groups transactions by budget period and computes
-// total, count, and categoryBreakdown for each period. Transactions with a
-// nil or empty budget are skipped (unassigned). Returns a map keyed by period ID.
+// total, count, and categoryBreakdown for each period. Non-primary normalized
+// transactions are excluded. Transactions with a nil or empty budget are
+// skipped (unassigned). Returns a map keyed by period ID.
 func aggregateTransactionData(txns []txnFieldMap) (map[string]*periodData, error) {
 	periods := make(map[string]*periodData)
 
 	for _, txn := range txns {
 		d := txn.data
+		// Skip non-primary normalized transactions from budget totals
+		if nid := d["normalizedId"]; nid != nil {
+			if primary, ok := d["normalizedPrimary"].(bool); ok && !primary {
+				continue
+			}
+		}
 		budgetID, _ := d["budget"].(string)
 		if budgetID == "" {
 			continue // unassigned transactions don't affect periods
@@ -505,5 +537,139 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 	}
 
 	log.Printf("periods recalculated: %d updated, %d created", updates, creates)
+	return nil
+}
+
+// NormalizationRuleDoc holds a normalization rule document read from Firestore.
+type NormalizationRuleDoc struct {
+	ID                   string
+	Pattern              string
+	PatternType          string
+	CanonicalDescription string
+	DateWindowDays       int
+	Institution          string
+	Account              string
+	Priority             int
+}
+
+// LoadNormalizationRules reads normalization rules from budget/{env}/normalization-rules,
+// filtered by groupId.
+func (c *Client) LoadNormalizationRules(ctx context.Context, groupID string) ([]NormalizationRuleDoc, error) {
+	col := c.fs.Collection(fmt.Sprintf("budget/%s/normalization-rules", c.env))
+	docs, err := col.Where("groupId", "==", groupID).Documents(ctx).GetAll()
+	if err != nil {
+		return nil, fmt.Errorf("querying normalization rules: %w", err)
+	}
+
+	result := make([]NormalizationRuleDoc, 0, len(docs))
+	for _, doc := range docs {
+		d := doc.Data()
+		r := NormalizationRuleDoc{ID: doc.Ref.ID}
+		v, ok := d["pattern"].(string)
+		if !ok {
+			return nil, fmt.Errorf("normalization rule %s: field 'pattern' is not a string (got %T)", doc.Ref.ID, d["pattern"])
+		}
+		r.Pattern = v
+		if v, ok := d["patternType"].(string); ok {
+			r.PatternType = v
+		} else if d["patternType"] != nil {
+			return nil, fmt.Errorf("normalization rule %s: field 'patternType' is not a string (got %T)", doc.Ref.ID, d["patternType"])
+		}
+		v, ok = d["canonicalDescription"].(string)
+		if !ok {
+			return nil, fmt.Errorf("normalization rule %s: field 'canonicalDescription' is not a string (got %T)", doc.Ref.ID, d["canonicalDescription"])
+		}
+		r.CanonicalDescription = v
+		if p, ok := d["dateWindowDays"].(int64); ok {
+			r.DateWindowDays = int(p)
+		} else if p, ok := d["dateWindowDays"].(float64); ok {
+			r.DateWindowDays = int(p)
+		} else if d["dateWindowDays"] != nil {
+			return nil, fmt.Errorf("normalization rule %s: field 'dateWindowDays' is not a number (got %T)", doc.Ref.ID, d["dateWindowDays"])
+		}
+		if v, ok := d["institution"].(string); ok {
+			r.Institution = v
+		} else if d["institution"] != nil {
+			return nil, fmt.Errorf("normalization rule %s: field 'institution' is not a string (got %T)", doc.Ref.ID, d["institution"])
+		}
+		if v, ok := d["account"].(string); ok {
+			r.Account = v
+		} else if d["account"] != nil {
+			return nil, fmt.Errorf("normalization rule %s: field 'account' is not a string (got %T)", doc.Ref.ID, d["account"])
+		}
+		if p, ok := d["priority"].(int64); ok {
+			r.Priority = int(p)
+		} else if p, ok := d["priority"].(float64); ok {
+			r.Priority = int(p)
+		} else {
+			return nil, fmt.Errorf("normalization rule %s: field 'priority' is not a number (got %T)", doc.Ref.ID, d["priority"])
+		}
+		result = append(result, r)
+	}
+
+	log.Printf("loaded %d normalization rules for group %s", len(result), groupID)
+	return result, nil
+}
+
+// TransactionDoc holds a transaction document's Firestore ID and field data.
+type TransactionDoc struct {
+	ID   string
+	Data map[string]interface{}
+}
+
+// LoadAllTransactions reads all transactions for a group from Firestore.
+func (c *Client) LoadAllTransactions(ctx context.Context, group GroupInfo) ([]TransactionDoc, error) {
+	col := c.fs.Collection(fmt.Sprintf("budget/%s/transactions", c.env))
+	docs, err := col.Where("groupId", "==", group.ID).Documents(ctx).GetAll()
+	if err != nil {
+		return nil, fmt.Errorf("loading all transactions: %w", err)
+	}
+
+	result := make([]TransactionDoc, 0, len(docs))
+	for _, doc := range docs {
+		result = append(result, TransactionDoc{ID: doc.Ref.ID, Data: doc.Data()})
+	}
+	log.Printf("loaded %d transactions for group %s", len(result), group.ID)
+	return result, nil
+}
+
+// normalizationFieldPaths lists the normalization fields for merge updates.
+var normalizationFieldPaths = []firestore.FieldPath{
+	{"normalizedId"},
+	{"normalizedPrimary"},
+	{"normalizedDescription"},
+}
+
+// UpdateNormalization batch-updates normalization fields on transaction documents.
+func (c *Client) UpdateNormalization(ctx context.Context, updates []NormalizationUpdate) error {
+	col := c.fs.Collection(fmt.Sprintf("budget/%s/transactions", c.env))
+
+	const maxBatch = 500
+	for i := 0; i < len(updates); i += maxBatch {
+		end := i + maxBatch
+		if end > len(updates) {
+			end = len(updates)
+		}
+		batch := c.fs.Batch()
+		for _, u := range updates[i:end] {
+			ref := col.Doc(u.DocID)
+			var normalizedID interface{} = u.NormalizedID
+			var normalizedDescription interface{} = u.NormalizedDescription
+			if u.NormalizedID == "" {
+				normalizedID = nil
+				normalizedDescription = nil
+			}
+			batch.Set(ref, map[string]interface{}{
+				"normalizedId":          normalizedID,
+				"normalizedPrimary":     u.NormalizedPrimary,
+				"normalizedDescription": normalizedDescription,
+			}, firestore.Merge(normalizationFieldPaths...))
+		}
+		if _, err := batch.Commit(ctx); err != nil {
+			return fmt.Errorf("committing normalization batch: %w", err)
+		}
+	}
+
+	log.Printf("normalization: updated %d transactions", len(updates))
 	return nil
 }
