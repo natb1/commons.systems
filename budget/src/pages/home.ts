@@ -177,7 +177,7 @@ function renderTransactionTable(
 
   const seenGroups = new Set<string>();
   const rows = transactions
-    .map((txn) => {
+    .flatMap((txn) => {
       if (txn.normalizedId === null) {
         return renderRow({
           txn,
@@ -187,7 +187,7 @@ function renderTransactionTable(
           balance: balances.get(txn.id) ?? null,
         });
       }
-      if (seenGroups.has(txn.normalizedId)) return "";
+      if (seenGroups.has(txn.normalizedId)) return [];
       seenGroups.add(txn.normalizedId);
       const members = normalizedGroups.get(txn.normalizedId)!;
       const primary = members.find(t => t.normalizedPrimary);
@@ -203,7 +203,6 @@ function renderTransactionTable(
         balance: balances.get(primary.id) ?? null,
       });
     })
-    .filter(row => row !== "")
     .join("\n");
 
   let dataAttrs = "";

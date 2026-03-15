@@ -86,6 +86,12 @@ describe("renderHomeHtml", () => {
     expect(html).toContain('id="post-hello-world"');
     expect(html).toContain('id="post-draft-post"');
   });
+
+  it("uses custom postLinkPrefix in article links", () => {
+    const html = renderHomeHtml([publishedPost], "/post/");
+    expect(html).toContain('href="/post/hello-world"');
+    expect(html).not.toContain("#/post/");
+  });
 });
 
 describe("hydrateHome", () => {

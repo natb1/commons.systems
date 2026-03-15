@@ -106,4 +106,12 @@ describe("generateRssXml", () => {
     expect(xml).toContain("<link>https://myblog.com</link>");
     expect(xml).toContain("https://myblog.com/#/post/newer-post");
   });
+
+  it("uses custom postLinkPrefix in links", () => {
+    const customConfig = { title: "commons.systems", siteUrl: "https://commons.systems", postLinkPrefix: "post/" };
+    const xml = generateRssXml(publishedPosts, customConfig);
+    expect(xml).toContain("https://commons.systems/post/newer-post");
+    expect(xml).toContain("https://commons.systems/post/older-post");
+    expect(xml).not.toContain("#/post/");
+  });
 });

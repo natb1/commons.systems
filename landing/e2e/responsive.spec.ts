@@ -15,7 +15,7 @@ test.describe("responsive layout", () => {
       route.fulfill({ body: "# Test\nContent." }),
     );
     await page.goto("/");
-    const homeLink = page.locator('nav a[href="#/"]');
+    const homeLink = page.locator('nav a[href="/"]');
 
     await expect(homeLink).toBeVisible();
 

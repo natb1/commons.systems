@@ -208,9 +208,9 @@ type autoNormKey struct {
 	day         string // "2006-01-02" in UTC
 }
 
-// autoNormalize groups transactions with identical description, amount, and
-// date from different statements. These are exact duplicates from overlapping
-// statement periods that don't require a rule.
+// autoNormalize groups transactions with matching description (case-insensitive),
+// amount, and date from different statements. These are exact duplicates from
+// overlapping statement periods that don't require a rule.
 func autoNormalize(txns []store.NormTxn, normalized map[string]bool) []store.NormalizationUpdate {
 	groups := make(map[autoNormKey][]store.NormTxn)
 	for _, txn := range txns {
@@ -258,7 +258,10 @@ func autoNormalize(txns []store.NormTxn, normalized map[string]bool) []store.Nor
 //
 // Step 2: Rule-based — remaining transactions are matched against rules
 // evaluated in priority order; each transaction is claimed by the first
-// rule whose group it joins. Regex rules use case-insensitive matching.
+// rule that matches it and groups it with at least one other transaction.
+// Singleton groups (size 1) are discarded so the transaction remains
+// available for lower-priority rules. Regex rules use case-insensitive
+// matching.
 //
 // Returns an error if a rule has an invalid regex pattern or an unrecognized
 // PatternType.

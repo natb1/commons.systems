@@ -5,7 +5,7 @@ test.describe("admin", () => {
   test("admin page shows login button when unauthenticated", async ({
     page,
   }) => {
-    await page.goto("/#/admin");
+    await page.goto("/admin");
     await expect(page.locator("#sign-in")).toBeVisible();
     await expect(page.locator("#sign-out")).not.toBeVisible();
   });
@@ -19,14 +19,14 @@ test.describe("admin", () => {
   test("nav shows login button on admin route only", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#sign-in")).not.toBeAttached();
-    await page.goto("/#/admin");
+    await page.goto("/admin");
     await expect(page.locator("#sign-in")).toBeVisible();
   });
 
   test("after sign-in, admin group member sees admin page", async ({ page }) => {
     await page.goto("/");
     await signIn(page);
-    await page.goto("/#/admin");
+    await page.goto("/admin");
     await expect(page.locator("#sign-in")).not.toBeVisible();
     await expect(page.locator("#not-authorized")).not.toBeAttached();
     await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
@@ -57,7 +57,7 @@ test.describe("admin", () => {
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop");
-    await page.goto("/#/admin");
+    await page.goto("/admin");
     await signIn(page);
     const panel = page.locator("#info-panel");
     await expect(panel.locator("h3", { hasText: "Top Posts" })).toBeVisible({
