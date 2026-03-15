@@ -5,7 +5,6 @@ APP_DIR="${1:?Usage: run-qa-server.sh <app-dir>}"
 
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
-APP_PKG="$REPO_ROOT/$APP_DIR/package.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=lib.sh
@@ -17,12 +16,10 @@ EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 cleanup_all_stale_processes
 cleanup_stale_hub
 
-detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
-install_local_deps "$REPO_ROOT" "$APP_PKG"
+ensure_deps
 
-# Install app dependencies
-cd "$REPO_ROOT/$APP_DIR"
-npm ci
+detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
+
 cd "$REPO_ROOT"
 
 # Count and allocate all needed ports atomically to avoid OS port recycling
@@ -128,7 +125,7 @@ trap cleanup EXIT INT TERM
 # Build functions before starting emulator (if used)
 if [ "$USES_FUNCTIONS" = true ]; then
   echo "Building Cloud Functions..."
-  (cd "$REPO_ROOT/functions" && npm ci && npm run build)
+  (cd "$REPO_ROOT" && npm run -w functions build)
 fi
 
 # Start Firebase emulators in background (if any emulators needed)
