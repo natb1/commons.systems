@@ -13,7 +13,7 @@ import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
-import { isInGroup } from "@commons-systems/authutil/groups";
+import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView } from "./firebase.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
@@ -134,7 +134,7 @@ const router = createRouter(
       path: "/admin",
       render: async () => {
         try {
-          const admin = await isInGroup(db, NAMESPACE, currentUser, "admin");
+          const admin = await isInGroup(db, NAMESPACE, currentUser, ADMIN_GROUP_ID);
           return renderAdmin(currentUser, admin, lastSkippedCount);
         } catch (error) {
           if (error instanceof TypeError || error instanceof ReferenceError) throw error;

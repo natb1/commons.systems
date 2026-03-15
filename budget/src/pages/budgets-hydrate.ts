@@ -1,10 +1,10 @@
-import { updateBudget } from "../firestore.js";
+import { updateBudget, type BudgetId } from "../firestore.js";
 import { showInputError, handleSaveError } from "./hydrate-util.js";
 
-function rowBudgetId(el: HTMLElement): string | null {
+function rowBudgetId(el: HTMLElement): BudgetId | null {
   const row = el.closest(".budget-row");
   if (!(row instanceof HTMLElement)) return null;
-  return row.dataset.budgetId ?? null;
+  return (row.dataset.budgetId ?? null) as BudgetId | null;
 }
 
 export function hydrateBudgetTable(container: HTMLElement): void {
