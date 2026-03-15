@@ -16,7 +16,7 @@ export const postDocuments: SeedDocument<PostSeedData>[] = [
       previewImage: "/alienurn.jpg",
       previewDescription:
         "TRANSMISSION\nOuter Rim Command: Disciplinary Review Operations\nService Member: Sassy Diaz",
-    } satisfies PostSeedData,
+    },
   },
   {
     id: "scenes-from-a-hat",
@@ -27,7 +27,7 @@ export const postDocuments: SeedDocument<PostSeedData>[] = [
       filename: "scenes-from-a-hat.md",
       previewImage: "/tile10-armadillo-crag.png",
       previewDescription: "d10 Scenes from Armadillo Crag: On approaching any landmark near Armadillo crag, roll 2 scenes from this table.",
-    } satisfies PostSeedData,
+    },
   },
 ];
 
