@@ -38,7 +38,7 @@ detect_features() {
   fi
 }
 
-# Install workspace dependencies if not already present.
+# Install workspace dependencies if node_modules is missing.
 # Requires REPO_ROOT to be set by the caller.
 ensure_deps() {
   if [ -z "${REPO_ROOT:-}" ]; then

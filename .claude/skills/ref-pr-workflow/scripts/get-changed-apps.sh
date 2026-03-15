@@ -56,8 +56,8 @@ if [ -z "$CHANGED" ]; then
   exit 0
 fi
 
-# Build a reverse dependency map: shared package → apps that depend on it.
-# Changes to a shared package mark all its consumers as changed.
+# Build a reverse dependency map: workspace → apps that depend on it.
+# Changes to a dependency workspace mark all its consumers as changed.
 declare -A SHARED_PKGS
 for app in "${!ALL_APPS[@]}"; do
   pkg="$REPO_ROOT/$app/package.json"
@@ -78,7 +78,7 @@ while IFS= read -r file; do
   top_dir="${file%%/*}"
   case "$file" in
     .claude/skills/ref-pr-workflow/scripts/*|firebase.json|firestore.rules|package.json|package-lock.json)
-      # Global triggers: mark all apps
+      # Global triggers: root dependency changes affect all workspace resolution
       for app in "${!ALL_APPS[@]}"; do
         DIRTY_APPS["$app"]=1
       done
