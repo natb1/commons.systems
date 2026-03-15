@@ -134,6 +134,8 @@ After completing the 7-category evaluation of the primary issue, repeat the full
 
 ## Step 4. Plan Mode — Propose Improvements
 
+**Scope:** This plan covers creating or updating the GitHub issue body — not implementing the code changes described in the issue. Do not modify source code files.
+
 Enter plan mode. Structure the plan across all issues with findings (primary + sub-issues):
 
 1. **Findings summary** — one section per issue (labeled by number), each with per-category bullet lists. Omit issues and categories with no findings.
@@ -143,6 +145,8 @@ Enter plan mode. Structure the plan across all issues with findings (primary + s
 Wait for user approval before proceeding.
 
 ## Step 5. Apply Improvements
+
+This step only modifies GitHub issues (via `gh issue edit`, `gh issue create`, and related `gh` commands). Do not modify source code files.
 
 Apply the approved improvements for each issue in sequence:
 
