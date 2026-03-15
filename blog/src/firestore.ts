@@ -17,8 +17,8 @@ function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null 
   const published = data.published === true;
   const publishedAt = typeof data.publishedAt === "string" ? data.publishedAt : null;
   const filename = typeof data.filename === "string" ? data.filename : "";
-  const image = typeof data.image === "string" ? data.image : undefined;
-  const description = typeof data.description === "string" ? data.description : undefined;
+  const previewImage = typeof data.previewImage === "string" ? data.previewImage : undefined;
+  const previewDescription = typeof data.previewDescription === "string" ? data.previewDescription : undefined;
   if (!title || !filename) {
     console.error(`Post "${id}" has missing required fields:`, data);
     return null;
@@ -28,13 +28,13 @@ function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null 
       console.error(`Post "${id}" has invalid publishedAt date:`, data);
       return null;
     }
-    return { id, title, published: true, publishedAt, filename, image, description };
+    return { id, title, published: true, publishedAt, filename, previewImage, previewDescription };
   }
   if (published) {
     console.error(`Post "${id}" is published but has no publishedAt date:`, data);
     return null;
   }
-  return { id, title, published: false, publishedAt: null, filename, image, description };
+  return { id, title, published: false, publishedAt: null, filename, previewImage, previewDescription };
 }
 
 export async function getPosts(db: Firestore, namespace: string, user: User | null): Promise<GetPostsResult> {
