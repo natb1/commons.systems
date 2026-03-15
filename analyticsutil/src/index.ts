@@ -22,8 +22,7 @@ export function initAnalyticsSafe(app: FirebaseApp): (path: string) => void {
     if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     reportError(
       new Error(
-        `Failed to initialize analytics (appId: ${app.options.appId}, measurementId: ${app.options.measurementId})`,
-        { cause: error },
+        `Failed to initialize analytics (appId: ${app.options.appId}, measurementId: ${app.options.measurementId}): ${error instanceof Error ? error.message : error}`,
       ),
     );
     return () => {};
@@ -48,9 +47,9 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
     } catch (error) {
       if (error instanceof TypeError || error instanceof ReferenceError) throw error;
       reportError(
-        new Error(`Failed to log page view (path: ${path})`, {
-          cause: error,
-        }),
+        new Error(
+          `Failed to log page view (path: ${path}): ${error instanceof Error ? error.message : error}`,
+        ),
       );
     }
   };

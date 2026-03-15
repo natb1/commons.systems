@@ -116,8 +116,9 @@ describe("initAnalytics", () => {
 
     expect(() => tracker("/about")).not.toThrow();
     const reported = reportErrorSpy.mock.calls[0][0] as Error;
-    expect(reported.message).toBe("Failed to log page view (path: /about)");
-    expect(reported.cause).toBe(badStateError);
+    expect(reported.message).toBe(
+      "Failed to log page view (path: /about): bad state",
+    );
 
     reportErrorSpy.mockRestore();
   });
@@ -148,9 +149,8 @@ describe("initAnalyticsSafe", () => {
 
     const reported = reportErrorSpy.mock.calls[0][0] as Error;
     expect(reported.message).toBe(
-      "Failed to initialize analytics (appId: 1:test:web:abc, measurementId: G-TEST)",
+      "Failed to initialize analytics (appId: 1:test:web:abc, measurementId: G-TEST): CSP blocked",
     );
-    expect(reported.cause).toBe(cspError);
 
     tracker("/about");
     expect(logEvent).not.toHaveBeenCalled();
