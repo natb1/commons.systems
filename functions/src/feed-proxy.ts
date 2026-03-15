@@ -1,15 +1,8 @@
 import { onRequest } from "firebase-functions/v2/https";
 import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
-
-// Must match FEED_REGISTRY in blog/src/blog-roll/feed-registry.ts.
-// Kept as a separate constant because Cloud Functions cannot import from
-// the blog package at runtime. See feed-proxy.test.ts for the sync check.
-export const ALLOWED_FEED_URLS: ReadonlySet<string> = new Set([
-  "https://www.bastionland.com/feeds/posts/default",
-  "https://newschoolrevolution.com/feed/",
-  "https://halfawormandabittenapple.blogspot.com/feeds/posts/default",
-]);
+import { ALLOWED_FEED_URLS } from "./allowed-feed-urls.generated.js";
+export { ALLOWED_FEED_URLS };
 
 export async function handleFeedProxy(req: Request, res: Response) {
   const url = req.query.url;

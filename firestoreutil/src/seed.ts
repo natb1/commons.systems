@@ -1,9 +1,9 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { nsCollectionPath } from "./namespace.js";
 
-export interface SeedDocument {
+export interface SeedDocument<T extends Record<string, unknown> = Record<string, unknown>> {
   id: string;
-  data: Record<string, unknown>;
+  data: T;
 }
 
 export interface SeedCollection {

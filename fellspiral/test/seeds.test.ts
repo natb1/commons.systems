@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
-import appSeed from "../seeds/firestore";
+import appSeed, { postDocuments } from "../seeds/firestore";
 
 const postDir = path.resolve(__dirname, "../post");
 
@@ -24,5 +24,23 @@ describe("seed/post sync", () => {
   it("each .md file has a matching seed entry", () => {
     const missing = mdFiles.filter((f) => !seedIds.includes(f));
     expect(missing, `.md files without seed entries: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("disciplinary-review-operations has correct metadata", () => {
+    const doc = postDocuments.find((d) => d.id === "disciplinary-review-operations");
+    expect(doc).toBeDefined();
+    expect(doc!.data).toMatchObject({
+      publishedAt: "2026-03-14T00:00:00Z",
+      previewImage: "/alienurn.jpg",
+    });
+    expect(doc!.data.previewDescription).toContain("Sassy Diaz");
+  });
+
+  it("scenes-from-a-hat has updated publication date", () => {
+    const doc = postDocuments.find((d) => d.id === "scenes-from-a-hat");
+    expect(doc).toBeDefined();
+    expect(doc!.data).toMatchObject({
+      publishedAt: "2026-03-15T00:00:00Z",
+    });
   });
 });
