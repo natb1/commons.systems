@@ -230,7 +230,8 @@ fi
 VITE_PID=$!
 cd "$REPO_ROOT"
 
-# Record child PIDs for orphan cleanup
+# Record child PIDs for orphan cleanup.
+# Both vite and firebase-tools run as "node" per `ps -o comm=`.
 PID_ARGS=()
 if [ -n "$EMULATOR_PID" ]; then PID_ARGS+=("${EMULATOR_PID}:node"); fi
 PID_ARGS+=("${VITE_PID}:node")

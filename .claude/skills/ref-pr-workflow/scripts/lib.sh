@@ -191,8 +191,6 @@ delete_preview_channel() {
 # Uses worktree-scoped project ID so each worktree manages its own hub file.
 # (PID recycling could theoretically cause a false positive but is negligible in practice.)
 cleanup_stale_hub() {
-  # Resolve tmpdir via Node to match the path Firebase emulators use
-  # (os.tmpdir() may differ from shell $TMPDIR on macOS).
   local tmpdir
   tmpdir="$(get_tmpdir)"
   local project_id
@@ -220,27 +218,20 @@ write_pid_file() {
   local worktree_path
   worktree_path="$(git rev-parse --show-toplevel)"
 
-  local processes="["
-  local first=true
+  local pid_file="${tmpdir}/pids-${project_id}.json"
+  local jq_args=(--argjson hub_pid "$$" --arg worktree_path "$worktree_path")
+  local jq_filter='{hub_pid: $hub_pid, worktree_path: $worktree_path, processes: ['
+  local i=0
   for entry in "$@"; do
     local pid="${entry%%:*}"
     local cmd="${entry#*:}"
-    if [ "$first" = true ]; then
-      first=false
-    else
-      processes="$processes, "
-    fi
-    processes="$processes{\"pid\": $pid, \"cmd\": \"$cmd\"}"
+    jq_args+=(--argjson "pid$i" "$pid" --arg "cmd$i" "$cmd")
+    [ $i -gt 0 ] && jq_filter+=","
+    jq_filter+="{\"pid\": \$pid${i}, \"cmd\": \$cmd${i}}"
+    i=$((i + 1))
   done
-  processes="$processes]"
-
-  local pid_file="${tmpdir}/pids-${project_id}.json"
-  jq -n \
-    --argjson hub_pid "$$" \
-    --arg worktree_path "$worktree_path" \
-    --argjson processes "$processes" \
-    '{hub_pid: $hub_pid, worktree_path: $worktree_path, processes: $processes}' \
-    > "$pid_file"
+  jq_filter+=']}'
+  jq -n "${jq_args[@]}" "$jq_filter" > "$pid_file"
 }
 
 # Remove the PID file for the current worktree.
@@ -264,7 +255,7 @@ cleanup_all_stale_processes() {
 
   # Use base FIREBASE_PROJECT_ID (not worktree-scoped) to scan PID files from all worktrees
   local pid_file
-  for pid_file in "${tmpdir}"/pids-${FIREBASE_PROJECT_ID}*.json; do
+  for pid_file in "${tmpdir}"/pids-${FIREBASE_PROJECT_ID}.json "${tmpdir}"/pids-${FIREBASE_PROJECT_ID}-wt-*.json; do
     [ -f "$pid_file" ] || continue
     local worktree_path hub_pid
     local header
@@ -287,7 +278,10 @@ cleanup_all_stale_processes() {
     if [ "$is_orphan" = true ]; then
       # Extract all pid:cmd pairs in one jq call (tab-separated, newline-delimited)
       local proc_entries
-      proc_entries=$(jq -r '.processes[] | [.pid, .cmd] | join("\t")' "$pid_file" 2>/dev/null) || proc_entries=""
+      proc_entries=$(jq -r '.processes[] | [.pid, .cmd] | join("\t")' "$pid_file" 2>/dev/null) || {
+        echo "WARNING: failed to extract processes from $pid_file, orphaned processes may need manual cleanup" >&2
+        proc_entries=""
+      }
 
       local line
       while IFS= read -r line; do
