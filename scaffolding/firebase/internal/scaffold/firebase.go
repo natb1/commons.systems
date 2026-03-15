@@ -267,9 +267,10 @@ func AddHostingEntry(config *FirebaseConfig, appName string) error {
 		}
 	}
 	entry := HostingEntry{
-		Target: appName,
-		Public: appName + "/dist",
-		Ignore: []string{"firebase.json", "**/.*", "**/node_modules/**"},
+		Target:   appName,
+		Public:   appName + "/dist",
+		Ignore:   []string{"firebase.json", "**/.*", "**/node_modules/**"},
+		Rewrites: []RewriteEntry{{Source: "**", Destination: "/index.html"}},
 	}
 	if err := entry.Validate(); err != nil {
 		return fmt.Errorf("invalid hosting entry for %q: %w", appName, err)

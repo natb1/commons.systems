@@ -1,6 +1,6 @@
 import "missing.css";
 import "./style/theme.css";
-import { createRouter } from "@commons-systems/router";
+import { createHistoryRouter } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
 import { renderNotes } from "./pages/notes.js";
@@ -15,9 +15,9 @@ const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
 navEl.links = [
-  { href: "#/", label: "Home" },
-  { href: "#/about", label: "About" },
-  { href: "#/notes", label: "Notes" },
+  { href: "/", label: "Home" },
+  { href: "/about", label: "About" },
+  { href: "/notes", label: "Notes" },
 ];
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => {
@@ -31,7 +31,7 @@ function updateNav(user: import("firebase/auth").User | null): void {
 // Show login UI immediately; onAuthStateChanged will update once auth resolves.
 updateNav(null);
 
-const router = createRouter(
+const router = createHistoryRouter(
   app,
   [
     { path: "/", render: renderHome },

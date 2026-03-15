@@ -1,15 +1,3 @@
-export function parseHash(): { path: string; params: URLSearchParams } {
-  const hash = location.hash.slice(1) || "/";
-  const qIndex = hash.indexOf("?");
-  if (qIndex === -1) {
-    return { path: hash, params: new URLSearchParams() };
-  }
-  return {
-    path: hash.slice(0, qIndex),
-    params: new URLSearchParams(hash.slice(qIndex + 1)),
-  };
-}
-
 export interface Route {
   readonly path: `/${string}` | RegExp;
   readonly render: (path: string) => string | Promise<string>;
@@ -36,9 +24,9 @@ function matchRoute(routes: [Route, ...Route[]], path: string): Route {
 }
 
 /**
- * Core navigation loop shared by hash and history routers. Returns navigate,
- * setDestroyed, and isDestroyed so callers can wire up their own event
- * listeners while reusing the rendering / error-handling pipeline.
+ * Core navigation loop. Returns navigate, setDestroyed, and isDestroyed so
+ * callers can wire up their own event listeners while reusing the rendering /
+ * error-handling pipeline.
  */
 function createNavigator(
   outlet: HTMLElement,
@@ -101,32 +89,6 @@ function createNavigator(
     navigate,
     setDestroyed: () => { destroyed = true; },
     isDestroyed: () => destroyed,
-  };
-}
-
-export function createRouter(
-  outlet: HTMLElement,
-  routes: [Route, ...Route[]],
-  options?: RouterOptions,
-): Router {
-  const nav = createNavigator(outlet, routes, parseHash, options);
-
-  const onHashChange = () => void nav.navigate();
-  window.addEventListener("hashchange", onHashChange);
-  void nav.navigate();
-
-  function teardown(): void {
-    nav.setDestroyed();
-    window.removeEventListener("hashchange", onHashChange);
-  }
-
-  return {
-    navigate: onHashChange,
-    destroy: teardown,
-    showTerminalError(html: string) {
-      teardown();
-      outlet.innerHTML = html;
-    },
   };
 }
 

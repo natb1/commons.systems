@@ -20,7 +20,7 @@ export function renderViewerShell(item: MediaItem): string {
       </div>
       <button class="viewer-panel-toggle" aria-expanded="true" aria-label="Toggle panel">&#9776;</button>
       <aside class="viewer-panel">
-        <a href="#/" class="viewer-back">&larr; Back to Library</a>
+        <a href="/" class="viewer-back">&larr; Back to Library</a>
         <div class="viewer-nav">
           <button class="viewer-prev" disabled aria-label="Previous page">&larr;</button>
           <span class="viewer-position">Loading...</span>

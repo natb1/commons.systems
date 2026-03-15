@@ -5,7 +5,7 @@ test.describe("auth", () => {
   test("notes page shows auth-required when not signed in", async ({
     page,
   }) => {
-    await page.goto("/#/notes");
+    await page.goto("/notes");
     await expect(page.locator("#notes-auth-required")).toBeVisible();
     await expect(page.locator("#notes-list")).not.toBeVisible();
   });
@@ -28,7 +28,7 @@ test.describe("auth", () => {
   test("notes page shows notes list after sign-in", async ({ page }) => {
     await page.goto("/");
     await signIn(page);
-    await page.goto("/#/notes");
+    await page.goto("/notes");
     await page.waitForSelector("#notes-list");
     const notes = page.locator("#notes-list li");
     await expect(notes).toHaveCount(2);
@@ -43,7 +43,7 @@ test.describe("auth", () => {
     await signIn(page);
     await page.locator("#sign-out").click();
     await page.waitForSelector("#sign-in");
-    await page.evaluate(() => { window.location.hash = '#/notes'; });
+    await page.evaluate(() => { window.history.pushState({}, "", '/notes'); window.dispatchEvent(new PopStateEvent('popstate')); });
     await expect(page.locator("#notes-auth-required")).toBeVisible();
   });
 
