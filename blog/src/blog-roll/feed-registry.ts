@@ -18,10 +18,4 @@ export const FEED_REGISTRY: readonly FeedRegistryEntry[] = [
     homeUrl: "https://newschoolrevolution.com/",
     feedUrl: "https://newschoolrevolution.com/feed/",
   },
-  {
-    id: "half-a-worm",
-    name: "Half a Worm and a Bitten Apple",
-    homeUrl: "https://halfawormandabittenapple.blogspot.com/",
-    feedUrl: "https://halfawormandabittenapple.blogspot.com/feeds/posts/default",
-  },
 ];

@@ -4,7 +4,7 @@
   "type": "module",
   "main": "lib/feed-proxy.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsx scripts/sync-feed-urls.ts && tsc",
     "test": "vitest run",
     "lint": "eslint src/"
   },
