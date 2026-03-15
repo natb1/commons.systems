@@ -45,7 +45,6 @@ const INFO_PANEL_LINK_SECTIONS = [
   { heading: "Links", links: [{ label: "Source", url: "https://github.com/natb1/commons.systems" }] },
 ];
 
-// Arrow function (not declaration) so TS narrows getElementById results as non-null.
 const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
 

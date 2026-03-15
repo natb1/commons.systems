@@ -13,7 +13,7 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import appSeed from "../seeds/firestore.js";
 
 const DIST_DIR = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
-const SITE_URL = "https://commons.systems";
+const SITE_URL = "https://cs-fellspiral-4e12.web.app";
 
 const template = readFileSync(join(DIST_DIR, "index.html"), "utf-8");
 
@@ -53,7 +53,7 @@ for (const doc of postsCollection.documents) {
   let html = template.replace("</head>", `    ${ogBlock}\n  </head>`);
   if (html === template) throw new Error(`</head> marker not found in template`);
   const beforeTitle = html;
-  html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)} | commons.systems</title>`);
+  html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)} | fellspiral</title>`);
   if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
   const outDir = join(DIST_DIR, "post", id);

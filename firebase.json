@@ -72,6 +72,10 @@
           "function": {
             "functionId": "feedProxy"
           }
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
         }
       ]
     },
