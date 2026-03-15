@@ -1,12 +1,5 @@
 import { initializeAnalytics, logEvent } from "firebase/analytics";
-import type { FirebaseApp, FirebaseOptions } from "firebase/app";
-
-export function withMeasurementId<T extends FirebaseOptions>(
-  config: T,
-  measurementId: string | undefined,
-): T {
-  return measurementId ? { ...config, measurementId } : config;
-}
+import type { FirebaseApp } from "firebase/app";
 
 export function initAnalytics(app: FirebaseApp): (path: string) => void {
   if (!app.options.measurementId) {
@@ -25,15 +18,19 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
       try {
         logEvent(analytics, "page_view", { page_path: path });
       } catch (error) {
-        console.error("Failed to log page view (path: %s):", path, error);
+        reportError(
+          new Error(`Failed to log page view (path: ${path})`, {
+            cause: error,
+          }),
+        );
       }
     };
   } catch (error) {
-    console.error(
-      "Failed to initialize analytics (appId: %s, measurementId: %s):",
-      app.options.appId,
-      app.options.measurementId,
-      error,
+    reportError(
+      new Error(
+        `Failed to initialize analytics (appId: ${app.options.appId}, measurementId: ${app.options.measurementId})`,
+        { cause: error },
+      ),
     );
     return () => {};
   }

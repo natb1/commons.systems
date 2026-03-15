@@ -7,23 +7,15 @@ vi.mock("firebase/analytics", () => ({
 }));
 
 import { initializeAnalytics, logEvent } from "firebase/analytics";
-import { initAnalytics, withMeasurementId } from "../src/index";
+import { initAnalytics } from "../src/index";
+
+// reportError is a browser API not available in Node — stub it so tests that
+// don't mock it fail loudly rather than silently swallowing errors.
+globalThis.reportError ??= (error: unknown) => {
+  throw error;
+};
 
 beforeEach(() => vi.clearAllMocks());
-
-describe("withMeasurementId", () => {
-  it("adds measurementId when present", () => {
-    const config = { apiKey: "test" };
-    const result = withMeasurementId(config, "G-TEST");
-    expect(result).toEqual({ apiKey: "test", measurementId: "G-TEST" });
-  });
-
-  it("returns config unchanged when measurementId is undefined", () => {
-    const config = { apiKey: "test" };
-    const result = withMeasurementId(config, undefined);
-    expect(result).toBe(config);
-  });
-});
 
 describe("initAnalytics", () => {
   it("returns no-op tracker and logs debug when measurementId is missing", () => {
@@ -74,45 +66,44 @@ describe("initAnalytics", () => {
     });
   });
 
-  it("returns no-op and logs error when initializeAnalytics throws", () => {
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("returns no-op and reports error when initializeAnalytics throws", () => {
+    const reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+    const cspError = new Error("CSP blocked");
     vi.mocked(initializeAnalytics).mockImplementation(() => {
-      throw new Error("CSP blocked");
+      throw cspError;
     });
 
     const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
     const tracker = initAnalytics(app);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "Failed to initialize analytics (appId: %s, measurementId: %s):",
-      "1:test:web:abc",
-      "G-TEST",
-      expect.any(Error),
+    const reported = reportErrorSpy.mock.calls[0][0] as Error;
+    expect(reported.message).toBe(
+      "Failed to initialize analytics (appId: 1:test:web:abc, measurementId: G-TEST)",
     );
+    expect(reported.cause).toBe(cspError);
 
     tracker("/about");
     expect(logEvent).not.toHaveBeenCalled();
 
-    consoleErrorSpy.mockRestore();
+    reportErrorSpy.mockRestore();
   });
 
-  it("swallows and logs error when logEvent throws", () => {
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("reports error when logEvent throws", () => {
+    const reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
     vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
+    const badStateError = new Error("bad state");
     vi.mocked(logEvent).mockImplementation(() => {
-      throw new Error("bad state");
+      throw badStateError;
     });
 
     const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
     const tracker = initAnalytics(app);
 
     expect(() => tracker("/about")).not.toThrow();
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "Failed to log page view (path: %s):",
-      "/about",
-      expect.any(Error),
-    );
+    const reported = reportErrorSpy.mock.calls[0][0] as Error;
+    expect(reported.message).toBe("Failed to log page view (path: /about)");
+    expect(reported.cause).toBe(badStateError);
 
-    consoleErrorSpy.mockRestore();
+    reportErrorSpy.mockRestore();
   });
 });
