@@ -324,7 +324,6 @@ describe("createHistoryRouter", () => {
 
   it("afterRender TypeError/ReferenceError deferred", async () => {
     const deferredErrors: unknown[] = [];
-    const origSetTimeout = globalThis.setTimeout;
     vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: TimerHandler) => {
       if (typeof fn === "function") {
         try { fn(); } catch (e) { deferredErrors.push(e); }

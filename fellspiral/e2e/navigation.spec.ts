@@ -39,7 +39,7 @@ test.describe("navigation", () => {
     await expect(page.locator("#sign-in")).toBeVisible();
   });
 
-  test("unknown hash falls back to home page", async ({ page }) => {
+  test("unknown path falls back to home page", async ({ page }) => {
     await page.goto("/nonexistent");
     await expect(page.locator("main h2").first()).toBeVisible({ timeout: 30000 });
   });
