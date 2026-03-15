@@ -4,9 +4,12 @@ import { isPublished, type PostMeta } from "./post-types.js";
 export interface RssConfig {
   title: string;
   siteUrl: string;
+  postLinkPrefix?: string;
 }
 
 export function generateRssXml(posts: PostMeta[], config: RssConfig): string {
+  const rawPrefix = config.postLinkPrefix ?? "#/post/";
+  const postLinkPrefix = rawPrefix.replace(/^\//, "");
   const published = posts
     .filter(isPublished)
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
@@ -17,10 +20,11 @@ export function generateRssXml(posts: PostMeta[], config: RssConfig): string {
       const pubDateTag = isNaN(date.getTime())
         ? ""
         : `\n      <pubDate>${date.toUTCString()}</pubDate>`;
+      const postUrl = `${escapeHtml(config.siteUrl)}/${escapeHtml(postLinkPrefix)}${escapeHtml(p.id)}`;
       return `    <item>
       <title>${escapeHtml(p.title)}</title>
-      <link>${escapeHtml(config.siteUrl)}/#/post/${escapeHtml(p.id)}</link>
-      <guid isPermaLink="false">${escapeHtml(config.siteUrl)}/#/post/${escapeHtml(p.id)}</guid>${pubDateTag}
+      <link>${postUrl}</link>
+      <guid isPermaLink="false">${postUrl}</guid>${pubDateTag}
     </item>`;
     })
     .join("\n");

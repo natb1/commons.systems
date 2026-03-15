@@ -14,6 +14,7 @@ export interface InfoPanelData {
   blogRoll: BlogRollEntry[];
   rssFeedUrl?: string;
   opmlUrl?: string;
+  postLinkPrefix?: string;
 }
 
 function groupByYearMonth(
@@ -36,11 +37,12 @@ function renderMonthBlock(
   month: number,
   posts: PublishedPost[],
   isOpen: boolean,
+  postLinkPrefix: string,
 ): string {
   const items = posts
     .map(
       (p) =>
-        `<li><a href="#/post/${escapeHtml(p.id)}">${escapeHtml(p.title)}</a></li>`,
+        `<li><a href="${postLinkPrefix}${escapeHtml(p.id)}">${escapeHtml(p.title)}</a></li>`,
     )
     .join("");
   return `<details${isOpen ? " open" : ""}>
@@ -54,12 +56,13 @@ function renderYearBlock(
   months: Map<number, PublishedPost[]>,
   currentYear: number,
   currentMonth: number,
+  postLinkPrefix: string,
 ): string {
   const isCurrentYear = year === currentYear;
   const sortedMonths = [...months.keys()].sort((a, b) => b - a);
   const monthBlocks = sortedMonths
     .map((month) =>
-      renderMonthBlock(month, months.get(month)!, isCurrentYear && month === currentMonth),
+      renderMonthBlock(month, months.get(month)!, isCurrentYear && month === currentMonth, postLinkPrefix),
     )
     .join("");
   return `<details${isCurrentYear ? " open" : ""}>
@@ -75,7 +78,7 @@ function renderLink(l: LinkSection["links"][number]): string {
   return `<li><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.label)}${subtitleHtml}</a></li>`;
 }
 
-function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string {
+function renderArchive(published: PublishedPost[], rssFeedUrl: string | undefined, postLinkPrefix: string): string {
   if (published.length === 0) return "";
 
   const grouped = groupByYearMonth(published);
@@ -83,7 +86,7 @@ function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string 
   const sortedYears = [...grouped.keys()].sort((a, b) => b - a);
   const yearBlocks = sortedYears
     .map((year) =>
-      renderYearBlock(year, grouped.get(year)!, now.getUTCFullYear(), now.getUTCMonth()),
+      renderYearBlock(year, grouped.get(year)!, now.getUTCFullYear(), now.getUTCMonth(), postLinkPrefix),
     )
     .join("");
 
@@ -98,6 +101,7 @@ function renderArchive(published: PublishedPost[], rssFeedUrl?: string): string 
 }
 
 export function renderInfoPanel(data: InfoPanelData): string {
+  const postLinkPrefix = data.postLinkPrefix ?? "#/post/";
   const linkSectionsHtml = data.linkSections
     .map((section) => {
       const linksHtml = section.links.map(renderLink).join("");
@@ -115,7 +119,7 @@ export function renderInfoPanel(data: InfoPanelData): string {
   const topPostsHtml = published
     .map(
       (p) =>
-        `<li><a href="#/post/${escapeHtml(p.id)}">${escapeHtml(p.title)}</a></li>`,
+        `<li><a href="${postLinkPrefix}${escapeHtml(p.id)}">${escapeHtml(p.title)}</a></li>`,
     )
     .join("");
 
@@ -146,7 +150,7 @@ export function renderInfoPanel(data: InfoPanelData): string {
       <h3>Blogroll${opmlIcon}</h3>
       <ul class="panel-list">${blogRollHtml}</ul>
     </section>
-    ${renderArchive(published, data.rssFeedUrl)}
+    ${renderArchive(published, data.rssFeedUrl, postLinkPrefix)}
   `;
 }
 
