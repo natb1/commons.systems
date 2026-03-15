@@ -189,4 +189,47 @@ describe("hydrateHome", () => {
       document.body.removeChild(header);
     }
   });
+
+  it("skips scroll from stale hydration when outlet is re-rendered between calls", async () => {
+    const header = document.createElement("header");
+    Object.defineProperty(header, "offsetHeight", { value: 60, configurable: true });
+    document.body.appendChild(header);
+
+    const scrollSpy = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+    try {
+      // --- First hydration with a deferred fetch ---
+      outlet.innerHTML = renderHomeHtml([publishedPost]);
+      let resolveFirst!: (value: string) => void;
+      const firstFetch = vi.fn(
+        () => new Promise<string>((resolve) => { resolveFirst = resolve; }),
+      );
+      hydrateHome(outlet, [publishedPost], firstFetch, "hello-world");
+
+      // --- Simulate re-render (auth state change replaces outlet contents) ---
+      outlet.innerHTML = renderHomeHtml([publishedPost]);
+
+      // --- Second hydration with its own deferred fetch ---
+      let resolveSecond!: (value: string) => void;
+      const secondFetch = vi.fn(
+        () => new Promise<string>((resolve) => { resolveSecond = resolve; }),
+      );
+      hydrateHome(outlet, [publishedPost], secondFetch, "hello-world");
+
+      // Resolve both fetches — first hydration's container is no longer in the DOM
+      resolveFirst("# Hello");
+      resolveSecond("# Hello");
+
+      await vi.waitFor(() => {
+        expect(scrollSpy).toHaveBeenCalledTimes(1);
+      });
+
+      // The single scroll call should come from the second hydration
+      const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
+      expect(call.behavior).toBe("smooth");
+    } finally {
+      scrollSpy.mockRestore();
+      document.body.removeChild(header);
+    }
+  });
 });

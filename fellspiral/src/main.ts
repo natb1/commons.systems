@@ -197,6 +197,7 @@ async function refreshAfterAuthChange(): Promise<void> {
 }
 
 onAuthStateChanged(auth, (user) => {
+  if (user?.uid === currentUser?.uid) return;
   currentUser = user;
   refreshAfterAuthChange().catch((err) => {
     if (err instanceof TypeError || err instanceof ReferenceError) {

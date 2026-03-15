@@ -17,6 +17,12 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe("blog", () => {
+  test("post slug route renders posts container @smoke", async ({ page }) => {
+    const response = await page.goto("/post/disciplinary-review-operations");
+    expect(response?.status()).toBe(200);
+    await page.waitForSelector("#posts", { timeout: 30000 });
+  });
+
   test("home page shows published posts", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
@@ -32,6 +38,18 @@ test.describe("blog", () => {
     await expect(
       page.locator("#post-content-scenes-from-a-hat"),
     ).toBeVisible();
+
+    // Wait for smooth scroll to settle, then verify the article is near the viewport top.
+    const article = page.locator("#post-scenes-from-a-hat");
+    await expect
+      .poll(
+        async () => {
+          const box = await article.boundingBox();
+          return box?.y ?? Infinity;
+        },
+        { timeout: 5000 },
+      )
+      .toBeLessThanOrEqual(200);
   });
 
   test("post content renders markdown as HTML", async ({ page }) => {
