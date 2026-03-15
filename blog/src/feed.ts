@@ -8,7 +8,8 @@ export interface RssConfig {
 }
 
 export function generateRssXml(posts: PostMeta[], config: RssConfig): string {
-  const postLinkPrefix = config.postLinkPrefix ?? "#/post/";
+  const rawPrefix = config.postLinkPrefix ?? "#/post/";
+  const postLinkPrefix = rawPrefix.replace(/^\//, "");
   const published = posts
     .filter(isPublished)
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));

@@ -36,8 +36,8 @@ function matchRoute(routes: [Route, ...Route[]], path: string): Route {
 }
 
 /**
- * Core navigation loop shared by hash and history routers. Returns a navigate
- * function and an `isDestroyed` check so callers can wire up their own event
+ * Core navigation loop shared by hash and history routers. Returns navigate,
+ * setDestroyed, and isDestroyed so callers can wire up their own event
  * listeners while reusing the rendering / error-handling pipeline.
  */
 function createNavigator(
