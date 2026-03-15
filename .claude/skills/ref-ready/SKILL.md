@@ -146,7 +146,7 @@ Wait for user approval before proceeding.
 
 ## Step 5. Apply Improvements
 
-The only actions in this step are `gh issue edit` and `gh issue create`. Do not modify source code files.
+This step only modifies GitHub issues (via `gh issue edit`, `gh issue create`, and related `gh` commands). Do not modify source code files.
 
 Apply the approved improvements for each issue in sequence:
 
