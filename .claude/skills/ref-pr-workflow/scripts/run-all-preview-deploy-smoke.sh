@@ -11,6 +11,8 @@ source "$SCRIPT_DIR/lib.sh"
 
 CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh")
 
+ensure_deps
+
 FAILURES=()
 DEPLOYED=0
 PREVIEW_COMMENT=""

@@ -4,6 +4,9 @@ set -euo pipefail
 REPO_ROOT=$(git rev-parse --show-toplevel)
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 
+# shellcheck source=lib.sh
+source "$SCRIPTS/lib.sh"
+
 # Parse options
 declare -A DIRTY_APPS
 RUN_NIX=false
@@ -60,10 +63,15 @@ fi
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
 
+# Install all dependencies once at the workspace root (skip when only running nix/rules checks)
+if [ ${#APP_DIRS[@]} -gt 0 ]; then
+  ensure_deps
+fi
+
 # Run eslint on detected app dirs
 for dir in "${APP_DIRS[@]}"; do
   echo "=== Lint: $dir ==="
-  if (cd "$REPO_ROOT/$dir" && npm ci && npx eslint src/); then
+  if (cd "$REPO_ROOT" && npm run -w "$dir" lint); then
     echo "PASS: $dir"
   else
     echo "FAIL: $dir" >&2

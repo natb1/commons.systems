@@ -38,45 +38,15 @@ detect_features() {
   fi
 }
 
-# Install local package dependencies (file: references).
-# Args: $1 = repo root, $2 = path to app package.json
-install_local_deps() {
-  local repo_root="$1"
-  local app_pkg="$2"
-
-  if grep -q '"@commons-systems/firebaseutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing firebaseutil dependency..."
-    (cd "$repo_root/firebaseutil" && npm ci)
+# Install workspace dependencies if node_modules is missing.
+# Requires REPO_ROOT to be set by the caller.
+ensure_deps() {
+  if [ -z "${REPO_ROOT:-}" ]; then
+    echo "ERROR: REPO_ROOT is not set" >&2
+    return 1
   fi
-
-  if grep -q '"@commons-systems/firestoreutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing firestoreutil dependency..."
-    (cd "$repo_root/firestoreutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/authutil"' "$app_pkg" 2>/dev/null || [ "${USES_AUTH:-false}" = true ]; then
-    echo "Installing authutil dependency..."
-    (cd "$repo_root/authutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/htmlutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing htmlutil dependency..."
-    (cd "$repo_root/htmlutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/blog"' "$app_pkg" 2>/dev/null; then
-    echo "Installing blog dependency..."
-    (cd "$repo_root/blog" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/analyticsutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing analyticsutil dependency..."
-    (cd "$repo_root/analyticsutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/style"' "$app_pkg" 2>/dev/null; then
-    echo "Installing style dependency..."
-    (cd "$repo_root/style" && npm ci)
+  if [ ! -d "$REPO_ROOT/node_modules" ]; then
+    (cd "$REPO_ROOT" && npm ci)
   fi
 }
 

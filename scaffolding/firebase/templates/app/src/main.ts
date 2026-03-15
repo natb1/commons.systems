@@ -1,3 +1,5 @@
+import "missing.css";
+import "./style/theme.css";
 import { createRouter } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
