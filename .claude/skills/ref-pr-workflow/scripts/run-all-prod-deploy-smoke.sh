@@ -10,6 +10,8 @@ source "$SCRIPT_DIR/lib.sh"
 # Post-merge context: origin/main == HEAD, so use HEAD~1 as base
 CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" --base HEAD~1)
 
+ensure_deps
+
 FAILURES=()
 DEPLOYED=0
 

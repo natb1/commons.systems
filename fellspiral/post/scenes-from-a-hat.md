@@ -6,10 +6,10 @@ Like many American millennials, my home from school indulgence was "The Price is
 
 ["The Smiling Fox"](https://podcasts.apple.com/us/podcast/the-smiling-fox/id1833673068) Mythic Bastionland fan podcast hosted a guest [Amanda P.](https://weirdwonder.bearblog.dev/) She referred to Mythic Bastionland Myths as "game technology". The dice tell a story, but there's another layer of narrative that emerges when "scenes from a hat" collide.
 
-This week I am participating in [William's Woland realm](https://halfawormandabittenapple.blogspot.com/). I rolled tile 10.
+## d10 Scenes from Armadillo Crag
+On approaching any landmark near Armadillo crag, roll 2 scenes from this table. Some combination of the two scenes play out as you pass through.
 
-## d10 Scenes for Tile 10
-On approaching any landmark in tile 10, roll 2 scenes from this table. Some combination of the two scenes play out as you pass through.
+![Tile 10: Armadillo Crag](/tile10-armadillo-crag.png)
 
 1. The people are clearly wary of outsiders. Mothers corral their children away from the company. An elder steps forward. He speaks indirectly. When you don't take the hint he uncomfortably informs you more directly: you are welcome to their hospitality, but it is considered taboo amongst his people to ask any question.
 2. A young boy sits alone on a log. He's too young to be alone and looks distraught. When he sees you he stares at you with intense curiosity, but doesn't speak until you do. Thoughts dart rapidly through the boy's mind, but something prevents him from sharing.

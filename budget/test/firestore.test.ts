@@ -110,6 +110,9 @@ describe("getTransactions", () => {
         timestamp: mockTimestamp,
         statementId: "stmt-2025-01",
         groupId: null,
+        normalizedId: null,
+        normalizedPrimary: true,
+        normalizedDescription: null,
       },
     ]);
   });
@@ -250,6 +253,9 @@ describe("data validation", () => {
           timestamp: null,
           statementId: null,
           groupId: null,
+          normalizedId: null,
+          normalizedPrimary: true,
+          normalizedDescription: null,
           ...data,
         }),
       }],

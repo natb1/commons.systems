@@ -181,7 +181,9 @@ func InsertFirestoreRules(repoRoot, appName string) error {
 	}
 
 	block := fmt.Sprintf(
-		"    // Groups are readable only by their members (email-based membership)\n"+
+		"    // Groups are readable only by their members (email-based membership).\n"+
+			"    // Uses resource.data directly instead of get() because getUserGroups\n"+
+			"    // performs a list query that Firestore cannot resolve with get() calls.\n"+
 			"    match /%s/{env}/groups/{groupId} {\n"+
 			"      allow read: if request.auth != null && request.auth.token.email in resource.data.members;\n"+
 			"      allow write: if false;\n"+
