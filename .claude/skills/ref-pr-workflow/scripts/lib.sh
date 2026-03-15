@@ -211,6 +211,7 @@ cleanup_stale_hub() {
 # Write a PID file recording child processes for orphan cleanup.
 # The file is scoped to the current worktree via get_emulator_project_id().
 # Args: pairs of pid:command_name (e.g., "12345:node" "12346:java")
+#   command_name must match `ps -o comm=` output for that PID (used to guard PID recycling)
 write_pid_file() {
   local tmpdir
   tmpdir="$(get_tmpdir)"
@@ -234,9 +235,12 @@ write_pid_file() {
   processes="$processes]"
 
   local pid_file="${tmpdir}/pids-${project_id}.json"
-  cat > "$pid_file" <<EOF
-{"hub_pid": $$, "worktree_path": "$worktree_path", "processes": $processes}
-EOF
+  jq -n \
+    --argjson hub_pid "$$" \
+    --arg worktree_path "$worktree_path" \
+    --argjson processes "$processes" \
+    '{hub_pid: $hub_pid, worktree_path: $worktree_path, processes: $processes}' \
+    > "$pid_file"
 }
 
 # Remove the PID file for the current worktree.
@@ -252,23 +256,24 @@ remove_pid_file() {
 # Scan all PID files for the project and clean up orphaned processes.
 # Orphans arise from two cases:
 #   1. The owning worktree directory was deleted
-#   2. The hub PID (parent script) is dead but child processes survived
-# Skips PID files whose hub process is still alive (active server in another worktree).
+#   2. The parent script PID is dead but child processes survived
+# Skips PID files whose parent script is still alive (active server in another worktree).
 cleanup_all_stale_processes() {
   local tmpdir
   tmpdir="$(get_tmpdir)"
 
-  local pid_files
-  pid_files=$(ls "${tmpdir}"/pids-${FIREBASE_PROJECT_ID}*.json 2>/dev/null) || true
-  if [ -z "$pid_files" ]; then
-    return 0
-  fi
-
+  # Use base FIREBASE_PROJECT_ID (not worktree-scoped) to scan PID files from all worktrees
   local pid_file
-  for pid_file in $pid_files; do
+  for pid_file in "${tmpdir}"/pids-${FIREBASE_PROJECT_ID}*.json; do
+    [ -f "$pid_file" ] || continue
     local worktree_path hub_pid
-    worktree_path=$(jq -r '.worktree_path // empty' "$pid_file" 2>/dev/null) || continue
-    hub_pid=$(jq -r '.hub_pid // empty' "$pid_file" 2>/dev/null) || continue
+    local header
+    header=$(jq -r '[.worktree_path // "", .hub_pid // ""] | join("\t")' "$pid_file" 2>/dev/null) || {
+      echo "WARNING: failed to parse PID file $pid_file, skipping" >&2
+      continue
+    }
+    worktree_path="${header%%	*}"
+    hub_pid="${header#*	}"
 
     local is_orphan=false
     if [ -n "$worktree_path" ] && [ ! -d "$worktree_path" ]; then
@@ -280,13 +285,16 @@ cleanup_all_stale_processes() {
     fi
 
     if [ "$is_orphan" = true ]; then
-      local process_count
-      process_count=$(jq '.processes | length' "$pid_file" 2>/dev/null) || continue
-      local i=0
-      while [ "$i" -lt "$process_count" ]; do
+      # Extract all pid:cmd pairs in one jq call (tab-separated, newline-delimited)
+      local proc_entries
+      proc_entries=$(jq -r '.processes[] | [.pid, .cmd] | join("\t")' "$pid_file" 2>/dev/null) || proc_entries=""
+
+      local line
+      while IFS= read -r line; do
+        [ -z "$line" ] && continue
         local proc_pid proc_cmd actual_cmd
-        proc_pid=$(jq -r ".processes[$i].pid" "$pid_file")
-        proc_cmd=$(jq -r ".processes[$i].cmd" "$pid_file")
+        proc_pid="${line%%	*}"
+        proc_cmd="${line#*	}"
 
         # Verify command name matches before killing (guards PID recycling)
         actual_cmd=$(ps -p "$proc_pid" -o comm= 2>/dev/null) || actual_cmd=""
@@ -296,13 +304,10 @@ cleanup_all_stale_processes() {
         elif [ -n "$actual_cmd" ]; then
           echo "Skipping PID $proc_pid: expected $proc_cmd but found $actual_cmd (PID recycled)"
         fi
-        i=$((i + 1))
-      done
+      done <<< "$proc_entries"
 
-      # Remove the PID file
       rm -f "$pid_file"
 
-      # Remove corresponding hub file if it exists
       local project_id
       project_id="${pid_file##*/pids-}"
       project_id="${project_id%.json}"

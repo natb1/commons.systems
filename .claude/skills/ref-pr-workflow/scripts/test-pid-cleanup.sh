@@ -28,9 +28,6 @@ fail() {
 cd "$REPO_ROOT"
 source "$SCRIPT_DIR/lib.sh"
 
-# Override get_tmpdir to use our test directory
-get_tmpdir() { printf '%s' "$TEST_TMPDIR"; }
-
 echo "=== Test: write_pid_file creates correct JSON ==="
 (
   source "$SCRIPT_DIR/lib.sh"
@@ -243,9 +240,9 @@ echo "=== Test: command name mismatch guards PID recycling ==="
   pid_file="${TEST_TMPDIR}/pids-${project_id}-mismatch.json"
   worktree_path="$(git rev-parse --show-toplevel)"
 
-  # PID file claims this is "java" but it's actually "sleep"
+  # PID file claims this is "not_sleep" but it's actually "sleep"
   cat > "$pid_file" <<EOF
-{"hub_pid": 1999999, "worktree_path": "$worktree_path", "processes": [{"pid": $SAFE_PID, "cmd": "java"}]}
+{"hub_pid": 1999999, "worktree_path": "$worktree_path", "processes": [{"pid": $SAFE_PID, "cmd": "not_sleep"}]}
 EOF
 
   cleanup_all_stale_processes

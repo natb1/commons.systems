@@ -118,7 +118,7 @@ cleanup() {
     kill_tree "$EMULATOR_PID"
     wait "$EMULATOR_PID" 2>/dev/null || true
   fi
-  remove_pid_file || true
+  remove_pid_file || echo "WARNING: remove_pid_file failed" >&2
   cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
   rm -f "$TEMP_FIREBASE_JSON"
   echo "QA server stopped."
@@ -232,7 +232,7 @@ cd "$REPO_ROOT"
 
 # Record child PIDs for orphan cleanup
 PID_ARGS=()
-if [ -n "$EMULATOR_PID" ]; then PID_ARGS+=("${EMULATOR_PID}:java"); fi
+if [ -n "$EMULATOR_PID" ]; then PID_ARGS+=("${EMULATOR_PID}:node"); fi
 PID_ARGS+=("${VITE_PID}:node")
 write_pid_file "${PID_ARGS[@]}"
 

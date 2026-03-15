@@ -144,7 +144,7 @@ cleanup() {
     kill_tree "$EMULATOR_PID"
     wait "$EMULATOR_PID" 2>/dev/null || true
   fi
-  remove_pid_file || true
+  remove_pid_file || echo "WARNING: remove_pid_file failed" >&2
   cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
   rm -f "$TEMP_FIREBASE_JSON"
 }
@@ -175,7 +175,7 @@ npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_
 EMULATOR_PID=$!
 
 # Record child PIDs for orphan cleanup
-write_pid_file "${EMULATOR_PID}:java"
+write_pid_file "${EMULATOR_PID}:node"
 
 # Poll until hosting emulator serves content.
 # Timeout allows headroom for slow CI (npx download + emulator startup can take 30-60s).
