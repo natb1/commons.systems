@@ -18,6 +18,7 @@
     "./blog-roll/vite-plugin-feed-fetch": "./src/blog-roll/vite-plugin-feed-fetch.ts",
     "./pages/home": "./src/pages/home.ts",
     "./pages/admin": "./src/pages/admin.ts",
+    "./og-meta": "./src/og-meta.ts",
     "./components/info-panel": "./src/components/info-panel.ts",
     "./blog.css": "./blog.css"
   },

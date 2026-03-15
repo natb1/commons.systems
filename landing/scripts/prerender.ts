@@ -26,8 +26,8 @@ for (const doc of postsCollection.documents) {
     throw new Error(`Post "${id}" is missing a title`);
   }
   const title = data.title;
-  const description = typeof data.description === "string" ? data.description : undefined;
-  const image = typeof data.image === "string" ? data.image : undefined;
+  const description = typeof data.previewDescription === "string" ? data.previewDescription : undefined;
+  const image = typeof data.previewImage === "string" ? data.previewImage : undefined;
 
   const ogTags = [
     `<meta property="og:title" content="${escapeHtml(title)}">`,
