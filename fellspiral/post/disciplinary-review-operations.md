@@ -4,7 +4,7 @@ I took a music class in high school. I had a deep curiosity about the mechanics 
 
 "Most of what you played isn't written here," said the annoyed teacher. Ya, duh. "You didn't follow the instructions, you must play what's on the page." I took an F. I spent the rest of the class listening to soul-devouring renditions of "Hot Cross Buns" and "Mary Had a Little Lamb."
 
-Fuck that guy. Fuck this pervasive hot cross buns bullshit. Fuck the sophists and employers and advertisers that dangle the prospect of emotional expression like a carrot on a stick. Fuck you for every time you've rejected another - not for morality, or curiosity, but because they failed to meet your expectations.
+Fuck that guy. Fuck this pervasive hot cross buns bullshit. Fuck the sophists and employers and advertisers that dangle the prospect of emotional expression like a carrot on a stick. Fuck you for every time you've rejected another — not for morality, or curiosity, but for expressing anything other than pantomime for your emotional comfort.
 
 ---
 
