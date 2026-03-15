@@ -117,15 +117,15 @@ describe("renderInfoPanel", () => {
 
   it("top posts section contains links to published posts", () => {
     const html = renderInfoPanel(defaultData());
-    expect(html).toContain('href="#/post/post-1"');
+    expect(html).toContain('href="/post/post-1"');
     expect(html).toContain("First Post");
-    expect(html).toContain('href="#/post/post-2"');
+    expect(html).toContain('href="/post/post-2"');
     expect(html).toContain("Second Post");
   });
 
   it("top posts section filters out unpublished posts", () => {
     const html = renderInfoPanel(defaultData());
-    expect(html).not.toContain('href="#/post/draft-1"');
+    expect(html).not.toContain('href="/post/draft-1"');
     expect(html).not.toContain("Draft Post");
   });
 

@@ -40,6 +40,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             published: true,
             publishedAt: "2026-03-15T00:00:00Z",
             filename: "scenes-from-a-hat.md",
+            previewImage: "/tile10-armadillo-crag.png",
+            previewDescription: "d10 Scenes from Armadillo Crag: On approaching any landmark near Armadillo crag, roll 2 scenes from this table.",
           } satisfies PostSeedData,
         },
       ],

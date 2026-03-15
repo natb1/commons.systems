@@ -3,8 +3,8 @@ import { DataIntegrityError } from "../src/errors";
 
 // Mock all modules that main.ts imports at the top level
 vi.mock("@commons-systems/router", () => ({
-  createRouter: () => ({ navigate: vi.fn(), destroy: vi.fn(), showTerminalError: vi.fn() }),
-  parseHash: () => ({ path: "/", params: new URLSearchParams() }),
+  createHistoryRouter: () => ({ navigate: vi.fn(), destroy: vi.fn(), showTerminalError: vi.fn() }),
+  parsePath: () => ({ path: "/", params: new URLSearchParams() }),
 }));
 vi.mock("../src/pages/home.js", () => ({ renderHome: vi.fn().mockResolvedValue("<div>home</div>") }));
 vi.mock("@commons-systems/style/components/nav", () => ({}));

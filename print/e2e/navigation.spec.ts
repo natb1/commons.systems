@@ -37,19 +37,19 @@ test.describe("navigation", () => {
   test("clicking About nav link shows About heading", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("main h2")).toHaveText("Library", { timeout: 10000 });
-    await page.click('nav a[href="#/about"]');
+    await page.click('nav a[href="/about"]');
     await expect(page.locator("main h2")).toHaveText("About");
   });
 
   test("clicking Library nav link returns to Library", async ({ page }) => {
-    await page.goto("/#/about");
+    await page.goto("/about");
     await expect(page.locator("main h2")).toHaveText("About");
-    await page.click('nav a[href="#/"]');
+    await page.click('nav a[href="/"]');
     await expect(page.locator("main h2")).toHaveText("Library");
   });
 
-  test("unknown hash falls back to home page", async ({ page }) => {
-    await page.goto("/#/nonexistent");
+  test("unknown path falls back to home page", async ({ page }) => {
+    await page.goto("/nonexistent");
     await expect(page.locator("main h2")).toHaveText("Library");
   });
 });

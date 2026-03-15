@@ -1,19 +1,5 @@
 import { initializeAnalytics, logEvent } from "firebase/analytics";
-import type { FirebaseApp, FirebaseOptions } from "firebase/app";
-
-export function withMeasurementId<T extends FirebaseOptions>(
-  config: T,
-  measurementId: string | undefined,
-): T {
-  if (!measurementId) return config;
-  // GA4 measurement IDs use "G-" prefix; reject raw stream/property IDs.
-  if (!/^G-/.test(measurementId)) {
-    throw new Error(
-      `Invalid measurement ID "${measurementId}": must start with "G-".`,
-    );
-  }
-  return { ...config, measurementId };
-}
+import type { FirebaseApp } from "firebase/app";
 
 export function initAnalyticsSafe(app: FirebaseApp): (path: string) => void {
   try {

@@ -1,6 +1,6 @@
 import "missing.css";
 import "./style/theme.css";
-import { createRouter, parseHash } from "@commons-systems/router";
+import { createHistoryRouter, parsePath } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderBudgets } from "./pages/budgets.js";
 import { renderRules } from "./pages/rules.js";
@@ -33,13 +33,15 @@ export type AppState =
 let state: AppState = { user: null, groups: [], groupError: false };
 
 function getGroupParam(): string | null {
-  return parseHash().params.get("group");
+  return parsePath().params.get("group");
 }
 
 function setGroupParam(groupId: string): void {
-  const { path, params } = parseHash();
+  const { path, params } = parsePath();
   params.set("group", groupId);
-  location.hash = `${path}?${params.toString()}`;
+  const url = `${path}?${params.toString()}`;
+  history.pushState({}, "", url);
+  window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
 function selectedGroup(): Group | null {
@@ -48,7 +50,7 @@ function selectedGroup(): Group | null {
   return state.groups.find((g) => g.id === param) ?? state.groups[0];
 }
 
-navEl.links = [{ href: "#/", label: "transactions" }, { href: "#/budgets", label: "budgets" }, { href: "#/rules", label: "rules" }];
+navEl.links = [{ href: "/", label: "transactions" }, { href: "/budgets", label: "budgets" }, { href: "/rules", label: "rules" }];
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => {
   signOut().catch((error) => console.error("Unexpected sign-out error:", error));
@@ -88,7 +90,7 @@ function renderOptions(): RenderPageOptions {
   return { user, group, groupError: state.groupError };
 }
 
-const router = createRouter(
+const router = createHistoryRouter(
   app,
   [
     { path: "/", render: () => renderHome(renderOptions()) },
@@ -112,7 +114,7 @@ function transition(next: AppState): void {
 }
 
 // Hydrate tables (transactions, budgets) whenever they appear in the DOM.
-// Multiple code paths trigger renders (hashchange, auth state changes), so an
+// Multiple code paths trigger renders (navigation, auth state changes), so an
 // observer catches all of them. Sets dataset.hydrated to "true" on success or
 // "error" on failure to prevent retry loops.
 // Observer runs for page lifetime: each render replaces page content, so
