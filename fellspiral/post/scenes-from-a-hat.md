@@ -6,10 +6,10 @@ Like many American millennials, my home from school indulgence was "The Price is
 
 ["The Smiling Fox"](https://podcasts.apple.com/us/podcast/the-smiling-fox/id1833673068) Mythic Bastionland fan podcast hosted a guest [Amanda P.](https://weirdwonder.bearblog.dev/) She referred to Mythic Bastionland Myths as "game technology". The dice tell a story, but there's another layer of narrative that emerges when "scenes from a hat" collide.
 
-This week I am participating in [William's Woland realm](https://halfawormandabittenapple.blogspot.com/). I rolled tile 10.
+## d10 Scenes for Armadillo Crag
+On approaching any landmark near Armadillo crag, roll 2 scenes from this table. Some combination of the two scenes play out as you pass through.
 
-## d10 Scenes for Tile 10
-On approaching any landmark in tile 10, roll 2 scenes from this table. Some combination of the two scenes play out as you pass through.
+![Tile 10: Armadillo Crag](/tile10-armadillo-crag.png)
 
 1. The people are clearly wary of outsiders. Mothers corral their children away from the company. An elder steps forward. He speaks indirectly. When you don't take the hint he uncomfortably informs you more directly: you are welcome to their hospitality, but it is considered taboo amongst his people to ask any question.
 2. A young boy sits alone on a log. He's too young to be alone and looks distraught. When he sees you he stares at you with intense curiosity, but doesn't speak until you do. Thoughts dart rapidly through the boy's mind, but something prevents him from sharing.
@@ -21,7 +21,3 @@ On approaching any landmark in tile 10, roll 2 scenes from this table. Some comb
 8. A surreal purple hue reflects off the horizon to hold your attention. Roll a clarity save. If you fail, you slip (or your horse bucks you) at the edge of a hidden sink hole. You fall 30 feet into a cenote below. A single ray of sun (or moon) light pierces the darkness and bends to illuminate the emerald green pool.
 9. A frail woman with kind eyes struggles to catch her breath as she rests on a stump at the base of a hill. She wears an odd style of thick glasses, and a fine pendant around her neck. She has come to see the view from the hill top and begs your aid. After ascending the hill she looks out on the landscape, smiles and closes her eyes in breathless slumber.
 10. You are hailed by a woman's voice from the top of a hill. She frantically rushes down the hill - part running, part tumbling. Before you can introduce yourself, or protest, she grabs you by the ears and pulls you down to a smush her lips against yours. Her strange, thick glasses scrape your nose. "It worked!" she exclaims. Without pause, she races off for a belated rendezvous, shouting back only terse, jubilant courtesies. She drops her fine pendant.
-
-## Tile 10: Armadillo Crag
-
-![Tile 10: Armadillo Crag](/tile10-armadillo-crag.png)
