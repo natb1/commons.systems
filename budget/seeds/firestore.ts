@@ -8,24 +8,32 @@ import type { Group } from "@commons-systems/authutil/groups";
 /** Seed groups include `members` (used in queries and security rules, omitted from the authutil Group type) */
 type GroupSeedData = Omit<Group, "id"> & { members: string[] };
 
-/** Seed transactions use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client Transaction type) */
-type TransactionSeedData = Omit<Transaction, "id" | "timestamp"> & {
+/** Seed data types override branded ID fields to plain strings since seed data is written via the Admin SDK,
+ *  not consumed through the typed client read path. This applies to all seed types below. */
+
+/** Seed transactions use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client Transaction type). */
+type TransactionSeedData = Omit<Transaction, "id" | "timestamp" | "budget" | "statementId" | "groupId"> & {
   timestamp: Date;
   memberEmails: string[];
+  budget: string | null;
+  statementId: string | null;
+  groupId: string | null;
 };
 
 /** Seed budgets add `memberEmails` for security rules (not present in the client Budget type) */
-type BudgetSeedData = Omit<Budget, "id"> & { memberEmails: string[] };
+type BudgetSeedData = Omit<Budget, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
 
 /** Seed budget periods use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client BudgetPeriod type) */
-type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "periodEnd"> & {
+type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "periodEnd" | "budgetId" | "groupId"> & {
   periodStart: Date;
   periodEnd: Date;
   memberEmails: string[];
+  budgetId: string;
+  groupId: string | null;
 };
 
 /** Seed rules include `memberEmails` for security rules and `groupId` for query filtering */
-type RuleSeedData = Omit<Rule, "id"> & { memberEmails: string[] };
+type RuleSeedData = Omit<Rule, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
 
 type NormalizationRuleSeedData = Omit<NormalizationRule, "id"> & { memberEmails: string[] };
 
