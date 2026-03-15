@@ -31,9 +31,9 @@ describe("seed/post sync", () => {
     expect(doc).toBeDefined();
     expect(doc!.data).toMatchObject({
       publishedAt: "2026-03-14T00:00:00Z",
-      image: "/alienurn.jpg",
+      previewImage: "/alienurn.jpg",
     });
-    expect((doc!.data as { description?: string }).description).toContain("Sassy Diaz");
+    expect((doc!.data as { previewDescription?: string }).previewDescription).toContain("Sassy Diaz");
   });
 
   it("scenes-from-a-hat has updated publication date", () => {

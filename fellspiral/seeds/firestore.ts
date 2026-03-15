@@ -28,8 +28,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             published: true,
             publishedAt: "2026-03-14T00:00:00Z",
             filename: "disciplinary-review-operations.md",
-            image: "/alienurn.jpg",
-            description:
+            previewImage: "/alienurn.jpg",
+            previewDescription:
               "TRANSMISSION\nOuter Rim Command: Disciplinary Review Operations\nService Member: Sassy Diaz",
           } satisfies PostSeedData,
         },
