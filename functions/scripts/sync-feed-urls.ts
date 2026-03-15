@@ -1,7 +1,14 @@
+// Cloud Functions cannot import from the blog package at runtime;
+// this script derives the feed URL allowlist at build time.
 import { writeFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { FEED_REGISTRY } from "../../blog/src/blog-roll/feed-registry";
+
+if (FEED_REGISTRY.length === 0) {
+  console.error("sync-feed-urls: FEED_REGISTRY is empty — refusing to generate an empty allowlist.");
+  process.exit(1);
+}
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outPath = resolve(here, "../src/allowed-feed-urls.generated.ts");
