@@ -1,7 +1,7 @@
 // Build-time script that generates per-post HTML files with OG metadata tags.
 // Reads the post catalog from seed data and injects OG tags into copies of the
 // SPA's index.html, enabling link previews for crawlers that don't execute JS.
-// Run after vite build (see package.json "postbuild" script).
+// Run after vite build (chained in the package.json "build" script).
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
@@ -22,13 +22,16 @@ for (const doc of postsCollection.documents) {
   if (data.published !== true) continue;
 
   const id = doc.id;
-  const title = data.title as string;
+  if (typeof data.title !== "string") {
+    throw new Error(`Post "${id}" is missing a title`);
+  }
+  const title = data.title;
   const description = typeof data.description === "string" ? data.description : undefined;
   const image = typeof data.image === "string" ? data.image : undefined;
 
   const ogTags = [
     `<meta property="og:title" content="${escapeHtml(title)}">`,
-    `<meta property="og:url" content="${SITE_URL}/post/${id}">`,
+    `<meta property="og:url" content="${SITE_URL}/post/${encodeURIComponent(id)}">`,
     `<meta property="og:type" content="article">`,
   ];
 

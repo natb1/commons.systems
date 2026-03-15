@@ -41,6 +41,7 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
     try {
       logEvent(analytics, "page_view", { page_path: path });
     } catch (error) {
+      if (error instanceof TypeError || error instanceof ReferenceError) throw error;
       console.error("Failed to log page view (path: %s):", path, error);
     }
   };

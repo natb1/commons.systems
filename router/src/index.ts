@@ -17,7 +17,7 @@ export interface Route {
 }
 
 export interface RouterOptions {
-  /** Called with the parsed hash path and query params at the start of each navigation, before route matching. Exceptions do not prevent the route from rendering. TypeError and ReferenceError are deferred as uncaught errors; other exceptions are caught and logged. */
+  /** Called with the parsed path and query params at the start of each navigation, before route matching. Exceptions do not prevent the route from rendering. TypeError and ReferenceError are deferred as uncaught errors; other exceptions are caught and logged. */
   onNavigate?: (nav: { path: string; params: URLSearchParams }) => void;
   /** Map an error to a user-facing message. Return undefined to use "Something went wrong. Please try again." */
   formatError?: (error: unknown) => string | undefined;
@@ -37,7 +37,7 @@ function matchRoute(routes: [Route, ...Route[]], path: string): Route {
 
 /**
  * Core navigation loop shared by hash and history routers. Returns a navigate
- * function and a `getDestroyed` check so callers can wire up their own event
+ * function and an `isDestroyed` check so callers can wire up their own event
  * listeners while reusing the rendering / error-handling pipeline.
  */
 function createNavigator(
