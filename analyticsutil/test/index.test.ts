@@ -7,7 +7,7 @@ vi.mock("firebase/analytics", () => ({
 }));
 
 import { initializeAnalytics, logEvent } from "firebase/analytics";
-import { initAnalytics, withMeasurementId } from "../src/index";
+import { initAnalytics, initAnalyticsSafe, withMeasurementId } from "../src/index";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -95,6 +95,26 @@ describe("initAnalytics", () => {
     const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
 
     expect(() => initAnalytics(app)).toThrow("CSP blocked");
+  });
+
+  it("propagates error from initAnalyticsSafe as no-op with console.error", () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(initializeAnalytics).mockImplementation(() => {
+      throw new Error("CSP blocked");
+    });
+
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
+    const tracker = initAnalyticsSafe(app);
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Analytics initialization failed:",
+      expect.any(Error),
+    );
+
+    tracker("/about");
+    expect(logEvent).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
   });
 
   it("swallows and logs error when logEvent throws", () => {

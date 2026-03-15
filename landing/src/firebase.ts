@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { firebaseConfig } from "@commons-systems/firebaseutil/config";
 import { validateNamespace } from "@commons-systems/firestoreutil/namespace";
-import { initAnalytics, withMeasurementId } from "@commons-systems/analyticsutil";
+import { initAnalyticsSafe, withMeasurementId } from "@commons-systems/analyticsutil";
 
 const app = initializeApp(
   withMeasurementId(firebaseConfig, import.meta.env.VITE_GA_MEASUREMENT_ID),
@@ -31,13 +31,6 @@ if (!envNamespace && import.meta.env.MODE !== "production") {
 export const NAMESPACE = envNamespace || "landing/prod";
 validateNamespace(NAMESPACE);
 
-let trackPageView: (path: string) => void;
-try {
-  trackPageView = initAnalytics(app);
-} catch (error) {
-  console.error("Analytics initialization failed:", error);
-  trackPageView = () => {};
-}
-export { trackPageView };
+export const trackPageView = initAnalyticsSafe(app);
 
 export { db, app };

@@ -15,6 +15,15 @@ export function withMeasurementId<T extends FirebaseOptions>(
   return { ...config, measurementId };
 }
 
+export function initAnalyticsSafe(app: FirebaseApp): (path: string) => void {
+  try {
+    return initAnalytics(app);
+  } catch (error) {
+    console.error("Analytics initialization failed:", error);
+    return () => {};
+  }
+}
+
 export function initAnalytics(app: FirebaseApp): (path: string) => void {
   if (!app.options.measurementId) {
     console.debug("Analytics disabled: measurementId not set.");
