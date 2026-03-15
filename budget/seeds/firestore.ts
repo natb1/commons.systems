@@ -8,8 +8,10 @@ import type { Group } from "@commons-systems/authutil/groups";
 /** Seed groups include `members` (used in queries and security rules, omitted from the authutil Group type) */
 type GroupSeedData = Omit<Group, "id"> & { members: string[] };
 
-/** Seed transactions use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client Transaction type).
- *  Branded ID fields are overridden to plain strings since seed data is a write boundary, not a type-checked call site. */
+/** Seed data types override branded ID fields to plain strings since seed data is written via the Admin SDK,
+ *  not consumed through the typed client read path. This applies to all seed types below. */
+
+/** Seed transactions use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client Transaction type). */
 type TransactionSeedData = Omit<Transaction, "id" | "timestamp" | "budget" | "statementId" | "groupId"> & {
   timestamp: Date;
   memberEmails: string[];

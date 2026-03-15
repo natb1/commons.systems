@@ -1,12 +1,12 @@
-import { updateRule, deleteRule, createRule, getGroupMembers, type RuleType, type Rule, type GroupId } from "../firestore.js";
+import { updateRule, deleteRule, createRule, getGroupMembers, type RuleType, type Rule, type GroupId, type RuleId } from "../firestore.js";
 import { renderRow } from "./rules.js";
 import { removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, handleActionError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
 
-function rowRuleId(el: HTMLElement): string | null {
+function rowRuleId(el: HTMLElement): RuleId | null {
   const row = el.closest(".rule-row");
   if (!(row instanceof HTMLElement)) return null;
-  return row.dataset.ruleId ?? null;
+  return (row.dataset.ruleId ?? null) as RuleId | null;
 }
 
 export function hydrateRulesTable(container: HTMLElement): void {

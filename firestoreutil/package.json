@@ -9,7 +9,8 @@
     "./seed": "./src/seed.ts",
     "./delete-namespace": "./src/delete-namespace.ts",
     "./errors": "./src/errors.ts",
-    "./validate": "./src/validate.ts"
+    "./validate": "./src/validate.ts",
+    "./brand": "./src/brand.ts"
   },
   "scripts": {
     "test": "vitest run",

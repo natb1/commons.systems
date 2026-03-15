@@ -5,14 +5,13 @@ import { requireString, requireNumber, requireNonNegativeNumber, optionalString 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
 import type { GroupId } from "@commons-systems/authutil/groups";
-
-declare const __brand: unique symbol;
-type Brand<B extends string> = string & { readonly [__brand]: B };
+import type { Brand } from "@commons-systems/firestoreutil/brand";
 
 export type TransactionId = Brand<"TransactionId">;
 export type StatementId = Brand<"StatementId">;
 export type BudgetId = Brand<"BudgetId">;
 export type BudgetPeriodId = Brand<"BudgetPeriodId">;
+export type RuleId = Brand<"RuleId">;
 
 export type { GroupId } from "@commons-systems/authutil/groups";
 
@@ -327,7 +326,7 @@ export async function updateBudget(
 export type RuleType = "categorization" | "budget_assignment";
 
 export interface Rule {
-  readonly id: string;
+  readonly id: RuleId;
   readonly type: RuleType;
   readonly pattern: string;
   readonly target: string;
@@ -349,7 +348,7 @@ export async function getRules(groupId: GroupId | null, email?: string): Promise
   return docs.map((docSnap) => {
     const data = docSnap.data();
     return {
-      id: docSnap.id,
+      id: docSnap.id as RuleId,
       type: requireRuleType(data.type),
       pattern: requireString(data.pattern, "pattern"),
       target: requireString(data.target, "target"),
@@ -365,7 +364,7 @@ export async function createRule(
   groupId: GroupId,
   memberEmails: string[],
   fields: Omit<Rule, "id" | "groupId">,
-): Promise<string> {
+): Promise<RuleId> {
   requireRuleType(fields.type);
   if (!Number.isFinite(fields.priority)) throw new RangeError("Rule priority must be a finite number");
   if (!fields.pattern) throw new Error("Rule pattern cannot be empty");
@@ -381,11 +380,11 @@ export async function createRule(
     groupId,
     memberEmails,
   });
-  return ref.id;
+  return ref.id as RuleId;
 }
 
 export async function updateRule(
-  ruleId: string,
+  ruleId: RuleId,
   fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account">>,
 ): Promise<void> {
   requireDocId(ruleId, "rule");
@@ -399,7 +398,7 @@ export async function updateRule(
   await updateDoc(ref, fields);
 }
 
-export async function deleteRule(ruleId: string): Promise<void> {
+export async function deleteRule(ruleId: RuleId): Promise<void> {
   requireDocId(ruleId, "rule");
   const path = nsCollectionPath(NAMESPACE, "rules");
   const ref = doc(db, path, ruleId);

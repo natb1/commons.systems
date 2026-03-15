@@ -3,11 +3,11 @@ import type { Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { DataIntegrityError } from "./errors.js";
-
-declare const __brand: unique symbol;
-type Brand<B extends string> = string & { readonly [__brand]: B };
+import type { Brand } from "@commons-systems/firestoreutil/brand";
 
 export type GroupId = Brand<"GroupId">;
+
+export const ADMIN_GROUP_ID = "admin" as GroupId;
 
 /**
  * Client-side view of a Firestore group document.
