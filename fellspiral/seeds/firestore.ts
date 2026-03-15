@@ -3,7 +3,7 @@ import type { Group } from "@commons-systems/authutil/groups";
 import type { PostMeta } from "@commons-systems/blog/post-types";
 
 type GroupSeedData = Omit<Group, "id"> & { members: string[] };
-type PostSeedData = Omit<PostMeta, "id">;
+export type PostSeedData = Omit<PostMeta, "id">;
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [

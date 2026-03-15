@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 import appSeed from "../seeds/firestore";
+import type { PostSeedData } from "../seeds/firestore";
 
 const postDir = path.resolve(__dirname, "../post");
 
@@ -33,7 +34,7 @@ describe("seed/post sync", () => {
       publishedAt: "2026-03-14T00:00:00Z",
       previewImage: "/alienurn.jpg",
     });
-    expect((doc!.data as { previewDescription?: string }).previewDescription).toContain("Sassy Diaz");
+    expect((doc!.data as PostSeedData).previewDescription).toContain("Sassy Diaz");
   });
 
   it("scenes-from-a-hat has updated publication date", () => {
