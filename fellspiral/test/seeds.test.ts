@@ -25,4 +25,22 @@ describe("seed/post sync", () => {
     const missing = mdFiles.filter((f) => !seedIds.includes(f));
     expect(missing, `.md files without seed entries: ${missing.join(", ")}`).toEqual([]);
   });
+
+  it("disciplinary-review-operations has correct metadata", () => {
+    const doc = postsCollection.documents.find((d) => d.id === "disciplinary-review-operations");
+    expect(doc).toBeDefined();
+    expect(doc!.data).toMatchObject({
+      publishedAt: "2026-03-14T00:00:00Z",
+      image: "/alienurn.jpg",
+    });
+    expect((doc!.data as { description?: string }).description).toContain("Sassy Diaz");
+  });
+
+  it("scenes-from-a-hat has updated publication date", () => {
+    const doc = postsCollection.documents.find((d) => d.id === "scenes-from-a-hat");
+    expect(doc).toBeDefined();
+    expect(doc!.data).toMatchObject({
+      publishedAt: "2026-03-15T00:00:00Z",
+    });
+  });
 });

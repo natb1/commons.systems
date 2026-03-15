@@ -22,11 +22,23 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
       convergent: true,
       documents: [
         {
+          id: "disciplinary-review-operations",
+          data: {
+            title: "Disciplinary Review Operations",
+            published: true,
+            publishedAt: "2026-03-14T00:00:00Z",
+            filename: "disciplinary-review-operations.md",
+            image: "/alienurn.jpg",
+            description:
+              "TRANSMISSION\nOuter Rim Command: Disciplinary Review Operations\nService Member: Sassy Diaz",
+          } satisfies PostSeedData,
+        },
+        {
           id: "scenes-from-a-hat",
           data: {
             title: "Scenes from a Hat",
             published: true,
-            publishedAt: "2026-03-11T00:00:00Z",
+            publishedAt: "2026-03-15T00:00:00Z",
             filename: "scenes-from-a-hat.md",
           } satisfies PostSeedData,
         },

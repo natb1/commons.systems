@@ -9,6 +9,9 @@ test.beforeEach(async ({ page }) => {
     if (url.pathname.endsWith("/fellspiral/post/scenes-from-a-hat.md")) {
       return route.fulfill({ body: "# Scenes from a Hat\nThis is the post." });
     }
+    if (url.pathname.endsWith("/fellspiral/post/disciplinary-review-operations.md")) {
+      return route.fulfill({ body: "# Disciplinary Review Operations\nThis is the post." });
+    }
     return route.abort("connectionfailed");
   });
 });
@@ -44,7 +47,7 @@ test.describe("blog", () => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
-      page.locator('#post-scenes-from-a-hat time[datetime="2026-03-11T00:00:00Z"]'),
+      page.locator('#post-scenes-from-a-hat time[datetime="2026-03-15T00:00:00Z"]'),
     ).toBeVisible();
   });
 
