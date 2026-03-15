@@ -26,6 +26,7 @@ export function updateOgMeta(siteUrl: string, post: PostMeta | undefined): void 
   setOgTag("og:title", post.title);
   setOgTag("og:description", post.previewDescription);
   setOgTag("og:type", "article");
+  setOgTag("og:url", `${siteUrl}/post/${encodeURIComponent(post.id)}`);
   if (post.previewImage) {
     setOgTag("og:image", `${siteUrl}${post.previewImage}`);
   } else {

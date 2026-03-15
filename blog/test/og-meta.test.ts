@@ -29,11 +29,12 @@ describe("updateOgMeta", () => {
     document.head.querySelectorAll('meta[property^="og:"]').forEach((el) => el.remove());
   });
 
-  it("sets og:title, og:description, og:type when post has previewDescription", () => {
+  it("sets og:title, og:description, og:type, og:url when post has previewDescription", () => {
     updateOgMeta(SITE_URL, basePost);
     expect(getOgContent("og:title")).toBe("Test Post");
     expect(getOgContent("og:description")).toBe("A test description");
     expect(getOgContent("og:type")).toBe("article");
+    expect(getOgContent("og:url")).toBe("https://example.com/post/test-post");
   });
 
   it("sets og:image with siteUrl prefix when post has previewImage", () => {
