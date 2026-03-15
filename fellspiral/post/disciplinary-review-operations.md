@@ -17,15 +17,15 @@ TRANSMISSION
 - Assignment: Cargo Operations - Technician
 
 Complaints:
-1. Drunk and Disorderly Conduct
+1. Drunk and Disorderly Conduct:
 Multiple complaints of inciting violence under the influence of alcohol.
-2. Conduct Unbecoming an Officer and a Gentleman (2 charges)
+2. Conduct Unbecoming an Officer and a Gentleman (2 charges):
 Two complaints of harassment filed by Supervising Officer Montgomery. Twenty-seven complaints of harassment filed by Field Technician Goodman.
-3. Attempted Field Execution (2 charges)
+3. Attempted Field Execution (2 charges):
 Unwarranted violence targeting a) May Outpost Field Officer b) UPP Field Commander. Multiple company casualties.
-4. Theft
+4. Theft:
 Alleged theft of military equipment from arrested UPP Field Commander.
-5. Violation of Quarantine Protocol
+5. Violation of Quarantine Protocol:
 Customs breach of artifacts of unknown biological origin (one dark urn-shaped vessel).
 
 - DISCIPLINARY RECOMMENDATION: Confinement. Forced psychiatric intervention.
