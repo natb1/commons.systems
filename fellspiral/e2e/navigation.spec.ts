@@ -35,18 +35,18 @@ test.describe("navigation", () => {
   });
 
   test("admin route accessible @smoke", async ({ page }) => {
-    await page.goto("/#/admin");
+    await page.goto("/admin");
     await expect(page.locator("#sign-in")).toBeVisible();
   });
 
-  test("unknown hash falls back to home page", async ({ page }) => {
-    await page.goto("/#/nonexistent");
+  test("unknown path falls back to home page", async ({ page }) => {
+    await page.goto("/nonexistent");
     await expect(page.locator("main h2").first()).toBeVisible({ timeout: 30000 });
   });
 
   test("clicking Home nav link shows home", async ({ page }) => {
-    await page.goto("/#/admin");
-    await page.click('app-nav a[href="#/"]');
+    await page.goto("/admin");
+    await page.click('app-nav a[href="/"]');
     await expect(page.locator("main h2").first()).toBeVisible();
   });
 

@@ -5,19 +5,19 @@ test.describe("rules", () => {
   test("page loads without JS errors @smoke", async ({ page }) => {
     const errors: Error[] = [];
     page.on("pageerror", (err) => errors.push(err));
-    await page.goto("/#/rules");
+    await page.goto("/rules");
     await page.waitForLoadState("load");
     expect(errors).toHaveLength(0);
   });
 
   test("Firestore connectivity @smoke", async ({ page }) => {
-    await page.goto("/#/rules");
+    await page.goto("/rules");
     await expect(page.locator("main h2")).toHaveText("Rules", { timeout: 30000 });
     await expect(page.locator("#rules-error")).toHaveCount(0);
   });
 
   test("seed rules visible and read-only", async ({ page }) => {
-    await page.goto("/#/rules");
+    await page.goto("/rules");
     await expect(page.locator("#rules-table")).toBeVisible();
     const rows = page.locator("#rules-table .rule-row");
     await expect(rows.first()).toBeVisible();
@@ -29,7 +29,7 @@ test.describe("rules", () => {
   });
 
   test("rules table displays correct column headers", async ({ page }) => {
-    await page.goto("/#/rules");
+    await page.goto("/rules");
     await expect(page.locator("#rules-table")).toBeVisible();
     // Headers only visible on medium+ screens
     const viewportSize = page.viewportSize();
@@ -45,7 +45,7 @@ test.describe("rules", () => {
   });
 
   test("seed data renders all example rules with filter", async ({ page }) => {
-    await page.goto("/#/rules");
+    await page.goto("/rules");
     await expect(page.locator("#rules-table")).toBeVisible();
     // All 8 rows exist in the DOM (3 categorization + 3 budget + 2 normalization)
     const allRows = page.locator("#rules-table .rule-row");
@@ -60,7 +60,7 @@ test.describe("rules", () => {
   });
 
   test("seed rules show expected content", async ({ page }) => {
-    await page.goto("/#/rules");
+    await page.goto("/rules");
     await expect(page.locator("#rules-table")).toBeVisible();
 
     // Default filter: categorization (sorted by priority then pattern)
@@ -87,20 +87,20 @@ test.describe("rules", () => {
   });
 
   test("unauthenticated user sees seed data notice", async ({ page }) => {
-    await page.goto("/#/rules");
+    await page.goto("/rules");
     await expect(page.locator("#seed-data-notice")).toBeVisible();
     await expect(page.locator("#seed-data-notice")).toContainText("Sign in");
   });
 
   test("unauthenticated user sees no add or delete buttons", async ({ page }) => {
-    await page.goto("/#/rules");
+    await page.goto("/rules");
     await expect(page.locator("#rules-table")).toBeVisible();
     await expect(page.locator("#add-rule")).toHaveCount(0);
     await expect(page.locator(".delete-rule")).toHaveCount(0);
   });
 
   test("authenticated user sees editable inputs and controls", async ({ page }) => {
-    await page.goto("/#/rules");
+    await page.goto("/rules");
     await signIn(page);
     await expect(page.locator("#rules-table")).toBeVisible();
     await expect(page.locator("#seed-data-notice")).toHaveCount(0);
@@ -120,12 +120,12 @@ test.describe("rules", () => {
   test("clicking rules nav link navigates to rules page", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("main h2")).toHaveText("Transactions");
-    await page.click('app-nav a[href="#/rules"]');
+    await page.click('app-nav a[href="/rules"]');
     await expect(page.locator("main h2")).toHaveText("Rules");
   });
 
-  test("direct URL to #/rules loads rules page", async ({ page }) => {
-    await page.goto("/#/rules");
+  test("direct URL to /rules loads rules page", async ({ page }) => {
+    await page.goto("/rules");
     await expect(page.locator("main h2")).toHaveText("Rules");
   });
 });

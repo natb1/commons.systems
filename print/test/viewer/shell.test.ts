@@ -49,10 +49,10 @@ describe("renderViewerShell", () => {
     expect(html).toContain("<aside");
   });
 
-  it("contains .viewer-back link with href='#/' and 'Back to Library' text", () => {
+  it("contains .viewer-back link with href='/' and 'Back to Library' text", () => {
     const html = renderViewerShell(makeMediaItem());
 
-    expect(html).toContain('href="#/"');
+    expect(html).toContain('href="/"');
     expect(html).toContain('class="viewer-back"');
     expect(html).toContain("Back to Library");
   });

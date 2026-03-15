@@ -2,12 +2,13 @@ import "missing.css";
 import "./style/theme.css";
 import type { User } from "firebase/auth";
 
-import { createRouter, parseHash } from "@commons-systems/router";
+import { createHistoryRouter, parsePath } from "@commons-systems/router";
 import { renderHomeHtml, hydrateHome } from "@commons-systems/blog/pages/home";
 import { renderAdmin } from "@commons-systems/blog/pages/admin";
 import { renderInfoPanel, hydrateInfoPanel, type LinkSection } from "@commons-systems/blog/components/info-panel";
 import { createRssBlobUrl } from "@commons-systems/blog/feed";
 import { createFetchPost } from "@commons-systems/blog/github";
+import { updateOgMeta } from "@commons-systems/blog/og-meta";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
@@ -39,7 +40,7 @@ let rssBlobUrl: string | undefined;
 let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("fellspiral/post");
-const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://cs-fellspiral-4e12.web.app" };
+const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://cs-fellspiral-4e12.web.app", postLinkPrefix: "post/" };
 const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
   {
     links: [
@@ -57,7 +58,6 @@ const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
   },
 ];
 
-// Arrow function (not declaration) so TS narrows getElementById results as non-null.
 const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
 
@@ -70,12 +70,13 @@ const updateInfoPanel = (): void => {
     blogRoll: BLOG_ROLL_ENTRIES,
     rssFeedUrl: rssBlobUrl,
     opmlUrl: "/blogroll.opml",
+    postLinkPrefix: "/post/",
   });
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
   lastRenderedPosts = cachedPosts;
 }
 
-navEl.links = [{ href: "#/", label: "Home" }];
+navEl.links = [{ href: "/", label: "Home" }];
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => {
   signOut().catch((err) => console.error("Sign-out failed:", err));
@@ -98,7 +99,7 @@ async function loadPosts(): Promise<string> {
     const result = await getPosts(db, NAMESPACE, currentUser);
     cachedPosts = result.posts;
     lastSkippedCount = result.skippedCount;
-    return renderHomeHtml(cachedPosts);
+    return renderHomeHtml(cachedPosts, "/post/");
   } catch (error) {
     if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     console.error("Failed to load posts:", error);
@@ -116,9 +117,9 @@ async function loadPosts(): Promise<string> {
   }
 }
 
-updateNav(parseHash().path);
+updateNav(parsePath().path);
 
-const router = createRouter(
+const router = createHistoryRouter(
   app,
   [
     {
@@ -127,6 +128,7 @@ const router = createRouter(
       afterRender: (outlet, path) => {
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
+        updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined);
         updateInfoPanel();
       },
     },
@@ -160,7 +162,7 @@ const closePanel = (): void => {
 document.addEventListener("click", (e) => {
   const target = e.target as HTMLElement;
 
-  if (target.closest('a[href="#/"]')) {
+  if (target.closest('a[href="/"]')) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -183,11 +185,12 @@ document.addEventListener("keydown", (e) => {
 // cachedPosts until the router's async render cycle completes and afterRender
 // calls updateInfoPanel() again with fresh data.
 async function refreshAfterAuthChange(): Promise<void> {
-  updateNav(parseHash().path);
+  const { path } = parsePath();
+  updateNav(path);
   router.navigate();
   // router.navigate() only loads posts on the home route; re-fetch on /admin
   // so the info panel populates even when not on home.
-  if (parseHash().path === "/admin") {
+  if (path === "/admin") {
     await loadPosts();
   }
   updateInfoPanel();

@@ -8,7 +8,7 @@ export interface RssConfig {
 }
 
 export function generateRssXml(posts: PostMeta[], config: RssConfig): string {
-  const rawPrefix = config.postLinkPrefix ?? "#/post/";
+  const rawPrefix = config.postLinkPrefix ?? "/post/";
   const postLinkPrefix = rawPrefix.replace(/^\//, "");
   const published = posts
     .filter(isPublished)
@@ -20,11 +20,14 @@ export function generateRssXml(posts: PostMeta[], config: RssConfig): string {
       const pubDateTag = isNaN(date.getTime())
         ? ""
         : `\n      <pubDate>${date.toUTCString()}</pubDate>`;
+      const descTag = p.previewDescription
+        ? `\n      <description>${escapeHtml(p.previewDescription)}</description>`
+        : "";
       const postUrl = `${escapeHtml(config.siteUrl)}/${escapeHtml(postLinkPrefix)}${escapeHtml(p.id)}`;
       return `    <item>
       <title>${escapeHtml(p.title)}</title>
       <link>${postUrl}</link>
-      <guid isPermaLink="false">${postUrl}</guid>${pubDateTag}
+      <guid isPermaLink="false">${postUrl}</guid>${pubDateTag}${descTag}
     </item>`;
     })
     .join("\n");

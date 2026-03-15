@@ -38,7 +38,7 @@ function renderArticle(p: PostMeta, postLinkPrefix: string): string {
       </article>`;
 }
 
-export function renderHomeHtml(posts: PostMeta[], postLinkPrefix = "#/post/"): string {
+export function renderHomeHtml(posts: PostMeta[], postLinkPrefix = "/post/"): string {
   if (posts.length === 0) {
     return `
     <h2>Home</h2>

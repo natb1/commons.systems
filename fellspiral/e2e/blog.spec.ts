@@ -23,7 +23,7 @@ test.describe("blog", () => {
   });
 
   test("post URL scrolls to post in home page", async ({ page }) => {
-    await page.goto("/#/post/scenes-from-a-hat");
+    await page.goto("/post/scenes-from-a-hat");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(page.locator("#post-scenes-from-a-hat")).toBeVisible();
     await expect(
@@ -53,6 +53,6 @@ test.describe("blog", () => {
     await page.waitForSelector("#posts", { timeout: 30000 });
     const link = page.locator('#post-scenes-from-a-hat h2 a.post-link');
     await expect(link).toBeVisible();
-    await expect(link).toHaveAttribute("href", "#/post/scenes-from-a-hat");
+    await expect(link).toHaveAttribute("href", "/post/scenes-from-a-hat");
   });
 });

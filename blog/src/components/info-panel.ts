@@ -101,7 +101,7 @@ function renderArchive(published: PublishedPost[], rssFeedUrl: string | undefine
 }
 
 export function renderInfoPanel(data: InfoPanelData): string {
-  const postLinkPrefix = data.postLinkPrefix ?? "#/post/";
+  const postLinkPrefix = data.postLinkPrefix ?? "/post/";
   const linkSectionsHtml = data.linkSections
     .map((section) => {
       const linksHtml = section.links.map(renderLink).join("");

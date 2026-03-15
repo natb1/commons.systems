@@ -9,7 +9,7 @@ test.describe("responsive layout", () => {
 
   test("nav links are accessible", async ({ page }) => {
     await page.goto("/");
-    const homeLink = page.locator('nav a[href="#/"]');
+    const homeLink = page.locator('nav a[href="/"]');
 
     await expect(homeLink).toBeVisible();
 
