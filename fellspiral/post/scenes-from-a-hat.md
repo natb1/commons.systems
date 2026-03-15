@@ -8,6 +8,7 @@ Like many American millennials, my home from school indulgence was "The Price is
 
 ## d10 Scenes for Armadillo Crag
 On approaching any landmark near Armadillo crag, roll 2 scenes from this table. Some combination of the two scenes play out as you pass through.
+
 ![Tile 10: Armadillo Crag](/tile10-armadillo-crag.png)
 
 1. The people are clearly wary of outsiders. Mothers corral their children away from the company. An elder steps forward. He speaks indirectly. When you don't take the hint he uncomfortably informs you more directly: you are welcome to their hospitality, but it is considered taboo amongst his people to ask any question.
