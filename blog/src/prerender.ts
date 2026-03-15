@@ -7,17 +7,18 @@ export interface PrerenderConfig {
   siteUrl: string;
   titleSuffix: string;
   distDir: string;
-  seed: SeedSpec;
+  seed: Pick<SeedSpec, "collections">;
 }
 
-// Build-time script that generates per-post HTML files with OG metadata tags.
+// Build-time function that generates per-post HTML files with OG metadata tags.
 // Reads the post catalog from seed data and injects OG tags into copies of the
 // SPA's index.html, enabling link previews for crawlers that don't execute JS.
 //
 // The client-side counterpart (blog/src/og-meta.ts) manages og:title,
 // og:description, og:image, og:type, and og:url dynamically for SPA navigation.
-// This script additionally sets og:url and meta description in static HTML for
-// crawlers.
+// This function mirrors those OG tags in static HTML for crawlers, and
+// additionally sets <meta name="description"> and rewrites <title> — neither of
+// which the client-side module handles.
 export function prerenderPosts(config: PrerenderConfig): void {
   const { siteUrl, titleSuffix, distDir, seed } = config;
 

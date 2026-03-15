@@ -24,7 +24,7 @@ function matchRoute(routes: [Route, ...Route[]], path: string): Route {
 }
 
 /**
- * Core navigation loop. Returns navigate, setDestroyed, and isDestroyed so
+ * Core navigation logic. Returns navigate, setDestroyed, and isDestroyed so
  * callers can wire up their own event listeners while reusing the rendering /
  * error-handling pipeline.
  */
@@ -117,13 +117,6 @@ export function createHistoryRouter(
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const href = anchor.getAttribute("href");
     if (!href || !href.startsWith("/")) return;
-    try {
-      const url = new URL(href, location.origin);
-      if (url.origin !== location.origin) return;
-    } catch (e) {
-      console.warn("Failed to parse href for history routing:", href, e);
-      return;
-    }
     e.preventDefault();
     history.pushState({}, "", href);
     void nav.navigate();

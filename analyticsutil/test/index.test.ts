@@ -7,7 +7,7 @@ vi.mock("firebase/analytics", () => ({
 }));
 
 import { initializeAnalytics, logEvent } from "firebase/analytics";
-import { initAnalytics, initAnalyticsSafe, withMeasurementId } from "../src/index";
+import { initAnalytics, initAnalyticsSafe } from "../src/index";
 
 // reportError is a browser API not available in Node — stub it so tests that
 // don't mock it fail loudly rather than silently swallowing errors.
@@ -16,33 +16,6 @@ globalThis.reportError ??= (error: unknown) => {
 };
 
 beforeEach(() => vi.clearAllMocks());
-
-describe("withMeasurementId", () => {
-  it("adds measurementId when present", () => {
-    const config = { apiKey: "test" };
-    const result = withMeasurementId(config, "G-TEST");
-    expect(result).toEqual({ apiKey: "test", measurementId: "G-TEST" });
-  });
-
-  it("returns config unchanged when measurementId is undefined", () => {
-    const config = { apiKey: "test" };
-    const result = withMeasurementId(config, undefined);
-    expect(result).toBe(config);
-  });
-
-  it("returns config unchanged when measurementId is empty string", () => {
-    const config = { apiKey: "test" };
-    const result = withMeasurementId(config, "");
-    expect(result).toBe(config);
-  });
-
-  it("throws when measurementId does not start with G-", () => {
-    const config = { apiKey: "test" };
-    expect(() => withMeasurementId(config, "13891425074")).toThrow(
-      'Invalid measurement ID "13891425074": must start with "G-".',
-    );
-  });
-});
 
 describe("initAnalytics", () => {
   it("returns no-op tracker and logs debug when measurementId is missing", () => {

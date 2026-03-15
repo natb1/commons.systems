@@ -185,11 +185,12 @@ document.addEventListener("keydown", (e) => {
 // cachedPosts until the router's async render cycle completes and afterRender
 // calls updateInfoPanel() again with fresh data.
 async function refreshAfterAuthChange(): Promise<void> {
-  updateNav(parsePath().path);
+  const { path } = parsePath();
+  updateNav(path);
   router.navigate();
   // router.navigate() only loads posts on the home route; re-fetch on /admin
   // so the info panel populates even when not on home.
-  if (parsePath().path === "/admin") {
+  if (path === "/admin") {
     await loadPosts();
   }
   updateInfoPanel();
