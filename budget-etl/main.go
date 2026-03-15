@@ -7,10 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
@@ -175,6 +177,103 @@ func run(dir, groupName, env, projectID string, dryRun bool) error {
 		return fmt.Errorf("upserting transactions: %w", err)
 	}
 	log.Printf("upsert: %d created, %d updated across %d statements", result.Created, result.Updated, len(parsed))
+
+	// Apply normalization (auto + rules, post-upsert, pre-recalculation)
+	type normRulesResult struct {
+		docs []store.NormalizationRuleDoc
+		err  error
+	}
+	normRulesCh := make(chan normRulesResult, 1)
+	go func() {
+		docs, err := client.LoadNormalizationRules(ctx, groupInfo.ID)
+		normRulesCh <- normRulesResult{docs, err}
+	}()
+	allDocs, err := client.LoadAllTransactions(ctx, groupInfo)
+	if err != nil {
+		return err
+	}
+	normRulesRes := <-normRulesCh
+	if normRulesRes.err != nil {
+		return normRulesRes.err
+	}
+	normRuleDocs := normRulesRes.docs
+	normTxns := make([]store.NormTxn, 0, len(allDocs))
+	for _, td := range allDocs {
+		desc, ok := td.Data["description"].(string)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'description' is not a string (got %T)", td.ID, td.Data["description"])
+		}
+		inst, ok := td.Data["institution"].(string)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'institution' is not a string (got %T)", td.ID, td.Data["institution"])
+		}
+		acct, ok := td.Data["account"].(string)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'account' is not a string (got %T)", td.ID, td.Data["account"])
+		}
+		amt, ok := td.Data["amount"].(float64)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", td.ID, td.Data["amount"])
+		}
+		ts, ok := td.Data["timestamp"].(time.Time)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", td.ID, td.Data["timestamp"])
+		}
+		stmtID, ok := td.Data["statementId"].(string)
+		if !ok {
+			return fmt.Errorf("transaction %s: field 'statementId' is not a string (got %T)", td.ID, td.Data["statementId"])
+		}
+		normTxns = append(normTxns, store.NormTxn{
+			DocID:       td.ID,
+			Description: desc,
+			Institution: inst,
+			Account:     acct,
+			Amount:      int64(math.Round(amt * 100)),
+			Timestamp:   ts,
+			StatementID: stmtID,
+		})
+	}
+	normRules := make([]rules.NormalizationRule, len(normRuleDocs))
+	for i, rd := range normRuleDocs {
+		normRules[i] = rules.NormalizationRule{
+			ID:                   rd.ID,
+			Pattern:              rd.Pattern,
+			PatternType:          rd.PatternType,
+			CanonicalDescription: rd.CanonicalDescription,
+			DateWindowDays:       rd.DateWindowDays,
+			Institution:          rd.Institution,
+			Account:              rd.Account,
+			Priority:             rd.Priority,
+		}
+	}
+	normUpdates, err := rules.ApplyNormalization(normTxns, normRules)
+	if err != nil {
+		return fmt.Errorf("normalization: %w", err)
+	}
+	// Clear stale normalization on transactions that were previously normalized
+	// but are no longer part of any normalization group
+	updatedDocIDs := make(map[string]bool, len(normUpdates))
+	for _, u := range normUpdates {
+		updatedDocIDs[u.DocID] = true
+	}
+	for _, td := range allDocs {
+		if updatedDocIDs[td.ID] {
+			continue
+		}
+		if td.Data["normalizedId"] != nil {
+			normUpdates = append(normUpdates, store.NormalizationUpdate{
+				DocID:                 td.ID,
+				NormalizedID:          "",
+				NormalizedPrimary:     true, // standalone entry counts toward budget totals
+				NormalizedDescription: "",
+			})
+		}
+	}
+	if len(normUpdates) > 0 {
+		if err := client.UpdateNormalization(ctx, normUpdates); err != nil {
+			return fmt.Errorf("updating normalization: %w", err)
+		}
+	}
 
 	// Recalculate affected budget periods
 	if len(allTxns) > 0 {

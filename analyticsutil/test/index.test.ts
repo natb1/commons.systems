@@ -7,7 +7,7 @@ vi.mock("firebase/analytics", () => ({
 }));
 
 import { initializeAnalytics, logEvent } from "firebase/analytics";
-import { initAnalytics, withMeasurementId } from "../src/index";
+import { initAnalytics, initAnalyticsSafe, withMeasurementId } from "../src/index";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -22,6 +22,19 @@ describe("withMeasurementId", () => {
     const config = { apiKey: "test" };
     const result = withMeasurementId(config, undefined);
     expect(result).toBe(config);
+  });
+
+  it("returns config unchanged when measurementId is empty string", () => {
+    const config = { apiKey: "test" };
+    const result = withMeasurementId(config, "");
+    expect(result).toBe(config);
+  });
+
+  it("throws when measurementId does not start with G-", () => {
+    const config = { apiKey: "test" };
+    expect(() => withMeasurementId(config, "13891425074")).toThrow(
+      'Invalid measurement ID "13891425074": must start with "G-".',
+    );
   });
 });
 
@@ -74,19 +87,27 @@ describe("initAnalytics", () => {
     });
   });
 
-  it("returns no-op and logs error when initializeAnalytics throws", () => {
+  it("propagates error when initializeAnalytics throws", () => {
+    vi.mocked(initializeAnalytics).mockImplementation(() => {
+      throw new Error("CSP blocked");
+    });
+
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
+
+    expect(() => initAnalytics(app)).toThrow("CSP blocked");
+  });
+
+  it("propagates error from initAnalyticsSafe as no-op with console.error", () => {
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(initializeAnalytics).mockImplementation(() => {
       throw new Error("CSP blocked");
     });
 
     const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
-    const tracker = initAnalytics(app);
+    const tracker = initAnalyticsSafe(app);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "Failed to initialize analytics (appId: %s, measurementId: %s):",
-      "1:test:web:abc",
-      "G-TEST",
+      "Analytics initialization failed:",
       expect.any(Error),
     );
 
