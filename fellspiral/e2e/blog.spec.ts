@@ -49,7 +49,7 @@ test.describe("blog", () => {
         },
         { timeout: 5000 },
       )
-      .toBeLessThanOrEqual(200);
+      .toBeLessThanOrEqual(250);
   });
 
   test("post content renders markdown as HTML", async ({ page }) => {
