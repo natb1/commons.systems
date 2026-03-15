@@ -49,7 +49,7 @@ test.describe("navigation", () => {
   });
 
   test("admin route accessible @smoke", async ({ page }) => {
-    await page.goto("/#/admin");
+    await page.goto("/admin");
     await expect(page.locator("#sign-in")).toBeVisible();
   });
 
@@ -57,7 +57,7 @@ test.describe("navigation", () => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
       route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." }),
     );
-    await page.goto("/#/post/recovering-autonomy-with-coding-agents");
+    await page.goto("/post/recovering-autonomy-with-coding-agents");
     await expect(page.locator("#posts")).toBeVisible({ timeout: 30000 });
   });
 
@@ -69,11 +69,11 @@ test.describe("navigation", () => {
     await expect(firstContent).not.toContainText("Loading...", { timeout: 30000 });
   });
 
-  test("unknown hash falls back to home page", async ({ page }) => {
+  test("unknown route falls back to home page", async ({ page }) => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
       route.fulfill({ body: "# Test\nContent." }),
     );
-    await page.goto("/#/nonexistent");
+    await page.goto("/nonexistent");
     await expect(page.locator("#posts")).toBeVisible({ timeout: 30000 });
   });
 
@@ -81,8 +81,8 @@ test.describe("navigation", () => {
     await page.route("https://raw.githubusercontent.com/**", (route) =>
       route.fulfill({ body: "# Test\nContent." }),
     );
-    await page.goto("/#/admin");
-    await page.click('app-nav a[href="#/"]');
+    await page.goto("/admin");
+    await page.click('app-nav a[href="/"]');
     await expect(page.locator("main h2").first()).toBeVisible();
   });
 

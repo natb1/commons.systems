@@ -20,7 +20,7 @@ const marked = new Marked({
   },
 });
 
-function renderArticle(p: PostMeta): string {
+function renderArticle(p: PostMeta, postLinkPrefix: string): string {
   const safeId = escapeHtml(p.id);
   const dateHtml = p.publishedAt
     ? `<time datetime="${escapeHtml(p.publishedAt)}">${escapeHtml(formatUtcDate(p.publishedAt))}</time>`
@@ -29,7 +29,7 @@ function renderArticle(p: PostMeta): string {
     ? ""
     : ` <span class="draft-badge">[draft]</span>`;
   const linkHtml =
-    `<a href="#/post/${safeId}" class="post-link">` +
+    `<a href="${postLinkPrefix}${safeId}" class="post-link">` +
     `<span class="link-icon" aria-hidden="true">&#x1F517; </span><span class="post-title">${escapeHtml(p.title)}</span></a>`;
   return `<article id="post-${safeId}">
         <h2>${linkHtml}${draftBadge}</h2>
@@ -38,7 +38,7 @@ function renderArticle(p: PostMeta): string {
       </article>`;
 }
 
-export function renderHomeHtml(posts: PostMeta[]): string {
+export function renderHomeHtml(posts: PostMeta[], postLinkPrefix = "#/post/"): string {
   if (posts.length === 0) {
     return `
     <h2>Home</h2>
@@ -46,7 +46,7 @@ export function renderHomeHtml(posts: PostMeta[]): string {
   `;
   }
 
-  const articles = posts.map(renderArticle).join("\n      <hr>\n      ");
+  const articles = posts.map((p) => renderArticle(p, postLinkPrefix)).join("\n      <hr>\n      ");
 
   return `
     <div id="posts">

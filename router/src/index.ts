@@ -106,3 +106,106 @@ export function createRouter(
     },
   };
 }
+
+export function parsePath(): { path: string; params: URLSearchParams } {
+  return {
+    path: location.pathname,
+    params: new URLSearchParams(location.search),
+  };
+}
+
+export function createHistoryRouter(
+  outlet: HTMLElement,
+  routes: [Route, ...Route[]],
+  options?: RouterOptions,
+): Router {
+  let navigationId = 0;
+  let destroyed = false;
+
+  function matchRoute(path: string): Route {
+    return routes.find((r) =>
+      typeof r.path === "string" ? r.path === path : r.path.test(path),
+    ) ?? routes[0];
+  }
+
+  async function navigate(): Promise<void> {
+    if (destroyed) return;
+    const id = ++navigationId;
+    const { path, params } = parsePath();
+    try {
+      options?.onNavigate?.({ path, params });
+    } catch (e) {
+      if (e instanceof TypeError || e instanceof ReferenceError) {
+        setTimeout(() => { throw e; }, 0);
+      } else {
+        console.error("onNavigate error:", e);
+      }
+    }
+    const route = matchRoute(path);
+    try {
+      const html = await route.render(path);
+      if (id === navigationId) {
+        outlet.innerHTML = html;
+        try {
+          route.afterRender?.(outlet, path);
+        } catch (afterError) {
+          if (afterError instanceof TypeError || afterError instanceof ReferenceError) {
+            setTimeout(() => { throw afterError; }, 0);
+            return;
+          }
+          console.error("afterRender error:", afterError);
+          outlet.insertAdjacentHTML(
+            "beforeend",
+            "<p>Some content failed to load. Try refreshing.</p>",
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Navigation error:", error);
+      if (id === navigationId) {
+        const message =
+          options?.formatError?.(error) ??
+          "Something went wrong. Please try again.";
+        outlet.innerHTML = `<p>${message}</p>`;
+      }
+    }
+  }
+
+  const onPopState = () => void navigate();
+  window.addEventListener("popstate", onPopState);
+
+  document.addEventListener("click", (e) => {
+    if (destroyed) return;
+    const anchor = (e.target as Element).closest("a");
+    if (!anchor) return;
+    if (anchor.getAttribute("target") === "_blank") return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const href = anchor.getAttribute("href");
+    if (!href || !href.startsWith("/")) return;
+    try {
+      const url = new URL(href, location.origin);
+      if (url.origin !== location.origin) return;
+    } catch {
+      return;
+    }
+    e.preventDefault();
+    history.pushState({}, "", href);
+    void navigate();
+  });
+
+  void navigate();
+
+  function teardown(): void {
+    destroyed = true;
+    window.removeEventListener("popstate", onPopState);
+  }
+
+  return {
+    navigate: onPopState,
+    destroy: teardown,
+    showTerminalError(html: string) {
+      teardown();
+      outlet.innerHTML = html;
+    },
+  };
+}

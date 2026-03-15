@@ -402,6 +402,26 @@ describe("renderInfoPanel", () => {
       expect(html).not.toContain("January");
     });
 
+    it("uses custom postLinkPrefix in top posts and archive links", () => {
+      const html = renderInfoPanel({ ...defaultData(), postLinkPrefix: "/post/" });
+      const container = document.createElement("div");
+      container.innerHTML = html;
+
+      // Top posts use custom prefix
+      expect(html).toContain('href="/post/post-1"');
+      expect(html).toContain('href="/post/post-2"');
+      expect(html).not.toContain('href="#/post/');
+
+      // Archive links also use custom prefix
+      const archiveLinks = container.querySelectorAll("details a");
+      for (const link of archiveLinks) {
+        const href = link.getAttribute("href");
+        if (href?.includes("post-")) {
+          expect(href).toMatch(/^\/post\//);
+        }
+      }
+    });
+
     it("archive is empty when no published posts", () => {
       const draftsOnly: PostMeta[] = [
         {
