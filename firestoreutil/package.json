@@ -9,7 +9,8 @@
     "./seed": "./src/seed.ts",
     "./delete-namespace": "./src/delete-namespace.ts",
     "./errors": "./src/errors.ts",
-    "./validate": "./src/validate.ts"
+    "./validate": "./src/validate.ts",
+    "./brand": "./src/brand.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -18,12 +19,5 @@
   },
   "dependencies": {
     "firebase-admin": "^13.0.0"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.19.0",
-    "eslint": "^9.19.0",
-    "typescript": "^5.7.3",
-    "typescript-eslint": "^8.22.0",
-    "vitest": "^3.0.5"
   }
 }

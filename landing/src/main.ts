@@ -1,6 +1,8 @@
+import "missing.css";
+import "./style/theme.css";
 import type { User } from "firebase/auth";
 
-import { createRouter, parseHash } from "@commons-systems/router";
+import { createHistoryRouter, parsePath } from "@commons-systems/router";
 import { renderHomeHtml, hydrateHome } from "@commons-systems/blog/pages/home";
 import { renderAdmin } from "@commons-systems/blog/pages/admin";
 import { renderInfoPanel, hydrateInfoPanel } from "@commons-systems/blog/components/info-panel";
@@ -11,7 +13,7 @@ import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
-import { isInGroup } from "@commons-systems/authutil/groups";
+import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView } from "./firebase.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
@@ -37,7 +39,7 @@ let rssBlobUrl: string | undefined;
 let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("landing/post");
-const RSS_CONFIG = { title: "commons.systems", siteUrl: "https://commons.systems" };
+const RSS_CONFIG = { title: "commons.systems", siteUrl: "https://commons.systems", postLinkPrefix: "post/" };
 const INFO_PANEL_LINK_SECTIONS = [
   { heading: "Links", links: [{ label: "Source", url: "https://github.com/natb1/commons.systems" }] },
 ];
@@ -55,12 +57,13 @@ const updateInfoPanel = (): void => {
     blogRoll: BLOG_ROLL_ENTRIES,
     rssFeedUrl: rssBlobUrl,
     opmlUrl: "/blogroll.opml",
+    postLinkPrefix: "/post/",
   });
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
   lastRenderedPosts = cachedPosts;
 }
 
-navEl.links = [{ href: "#/", label: "Home" }];
+navEl.links = [{ href: "/", label: "Home" }];
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => {
   signOut().catch((err) => console.error("Sign-out failed:", err));
@@ -83,7 +86,7 @@ async function loadPosts(): Promise<string> {
     const result = await getPosts(db, NAMESPACE, currentUser);
     cachedPosts = result.posts;
     lastSkippedCount = result.skippedCount;
-    return renderHomeHtml(cachedPosts);
+    return renderHomeHtml(cachedPosts, "/post/");
   } catch (error) {
     if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     console.error("Failed to load posts:", error);
@@ -101,9 +104,9 @@ async function loadPosts(): Promise<string> {
   }
 }
 
-updateNav(parseHash().path);
+updateNav(parsePath().path);
 
-const router = createRouter(
+const router = createHistoryRouter(
   app,
   [
     {
@@ -119,7 +122,7 @@ const router = createRouter(
       path: "/admin",
       render: async () => {
         try {
-          const admin = await isInGroup(db, NAMESPACE, currentUser, "admin");
+          const admin = await isInGroup(db, NAMESPACE, currentUser, ADMIN_GROUP_ID);
           return renderAdmin(currentUser, admin, lastSkippedCount);
         } catch (error) {
           if (error instanceof TypeError || error instanceof ReferenceError) throw error;
@@ -145,7 +148,7 @@ const closePanel = (): void => {
 document.addEventListener("click", (e) => {
   const target = e.target as HTMLElement;
 
-  if (target.closest('a[href="#/"]')) {
+  if (target.closest('a[href="/"]')) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -168,11 +171,12 @@ document.addEventListener("keydown", (e) => {
 // cachedPosts until the router's async render cycle completes and afterRender
 // calls updateInfoPanel() again with fresh data.
 async function refreshAfterAuthChange(): Promise<void> {
-  updateNav(parseHash().path);
+  const { path } = parsePath();
+  updateNav(path);
   router.navigate();
   // router.navigate() only loads posts on the home route; re-fetch on /admin
   // so the info panel populates even when not on home.
-  if (parseHash().path === "/admin") {
+  if (path === "/admin") {
     await loadPosts();
   }
   updateInfoPanel();

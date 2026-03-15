@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { firebaseConfig } from "@commons-systems/firebaseutil/config";
 import { validateNamespace } from "@commons-systems/firestoreutil/namespace";
-import { initAnalytics } from "@commons-systems/analyticsutil";
+import { initAnalyticsSafe } from "@commons-systems/analyticsutil";
 
 const app = initializeApp({
   ...firebaseConfig,
@@ -35,6 +35,6 @@ if (!envNamespace && import.meta.env.MODE !== "production") {
 export const NAMESPACE = envNamespace || "landing/prod";
 validateNamespace(NAMESPACE);
 
-export const trackPageView = initAnalytics(app);
+export const trackPageView = initAnalyticsSafe(app);
 
 export { db, app };

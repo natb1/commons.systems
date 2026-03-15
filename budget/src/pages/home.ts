@@ -19,16 +19,21 @@ function formatCategory(category: string): string {
   return category.split(":").map(escapeHtml).join(" &gt; ");
 }
 
-interface RenderRowOptions {
-  txn: Transaction;
-  groupName: string;
-  editable: boolean;
-  budgetIdToName: Map<string, string>;
-  balance: number | null;
+interface RowParts {
+  txnIdAttr: string;
+  noteCell: string;
+  categoryCell: string;
+  reimbursementCell: string;
+  budgetCell: string;
+  balanceRow: string;
+  amountAttr: string;
+  budgetIdAttr: string;
+  timestampAttr: string;
+  reimbursementAttr: string;
+  detailDl: string;
 }
 
-function renderRow(opts: RenderRowOptions): string {
-  const { txn, groupName, editable, budgetIdToName, balance } = opts;
+function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<string, string>, balance: number | null, groupName: string): RowParts {
   const txnIdAttr = editable ? ` data-txn-id="${escapeHtml(txn.id)}"` : "";
   const noteCell = editable
     ? `<input type="text" class="edit-note" value="${escapeHtml(txn.note)}" aria-label="Note">`
@@ -50,28 +55,14 @@ function renderRow(opts: RenderRowOptions): string {
   const budgetCell = editable
     ? `<input type="text" class="edit-budget" value="${escapeHtml(budgetName)}" aria-label="Budget" data-autocomplete>`
     : escapeHtml(budgetName);
-
   const balanceRow = balance !== null
     ? `<dt>Budget Balance</dt><dd class="budget-balance">${balance.toFixed(2)}</dd>`
     : "";
-
-  // Data attributes consumed by syncPeriodTotals / syncPeriodOnReimbursementChange in home-hydrate.ts
   const amountAttr = editable ? ` data-amount="${txn.amount}"` : "";
   const budgetIdAttr = editable && txn.budget ? ` data-budget-id="${escapeHtml(txn.budget)}"` : "";
   const timestampAttr = editable && txn.timestamp ? ` data-timestamp="${txn.timestamp.toMillis()}"` : "";
   const reimbursementAttr = editable ? ` data-reimbursement="${txn.reimbursement}"` : "";
-
-  return `<details class="expand-row txn-row"${txnIdAttr}${amountAttr}${budgetIdAttr}${timestampAttr}${reimbursementAttr}>
-    <summary class="txn-summary">
-      <div class="txn-summary-content">
-        <span>${escapeHtml(txn.description)}</span>
-        <span>${noteCell}</span>
-        <span>${categoryCell}</span>
-        <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
-      </div>
-    </summary>
-    <div class="expand-details txn-details">
-      <dl>
+  const detailDl = `<dl>
         <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
         <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
         <dt>Account</dt><dd>${escapeHtml(txn.account)}</dd>
@@ -80,7 +71,75 @@ function renderRow(opts: RenderRowOptions): string {
         ${balanceRow}
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
-      </dl>
+      </dl>`;
+  return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, detailDl };
+}
+
+interface RenderRowOptions {
+  txn: Transaction;
+  groupName: string;
+  editable: boolean;
+  budgetIdToName: Map<string, string>;
+  balance: number | null;
+}
+
+function renderRow(opts: RenderRowOptions): string {
+  const { txn, groupName, editable, budgetIdToName, balance } = opts;
+  const p = buildRowParts(txn, editable, budgetIdToName, balance, groupName);
+
+  return `<details class="expand-row txn-row"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}>
+    <summary class="txn-summary">
+      <div class="txn-summary-content">
+        <span>${escapeHtml(txn.description)}</span>
+        <span>${p.noteCell}</span>
+        <span>${p.categoryCell}</span>
+        <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
+      </div>
+    </summary>
+    <div class="expand-details txn-details">
+      ${p.detailDl}
+    </div>
+  </details>`;
+}
+
+interface RenderGroupOptions {
+  primary: Transaction;
+  members: Transaction[];
+  groupName: string;
+  editable: boolean;
+  budgetIdToName: Map<string, string>;
+  balance: number | null;
+}
+
+function renderNormalizedGroup(opts: RenderGroupOptions): string {
+  const { primary, members, groupName, editable, budgetIdToName, balance } = opts;
+  const description = primary.normalizedDescription ?? primary.description;
+  const p = buildRowParts(primary, editable, budgetIdToName, balance, groupName);
+
+  const originalRows = members.map(txn =>
+    `<div class="normalized-original">
+      <span>${escapeHtml(txn.description)}</span>
+      <span>${formatTimestamp(txn.timestamp)}</span>
+      <span>${txn.statementId ? escapeHtml(txn.statementId) : ""}</span>
+      <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
+    </div>`
+  ).join("\n");
+
+  return `<details class="expand-row txn-row normalized-group"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}>
+    <summary class="txn-summary">
+      <div class="txn-summary-content">
+        <span>${escapeHtml(description)}</span>
+        <span>${p.noteCell}</span>
+        <span>${p.categoryCell}</span>
+        <span class="amount">${escapeHtml(primary.amount.toFixed(2))}</span>
+      </div>
+    </summary>
+    <div class="expand-details txn-details">
+      ${p.detailDl}
+      <div class="normalized-originals">
+        <h4>Original Transactions</h4>
+        ${originalRows}
+      </div>
     </div>
   </details>`;
 }
@@ -105,14 +164,45 @@ function renderTransactionTable(
 
   const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
   const balances = computeAllBudgetBalances(transactions, budgets, budgetPeriods);
+
+  // Group normalized transactions by normalizedId
+  const normalizedGroups = new Map<string, Transaction[]>();
+  for (const txn of transactions) {
+    if (txn.normalizedId !== null) {
+      const group = normalizedGroups.get(txn.normalizedId);
+      if (group) group.push(txn);
+      else normalizedGroups.set(txn.normalizedId, [txn]);
+    }
+  }
+
+  const seenGroups = new Set<string>();
   const rows = transactions
-    .map((txn) => renderRow({
-      txn,
-      groupName,
-      editable: authorized,
-      budgetIdToName,
-      balance: balances.get(txn.id) ?? null,
-    }))
+    .flatMap((txn) => {
+      if (txn.normalizedId === null) {
+        return renderRow({
+          txn,
+          groupName,
+          editable: authorized,
+          budgetIdToName,
+          balance: balances.get(txn.id) ?? null,
+        });
+      }
+      if (seenGroups.has(txn.normalizedId)) return [];
+      seenGroups.add(txn.normalizedId);
+      const members = normalizedGroups.get(txn.normalizedId)!;
+      const primary = members.find(t => t.normalizedPrimary);
+      if (!primary) {
+        throw new DataIntegrityError(`Normalized group ${txn.normalizedId} has no primary transaction`);
+      }
+      return renderNormalizedGroup({
+        primary,
+        members,
+        groupName,
+        editable: authorized,
+        budgetIdToName,
+        balance: balances.get(primary.id) ?? null,
+      });
+    })
     .join("\n");
 
   let dataAttrs = "";

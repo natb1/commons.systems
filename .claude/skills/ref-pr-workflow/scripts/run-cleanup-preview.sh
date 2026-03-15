@@ -6,7 +6,6 @@ PR_NUMBER="${2:?Usage: run-cleanup-preview.sh <app-dir> <pr-number>}"
 
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
-APP_PKG="$REPO_ROOT/$APP_DIR/package.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=lib.sh
@@ -14,6 +13,8 @@ source "$SCRIPT_DIR/lib.sh"
 
 APP_NAME=$(get_app_name "$APP_DIR")
 HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
+
+ensure_deps
 
 detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
 
@@ -27,8 +28,6 @@ delete_preview_channel "$CHANNEL_ID" "$HOSTING_SITE"
 if [ "$USES_FIRESTORE" = true ]; then
   NAMESPACE=$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")
   echo "Deleting Firestore namespace '${NAMESPACE}'..."
-  install_local_deps "$REPO_ROOT" "$APP_PKG"
-  (cd "$REPO_ROOT/firestoreutil" && npm ci)
   FIRESTORE_NAMESPACE="$NAMESPACE" npx tsx firestoreutil/bin/run-delete-namespace.ts
 fi
 

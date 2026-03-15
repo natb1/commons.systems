@@ -6,7 +6,6 @@ CHANNEL_ID="${2:?Usage: run-preview-deploy.sh <app-dir> <channel-id>}"
 
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
-APP_PKG="$REPO_ROOT/$APP_DIR/package.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=lib.sh
@@ -15,14 +14,14 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
 
+ensure_deps
+
 detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
-install_local_deps "$REPO_ROOT" "$APP_PKG"
 
 PREVIEW_NAMESPACE=$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")
 
-# Install app dependencies and build (uses preview namespace, no emulator)
+# Build (uses preview namespace, no emulator)
 cd "$REPO_ROOT/$APP_DIR"
-npm ci
 VITE_FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" \
   VITE_GITHUB_BRANCH="${VITE_GITHUB_BRANCH:-main}" \
   npm run build

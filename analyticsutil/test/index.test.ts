@@ -7,7 +7,7 @@ vi.mock("firebase/analytics", () => ({
 }));
 
 import { initializeAnalytics, logEvent } from "firebase/analytics";
-import { initAnalytics } from "../src/index";
+import { initAnalytics, initAnalyticsSafe, withMeasurementId } from "../src/index";
 
 // reportError is a browser API not available in Node — stub it so tests that
 // don't mock it fail loudly rather than silently swallowing errors.
@@ -16,6 +16,33 @@ globalThis.reportError ??= (error: unknown) => {
 };
 
 beforeEach(() => vi.clearAllMocks());
+
+describe("withMeasurementId", () => {
+  it("adds measurementId when present", () => {
+    const config = { apiKey: "test" };
+    const result = withMeasurementId(config, "G-TEST");
+    expect(result).toEqual({ apiKey: "test", measurementId: "G-TEST" });
+  });
+
+  it("returns config unchanged when measurementId is undefined", () => {
+    const config = { apiKey: "test" };
+    const result = withMeasurementId(config, undefined);
+    expect(result).toBe(config);
+  });
+
+  it("returns config unchanged when measurementId is empty string", () => {
+    const config = { apiKey: "test" };
+    const result = withMeasurementId(config, "");
+    expect(result).toBe(config);
+  });
+
+  it("throws when measurementId does not start with G-", () => {
+    const config = { apiKey: "test" };
+    expect(() => withMeasurementId(config, "13891425074")).toThrow(
+      'Invalid measurement ID "13891425074": must start with "G-".',
+    );
+  });
+});
 
 describe("initAnalytics", () => {
   it("returns no-op tracker and logs debug when measurementId is missing", () => {
@@ -66,26 +93,14 @@ describe("initAnalytics", () => {
     });
   });
 
-  it("returns no-op and reports error when initializeAnalytics throws", () => {
-    const reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
-    const cspError = new Error("CSP blocked");
+  it("propagates error when initializeAnalytics throws", () => {
     vi.mocked(initializeAnalytics).mockImplementation(() => {
-      throw cspError;
+      throw new Error("CSP blocked");
     });
 
     const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
-    const tracker = initAnalytics(app);
 
-    const reported = reportErrorSpy.mock.calls[0][0] as Error;
-    expect(reported.message).toBe(
-      "Failed to initialize analytics (appId: 1:test:web:abc, measurementId: G-TEST)",
-    );
-    expect(reported.cause).toBe(cspError);
-
-    tracker("/about");
-    expect(logEvent).not.toHaveBeenCalled();
-
-    reportErrorSpy.mockRestore();
+    expect(() => initAnalytics(app)).toThrow("CSP blocked");
   });
 
   it("reports error when logEvent throws", () => {
@@ -105,5 +120,51 @@ describe("initAnalytics", () => {
     expect(reported.cause).toBe(badStateError);
 
     reportErrorSpy.mockRestore();
+  });
+
+  it("re-throws TypeError from logEvent", () => {
+    vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
+    vi.mocked(logEvent).mockImplementation(() => {
+      throw new TypeError("invalid argument");
+    });
+
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
+    const tracker = initAnalytics(app);
+
+    expect(() => tracker("/about")).toThrow(TypeError);
+  });
+});
+
+describe("initAnalyticsSafe", () => {
+  it("returns no-op and reports error when initializeAnalytics throws", () => {
+    const reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+    const cspError = new Error("CSP blocked");
+    vi.mocked(initializeAnalytics).mockImplementation(() => {
+      throw cspError;
+    });
+
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
+    const tracker = initAnalyticsSafe(app);
+
+    const reported = reportErrorSpy.mock.calls[0][0] as Error;
+    expect(reported.message).toBe(
+      "Failed to initialize analytics (appId: 1:test:web:abc, measurementId: G-TEST)",
+    );
+    expect(reported.cause).toBe(cspError);
+
+    tracker("/about");
+    expect(logEvent).not.toHaveBeenCalled();
+
+    reportErrorSpy.mockRestore();
+  });
+
+  it("re-throws TypeError from initializeAnalytics", () => {
+    vi.mocked(initializeAnalytics).mockImplementation(() => {
+      throw new TypeError("invalid config");
+    });
+
+    const app = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
+
+    expect(() => initAnalyticsSafe(app)).toThrow(TypeError);
   });
 });

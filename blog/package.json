@@ -33,21 +33,5 @@
     "dompurify": "^3.3.1",
     "firebase": "^12.9.0",
     "marked": "^15"
-  },
-  "devDependencies": {
-    "@commons-systems/authutil": "file:../authutil",
-    "@commons-systems/firestoreutil": "file:../firestoreutil",
-    "@commons-systems/htmlutil": "file:../htmlutil",
-    "@eslint/js": "^9.19.0",
-    "@types/dompurify": "^3.0.5",
-    "dompurify": "^3.3.1",
-    "eslint": "^9.19.0",
-    "firebase": "^12.9.0",
-    "happy-dom": "^17.4.4",
-    "marked": "^15",
-    "typescript": "^5.7.3",
-    "vite": "^6.1.0",
-    "typescript-eslint": "^8.22.0",
-    "vitest": "^3.0.5"
   }
 }

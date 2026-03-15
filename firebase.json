@@ -26,7 +26,13 @@
         "**/node_modules/**"
       ],
       "public": "landing/dist",
-      "target": "landing"
+      "target": "landing",
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
     },
     {
       "target": "budget",

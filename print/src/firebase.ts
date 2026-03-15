@@ -3,7 +3,7 @@ import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { firebaseConfig } from "@commons-systems/firebaseutil/config";
 import { validateNamespace } from "@commons-systems/firestoreutil/namespace";
-import { initAnalytics } from "@commons-systems/analyticsutil";
+import { initAnalyticsSafe } from "@commons-systems/analyticsutil";
 
 function parseEmulatorHost(envVar: string, value: string): { hostname: string; port: number } {
   const url = new URL(`http://${value}`);
@@ -51,6 +51,6 @@ validateNamespace(NAMESPACE);
 // duplicated per preview branch. All environments read from prod storage.
 export const STORAGE_NAMESPACE = "print/prod";
 
-export const trackPageView = initAnalytics(app);
+export const trackPageView = initAnalyticsSafe(app);
 
 export { db, storage, app };

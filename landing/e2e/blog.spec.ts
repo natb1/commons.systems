@@ -32,7 +32,7 @@ test.describe("blog", () => {
   });
 
   test("post URL scrolls to post in home page", async ({ page }) => {
-    await page.goto("/#/post/recovering-autonomy-with-coding-agents");
+    await page.goto("/post/recovering-autonomy-with-coding-agents");
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(page.locator("#post-recovering-autonomy-with-coding-agents")).toBeVisible();
     await expect(
@@ -61,7 +61,7 @@ test.describe("blog", () => {
     await page.waitForSelector("#posts", { timeout: 30000 });
     const link = page.locator('#post-recovering-autonomy-with-coding-agents h2 a.post-link');
     await expect(link).toBeVisible();
-    await expect(link).toHaveAttribute("href", "#/post/recovering-autonomy-with-coding-agents");
+    await expect(link).toHaveAttribute("href", "/post/recovering-autonomy-with-coding-agents");
   });
 
   // datetime must match publishedAt in landing/seeds/firestore.ts

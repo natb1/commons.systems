@@ -4,6 +4,16 @@ import { requireString, requireNumber, requireNonNegativeNumber, optionalString 
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
+import type { GroupId } from "@commons-systems/authutil/groups";
+import type { Brand } from "@commons-systems/firestoreutil/brand";
+
+export type TransactionId = Brand<"TransactionId">;
+export type StatementId = Brand<"StatementId">;
+export type BudgetId = Brand<"BudgetId">;
+export type BudgetPeriodId = Brand<"BudgetPeriodId">;
+export type RuleId = Brand<"RuleId">;
+
+export type { GroupId } from "@commons-systems/authutil/groups";
 
 /**
  * Budget rollover strategy:
@@ -14,16 +24,16 @@ import { DataIntegrityError } from "./errors.js";
 export type Rollover = "none" | "debt" | "balance";
 
 export interface Budget {
-  readonly id: string;
+  readonly id: BudgetId;
   readonly name: string;
   readonly weeklyAllowance: number;
   readonly rollover: Rollover;
-  readonly groupId: string | null;
+  readonly groupId: GroupId | null;
 }
 
 export interface BudgetPeriod {
-  readonly id: string;
-  readonly budgetId: string;
+  readonly id: BudgetPeriodId;
+  readonly budgetId: BudgetId;
   readonly periodStart: Timestamp;
   readonly periodEnd: Timestamp;
   /** Sum of net transaction amounts (after reimbursement) in this period. May be negative when credits/refunds exceed debits. Client-updatable. */
@@ -32,13 +42,13 @@ export interface BudgetPeriod {
   readonly count: number;
   /** Net amounts broken down by category. Immutable by client. */
   readonly categoryBreakdown: Record<string, number>;
-  readonly groupId: string | null;
+  readonly groupId: GroupId | null;
 }
 
 /** Serialized form of BudgetPeriod for HTML data attributes. Used by both home.ts (serializer) and home-hydrate.ts (parser). */
 export interface SerializedBudgetPeriod {
-  readonly id: string;
-  readonly budgetId: string;
+  readonly id: BudgetPeriodId;
+  readonly budgetId: BudgetId;
   readonly periodStartMs: number;
   readonly periodEndMs: number;
   readonly total: number;
@@ -47,7 +57,7 @@ export interface SerializedBudgetPeriod {
 }
 
 export interface Transaction {
-  readonly id: string;
+  readonly id: TransactionId;
   readonly institution: string;
   readonly account: string;
   readonly description: string;
@@ -63,10 +73,13 @@ export interface Transaction {
    * and range constraints hold even if client validation is bypassed.
    */
   readonly reimbursement: number;
-  readonly budget: string | null;
+  readonly budget: BudgetId | null;
   readonly timestamp: Timestamp | null;
-  readonly statementId: string | null;
-  readonly groupId: string | null;
+  readonly statementId: StatementId | null;
+  readonly groupId: GroupId | null;
+  readonly normalizedId: string | null;
+  readonly normalizedPrimary: boolean;
+  readonly normalizedDescription: string | null;
 }
 
 function validateReimbursementRange(n: number): void {
@@ -123,7 +136,7 @@ function requireRollover(value: unknown): Rollover {
 async function queryGroupCollection(
   collectionName: string,
   seedPrefix: string,
-  groupId: string | null,
+  groupId: GroupId | null,
   email?: string,
 ): Promise<QueryDocumentSnapshot<DocumentData, DocumentData>[]> {
   if (groupId && !email) throw new Error("email is required when querying by groupId");
@@ -140,7 +153,7 @@ async function queryGroupCollection(
   return snapshot.docs;
 }
 
-export async function getGroupMembers(groupId: string): Promise<string[]> {
+export async function getGroupMembers(groupId: GroupId): Promise<string[]> {
   const path = nsCollectionPath(NAMESPACE, "groups");
   const docSnap = await getDoc(doc(db, path, groupId));
   if (!docSnap.exists()) throw new Error(`Group ${groupId} not found`);
@@ -155,13 +168,13 @@ export async function getGroupMembers(groupId: string): Promise<string[]> {
 }
 
 export async function getTransactions(groupId: null): Promise<Transaction[]>;
-export async function getTransactions(groupId: string, email: string): Promise<Transaction[]>;
-export async function getTransactions(groupId: string | null, email?: string): Promise<Transaction[]> {
+export async function getTransactions(groupId: GroupId, email: string): Promise<Transaction[]>;
+export async function getTransactions(groupId: GroupId | null, email?: string): Promise<Transaction[]> {
   const docs = await queryGroupCollection("transactions", "seed-", groupId, email);
   return docs.map((docSnap) => {
     const data = docSnap.data();
     return {
-      id: docSnap.id,
+      id: docSnap.id as TransactionId,
       institution: requireString(data.institution, "institution"),
       account: requireString(data.account, "account"),
       description: requireString(data.description, "description"),
@@ -169,10 +182,14 @@ export async function getTransactions(groupId: string | null, email?: string): P
       note: requireString(data.note, "note"),
       category: requireString(data.category, "category"),
       reimbursement: requireReimbursement(data.reimbursement),
-      budget: optionalString(data.budget, "budget"),
+      budget: optionalString(data.budget, "budget") as BudgetId | null,
       timestamp: optionalTimestamp(data.timestamp, "timestamp"),
-      statementId: optionalString(data.statementId, "statementId"),
-      groupId: optionalString(data.groupId, "groupId"),
+      statementId: optionalString(data.statementId, "statementId") as StatementId | null,
+      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
+      normalizedId: optionalString(data.normalizedId, "normalizedId"),
+      // Defaults to true for un-normalized transactions (field may be missing or null)
+      normalizedPrimary: data.normalizedPrimary !== false,
+      normalizedDescription: optionalString(data.normalizedDescription, "normalizedDescription"),
     };
   });
 }
@@ -182,8 +199,8 @@ function requireDocId(id: string, label: string): void {
 }
 
 export async function updateTransaction(
-  txnId: string,
-  fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget">>,
+  txnId: TransactionId,
+  fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
 ): Promise<void> {
   requireDocId(txnId, "transaction");
   if (Object.keys(fields).length === 0) return;
@@ -196,25 +213,25 @@ export async function updateTransaction(
 }
 
 export async function getBudgets(groupId: null): Promise<Budget[]>;
-export async function getBudgets(groupId: string, email: string): Promise<Budget[]>;
-export async function getBudgets(groupId: string | null, email?: string): Promise<Budget[]> {
+export async function getBudgets(groupId: GroupId, email: string): Promise<Budget[]>;
+export async function getBudgets(groupId: GroupId | null, email?: string): Promise<Budget[]> {
   const docs = await queryGroupCollection("budgets", "seed-", groupId, email);
   return docs.map((docSnap) => {
     const data = docSnap.data();
     const name = requireString(data.name, "name");
     if (!name) throw new DataIntegrityError("Budget name must be non-empty");
     return {
-      id: docSnap.id,
+      id: docSnap.id as BudgetId,
       name,
       weeklyAllowance: requireNonNegativeNumber(data.weeklyAllowance, "weeklyAllowance"),
       rollover: requireRollover(data.rollover),
-      groupId: optionalString(data.groupId, "groupId"),
+      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     };
   });
 }
 
 function validateNoOverlappingPeriods(periods: BudgetPeriod[]): void {
-  const byBudget = new Map<string, BudgetPeriod[]>();
+  const byBudget = new Map<BudgetId, BudgetPeriod[]>();
   for (const p of periods) {
     const list = byBudget.get(p.budgetId);
     if (list) list.push(p);
@@ -233,8 +250,8 @@ function validateNoOverlappingPeriods(periods: BudgetPeriod[]): void {
 }
 
 export async function getBudgetPeriods(groupId: null): Promise<BudgetPeriod[]>;
-export async function getBudgetPeriods(groupId: string, email: string): Promise<BudgetPeriod[]>;
-export async function getBudgetPeriods(groupId: string | null, email?: string): Promise<BudgetPeriod[]> {
+export async function getBudgetPeriods(groupId: GroupId, email: string): Promise<BudgetPeriod[]>;
+export async function getBudgetPeriods(groupId: GroupId | null, email?: string): Promise<BudgetPeriod[]> {
   const docs = await queryGroupCollection("budget-periods", "seed-", groupId, email);
   const periods = docs.map((docSnap) => {
     const data = docSnap.data();
@@ -246,14 +263,14 @@ export async function getBudgetPeriods(groupId: string | null, email?: string): 
       );
     }
     return {
-      id: docSnap.id,
-      budgetId: requireString(data.budgetId, "budgetId"),
+      id: docSnap.id as BudgetPeriodId,
+      budgetId: requireString(data.budgetId, "budgetId") as BudgetId,
       periodStart,
       periodEnd,
       total: requireNumber(data.total, "total"),
       count: requireNonNegativeNumber(data.count, "count"),
       categoryBreakdown: requireCategoryBreakdown(data.categoryBreakdown),
-      groupId: optionalString(data.groupId, "groupId"),
+      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     };
   });
 
@@ -262,7 +279,7 @@ export async function getBudgetPeriods(groupId: string | null, email?: string): 
 }
 
 export async function updateBudgetPeriod(
-  periodId: string,
+  periodId: BudgetPeriodId,
   fields: Partial<Pick<BudgetPeriod, "total">>,
 ): Promise<void> {
   requireDocId(periodId, "period");
@@ -278,7 +295,7 @@ export async function updateBudgetPeriod(
 }
 
 export async function adjustBudgetPeriodTotal(
-  periodId: string,
+  periodId: BudgetPeriodId,
   delta: number,
 ): Promise<void> {
   requireDocId(periodId, "period");
@@ -290,7 +307,7 @@ export async function adjustBudgetPeriodTotal(
 }
 
 export async function updateBudget(
-  budgetId: string,
+  budgetId: BudgetId,
   fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
 ): Promise<void> {
   requireDocId(budgetId, "budget");
@@ -316,14 +333,14 @@ export async function updateBudget(
 export type RuleType = "categorization" | "budget_assignment";
 
 export interface Rule {
-  readonly id: string;
+  readonly id: RuleId;
   readonly type: RuleType;
   readonly pattern: string;
   readonly target: string;
   readonly priority: number;
   readonly institution: string | null;
   readonly account: string | null;
-  readonly groupId: string | null;
+  readonly groupId: GroupId | null;
 }
 
 function requireRuleType(value: unknown): RuleType {
@@ -331,30 +348,30 @@ function requireRuleType(value: unknown): RuleType {
   throw new DataIntegrityError(`Expected rule type to be categorization or budget_assignment, got ${value}`);
 }
 
-export async function getRules(groupId: string, email: string): Promise<Rule[]>;
+export async function getRules(groupId: GroupId, email: string): Promise<Rule[]>;
 export async function getRules(groupId: null): Promise<Rule[]>;
-export async function getRules(groupId: string | null, email?: string): Promise<Rule[]> {
+export async function getRules(groupId: GroupId | null, email?: string): Promise<Rule[]> {
   const docs = await queryGroupCollection("rules", "seed-", groupId, email);
   return docs.map((docSnap) => {
     const data = docSnap.data();
     return {
-      id: docSnap.id,
+      id: docSnap.id as RuleId,
       type: requireRuleType(data.type),
       pattern: requireString(data.pattern, "pattern"),
       target: requireString(data.target, "target"),
       priority: requireNumber(data.priority, "priority"),
       institution: optionalString(data.institution, "institution"),
       account: optionalString(data.account, "account"),
-      groupId: optionalString(data.groupId, "groupId"),
+      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     };
   });
 }
 
 export async function createRule(
-  groupId: string,
+  groupId: GroupId,
   memberEmails: string[],
   fields: Omit<Rule, "id" | "groupId">,
-): Promise<string> {
+): Promise<RuleId> {
   requireRuleType(fields.type);
   if (!Number.isFinite(fields.priority)) throw new RangeError("Rule priority must be a finite number");
   if (!fields.pattern) throw new Error("Rule pattern cannot be empty");
@@ -370,11 +387,11 @@ export async function createRule(
     groupId,
     memberEmails,
   });
-  return ref.id;
+  return ref.id as RuleId;
 }
 
 export async function updateRule(
-  ruleId: string,
+  ruleId: RuleId,
   fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account">>,
 ): Promise<void> {
   requireDocId(ruleId, "rule");
@@ -388,9 +405,88 @@ export async function updateRule(
   await updateDoc(ref, fields);
 }
 
-export async function deleteRule(ruleId: string): Promise<void> {
+export async function deleteRule(ruleId: RuleId): Promise<void> {
   requireDocId(ruleId, "rule");
   const path = nsCollectionPath(NAMESPACE, "rules");
+  const ref = doc(db, path, ruleId);
+  await deleteDoc(ref);
+}
+
+// --- Normalization Rules ---
+
+export interface NormalizationRule {
+  readonly id: string;
+  readonly pattern: string;
+  readonly patternType: string | null;
+  readonly canonicalDescription: string;
+  readonly dateWindowDays: number;
+  readonly institution: string | null;
+  readonly account: string | null;
+  readonly priority: number;
+  readonly groupId: GroupId | null;
+}
+
+export async function getNormalizationRules(groupId: GroupId, email: string): Promise<NormalizationRule[]>;
+export async function getNormalizationRules(groupId: null): Promise<NormalizationRule[]>;
+export async function getNormalizationRules(groupId: GroupId | null, email?: string): Promise<NormalizationRule[]> {
+  const docs = await queryGroupCollection("normalization-rules", "seed-", groupId, email);
+  return docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      pattern: requireString(data.pattern, "pattern"),
+      patternType: optionalString(data.patternType, "patternType"),
+      canonicalDescription: requireString(data.canonicalDescription, "canonicalDescription"),
+      dateWindowDays: data.dateWindowDays == null ? 0 : requireNumber(data.dateWindowDays, "dateWindowDays"),
+      institution: optionalString(data.institution, "institution"),
+      account: optionalString(data.account, "account"),
+      priority: requireNumber(data.priority, "priority"),
+      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
+    };
+  });
+}
+
+export async function createNormalizationRule(
+  groupId: GroupId,
+  memberEmails: string[],
+  fields: Omit<NormalizationRule, "id" | "groupId">,
+): Promise<string> {
+  if (!fields.pattern) throw new Error("Normalization rule pattern cannot be empty");
+  if (!fields.canonicalDescription) throw new Error("Normalization rule canonical description cannot be empty");
+  if (!Number.isFinite(fields.priority)) throw new RangeError("Normalization rule priority must be a finite number");
+  const path = nsCollectionPath(NAMESPACE, "normalization-rules");
+  const data: Record<string, unknown> = {
+    pattern: fields.pattern,
+    canonicalDescription: fields.canonicalDescription,
+    priority: fields.priority,
+    groupId,
+    memberEmails,
+  };
+  if (fields.patternType) data.patternType = fields.patternType;
+  if (fields.dateWindowDays != null) data.dateWindowDays = fields.dateWindowDays;
+  if (fields.institution) data.institution = fields.institution;
+  if (fields.account) data.account = fields.account;
+  const ref = await addDoc(collection(db, path), data);
+  return ref.id;
+}
+
+export async function updateNormalizationRule(
+  ruleId: string,
+  fields: Partial<Pick<NormalizationRule, "pattern" | "patternType" | "canonicalDescription" | "dateWindowDays" | "priority" | "institution" | "account">>,
+): Promise<void> {
+  requireDocId(ruleId, "normalization rule");
+  if (Object.keys(fields).length === 0) return;
+  if (fields.pattern !== undefined && !fields.pattern) throw new Error("Normalization rule pattern cannot be empty");
+  if (fields.canonicalDescription !== undefined && !fields.canonicalDescription) throw new Error("Normalization rule canonical description cannot be empty");
+  if (fields.priority !== undefined && !Number.isFinite(fields.priority)) throw new RangeError("Normalization rule priority must be a finite number");
+  const path = nsCollectionPath(NAMESPACE, "normalization-rules");
+  const ref = doc(db, path, ruleId);
+  await updateDoc(ref, fields);
+}
+
+export async function deleteNormalizationRule(ruleId: string): Promise<void> {
+  requireDocId(ruleId, "normalization rule");
+  const path = nsCollectionPath(NAMESPACE, "normalization-rules");
   const ref = doc(db, path, ruleId);
   await deleteDoc(ref);
 }
