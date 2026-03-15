@@ -17,6 +17,7 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("@commons-systems/authutil/groups", () => ({
   isInGroup: (...args: unknown[]) => mockIsInGroup(...args),
+  ADMIN_GROUP_ID: "admin",
 }));
 
 import { getPosts } from "../src/firestore";

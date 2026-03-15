@@ -6,7 +6,6 @@ EXTERNAL_BASE_URL="${2:-}"
 
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
-APP_PKG="$REPO_ROOT/$APP_DIR/package.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=lib.sh
@@ -15,8 +14,9 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 
+ensure_deps
+
 cd "$REPO_ROOT/$APP_DIR"
-npm ci
 
 # When a base URL is provided, skip emulator setup and run tests directly
 if [ -n "$EXTERNAL_BASE_URL" ]; then
@@ -29,10 +29,10 @@ fi
 
 cd "$REPO_ROOT"
 
+cleanup_all_stale_processes
 cleanup_stale_hub
 
 detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
-install_local_deps "$REPO_ROOT" "$APP_PKG"
 
 cd "$REPO_ROOT/$APP_DIR"
 
@@ -143,6 +143,7 @@ cleanup() {
     kill_tree "$EMULATOR_PID"
     wait "$EMULATOR_PID" 2>/dev/null || true
   fi
+  remove_pid_file || echo "WARNING: remove_pid_file failed" >&2
   cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
   rm -f "$TEMP_FIREBASE_JSON"
 }
@@ -166,11 +167,14 @@ fi
 # Build functions before starting emulator (if used)
 if [ "$USES_FUNCTIONS" = true ]; then
   echo "Building Cloud Functions..."
-  (cd "$REPO_ROOT/functions" && npm ci && npm run build)
+  (cd "$REPO_ROOT" && npm run -w functions build)
 fi
 
 npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
 EMULATOR_PID=$!
+
+# Record child PIDs for orphan cleanup
+write_pid_file "${EMULATOR_PID}:node"
 
 # Poll until hosting emulator serves content.
 # Timeout allows headroom for slow CI (npx download + emulator startup can take 30-60s).

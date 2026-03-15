@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { Budget, BudgetPeriod, Rollover, Transaction } from "./firestore.js";
+import type { Budget, BudgetId, BudgetPeriod, Rollover, Transaction, TransactionId } from "./firestore.js";
 
 export function computeNetAmount(amount: number, reimbursement: number): number {
   if (reimbursement < 0 || reimbursement > 100) {
@@ -35,14 +35,14 @@ function applyRollover(running: number, weeklyAllowance: number, rollover: Rollo
   }
 }
 
-function periodsForBudget(periods: BudgetPeriod[], budgetId: string): BudgetPeriod[] {
+function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
   return periods
     .filter((p) => p.budgetId === budgetId)
     .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
 }
 
 // Exclude non-primary normalized transactions to avoid double-counting duplicates
-function transactionsForBudget(txns: Transaction[], budgetId: string): TimestampedTransaction[] {
+function transactionsForBudget(txns: Transaction[], budgetId: BudgetId): TimestampedTransaction[] {
   return txns
     .filter((t): t is TimestampedTransaction =>
       t.budget === budgetId
@@ -53,7 +53,7 @@ function transactionsForBudget(txns: Transaction[], budgetId: string): Timestamp
 
 export function findPeriodForTimestamp(
   periods: BudgetPeriod[],
-  budgetId: string,
+  budgetId: BudgetId,
   timestamp: Timestamp,
 ): BudgetPeriod | null {
   const ms = timestamp.toMillis();
@@ -120,8 +120,8 @@ export function computeAllBudgetBalances(
   allTransactions: Transaction[],
   budgets: Budget[],
   budgetPeriods: BudgetPeriod[],
-): Map<string, number> {
-  const result = new Map<string, number>();
+): Map<TransactionId, number> {
+  const result = new Map<TransactionId, number>();
 
   for (const budget of budgets) {
     const periods = periodsForBudget(budgetPeriods, budget.id);

@@ -38,45 +38,15 @@ detect_features() {
   fi
 }
 
-# Install local package dependencies (file: references).
-# Args: $1 = repo root, $2 = path to app package.json
-install_local_deps() {
-  local repo_root="$1"
-  local app_pkg="$2"
-
-  if grep -q '"@commons-systems/firebaseutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing firebaseutil dependency..."
-    (cd "$repo_root/firebaseutil" && npm ci)
+# Install workspace dependencies if node_modules is missing.
+# Requires REPO_ROOT to be set by the caller.
+ensure_deps() {
+  if [ -z "${REPO_ROOT:-}" ]; then
+    echo "ERROR: REPO_ROOT is not set" >&2
+    return 1
   fi
-
-  if grep -q '"@commons-systems/firestoreutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing firestoreutil dependency..."
-    (cd "$repo_root/firestoreutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/authutil"' "$app_pkg" 2>/dev/null || [ "${USES_AUTH:-false}" = true ]; then
-    echo "Installing authutil dependency..."
-    (cd "$repo_root/authutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/htmlutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing htmlutil dependency..."
-    (cd "$repo_root/htmlutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/blog"' "$app_pkg" 2>/dev/null; then
-    echo "Installing blog dependency..."
-    (cd "$repo_root/blog" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/analyticsutil"' "$app_pkg" 2>/dev/null; then
-    echo "Installing analyticsutil dependency..."
-    (cd "$repo_root/analyticsutil" && npm ci)
-  fi
-
-  if grep -q '"@commons-systems/style"' "$app_pkg" 2>/dev/null; then
-    echo "Installing style dependency..."
-    (cd "$repo_root/style" && npm ci)
+  if [ ! -d "$REPO_ROOT/node_modules" ]; then
+    (cd "$REPO_ROOT" && npm ci)
   fi
 }
 
@@ -115,6 +85,13 @@ get_env_suffix() {
   local wt_id
   wt_id="$(get_worktree_id)"
   echo "${1}${wt_id:+-$wt_id}"
+}
+
+# Resolve the tmp directory that Firebase emulators use.
+# Uses Node os.tmpdir() to match the path Firebase writes hub files to.
+# Can be overridden in tests by redefining this function.
+get_tmpdir() {
+  node -e "process.stdout.write(require('os').tmpdir())"
 }
 
 # Kill a process and all its descendants.
@@ -184,10 +161,8 @@ delete_preview_channel() {
 # Uses worktree-scoped project ID so each worktree manages its own hub file.
 # (PID recycling could theoretically cause a false positive but is negligible in practice.)
 cleanup_stale_hub() {
-  # Resolve tmpdir via Node to match the path Firebase emulators use
-  # (os.tmpdir() may differ from shell $TMPDIR on macOS).
   local tmpdir
-  tmpdir="$(node -e "process.stdout.write(require('os').tmpdir())")"
+  tmpdir="$(get_tmpdir)"
   local project_id
   project_id="$(get_emulator_project_id)"
   local hub_file="${tmpdir}/hub-${project_id}.json"
@@ -199,6 +174,114 @@ cleanup_stale_hub() {
       rm -f "$hub_file"
     fi
   fi
+}
+
+# Write a PID file recording child processes for orphan cleanup.
+# The file is scoped to the current worktree via get_emulator_project_id().
+# Args: pairs of pid:command_name (e.g., "12345:node" "12346:java")
+#   command_name must match `ps -o comm=` output for that PID (used to guard PID recycling)
+write_pid_file() {
+  local tmpdir
+  tmpdir="$(get_tmpdir)"
+  local project_id
+  project_id="$(get_emulator_project_id)"
+  local worktree_path
+  worktree_path="$(git rev-parse --show-toplevel)"
+
+  local pid_file="${tmpdir}/pids-${project_id}.json"
+  local jq_args=(--argjson hub_pid "$$" --arg worktree_path "$worktree_path")
+  local jq_filter='{hub_pid: $hub_pid, worktree_path: $worktree_path, processes: ['
+  local i=0
+  for entry in "$@"; do
+    local pid="${entry%%:*}"
+    local cmd="${entry#*:}"
+    jq_args+=(--argjson "pid$i" "$pid" --arg "cmd$i" "$cmd")
+    [ $i -gt 0 ] && jq_filter+=","
+    jq_filter+="{\"pid\": \$pid${i}, \"cmd\": \$cmd${i}}"
+    i=$((i + 1))
+  done
+  jq_filter+=']}'
+  jq -n "${jq_args[@]}" "$jq_filter" > "$pid_file"
+}
+
+# Remove the PID file for the current worktree.
+# Called during normal trap cleanup.
+remove_pid_file() {
+  local tmpdir
+  tmpdir="$(get_tmpdir)"
+  local project_id
+  project_id="$(get_emulator_project_id)"
+  rm -f "${tmpdir}/pids-${project_id}.json"
+}
+
+# Scan all PID files for the project and clean up orphaned processes.
+# Orphans arise from two cases:
+#   1. The owning worktree directory was deleted
+#   2. The parent script PID is dead but child processes survived
+# Skips PID files whose parent script is still alive (active server in another worktree).
+cleanup_all_stale_processes() {
+  local tmpdir
+  tmpdir="$(get_tmpdir)"
+
+  # Use base FIREBASE_PROJECT_ID (not worktree-scoped) to scan PID files from all worktrees
+  local pid_file
+  for pid_file in "${tmpdir}"/pids-${FIREBASE_PROJECT_ID}.json "${tmpdir}"/pids-${FIREBASE_PROJECT_ID}-wt-*.json; do
+    [ -f "$pid_file" ] || continue
+    local worktree_path hub_pid
+    local header
+    header=$(jq -r '[.worktree_path // "", .hub_pid // ""] | join("\t")' "$pid_file" 2>/dev/null) || {
+      echo "WARNING: failed to parse PID file $pid_file, skipping" >&2
+      continue
+    }
+    worktree_path="${header%%	*}"
+    hub_pid="${header#*	}"
+
+    local is_orphan=false
+    if [ -n "$worktree_path" ] && [ ! -d "$worktree_path" ]; then
+      echo "Orphan detected: worktree deleted ($worktree_path)"
+      is_orphan=true
+    elif [ -n "$hub_pid" ] && ! kill -0 "$hub_pid" 2>/dev/null; then
+      echo "Orphan detected: hub PID $hub_pid is dead"
+      is_orphan=true
+    fi
+
+    if [ "$is_orphan" = true ]; then
+      # Extract all pid:cmd pairs in one jq call (tab-separated, newline-delimited)
+      local proc_entries
+      proc_entries=$(jq -r '.processes[] | [.pid, .cmd] | join("\t")' "$pid_file" 2>/dev/null) || {
+        echo "WARNING: failed to extract processes from $pid_file, orphaned processes may need manual cleanup" >&2
+        proc_entries=""
+      }
+
+      local line
+      while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        local proc_pid proc_cmd actual_cmd
+        proc_pid="${line%%	*}"
+        proc_cmd="${line#*	}"
+
+        # Verify command name matches before killing (guards PID recycling)
+        actual_cmd=$(ps -p "$proc_pid" -o comm= 2>/dev/null) || actual_cmd=""
+        if [ -n "$actual_cmd" ] && [ "$actual_cmd" = "$proc_cmd" ]; then
+          echo "Killing orphaned process: PID $proc_pid ($proc_cmd)"
+          kill_tree "$proc_pid"
+        elif [ -n "$actual_cmd" ]; then
+          echo "Skipping PID $proc_pid: expected $proc_cmd but found $actual_cmd (PID recycled)"
+        fi
+      done <<< "$proc_entries"
+
+      rm -f "$pid_file"
+
+      local project_id
+      project_id="${pid_file##*/pids-}"
+      project_id="${project_id%.json}"
+      local hub_file="${tmpdir}/hub-${project_id}.json"
+      if [ -f "$hub_file" ]; then
+        echo "Removing stale hub file: $hub_file"
+        rm -f "$hub_file"
+      fi
+    fi
+  done
 }
 
 # Find N available TCP ports by binding to port 0 simultaneously.

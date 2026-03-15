@@ -63,6 +63,22 @@ func TestInsertFirestoreRules(t *testing.T) {
 		}
 	})
 
+	t.Run("groups rule uses inline resource.data.members check", func(t *testing.T) {
+		dir := writeRulesFile(t, t.TempDir(), baseRules)
+
+		if err := InsertFirestoreRules(dir, "myapp"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		got := readRulesFile(t, dir)
+		if !strings.Contains(got, "request.auth.token.email in resource.data.members") {
+			t.Error("groups rule should use inline resource.data.members check for list query compatibility")
+		}
+		if strings.Contains(got, "isGroupMember") {
+			t.Error("groups rule should not use isGroupMember (get() calls break list queries)")
+		}
+	})
+
 	t.Run("skips insertion when rules already exist", func(t *testing.T) {
 		dir := writeRulesFile(t, t.TempDir(), baseRules)
 

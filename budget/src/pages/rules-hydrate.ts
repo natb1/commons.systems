@@ -1,12 +1,12 @@
-import { updateRule, deleteRule, createRule, updateNormalizationRule, deleteNormalizationRule, createNormalizationRule, getGroupMembers, type RuleType, type Rule } from "../firestore.js";
+import { updateRule, deleteRule, createRule, updateNormalizationRule, deleteNormalizationRule, createNormalizationRule, getGroupMembers, type RuleType, type Rule, type GroupId, type RuleId } from "../firestore.js";
 import { renderRow, renderNormalizationRow } from "./rules.js";
 import { removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, handleActionError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
 
-function rowRuleId(el: HTMLElement): string | null {
+function rowRuleId(el: HTMLElement): RuleId | null {
   const row = el.closest(".rule-row");
   if (!(row instanceof HTMLElement)) return null;
-  return row.dataset.ruleId ?? null;
+  return (row.dataset.ruleId ?? null) as RuleId | null;
 }
 
 export function hydrateRulesTable(container: HTMLElement): void {
@@ -146,7 +146,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
     }
 
     if (target.id === "add-rule") {
-      const groupId = target.dataset.groupId;
+      const groupId = target.dataset.groupId as GroupId | undefined;
       if (!groupId) { console.error("add-rule button missing data-group-id"); return; }
       try {
         const filterType = activeFilterType();

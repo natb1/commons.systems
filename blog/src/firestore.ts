@@ -1,7 +1,7 @@
 import { collection, getDocs, orderBy, query, where, type Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
-import { isInGroup } from "@commons-systems/authutil/groups";
+import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 
 import type { PostMeta, PublishedPost } from "./post-types.js";
 export type { PostMeta, PublishedPost };
@@ -39,7 +39,7 @@ function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null 
 
 export async function getPosts(db: Firestore, namespace: string, user: User | null): Promise<GetPostsResult> {
   const path = nsCollectionPath(namespace, "posts");
-  const admin = await isInGroup(db, namespace, user, "admin");
+  const admin = await isInGroup(db, namespace, user, ADMIN_GROUP_ID);
   const q = admin
     ? query(collection(db, path), orderBy("publishedAt", "desc"))
     : query(collection(db, path), where("published", "==", true));

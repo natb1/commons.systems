@@ -12,25 +12,15 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "@commons-systems/analyticsutil": "file:../analyticsutil",
-    "@commons-systems/authutil": "file:../authutil",
-    "@commons-systems/router": "file:../router",
-    "@commons-systems/firebaseutil": "file:../firebaseutil",
-    "@commons-systems/htmlutil": "file:../htmlutil",
-    "@commons-systems/firestoreutil": "file:../firestoreutil",
-    "@commons-systems/style": "file:../style",
+    "@commons-systems/analyticsutil": "*",
+    "@commons-systems/authutil": "*",
+    "@commons-systems/router": "*",
+    "@commons-systems/firebaseutil": "*",
+    "@commons-systems/htmlutil": "*",
+    "@commons-systems/firestoreutil": "*",
+    "@commons-systems/style": "*",
     "firebase": "^12.9.0",
     "missing.css": "^1.1.3",
     "pdfjs-dist": "^4.0.0"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.19.0",
-    "@playwright/test": "1.57.0",
-    "eslint": "^9.19.0",
-    "happy-dom": "^17.4.4",
-    "typescript": "^5.7.3",
-    "typescript-eslint": "^8.22.0",
-    "vite": "^6.1.0",
-    "vitest": "^3.0.5"
   }
 }

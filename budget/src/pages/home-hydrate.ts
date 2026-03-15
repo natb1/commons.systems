@@ -1,4 +1,4 @@
-import { updateTransaction, adjustBudgetPeriodTotal, type SerializedBudgetPeriod } from "../firestore.js";
+import { updateTransaction, adjustBudgetPeriodTotal, type SerializedBudgetPeriod, type TransactionId, type BudgetId } from "../firestore.js";
 import { computeNetAmount } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
@@ -9,7 +9,7 @@ import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListene
  * Returns {} when the attribute is absent (unauthorized users).
  * Throws DataIntegrityError for non-empty values that are not valid JSON objects with string values.
  */
-function parseBudgetMap(raw: string | undefined): Record<string, string> {
+function parseBudgetMap(raw: string | undefined): Record<string, BudgetId> {
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);
@@ -19,7 +19,7 @@ function parseBudgetMap(raw: string | undefined): Record<string, string> {
     if (!Object.values(parsed).every((v: unknown) => typeof v === "string")) {
       throw new DataIntegrityError("Budget map contains non-string value");
     }
-    return parsed;
+    return parsed as Record<string, BudgetId>;
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
     throw new DataIntegrityError(`Failed to parse budget map: ${raw}`);
@@ -62,7 +62,7 @@ function parseBudgetPeriods(raw: string | undefined): HydrationPeriod[] {
   }
 }
 
-function findPeriod(periods: HydrationPeriod[], budgetId: string, timestampMs: number): HydrationPeriod | null {
+function findPeriod(periods: HydrationPeriod[], budgetId: BudgetId, timestampMs: number): HydrationPeriod | null {
   for (const p of periods) {
     if (p.budgetId === budgetId && p.periodStartMs <= timestampMs && timestampMs < p.periodEndMs) {
       return p;
@@ -82,8 +82,8 @@ function findPeriod(periods: HydrationPeriod[], budgetId: string, timestampMs: n
  */
 async function syncPeriodTotals(
   row: HTMLElement,
-  oldBudgetId: string | null,
-  newBudgetId: string | null,
+  oldBudgetId: BudgetId | null,
+  newBudgetId: BudgetId | null,
   budgetPeriods: HydrationPeriod[],
 ): Promise<void> {
   const amount = Number(row.dataset.amount);
@@ -131,7 +131,7 @@ async function syncPeriodOnReimbursementChange(
   newReimbursement: number,
   budgetPeriods: HydrationPeriod[],
 ): Promise<void> {
-  const budgetId = row.dataset.budgetId || null;
+  const budgetId = (row.dataset.budgetId || null) as BudgetId | null;
   if (!budgetId) return;
   const amount = Number(row.dataset.amount);
   const timestampMs = Number(row.dataset.timestamp);
@@ -201,7 +201,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
 
     const row = target.closest(".txn-row");
     if (!(row instanceof HTMLElement)) return;
-    const txnId = row.dataset.txnId;
+    const txnId = row.dataset.txnId as TransactionId | undefined;
     if (!txnId) return;
 
     if (!(target instanceof HTMLInputElement)) return;
@@ -232,7 +232,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
           return;
         }
         const newBudgetId = value ? budgetNameToId[value] : null;
-        const oldBudgetId = row.dataset.budgetId || null;
+        const oldBudgetId = (row.dataset.budgetId || null) as BudgetId | null;
         await updateTransaction(txnId, { budget: newBudgetId });
         await syncPeriodTotals(row, oldBudgetId, newBudgetId, budgetPeriods);
 
