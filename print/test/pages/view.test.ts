@@ -75,7 +75,7 @@ describe("renderView", () => {
     it("includes a back link to the library", async () => {
       const html = await renderView("", null);
 
-      expect(html).toContain('href="#/"');
+      expect(html).toContain('href="/"');
       expect(html).toContain('class="viewer-back"');
     });
   });
@@ -103,7 +103,7 @@ describe("renderView", () => {
 
       const html = await renderView("missing-id", null);
 
-      expect(html).toContain('href="#/"');
+      expect(html).toContain('href="/"');
       expect(html).toContain('class="viewer-back"');
     });
   });
@@ -123,7 +123,7 @@ describe("renderView", () => {
 
       const html = await renderView("item-1", null);
 
-      expect(html).toContain('href="#/"');
+      expect(html).toContain('href="/"');
       expect(html).toContain('class="viewer-back"');
     });
 

@@ -82,10 +82,10 @@ describe("generateRssXml", () => {
     expect(xml).not.toContain("<item>");
   });
 
-  it("includes post links in hash URL format", () => {
+  it("includes post links in path URL format", () => {
     const xml = generateRssXml(publishedPosts, config);
-    expect(xml).toContain("https://commons.systems/#/post/newer-post");
-    expect(xml).toContain("https://commons.systems/#/post/older-post");
+    expect(xml).toContain("https://commons.systems/post/newer-post");
+    expect(xml).toContain("https://commons.systems/post/older-post");
   });
 
   it("guid elements have isPermaLink=false", () => {
@@ -104,7 +104,7 @@ describe("generateRssXml", () => {
     const xml = generateRssXml(publishedPosts, customConfig);
     expect(xml).toContain("<title>My Blog</title>");
     expect(xml).toContain("<link>https://myblog.com</link>");
-    expect(xml).toContain("https://myblog.com/#/post/newer-post");
+    expect(xml).toContain("https://myblog.com/post/newer-post");
   });
 
   it("uses custom postLinkPrefix in links", () => {

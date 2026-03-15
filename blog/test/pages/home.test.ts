@@ -40,7 +40,7 @@ describe("renderHomeHtml", () => {
     const html = renderHomeHtml([publishedPost]);
     expect(html).toContain('class="post-link"');
     expect(html).toContain("Hello World</span></a>");
-    expect(html).toContain('href="#/post/hello-world"');
+    expect(html).toContain('href="/post/hello-world"');
   });
 
   it("renders publishedAt in a time element", () => {

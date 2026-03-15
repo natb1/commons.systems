@@ -8,18 +8,18 @@ test.describe("viewer", () => {
   //   3. "Confessions..." (gutenberg-3296, EPUB)
   //
   // Navigate to Republic (3 pages) for navigation testing:
-  //   page.goto("/#/view/plato-republic")
+  //   page.goto("/view/plato-republic")
   // Or navigate via library by clicking the first .media-view link.
 
   test("viewer loads for PDF item", async ({ page }) => {
-    await page.goto("/#/view/plato-republic");
+    await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator("#viewer-canvas")).toBeVisible();
     await expect(page.locator(".viewer-position")).toContainText("1 / 3");
   });
 
   test("panel toggle collapses and expands", async ({ page }) => {
-    await page.goto("/#/view/plato-republic");
+    await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".viewer-position")).toContainText("1 / 3");
 
@@ -42,7 +42,7 @@ test.describe("viewer", () => {
   });
 
   test("page navigation works", async ({ page }) => {
-    await page.goto("/#/view/plato-republic");
+    await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer-position")).toContainText("1 / 3", {
       timeout: 15000,
     });
@@ -72,7 +72,7 @@ test.describe("viewer", () => {
   });
 
   test("back link returns to library", async ({ page }) => {
-    await page.goto("/#/view/plato-republic");
+    await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
 
     await page.locator(".viewer-back").click();
@@ -80,7 +80,7 @@ test.describe("viewer", () => {
   });
 
   test("metadata is visible in panel", async ({ page }) => {
-    await page.goto("/#/view/plato-republic");
+    await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
 
     await expect(page.locator(".viewer-title")).toContainText("Republic");
@@ -93,7 +93,7 @@ test.describe("viewer", () => {
   test("desktop shows landscape orientation", async ({ page }, testInfo) => {
     // Desktop project has landscape viewport (1133x744)
     test.skip(testInfo.project.name !== "desktop", "desktop only");
-    await page.goto("/#/view/plato-republic");
+    await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".viewer")).toHaveAttribute(
       "data-orientation",
@@ -104,7 +104,7 @@ test.describe("viewer", () => {
   test("mobile shows portrait orientation", async ({ page }, testInfo) => {
     // Mobile project has portrait viewport (375x812)
     test.skip(testInfo.project.name !== "mobile", "mobile only");
-    await page.goto("/#/view/plato-republic");
+    await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".viewer")).toHaveAttribute(
       "data-orientation",

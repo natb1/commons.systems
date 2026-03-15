@@ -28,7 +28,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             published: true,
             publishedAt: "2026-03-10T00:00:00Z",
             filename: "recovering-autonomy-with-coding-agents.md",
-            description: "How coding agents help developers reclaim autonomy over their tools and workflows.",
+            previewDescription: "Recovering autonomy means applying expertise with enough velocity that the logistics don't become the core business.",
           } satisfies PostSeedData,
         },
         {

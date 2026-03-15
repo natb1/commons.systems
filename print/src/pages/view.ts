@@ -6,7 +6,7 @@ import type { MediaItem } from "../types.js";
 import { renderViewerShell, initViewer } from "../viewer/shell.js";
 import { createPdfRenderer } from "../viewer/pdf.js";
 
-const BACK_LINK = '<a href="#/" class="viewer-back">&larr; Back to Library</a>';
+const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
 let pendingItem: MediaItem | null = null;
 let pendingUrl: string | null = null;

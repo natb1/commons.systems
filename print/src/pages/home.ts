@@ -22,7 +22,7 @@ function renderMediaList(items: MediaItem[]): string {
           ${mediaTypeBadge(item.mediaType)}
         </div>
         <div class="media-actions">
-          <a href="#/view/${escapeHtml(item.id)}" class="media-view" title="View in Reader" aria-label="View ${escapeHtml(item.title)}">&#128196;</a>
+          <a href="/view/${escapeHtml(item.id)}" class="media-view" title="View in Reader" aria-label="View ${escapeHtml(item.title)}">&#128196;</a>
           <button class="media-download" data-path="${escapeHtml(item.storagePath)}" title="Download" aria-label="Download ${escapeHtml(item.title)}">&#11015;</button>
         </div>
       </li>`;

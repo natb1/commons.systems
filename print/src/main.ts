@@ -1,6 +1,6 @@
 import "missing.css";
 import "./style/theme.css";
-import { createRouter } from "@commons-systems/router";
+import { createHistoryRouter } from "@commons-systems/router";
 import { DataIntegrityError } from "./errors.js";
 import { renderHome, afterRenderHome } from "./pages/home.js";
 import { renderView, afterRenderView, cleanupView } from "./pages/view.js";
@@ -17,8 +17,8 @@ const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
 navEl.links = [
-  { href: "#/", label: "Library" },
-  { href: "#/about", label: "About" },
+  { href: "/", label: "Library" },
+  { href: "/about", label: "About" },
 ];
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => void signOut());
@@ -28,7 +28,7 @@ let currentUser: User | null = null;
 // Show login UI immediately; onAuthStateChanged will update once auth resolves.
 navEl.user = null;
 
-const router = createRouter(
+const router = createHistoryRouter(
   app,
   [
     {

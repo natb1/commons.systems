@@ -8,6 +8,7 @@ import { renderAdmin } from "@commons-systems/blog/pages/admin";
 import { renderInfoPanel, hydrateInfoPanel } from "@commons-systems/blog/components/info-panel";
 import { createRssBlobUrl } from "@commons-systems/blog/feed";
 import { createFetchPost } from "@commons-systems/blog/github";
+import { updateOgMeta } from "@commons-systems/blog/og-meta";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
@@ -44,7 +45,6 @@ const INFO_PANEL_LINK_SECTIONS = [
   { heading: "Links", links: [{ label: "Source", url: "https://github.com/natb1/commons.systems" }] },
 ];
 
-// Arrow function (not declaration) so TS narrows getElementById results as non-null.
 const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
 
@@ -115,6 +115,7 @@ const router = createHistoryRouter(
       afterRender: (outlet, path) => {
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
+        updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined);
         updateInfoPanel();
       },
     },

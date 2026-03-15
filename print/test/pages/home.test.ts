@@ -138,7 +138,7 @@ describe("renderHome", () => {
 
     const html = await renderHome(null);
 
-    expect(html).toContain('href="#/view/book-1"');
+    expect(html).toContain('href="/view/book-1"');
     expect(html).toContain('class="media-view"');
   });
 

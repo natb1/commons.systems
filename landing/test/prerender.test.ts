@@ -7,7 +7,7 @@ describe("prerender seed data", () => {
     const published = posts!.documents.find(
       (d) => d.id === "recovering-autonomy-with-coding-agents",
     );
-    expect((published!.data as Record<string, unknown>).description).toBeDefined();
+    expect((published!.data as Record<string, unknown>).previewDescription).toBeDefined();
   });
 
   it("draft post is not published", () => {
