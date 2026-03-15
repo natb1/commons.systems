@@ -1,5 +1,5 @@
-import { updateRule, deleteRule, createRule, getGroupMembers, type RuleType, type Rule } from "../firestore.js";
-import { renderRow } from "./rules.js";
+import { updateRule, deleteRule, createRule, updateNormalizationRule, deleteNormalizationRule, createNormalizationRule, getGroupMembers, type RuleType, type Rule } from "../firestore.js";
+import { renderRow, renderNormalizationRow } from "./rules.js";
 import { removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, handleActionError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
 
@@ -26,10 +26,18 @@ export function hydrateRulesTable(container: HTMLElement): void {
     });
   }
 
-  function activeFilterType(): RuleType {
+  type FilterType = RuleType | "normalization";
+
+  function activeFilterType(): FilterType {
     const val = container.dataset.activeFilter;
     if (val === "budget_assignment") return "budget_assignment";
+    if (val === "normalization") return "normalization";
     return "categorization";
+  }
+
+  function isNormalizationRow(el: HTMLElement): boolean {
+    const row = el.closest(".rule-row");
+    return row instanceof HTMLElement && row.dataset.ruleType === "normalization";
   }
 
   function getOptionsForInput(input: HTMLInputElement): string[] {
@@ -78,23 +86,38 @@ export function hydrateRulesTable(container: HTMLElement): void {
     if (target.value === target.defaultValue) return;
 
     try {
-      if (target.classList.contains("edit-pattern")) {
-        await updateRule(ruleId, { pattern: target.value });
-      } else if (target.classList.contains("edit-target")) {
-        await updateRule(ruleId, { target: target.value });
-      } else if (target.classList.contains("edit-priority")) {
-        const priority = Number(target.value);
-        if (!Number.isFinite(priority)) {
-          showInputError(target, "Priority must be a number");
+      if (isNormalizationRow(target)) {
+        if (target.classList.contains("edit-pattern")) {
+          await updateNormalizationRule(ruleId, { pattern: target.value });
+        } else if (target.classList.contains("edit-canonical")) {
+          await updateNormalizationRule(ruleId, { canonicalDescription: target.value });
+        } else if (target.classList.contains("edit-priority")) {
+          const priority = Number(target.value);
+          if (!Number.isFinite(priority)) { showInputError(target, "Priority must be a number"); return; }
+          await updateNormalizationRule(ruleId, { priority });
+        } else if (target.classList.contains("edit-date-window")) {
+          const days = Number(target.value);
+          if (!Number.isFinite(days) || days < 0) { showInputError(target, "Date window must be a non-negative number"); return; }
+          await updateNormalizationRule(ruleId, { dateWindowDays: days });
+        } else {
           return;
         }
-        await updateRule(ruleId, { priority });
-      } else if (target.classList.contains("edit-institution")) {
-        await updateRule(ruleId, { institution: target.value || null });
-      } else if (target.classList.contains("edit-account")) {
-        await updateRule(ruleId, { account: target.value || null });
       } else {
-        return;
+        if (target.classList.contains("edit-pattern")) {
+          await updateRule(ruleId, { pattern: target.value });
+        } else if (target.classList.contains("edit-target")) {
+          await updateRule(ruleId, { target: target.value });
+        } else if (target.classList.contains("edit-priority")) {
+          const priority = Number(target.value);
+          if (!Number.isFinite(priority)) { showInputError(target, "Priority must be a number"); return; }
+          await updateRule(ruleId, { priority });
+        } else if (target.classList.contains("edit-institution")) {
+          await updateRule(ruleId, { institution: target.value || null });
+        } else if (target.classList.contains("edit-account")) {
+          await updateRule(ruleId, { account: target.value || null });
+        } else {
+          return;
+        }
       }
       target.defaultValue = target.value;
     } catch (error) {
@@ -110,7 +133,11 @@ export function hydrateRulesTable(container: HTMLElement): void {
       const ruleId = rowRuleId(target);
       if (!ruleId) return;
       try {
-        await deleteRule(ruleId);
+        if (isNormalizationRow(target)) {
+          await deleteNormalizationRule(ruleId);
+        } else {
+          await deleteRule(ruleId);
+        }
         const row = target.closest(".rule-row");
         if (row) row.remove();
       } catch (error) {
@@ -122,25 +149,40 @@ export function hydrateRulesTable(container: HTMLElement): void {
       const groupId = target.dataset.groupId;
       if (!groupId) { console.error("add-rule button missing data-group-id"); return; }
       try {
-        const ruleType = activeFilterType();
+        const filterType = activeFilterType();
         const memberEmails = await getGroupMembers(groupId);
-        const defaultFields = {
-          type: ruleType,
-          pattern: "new rule",
-          target: ruleType === "budget_assignment" ? "Unassigned" : "Uncategorized",
-          priority: 100,
-          institution: null,
-          account: null,
-        };
-        const newId = await createRule(groupId, memberEmails, defaultFields);
 
-        const newRule: Rule = { id: newId, groupId, ...defaultFields };
-        const wrapper = document.createElement("div");
-        wrapper.innerHTML = renderRow(newRule, true);
-        const newRow = wrapper.firstElementChild as HTMLElement;
-        if (window.innerWidth >= 768) {
-          newRow.setAttribute("open", "");
+        let rowHtml: string;
+        if (filterType === "normalization") {
+          const defaultFields = {
+            pattern: "new rule",
+            canonicalDescription: "New Description",
+            patternType: null as string | null,
+            dateWindowDays: 7,
+            priority: 100,
+            institution: null as string | null,
+            account: null as string | null,
+          };
+          const newId = await createNormalizationRule(groupId, memberEmails, defaultFields);
+          rowHtml = renderNormalizationRow({ id: newId, groupId, ...defaultFields }, true);
+        } else {
+          const ruleType = filterType;
+          const defaultFields = {
+            type: ruleType,
+            pattern: "new rule",
+            target: ruleType === "budget_assignment" ? "Unassigned" : "Uncategorized",
+            priority: 100,
+            institution: null,
+            account: null,
+          };
+          const newId = await createRule(groupId, memberEmails, defaultFields);
+          const newRule: Rule = { id: newId, groupId, ...defaultFields };
+          rowHtml = renderRow(newRule, true);
         }
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = rowHtml;
+        const newRow = wrapper.firstElementChild as HTMLElement;
+        if (window.innerWidth >= 768) newRow.setAttribute("open", "");
         container.insertBefore(newRow, target);
       } catch (error) {
         handleActionError(target, error, "add rule");

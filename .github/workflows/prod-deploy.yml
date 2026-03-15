@@ -47,7 +47,9 @@ jobs:
       - name: Check for functions changes
         id: changes
         run: |
-          if git diff --name-only HEAD~1...HEAD | grep -q '^functions/'; then
+          set -euo pipefail
+          CHANGED_FILES=$(git diff --name-only HEAD~1...HEAD)
+          if echo "$CHANGED_FILES" | grep -q '^functions/'; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -75,7 +77,7 @@ jobs:
         if: steps.changes.outputs.changed == 'true'
         run: npx firebase-tools deploy --only functions --force --project "${{ secrets.FIREBASE_PROJECT_ID }}"
       - name: Cleanup credentials
-        if: always() && steps.changes.outputs.changed == 'true'
+        if: always()
         run: rm -f "$CREDS_FILE"
 
   cleanup-preview:

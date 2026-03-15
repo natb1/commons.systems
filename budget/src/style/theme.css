@@ -85,8 +85,22 @@
 /* --- Rules table --- */
 
 #rules-table[data-active-filter="categorization"] .rule-row[data-rule-type="budget_assignment"],
-#rules-table[data-active-filter="budget_assignment"] .rule-row[data-rule-type="categorization"] {
+#rules-table[data-active-filter="categorization"] .rule-row[data-rule-type="normalization"],
+#rules-table[data-active-filter="budget_assignment"] .rule-row[data-rule-type="categorization"],
+#rules-table[data-active-filter="budget_assignment"] .rule-row[data-rule-type="normalization"],
+#rules-table[data-active-filter="normalization"] .rule-row[data-rule-type="categorization"],
+#rules-table[data-active-filter="normalization"] .rule-row[data-rule-type="budget_assignment"] {
   display: none;
+}
+
+.rule-header-normalization {
+  display: none;
+}
+#rules-table[data-active-filter="normalization"] .rule-header-default {
+  display: none;
+}
+#rules-table[data-active-filter="normalization"] .rule-header-normalization {
+  display: grid;
 }
 
 .rule-row input {
@@ -110,6 +124,12 @@
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: subgrid;
+  }
+  .rule-header-normalization {
+    display: none;
+  }
+  #rules-table[data-active-filter="normalization"] .rule-header-normalization {
+    display: grid;
   }
   .rule-header > span {
     font-weight: bold;
@@ -205,4 +225,30 @@
   width: 117px;
   height: 41px;
   vertical-align: middle;
+}
+
+/* --- Normalized transaction groups --- */
+
+.normalized-originals {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.normalized-originals h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.875rem;
+}
+
+.normalized-original {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.875rem;
+  opacity: 0.8;
+}
+
+.normalized-original .amount {
+  text-align: right;
 }
