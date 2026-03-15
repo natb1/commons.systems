@@ -2,7 +2,7 @@
 // The firestoreutil seed runner writes these specs to Firestore using the Admin SDK,
 // which converts Date objects to Timestamps on write.
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { Transaction, Budget, BudgetPeriod, Rule } from "../src/firestore.js";
+import type { Transaction, Budget, BudgetPeriod, Rule, NormalizationRule } from "../src/firestore.js";
 import type { Group } from "@commons-systems/authutil/groups";
 
 /** Seed groups include `members` (used in queries and security rules, omitted from the authutil Group type) */
@@ -26,6 +26,8 @@ type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "periodEnd
 
 /** Seed rules include `memberEmails` for security rules and `groupId` for query filtering */
 type RuleSeedData = Omit<Rule, "id"> & { memberEmails: string[] };
+
+type NormalizationRuleSeedData = Omit<NormalizationRule, "id"> & { memberEmails: string[] };
 
 const budgetDocs: { id: string; data: BudgetSeedData }[] = [
   {
@@ -97,9 +99,9 @@ const budgetPeriodDocs: { id: string; data: BudgetPeriodSeedData }[] = [
       budgetId: "food",
       periodStart: new Date("2025-01-20"),
       periodEnd: new Date("2025-01-27"),
-      total: 45,
-      count: 2,
-      categoryBreakdown: { "Food:Dining": 25, "Food:Coffee": 20 },
+      total: 70,
+      count: 3,
+      categoryBreakdown: { "Food:Dining": 25, "Food:Coffee": 45 },
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies BudgetPeriodSeedData,
@@ -161,6 +163,9 @@ const seedTransactionDocs = [
       statementId: "stmt-2025-01",
       groupId: "household",
       memberEmails: ["test@example.com"],
+      normalizedId: null,
+      normalizedPrimary: true,
+      normalizedDescription: null,
     } satisfies TransactionSeedData,
   },
   {
@@ -178,6 +183,9 @@ const seedTransactionDocs = [
       statementId: "stmt-2025-01",
       groupId: "household",
       memberEmails: ["test@example.com"],
+      normalizedId: null,
+      normalizedPrimary: true,
+      normalizedDescription: null,
     } satisfies TransactionSeedData,
   },
   {
@@ -195,6 +203,9 @@ const seedTransactionDocs = [
       statementId: "stmt-2025-01",
       groupId: "household",
       memberEmails: ["test@example.com"],
+      normalizedId: null,
+      normalizedPrimary: true,
+      normalizedDescription: null,
     } satisfies TransactionSeedData,
   },
   {
@@ -212,6 +223,9 @@ const seedTransactionDocs = [
       statementId: "stmt-2025-01",
       groupId: "household",
       memberEmails: ["test@example.com"],
+      normalizedId: null,
+      normalizedPrimary: true,
+      normalizedDescription: null,
     } satisfies TransactionSeedData,
   },
   {
@@ -229,6 +243,9 @@ const seedTransactionDocs = [
       statementId: "stmt-2025-01",
       groupId: "household",
       memberEmails: ["test@example.com"],
+      normalizedId: null,
+      normalizedPrimary: true,
+      normalizedDescription: null,
     } satisfies TransactionSeedData,
   },
   {
@@ -246,6 +263,9 @@ const seedTransactionDocs = [
       statementId: "stmt-2025-01",
       groupId: "household",
       memberEmails: ["test@example.com"],
+      normalizedId: null,
+      normalizedPrimary: true,
+      normalizedDescription: null,
     } satisfies TransactionSeedData,
   },
   {
@@ -263,6 +283,9 @@ const seedTransactionDocs = [
       statementId: "stmt-2025-01",
       groupId: "household",
       memberEmails: ["test@example.com"],
+      normalizedId: null,
+      normalizedPrimary: true,
+      normalizedDescription: null,
     } satisfies TransactionSeedData,
   },
   {
@@ -280,6 +303,49 @@ const seedTransactionDocs = [
       statementId: "stmt-2025-02",
       groupId: "household",
       memberEmails: ["test@example.com"],
+      normalizedId: null,
+      normalizedPrimary: true,
+      normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-norm-primary",
+    data: {
+      institution: "Example Bank",
+      account: "Checking",
+      description: "CAFE NERO #1234 01/22",
+      amount: 25.0,
+      note: "",
+      category: "Food:Coffee",
+      reimbursement: 0,
+      budget: "food",
+      timestamp: new Date("2025-01-22"),
+      statementId: "stmt-2025-01",
+      groupId: "household",
+      memberEmails: ["test@example.com"],
+      normalizedId: "norm-group-1",
+      normalizedPrimary: true,
+      normalizedDescription: "Cafe Nero",
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-norm-secondary",
+    data: {
+      institution: "Example Bank",
+      account: "Checking",
+      description: "CAFE NERO 01/22 DEBIT CARD",
+      amount: 25.0,
+      note: "",
+      category: "Food:Coffee",
+      reimbursement: 0,
+      budget: "food",
+      timestamp: new Date("2025-01-22"),
+      statementId: "stmt-2025-02",
+      groupId: "household",
+      memberEmails: ["test@example.com"],
+      normalizedId: "norm-group-1",
+      normalizedPrimary: false,
+      normalizedDescription: "Cafe Nero",
     } satisfies TransactionSeedData,
   },
 ];
@@ -365,6 +431,39 @@ const seedRuleDocs: { id: string; data: RuleSeedData }[] = [
   },
 ];
 
+const seedNormalizationRuleDocs: { id: string; data: NormalizationRuleSeedData }[] = [
+  {
+    id: "norm-cafe-nero",
+    data: {
+      pattern: "cafe nero",
+      patternType: "substring",
+      canonicalDescription: "Cafe Nero",
+
+      dateWindowDays: 7,
+      institution: null,
+      account: null,
+      priority: 10,
+      groupId: "household",
+      memberEmails: ["test@example.com"],
+    } satisfies NormalizationRuleSeedData,
+  },
+  {
+    id: "norm-electric",
+    data: {
+      pattern: "electric",
+      patternType: "substring",
+      canonicalDescription: "Electric Utility",
+
+      dateWindowDays: 5,
+      institution: "Example Bank",
+      account: null,
+      priority: 20,
+      groupId: "household",
+      memberEmails: ["test@example.com"],
+    } satisfies NormalizationRuleSeedData,
+  },
+];
+
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
@@ -404,6 +503,9 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             statementId: "stmt-2025-02",
             groupId: "household",
             memberEmails: ["test@example.com"],
+            normalizedId: null,
+            normalizedPrimary: true,
+            normalizedDescription: null,
           } satisfies TransactionSeedData,
         },
         {
@@ -421,6 +523,9 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             statementId: null,
             groupId: "household",
             memberEmails: ["test@example.com"],
+            normalizedId: null,
+            normalizedPrimary: true,
+            normalizedDescription: null,
           } satisfies TransactionSeedData,
         },
       ],
@@ -431,6 +536,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
     { name: "budget-periods", testOnly: true, documents: budgetPeriodDocs },
     { name: "seed-rules", convergent: true, documents: seedRuleDocs },
     { name: "rules", testOnly: true, documents: seedRuleDocs },
+    { name: "seed-normalization-rules", convergent: true, documents: seedNormalizationRuleDocs },
+    { name: "normalization-rules", testOnly: true, documents: seedNormalizationRuleDocs },
   ],
 };
 

@@ -45,6 +45,9 @@ function makeTxn(overrides: Partial<Transaction> = {}): Transaction {
     timestamp: ts("2025-01-15"),
     statementId: null,
     groupId: null,
+    normalizedId: null,
+    normalizedPrimary: true,
+    normalizedDescription: null,
     ...overrides,
   };
 }
@@ -359,12 +362,85 @@ describe("computeAllBudgetBalances", () => {
     expect(batch.get("txn-1")).toBe(single1);
     expect(batch.get("txn-2")).toBe(single2);
   });
+
+  describe("normalization filtering", () => {
+    it("excludes non-primary normalized transactions from balances", () => {
+      const budget = makeBudget({ weeklyAllowance: 150 });
+      const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
+      const primary = makeTxn({
+        id: "txn-primary",
+        amount: 50,
+        normalizedId: "doc-1",
+        normalizedPrimary: true,
+      });
+      const nonPrimary = makeTxn({
+        id: "txn-secondary",
+        amount: 30,
+        normalizedId: "doc-1",
+        normalizedPrimary: false,
+      });
+      const result = computeAllBudgetBalances([primary, nonPrimary], [budget], [period]);
+      expect(result.has("txn-primary")).toBe(true);
+      expect(result.has("txn-secondary")).toBe(false);
+    });
+
+    it("includes primary normalized transaction with a normal balance", () => {
+      const budget = makeBudget({ weeklyAllowance: 150 });
+      const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
+      const primary = makeTxn({
+        id: "txn-primary",
+        amount: 50,
+        normalizedId: "doc-1",
+        normalizedPrimary: true,
+      });
+      const result = computeAllBudgetBalances([primary], [budget], [period]);
+      // 150 - 50 = 100
+      expect(result.get("txn-primary")).toBe(100);
+    });
+
+    it("includes unnormalized and primary, excludes non-primary", () => {
+      const budget = makeBudget({ weeklyAllowance: 200 });
+      const period = makePeriod({ id: "food-w2", budgetId: "food", total: 110 });
+      const unnormalized = makeTxn({
+        id: "txn-unnorm",
+        amount: 40,
+        timestamp: ts("2025-01-14"),
+        normalizedId: null,
+        normalizedPrimary: true,
+      });
+      const primary = makeTxn({
+        id: "txn-primary",
+        amount: 70,
+        timestamp: ts("2025-01-16"),
+        normalizedId: "doc-1",
+        normalizedPrimary: true,
+      });
+      const nonPrimary = makeTxn({
+        id: "txn-secondary",
+        amount: 25,
+        timestamp: ts("2025-01-17"),
+        normalizedId: "doc-1",
+        normalizedPrimary: false,
+      });
+      const result = computeAllBudgetBalances(
+        [unnormalized, primary, nonPrimary],
+        [budget],
+        [period],
+      );
+      // unnormalized: 200 - 40 = 160
+      expect(result.get("txn-unnorm")).toBe(160);
+      // primary: 160 - 70 = 90
+      expect(result.get("txn-primary")).toBe(90);
+      // non-primary excluded
+      expect(result.has("txn-secondary")).toBe(false);
+    });
+  });
 });
 
 describe("seed data consistency", () => {
-  // Verify that seed budget period totals match the sum of net amounts
-  // from seed transactions within each period's time range.
-  // This catches drift between seed transactions and period totals.
+  // Verify budget period totals against a curated subset of seed transactions
+  // that excludes normalized duplicates. The actual seed file includes
+  // seed-norm-primary/secondary, but this test validates only standalone transactions.
 
   interface SeedTxn { amount: number; reimbursement: number; budget: string | null; timestamp: Date }
   interface SeedPeriod { id: string; budgetId: string; periodStart: Date; periodEnd: Date; total: number }
