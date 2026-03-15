@@ -14,6 +14,7 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 
+cleanup_all_stale_processes
 cleanup_stale_hub
 
 detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
@@ -117,6 +118,7 @@ cleanup() {
     kill_tree "$EMULATOR_PID"
     wait "$EMULATOR_PID" 2>/dev/null || true
   fi
+  remove_pid_file || echo "WARNING: remove_pid_file failed" >&2
   cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
   rm -f "$TEMP_FIREBASE_JSON"
   echo "QA server stopped."
@@ -227,6 +229,13 @@ else
 fi
 VITE_PID=$!
 cd "$REPO_ROOT"
+
+# Record child PIDs for orphan cleanup.
+# Both vite and firebase-tools run as "node" per `ps -o comm=`.
+PID_ARGS=()
+if [ -n "$EMULATOR_PID" ]; then PID_ARGS+=("${EMULATOR_PID}:node"); fi
+PID_ARGS+=("${VITE_PID}:node")
+write_pid_file "${PID_ARGS[@]}"
 
 # Poll until Vite is serving
 ELAPSED=0
