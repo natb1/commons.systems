@@ -13,6 +13,5 @@
   },
   "peerDependencies": {
     "firebase": "^12.9.0"
-  },
-  "devDependencies": {}
+  }
 }

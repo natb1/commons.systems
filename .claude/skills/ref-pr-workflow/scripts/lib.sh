@@ -39,8 +39,12 @@ detect_features() {
 }
 
 # Install workspace dependencies if not already present.
-# Uses REPO_ROOT from the calling script's environment.
+# Requires REPO_ROOT to be set by the caller.
 ensure_deps() {
+  if [ -z "${REPO_ROOT:-}" ]; then
+    echo "ERROR: REPO_ROOT is not set" >&2
+    return 1
+  fi
   if [ ! -d "$REPO_ROOT/node_modules" ]; then
     (cd "$REPO_ROOT" && npm ci)
   fi

@@ -63,7 +63,7 @@ fi
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
 
-# Install all dependencies once at the workspace root
+# Install all dependencies once at the workspace root (skip when only running nix/rules checks)
 if [ ${#APP_DIRS[@]} -gt 0 ]; then
   ensure_deps
 fi
