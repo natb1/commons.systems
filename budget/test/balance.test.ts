@@ -440,7 +440,11 @@ describe("computeAllBudgetBalances", () => {
 describe("seed data consistency", () => {
   // Verify budget period totals against a curated subset of seed transactions
   // that excludes normalized duplicates. The actual seed file includes
-  // seed-norm-primary/secondary, but this test validates only standalone transactions.
+  // seed-norm-primary (amount: 25) and seed-norm-secondary (amount: 25), but
+  // only the primary counts toward the period total. This test uses standalone
+  // transactions only, so food-2025-01-20 shows total=45 (25+20) here versus
+  // total=70 (25+20+25 primary) in the actual seed which includes the
+  // normalized primary.
 
   interface SeedTxn { amount: number; reimbursement: number; budget: string | null; timestamp: Date }
   interface SeedPeriod { id: string; budgetId: string; periodStart: Date; periodEnd: Date; total: number }

@@ -1,5 +1,10 @@
+// Build-time script that generates per-post HTML files with OG metadata tags.
+// Reads the post catalog from seed data and injects OG tags into copies of the
+// SPA's index.html, enabling link previews for crawlers that don't execute JS.
+// Run after vite build (see package.json "postbuild" script).
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { escapeHtml } from "@commons-systems/htmlutil";
 import appSeed from "../seeds/firestore.js";
 
 const DIST_DIR = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
@@ -22,34 +27,29 @@ for (const doc of postsCollection.documents) {
   const image = typeof data.image === "string" ? data.image : undefined;
 
   const ogTags = [
-    `<meta property="og:title" content="${escapeAttr(title)}">`,
+    `<meta property="og:title" content="${escapeHtml(title)}">`,
     `<meta property="og:url" content="${SITE_URL}/post/${id}">`,
     `<meta property="og:type" content="article">`,
   ];
 
   if (description) {
-    ogTags.push(`<meta property="og:description" content="${escapeAttr(description)}">`);
-    ogTags.push(`<meta name="description" content="${escapeAttr(description)}">`);
+    ogTags.push(`<meta property="og:description" content="${escapeHtml(description)}">`);
+    ogTags.push(`<meta name="description" content="${escapeHtml(description)}">`);
   }
 
   if (image) {
-    ogTags.push(`<meta property="og:image" content="${escapeAttr(image)}">`);
+    ogTags.push(`<meta property="og:image" content="${escapeHtml(image)}">`);
   }
 
   const ogBlock = ogTags.join("\n    ");
   let html = template.replace("</head>", `    ${ogBlock}\n  </head>`);
+  if (html === template) throw new Error(`</head> marker not found in template`);
+  const beforeTitle = html;
   html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)} | commons.systems</title>`);
+  if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
   const outDir = join(DIST_DIR, "post", id);
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, "index.html"), html);
   console.log(`Pre-rendered: /post/${id}/index.html`);
-}
-
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

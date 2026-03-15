@@ -19,6 +19,7 @@ export function initAnalyticsSafe(app: FirebaseApp): (path: string) => void {
   try {
     return initAnalytics(app);
   } catch (error) {
+    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     console.error("Analytics initialization failed:", error);
     return () => {};
   }
