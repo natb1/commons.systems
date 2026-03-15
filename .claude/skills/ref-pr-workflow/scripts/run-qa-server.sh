@@ -5,7 +5,6 @@ APP_DIR="${1:?Usage: run-qa-server.sh <app-dir>}"
 
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
-APP_PKG="$REPO_ROOT/$APP_DIR/package.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=lib.sh
@@ -16,13 +15,10 @@ EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 
 cleanup_stale_hub
 
-if [ ! -d "$REPO_ROOT/node_modules" ]; then
-  (cd "$REPO_ROOT" && npm ci)
-fi
+ensure_deps
 
 detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
 
-cd "$REPO_ROOT/$APP_DIR"
 cd "$REPO_ROOT"
 
 # Count and allocate all needed ports atomically to avoid OS port recycling

@@ -38,6 +38,14 @@ detect_features() {
   fi
 }
 
+# Install workspace dependencies if not already present.
+# Uses REPO_ROOT from the calling script's environment.
+ensure_deps() {
+  if [ ! -d "$REPO_ROOT/node_modules" ]; then
+    (cd "$REPO_ROOT" && npm ci)
+  fi
+}
+
 # Extract the app name from the app directory path.
 # Args: $1 = app directory (e.g. "hello" or "/path/to/hello")
 get_app_name() {

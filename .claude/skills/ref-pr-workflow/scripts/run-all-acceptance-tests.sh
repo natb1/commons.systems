@@ -4,9 +4,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+
 CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" "$@")
 
-(cd "$REPO_ROOT" && npm ci)
+ensure_deps
 
 FAILURES=()
 TESTED=0

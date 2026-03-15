@@ -6,7 +6,6 @@ PR_NUMBER="${2:?Usage: run-cleanup-preview.sh <app-dir> <pr-number>}"
 
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
-APP_PKG="$REPO_ROOT/$APP_DIR/package.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=lib.sh
@@ -15,9 +14,7 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
 
-if [ ! -d "$REPO_ROOT/node_modules" ]; then
-  (cd "$REPO_ROOT" && npm ci)
-fi
+ensure_deps
 
 detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
 

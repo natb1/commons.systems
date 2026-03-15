@@ -36,10 +36,20 @@ fi
 
 # Discover all apps from workspace list in root package.json
 declare -A ALL_APPS
+if ! workspace_list=$(jq -r '.workspaces[]' "$REPO_ROOT/package.json"); then
+  echo "ERROR: failed to read workspaces from $REPO_ROOT/package.json" >&2
+  exit 1
+fi
+
 while IFS= read -r ws; do
   [ -z "$ws" ] && continue
   ALL_APPS["$ws"]=1
-done < <(jq -r '.workspaces[]' "$REPO_ROOT/package.json")
+done <<< "$workspace_list"
+
+if [ ${#ALL_APPS[@]} -eq 0 ]; then
+  echo "ERROR: no workspaces found in $REPO_ROOT/package.json" >&2
+  exit 1
+fi
 
 # No changed files — nothing to output
 if [ -z "$CHANGED" ]; then
@@ -50,10 +60,14 @@ fi
 declare -A SHARED_PKGS
 for app in "${!ALL_APPS[@]}"; do
   pkg="$REPO_ROOT/$app/package.json"
+  if ! dep_list=$(jq -r '(.dependencies // {}) + (.devDependencies // {}) + (.peerDependencies // {}) | keys[] | select(startswith("@commons-systems/")) | sub("@commons-systems/"; "")' "$pkg"); then
+    echo "ERROR: failed to read dependencies from $pkg" >&2
+    exit 1
+  fi
   while IFS= read -r dep_dir; do
     [ -z "$dep_dir" ] && continue
     SHARED_PKGS["$dep_dir"]+="$app "
-  done < <(jq -r '(.dependencies // {}) + (.devDependencies // {}) | keys[] | select(startswith("@commons-systems/")) | sub("@commons-systems/"; "")' "$pkg" 2>/dev/null)
+  done <<< "$dep_list"
 done
 
 declare -A DIRTY_APPS

@@ -6,7 +6,6 @@ EXTERNAL_BASE_URL="${2:-}"
 
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
-APP_PKG="$REPO_ROOT/$APP_DIR/package.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=lib.sh
@@ -15,9 +14,7 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 
-if [ ! -d "$REPO_ROOT/node_modules" ]; then
-  (cd "$REPO_ROOT" && npm ci)
-fi
+ensure_deps
 
 cd "$REPO_ROOT/$APP_DIR"
 

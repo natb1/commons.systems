@@ -65,7 +65,7 @@ FAILURES=()
 
 # Install all dependencies once at the workspace root
 if [ ${#APP_DIRS[@]} -gt 0 ]; then
-  (cd "$REPO_ROOT" && npm ci)
+  ensure_deps
 fi
 
 # Run app unit tests

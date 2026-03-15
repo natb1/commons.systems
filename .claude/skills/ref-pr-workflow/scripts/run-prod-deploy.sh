@@ -5,7 +5,6 @@ APP_DIR="${1:?Usage: run-prod-deploy.sh <app-dir>}"
 
 # Remember repo root (script must be invoked from repo root)
 REPO_ROOT="$(pwd)"
-APP_PKG="$REPO_ROOT/$APP_DIR/package.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=lib.sh
@@ -14,9 +13,7 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$APP_NAME")
 
-if [ ! -d "$REPO_ROOT/node_modules" ]; then
-  (cd "$REPO_ROOT" && npm ci)
-fi
+ensure_deps
 
 detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
 
@@ -26,8 +23,7 @@ GA_VAR="GA_MEASUREMENT_ID_$(echo "$APP_NAME" | tr '[:lower:]' '[:upper:]')"
 VITE_GA_MEASUREMENT_ID="${!GA_VAR:-}"
 export VITE_GA_MEASUREMENT_ID
 
-# Build.
-# Production build uses the app's compiled-in fallback namespace (e.g. "<app>/prod" from firebase.ts).
+# Build — production uses the app's compiled-in fallback namespace (e.g. "<app>/prod" from firebase.ts).
 cd "$REPO_ROOT/$APP_DIR"
 npm run build
 cd "$REPO_ROOT"
