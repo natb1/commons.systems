@@ -1,6 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-type RelocatedCallback = (location: { start: { index: number } }) => void;
+interface RelocatedLocation {
+  start: { index: number; displayed: { page: number; total: number } };
+  atStart: boolean;
+  atEnd: boolean;
+}
+type RelocatedCallback = (location: RelocatedLocation) => void;
+
+function makeLocation(
+  index: number,
+  page: number,
+  total: number,
+  atStart = false,
+  atEnd = false,
+): RelocatedLocation {
+  return {
+    start: { index, displayed: { page, total } },
+    atStart,
+    atEnd,
+  };
+}
 
 const mockRendition = {
   on: vi.fn(),
@@ -56,32 +75,36 @@ describe("createEpubRenderer", () => {
       expect(epubDiv?.tagName).toBe("DIV");
     });
 
-    it("sets pageCount from spine length and currentPage to 1", async () => {
-      mockSpine.length = 8;
+    it("sets currentPage to 1 after init (atStart)", async () => {
       const renderer = createEpubRenderer();
 
       await renderer.init(container, "https://example.com/book.epub");
 
-      expect(renderer.pageCount).toBe(8);
       expect(renderer.currentPage).toBe(1);
     });
   });
 
   describe("positionLabel", () => {
-    it("returns 'Chapter X / Y'", async () => {
+    it("returns 'Ch. X/Y — p. A/B' format", async () => {
       mockSpine.length = 5;
       const renderer = createEpubRenderer();
 
       await renderer.init(container, "https://example.com/book.epub");
 
-      expect(renderer.positionLabel).toBe("Chapter 1 / 5");
+      expect(renderer.positionLabel).toBe("Ch. 1/5 — p. 1/1");
     });
   });
 
   describe("next", () => {
-    it("calls rendition.next and updates currentPage via relocated event", async () => {
+    it("calls rendition.next when not at end", async () => {
       const renderer = createEpubRenderer();
       await renderer.init(container, "https://example.com/book.epub");
+
+      // Simulate relocated firing to move away from atStart
+      const relocatedCb = mockRendition.on.mock.calls.find(
+        (c: unknown[]) => c[0] === "relocated",
+      )?.[1] as RelocatedCallback;
+      relocatedCb(makeLocation(0, 1, 3, true, false));
 
       mockRendition.once.mockImplementation((_event: string, cb: () => void) => {
         cb();
@@ -91,12 +114,43 @@ describe("createEpubRenderer", () => {
 
       expect(mockRendition.next).toHaveBeenCalled();
     });
+
+    it("does nothing when atEnd", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // Simulate being at end
+      const relocatedCb = mockRendition.on.mock.calls.find(
+        (c: unknown[]) => c[0] === "relocated",
+      )?.[1] as RelocatedCallback;
+      relocatedCb(makeLocation(4, 3, 3, false, true));
+
+      await renderer.next();
+
+      expect(mockRendition.next).not.toHaveBeenCalled();
+    });
   });
 
   describe("prev", () => {
-    it("calls rendition.prev and updates currentPage via relocated event", async () => {
+    it("does nothing when atStart", async () => {
       const renderer = createEpubRenderer();
       await renderer.init(container, "https://example.com/book.epub");
+
+      // atStart is true by default after init
+      await renderer.prev();
+
+      expect(mockRendition.prev).not.toHaveBeenCalled();
+    });
+
+    it("calls rendition.prev when not at start", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // Simulate relocated to move away from start
+      const relocatedCb = mockRendition.on.mock.calls.find(
+        (c: unknown[]) => c[0] === "relocated",
+      )?.[1] as RelocatedCallback;
+      relocatedCb(makeLocation(1, 1, 3, false, false));
 
       mockRendition.once.mockImplementation((_event: string, cb: () => void) => {
         cb();
@@ -149,7 +203,7 @@ describe("createEpubRenderer", () => {
   });
 
   describe("relocated event", () => {
-    it("updates currentPage when relocated fires", async () => {
+    it("updates positionLabel when relocated fires", async () => {
       let relocatedCb: RelocatedCallback | null = null;
       mockRendition.on.mockImplementation((event: string, cb: RelocatedCallback) => {
         if (event === "relocated") relocatedCb = cb;
@@ -159,8 +213,8 @@ describe("createEpubRenderer", () => {
       await renderer.init(container, "https://example.com/book.epub");
 
       expect(relocatedCb).not.toBeNull();
-      relocatedCb!({ start: { index: 3 } });
-      expect(renderer.currentPage).toBe(4);
+      relocatedCb!(makeLocation(2, 4, 10, false, false));
+      expect(renderer.positionLabel).toBe("Ch. 3/5 — p. 4/10");
     });
   });
 });

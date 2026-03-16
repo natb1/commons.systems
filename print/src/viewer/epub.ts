@@ -1,4 +1,4 @@
-import ePub, { type Book, type Rendition } from "epubjs";
+import ePub, { type Book, type Rendition, type Location } from "epubjs";
 import type { ContentRenderer } from "./types.js";
 
 export function createEpubRenderer(
@@ -7,8 +7,12 @@ export function createEpubRenderer(
   let book: Book | null = null;
   let rendition: Rendition | null = null;
   let containerDiv: HTMLDivElement | null = null;
-  let _currentPage = 0;
-  let _pageCount = 0;
+  let _chapterCount = 0;
+  let _chapterIndex = 0; // 0-based
+  let _subPage = 1;
+  let _subPageTotal = 1;
+  let _atStart = true;
+  let _atEnd = false;
   let destroyed = false;
 
   // Suppress unused-parameter lint — onError reserved for future use by
@@ -44,45 +48,56 @@ export function createEpubRenderer(
       if (destroyed) return;
 
       // spine.length exists at runtime but is missing from @types/epubjs
-      _pageCount = (book.spine as unknown as { length: number }).length;
+      _chapterCount = (book.spine as unknown as { length: number }).length;
 
-      rendition.on("relocated", (location: { start: { index: number } }) => {
-        _currentPage = location.start.index + 1;
+      rendition.on("relocated", (location: Location) => {
+        _chapterIndex = location.start.index;
+        _subPage = location.start.displayed.page;
+        _subPageTotal = location.start.displayed.total;
+        _atStart = location.atStart;
+        _atEnd = location.atEnd;
       });
 
       await rendition.display();
-      _currentPage = 1;
+      _chapterIndex = 0;
+      _subPage = 1;
     },
 
     async goToPage(page: number): Promise<void> {
-      if (!rendition || !book || page < 1 || page > _pageCount) return;
+      if (!rendition || !book || page < 1 || page > _chapterCount) return;
       const spineItem = book.spine.get(page - 1);
       if (!spineItem) return;
       await rendition.display(spineItem.href);
     },
 
     async next(): Promise<void> {
-      if (!rendition) return;
+      if (!rendition || _atEnd) return;
       const relocated = waitForRelocated();
       await rendition.next();
       await relocated;
     },
 
     async prev(): Promise<void> {
-      if (!rendition) return;
+      if (!rendition || _atStart) return;
       const relocated = waitForRelocated();
       await rendition.prev();
       await relocated;
     },
 
     get pageCount() {
-      return _pageCount;
+      // Shell uses currentPage >= pageCount to disable "next".
+      // Return 2 so only currentPage=2 (atEnd) disables it.
+      return 2;
     },
     get currentPage() {
-      return _currentPage;
+      // Shell uses currentPage <= 1 to disable "prev".
+      // Return 1 when atStart, 2 when atEnd, otherwise in between.
+      if (_atStart) return 1;
+      if (_atEnd) return 2;
+      return 1.5; // neither boundary — both buttons enabled
     },
     get positionLabel() {
-      return `Chapter ${_currentPage} / ${_pageCount}`;
+      return `Ch. ${_chapterIndex + 1}/${_chapterCount} — p. ${_subPage}/${_subPageTotal}`;
     },
 
     destroy(): void {
