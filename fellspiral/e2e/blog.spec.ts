@@ -39,7 +39,7 @@ test.describe("blog", () => {
       page.locator("#post-content-scenes-from-a-hat"),
     ).toBeVisible();
 
-    // Wait for smooth scroll to settle, then verify the article is near the viewport top.
+    // Wait for content to load and scroll to complete, then verify the article is near the viewport top.
     const article = page.locator("#post-scenes-from-a-hat");
     await expect
       .poll(

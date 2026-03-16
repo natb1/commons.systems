@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+if (typeof globalThis.reportError !== "function") {
+  globalThis.reportError = () => {};
+}
+
 vi.mock("marked", () => ({
   Marked: class {
     parse = vi.fn((md: string) => Promise.resolve(`<p>${md}</p>`));
