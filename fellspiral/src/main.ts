@@ -102,7 +102,7 @@ async function loadPosts(): Promise<string> {
     return renderHomeHtml(cachedPosts, "/post/");
   } catch (error) {
     if (error instanceof TypeError || error instanceof ReferenceError) throw error;
-    console.error("Failed to load posts:", error);
+    reportError(new Error(`Failed to load posts: ${error instanceof Error ? error.message : error}`));
     const isPermissionDenied =
       error instanceof Error &&
       "code" in error &&
@@ -197,6 +197,7 @@ async function refreshAfterAuthChange(): Promise<void> {
 }
 
 onAuthStateChanged(auth, (user) => {
+  if (user?.uid === currentUser?.uid) return;
   currentUser = user;
   refreshAfterAuthChange().catch((err) => {
     if (err instanceof TypeError || err instanceof ReferenceError) {

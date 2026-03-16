@@ -97,7 +97,7 @@ export function hydrateHome(
         ADD_ATTR: ["target"],
       });
     } catch (error) {
-      console.error(`Failed to load post "${post.id}":`, error);
+      reportError(new Error(`Failed to load post "${post.id}": ${error instanceof Error ? error.message : error}`));
       if (!outlet.contains(container)) return;
       contentDiv.innerHTML = "<p>Could not load post content. Try refreshing.</p>";
     }
@@ -110,7 +110,7 @@ export function hydrateHome(
       if (article) {
         const headerHeight = document.querySelector('header')?.offsetHeight ?? 0;
         const y = article.getBoundingClientRect().top + window.scrollY - headerHeight - SCROLL_PADDING_PX;
-        window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+        window.scrollTo({ top: Math.max(0, y), behavior: "instant" });
       }
     });
   }
