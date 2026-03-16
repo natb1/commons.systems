@@ -110,7 +110,7 @@ export function hydrateHome(
       if (article) {
         const headerHeight = document.querySelector('header')?.offsetHeight ?? 0;
         const y = article.getBoundingClientRect().top + window.scrollY - headerHeight - SCROLL_PADDING_PX;
-        window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+        window.scrollTo({ top: Math.max(0, y), behavior: "instant" });
       }
     });
   }

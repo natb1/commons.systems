@@ -183,7 +183,7 @@ describe("hydrateHome", () => {
       // getBoundingClientRect().top is 0 in happy-dom, so Math.max(0, 0 + 0 - 60 - 16) = 0
       const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
       expect(call.top).toBe(0);
-      expect(call.behavior).toBe("smooth");
+      expect(call.behavior).toBe("instant");
     } finally {
       scrollSpy.mockRestore();
       document.body.removeChild(header);
@@ -226,7 +226,7 @@ describe("hydrateHome", () => {
 
       // The single scroll call should come from the second hydration
       const call = scrollSpy.mock.calls[0][0] as ScrollToOptions;
-      expect(call.behavior).toBe("smooth");
+      expect(call.behavior).toBe("instant");
     } finally {
       scrollSpy.mockRestore();
       document.body.removeChild(header);
