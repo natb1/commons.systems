@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances } from "../src/balance";
+import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances } from "../src/balance";
 import type { Budget, BudgetPeriod, Transaction } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -434,6 +434,109 @@ describe("computeAllBudgetBalances", () => {
       // non-primary excluded
       expect(result.has("txn-secondary")).toBe(false);
     });
+  });
+});
+
+describe("computePeriodBalances", () => {
+  it("single budget, single period: returns correct spent and balance", () => {
+    const budget = makeBudget({ id: "food", weeklyAllowance: 150, rollover: "none" });
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
+    ];
+    const result = computePeriodBalances([budget], periods);
+    const balances = result.get("food" as any)!;
+    expect(balances).toHaveLength(1);
+    expect(balances[0].spent).toBe(80);
+    // rollover=none: applyRollover(0, 150, "none") = 150; 150 - 80 = 70
+    expect(balances[0].balance).toBe(70);
+    expect(balances[0].periodStart.toMillis()).toBe(ts("2025-01-06").toMillis());
+  });
+
+  it("multi-period with rollover none: balance resets each period", () => {
+    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "none" });
+    const periods = [
+      makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
+      makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
+    ];
+    const result = computePeriodBalances([budget], periods);
+    const balances = result.get("food" as any)!;
+    expect(balances).toHaveLength(2);
+    // w1: applyRollover(0, 100, "none") = 100; 100 - 60 = 40
+    expect(balances[0].spent).toBe(60);
+    expect(balances[0].balance).toBe(40);
+    // w2: applyRollover(40, 100, "none") = 100 (resets); 100 - 30 = 70
+    expect(balances[1].spent).toBe(30);
+    expect(balances[1].balance).toBe(70);
+  });
+
+  it("multi-period with rollover debt: only negative carries", () => {
+    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "debt" });
+    const periods = [
+      makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 120 }),
+      makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 50 }),
+    ];
+    const result = computePeriodBalances([budget], periods);
+    const balances = result.get("food" as any)!;
+    expect(balances).toHaveLength(2);
+    // w1: applyRollover(0, 100, "debt") = min(0,0)+100 = 100; 100 - 120 = -20
+    expect(balances[0].spent).toBe(120);
+    expect(balances[0].balance).toBe(-20);
+    // w2: applyRollover(-20, 100, "debt") = min(-20,0)+100 = 80; 80 - 50 = 30
+    expect(balances[1].spent).toBe(50);
+    expect(balances[1].balance).toBe(30);
+  });
+
+  it("multi-period with rollover balance: full balance carries", () => {
+    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance" });
+    const periods = [
+      makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+      makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
+    ];
+    const result = computePeriodBalances([budget], periods);
+    const balances = result.get("food" as any)!;
+    expect(balances).toHaveLength(2);
+    // w1: applyRollover(0, 100, "balance") = 0+100 = 100; 100 - 50 = 50
+    expect(balances[0].spent).toBe(50);
+    expect(balances[0].balance).toBe(50);
+    // w2: applyRollover(50, 100, "balance") = 50+100 = 150; 150 - 30 = 120
+    expect(balances[1].spent).toBe(30);
+    expect(balances[1].balance).toBe(120);
+  });
+
+  it("multi-budget: returns separate entries per budget", () => {
+    const foodBudget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "none" });
+    const vacBudget = makeBudget({ id: "vacation", name: "Vacation", weeklyAllowance: 50, rollover: "balance" });
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
+      makePeriod({ id: "vac-w1", budgetId: "vacation", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 20 }),
+    ];
+    const result = computePeriodBalances([foodBudget, vacBudget], periods);
+    expect(result.size).toBe(2);
+
+    const foodBalances = result.get("food" as any)!;
+    expect(foodBalances).toHaveLength(1);
+    expect(foodBalances[0].spent).toBe(60);
+    expect(foodBalances[0].balance).toBe(40); // 100 - 60
+
+    const vacBalances = result.get("vacation" as any)!;
+    expect(vacBalances).toHaveLength(1);
+    expect(vacBalances[0].spent).toBe(20);
+    expect(vacBalances[0].balance).toBe(30); // 50 - 20
+  });
+
+  it("empty periods: returns empty array for each budget", () => {
+    const budget = makeBudget({ id: "food", weeklyAllowance: 100 });
+    const result = computePeriodBalances([budget], []);
+    expect(result.get("food" as any)).toEqual([]);
+  });
+
+  it("budget with no matching periods: returns empty array", () => {
+    const foodBudget = makeBudget({ id: "food", weeklyAllowance: 100 });
+    const periods = [
+      makePeriod({ id: "vac-w1", budgetId: "vacation", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 20 }),
+    ];
+    const result = computePeriodBalances([foodBudget], periods);
+    expect(result.get("food" as any)).toEqual([]);
   });
 });
 
