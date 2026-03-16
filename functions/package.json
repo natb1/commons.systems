@@ -2,7 +2,7 @@
   "name": "@commons-systems/functions",
   "private": true,
   "type": "module",
-  "main": "lib/feed-proxy.js",
+  "main": "lib/index.js",
   "scripts": {
     "build": "tsx scripts/sync-feed-urls.ts && tsc",
     "test": "vitest run",

@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 import { generateRssXml } from "../src/feed";
 import type { PostMeta } from "../src/post-types";
 
-const config = { title: "commons.systems", siteUrl: "https://commons.systems" };
+const config = {
+  title: "commons.systems",
+  siteUrl: "https://commons.systems",
+  feedUrl: "https://commons.systems/feed.xml",
+};
 
 const publishedPosts: PostMeta[] = [
   {
@@ -36,7 +40,7 @@ describe("generateRssXml", () => {
   it("generates valid RSS 2.0 with published posts sorted newest-first", () => {
     const xml = generateRssXml(publishedPosts, config);
     expect(xml).toContain('<?xml version="1.0" encoding="UTF-8"?>');
-    expect(xml).toContain('<rss version="2.0">');
+    expect(xml).toContain('<rss version="2.0"');
     expect(xml).toContain("<channel>");
 
     const newerIdx = xml.indexOf("Newer Post");
@@ -88,10 +92,10 @@ describe("generateRssXml", () => {
     expect(xml).toContain("https://commons.systems/post/older-post");
   });
 
-  it("guid elements have isPermaLink=false", () => {
+  it("guid elements have isPermaLink=true", () => {
     const xml = generateRssXml(publishedPosts, config);
-    expect(xml).toContain('isPermaLink="false"');
-    expect(xml).not.toMatch(/<guid>(?!.*isPermaLink)/);
+    expect(xml).toContain('isPermaLink="true"');
+    expect(xml).not.toContain('isPermaLink="false"');
   });
 
   it("includes pubDate elements", () => {
@@ -100,7 +104,11 @@ describe("generateRssXml", () => {
   });
 
   it("uses config title and siteUrl in channel", () => {
-    const customConfig = { title: "My Blog", siteUrl: "https://myblog.com" };
+    const customConfig = {
+      title: "My Blog",
+      siteUrl: "https://myblog.com",
+      feedUrl: "https://myblog.com/feed.xml",
+    };
     const xml = generateRssXml(publishedPosts, customConfig);
     expect(xml).toContain("<title>My Blog</title>");
     expect(xml).toContain("<link>https://myblog.com</link>");
@@ -108,10 +116,45 @@ describe("generateRssXml", () => {
   });
 
   it("uses custom postLinkPrefix in links", () => {
-    const customConfig = { title: "commons.systems", siteUrl: "https://commons.systems", postLinkPrefix: "post/" };
+    const customConfig = {
+      title: "commons.systems",
+      siteUrl: "https://commons.systems",
+      feedUrl: "https://commons.systems/feed.xml",
+      postLinkPrefix: "post/",
+    };
     const xml = generateRssXml(publishedPosts, customConfig);
     expect(xml).toContain("https://commons.systems/post/newer-post");
     expect(xml).toContain("https://commons.systems/post/older-post");
     expect(xml).not.toContain("#/post/");
+  });
+
+  it("includes xmlns:atom namespace on rss element", () => {
+    const xml = generateRssXml(publishedPosts, config);
+    expect(xml).toContain('xmlns:atom="http://www.w3.org/2005/Atom"');
+  });
+
+  it("includes atom:link rel=self with feedUrl", () => {
+    const xml = generateRssXml(publishedPosts, config);
+    expect(xml).toContain(
+      '<atom:link href="https://commons.systems/feed.xml" rel="self" type="application/rss+xml" />'
+    );
+  });
+
+  it("sets lastBuildDate from newest published post", () => {
+    const xml = generateRssXml(publishedPosts, config);
+    const expected = new Date("2026-02-15T00:00:00Z").toUTCString();
+    expect(xml).toContain(`<lastBuildDate>${expected}</lastBuildDate>`);
+  });
+
+  it("includes docs element", () => {
+    const xml = generateRssXml(publishedPosts, config);
+    expect(xml).toContain(
+      "<docs>https://www.rssboard.org/rss-specification</docs>"
+    );
+  });
+
+  it("includes generator element", () => {
+    const xml = generateRssXml(publishedPosts, config);
+    expect(xml).toContain("<generator>commons.systems</generator>");
   });
 });
