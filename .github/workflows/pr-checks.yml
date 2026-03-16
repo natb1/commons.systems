@@ -46,6 +46,13 @@ jobs:
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$CREDS_FILE"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE" >> "$GITHUB_ENV"
           echo "CREDS_FILE=$CREDS_FILE" >> "$GITHUB_ENV"
+      - name: Deploy Cloud Functions (if changed)
+        run: |
+          if git diff --name-only origin/main...HEAD | grep -q '^functions/'; then
+            npm ci
+            npm run -w functions build
+            npx firebase-tools deploy --only functions --force --project "${{ secrets.FIREBASE_PROJECT_ID }}"
+          fi
       - name: Deploy previews and run smoke tests
         id: deploy
         env:

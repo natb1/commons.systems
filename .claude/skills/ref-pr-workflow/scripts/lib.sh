@@ -31,9 +31,9 @@ detect_features() {
     USES_STORAGE=true
   fi
 
-  # Detect Cloud Functions by checking for /api/ rewrites in firebase.json
+  # Detect Cloud Functions by checking for any function rewrites in firebase.json
   USES_FUNCTIONS=false
-  if [ -d "$repo_root/functions" ] && jq -e '.hosting[] | select(.target == "'"$app_name"'") | .rewrites[]? | select(.source | startswith("/api/"))' "$repo_root/firebase.json" >/dev/null 2>&1; then
+  if [ -d "$repo_root/functions" ] && jq -e '.hosting[] | select(.target == "'"$app_name"'") | .rewrites[]? | select(.function)' "$repo_root/firebase.json" >/dev/null 2>&1; then
     USES_FUNCTIONS=true
   fi
 }

@@ -26,6 +26,13 @@ test.describe("rss feed", () => {
 
   test("RSS icon links to /feed.xml", async ({ page }) => {
     await page.goto("/");
+    // Wait for posts to load (Archive section needs published posts)
+    await page.waitForSelector("#app a[href]", { timeout: 30000 });
+    // On narrow viewports the sidebar is hidden until the panel toggle is clicked
+    const toggle = page.locator("#panel-toggle");
+    if (await toggle.isVisible()) {
+      await toggle.click();
+    }
     await page.waitForSelector("#info-panel .feed-icon", { timeout: 30000 });
     const rssLink = page.locator('#info-panel a[title="RSS"]');
     await expect(rssLink).toHaveAttribute("href", "/feed.xml");

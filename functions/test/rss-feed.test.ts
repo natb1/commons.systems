@@ -219,6 +219,45 @@ describe("handleRssFeed", () => {
     expect(res.body).not.toContain("<item>");
   });
 
+  it("resolves preview channel hostname to production config", async () => {
+    const res = createMockRes();
+    await handleRssFeed(
+      createMockReq("cs-fellspiral-4e12--pr-224-rmzvwgbc.web.app"),
+      res as never,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("<title>fellspiral</title>");
+    expect(res.body).toContain(
+      "<link>https://fellspiral.commons.systems</link>",
+    );
+  });
+
+  it("resolves localhost to emulator config when FIRESTORE_NAMESPACE is set", async () => {
+    const origNs = process.env.FIRESTORE_NAMESPACE;
+    process.env.FIRESTORE_NAMESPACE = "fellspiral/emulator";
+    try {
+      const res = createMockRes();
+      await handleRssFeed(createMockReq("localhost:44023"), res as never);
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain("<title>fellspiral</title>");
+    } finally {
+      if (origNs === undefined) delete process.env.FIRESTORE_NAMESPACE;
+      else process.env.FIRESTORE_NAMESPACE = origNs;
+    }
+  });
+
+  it("returns 400 for localhost without FIRESTORE_NAMESPACE", async () => {
+    const origNs = process.env.FIRESTORE_NAMESPACE;
+    delete process.env.FIRESTORE_NAMESPACE;
+    try {
+      const res = createMockRes();
+      await handleRssFeed(createMockReq("localhost:44023"), res as never);
+      expect(res.statusCode).toBe(400);
+    } finally {
+      if (origNs !== undefined) process.env.FIRESTORE_NAMESPACE = origNs;
+    }
+  });
+
   it("handles posts without description or previewDescription", async () => {
     mockDocs.length = 0;
     mockDocs.push({

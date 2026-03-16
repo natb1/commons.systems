@@ -32,6 +32,47 @@ const APP_CONFIGS: Record<string, AppConfig> = {
   },
 };
 
+// Maps Firebase Hosting site IDs to their production hostnames
+const SITE_TO_HOST: Record<string, string> = {
+  "cs-fellspiral-4e12": "fellspiral.commons.systems",
+  "commons-systems": "commons.systems",
+};
+
+function resolveAppConfig(host: string): AppConfig | undefined {
+  // Exact match (production hostnames)
+  if (APP_CONFIGS[host]) return APP_CONFIGS[host];
+
+  // Preview channel: <site>--<channel>.web.app
+  // Always reads from the production Firestore namespace since the RSS feed
+  // shows published content regardless of preview environment.
+  const previewMatch = host.match(/^([a-z0-9-]+)--[a-z0-9-]+\.web\.app$/);
+  if (previewMatch) {
+    const productionHost = SITE_TO_HOST[previewMatch[1]];
+    if (productionHost) {
+      return APP_CONFIGS[productionHost];
+    }
+  }
+
+  // Emulator: localhost or 127.0.0.1 (stripped of port).
+  // Use FIRESTORE_NAMESPACE env var (set by the acceptance test harness) to
+  // read from the same Firestore path that was seeded.
+  const hostWithoutPort = host.replace(/:\d+$/, "");
+  if (hostWithoutPort === "localhost" || hostWithoutPort === "127.0.0.1") {
+    const ns = process.env.FIRESTORE_NAMESPACE;
+    if (!ns) {
+      return undefined;
+    }
+    const appName = ns.split("/")[0];
+    const prodHost = Object.keys(APP_CONFIGS).find(
+      (h) => APP_CONFIGS[h].namespace.startsWith(`${appName}/`),
+    );
+    if (!prodHost) return undefined;
+    return { ...APP_CONFIGS[prodHost], siteUrl: `http://${host}`, namespace: ns };
+  }
+
+  return undefined;
+}
+
 function escapeXml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -43,7 +84,7 @@ function escapeXml(text: string): string {
 
 export async function handleRssFeed(req: Request, res: Response) {
   const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.hostname;
-  const appConfig = APP_CONFIGS[host];
+  const appConfig = resolveAppConfig(host);
   if (!appConfig) {
     res.status(400).send(`Unknown host: ${host}`);
     return;
