@@ -1,4 +1,14 @@
 import { deflateRawSync } from "node:zlib";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function loadChapterBodies(): string[] {
+  const jsonPath = join(__dirname, "confessions-chapters.json");
+  return JSON.parse(readFileSync(jsonPath, "utf-8")) as string[];
+}
 
 export interface StorageSeedItem {
   path: string;
@@ -39,7 +49,8 @@ function makePdf(pageCount: number): string {
 }
 
 // Builds a minimal valid EPUB (ZIP archive) with the given number of chapters.
-function makeEpub(chapterCount: number): Buffer {
+// chapterBodies: optional array of HTML body content for each chapter.
+function makeEpub(chapterCount: number, chapterBodies: string[] = []): Buffer {
   const files: { name: string; data: Buffer; store?: boolean }[] = [];
 
   // mimetype must be first entry, stored uncompressed
@@ -94,14 +105,16 @@ ${spineItems.join("\n")}
 
   // Chapter XHTML files
   for (let i = 1; i <= chapterCount; i++) {
+    const bodyHtml = chapterBodies[i - 1]
+      ?? `<h1>Chapter ${i}</h1><p>Content of chapter ${i}.</p>`;
     files.push({
       name: `OEBPS/chapter${i}.xhtml`,
       data: Buffer.from(
         `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>Chapter ${i}</title></head>
-<body><h1>Chapter ${i}</h1><p>Content of chapter ${i}.</p></body>
+<head><title>Book ${i}</title></head>
+<body>${bodyHtml}</body>
 </html>`),
     });
   }
@@ -203,7 +216,7 @@ const testPrivateMeta = { publicDomain: "false", "test@example.com": "member" };
 const storageSeed: StorageSeedItem[] = [
   {
     path: "print/prod/media/pg3296-images-3.epub",
-    content: makeEpub(3),
+    content: makeEpub(3, loadChapterBodies()),
     metadata: publicMeta,
   },
   {
