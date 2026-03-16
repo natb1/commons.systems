@@ -10,8 +10,7 @@ vi.mock("firebase-admin/app", () => ({
 
 vi.mock("firebase-admin/firestore", () => {
   const get = vi.fn(() => Promise.resolve({ docs: mockDocs }));
-  const orderBy = vi.fn(() => ({ get }));
-  const where = vi.fn(() => ({ orderBy }));
+  const where = vi.fn(() => ({ get }));
   const collection = vi.fn(() => ({ where }));
   return {
     getFirestore: () => ({ collection }),
@@ -120,18 +119,38 @@ describe("handleRssFeed", () => {
     expect(where).toHaveBeenCalledWith("published", "==", true);
   });
 
-  it("sorts posts newest-first", async () => {
-    const { getFirestore } = await import("firebase-admin/firestore");
-    const db = getFirestore();
-    const collection = db.collection as ReturnType<typeof vi.fn>;
+  it("sorts posts newest-first in output", async () => {
+    // Provide docs in oldest-first order to verify in-memory sort
+    mockDocs.length = 0;
+    mockDocs.push(
+      {
+        id: "older-post",
+        data: () => ({
+          title: "Older Post",
+          published: true,
+          publishedAt: "2026-01-10T00:00:00Z",
+          filename: "older.md",
+        }),
+      },
+      {
+        id: "newer-post",
+        data: () => ({
+          title: "Newer Post",
+          published: true,
+          publishedAt: "2026-02-15T00:00:00Z",
+          filename: "newer.md",
+          previewDescription: "A newer post",
+        }),
+      },
+    );
     const res = createMockRes();
     await handleRssFeed(
       createMockReq("fellspiral.commons.systems"),
       res as never,
     );
-    const orderBy = collection.mock.results[0].value.where.mock.results[0].value
-      .orderBy as ReturnType<typeof vi.fn>;
-    expect(orderBy).toHaveBeenCalledWith("publishedAt", "desc");
+    const newerIdx = res.body.indexOf("Newer Post");
+    const olderIdx = res.body.indexOf("Older Post");
+    expect(newerIdx).toBeLessThan(olderIdx);
   });
 
   it("escapes XML entities in title and description", async () => {

@@ -93,20 +93,29 @@ export async function handleRssFeed(req: Request, res: Response) {
   if (getApps().length === 0) initializeApp();
   const db = getFirestore();
 
+  // Query only with the equality filter; sort in memory to avoid requiring a
+  // composite Firestore index (the emulator doesn't enforce index requirements,
+  // so this mismatch only surfaces in production / preview deploys).
   const snapshot = await db
     .collection(`${appConfig.namespace}/posts`)
     .where("published", "==", true)
-    .orderBy("publishedAt", "desc")
     .get();
+
+  // Sort descending by publishedAt in memory
+  const docs = [...snapshot.docs].sort((a, b) => {
+    const aDate = new Date(a.data().publishedAt).getTime();
+    const bDate = new Date(b.data().publishedAt).getTime();
+    return bDate - aDate;
+  });
 
   const feedUrl = `${appConfig.siteUrl}/feed.xml`;
 
   const lastBuildDate =
-    snapshot.docs.length > 0
-      ? `\n    <lastBuildDate>${new Date(snapshot.docs[0].data().publishedAt).toUTCString()}</lastBuildDate>`
+    docs.length > 0
+      ? `\n    <lastBuildDate>${new Date(docs[0].data().publishedAt).toUTCString()}</lastBuildDate>`
       : "";
 
-  const items = snapshot.docs
+  const items = docs
     .map((doc) => {
       const d = doc.data();
       const postUrl = `${escapeXml(appConfig.siteUrl)}/${escapeXml(appConfig.postLinkPrefix)}${escapeXml(doc.id)}`;
