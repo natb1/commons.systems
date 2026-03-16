@@ -1,5 +1,7 @@
-import { updateBudget, type BudgetId } from "../firestore.js";
+import { Timestamp } from "firebase/firestore";
+import { updateBudget, type Budget, type BudgetId, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod, type Rollover } from "../firestore.js";
 import { showInputError, handleSaveError } from "./hydrate-util.js";
+import { renderBudgetChart } from "./budgets-chart.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
   const row = el.closest(".budget-row");
@@ -65,4 +67,60 @@ export function hydrateBudgetTable(container: HTMLElement): void {
       handleSaveError(target, error, "budget");
     }
   });
+}
+
+function deserializeBudgets(raw: string): Budget[] {
+  const parsed = JSON.parse(raw) as Array<{ id: string; name: string; weeklyAllowance: number; rollover: string }>;
+  return parsed.map(b => ({
+    id: b.id as BudgetId,
+    name: b.name,
+    weeklyAllowance: b.weeklyAllowance,
+    rollover: b.rollover as Rollover,
+    groupId: null,
+  }));
+}
+
+function deserializePeriods(raw: string): BudgetPeriod[] {
+  const parsed = JSON.parse(raw) as SerializedBudgetPeriod[];
+  return parsed.map(p => ({
+    id: p.id as BudgetPeriodId,
+    budgetId: p.budgetId as BudgetId,
+    periodStart: Timestamp.fromMillis(p.periodStartMs),
+    periodEnd: Timestamp.fromMillis(p.periodEndMs),
+    total: p.total,
+    count: p.count,
+    categoryBreakdown: p.categoryBreakdown,
+    groupId: null,
+  }));
+}
+
+export function hydrateBudgetChart(container: HTMLElement): void {
+  const budgetsRaw = container.dataset.budgets;
+  const periodsRaw = container.dataset.periods;
+  if (!budgetsRaw || !periodsRaw) return;
+
+  const budgets = deserializeBudgets(budgetsRaw);
+  const periods = deserializePeriods(periodsRaw);
+  let windowWeeks = 12;
+
+  function render(): void {
+    renderBudgetChart(container, { budgets, periods, windowWeeks });
+  }
+
+  render();
+
+  const windowSelect = document.getElementById("chart-window") as HTMLSelectElement | null;
+  if (windowSelect) {
+    windowSelect.addEventListener("change", () => {
+      windowWeeks = Number(windowSelect.value);
+      render();
+    });
+  }
+
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+  const observer = new ResizeObserver(() => {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(render, 150);
+  });
+  observer.observe(container);
 }

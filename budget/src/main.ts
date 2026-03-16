@@ -9,7 +9,7 @@ import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { RenderPageOptions } from "./pages/render-options.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
-import { hydrateBudgetTable } from "./pages/budgets-hydrate.js";
+import { hydrateBudgetTable, hydrateBudgetChart } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
 import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/authutil/groups";
@@ -50,7 +50,7 @@ function selectedGroup(): Group | null {
   return state.groups.find((g) => g.id === param) ?? state.groups[0];
 }
 
-navEl.links = [{ href: "/", label: "transactions" }, { href: "/budgets", label: "budgets" }, { href: "/rules", label: "rules" }];
+navEl.links = [{ href: "/", label: "budgets" }, { href: "/transactions", label: "transactions" }, { href: "/rules", label: "rules" }];
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => {
   signOut().catch((error) => console.error("Unexpected sign-out error:", error));
@@ -93,8 +93,8 @@ function renderOptions(): RenderPageOptions {
 const router = createHistoryRouter(
   app,
   [
-    { path: "/", render: () => renderHome(renderOptions()) },
-    { path: "/budgets", render: () => renderBudgets(renderOptions()) },
+    { path: "/", render: () => renderBudgets(renderOptions()) },
+    { path: "/transactions", render: () => renderHome(renderOptions()) },
     { path: "/rules", render: () => renderRules(renderOptions()) },
   ],
   {
@@ -150,6 +150,7 @@ function hydrateTable(
 
 const observer = new MutationObserver(() => {
   hydrateTable("#transactions-table", hydrateTransactionTable);
+  hydrateTable("#budgets-chart", hydrateBudgetChart);
   hydrateTable("#budgets-table", hydrateBudgetTable);
   hydrateTable("#rules-table", hydrateRulesTable);
 });

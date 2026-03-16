@@ -24,7 +24,7 @@ function compareByTimestampThenId(a: TimestampedTransaction, b: TimestampedTrans
   return 0;
 }
 
-function applyRollover(running: number, weeklyAllowance: number, rollover: Rollover): number {
+export function applyRollover(running: number, weeklyAllowance: number, rollover: Rollover): number {
   switch (rollover) {
     case "none":
       return weeklyAllowance;
@@ -35,7 +35,7 @@ function applyRollover(running: number, weeklyAllowance: number, rollover: Rollo
   }
 }
 
-function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
+export function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
   return periods
     .filter((p) => p.budgetId === budgetId)
     .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
@@ -114,6 +114,35 @@ export function computeBudgetBalance(
   if (!found) return null;
 
   return running;
+}
+
+export interface PeriodBalance {
+  readonly periodStart: Timestamp;
+  readonly spent: number;
+  readonly balance: number;
+}
+
+export function computePeriodBalances(
+  budgets: Budget[],
+  periods: BudgetPeriod[],
+): Map<BudgetId, PeriodBalance[]> {
+  const result = new Map<BudgetId, PeriodBalance[]>();
+  for (const budget of budgets) {
+    const sorted = periodsForBudget(periods, budget.id);
+    const balances: PeriodBalance[] = [];
+    let accumulated = 0;
+    for (const period of sorted) {
+      const running = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
+      accumulated = running - period.total;
+      balances.push({
+        periodStart: period.periodStart,
+        spent: period.total,
+        balance: accumulated,
+      });
+    }
+    result.set(budget.id, balances);
+  }
+  return result;
 }
 
 export function computeAllBudgetBalances(

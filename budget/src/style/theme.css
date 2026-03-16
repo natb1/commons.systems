@@ -82,6 +82,19 @@
   border-radius: 4px;
 }
 
+/* --- Budget chart --- */
+
+#budgets-chart-controls { margin-bottom: 0.5rem; }
+#budgets-chart { width: 100%; margin-bottom: 1rem; }
+#budgets-chart svg { width: 100%; height: auto; }
+#chart-window {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
 /* --- Rules table --- */
 
 #rules-table[data-active-filter="categorization"] .rule-row[data-rule-type="budget_assignment"],
