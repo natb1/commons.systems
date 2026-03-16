@@ -5,6 +5,7 @@ import { getMediaDownloadUrl } from "../storage.js";
 import type { MediaItem } from "../types.js";
 import { renderViewerShell, initViewer } from "../viewer/shell.js";
 import { createPdfRenderer } from "../viewer/pdf.js";
+import { createEpubRenderer } from "../viewer/epub.js";
 
 const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
@@ -63,7 +64,9 @@ export function afterRenderView(outlet: HTMLElement): void {
   pendingItem = null;
   pendingUrl = null;
 
-  if (item.mediaType !== "pdf") return;
-
-  cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url);
+  if (item.mediaType === "pdf") {
+    cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url);
+  } else if (item.mediaType === "epub") {
+    cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), url);
+  }
 }

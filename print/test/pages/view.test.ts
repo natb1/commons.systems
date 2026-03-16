@@ -27,10 +27,15 @@ vi.mock("../../src/viewer/pdf.js", () => ({
   createPdfRenderer: vi.fn().mockReturnValue({}),
 }));
 
-import { renderView } from "../../src/pages/view";
+vi.mock("../../src/viewer/epub.js", () => ({
+  createEpubRenderer: vi.fn().mockReturnValue({}),
+}));
+
+import { renderView, afterRenderView, cleanupView } from "../../src/pages/view";
 import type { MediaItem } from "../../src/types";
 import { getMediaDownloadUrl } from "../../src/storage";
-import { renderViewerShell } from "../../src/viewer/shell";
+import { renderViewerShell, initViewer } from "../../src/viewer/shell";
+import { createEpubRenderer } from "../../src/viewer/epub";
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
   return {
@@ -166,6 +171,35 @@ describe("renderView", () => {
       await renderView("item-1", null);
 
       expect(renderViewerShell).toHaveBeenCalledWith(item);
+    });
+  });
+
+  describe("afterRenderView", () => {
+    beforeEach(() => {
+      cleanupView();
+    });
+
+    it("dispatches epub media type to createEpubRenderer", async () => {
+      const item = makeMediaItem({ mediaType: "epub", storagePath: "media/book.epub" });
+      mockGetMediaItem.mockResolvedValue(item);
+
+      await renderView("item-1", mockUser);
+
+      const outlet = document.createElement("div");
+      afterRenderView(outlet);
+
+      expect(initViewer).toHaveBeenCalledWith(
+        outlet,
+        expect.any(Function),
+        "https://example.com/download",
+      );
+
+      const factory = (initViewer as ReturnType<typeof vi.fn>).mock.calls.find(
+        (call: unknown[]) => call[2] === "https://example.com/download",
+      )![1] as (onError: (err: unknown) => void) => unknown;
+      factory(() => {});
+
+      expect(createEpubRenderer).toHaveBeenCalled();
     });
   });
 });

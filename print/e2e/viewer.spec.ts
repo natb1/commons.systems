@@ -14,7 +14,7 @@ test.describe("viewer", () => {
   test("viewer loads for PDF item", async ({ page }) => {
     await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
-    await expect(page.locator("#viewer-canvas")).toBeVisible();
+    await expect(page.locator(".viewer-canvas-wrap canvas")).toBeVisible();
     await expect(page.locator(".viewer-position")).toContainText("1 / 3");
   });
 
@@ -110,5 +110,60 @@ test.describe("viewer", () => {
       "data-orientation",
       "portrait",
     );
+  });
+
+  test("viewer loads for EPUB item", async ({ page }) => {
+    await page.goto("/view/gutenberg-3296");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-epub-container")).toBeVisible();
+    await expect(page.locator(".viewer-position")).toContainText("Chapter");
+  });
+
+  test("chapter navigation works", async ({ page }) => {
+    await page.goto("/view/gutenberg-3296");
+    await expect(page.locator(".viewer-position")).toContainText(
+      "Chapter 1 / 3",
+      { timeout: 15000 },
+    );
+
+    const prev = page.locator(".viewer-prev");
+    const next = page.locator(".viewer-next");
+
+    // Chapter 1: prev disabled, next enabled
+    await expect(prev).toBeDisabled();
+    await expect(next).toBeEnabled();
+
+    // Go to chapter 2
+    await next.click();
+    await expect(page.locator(".viewer-position")).toContainText(
+      "Chapter 2 / 3",
+    );
+    await expect(prev).toBeEnabled();
+    await expect(next).toBeEnabled();
+
+    // Go to chapter 3 (last)
+    await next.click();
+    await expect(page.locator(".viewer-position")).toContainText(
+      "Chapter 3 / 3",
+    );
+    await expect(prev).toBeEnabled();
+    await expect(next).toBeDisabled();
+
+    // Go back to chapter 2
+    await prev.click();
+    await expect(page.locator(".viewer-position")).toContainText(
+      "Chapter 2 / 3",
+    );
+  });
+
+  test("EPUB metadata is visible in panel", async ({ page }) => {
+    await page.goto("/view/gutenberg-3296");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+
+    await expect(page.locator(".viewer-title")).toContainText("Confessions");
+    await expect(page.locator(".viewer-panel .media-badge")).toContainText(
+      "epub",
+    );
+    await expect(page.locator(".viewer-pd")).toContainText("Public Domain");
   });
 });

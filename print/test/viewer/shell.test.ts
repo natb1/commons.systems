@@ -34,12 +34,12 @@ describe("renderViewerShell", () => {
     expect(html).toContain('data-orientation="landscape"');
   });
 
-  it("contains .viewer-content with .viewer-canvas-wrap and canvas#viewer-canvas", () => {
+  it("contains .viewer-content with .viewer-canvas-wrap (no embedded canvas)", () => {
     const html = renderViewerShell(makeMediaItem());
 
     expect(html).toContain('class="viewer-content"');
     expect(html).toContain('class="viewer-canvas-wrap"');
-    expect(html).toContain('id="viewer-canvas"');
+    expect(html).not.toContain('id="viewer-canvas"');
   });
 
   it("contains .viewer-panel aside element", () => {
