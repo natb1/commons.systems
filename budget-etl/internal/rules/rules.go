@@ -253,7 +253,7 @@ func autoNormalize(txns []store.NormTxn, normalized map[string]bool) []store.Nor
 // ApplyNormalization groups duplicate transactions and returns updates that
 // assign normalizedId, normalizedPrimary, and normalizedDescription.
 //
-// Step 1: Auto-normalize — transactions with identical description, amount,
+// Step 1: Auto-normalize — transactions with matching description (case-insensitive), amount,
 // and date from different statements are grouped without a rule.
 //
 // Step 2: Rule-based — remaining transactions are matched against rules

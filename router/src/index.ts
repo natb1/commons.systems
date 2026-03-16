@@ -48,7 +48,7 @@ function createNavigator(
         // Defer programming errors so they surface as uncaught in devtools
         setTimeout(() => { throw e; }, 0);
       } else {
-        console.error("onNavigate error:", e);
+        reportError(e);
       }
     }
     const route = matchRoute(routes, path);
@@ -67,7 +67,7 @@ function createNavigator(
             setTimeout(() => { throw afterError; }, 0);
             return;
           }
-          console.error("afterRender error:", afterError);
+          reportError(afterError);
           outlet.insertAdjacentHTML(
             "beforeend",
             "<p>Some content failed to load. Try refreshing.</p>",

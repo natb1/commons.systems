@@ -23,11 +23,16 @@ describe("createHistoryRouter", () => {
       { path: "/about", render: () => "<h2>About</h2>" },
     ];
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
   });
 
   afterEach(() => {
     router?.destroy();
     consoleErrorSpy.mockRestore();
+    vi.mocked(globalThis.reportError).mockRestore();
   });
 
   it("renders default route", async () => {
