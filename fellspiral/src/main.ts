@@ -6,7 +6,7 @@ import { createHistoryRouter, parsePath } from "@commons-systems/router";
 import { renderHomeHtml, hydrateHome } from "@commons-systems/blog/pages/home";
 import { renderAdmin } from "@commons-systems/blog/pages/admin";
 import { renderInfoPanel, hydrateInfoPanel, type LinkSection } from "@commons-systems/blog/components/info-panel";
-import { createRssBlobUrl } from "@commons-systems/blog/feed";
+
 import { createFetchPost } from "@commons-systems/blog/github";
 import { updateOgMeta } from "@commons-systems/blog/og-meta";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
@@ -36,11 +36,10 @@ new ResizeObserver(([entry]) => {
 let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
 let lastSkippedCount = 0;
-let rssBlobUrl: string | undefined;
 let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("fellspiral/post");
-const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://cs-fellspiral-4e12.web.app", postLinkPrefix: "post/" };
+const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://fellspiral.commons.systems" };
 const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
   {
     links: [
@@ -61,14 +60,11 @@ const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
 const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
 
-  if (rssBlobUrl) URL.revokeObjectURL(rssBlobUrl);
-  rssBlobUrl = createRssBlobUrl(cachedPosts, RSS_CONFIG);
-
   infoPanel.innerHTML = renderInfoPanel({
     linkSections: INFO_PANEL_LINK_SECTIONS,
     topPosts: cachedPosts,
     blogRoll: BLOG_ROLL_ENTRIES,
-    rssFeedUrl: rssBlobUrl,
+    rssFeedUrl: "/feed.xml",
     opmlUrl: "/blogroll.opml",
     postLinkPrefix: "/post/",
   });
