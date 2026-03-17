@@ -52,4 +52,17 @@ test.describe("budgets", () => {
     const count = await rects.count();
     expect(count).toBeGreaterThan(0);
   });
+
+  test("budget metrics section visible @smoke", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#budget-metrics")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#budget-metrics")).toContainText(/\$/);
+  });
+
+  test("metrics section contains income and budget labels", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#budget-metrics")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#budget-metrics")).toContainText("12-Week Avg Weekly Income");
+    await expect(page.locator("#budget-metrics")).toContainText("Total Weekly Budget");
+  });
 });
