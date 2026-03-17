@@ -48,7 +48,8 @@ function loadLocalPosition(mediaId: string): string | null {
   try {
     return localStorage.getItem(localStorageKey(mediaId));
   } catch (e) {
-    console.warn("Could not load reading position from localStorage:", e);
+    if (e instanceof TypeError || e instanceof ReferenceError) throw e;
+    reportError(new Error("Could not load reading position from localStorage", { cause: e }));
     return null;
   }
 }
@@ -57,7 +58,8 @@ function saveLocalPosition(mediaId: string, position: string): void {
   try {
     localStorage.setItem(localStorageKey(mediaId), position);
   } catch (e) {
-    console.warn("Could not save reading position to localStorage:", e);
+    if (e instanceof TypeError || e instanceof ReferenceError) throw e;
+    reportError(new Error("Could not save reading position to localStorage", { cause: e }));
   }
 }
 
@@ -81,7 +83,7 @@ export function initViewer(
   document.body.classList.add("viewer-active");
 
   function handleRenderError(err: unknown) {
-    console.error("Render failed:", err);
+    reportError(new Error("Render failed", { cause: err }));
     position.textContent = "Render failed";
   }
 
@@ -116,7 +118,8 @@ export function initViewer(
       lastSavedPosition = pos;
       if (uid) {
         saveReadingPosition(uid, mediaId, pos).catch((err) => {
-          console.error("Failed to save reading position:", err);
+          if (err instanceof TypeError || err instanceof ReferenceError) throw err;
+          reportError(new Error("Failed to save reading position", { cause: err }));
         });
       } else {
         saveLocalPosition(mediaId, pos);
@@ -133,7 +136,7 @@ export function initViewer(
   }
 
   function handleNavError(err: unknown) {
-    console.error("Page navigation failed:", err);
+    reportError(new Error("Page navigation failed", { cause: err }));
     position.textContent = "Navigation failed";
   }
 
@@ -168,7 +171,8 @@ export function initViewer(
       try {
         savedPosition = await getReadingPosition(uid, mediaId);
       } catch (err) {
-        console.error("Failed to restore reading position:", err);
+        if (err instanceof TypeError || err instanceof ReferenceError) throw err;
+        reportError(new Error("Failed to restore reading position", { cause: err }));
       }
     } else {
       savedPosition = loadLocalPosition(mediaId);
@@ -177,7 +181,8 @@ export function initViewer(
     await renderer.init(canvasWrap, url, savedPosition ?? undefined);
     updateNav();
   })().catch((err) => {
-    console.error("Failed to load document:", err);
+    if (err instanceof TypeError || err instanceof ReferenceError) throw err;
+    reportError(new Error("Failed to load document", { cause: err }));
     position.textContent = "Failed to load";
   });
 

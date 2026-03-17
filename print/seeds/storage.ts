@@ -122,7 +122,7 @@ ${spineItems.join("\n")}
   return buildZip(files);
 }
 
-// Minimal ZIP archive builder (PKZIP APPNOTE 6.3.3 compatible).
+// Minimal ZIP archive builder (subset of PKZIP APPNOTE 6.3.3; STORE and DEFLATE only).
 function buildZip(
   entries: { name: string; data: Buffer; store?: boolean }[],
 ): Buffer {

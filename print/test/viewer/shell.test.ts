@@ -180,10 +180,15 @@ describe("initViewer", () => {
     vi.clearAllMocks();
     outlet = document.createElement("div");
     outlet.innerHTML = renderViewerShell(makeMediaItem());
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.mocked(globalThis.reportError).mockRestore();
   });
 
   it("disables prev and enables next based on canGoPrev/canGoNext", async () => {

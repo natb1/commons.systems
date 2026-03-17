@@ -23,7 +23,7 @@ export function createEpubRenderer(
   function waitForRelocated(): Promise<void> {
     return new Promise<void>((resolve) => {
       if (!rendition) { resolve(); return; }
-      const timer = setTimeout(() => { console.warn("waitForRelocated: timed out after 5s"); resolve(); }, 5000);
+      const timer = setTimeout(() => { reportError(new Error("waitForRelocated: timed out after 5s")); resolve(); }, 5000);
       rendition.once("relocated", () => { clearTimeout(timer); resolve(); });
     });
   }

@@ -63,6 +63,14 @@ describe("createEpubRenderer", () => {
     mockSpine.length = 5;
     mockSpine.get.mockImplementation((index: number) => ({ href: `chapter-${index}.xhtml` }));
     container = document.createElement("div");
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(globalThis.reportError).mockRestore();
   });
 
   describe("init", () => {
