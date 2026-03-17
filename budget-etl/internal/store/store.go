@@ -160,7 +160,7 @@ func (c *Client) UpsertTransactions(ctx context.Context, group GroupInfo, txns [
 		// Build document references
 		refs := make([]*firestore.DocumentRef, len(chunk))
 		for j, txn := range chunk {
-			refs[j] = col.Doc(transactionDocID(txn.StatementID, txn.TransactionID))
+			refs[j] = col.Doc(TransactionDocID(txn.StatementID, txn.TransactionID))
 		}
 
 		// Batch read to check which documents exist
@@ -194,8 +194,8 @@ func (c *Client) UpsertTransactions(ctx context.Context, group GroupInfo, txns [
 	return result, nil
 }
 
-// dollarAmount converts int64 cents to float64 dollars for the Firestore schema.
-func dollarAmount(cents int64) float64 { return float64(cents) / 100 }
+// DollarAmount converts int64 cents to float64 dollars.
+func DollarAmount(cents int64) float64 { return float64(cents) / 100 }
 
 // allFields returns a map of all transaction document fields including user-editable defaults.
 // Amount is converted from int64 cents to float64 dollars for the Firestore schema.
@@ -226,7 +226,7 @@ func importFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 		"institution":  txn.Institution,
 		"account":      txn.Account,
 		"description":  txn.Description,
-		"amount":       dollarAmount(txn.Amount),
+		"amount":       DollarAmount(txn.Amount),
 		"timestamp":    txn.Timestamp,
 		"statementId":  txn.StatementID,
 		"groupId":      group.ID,
@@ -234,11 +234,11 @@ func importFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 	}
 }
 
-// transactionDocID generates a deterministic Firestore document ID from a
-// statement ID and transaction ID using a truncated sha256 hash (10 bytes /
-// 20 hex characters). Collision probability is negligible for the expected
-// transaction volume (< 1 million documents).
-func transactionDocID(statementID, transactionID string) string {
+// TransactionDocID generates a deterministic document ID from a statement ID
+// and transaction ID using a truncated sha256 hash (10 bytes / 20 hex characters).
+// Collision probability is negligible for the expected transaction volume
+// (< 1 million documents).
+func TransactionDocID(statementID, transactionID string) string {
 	if statementID == "" || transactionID == "" {
 		panic(fmt.Sprintf("transactionDocID: empty input (statement=%q, txn=%q)", statementID, transactionID))
 	}
@@ -608,6 +608,125 @@ func (c *Client) LoadNormalizationRules(ctx context.Context, groupID string) ([]
 	}
 
 	log.Printf("loaded %d normalization rules for group %s", len(result), groupID)
+	return result, nil
+}
+
+// BudgetDoc holds a budget document read from Firestore.
+type BudgetDoc struct {
+	ID              string
+	Name            string
+	WeeklyAllowance float64
+	Rollover        string // "none", "debt", "balance"
+}
+
+// LoadBudgets reads budgets from budget/{env}/budgets, filtered by groupId.
+func (c *Client) LoadBudgets(ctx context.Context, groupID string) ([]BudgetDoc, error) {
+	col := c.fs.Collection(fmt.Sprintf("budget/%s/budgets", c.env))
+	docs, err := col.Where("groupId", "==", groupID).Documents(ctx).GetAll()
+	if err != nil {
+		return nil, fmt.Errorf("querying budgets: %w", err)
+	}
+
+	result := make([]BudgetDoc, 0, len(docs))
+	for _, doc := range docs {
+		d := doc.Data()
+		b := BudgetDoc{ID: doc.Ref.ID}
+		v, ok := d["name"].(string)
+		if !ok {
+			return nil, fmt.Errorf("budget %s: field 'name' is not a string (got %T)", doc.Ref.ID, d["name"])
+		}
+		b.Name = v
+		switch wa := d["weeklyAllowance"].(type) {
+		case float64:
+			b.WeeklyAllowance = wa
+		case int64:
+			b.WeeklyAllowance = float64(wa)
+		default:
+			return nil, fmt.Errorf("budget %s: field 'weeklyAllowance' is not a number (got %T)", doc.Ref.ID, d["weeklyAllowance"])
+		}
+		if v, ok := d["rollover"].(string); ok {
+			b.Rollover = v
+		} else if d["rollover"] != nil {
+			return nil, fmt.Errorf("budget %s: field 'rollover' is not a string (got %T)", doc.Ref.ID, d["rollover"])
+		}
+		result = append(result, b)
+	}
+
+	log.Printf("loaded %d budgets for group %s", len(result), groupID)
+	return result, nil
+}
+
+// FullTransaction holds all fields needed for period aggregation without
+// exposing the internal txnFieldMap type.
+type FullTransaction struct {
+	ID                string
+	Budget            string // empty when unassigned
+	Category          string
+	Amount            float64 // dollars
+	Reimbursement     float64 // percentage (0-100)
+	Timestamp         time.Time
+	NormalizedID      string // empty when not normalized
+	NormalizedPrimary bool
+}
+
+// PeriodResult holds aggregated data for a single budget period.
+type PeriodResult struct {
+	ID                string
+	BudgetID          string
+	Start             time.Time
+	End               time.Time
+	Total             float64
+	Count             int
+	CategoryBreakdown map[string]float64
+}
+
+// ComputePeriods groups transactions by budget period and computes total, count,
+// and categoryBreakdown for each period. Non-primary normalized transactions
+// are excluded. Transactions with an empty budget are skipped (unassigned).
+func ComputePeriods(txns []FullTransaction) ([]PeriodResult, error) {
+	// Convert to txnFieldMap for aggregation
+	maps := make([]txnFieldMap, len(txns))
+	for i, t := range txns {
+		var normalizedID interface{}
+		if t.NormalizedID != "" {
+			normalizedID = t.NormalizedID
+		}
+		maps[i] = txnFieldMap{
+			id: t.ID,
+			data: map[string]interface{}{
+				"budget":            t.Budget,
+				"category":          t.Category,
+				"amount":            t.Amount,
+				"reimbursement":     t.Reimbursement,
+				"timestamp":         t.Timestamp,
+				"normalizedId":      normalizedID,
+				"normalizedPrimary": t.NormalizedPrimary,
+			},
+		}
+	}
+
+	periods, err := aggregateTransactionData(maps)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]PeriodResult, 0, len(periods))
+	for key, pd := range periods {
+		total := math.Round(pd.total*100) / 100
+		roundedBreakdown := make(map[string]float64, len(pd.categoryBreakdown))
+		for cat, val := range pd.categoryBreakdown {
+			roundedBreakdown[cat] = math.Round(val*100) / 100
+		}
+		result = append(result, PeriodResult{
+			ID:                key,
+			BudgetID:          pd.budgetID,
+			Start:             pd.start,
+			End:               PeriodEnd(pd.start),
+			Total:             total,
+			Count:             pd.count,
+			CategoryBreakdown: roundedBreakdown,
+		})
+	}
 	return result, nil
 }
 

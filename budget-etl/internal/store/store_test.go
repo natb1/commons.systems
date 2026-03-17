@@ -18,7 +18,7 @@ func TestTransactionDocID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.statementID+"/"+tt.transactionID, func(t *testing.T) {
-			id := transactionDocID(tt.statementID, tt.transactionID)
+			id := TransactionDocID(tt.statementID, tt.transactionID)
 
 			// Must be exactly 20 hex characters
 			if len(id) != 20 {
@@ -31,7 +31,7 @@ func TestTransactionDocID(t *testing.T) {
 			}
 
 			// Must be deterministic
-			id2 := transactionDocID(tt.statementID, tt.transactionID)
+			id2 := TransactionDocID(tt.statementID, tt.transactionID)
 			if id != id2 {
 				t.Errorf("not deterministic: %q != %q", id, id2)
 			}
@@ -39,8 +39,8 @@ func TestTransactionDocID(t *testing.T) {
 	}
 
 	// Different inputs must produce different IDs
-	a := transactionDocID("stmt-a", "txn-1")
-	b := transactionDocID("stmt-b", "txn-1")
+	a := TransactionDocID("stmt-a", "txn-1")
+	b := TransactionDocID("stmt-b", "txn-1")
 	if a == b {
 		t.Errorf("different statements produced same doc ID: %q", a)
 	}
@@ -487,4 +487,122 @@ func TestAggregateTransactionData_NullNormalizedId(t *testing.T) {
 	if pd.count != 1 {
 		t.Errorf("count = %d, want 1", pd.count)
 	}
+}
+
+func TestComputePeriods(t *testing.T) {
+	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)
+	wed := time.Date(2025, 1, 8, 10, 0, 0, 0, time.UTC)
+	nextMon := time.Date(2025, 1, 13, 9, 0, 0, 0, time.UTC)
+
+	t.Run("basic aggregation", func(t *testing.T) {
+		txns := []FullTransaction{
+			{ID: "t1", Budget: "food", Category: "Food:Groceries", Amount: 50.0, Timestamp: mon, NormalizedPrimary: true},
+			{ID: "t2", Budget: "food", Category: "Food:Dining", Amount: 30.0, Timestamp: wed, NormalizedPrimary: true},
+			{ID: "t3", Budget: "food", Category: "Food", Amount: 25.0, Timestamp: nextMon, NormalizedPrimary: true},
+		}
+		periods, err := ComputePeriods(txns)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(periods) != 2 {
+			t.Fatalf("got %d periods, want 2", len(periods))
+		}
+		byID := make(map[string]PeriodResult)
+		for _, p := range periods {
+			byID[p.ID] = p
+		}
+		w1 := byID["food-2025-01-06"]
+		if w1.Total != 80.0 {
+			t.Errorf("week1 total = %v, want 80.0", w1.Total)
+		}
+		if w1.Count != 2 {
+			t.Errorf("week1 count = %d, want 2", w1.Count)
+		}
+		if w1.BudgetID != "food" {
+			t.Errorf("week1 budgetID = %q, want food", w1.BudgetID)
+		}
+		w2 := byID["food-2025-01-13"]
+		if w2.Total != 25.0 {
+			t.Errorf("week2 total = %v, want 25.0", w2.Total)
+		}
+	})
+
+	t.Run("skips non-primary normalized", func(t *testing.T) {
+		txns := []FullTransaction{
+			{ID: "t1", Budget: "food", Category: "Food", Amount: 50.0, Timestamp: mon, NormalizedID: "norm-1", NormalizedPrimary: false},
+			{ID: "t2", Budget: "food", Category: "Food", Amount: 30.0, Timestamp: mon, NormalizedPrimary: true},
+		}
+		periods, err := ComputePeriods(txns)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(periods) != 1 {
+			t.Fatalf("got %d periods, want 1", len(periods))
+		}
+		if periods[0].Total != 30.0 {
+			t.Errorf("total = %v, want 30.0 (non-primary excluded)", periods[0].Total)
+		}
+	})
+
+	t.Run("skips unassigned", func(t *testing.T) {
+		txns := []FullTransaction{
+			{ID: "t1", Budget: "", Category: "Food", Amount: 100.0, Timestamp: mon, NormalizedPrimary: true},
+		}
+		periods, err := ComputePeriods(txns)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(periods) != 0 {
+			t.Errorf("got %d periods, want 0", len(periods))
+		}
+	})
+
+	t.Run("reimbursement reduces total", func(t *testing.T) {
+		txns := []FullTransaction{
+			{ID: "t1", Budget: "food", Category: "Food", Amount: 100.0, Reimbursement: 50.0, Timestamp: mon, NormalizedPrimary: true},
+		}
+		periods, err := ComputePeriods(txns)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(periods) != 1 {
+			t.Fatalf("got %d periods, want 1", len(periods))
+		}
+		if periods[0].Total != 50.0 {
+			t.Errorf("total = %v, want 50.0", periods[0].Total)
+		}
+	})
+
+	t.Run("rounds to 2 decimal places", func(t *testing.T) {
+		txns := []FullTransaction{
+			{ID: "t1", Budget: "food", Category: "Food", Amount: 10.01, Timestamp: mon, NormalizedPrimary: true},
+			{ID: "t2", Budget: "food", Category: "Food", Amount: 20.02, Timestamp: wed, NormalizedPrimary: true},
+		}
+		periods, err := ComputePeriods(txns)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if periods[0].Total != 30.03 {
+			t.Errorf("total = %v, want 30.03", periods[0].Total)
+		}
+	})
+
+	t.Run("period start and end are correct", func(t *testing.T) {
+		txns := []FullTransaction{
+			{ID: "t1", Budget: "food", Category: "Food", Amount: 10.0, Timestamp: wed, NormalizedPrimary: true},
+		}
+		periods, err := ComputePeriods(txns)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		p := periods[0]
+		wantStart := time.Date(2025, 1, 6, 0, 0, 0, 0, time.UTC)
+		wantEnd := time.Date(2025, 1, 13, 0, 0, 0, 0, time.UTC)
+		if !p.Start.Equal(wantStart) {
+			t.Errorf("start = %v, want %v", p.Start, wantStart)
+		}
+		if !p.End.Equal(wantEnd) {
+			t.Errorf("end = %v, want %v", p.End, wantEnd)
+		}
+	})
 }
