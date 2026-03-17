@@ -1,16 +1,7 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
+import type { MediaItem } from "../src/types.js";
 
-type MediaSeedData = {
-  title: string;
-  mediaType: "epub" | "pdf" | "image-archive";
-  tags: Record<string, string>;
-  publicDomain: boolean;
-  sourceNotes: string;
-  storagePath: string;
-  groupId: string | null;
-  memberEmails: string[];
-  addedAt: string;
-};
+type MediaSeedData = Omit<MediaItem, "id">;
 
 // Production media upload is handled by print/scripts/upload-media.sh.
 // Emulator seeding is automated via seeds/run-storage-seed.ts.

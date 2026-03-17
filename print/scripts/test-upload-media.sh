@@ -36,19 +36,18 @@ done
 # Subcommand-specific output
 for arg in "$@"; do
   case "$arg" in
-    cp)   echo "Copying..." ;;
+    cp)
+      echo "Copying..."
+      touch "$STUB_DIR/stat-exists"
+      ;;
     stat)
-      # If -q flag is present, this is a pre-flight existence check
-      for a in "$@"; do
-        if [ "$a" = "-q" ]; then
-          if [ -f "$STUB_DIR/stat-exists" ]; then
-            exit 0
-          else
-            exit 1
-          fi
-        fi
-      done
-      echo "gs://bucket/path: 1024 bytes"
+      if [ -f "$STUB_DIR/stat-exists" ]; then
+        echo "gs://bucket/path: 1024 bytes"
+        exit 0
+      else
+        echo "No URLs matched: gs://bucket/path" >&2
+        exit 1
+      fi
       ;;
   esac
 done
@@ -96,8 +95,7 @@ fi
 STUB
   chmod +x "$TMPDIR_TEST/bin/curl"
 
-  # jq stub: pass through to real jq
-  # (jq is required, not stubbed)
+  # jq is used directly (not stubbed)
 
   # date stub: returns fixed timestamp
   cat > "$TMPDIR_TEST/bin/date" <<'STUB'

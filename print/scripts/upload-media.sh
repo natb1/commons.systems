@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Upload a media file to GCS and create the corresponding Firestore document.
+# Targets the commons-systems production project and bucket. No dry-run or staging mode.
 # Usage: upload-media.sh <file> <title> <mediaType> [--public | <email1> [email2] [email3]]
 set -euo pipefail
 
@@ -23,7 +24,6 @@ EOF
   exit 1
 }
 
-# Validate required tools
 for cmd in gsutil gcloud curl jq; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "error: required command not found: $cmd" >&2
@@ -31,7 +31,6 @@ for cmd in gsutil gcloud curl jq; do
   fi
 done
 
-# Parse positional args
 if [ $# -lt 3 ]; then
   usage
 fi
@@ -41,13 +40,11 @@ TITLE="$2"
 MEDIA_TYPE="$3"
 shift 3
 
-# Validate file exists
 if [ ! -f "$FILE_PATH" ]; then
   echo "error: file not found: ${FILE_PATH}" >&2
   exit 1
 fi
 
-# Validate mediaType
 case "$MEDIA_TYPE" in
   epub|pdf|image-archive) ;;
   *)
@@ -85,9 +82,14 @@ GCS_DEST="${BUCKET}/${COLLECTION_PATH}/${FILENAME}"
 ADDED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 # Check for existing object at destination
-if gsutil -q stat "$GCS_DEST" 2>/dev/null; then
+if STAT_OUTPUT=$(gsutil stat "$GCS_DEST" 2>&1); then
   echo "error: object already exists at ${GCS_DEST}" >&2
   echo "Rename the file or remove the existing object: gsutil rm ${GCS_DEST}" >&2
+  exit 1
+fi
+if ! echo "$STAT_OUTPUT" | grep -q "No URLs matched"; then
+  echo "error: could not verify object status at ${GCS_DEST}:" >&2
+  echo "$STAT_OUTPUT" >&2
   exit 1
 fi
 
@@ -150,6 +152,7 @@ fi
 FIRESTORE_URL="https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${COLLECTION_PATH}"
 
 RESP_FILE=$(mktemp)
+trap 'rm -f "$RESP_FILE"' EXIT
 HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w '%{http_code}' -X POST "$FIRESTORE_URL" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
@@ -161,12 +164,10 @@ if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
   echo "" >&2
   echo "The file was uploaded to GCS at: ${GCS_DEST}" >&2
   echo "To clean up: gsutil rm ${GCS_DEST}" >&2
-  rm -f "$RESP_FILE"
   exit 1
 fi
 
 RESPONSE=$(cat "$RESP_FILE")
-rm -f "$RESP_FILE"
 
 DOC_ID=$(echo "$RESPONSE" | jq -r '.name | split("/") | last')
 if [ -z "$DOC_ID" ] || [ "$DOC_ID" = "null" ]; then
