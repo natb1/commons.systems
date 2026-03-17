@@ -3,6 +3,7 @@ import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { generateRssXml, type RssPost } from "@commons-systems/rssutil";
 
 interface AppConfig {
   namespace: string;
@@ -32,14 +33,13 @@ const APP_CONFIGS: Record<string, AppConfig> = {
   },
 };
 
-// Maps Firebase Hosting site IDs to their production hostnames
+// Maps Firebase Hosting site IDs to production hostnames, used to resolve preview channel URLs back to production config
 const SITE_TO_HOST: Record<string, string> = {
   "cs-fellspiral-4e12": "fellspiral.commons.systems",
   "commons-systems": "commons.systems",
 };
 
 function resolveAppConfig(host: string): AppConfig | undefined {
-  // Exact match (production hostnames)
   if (APP_CONFIGS[host]) return APP_CONFIGS[host];
 
   // Preview channel: <site>--<channel>.web.app
@@ -51,6 +51,9 @@ function resolveAppConfig(host: string): AppConfig | undefined {
     if (productionHost) {
       return APP_CONFIGS[productionHost];
     }
+    console.warn(
+      `Preview channel matched but site ID "${previewMatch[1]}" not in SITE_TO_HOST`,
+    );
   }
 
   // Emulator: localhost or 127.0.0.1 (stripped of port).
@@ -73,79 +76,66 @@ function resolveAppConfig(host: string): AppConfig | undefined {
   return undefined;
 }
 
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 export async function handleRssFeed(req: Request, res: Response) {
   const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.hostname;
   const appConfig = resolveAppConfig(host);
   if (!appConfig) {
-    res.status(400).send(`Unknown host: ${host}`);
+    res.status(400).set("Content-Type", "text/plain").send(`Unknown host: ${host}`);
     return;
   }
 
   if (getApps().length === 0) initializeApp({ projectId: "commons-systems" });
   const db = getFirestore();
 
-  // Query only with the equality filter; sort in memory to avoid requiring a
-  // composite Firestore index (the emulator doesn't enforce index requirements,
-  // so this mismatch only surfaces in production / preview deploys).
-  const snapshot = await db
-    .collection(`${appConfig.namespace}/posts`)
-    .where("published", "==", true)
-    .get();
+  const collectionPath = `${appConfig.namespace}/posts`;
+  let snapshot;
+  try {
+    // Query only with the equality filter; sort in memory to avoid requiring a
+    // composite Firestore index (the emulator doesn't enforce index requirements,
+    // so an index-related failure only surfaces in production / preview deploys).
+    snapshot = await db
+      .collection(collectionPath)
+      .where("published", "==", true)
+      .get();
+  } catch (err) {
+    console.error(`Firestore query failed for collection "${collectionPath}":`, err);
+    res.status(500).set("Content-Type", "text/plain").send("RSS feed temporarily unavailable");
+    return;
+  }
 
-  // Sort descending by publishedAt in memory
   const docs = [...snapshot.docs].sort((a, b) => {
-    const aDate = new Date(a.data().publishedAt).getTime();
-    const bDate = new Date(b.data().publishedAt).getTime();
-    return bDate - aDate;
+    const aTime = new Date(a.data().publishedAt).getTime();
+    const bTime = new Date(b.data().publishedAt).getTime();
+    if (isNaN(aTime) && isNaN(bTime)) return 0;
+    if (isNaN(aTime)) return 1;
+    if (isNaN(bTime)) return -1;
+    return bTime - aTime;
   });
 
+  const rssPosts: RssPost[] = [];
+  for (const doc of docs) {
+    const d = doc.data();
+    if (typeof d.title !== "string") {
+      console.warn(
+        `Skipping doc "${doc.id}" in "${collectionPath}": missing or non-string title`,
+      );
+      continue;
+    }
+    rssPosts.push({
+      id: doc.id,
+      title: d.title,
+      publishedAt: d.publishedAt,
+      previewDescription: d.previewDescription,
+    });
+  }
+
   const feedUrl = `${appConfig.siteUrl}/feed.xml`;
-
-  const lastBuildDate =
-    docs.length > 0
-      ? `\n    <lastBuildDate>${new Date(docs[0].data().publishedAt).toUTCString()}</lastBuildDate>`
-      : "";
-
-  const items = docs
-    .map((doc) => {
-      const d = doc.data();
-      const postUrl = `${escapeXml(appConfig.siteUrl)}/${escapeXml(appConfig.postLinkPrefix)}${escapeXml(doc.id)}`;
-      const date = new Date(d.publishedAt);
-      const pubDateTag = isNaN(date.getTime())
-        ? ""
-        : `\n      <pubDate>${date.toUTCString()}</pubDate>`;
-      const descTag = d.previewDescription
-        ? `\n      <description>${escapeXml(d.previewDescription)}</description>`
-        : "";
-      return `    <item>
-      <title>${escapeXml(d.title)}</title>
-      <link>${postUrl}</link>
-      <guid isPermaLink="true">${postUrl}</guid>${pubDateTag}${descTag}
-    </item>`;
-    })
-    .join("\n");
-
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
-  <channel>
-    <title>${escapeXml(appConfig.title)}</title>
-    <link>${escapeXml(appConfig.siteUrl)}</link>
-    <description>${escapeXml(appConfig.title)} blog</description>
-    <atom:link href="${escapeXml(feedUrl)}" rel="self" type="application/rss+xml" />${lastBuildDate}
-    <docs>https://www.rssboard.org/rss-specification</docs>
-    <generator>commons.systems</generator>
-${items}
-  </channel>
-</rss>`;
+  const xml = generateRssXml(rssPosts, {
+    title: appConfig.title,
+    siteUrl: appConfig.siteUrl,
+    feedUrl,
+    postLinkPrefix: appConfig.postLinkPrefix,
+  });
 
   res.set("Content-Type", "application/rss+xml; charset=utf-8");
   res.set("Cache-Control", "public, max-age=3600");

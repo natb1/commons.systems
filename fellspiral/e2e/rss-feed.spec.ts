@@ -26,7 +26,7 @@ test.describe("rss feed", () => {
 
   test("RSS icon links to /feed.xml", async ({ page }) => {
     await page.goto("/");
-    // Wait for posts to load (Archive section needs published posts)
+    // Wait for posts to load (the post list needs published posts)
     await page.waitForSelector("#app a[href]", { timeout: 30000 });
     // On narrow viewports the sidebar is hidden until the panel toggle is clicked
     const toggle = page.locator("#panel-toggle");
