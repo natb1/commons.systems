@@ -1,6 +1,10 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { MediaItem } from "../types.js";
 import type { ContentRenderer } from "./types.js";
+import {
+  getReadingPosition,
+  saveReadingPosition,
+} from "../reading-position.js";
 
 function renderTags(tags: Record<string, string>): string {
   const entries = Object.entries(tags);
@@ -36,10 +40,32 @@ export function renderViewerShell(item: MediaItem): string {
   `;
 }
 
+function localStorageKey(mediaId: string): string {
+  return `reading-position:${mediaId}`;
+}
+
+function loadLocalPosition(mediaId: string): string | null {
+  try {
+    return localStorage.getItem(localStorageKey(mediaId));
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalPosition(mediaId: string, position: string): void {
+  try {
+    localStorage.setItem(localStorageKey(mediaId), position);
+  } catch {
+    // localStorage may be unavailable (private browsing, quota)
+  }
+}
+
 export function initViewer(
   outlet: HTMLElement,
   createRenderer: (onError: (err: unknown) => void) => ContentRenderer,
   url: string,
+  mediaId: string,
+  uid: string | null,
 ): () => void {
   const viewer = outlet.querySelector(".viewer") as HTMLElement;
   if (!viewer) throw new Error(".viewer element not found");
@@ -75,11 +101,31 @@ export function initViewer(
   }
   toggleBtn.addEventListener("click", handleToggle);
 
+  // Position persistence (debounced)
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function scheduleSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      const pos = renderer.position;
+      if (!pos) return;
+      if (uid) {
+        saveReadingPosition(uid, mediaId, pos).catch((err) => {
+          console.error("Failed to save reading position:", err);
+        });
+      } else {
+        saveLocalPosition(mediaId, pos);
+      }
+    }, 500);
+  }
+
   // Navigation
   function updateNav() {
     position.textContent = renderer.positionLabel;
     prevBtn.disabled = renderer.currentPage <= 1;
     nextBtn.disabled = renderer.currentPage >= renderer.pageCount;
+    scheduleSave();
   }
 
   function handleNavError(err: unknown) {
@@ -111,18 +157,23 @@ export function initViewer(
   }
   document.addEventListener("keydown", handleKeydown);
 
-  // Initialize renderer
-  renderer
-    .init(canvasWrap, url)
-    .then(() => {
-      updateNav();
-    })
-    .catch((err) => {
-      console.error("Failed to load document:", err);
-      position.textContent = "Failed to load";
-    });
+  // Initialize renderer — load saved position, then init
+  (async () => {
+    let savedPosition: string | null = null;
+    if (uid) {
+      savedPosition = await getReadingPosition(uid, mediaId);
+    } else {
+      savedPosition = loadLocalPosition(mediaId);
+    }
+    await renderer.init(canvasWrap, url, savedPosition ?? undefined);
+    updateNav();
+  })().catch((err) => {
+    console.error("Failed to load document:", err);
+    position.textContent = "Failed to load";
+  });
 
   return () => {
+    if (saveTimer) clearTimeout(saveTimer);
     document.body.classList.remove("viewer-active");
     orientationQuery.removeEventListener("change", updateOrientation);
     toggleBtn.removeEventListener("click", handleToggle);

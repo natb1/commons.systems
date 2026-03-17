@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 interface RelocatedLocation {
-  start: { index: number; displayed: { page: number; total: number } };
+  start: { index: number; cfi: string; displayed: { page: number; total: number } };
   atStart: boolean;
   atEnd: boolean;
 }
@@ -13,9 +13,10 @@ function makeLocation(
   total: number,
   atStart = false,
   atEnd = false,
+  cfi = "",
 ): RelocatedLocation {
   return {
-    start: { index, displayed: { page, total } },
+    start: { index, cfi, displayed: { page, total } },
     atStart,
     atEnd,
   };
@@ -215,6 +216,44 @@ describe("createEpubRenderer", () => {
       expect(relocatedCb).not.toBeNull();
       relocatedCb!(makeLocation(2, 4, 10, false, false));
       expect(renderer.positionLabel).toBe("Ch. 3/5 — p. 4/10");
+    });
+  });
+
+  describe("position", () => {
+    it("returns empty string before any relocation", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      expect(renderer.position).toBe("");
+    });
+
+    it("returns current CFI after relocated fires", async () => {
+      let relocatedCb: RelocatedCallback | null = null;
+      mockRendition.on.mockImplementation((event: string, cb: RelocatedCallback) => {
+        if (event === "relocated") relocatedCb = cb;
+      });
+
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      relocatedCb!(makeLocation(1, 2, 5, false, false, "epubcfi(/6/4!/4/2)"));
+      expect(renderer.position).toBe("epubcfi(/6/4!/4/2)");
+    });
+  });
+
+  describe("initialPosition", () => {
+    it("passes initialPosition to rendition.display", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub", "epubcfi(/6/4!/4/2)");
+
+      expect(mockRendition.display).toHaveBeenCalledWith("epubcfi(/6/4!/4/2)");
+    });
+
+    it("passes undefined to rendition.display when no initialPosition", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      expect(mockRendition.display).toHaveBeenCalledWith(undefined);
     });
   });
 });

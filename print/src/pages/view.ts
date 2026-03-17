@@ -56,7 +56,7 @@ export async function renderView(id: string, _user: User | null): Promise<string
   }
 }
 
-export function afterRenderView(outlet: HTMLElement): void {
+export function afterRenderView(outlet: HTMLElement, user: User | null): void {
   if (!pendingItem || !pendingUrl) return;
 
   const item = pendingItem;
@@ -64,9 +64,11 @@ export function afterRenderView(outlet: HTMLElement): void {
   pendingItem = null;
   pendingUrl = null;
 
+  const uid = user?.uid ?? null;
+
   if (item.mediaType === "pdf") {
-    cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url);
+    cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url, item.id, uid);
   } else if (item.mediaType === "epub") {
-    cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), url);
+    cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), url, item.id, uid);
   }
 }

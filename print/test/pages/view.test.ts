@@ -186,12 +186,14 @@ describe("renderView", () => {
       await renderView("item-1", mockUser);
 
       const outlet = document.createElement("div");
-      afterRenderView(outlet);
+      afterRenderView(outlet, mockUser);
 
       expect(initViewer).toHaveBeenCalledWith(
         outlet,
         expect.any(Function),
         "https://example.com/download",
+        "item-1",
+        "user-123",
       );
 
       const factory = (initViewer as ReturnType<typeof vi.fn>).mock.calls.find(

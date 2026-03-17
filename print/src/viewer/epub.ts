@@ -13,28 +13,12 @@ export function createEpubRenderer(
   let _subPageTotal = 1;
   let _atStart = true;
   let _atEnd = false;
-  let _storageKey = "";
+  let _currentCfi = "";
   let destroyed = false;
 
   // Suppress unused-parameter lint — onError reserved for future use by
   // rendition error events, matching the PDF renderer's signature.
   void onError;
-
-  function savePosition(cfi: string): void {
-    try {
-      localStorage.setItem(_storageKey, cfi);
-    } catch {
-      // localStorage may be unavailable (private browsing, quota)
-    }
-  }
-
-  function loadPosition(): string | null {
-    try {
-      return localStorage.getItem(_storageKey);
-    } catch {
-      return null;
-    }
-  }
 
   function waitForRelocated(): Promise<void> {
     return new Promise<void>((resolve) => {
@@ -47,12 +31,10 @@ export function createEpubRenderer(
   }
 
   return {
-    async init(containerEl: HTMLElement, url: string): Promise<void> {
+    async init(containerEl: HTMLElement, url: string, initialPosition?: string): Promise<void> {
       containerDiv = document.createElement("div");
       containerDiv.className = "viewer-epub-container";
       containerEl.appendChild(containerDiv);
-
-      _storageKey = `epub-position:${url}`;
 
       book = ePub(url);
       rendition = book.renderTo(containerDiv, {
@@ -75,12 +57,11 @@ export function createEpubRenderer(
         _subPageTotal = location.start.displayed.total;
         _atStart = location.atStart;
         _atEnd = location.atEnd;
-        savePosition(location.start.cfi);
+        _currentCfi = location.start.cfi;
       });
 
-      const savedCfi = loadPosition();
-      await rendition.display(savedCfi ?? undefined);
-      if (!savedCfi) {
+      await rendition.display(initialPosition ?? undefined);
+      if (!initialPosition) {
         _chapterIndex = 0;
         _subPage = 1;
       }
@@ -118,6 +99,9 @@ export function createEpubRenderer(
       if (_atStart) return 1;
       if (_atEnd) return 2;
       return 1.5; // neither boundary — both buttons enabled
+    },
+    get position() {
+      return _currentCfi;
     },
     get positionLabel() {
       return `Ch. ${_chapterIndex + 1}/${_chapterCount} — p. ${_subPage}/${_subPageTotal}`;
