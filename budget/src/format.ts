@@ -1,3 +1,4 @@
 export function formatCurrency(n: number): string {
-  return `$${n.toFixed(2)}`;
+  if (!Number.isFinite(n)) throw new RangeError(`formatCurrency received non-finite value: ${n}`);
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }

@@ -51,7 +51,7 @@ function renderBudgetTable(budgets: Budget[], authorized: boolean): string {
     </div>`;
 }
 
-interface SerializedBudget {
+export interface SerializedBudget {
   readonly id: string;
   readonly name: string;
   readonly weeklyAllowance: number;
@@ -81,10 +81,8 @@ function serializePeriods(periods: BudgetPeriod[]): string {
   return escapeHtml(JSON.stringify(data));
 }
 
-
-function renderMetricsSection(averageWeeklyIncome: number, totalWeeklyBudget: number): string {
-  return `<div id="budget-insights" class="budget-insights">
-    <div id="budget-metrics" class="budget-metrics">
+function renderMetrics(averageWeeklyIncome: number, totalWeeklyBudget: number): string {
+  return `<div id="budget-metrics" class="budget-metrics">
       <dl>
         <div class="metric">
           <dt>12-Week Avg Weekly Income</dt>
@@ -95,15 +93,18 @@ function renderMetricsSection(averageWeeklyIncome: number, totalWeeklyBudget: nu
           <dd>${formatCurrency(totalWeeklyBudget)}</dd>
         </div>
       </dl>
-    </div>
-  </div>`;
+    </div>`;
 }
 
-function renderChartContainer(budgets: Budget[], periods: BudgetPeriod[]): string {
+function renderChartContainer(budgets: Budget[], periods: BudgetPeriod[], metricsHtml: string): string {
   return `<div id="budgets-chart-controls">
       <label>Jump to: <input type="date" id="chart-date-picker"></label>
     </div>
-    <div id="budgets-chart" data-budgets="${serializeBudgets(budgets)}" data-periods="${serializePeriods(periods)}"></div>`;
+    <div id="budgets-chart" data-budgets="${serializeBudgets(budgets)}" data-periods="${serializePeriods(periods)}"></div>
+    <div class="below-bar-chart-row">
+      ${metricsHtml}
+      <div id="budgets-pie"></div>
+    </div>`;
 }
 
 export async function renderBudgets(options: RenderPageOptions): Promise<string> {
@@ -112,7 +113,6 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
 
   let tableHtml: string;
   let chartHtml = "";
-  let metricsHtml = "";
   try {
     const [budgets, periods, transactions] = await Promise.all([
       (group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null))
@@ -122,10 +122,10 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
       (group && user?.email ? getTransactions(group.id, user.email) : getTransactions(null))
         .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
     ]);
-    chartHtml = renderChartContainer(budgets, periods);
     const averageWeeklyIncome = computeAverageWeeklyIncome(transactions);
     const totalWeeklyBudget = budgets.reduce((s, b) => s + b.weeklyAllowance, 0);
-    metricsHtml = renderMetricsSection(averageWeeklyIncome, totalWeeklyBudget);
+    const metricsHtml = renderMetrics(averageWeeklyIncome, totalWeeklyBudget);
+    chartHtml = renderChartContainer(budgets, periods, metricsHtml);
     tableHtml = renderBudgetTable(budgets, authorized);
   } catch (error) {
     tableHtml = renderLoadError(error, "budgets-error");
@@ -135,7 +135,6 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
     <h2>Budgets</h2>
     ${renderPageNotices(options, "budgets")}
     ${chartHtml}
-    ${metricsHtml}
     ${tableHtml}
   `;
 }
