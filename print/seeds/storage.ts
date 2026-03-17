@@ -37,7 +37,7 @@ function makePdf(pageCount: number): string {
 }
 
 const publicMeta = { publicDomain: "true" };
-const testPrivateMeta = { publicDomain: "false", "test@example.com": "member" };
+const testPrivateMeta = { publicDomain: "false", member_0: "test@example.com" };
 
 const storageSeed: StorageSeedItem[] = [
   {
