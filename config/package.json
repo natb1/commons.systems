@@ -1,0 +1,13 @@
+{
+  "name": "@commons-systems/config",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./tsconfig.app.json": "./tsconfig.app.json",
+    "./tsconfig.lib.json": "./tsconfig.lib.json",
+    "./eslint": "./eslint.config.js",
+    "./vite": "./vite.js",
+    "./playwright": "./playwright.js"
+  }
+}
