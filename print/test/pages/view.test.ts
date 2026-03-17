@@ -71,7 +71,7 @@ describe("afterRenderView", () => {
     outlet.innerHTML = '<div class="viewer"></div>';
 
     await renderView("item-1", null);
-    afterRenderView(outlet);
+    afterRenderView(outlet, null);
 
     expect(initViewer).toHaveBeenCalled();
     // Verify the factory passed to initViewer creates an image archive renderer

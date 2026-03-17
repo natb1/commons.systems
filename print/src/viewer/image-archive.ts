@@ -11,7 +11,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   let _pageCount = 0;
 
   return {
-    async init(container: HTMLElement, url: string): Promise<void> {
+    async init(container: HTMLElement, url: string, initialPosition?: string): Promise<void> {
       canvas = container.querySelector("canvas") as HTMLCanvasElement;
       if (!canvas) throw new Error("Canvas element not found in container");
 
@@ -29,11 +29,17 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
 
       objectUrls = imagePaths.map((path) => URL.createObjectURL(new Blob([files[path] as Uint8Array<ArrayBuffer>])));
       _pageCount = objectUrls.length;
-      _currentPage = 1;
+
+      let startPage = 1;
+      if (initialPosition) {
+        const parsed = parseInt(initialPosition, 10);
+        if (parsed >= 1 && parsed <= _pageCount) startPage = parsed;
+      }
+      _currentPage = startPage;
 
       canvas.style.display = "none";
       imgEl = document.createElement("img");
-      imgEl.src = objectUrls[0];
+      imgEl.src = objectUrls[startPage - 1];
       container.appendChild(imgEl);
     },
 
@@ -43,6 +49,9 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       imgEl.src = objectUrls[page - 1];
     },
 
+    get position() {
+      return String(_currentPage);
+    },
     get pageCount() {
       return _pageCount;
     },

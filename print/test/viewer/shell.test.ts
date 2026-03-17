@@ -7,6 +7,11 @@ vi.mock("../../src/auth.js", () => ({
   onAuthStateChanged: vi.fn(),
 }));
 
+vi.mock("../../src/reading-position.js", () => ({
+  getReadingPosition: vi.fn(),
+  saveReadingPosition: vi.fn(),
+}));
+
 import { renderViewerShell } from "../../src/viewer/shell";
 import type { MediaItem } from "../../src/types";
 

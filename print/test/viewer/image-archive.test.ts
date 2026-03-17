@@ -187,4 +187,50 @@ describe("createImageArchiveRenderer", () => {
     await renderer.goToPage(3);
     expect(renderer.currentPage).toBe(1);
   });
+
+  it("position getter returns current page as string", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    expect(renderer.position).toBe("1");
+    await renderer.goToPage(2);
+    expect(renderer.position).toBe("2");
+  });
+
+  it("initialPosition restores to correct image on init", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+      "image-003.png": new Uint8Array([3]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip", "3");
+
+    expect(renderer.currentPage).toBe(3);
+    expect(renderer.position).toBe("3");
+  });
+
+  it("ignores out-of-range initialPosition and starts at page 1", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip", "99");
+
+    expect(renderer.currentPage).toBe(1);
+  });
 });

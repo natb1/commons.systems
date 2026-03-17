@@ -55,7 +55,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   }
 
   return {
-    async init(containerEl: HTMLElement, url: string): Promise<void> {
+    async init(containerEl: HTMLElement, url: string, initialPosition?: string): Promise<void> {
       container = containerEl;
       canvas = containerEl.querySelector("canvas") as HTMLCanvasElement;
       if (!canvas) throw new Error("Canvas element not found in container");
@@ -68,9 +68,15 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       }
       pdfDoc = doc;
       _pageCount = pdfDoc.numPages;
-      _currentPage = 1;
 
-      await renderPage(1);
+      let startPage = 1;
+      if (initialPosition) {
+        const parsed = parseInt(initialPosition, 10);
+        if (parsed >= 1 && parsed <= _pageCount) startPage = parsed;
+      }
+      _currentPage = startPage;
+
+      await renderPage(startPage);
       if (destroyed) return;
 
       resizeObserver = new ResizeObserver(() => {
@@ -89,6 +95,9 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       await renderPage(page);
     },
 
+    get position() {
+      return String(_currentPage);
+    },
     get pageCount() {
       return _pageCount;
     },
