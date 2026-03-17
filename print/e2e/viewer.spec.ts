@@ -190,6 +190,24 @@ test.describe("viewer", () => {
     await expect(next).toBeEnabled();
   });
 
+  test("EPUB stylesheet is applied to content", async ({ page }) => {
+    await page.goto("/view/gutenberg-3296");
+    await expect(page.locator(".viewer-epub-container")).toBeVisible({
+      timeout: 15000,
+    });
+    // Wait for chapter content to render
+    await expect(page.locator(".viewer-position")).toContainText("Ch. 1/3", {
+      timeout: 15000,
+    });
+
+    // The EPUB content is inside an iframe created by epub.js
+    const iframe = page.frameLocator(".viewer-epub-container iframe");
+    const body = iframe.locator("body");
+
+    // Verify the stylesheet's font-family is applied
+    await expect(body).toHaveCSS("font-family", /Georgia/);
+  });
+
   test("EPUB metadata is visible in panel", async ({ page }) => {
     await page.goto("/view/gutenberg-3296");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
