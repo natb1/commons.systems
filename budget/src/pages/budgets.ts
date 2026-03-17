@@ -1,6 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { getBudgets, type Budget, type Rollover } from "../firestore.js";
+import { getBudgets, getBudgetPeriods, type Budget, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
   { value: "none", label: "None" },
@@ -49,22 +49,66 @@ function renderBudgetTable(budgets: Budget[], authorized: boolean): string {
     </div>`;
 }
 
+interface SerializedBudget {
+  readonly id: string;
+  readonly name: string;
+  readonly weeklyAllowance: number;
+  readonly rollover: Rollover;
+}
+
+function serializeBudgets(budgets: Budget[]): string {
+  const data: SerializedBudget[] = budgets.map(b => ({
+    id: b.id,
+    name: b.name,
+    weeklyAllowance: b.weeklyAllowance,
+    rollover: b.rollover,
+  }));
+  return escapeHtml(JSON.stringify(data));
+}
+
+function serializePeriods(periods: BudgetPeriod[]): string {
+  const data: SerializedBudgetPeriod[] = periods.map(p => ({
+    id: p.id,
+    budgetId: p.budgetId,
+    periodStartMs: p.periodStart.toMillis(),
+    periodEndMs: p.periodEnd.toMillis(),
+    total: p.total,
+    count: p.count,
+    categoryBreakdown: p.categoryBreakdown,
+  }));
+  return escapeHtml(JSON.stringify(data));
+}
+
+function renderChartContainer(budgets: Budget[], periods: BudgetPeriod[]): string {
+  return `<div id="budgets-chart-controls">
+      <label>Jump to: <input type="date" id="chart-date-picker"></label>
+    </div>
+    <div id="budgets-chart" data-budgets="${serializeBudgets(budgets)}" data-periods="${serializePeriods(periods)}"></div>`;
+}
+
 export async function renderBudgets(options: RenderPageOptions): Promise<string> {
   const { user, group } = options;
   const authorized = group !== null;
 
   let tableHtml: string;
+  let chartHtml = "";
   try {
-    const budgets = await (group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null));
+    const [budgets, periods] = await Promise.all([
+      (group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null))
+        .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
+      (group && user?.email ? getBudgetPeriods(group.id, user.email) : getBudgetPeriods(null))
+        .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
+    ]);
+    chartHtml = renderChartContainer(budgets, periods);
     tableHtml = renderBudgetTable(budgets, authorized);
   } catch (error) {
-    console.error("Failed to load budgets:", error);
     tableHtml = renderLoadError(error, "budgets-error");
   }
 
   return `
     <h2>Budgets</h2>
     ${renderPageNotices(options, "budgets")}
+    ${chartHtml}
     ${tableHtml}
   `;
 }
