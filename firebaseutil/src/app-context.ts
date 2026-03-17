@@ -42,6 +42,15 @@ function parseEmulatorHost(
   return { hostname: url.hostname, port };
 }
 
+export interface StorageModule {
+  getStorage: (app: FirebaseApp) => FirebaseStorage;
+  connectStorageEmulator: (
+    storage: FirebaseStorage,
+    host: string,
+    port: number,
+  ) => void;
+}
+
 /**
  * Initialize a Firebase app with Firestore, analytics, and optional Storage.
  *
@@ -49,25 +58,25 @@ function parseEmulatorHost(
  * - `VITE_FIRESTORE_NAMESPACE` — required in dev/preview (throws if missing); defaults to `{appName}/prod` in production
  * - `VITE_FIRESTORE_EMULATOR_HOST` — connects Firestore emulator when set (hostname:port)
  * - `VITE_GA_MEASUREMENT_ID` — activates page-view tracking when set; returns a no-op tracker otherwise
- * - `VITE_STORAGE_EMULATOR_HOST` — connects Storage emulator when set and `opts.storage` is true (hostname:port)
+ * - `VITE_STORAGE_EMULATOR_HOST` — connects Storage emulator when set and `storageModule` is provided (hostname:port)
  *
- * Returns synchronously unless `opts.storage` is true, in which case it returns a Promise (storage SDK is dynamically imported).
+ * Pass the `firebase/storage` module to include Storage in the context. Accepting it as a parameter
+ * keeps `firebase/storage` out of non-storage app bundles without requiring a dynamic import.
  */
 export function createAppContext(
   appName: string,
   appId: string,
-  opts: { storage: true },
-): Promise<AppContextWithStorage>;
+  storageModule: StorageModule,
+): AppContextWithStorage;
 export function createAppContext(
   appName: string,
   appId: string,
-  opts?: { storage?: boolean },
 ): AppContextBase;
 export function createAppContext(
   appName: string,
   appId: string,
-  opts?: { storage?: boolean },
-): AppContextBase | Promise<AppContextWithStorage> {
+  storageModule?: StorageModule,
+): AppContextBase | AppContextWithStorage {
   const app = initializeApp({
     ...firebaseConfig,
     appId,
@@ -98,27 +107,22 @@ export function createAppContext(
 
   const trackPageView = initAnalyticsSafe(app);
 
-  if (opts?.storage) {
-    return (async () => {
-      const { getStorage, connectStorageEmulator } = await import(
-        "firebase/storage"
+  if (storageModule) {
+    const storage = storageModule.getStorage(app);
+
+    const storageEmulatorHost = import.meta.env.VITE_STORAGE_EMULATOR_HOST;
+    if (storageEmulatorHost) {
+      const { hostname, port } = parseEmulatorHost(
+        "VITE_STORAGE_EMULATOR_HOST",
+        storageEmulatorHost,
       );
-      const storage = getStorage(app);
+      storageModule.connectStorageEmulator(storage, hostname, port);
+    }
 
-      const storageEmulatorHost = import.meta.env.VITE_STORAGE_EMULATOR_HOST;
-      if (storageEmulatorHost) {
-        const { hostname, port } = parseEmulatorHost(
-          "VITE_STORAGE_EMULATOR_HOST",
-          storageEmulatorHost,
-        );
-        connectStorageEmulator(storage, hostname, port);
-      }
+    // Storage paths always use prod — media binaries are not duplicated per preview branch.
+    const STORAGE_NAMESPACE = validateNamespace(`${appName}/prod`);
 
-      // Storage paths always use prod — media binaries are not duplicated per preview branch.
-      const STORAGE_NAMESPACE = validateNamespace(`${appName}/prod`);
-
-      return { app, db, NAMESPACE, trackPageView, storage, STORAGE_NAMESPACE };
-    })();
+    return { app, db, NAMESPACE, trackPageView, storage, STORAGE_NAMESPACE };
   }
 
   return { app, db, NAMESPACE, trackPageView };

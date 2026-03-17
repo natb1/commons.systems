@@ -71,9 +71,15 @@ describe("createAppContext", () => {
     expect(ctx).not.toHaveProperty("STORAGE_NAMESPACE");
   });
 
-  it("returns correct shape with { storage: true }", async () => {
+  it("returns correct shape with storage module", async () => {
     const createAppContext = await loadModule();
-    const ctx = await createAppContext("myapp", "app-id-123", { storage: true });
+    const { getStorage, connectStorageEmulator } = await import(
+      "firebase/storage"
+    );
+    const ctx = createAppContext("myapp", "app-id-123", {
+      getStorage,
+      connectStorageEmulator,
+    });
 
     expect(ctx).toHaveProperty("app", mockApp);
     expect(ctx).toHaveProperty("db", mockDb);
@@ -121,12 +127,18 @@ describe("createAppContext", () => {
     );
   });
 
-  it("connects Storage emulator when VITE_STORAGE_EMULATOR_HOST is set and storage: true", async () => {
+  it("connects Storage emulator when VITE_STORAGE_EMULATOR_HOST is set and storage module provided", async () => {
     vi.stubEnv("VITE_STORAGE_EMULATOR_HOST", "localhost:9199");
     const createAppContext = await loadModule();
     const mocks = await loadMocks();
+    const { getStorage, connectStorageEmulator } = await import(
+      "firebase/storage"
+    );
 
-    await createAppContext("myapp", "app-id-123", { storage: true });
+    createAppContext("myapp", "app-id-123", {
+      getStorage,
+      connectStorageEmulator,
+    });
 
     expect(mocks.connectStorageEmulator).toHaveBeenCalledWith(
       mockStorage,
