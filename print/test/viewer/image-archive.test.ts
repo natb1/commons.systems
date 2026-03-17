@@ -351,6 +351,36 @@ describe("createImageArchiveRenderer", () => {
     expect(HTTPRangeReader).toHaveBeenCalledWith("https://example.com/archive.zip");
   });
 
+  it("falls back to full fetch when HTTPRangeReader fails", async () => {
+    const fallbackEntries = makeMockEntries({ "image-001.png": new Uint8Array([1]) });
+    // First call (HTTPRangeReader path) rejects; second call (ArrayBuffer path) resolves
+    mockUnzip
+      .mockRejectedValueOnce(new Error("Range not supported"))
+      .mockResolvedValueOnce(fallbackEntries as unknown as ZipInfo);
+
+    const mockArrayBuffer = new ArrayBuffer(8);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: vi.fn().mockResolvedValue(mockArrayBuffer),
+    }));
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    expect(renderer.pageCount).toBe(1);
+    expect(container.querySelector("img")).not.toBeNull();
+    expect(fetch).toHaveBeenCalledWith("https://example.com/archive.zip");
+    expect(mockUnzip).toHaveBeenCalledTimes(2);
+    expect(mockUnzip).toHaveBeenLastCalledWith(mockArrayBuffer);
+
+    vi.unstubAllGlobals();
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn((blob: Blob) => `blob:mock-${Math.random()}`),
+      revokeObjectURL: vi.fn(),
+    });
+  });
+
   it("prefetches next page after init", async () => {
     const result = mockEntries({
       "image-001.png": new Uint8Array([1]),

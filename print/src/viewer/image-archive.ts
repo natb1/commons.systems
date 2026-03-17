@@ -32,8 +32,17 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
 
   return {
     async init(container: HTMLElement, url: string, initialPosition?: string): Promise<void> {
-      const reader = new HTTPRangeReader(url);
-      const { entries } = await unzip(reader);
+      let entries: Record<string, ZipEntry>;
+      try {
+        const reader = new HTTPRangeReader(url);
+        ({ entries } = await unzip(reader));
+      } catch {
+        // Fall back to full download when Range requests are unavailable
+        // (e.g. Firebase Storage emulator).
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Failed to fetch archive: ${res.status}`);
+        ({ entries } = await unzip(await res.arrayBuffer()));
+      }
 
       const imageEntries = Object.keys(entries)
         .filter((path) => IMAGE_EXT.test(path))
