@@ -1,32 +1,21 @@
 import * as Plot from "@observablehq/plot";
 import type { Budget, BudgetId, BudgetPeriod } from "../firestore.js";
-import { computePeriodBalances, type PeriodBalance } from "../balance.js";
+import { applyRollover, computePeriodBalances, type PeriodBalance } from "../balance.js";
 
 export interface ChartOptions {
   budgets: Budget[];
   periods: BudgetPeriod[];
-  windowWeeks: number;
+}
+
+export interface ChartResult {
+  weekLabels: string[];
 }
 
 interface BarDatum {
   week: string;
   budget: string;
-  value: number;
-  type: "allowance" | "spent";
-  overBudget: boolean;
-}
-
-interface LineDatum {
-  week: string;
-  budget: string;
-  balance: number;
-}
-
-interface TipDatum {
-  week: string;
-  budget: string;
-  allowance: number;
   spent: number;
+  allowance: number;
   balance: number;
 }
 
@@ -35,130 +24,172 @@ function formatWeek(ts: { toDate(): Date }): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/** Collect ordered unique week entries across all budgets, keyed by ms to avoid label collisions. */
+function allWeekEntries(balanceMap: Map<BudgetId, PeriodBalance[]>): { label: string; ms: number }[] {
+  const seen = new Map<number, string>(); // ms → label
+  for (const balances of balanceMap.values()) {
+    for (const pb of balances) {
+      const ms = pb.periodStart.toMillis();
+      if (!seen.has(ms)) seen.set(ms, formatWeek(pb.periodStart));
+    }
+  }
+  return [...seen.entries()].sort((a, b) => a[0] - b[0]).map(([ms, label]) => ({ label, ms }));
+}
+
 function buildChartData(
   budgets: Budget[],
   balanceMap: Map<BudgetId, PeriodBalance[]>,
-  windowWeeks: number,
-): { bars: BarDatum[]; lines: LineDatum[]; tips: TipDatum[] } {
-  // Find the latest periodStart across all budgets to determine the window
-  let latestMs = 0;
-  for (const balances of balanceMap.values()) {
-    for (const b of balances) {
-      const ms = b.periodStart.toMillis();
-      if (ms > latestMs) latestMs = ms;
-    }
-  }
-
-  const bars: BarDatum[] = [];
-  const lines: LineDatum[] = [];
-  const tips: TipDatum[] = [];
+): { data: BarDatum[]; weekLabels: string[] } {
+  const weekEntries = allWeekEntries(balanceMap);
+  const weekLabels = weekEntries.map(e => e.label);
+  const data: BarDatum[] = [];
 
   for (const budget of budgets) {
     const balances = balanceMap.get(budget.id) ?? [];
-    // Filter to most recent windowWeeks periods
-    const filtered = latestMs === 0
-      ? balances
-      : balances.filter((_, i) => i >= balances.length - windowWeeks);
+    const byMs = new Map<number, PeriodBalance>();
+    for (const pb of balances) byMs.set(pb.periodStart.toMillis(), pb);
 
-    for (const pb of filtered) {
-      const week = formatWeek(pb.periodStart);
-      const overBudget = pb.spent > budget.weeklyAllowance;
-
-      bars.push({
-        week,
-        budget: budget.name,
-        value: budget.weeklyAllowance,
-        type: "allowance",
-        overBudget: false,
-      });
-      bars.push({
-        week,
-        budget: budget.name,
-        value: pb.spent,
-        type: "spent",
-        overBudget,
-      });
-      lines.push({
-        week,
-        budget: budget.name,
-        balance: pb.balance,
-      });
-      tips.push({
-        week,
-        budget: budget.name,
-        allowance: budget.weeklyAllowance,
-        spent: pb.spent,
-        balance: pb.balance,
-      });
+    // Walk all weeks: fill missing periods (budget had no activity this week) with zero-spend rollover entries
+    let accumulated = 0;
+    for (const entry of weekEntries) {
+      const pb = byMs.get(entry.ms);
+      if (pb) {
+        data.push({
+          week: entry.label,
+          budget: budget.name,
+          spent: pb.spent,
+          allowance: budget.weeklyAllowance,
+          balance: pb.runningBalance,
+        });
+        accumulated = pb.runningBalance;
+      } else {
+        // No period for this week — zero spend, rollover accumulates allowance
+        const balance = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
+        data.push({
+          week: entry.label,
+          budget: budget.name,
+          spent: 0,
+          allowance: budget.weeklyAllowance,
+          balance,
+        });
+        accumulated = balance;
+      }
     }
   }
 
-  return { bars, lines, tips };
+  return { data, weekLabels };
 }
 
-function getThemeColors(container: HTMLElement): { fg: string; surface: string; border: string } {
-  const styles = getComputedStyle(container);
-  return {
-    fg: styles.getPropertyValue("--fg").trim() || "#e0e0e0",
-    surface: styles.getPropertyValue("--surface").trim() || "#1a1a1a",
-    border: styles.getPropertyValue("--border").trim() || "#333",
-  };
+function getThemeFg(container: HTMLElement): string {
+  const fg = getComputedStyle(container).getPropertyValue("--fg").trim();
+  if (!fg) throw new Error("Missing required CSS custom property --fg");
+  return fg;
 }
 
-export function renderBudgetChart(container: HTMLElement, options: ChartOptions): void {
-  const { budgets, periods, windowWeeks } = options;
+export function renderBudgetChart(container: HTMLElement, options: ChartOptions): ChartResult {
+  const { budgets, periods } = options;
   const balanceMap = computePeriodBalances(budgets, periods);
-  const { bars, lines, tips } = buildChartData(budgets, balanceMap, windowWeeks);
+  const { data, weekLabels } = buildChartData(budgets, balanceMap);
 
-  if (bars.length === 0) {
+  if (data.length === 0) {
     container.textContent = "No budget period data to chart.";
-    return;
+    return { weekLabels: [] };
   }
+  const weekCount = weekLabels.length;
+  const panelWidth = Math.max(budgets.length * 60 + 40, 120);
+  const axisWidth = 50;
+  const marginRight = 20;
+  const chartWidth = Math.max(weekCount * panelWidth + marginRight, (container.clientWidth || 640) - axisWidth);
+  const height = 300;
+  const marginBottom = 50;
 
-  const colors = getThemeColors(container);
-  const allowanceBars = bars.filter(d => d.type === "allowance");
-  const spentBars = bars.filter(d => d.type === "spent");
+  const fg = getThemeFg(container);
 
-  const plot = Plot.plot({
-    width: container.clientWidth || 640,
-    height: 300,
-    style: {
-      background: "transparent",
-      color: colors.fg,
-    },
-    x: { label: null, tickRotate: -45 },
-    y: { label: "$", grid: true },
+  // Compute shared Y domain so the fixed Y-axis and scrollable chart body use the same scale
+  const yMax = Math.max(...data.map(d => Math.max(d.spent, d.allowance, d.balance)));
+  const yMin = Math.min(0, ...data.map(d => d.balance));
+  const yDomain: [number, number] = [yMin, yMax];
+
+  const sharedStyle = { background: "transparent", color: fg };
+
+  // Fixed Y-axis (stays visible while scrolling)
+  const axisSvg = Plot.plot({
+    width: axisWidth,
+    height,
+    marginBottom,
+    marginLeft: axisWidth - 1,
+    marginRight: 0,
+    style: sharedStyle,
+    x: { axis: null, domain: [0, 1] },
+    y: { label: "$", grid: false, domain: yDomain },
+    marks: [Plot.ruleY([0])],
+  });
+
+  // Scrollable chart body (no Y-axis)
+  const chartSvg = Plot.plot({
+    width: chartWidth,
+    height,
+    marginBottom,
+    marginLeft: 0,
+    marginRight,
+    style: sharedStyle,
+    x: { label: null, tickRotate: -45, padding: 0.1 },
+    y: { label: null, axis: null, grid: true, domain: yDomain },
     fx: { label: null, padding: 0.15 },
     color: { legend: false },
     marks: [
-      Plot.barY(allowanceBars, {
+      Plot.tickY(data, {
         x: "budget",
-        y: "value",
+        y: "allowance",
         fx: "week",
-        fill: colors.border,
-        fillOpacity: 0.3,
-      }),
-      Plot.barY(spentBars, {
-        x: "budget",
-        y: "value",
-        fx: "week",
-        fill: d => (d as BarDatum).overBudget ? "#e45858" : "#4caf50",
-      }),
-      Plot.lineY(lines, {
-        x: "week",
-        y: "balance",
-        stroke: "budget",
+        stroke: fg,
+        strokeOpacity: 0.5,
         strokeWidth: 2,
-        marker: "dot",
+        strokeDasharray: "4,3",
       }),
-      Plot.tip(tips, Plot.pointer({
-        x: "week",
+      Plot.barY(data, {
+        x: "budget",
         y: "spent",
-        title: (d: TipDatum) =>
+        fx: "week",
+        fill: (d: BarDatum) => d.balance < 0 ? "#e45858" : "#4caf50",
+      }),
+      Plot.dot(data, {
+        x: "budget",
+        y: "balance",
+        fx: "week",
+        fill: "#f0a030",
+        r: 4,
+      }),
+      Plot.ruleY([0]),
+      Plot.tip(data, Plot.pointer({
+        x: "budget",
+        y: "spent",
+        fx: "week",
+        title: (d: BarDatum) =>
           `${d.budget}\nWeek: ${d.week}\nAllowance: $${d.allowance.toFixed(2)}\nSpent: $${d.spent.toFixed(2)}\nBalance: $${d.balance.toFixed(2)}`,
       })),
     ],
   });
 
-  container.replaceChildren(plot);
+  chartSvg.style.width = `${chartWidth}px`;
+  chartSvg.style.minWidth = `${chartWidth}px`;
+
+  const layout = document.createElement("div");
+  layout.className = "chart-layout";
+
+  const axisDiv = document.createElement("div");
+  axisDiv.className = "chart-y-axis";
+  axisDiv.appendChild(axisSvg);
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "chart-scroll-wrapper";
+  wrapper.appendChild(chartSvg);
+
+  layout.appendChild(axisDiv);
+  layout.appendChild(wrapper);
+  container.replaceChildren(layout);
+
+  wrapper.scrollLeft = wrapper.scrollWidth;
+
+  return { weekLabels };
 }

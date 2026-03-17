@@ -53,7 +53,7 @@ interface SerializedBudget {
   readonly id: string;
   readonly name: string;
   readonly weeklyAllowance: number;
-  readonly rollover: string;
+  readonly rollover: Rollover;
 }
 
 function serializeBudgets(budgets: Budget[]): string {
@@ -81,12 +81,7 @@ function serializePeriods(periods: BudgetPeriod[]): string {
 
 function renderChartContainer(budgets: Budget[], periods: BudgetPeriod[]): string {
   return `<div id="budgets-chart-controls">
-      <label>Weeks: <select id="chart-window">
-        <option value="8">8</option>
-        <option value="12" selected>12</option>
-        <option value="16">16</option>
-        <option value="24">24</option>
-      </select></label>
+      <label>Jump to: <input type="date" id="chart-date-picker"></label>
     </div>
     <div id="budgets-chart" data-budgets="${serializeBudgets(budgets)}" data-periods="${serializePeriods(periods)}"></div>`;
 }

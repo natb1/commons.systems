@@ -1,7 +1,8 @@
 import { Timestamp } from "firebase/firestore";
 import { updateBudget, type Budget, type BudgetId, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod, type Rollover } from "../firestore.js";
+import { DataIntegrityError } from "../errors.js";
 import { showInputError, handleSaveError } from "./hydrate-util.js";
-import { renderBudgetChart } from "./budgets-chart.js";
+import { renderBudgetChart, type ChartResult } from "./budgets-chart.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
   const row = el.closest(".budget-row");
@@ -70,18 +71,24 @@ export function hydrateBudgetTable(container: HTMLElement): void {
 }
 
 function deserializeBudgets(raw: string): Budget[] {
-  const parsed = JSON.parse(raw) as Array<{ id: string; name: string; weeklyAllowance: number; rollover: string }>;
-  return parsed.map(b => ({
-    id: b.id as BudgetId,
-    name: b.name,
-    weeklyAllowance: b.weeklyAllowance,
-    rollover: b.rollover as Rollover,
-    groupId: null,
-  }));
+  let parsed: Array<{ id: string; name: string; weeklyAllowance: number; rollover: string }>;
+  try { parsed = JSON.parse(raw); } catch { throw new DataIntegrityError("Invalid budget chart data"); }
+  return parsed.map(b => {
+    if (b.rollover !== "none" && b.rollover !== "debt" && b.rollover !== "balance")
+      throw new DataIntegrityError(`Invalid rollover value: ${b.rollover}`);
+    return {
+      id: b.id as BudgetId,
+      name: b.name,
+      weeklyAllowance: b.weeklyAllowance,
+      rollover: b.rollover,
+      groupId: null,
+    };
+  });
 }
 
 function deserializePeriods(raw: string): BudgetPeriod[] {
-  const parsed = JSON.parse(raw) as SerializedBudgetPeriod[];
+  let parsed: SerializedBudgetPeriod[];
+  try { parsed = JSON.parse(raw); } catch { throw new DataIntegrityError("Invalid budget period chart data"); }
   return parsed.map(p => ({
     id: p.id as BudgetPeriodId,
     budgetId: p.budgetId as BudgetId,
@@ -97,30 +104,75 @@ function deserializePeriods(raw: string): BudgetPeriod[] {
 export function hydrateBudgetChart(container: HTMLElement): void {
   const budgetsRaw = container.dataset.budgets;
   const periodsRaw = container.dataset.periods;
-  if (!budgetsRaw || !periodsRaw) return;
+  if (!budgetsRaw || !periodsRaw)
+    throw new DataIntegrityError("budgets-chart missing required data-budgets or data-periods attribute");
 
   const budgets = deserializeBudgets(budgetsRaw);
   const periods = deserializePeriods(periodsRaw);
-  let windowWeeks = 12;
+  let chartResult: ChartResult = { weekLabels: [] };
+
+  // Build a sorted list of period start dates (ms) for date picker mapping.
+  // Each entry corresponds to a week label by index.
+  const periodStartDates = [...new Set(
+    periods.map(p => p.periodStart.toMillis()),
+  )].sort((a, b) => a - b);
 
   function render(): void {
-    renderBudgetChart(container, { budgets, periods, windowWeeks });
+    chartResult = renderBudgetChart(container, { budgets, periods });
   }
 
   render();
 
-  const windowSelect = document.getElementById("chart-window") as HTMLSelectElement | null;
-  if (windowSelect) {
-    windowSelect.addEventListener("change", () => {
-      windowWeeks = Number(windowSelect.value);
-      render();
+  // Configure date picker min/max from period date range
+  const datePicker = document.getElementById("chart-date-picker") as HTMLInputElement | null;
+  if (datePicker && periodStartDates.length > 0) {
+    datePicker.min = toISODate(periodStartDates[0]);
+    datePicker.max = toISODate(periodStartDates[periodStartDates.length - 1]);
+
+    datePicker.addEventListener("change", () => {
+      const wrapper = container.querySelector(".chart-scroll-wrapper");
+      if (!(wrapper instanceof HTMLElement) || !datePicker.value) return;
+
+      const selectedMs = new Date(datePicker.value + "T00:00:00").getTime();
+      // Find nearest period start date
+      let nearestIdx = 0;
+      let nearestDist = Infinity;
+      for (let i = 0; i < periodStartDates.length; i++) {
+        const dist = Math.abs(periodStartDates[i] - selectedMs);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestIdx = i;
+        }
+      }
+
+      const weekCount = chartResult.weekLabels.length;
+      if (weekCount === 0) return;
+
+      const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
+      const left = weekCount <= 1 ? 0 : Math.round((nearestIdx / (weekCount - 1)) * scrollMax);
+      wrapper.scrollTo({ left: Math.max(0, left - wrapper.clientWidth / 2), behavior: "smooth" });
     });
   }
 
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   const observer = new ResizeObserver(() => {
     if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(render, 150);
+    resizeTimer = setTimeout(() => {
+      const wrapper = container.querySelector(".chart-scroll-wrapper");
+      const scrollRatio = wrapper instanceof HTMLElement && wrapper.scrollWidth > 0
+        ? wrapper.scrollLeft / wrapper.scrollWidth
+        : 1;
+      render();
+      const newWrapper = container.querySelector(".chart-scroll-wrapper");
+      if (newWrapper instanceof HTMLElement) {
+        newWrapper.scrollLeft = scrollRatio * newWrapper.scrollWidth;
+      }
+    }, 150);
   });
   observer.observe(container);
+}
+
+function toISODate(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

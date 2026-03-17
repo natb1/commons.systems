@@ -113,7 +113,7 @@ function transition(next: AppState): void {
   router.navigate();
 }
 
-// Hydrate tables (transactions, budgets) whenever they appear in the DOM.
+// Hydrate interactive containers (tables, chart) whenever they appear in the DOM.
 // Multiple code paths trigger renders (navigation, auth state changes), so an
 // observer catches all of them. Sets dataset.hydrated to "true" on success or
 // "error" on failure to prevent retry loops.

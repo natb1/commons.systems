@@ -5,7 +5,6 @@ test.describe("budgets", () => {
     await page.goto("/");
     await expect(page.locator("main h2")).toHaveText("Budgets", { timeout: 30000 });
     await expect(page.locator("#budgets-error")).toHaveCount(0);
-    // Chart renders without error
     await expect(page.locator("#budgets-chart")).toBeVisible();
     await expect(page.locator("#budgets-chart svg")).toBeVisible({ timeout: 10000 });
   });
@@ -36,24 +35,19 @@ test.describe("budgets", () => {
     await expect(page.locator("#budgets-chart svg")).toBeVisible({ timeout: 10000 });
   });
 
-  test("window selector changes chart content", async ({ page }) => {
+  test("date picker and chart layout with fixed axis", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#budgets-chart svg")).toBeVisible({ timeout: 10000 });
-    // Get initial SVG content
-    const initialSvg = await page.locator("#budgets-chart svg").innerHTML();
-    // Change window to 8 weeks
-    await page.selectOption("#chart-window", "8");
-    // Wait for re-render
-    await page.waitForTimeout(500);
-    const newSvg = await page.locator("#budgets-chart svg").innerHTML();
-    // Content should differ (fewer data points)
-    expect(newSvg).not.toBe(initialSvg);
+    const datePicker = page.locator("#chart-date-picker");
+    await expect(datePicker).toBeVisible();
+    await expect(page.locator(".chart-layout")).toBeVisible();
+    await expect(page.locator(".chart-y-axis")).toBeVisible();
+    await expect(page.locator(".chart-scroll-wrapper")).toBeVisible();
   });
 
   test("chart has bars for budget periods", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#budgets-chart svg")).toBeVisible({ timeout: 10000 });
-    // Observable Plot renders rect elements for bars
     const rects = page.locator("#budgets-chart svg rect");
     const count = await rects.count();
     expect(count).toBeGreaterThan(0);

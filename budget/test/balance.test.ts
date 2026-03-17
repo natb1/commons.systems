@@ -438,7 +438,7 @@ describe("computeAllBudgetBalances", () => {
 });
 
 describe("computePeriodBalances", () => {
-  it("single budget, single period: returns correct spent and balance", () => {
+  it("single budget, single period: returns correct spent and runningBalance", () => {
     const budget = makeBudget({ id: "food", weeklyAllowance: 150, rollover: "none" });
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
@@ -448,7 +448,7 @@ describe("computePeriodBalances", () => {
     expect(balances).toHaveLength(1);
     expect(balances[0].spent).toBe(80);
     // rollover=none: applyRollover(0, 150, "none") = 150; 150 - 80 = 70
-    expect(balances[0].balance).toBe(70);
+    expect(balances[0].runningBalance).toBe(70);
     expect(balances[0].periodStart.toMillis()).toBe(ts("2025-01-06").toMillis());
   });
 
@@ -463,10 +463,10 @@ describe("computePeriodBalances", () => {
     expect(balances).toHaveLength(2);
     // w1: applyRollover(0, 100, "none") = 100; 100 - 60 = 40
     expect(balances[0].spent).toBe(60);
-    expect(balances[0].balance).toBe(40);
+    expect(balances[0].runningBalance).toBe(40);
     // w2: applyRollover(40, 100, "none") = 100 (resets); 100 - 30 = 70
     expect(balances[1].spent).toBe(30);
-    expect(balances[1].balance).toBe(70);
+    expect(balances[1].runningBalance).toBe(70);
   });
 
   it("multi-period with rollover debt: only negative carries", () => {
@@ -480,10 +480,10 @@ describe("computePeriodBalances", () => {
     expect(balances).toHaveLength(2);
     // w1: applyRollover(0, 100, "debt") = min(0,0)+100 = 100; 100 - 120 = -20
     expect(balances[0].spent).toBe(120);
-    expect(balances[0].balance).toBe(-20);
+    expect(balances[0].runningBalance).toBe(-20);
     // w2: applyRollover(-20, 100, "debt") = min(-20,0)+100 = 80; 80 - 50 = 30
     expect(balances[1].spent).toBe(50);
-    expect(balances[1].balance).toBe(30);
+    expect(balances[1].runningBalance).toBe(30);
   });
 
   it("multi-period with rollover balance: full balance carries", () => {
@@ -497,10 +497,10 @@ describe("computePeriodBalances", () => {
     expect(balances).toHaveLength(2);
     // w1: applyRollover(0, 100, "balance") = 0+100 = 100; 100 - 50 = 50
     expect(balances[0].spent).toBe(50);
-    expect(balances[0].balance).toBe(50);
+    expect(balances[0].runningBalance).toBe(50);
     // w2: applyRollover(50, 100, "balance") = 50+100 = 150; 150 - 30 = 120
     expect(balances[1].spent).toBe(30);
-    expect(balances[1].balance).toBe(120);
+    expect(balances[1].runningBalance).toBe(120);
   });
 
   it("multi-budget: returns separate entries per budget", () => {
@@ -516,12 +516,12 @@ describe("computePeriodBalances", () => {
     const foodBalances = result.get("food" as any)!;
     expect(foodBalances).toHaveLength(1);
     expect(foodBalances[0].spent).toBe(60);
-    expect(foodBalances[0].balance).toBe(40); // 100 - 60
+    expect(foodBalances[0].runningBalance).toBe(40); // 100 - 60
 
     const vacBalances = result.get("vacation" as any)!;
     expect(vacBalances).toHaveLength(1);
     expect(vacBalances[0].spent).toBe(20);
-    expect(vacBalances[0].balance).toBe(30); // 50 - 20
+    expect(vacBalances[0].runningBalance).toBe(30); // 50 - 20
   });
 
   it("empty periods: returns empty array for each budget", () => {
@@ -541,13 +541,12 @@ describe("computePeriodBalances", () => {
 });
 
 describe("seed data consistency", () => {
-  // Verify budget period totals against a curated subset of seed transactions
-  // that excludes normalized duplicates. The actual seed file includes
-  // seed-norm-primary (amount: 25) and seed-norm-secondary (amount: 25), but
-  // only the primary counts toward the period total. This test uses standalone
-  // transactions only, so food-2025-01-20 shows total=45 (25+20) here versus
-  // total=70 (25+20+25 primary) in the actual seed which includes the
-  // normalized primary.
+  // Verify budget period totals against a curated subset of seed transactions.
+  // This subset excludes all normalized transactions (both primary and secondary)
+  // to isolate standalone transaction sums. The actual seed includes
+  // seed-norm-primary (amount: 25) and seed-norm-secondary (amount: 25); the
+  // primary counts toward food-2025-01-20's total (70 = 25+20+25) but is omitted
+  // here, so this test shows total=45 (25+20) for that period.
 
   interface SeedTxn { amount: number; reimbursement: number; budget: string | null; timestamp: Date }
   interface SeedPeriod { id: string; budgetId: string; periodStart: Date; periodEnd: Date; total: number }

@@ -119,7 +119,7 @@ export function computeBudgetBalance(
 export interface PeriodBalance {
   readonly periodStart: Timestamp;
   readonly spent: number;
-  readonly balance: number;
+  readonly runningBalance: number;
 }
 
 export function computePeriodBalances(
@@ -137,7 +137,7 @@ export function computePeriodBalances(
       balances.push({
         periodStart: period.periodStart,
         spent: period.total,
-        balance: accumulated,
+        runningBalance: accumulated,
       });
     }
     result.set(budget.id, balances);
