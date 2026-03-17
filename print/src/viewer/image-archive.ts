@@ -20,12 +20,14 @@ function applyZoom(container: HTMLElement, img: HTMLImageElement, level: number,
 
 export function createImageArchiveRenderer(_onError?: (err: unknown) => void): ContentRenderer {
   // _onError accepted for factory signature consistency with createPdfRenderer. Unlike createPdfRenderer,
-  // this renderer has no background re-render path (no ResizeObserver), so the callback is never invoked;
-  // all errors surface as thrown exceptions from init.
+  // this renderer has no background re-render path, so the callback is never invoked;
+  // all errors surface as thrown exceptions from the renderer's methods.
   let fileData: Uint8Array[] = [];
   let objectUrlCache: (string | null)[] = [];
   let imgEl: HTMLImageElement | null = null;
   let containerEl: HTMLElement | null = null;
+  let scrollParent: HTMLElement | null = null;
+  let resizeObserver: ResizeObserver | null = null;
   // 0 is the pre-init sentinel; position returns "0" and canGoNext/canGoPrev return false until init resolves.
   let _currentPage = 0;
   let _pageCount = 0;
@@ -33,6 +35,18 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   let _zoomLevel = 0; // 0 = fit-to-view, 1+ = zoomed (each step multiplies by ZOOM_FACTOR)
   let _fittedWidth = 0; // displayed width at fit-to-view (captured before first zoom)
   let _fittedHeight = 0;
+
+  function resetZoomState(): void {
+    if (!containerEl || !imgEl || _zoomLevel === 0) return;
+    _zoomLevel = 0;
+    _fittedWidth = 0;
+    _fittedHeight = 0;
+    applyZoom(containerEl, imgEl, 0, 0, 0);
+    if (scrollParent) {
+      scrollParent.scrollTop = 0;
+      scrollParent.scrollLeft = 0;
+    }
+  }
 
   function getObjectUrl(index: number): string {
     if (!objectUrlCache[index]) {
@@ -77,16 +91,20 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       _currentPage = startPage;
 
       containerEl = container;
+      scrollParent = container.parentElement;
       imgEl = document.createElement("img");
       imgEl.alt = `Page ${startPage}`;
       imgEl.src = getObjectUrl(startPage - 1);
       container.appendChild(imgEl);
+
+      resizeObserver = new ResizeObserver(() => { resetZoomState(); });
+      resizeObserver.observe(container);
     },
 
     async goToPage(page: number): Promise<void> {
       if (page < 1 || page > _pageCount) return;
       if (!imgEl) throw new Error("goToPage called after renderer was destroyed");
-      if (this.resetZoom) this.resetZoom();
+      resetZoomState();
       _currentPage = page;
       imgEl.alt = `Page ${page}`;
       imgEl.src = getObjectUrl(page - 1);
@@ -137,7 +155,8 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       _zoomLevel--;
       applyZoom(containerEl, imgEl, _zoomLevel, _fittedWidth, _fittedHeight);
       if (_zoomLevel === 0) {
-        const scrollParent = containerEl.parentElement;
+        _fittedWidth = 0;
+        _fittedHeight = 0;
         if (scrollParent) {
           scrollParent.scrollTop = 0;
           scrollParent.scrollLeft = 0;
@@ -147,13 +166,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
 
     resetZoom(): void {
       if (!containerEl || !imgEl) throw new Error("resetZoom called on uninitialized or destroyed renderer");
-      _zoomLevel = 0;
-      applyZoom(containerEl, imgEl, _zoomLevel, _fittedWidth, _fittedHeight);
-      const scrollParent = containerEl.parentElement;
-      if (scrollParent) {
-        scrollParent.scrollTop = 0;
-        scrollParent.scrollLeft = 0;
-      }
+      resetZoomState();
     },
 
     get isZoomed(): boolean {
@@ -162,6 +175,8 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
 
     destroy(): void {
       destroyed = true;
+      resizeObserver?.disconnect();
+      resizeObserver = null;
       for (const url of objectUrlCache) {
         if (url) URL.revokeObjectURL(url);
       }
@@ -171,6 +186,8 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
         imgEl.remove();
         imgEl = null;
       }
+      containerEl = null;
+      scrollParent = null;
     },
   };
 }

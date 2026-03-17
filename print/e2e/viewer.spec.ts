@@ -299,7 +299,6 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-zoom-out")).toBeEnabled();
 
     await page.locator(".viewer-zoom-out").click();
-    await expect(page.locator(".viewer-zoom-out")).toBeEnabled();
 
     // Still zoomed (went from level 3 to level 2)
     await expect(page.locator(".viewer-zoom-out")).toBeEnabled();
@@ -344,7 +343,7 @@ test.describe("viewer", () => {
     // Zoom in
     const zoomIn = page.locator(".viewer-zoom-in");
     for (let i = 0; i < 3; i++) await zoomIn.click();
-    await page.waitForTimeout(300);
+    await expect(page.locator(".viewer-canvas-wrap.zoomed")).toBeVisible();
 
     // Navigate to next page
     await page.locator(".viewer-next").click();
