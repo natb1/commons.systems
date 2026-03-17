@@ -211,7 +211,6 @@ describe("initViewer", () => {
 
     const prevBtn = outlet.querySelector(".viewer-prev") as HTMLButtonElement;
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
-    // currentPage=1: canGoPrev=false, canGoNext=true
     expect(prevBtn.disabled).toBe(true);
     expect(nextBtn.disabled).toBe(false);
   });
@@ -366,6 +365,34 @@ describe("initViewer", () => {
     await flushInit();
     await vi.runAllTimersAsync();
 
+    expect(globalThis.reportError).toHaveBeenCalled();
+  });
+
+  it("onError callback disables nav buttons and shows render error message", async () => {
+    let capturedOnError: ((err: unknown) => void) | null = null;
+    const renderer = makeMockRenderer();
+
+    initViewer(
+      outlet,
+      (onError) => { capturedOnError = onError; return renderer; },
+      "https://example.com/doc.pdf",
+      "m1",
+      null,
+    );
+    await flushInit();
+
+    // Buttons enabled after successful init
+    const prevBtn = outlet.querySelector(".viewer-prev") as HTMLButtonElement;
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    expect(nextBtn.disabled).toBe(false);
+
+    // Simulate a background render error (e.g., PDF re-render failure)
+    capturedOnError!(new Error("render failure"));
+
+    const pos = outlet.querySelector(".viewer-position") as HTMLElement;
+    expect(pos.textContent).toBe("Render failed. Try refreshing the page.");
+    expect(prevBtn.disabled).toBe(true);
+    expect(nextBtn.disabled).toBe(true);
     expect(globalThis.reportError).toHaveBeenCalled();
   });
 

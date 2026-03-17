@@ -111,14 +111,14 @@ export function initViewer(
   // Set true when Firestore read fails at init; prevents overwriting unknown saved state on write.
   let firestoreReadFailed = false;
 
-  // Persist position after each navigation — debounced (500ms), deduplicated (skips matching position),
-  // and guarded against pre-init saves (pos === "0"). Skips Firestore writes if the initial read failed.
+  // Persist position after each navigation — debounced (500ms), deduplicated (skips matching position).
+  // Skips Firestore writes if the initial read failed.
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
       const pos = renderer.position;
-      if (!pos || pos === "0" || pos === lastSavedPosition) return;
+      if (!pos || pos === lastSavedPosition) return;
       lastSavedPosition = pos;
       if (uid && !firestoreReadFailed) {
         saveReadingPosition(uid, mediaId, pos).catch((err) => {
@@ -140,7 +140,7 @@ export function initViewer(
 
   function handleNavError(err: unknown) {
     reportError(new Error("Page navigation failed", { cause: err }));
-    position.textContent = "Navigation failed";
+    position.textContent = "Navigation failed. Try refreshing the page.";
   }
 
   async function goPrev() {

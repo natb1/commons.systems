@@ -22,10 +22,7 @@ function mockFetch(buffer: ArrayBuffer) {
 }
 
 function makeContainer(): HTMLElement {
-  const container = document.createElement("div");
-  const canvas = document.createElement("canvas");
-  container.appendChild(canvas);
-  return container;
+  return document.createElement("div");
 }
 
 import { createImageArchiveRenderer } from "../../src/viewer/image-archive.js";
@@ -51,20 +48,31 @@ describe("createImageArchiveRenderer", () => {
 
     const img = container.querySelector("img") as HTMLImageElement;
     expect(img).not.toBeNull();
-    // Only the first page's URL is created on init (lazy loading)
+    // Only the first page's URL is created on init (remaining URLs deferred until that page is visited)
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
-  it("hides canvas on init", async () => {
+  it("appends img element to container on init", async () => {
     const zip = makeZipBuffer({ "image-001.png": new Uint8Array([1]) });
     mockFetch(zip);
 
     const container = makeContainer();
-    const canvas = container.querySelector("canvas") as HTMLCanvasElement;
     const renderer = createImageArchiveRenderer();
     await renderer.init(container, "https://example.com/archive.zip");
 
-    expect(canvas.style.display).toBe("none");
+    expect(container.querySelector("img")).not.toBeNull();
+  });
+
+  it("sets alt attribute on img element for accessibility", async () => {
+    const zip = makeZipBuffer({ "image-001.png": new Uint8Array([1]) });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    const img = container.querySelector("img") as HTMLImageElement;
+    expect(img.alt).toBe("Page 1");
   });
 
   it("goToPage changes displayed image", async () => {
@@ -84,6 +92,58 @@ describe("createImageArchiveRenderer", () => {
     await renderer.goToPage(2);
     expect(renderer.currentPage).toBe(2);
     expect(img.src).not.toBe(firstSrc);
+    expect(img.alt).toBe("Page 2");
+  });
+
+  it("next() advances to next page", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    await renderer.next();
+    expect(renderer.currentPage).toBe(2);
+    expect(renderer.canGoNext).toBe(false);
+    expect(renderer.canGoPrev).toBe(true);
+  });
+
+  it("prev() goes to previous page", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    await renderer.next();
+    await renderer.prev();
+    expect(renderer.currentPage).toBe(1);
+    expect(renderer.canGoPrev).toBe(false);
+    expect(renderer.canGoNext).toBe(true);
+  });
+
+  it("positionLabel returns 'Page X / Y' format", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    expect(renderer.positionLabel).toBe("Page 1 / 2");
+    await renderer.next();
+    expect(renderer.positionLabel).toBe("Page 2 / 2");
   });
 
   it("ignores non-image entries in ZIP", async () => {
@@ -155,20 +215,6 @@ describe("createImageArchiveRenderer", () => {
     // Only URLs that were actually created (page 1 on init, no goToPage calls) are revoked
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
     expect(container.querySelector("img")).toBeNull();
-  });
-
-  it("destroy restores canvas visibility", async () => {
-    const zip = makeZipBuffer({ "image-001.png": new Uint8Array([1]) });
-    mockFetch(zip);
-
-    const container = makeContainer();
-    const canvas = container.querySelector("canvas") as HTMLCanvasElement;
-    const renderer = createImageArchiveRenderer();
-    await renderer.init(container, "https://example.com/archive.zip");
-
-    expect(canvas.style.display).toBe("none");
-    renderer.destroy();
-    expect(canvas.style.display).toBe("");
   });
 
   it("goToPage is a no-op for out-of-range values", async () => {

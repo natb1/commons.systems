@@ -11,7 +11,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   let fileData: Uint8Array[] = [];
   let objectUrlCache: (string | null)[] = [];
   let imgEl: HTMLImageElement | null = null;
-  let canvas: HTMLCanvasElement | null = null;
+  // 0 is the pre-init sentinel; position returns "0" and canGoNext/canGoPrev return false until init resolves.
   let _currentPage = 0;
   let _pageCount = 0;
   let destroyed = false;
@@ -25,14 +25,19 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
 
   return {
     async init(container: HTMLElement, url: string, initialPosition?: string): Promise<void> {
-      canvas = container.querySelector("canvas") as HTMLCanvasElement;
-      if (!canvas) throw new Error("Canvas element not found in container");
-
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Failed to fetch archive: ${response.status}`);
 
       const buffer = await response.arrayBuffer();
-      const files = unzipSync(new Uint8Array(buffer));
+      let files: ReturnType<typeof unzipSync>;
+      try {
+        files = unzipSync(new Uint8Array(buffer));
+      } catch (err) {
+        throw new Error(
+          `Failed to decompress archive from ${url} (${buffer.byteLength} bytes): ${err instanceof Error ? err.message : String(err)}`,
+          { cause: err },
+        );
+      }
 
       const imagePaths = Object.keys(files)
         .filter((path) => IMAGE_EXT.test(path))
@@ -53,9 +58,6 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       const startPage = parsePositionPage(initialPosition, _pageCount);
       _currentPage = startPage;
 
-      // Hide the canvas rather than remove it: the PDF renderer locates it via querySelector on the
-      // same container, and hiding avoids a layout shift on destroy.
-      canvas.style.display = "none";
       imgEl = document.createElement("img");
       imgEl.alt = `Page ${startPage}`;
       imgEl.src = getObjectUrl(startPage - 1);
@@ -70,8 +72,26 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       imgEl.src = getObjectUrl(page - 1);
     },
 
+    async next(): Promise<void> {
+      if (_currentPage < _pageCount) {
+        await this.goToPage(_currentPage + 1);
+      }
+    },
+
+    async prev(): Promise<void> {
+      if (_currentPage > 1) {
+        await this.goToPage(_currentPage - 1);
+      }
+    },
+
+    get canGoNext() { return _currentPage < _pageCount; },
+    get canGoPrev() { return _currentPage > 1; },
+
     get position() {
       return String(_currentPage);
+    },
+    get positionLabel() {
+      return `Page ${_currentPage} / ${_pageCount}`;
     },
     get pageCount() {
       return _pageCount;
@@ -90,10 +110,6 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       if (imgEl) {
         imgEl.remove();
         imgEl = null;
-      }
-      if (canvas) {
-        canvas.style.display = "";
-        canvas = null;
       }
     },
   };
