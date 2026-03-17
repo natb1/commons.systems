@@ -28,7 +28,7 @@ import {
   getAllAccessibleMedia,
   getMediaItem,
 } from "../src/firestore";
-import { DataIntegrityError } from "../src/errors";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 function validMediaDoc(
   id: string,

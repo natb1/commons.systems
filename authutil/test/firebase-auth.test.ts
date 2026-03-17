@@ -54,6 +54,16 @@ describe("createFirebaseAuth", () => {
     expect(typeof result.onAuthStateChanged).toBe("function");
   });
 
+  it("onAuthStateChanged passes callback to firebase with bound auth", () => {
+    const result = createFirebaseAuth(mockApp);
+    const callback = vi.fn();
+    result.onAuthStateChanged(callback);
+    expect(mockOnAuthStateChanged).toHaveBeenCalledWith(
+      { type: "mock-auth" },
+      callback,
+    );
+  });
+
   it("calls getRedirectResult on factory invocation", () => {
     createFirebaseAuth(mockApp);
     expect(mockGetRedirectResult).toHaveBeenCalledWith({ type: "mock-auth" });

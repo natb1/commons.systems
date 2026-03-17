@@ -19,7 +19,9 @@ vi.mock("firebase/firestore", () => ({
 import { getUserGroups, isInGroup, ADMIN_GROUP_ID } from "../src/groups";
 import type { Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
+import type { Namespace } from "@commons-systems/firestoreutil/namespace";
 
+const NAMESPACE = "app/test" as Namespace;
 const mockDb = { type: "mock-firestore" } as unknown as Firestore;
 const mockUser = { uid: "user-123", email: "user@example.com" } as User;
 
@@ -39,7 +41,7 @@ describe("getUserGroups", () => {
       ],
     });
 
-    const groups = await getUserGroups(mockDb, "app/test", mockUser);
+    const groups = await getUserGroups(mockDb, NAMESPACE, mockUser);
 
     expect(groups).toEqual([
       { id: "household", name: "household" },
@@ -52,7 +54,7 @@ describe("getUserGroups", () => {
   it("returns empty array when no groups", async () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    const groups = await getUserGroups(mockDb, "app/test", mockUser);
+    const groups = await getUserGroups(mockDb, NAMESPACE, mockUser);
 
     expect(groups).toEqual([]);
   });
@@ -60,7 +62,7 @@ describe("getUserGroups", () => {
   it("throws when user has no email", async () => {
     const noEmailUser = { uid: "user-no-email" } as User;
 
-    await expect(getUserGroups(mockDb, "app/test", noEmailUser)).rejects.toThrow(
+    await expect(getUserGroups(mockDb, NAMESPACE, noEmailUser)).rejects.toThrow(
       /has no email/,
     );
     expect(mockGetDocs).not.toHaveBeenCalled();
@@ -72,7 +74,7 @@ describe("getUserGroups", () => {
     });
 
     const { DataIntegrityError } = await import("../src/errors");
-    await expect(getUserGroups(mockDb, "app/test", mockUser)).rejects.toThrow(DataIntegrityError);
+    await expect(getUserGroups(mockDb, NAMESPACE, mockUser)).rejects.toThrow(DataIntegrityError);
   });
 });
 
@@ -88,14 +90,14 @@ describe("isInGroup", () => {
       data: () => ({ name: "admin", members: ["user@example.com", "other@example.com"] }),
     });
 
-    const result = await isInGroup(mockDb, "app/test", mockUser, ADMIN_GROUP_ID);
+    const result = await isInGroup(mockDb, NAMESPACE, mockUser, ADMIN_GROUP_ID);
 
     expect(result).toBe(true);
     expect(mockDoc).toHaveBeenCalledWith(mockDb, "app/test/groups", "admin");
   });
 
   it("returns false for null user", async () => {
-    const result = await isInGroup(mockDb, "app/test", null, ADMIN_GROUP_ID);
+    const result = await isInGroup(mockDb, NAMESPACE, null, ADMIN_GROUP_ID);
 
     expect(result).toBe(false);
     expect(mockGetDoc).not.toHaveBeenCalled();
@@ -104,7 +106,7 @@ describe("isInGroup", () => {
   it("throws when user has no email", async () => {
     const noEmailUser = { uid: "user-no-email" } as User;
 
-    await expect(isInGroup(mockDb, "app/test", noEmailUser, ADMIN_GROUP_ID)).rejects.toThrow(
+    await expect(isInGroup(mockDb, NAMESPACE, noEmailUser, ADMIN_GROUP_ID)).rejects.toThrow(
       /has no email/,
     );
     expect(mockGetDoc).not.toHaveBeenCalled();
@@ -116,7 +118,7 @@ describe("isInGroup", () => {
       data: () => undefined,
     });
 
-    const result = await isInGroup(mockDb, "app/test", mockUser, ADMIN_GROUP_ID);
+    const result = await isInGroup(mockDb, NAMESPACE, mockUser, ADMIN_GROUP_ID);
 
     expect(result).toBe(false);
   });
@@ -127,7 +129,7 @@ describe("isInGroup", () => {
       data: () => ({ name: "admin", members: ["other@example.com"] }),
     });
 
-    const result = await isInGroup(mockDb, "app/test", mockUser, ADMIN_GROUP_ID);
+    const result = await isInGroup(mockDb, NAMESPACE, mockUser, ADMIN_GROUP_ID);
 
     expect(result).toBe(false);
   });
@@ -136,7 +138,7 @@ describe("isInGroup", () => {
     const error = Object.assign(new Error("permission denied"), { code: "permission-denied" });
     mockGetDoc.mockRejectedValue(error);
 
-    const result = await isInGroup(mockDb, "app/test", mockUser, ADMIN_GROUP_ID);
+    const result = await isInGroup(mockDb, NAMESPACE, mockUser, ADMIN_GROUP_ID);
 
     expect(result).toBe(false);
   });
@@ -144,6 +146,6 @@ describe("isInGroup", () => {
   it("rethrows non-permission errors", async () => {
     mockGetDoc.mockRejectedValue(new Error("network error"));
 
-    await expect(isInGroup(mockDb, "app/test", mockUser, ADMIN_GROUP_ID)).rejects.toThrow("network error");
+    await expect(isInGroup(mockDb, NAMESPACE, mockUser, ADMIN_GROUP_ID)).rejects.toThrow("network error");
   });
 });
