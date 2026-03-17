@@ -13,27 +13,8 @@ async function uploadFixture(page: import("@playwright/test").Page): Promise<voi
 
 test.describe("upload", () => {
   test.beforeEach(async ({ page }) => {
-    // Clear IndexedDB before each test so we start from seed data
+    // Playwright creates a fresh browser context per test, so IDB is already empty.
     await page.goto("/transactions");
-    await page.evaluate(() => {
-      const dbs = indexedDB.databases
-        ? indexedDB.databases()
-        : Promise.resolve([]);
-      return dbs.then((databases: IDBDatabaseInfo[]) =>
-        Promise.all(
-          databases.map(
-            (db: IDBDatabaseInfo) =>
-              new Promise<void>((resolve, reject) => {
-                if (!db.name) return resolve();
-                const req = indexedDB.deleteDatabase(db.name);
-                req.onsuccess = () => resolve();
-                req.onerror = () => reject(req.error);
-              }),
-          ),
-        ),
-      );
-    });
-    await page.reload();
     await expect(page.locator("#seed-data-notice")).toBeVisible({ timeout: 15000 });
   });
 
