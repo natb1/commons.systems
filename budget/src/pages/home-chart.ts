@@ -136,8 +136,16 @@ interface LayoutNode {
   collapsed: boolean;
 }
 
+interface IndexedNode extends HierarchyNode<CategoryNode> {
+  topLevelIndex: number;
+}
+
+function asIndexed(node: HierarchyNode<CategoryNode>): IndexedNode {
+  return node as IndexedNode;
+}
+
 function assignTopLevelIndex(node: HierarchyNode<CategoryNode>, index: number): void {
-  (node as any).topLevelIndex = index;
+  asIndexed(node).topLevelIndex = index;
   node.children?.forEach(c => assignTopLevelIndex(c, index));
 }
 
@@ -200,7 +208,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
     // Assign top-level color indices
     root.children?.forEach((child, i) => assignTopLevelIndex(child, i));
-    (root as any).topLevelIndex = -1;
+    asIndexed(root).topLevelIndex = -1;
 
     const leafCount = root.leaves().length;
     const nodeHeight = 24;
@@ -258,7 +266,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
         `Z`,
       ].join(" ");
 
-      const topIdx = (target as any).topLevelIndex ?? 0;
+      const topIdx = asIndexed(target).topLevelIndex ?? 0;
       const path = document.createElementNS(SVG_NS, "path");
       path.setAttribute("d", d);
       path.setAttribute("fill", categoryColor(topIdx, target.depth));
@@ -277,7 +285,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       if (node.depth === 0) continue; // skip root
       const h = Math.max((node.data.value / rootData.value) * treeHeight, 4);
       const w = 12;
-      const topIdx = (node as any).topLevelIndex ?? 0;
+      const topIdx = node.topLevelIndex ?? 0;
       const hasChildren = (node.children?.length ?? 0) > 0 || collapsedPaths.has(node.data.fullPath);
 
       const nodeG = document.createElementNS(SVG_NS, "g");
