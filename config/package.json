@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint *.js"
   },
   "exports": {
     "./tsconfig.app.json": "./tsconfig.app.json",
