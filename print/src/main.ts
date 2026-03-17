@@ -1,7 +1,7 @@
 import "missing.css";
 import "./style/theme.css";
 import { createHistoryRouter } from "@commons-systems/router";
-import { DataIntegrityError } from "./errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { renderHome, afterRenderHome } from "./pages/home.js";
 import { renderView, afterRenderView, cleanupView } from "./pages/view.js";
 import { renderAbout } from "./pages/about.js";

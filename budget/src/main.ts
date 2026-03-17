@@ -14,7 +14,7 @@ import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
 import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView } from "./firebase.js";
-import { DataIntegrityError } from "./errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 function getUserGroups(user: User): Promise<Group[]> {
   return _getUserGroups(db, NAMESPACE, user);

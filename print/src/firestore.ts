@@ -3,7 +3,7 @@ import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { requireString, requireBoolean, optionalString } from "@commons-systems/firestoreutil/validate";
 
 import { db, NAMESPACE } from "./firebase.js";
-import { DataIntegrityError } from "./errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { MEDIA_TYPES } from "./types.js";
 import type { MediaItem, MediaType } from "./types.js";
 
