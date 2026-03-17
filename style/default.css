@@ -74,6 +74,7 @@ app-nav,
 app-nav .nav-links,
 app-nav .nav-auth {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 1rem;
 }
