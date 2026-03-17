@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-vi.mock("../../src/firestore.js", () => ({
+const mockDataSource = {
   updateTransaction: vi.fn(),
   adjustBudgetPeriodTotal: vi.fn(),
+};
+vi.mock("../../src/active-data-source.js", () => ({
+  getActiveDataSource: () => mockDataSource,
 }));
 
 vi.mock("@commons-systems/style/components/autocomplete", () => ({
@@ -14,10 +17,6 @@ vi.mock("@commons-systems/style/components/autocomplete", () => ({
 }));
 
 import { hydrateTransactionTable, _resetForTest } from "../../src/pages/home-hydrate";
-import { updateTransaction, adjustBudgetPeriodTotal } from "../../src/firestore";
-
-const mockUpdateTransaction = vi.mocked(updateTransaction);
-const mockAdjustBudgetPeriodTotal = vi.mocked(adjustBudgetPeriodTotal);
 
 function flush(): Promise<void> {
   return new Promise(r => setTimeout(r, 0));
@@ -71,8 +70,8 @@ describe("hydrateTransactionTable", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
-    mockUpdateTransaction.mockResolvedValue(undefined);
-    mockAdjustBudgetPeriodTotal.mockResolvedValue(undefined);
+    mockDataSource.updateTransaction.mockResolvedValue(undefined);
+    mockDataSource.adjustBudgetPeriodTotal.mockResolvedValue(undefined);
     _resetForTest();
   });
 
@@ -87,7 +86,7 @@ describe("hydrateTransactionTable", () => {
     input.value = "updated note";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { note: "updated note" });
+    expect(mockDataSource.updateTransaction).toHaveBeenCalledWith("txn-1", { note: "updated note" });
   });
 
   it("saves category field on blur", async () => {
@@ -97,7 +96,7 @@ describe("hydrateTransactionTable", () => {
     input.value = "Travel";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { category: "Travel" });
+    expect(mockDataSource.updateTransaction).toHaveBeenCalledWith("txn-1", { category: "Travel" });
   });
 
   it("saves reimbursement as number on blur", async () => {
@@ -107,7 +106,7 @@ describe("hydrateTransactionTable", () => {
     input.value = "75";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { reimbursement: 75 });
+    expect(mockDataSource.updateTransaction).toHaveBeenCalledWith("txn-1", { reimbursement: 75 });
   });
 
   it("saves budget field on blur", async () => {
@@ -117,7 +116,7 @@ describe("hydrateTransactionTable", () => {
     input.value = "vacation";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
+    expect(mockDataSource.updateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
   });
 
   it("saves budget as null when empty", async () => {
@@ -127,15 +126,13 @@ describe("hydrateTransactionTable", () => {
     input.value = "";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: null });
+    expect(mockDataSource.updateTransaction).toHaveBeenCalledWith("txn-1", { budget: null });
   });
 
   it("rejects non-finite reimbursement values and shows error", async () => {
     const container = createContainer("txn-1");
     hydrateTransactionTable(container);
     const input = container.querySelector(".edit-reimbursement") as HTMLInputElement;
-    // Number inputs sanitize invalid strings, so override value to simulate
-    // a programmatic non-numeric value (defense-in-depth test)
     let currentValue = "abc";
     Object.defineProperty(input, "value", {
       get: () => currentValue,
@@ -144,8 +141,8 @@ describe("hydrateTransactionTable", () => {
     });
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateTransaction).not.toHaveBeenCalled();
-    expect(currentValue).toBe("50"); // reverted to defaultValue
+    expect(mockDataSource.updateTransaction).not.toHaveBeenCalled();
+    expect(currentValue).toBe("50");
     expect(input.classList.contains("save-error")).toBe(true);
   });
 
@@ -155,11 +152,11 @@ describe("hydrateTransactionTable", () => {
     const input = container.querySelector(".edit-note") as HTMLInputElement;
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateTransaction).not.toHaveBeenCalled();
+    expect(mockDataSource.updateTransaction).not.toHaveBeenCalled();
   });
 
   it("reverts input value on save failure and sets title", async () => {
-    mockUpdateTransaction.mockRejectedValue(new Error("permission denied"));
+    mockDataSource.updateTransaction.mockRejectedValue(new Error("permission denied"));
     const container = createContainer("txn-1");
     hydrateTransactionTable(container);
     const input = container.querySelector(".edit-note") as HTMLInputElement;
@@ -172,7 +169,7 @@ describe("hydrateTransactionTable", () => {
   });
 
   it("adds save-error class on failure", async () => {
-    mockUpdateTransaction.mockRejectedValue(new Error("network error"));
+    mockDataSource.updateTransaction.mockRejectedValue(new Error("network error"));
     const container = createContainer("txn-1");
     hydrateTransactionTable(container);
     const input = container.querySelector(".edit-note") as HTMLInputElement;
@@ -205,7 +202,7 @@ describe("hydrateTransactionTable", () => {
     input.value = "nonexistent";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateTransaction).not.toHaveBeenCalled();
+    expect(mockDataSource.updateTransaction).not.toHaveBeenCalled();
     expect(input.classList.contains("save-error")).toBe(true);
   });
 
@@ -236,7 +233,7 @@ describe("hydrateTransactionTable", () => {
     input.value = "changed";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateTransaction).not.toHaveBeenCalled();
+    expect(mockDataSource.updateTransaction).not.toHaveBeenCalled();
   });
 
   describe("budget period updates on budget edit", () => {
@@ -252,11 +249,9 @@ describe("hydrateTransactionTable", () => {
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
-      // Old period (food-w2) decremented by net amount 30
-      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -30);
-      // New period (vacation-w1) incremented by net amount 30
-      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("vacation-w1", 30);
+      expect(mockDataSource.updateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
+      expect(mockDataSource.adjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -30);
+      expect(mockDataSource.adjustBudgetPeriodTotal).toHaveBeenCalledWith("vacation-w1", 30);
     });
 
     it("only decrements old period when no matching new period exists", async () => {
@@ -267,20 +262,18 @@ describe("hydrateTransactionTable", () => {
       });
       hydrateTransactionTable(container);
       const input = container.querySelector(".edit-budget") as HTMLInputElement;
-      // housing has no matching period for 2025-01-15
       input.value = "housing";
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledTimes(1);
-      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -30);
+      expect(mockDataSource.adjustBudgetPeriodTotal).toHaveBeenCalledTimes(1);
+      expect(mockDataSource.adjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -30);
     });
 
     it("only increments new period when old budget was null", async () => {
       const container = createContainer("txn-1", {
         amount: 30,
         timestamp: new Date("2025-01-15").getTime(),
-        // no budgetId — was unbudgeted
       });
       hydrateTransactionTable(container);
       const input = container.querySelector(".edit-budget") as HTMLInputElement;
@@ -288,8 +281,8 @@ describe("hydrateTransactionTable", () => {
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledTimes(1);
-      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("vacation-w1", 30);
+      expect(mockDataSource.adjustBudgetPeriodTotal).toHaveBeenCalledTimes(1);
+      expect(mockDataSource.adjustBudgetPeriodTotal).toHaveBeenCalledWith("vacation-w1", 30);
     });
 
     it("updates data-budget-id attribute after save", async () => {
@@ -325,7 +318,6 @@ describe("hydrateTransactionTable", () => {
     });
 
     it("shows data integrity error when amount or timestamp data attributes are missing", async () => {
-      // No amount or timestamp data attributes
       const container = createContainer("txn-1", { budgetId: "budget-food" });
       hydrateTransactionTable(container);
       const input = container.querySelector(".edit-budget") as HTMLInputElement;
@@ -333,8 +325,8 @@ describe("hydrateTransactionTable", () => {
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      expect(mockUpdateTransaction).toHaveBeenCalled();
-      expect(mockAdjustBudgetPeriodTotal).not.toHaveBeenCalled();
+      expect(mockDataSource.updateTransaction).toHaveBeenCalled();
+      expect(mockDataSource.adjustBudgetPeriodTotal).not.toHaveBeenCalled();
       expect(console.error).toHaveBeenCalledWith(
         "Data integrity error:",
         expect.objectContaining({ message: expect.stringContaining("Cannot update period totals") }),
@@ -345,7 +337,7 @@ describe("hydrateTransactionTable", () => {
     it("sends raw negative delta to server without local clamping", async () => {
       const container = createContainer("txn-1", {
         budgetId: "budget-food",
-        amount: 100, // larger than period total of 50
+        amount: 100,
         timestamp: new Date("2025-01-15").getTime(),
       });
       hydrateTransactionTable(container);
@@ -354,8 +346,7 @@ describe("hydrateTransactionTable", () => {
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      // Server gets raw delta -100; Firestore rules enforce non-negative totals
-      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -100);
+      expect(mockDataSource.adjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -100);
     });
 
     it("uses net amount (after reimbursement) for period updates", async () => {
@@ -371,11 +362,8 @@ describe("hydrateTransactionTable", () => {
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      // net = 100 * (1 - 50/100) = 50
-      // Old period (food-w2) decremented by net 50
-      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -50);
-      // New period (vacation-w1) incremented by net 50
-      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("vacation-w1", 50);
+      expect(mockDataSource.adjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -50);
+      expect(mockDataSource.adjustBudgetPeriodTotal).toHaveBeenCalledWith("vacation-w1", 50);
     });
 
     it("clears balance display after budget change", async () => {
@@ -397,7 +385,7 @@ describe("hydrateTransactionTable", () => {
     });
 
     it("logs error but preserves transaction save when period adjustment fails", async () => {
-      mockAdjustBudgetPeriodTotal.mockRejectedValue(new Error("firestore unavailable"));
+      mockDataSource.adjustBudgetPeriodTotal.mockRejectedValue(new Error("firestore unavailable"));
       const container = createContainer("txn-1", {
         budgetId: "budget-food",
         amount: 30,
@@ -409,7 +397,7 @@ describe("hydrateTransactionTable", () => {
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
+      expect(mockDataSource.updateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
       expect(console.error).toHaveBeenCalledWith("Failed to update budget period totals:", expect.any(Error));
       const row = container.querySelector(".txn-row") as HTMLElement;
       expect(row.dataset.budgetId).toBe("budget-vacation");
@@ -430,9 +418,8 @@ describe("hydrateTransactionTable", () => {
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      expect(mockUpdateTransaction).toHaveBeenCalledWith("txn-1", { reimbursement: 50 });
-      // oldNet=100, newNet=50, delta=-50
-      expect(mockAdjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -50);
+      expect(mockDataSource.updateTransaction).toHaveBeenCalledWith("txn-1", { reimbursement: 50 });
+      expect(mockDataSource.adjustBudgetPeriodTotal).toHaveBeenCalledWith("food-w2", -50);
     });
 
     it("does not adjust period when transaction has no budget", async () => {
@@ -440,7 +427,6 @@ describe("hydrateTransactionTable", () => {
         amount: 100,
         reimbursement: 0,
         timestamp: new Date("2025-01-15").getTime(),
-        // no budgetId
       });
       hydrateTransactionTable(container);
       const input = container.querySelector(".edit-reimbursement") as HTMLInputElement;
@@ -448,8 +434,8 @@ describe("hydrateTransactionTable", () => {
       input.dispatchEvent(new Event("blur", { bubbles: true }));
       await flush();
 
-      expect(mockUpdateTransaction).toHaveBeenCalled();
-      expect(mockAdjustBudgetPeriodTotal).not.toHaveBeenCalled();
+      expect(mockDataSource.updateTransaction).toHaveBeenCalled();
+      expect(mockDataSource.adjustBudgetPeriodTotal).not.toHaveBeenCalled();
     });
 
     it("updates data-reimbursement attribute after save", async () => {

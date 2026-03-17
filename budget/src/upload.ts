@@ -1,0 +1,288 @@
+import { Timestamp } from "firebase/firestore";
+import type {
+  Transaction,
+  Budget,
+  BudgetPeriod,
+  Rule,
+  NormalizationRule,
+  TransactionId,
+  StatementId,
+  BudgetId,
+  BudgetPeriodId,
+  RuleId,
+  GroupId,
+  Rollover,
+  RuleType,
+} from "./firestore.js";
+import type { ParsedData } from "./idb.js";
+
+export class UploadValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UploadValidationError";
+  }
+}
+
+interface RawOutput {
+  version: number;
+  exportedAt: string;
+  groupId: string;
+  groupName: string;
+  transactions: RawTransaction[];
+  budgets: RawBudget[];
+  budgetPeriods: RawBudgetPeriod[];
+  rules: RawRule[];
+  normalizationRules: RawNormalizationRule[];
+}
+
+interface RawTransaction {
+  id: string;
+  institution: string;
+  account: string;
+  description: string;
+  amount: number;
+  timestamp: string;
+  statementId: string;
+  category: string;
+  budget: string | null;
+  note: string;
+  reimbursement: number;
+  normalizedId: string | null;
+  normalizedPrimary: boolean;
+  normalizedDescription: string | null;
+}
+
+interface RawBudget {
+  id: string;
+  name: string;
+  weeklyAllowance: number;
+  rollover: string;
+}
+
+interface RawBudgetPeriod {
+  id: string;
+  budgetId: string;
+  periodStart: string;
+  periodEnd: string;
+  total: number;
+  count: number;
+  categoryBreakdown: Record<string, number>;
+}
+
+interface RawRule {
+  id: string;
+  type: string;
+  pattern: string;
+  target: string;
+  priority: number;
+  institution: string;
+  account: string;
+}
+
+interface RawNormalizationRule {
+  id: string;
+  pattern: string;
+  patternType: string;
+  canonicalDescription: string;
+  dateWindowDays: number;
+  institution: string;
+  account: string;
+  priority: number;
+}
+
+export interface ParsedUpload {
+  transactions: Transaction[];
+  budgets: Budget[];
+  budgetPeriods: BudgetPeriod[];
+  rules: Rule[];
+  normalizationRules: NormalizationRule[];
+  groupName: string;
+  version: number;
+  exportedAt: string;
+}
+
+function parseTimestamp(iso: string, field: string): Timestamp {
+  const ms = Date.parse(iso);
+  if (isNaN(ms)) throw new UploadValidationError(`Invalid timestamp for ${field}: "${iso}"`);
+  return Timestamp.fromMillis(ms);
+}
+
+function emptyToNull(value: string): string | null {
+  return value === "" ? null : value;
+}
+
+function requireRollover(value: string): Rollover {
+  if (value === "none" || value === "debt" || value === "balance") return value;
+  throw new UploadValidationError(`Invalid rollover value: "${value}"`);
+}
+
+function requireRuleType(value: string): RuleType {
+  if (value === "categorization" || value === "budget_assignment") return value;
+  throw new UploadValidationError(`Invalid rule type: "${value}"`);
+}
+
+export function parseUploadedJson(text: string): ParsedUpload {
+  let raw: RawOutput;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new UploadValidationError("Invalid JSON file");
+  }
+
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new UploadValidationError("JSON must be an object");
+  }
+
+  if (raw.version !== 1) {
+    throw new UploadValidationError(
+      raw.version === undefined
+        ? "Missing required field: version"
+        : `Unsupported version: ${raw.version} (expected 1)`,
+    );
+  }
+
+  if (!raw.groupName || typeof raw.groupName !== "string") {
+    throw new UploadValidationError("Missing required field: groupName");
+  }
+  if (!raw.exportedAt || typeof raw.exportedAt !== "string") {
+    throw new UploadValidationError("Missing required field: exportedAt");
+  }
+  if (!Array.isArray(raw.transactions)) {
+    throw new UploadValidationError("Missing required field: transactions");
+  }
+
+  const transactions: Transaction[] = raw.transactions.map((t: RawTransaction) => ({
+    id: t.id as TransactionId,
+    institution: t.institution ?? "",
+    account: t.account ?? "",
+    description: t.description ?? "",
+    amount: t.amount ?? 0,
+    note: t.note ?? "",
+    category: t.category ?? "",
+    reimbursement: t.reimbursement ?? 0,
+    budget: (t.budget || null) as BudgetId | null,
+    timestamp: t.timestamp ? parseTimestamp(t.timestamp, "transaction.timestamp") : null,
+    statementId: (t.statementId || null) as StatementId | null,
+    groupId: null as GroupId | null,
+    normalizedId: t.normalizedId || null,
+    normalizedPrimary: t.normalizedPrimary !== false,
+    normalizedDescription: t.normalizedDescription || null,
+  }));
+
+  const budgets: Budget[] = (raw.budgets ?? []).map((b: RawBudget) => ({
+    id: b.id as BudgetId,
+    name: b.name,
+    weeklyAllowance: b.weeklyAllowance ?? 0,
+    rollover: requireRollover(b.rollover ?? "none"),
+    groupId: null as GroupId | null,
+  }));
+
+  const budgetPeriods: BudgetPeriod[] = (raw.budgetPeriods ?? []).map((p: RawBudgetPeriod) => ({
+    id: p.id as BudgetPeriodId,
+    budgetId: p.budgetId as BudgetId,
+    periodStart: parseTimestamp(p.periodStart, "budgetPeriod.periodStart"),
+    periodEnd: parseTimestamp(p.periodEnd, "budgetPeriod.periodEnd"),
+    total: p.total ?? 0,
+    count: p.count ?? 0,
+    categoryBreakdown: p.categoryBreakdown ?? {},
+    groupId: null as GroupId | null,
+  }));
+
+  const rules: Rule[] = (raw.rules ?? []).map((r: RawRule) => ({
+    id: r.id as RuleId,
+    type: requireRuleType(r.type),
+    pattern: r.pattern ?? "",
+    target: r.target ?? "",
+    priority: r.priority ?? 0,
+    institution: emptyToNull(r.institution ?? ""),
+    account: emptyToNull(r.account ?? ""),
+    groupId: null as GroupId | null,
+  }));
+
+  const normalizationRules: NormalizationRule[] = (raw.normalizationRules ?? []).map(
+    (r: RawNormalizationRule) => ({
+      id: r.id,
+      pattern: r.pattern ?? "",
+      patternType: emptyToNull(r.patternType ?? ""),
+      canonicalDescription: r.canonicalDescription ?? "",
+      dateWindowDays: r.dateWindowDays ?? 0,
+      institution: emptyToNull(r.institution ?? ""),
+      account: emptyToNull(r.account ?? ""),
+      priority: r.priority ?? 0,
+      groupId: null as GroupId | null,
+    }),
+  );
+
+  return {
+    transactions,
+    budgets,
+    budgetPeriods,
+    rules,
+    normalizationRules,
+    groupName: raw.groupName,
+    version: raw.version,
+    exportedAt: raw.exportedAt,
+  };
+}
+
+/** Convert a ParsedUpload to the format expected by storeParsedData (plain objects with Timestamps converted to millis). */
+export function toParsedData(parsed: ParsedUpload): ParsedData {
+  return {
+    transactions: parsed.transactions.map((t) => ({
+      id: t.id,
+      institution: t.institution,
+      account: t.account,
+      description: t.description,
+      amount: t.amount,
+      note: t.note,
+      category: t.category,
+      reimbursement: t.reimbursement,
+      budget: t.budget,
+      timestampMs: t.timestamp?.toMillis() ?? null,
+      statementId: t.statementId,
+      normalizedId: t.normalizedId,
+      normalizedPrimary: t.normalizedPrimary,
+      normalizedDescription: t.normalizedDescription,
+    })),
+    budgets: parsed.budgets.map((b) => ({
+      id: b.id,
+      name: b.name,
+      weeklyAllowance: b.weeklyAllowance,
+      rollover: b.rollover,
+    })),
+    budgetPeriods: parsed.budgetPeriods.map((p) => ({
+      id: p.id,
+      budgetId: p.budgetId,
+      periodStartMs: p.periodStart.toMillis(),
+      periodEndMs: p.periodEnd.toMillis(),
+      total: p.total,
+      count: p.count,
+      categoryBreakdown: p.categoryBreakdown,
+    })),
+    rules: parsed.rules.map((r) => ({
+      id: r.id,
+      type: r.type,
+      pattern: r.pattern,
+      target: r.target,
+      priority: r.priority,
+      institution: r.institution,
+      account: r.account,
+    })),
+    normalizationRules: parsed.normalizationRules.map((r) => ({
+      id: r.id,
+      pattern: r.pattern,
+      patternType: r.patternType,
+      canonicalDescription: r.canonicalDescription,
+      dateWindowDays: r.dateWindowDays,
+      institution: r.institution,
+      account: r.account,
+      priority: r.priority,
+    })),
+    meta: {
+      key: "upload",
+      groupName: parsed.groupName,
+      version: parsed.version,
+      exportedAt: parsed.exportedAt,
+    },
+  };
+}

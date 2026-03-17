@@ -1,24 +1,21 @@
 import "missing.css";
 import "./style/theme.css";
-import { createHistoryRouter, parsePath } from "@commons-systems/router";
+import { createHistoryRouter } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderBudgets } from "./pages/budgets.js";
 import { renderRules } from "./pages/rules.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
-import { escapeHtml } from "@commons-systems/htmlutil";
 import type { RenderPageOptions } from "./pages/render-options.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { hydrateBudgetTable, hydrateBudgetChart } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
-import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
-import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/authutil/groups";
-import { db, NAMESPACE, trackPageView } from "./firebase.js";
+import { trackPageView } from "./firebase.js";
 import { DataIntegrityError } from "./errors.js";
-
-function getUserGroups(user: User): Promise<Group[]> {
-  return _getUserGroups(db, NAMESPACE, user);
-}
+import { parseUploadedJson, toParsedData, UploadValidationError } from "./upload.js";
+import { storeParsedData, clearAll, hasData, getMeta } from "./idb.js";
+import { FirestoreSeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
+import { setActiveDataSource } from "./active-data-source.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -26,68 +23,82 @@ const app = document.getElementById("app") as HTMLElement;
 if (!app) throw new Error("#app element not found");
 
 export type AppState =
-  | { user: null; groups: readonly []; groupError: false }
-  | { user: User; groups: Group[]; groupError: false }
-  | { user: User; groups: readonly []; groupError: true };
+  | { source: "seed" }
+  | { source: "local"; groupName: string };
 
-let state: AppState = { user: null, groups: [], groupError: false };
-
-function getGroupParam(): string | null {
-  return parsePath().params.get("group");
-}
-
-function setGroupParam(groupId: string): void {
-  const { path, params } = parsePath();
-  params.set("group", groupId);
-  const url = `${path}?${params.toString()}`;
-  history.pushState({}, "", url);
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
-
-function selectedGroup(): Group | null {
-  if (state.groups.length === 0) return null;
-  const param = getGroupParam();
-  return state.groups.find((g) => g.id === param) ?? state.groups[0];
-}
+let state: AppState = { source: "seed" };
 
 navEl.links = [{ href: "/", label: "budgets" }, { href: "/transactions", label: "transactions" }, { href: "/rules", label: "rules" }];
-navEl.addEventListener("sign-in", () => signIn());
-navEl.addEventListener("sign-out", () => {
-  signOut().catch((error) => console.error("Unexpected sign-out error:", error));
-});
+navEl.showAuth = false;
 
-function updateNav(user: User | null): void {
-  navEl.user = user;
-  const group = selectedGroup();
-  let select = navEl.querySelector("#group-select") as HTMLSelectElement | null;
-  if (user && state.groups.length > 0) {
-    if (!select) {
-      select = document.createElement("select");
-      select.id = "group-select";
-      select.setAttribute("aria-label", "Select group");
-      const authContainer = navEl.querySelector(".nav-auth");
-      if (!authContainer) throw new Error(".nav-auth container not found in app-nav");
-      authContainer.insertBefore(select, authContainer.querySelector("#sign-out"));
-      select.addEventListener("change", (e) => setGroupParam((e.target as HTMLSelectElement).value));
-    }
-    select.innerHTML = state.groups.map(g => {
-      const sel = g.id === (group?.id ?? null) ? " selected" : "";
-      return `<option value="${escapeHtml(g.id)}"${sel}>${escapeHtml(g.name)}</option>`;
-    }).join("");
-  } else if (select) {
-    select.remove();
+// File upload UI
+const uploadContainer = document.createElement("div");
+uploadContainer.className = "nav-upload";
+uploadContainer.innerHTML = `<label class="upload-label" tabindex="0">Load data<input type="file" accept=".json" class="upload-input" hidden></label>`;
+const authContainer = navEl.querySelector(".nav-auth");
+if (authContainer) {
+  authContainer.appendChild(uploadContainer);
+}
+
+const uploadInput = uploadContainer.querySelector(".upload-input") as HTMLInputElement;
+const uploadLabel = uploadContainer.querySelector(".upload-label") as HTMLLabelElement;
+
+// Group name + clear button (shown when local data is loaded)
+const localInfoContainer = document.createElement("div");
+localInfoContainer.className = "nav-local-info";
+localInfoContainer.hidden = true;
+localInfoContainer.innerHTML = `<span class="local-group-name"></span><button class="clear-data">Clear data</button>`;
+if (authContainer) {
+  authContainer.appendChild(localInfoContainer);
+}
+
+const groupNameSpan = localInfoContainer.querySelector(".local-group-name") as HTMLSpanElement;
+const clearButton = localInfoContainer.querySelector(".clear-data") as HTMLButtonElement;
+
+// Error display
+const errorEl = document.createElement("p");
+errorEl.className = "upload-error";
+errorEl.hidden = true;
+if (authContainer) {
+  authContainer.appendChild(errorEl);
+}
+
+function showUploadError(message: string): void {
+  errorEl.textContent = message;
+  errorEl.hidden = false;
+}
+
+function clearUploadError(): void {
+  errorEl.hidden = true;
+  errorEl.textContent = "";
+}
+
+function updateNav(): void {
+  if (state.source === "local") {
+    uploadContainer.hidden = true;
+    localInfoContainer.hidden = false;
+    groupNameSpan.textContent = state.groupName;
+  } else {
+    uploadContainer.hidden = false;
+    localInfoContainer.hidden = true;
   }
 }
 
-// Show login UI immediately; onAuthStateChanged will update once auth resolves.
-updateNav(null);
+function createDataSource(): DataSource {
+  if (state.source === "local") {
+    return new IdbDataSource();
+  }
+  return new FirestoreSeedDataSource();
+}
 
 function renderOptions(): RenderPageOptions {
-  const group = selectedGroup();
-  const user = state.user;
-  if (!user) return { user: null, group: null, groupError: false };
-  if (group) return { user, group, groupError: false };
-  return { user, group, groupError: state.groupError };
+  const ds = createDataSource();
+  setActiveDataSource(ds);
+  return {
+    authorized: state.source === "local",
+    groupName: state.source === "local" ? state.groupName : "",
+    dataSource: ds,
+  };
 }
 
 const router = createHistoryRouter(
@@ -109,16 +120,12 @@ const router = createHistoryRouter(
 
 function transition(next: AppState): void {
   state = next;
-  updateNav(next.user);
+  updateNav();
+  clearUploadError();
   router.navigate();
 }
 
 // Hydrate interactive containers (tables, chart) whenever they appear in the DOM.
-// Multiple code paths trigger renders (navigation, auth state changes), so an
-// observer catches all of them. Sets dataset.hydrated to "true" on success or
-// "error" on failure to prevent retry loops.
-// Observer runs for page lifetime: each render replaces page content, so
-// tables start unhydrated and need re-initialization.
 function hydrateTable(
   selector: string,
   hydrate: (el: HTMLElement) => void,
@@ -130,8 +137,6 @@ function hydrateTable(
     table.dataset.hydrated = "true";
   } catch (error) {
     table.dataset.hydrated = "error";
-    // Programmer errors: rethrow asynchronously so they surface in devtools
-    // without killing the MutationObserver.
     if (error instanceof TypeError || error instanceof ReferenceError) {
       setTimeout(() => { throw error; }, 0);
       return;
@@ -156,59 +161,69 @@ const observer = new MutationObserver(() => {
 });
 observer.observe(app, { childList: true, subtree: true });
 
-export interface AuthStateDeps {
-  /** Fetches groups the user belongs to from Firestore. */
-  getUserGroups: (user: User) => Promise<Group[]>;
-  /** Commits final state and triggers nav update + route re-render. */
-  transition: (next: AppState) => void;
-  /** Displays a terminal error message, halting further route navigation. */
-  showTerminalError: (html: string) => void;
-  /** Returns the current app state snapshot (used for race-condition guards during async operations). */
-  getState: () => AppState;
-  /** Sets intermediate state without updating nav or triggering route re-render (e.g., setting user before async group fetch). */
-  setState: (next: AppState) => void;
-}
-
-export function createAuthStateHandler(deps: AuthStateDeps): (user: User | null) => Promise<void> {
-  return async (user) => {
-    if (!user) {
-      deps.transition({ user: null, groups: [], groupError: false });
+// File upload handler
+async function handleFileUpload(file: File): Promise<void> {
+  clearUploadError();
+  try {
+    const text = await file.text();
+    const parsed = parseUploadedJson(text);
+    const data = toParsedData(parsed);
+    await storeParsedData(data);
+    transition({ source: "local", groupName: parsed.groupName });
+  } catch (error) {
+    if (error instanceof UploadValidationError) {
+      showUploadError(error.message);
       return;
     }
-    // Set user immediately so concurrent callbacks detect the change
-    const currentState = deps.getState();
-    deps.setState({
-      user,
-      groups: currentState.user === user && !currentState.groupError ? currentState.groups : [],
-      groupError: false,
-    });
-    try {
-      const groups = await deps.getUserGroups(user);
-      if (deps.getState().user !== user) return; // auth state changed during fetch
-      deps.transition({ user, groups, groupError: false });
-    } catch (error) {
-      if (error instanceof DataIntegrityError) {
-        console.error("Data integrity error in user groups:", error);
-        deps.showTerminalError("<p>A data error occurred. Please contact support.</p>");
-        return;
-      }
-      if (error instanceof TypeError || error instanceof ReferenceError) throw error;
-      console.error("Failed to fetch user groups:", error);
-      deps.transition({ user, groups: [], groupError: true });
-    }
-  };
+    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+    console.error("Upload failed:", error);
+    showUploadError("Upload failed. Please try again.");
+  }
 }
 
-const handleAuth = createAuthStateHandler({
-  getUserGroups,
-  transition,
-  showTerminalError: router.showTerminalError,
-  getState: () => state,
-  setState: (next) => { state = next; },
+uploadInput.addEventListener("change", () => {
+  const file = uploadInput.files?.[0];
+  if (file) {
+    handleFileUpload(file).catch((error) => {
+      console.error("Unhandled upload error:", error);
+    });
+  }
+  // Reset so the same file can be re-uploaded
+  uploadInput.value = "";
 });
 
-onAuthStateChanged(auth, (user) => {
-  handleAuth(user).catch((error) => {
-    console.error("Unhandled error in auth state handler:", error);
-  });
+// Allow keyboard activation of the label
+uploadLabel.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    uploadInput.click();
+  }
+});
+
+// Clear data handler
+clearButton.addEventListener("click", async () => {
+  try {
+    await clearAll();
+    transition({ source: "seed" });
+  } catch (error) {
+    console.error("Failed to clear data:", error);
+  }
+});
+
+// Startup: check for existing local data
+async function initialize(): Promise<void> {
+  const hasLocalData = await hasData();
+  if (hasLocalData) {
+    const meta = await getMeta();
+    if (meta) {
+      transition({ source: "local", groupName: meta.groupName });
+      return;
+    }
+  }
+  transition({ source: "seed" });
+}
+
+initialize().catch((error) => {
+  console.error("Initialization error:", error);
+  transition({ source: "seed" });
 });

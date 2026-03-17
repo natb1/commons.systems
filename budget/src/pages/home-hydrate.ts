@@ -1,4 +1,5 @@
-import { updateTransaction, adjustBudgetPeriodTotal, type SerializedBudgetPeriod, type TransactionId, type BudgetId } from "../firestore.js";
+import { type SerializedBudgetPeriod, type TransactionId, type BudgetId } from "../firestore.js";
+import { getActiveDataSource } from "../active-data-source.js";
 import { computeNetAmount } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
@@ -101,14 +102,14 @@ async function syncPeriodTotals(
     if (oldBudgetId) {
       const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
       if (oldPeriod) {
-        await adjustBudgetPeriodTotal(oldPeriod.id, -net);
+        await getActiveDataSource().adjustBudgetPeriodTotal(oldPeriod.id, -net);
         oldPeriod.total -= net;
       }
     }
     if (newBudgetId) {
       const newPeriod = findPeriod(budgetPeriods, newBudgetId, timestampMs);
       if (newPeriod) {
-        await adjustBudgetPeriodTotal(newPeriod.id, net);
+        await getActiveDataSource().adjustBudgetPeriodTotal(newPeriod.id, net);
         newPeriod.total += net;
       }
     }
@@ -149,7 +150,7 @@ async function syncPeriodOnReimbursementChange(
   try {
     const period = findPeriod(budgetPeriods, budgetId, timestampMs);
     if (period) {
-      await adjustBudgetPeriodTotal(period.id, delta);
+      await getActiveDataSource().adjustBudgetPeriodTotal(period.id, delta);
       period.total += delta;
     }
   } catch (periodError) {
@@ -211,9 +212,9 @@ export function hydrateTransactionTable(container: HTMLElement): void {
 
     try {
       if (input.classList.contains("edit-note")) {
-        await updateTransaction(txnId, { note: input.value });
+        await getActiveDataSource().updateTransaction(txnId, { note: input.value });
       } else if (input.classList.contains("edit-category")) {
-        await updateTransaction(txnId, { category: input.value });
+        await getActiveDataSource().updateTransaction(txnId, { category: input.value });
       } else if (input.classList.contains("edit-reimbursement")) {
         const reimbursement = Number(input.value);
         if (!Number.isFinite(reimbursement)) {
@@ -221,7 +222,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
           return;
         }
         const oldReimbursement = Number(row.dataset.reimbursement);
-        await updateTransaction(txnId, { reimbursement });
+        await getActiveDataSource().updateTransaction(txnId, { reimbursement });
         await syncPeriodOnReimbursementChange(row, oldReimbursement, reimbursement, budgetPeriods);
         row.dataset.reimbursement = String(reimbursement);
         clearBalanceDisplay(row);
@@ -233,7 +234,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         }
         const newBudgetId = value ? budgetNameToId[value] : null;
         const oldBudgetId = (row.dataset.budgetId || null) as BudgetId | null;
-        await updateTransaction(txnId, { budget: newBudgetId });
+        await getActiveDataSource().updateTransaction(txnId, { budget: newBudgetId });
         await syncPeriodTotals(row, oldBudgetId, newBudgetId, budgetPeriods);
 
         if (newBudgetId) {

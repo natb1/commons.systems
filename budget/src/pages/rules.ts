@@ -1,6 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { getRules, getBudgets, getNormalizationRules, type Rule, type NormalizationRule } from "../firestore.js";
+import { type Rule, type NormalizationRule } from "../firestore.js";
 import { uniqueSorted } from "./hydrate-util.js";
 
 export function renderRow(rule: Rule, editable: boolean): string {
@@ -117,21 +117,20 @@ function renderRulesTable(opts: RulesTableOptions): string {
 }
 
 export async function renderRules(options: RenderPageOptions): Promise<string> {
-  const { user, group } = options;
-  const authorized = group !== null;
+  const { authorized, dataSource } = options;
 
   let tableHtml: string;
   try {
     const [rules, budgets, normalizationRules] = await Promise.all([
-      group && user?.email ? getRules(group.id, user.email) : getRules(null),
-      group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null),
-      group && user?.email ? getNormalizationRules(group.id, user.email) : getNormalizationRules(null),
+      dataSource.getRules(),
+      dataSource.getBudgets(),
+      dataSource.getNormalizationRules(),
     ]);
     const budgetNames = budgets.map(b => b.name);
     const categoryTargets = uniqueSorted(rules.filter(r => r.type === "categorization").map(r => r.target));
     const uniqueInstitutions = uniqueSorted(rules.map(r => r.institution));
     const uniqueAccounts = uniqueSorted(rules.map(r => r.account));
-    tableHtml = renderRulesTable({ rules, normalizationRules, authorized, groupId: group?.id ?? "", budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts });
+    tableHtml = renderRulesTable({ rules, normalizationRules, authorized, groupId: "", budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts });
   } catch (error) {
     console.error("Failed to load rules:", error);
     tableHtml = renderLoadError(error, "rules-error");

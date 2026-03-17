@@ -1,7 +1,7 @@
 import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { getTransactions, getBudgets, getBudgetPeriods, type Transaction, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
+import { type Transaction, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAllBudgetBalances } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
 import { uniqueSorted } from "./hydrate-util.js";
@@ -248,18 +248,16 @@ function renderTransactionTable(
 }
 
 export async function renderHome(options: RenderPageOptions): Promise<string> {
-  const { user, group } = options;
-  const authorized = group !== null;
-  const groupName = group?.name ?? "";
+  const { authorized, groupName, dataSource } = options;
 
   let tableHtml: string;
   try {
     const [transactions, budgets, budgetPeriods] = await Promise.all([
-      (group && user?.email ? getTransactions(group.id, user.email) : getTransactions(null))
+      dataSource.getTransactions()
         .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
-      (group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null))
+      dataSource.getBudgets()
         .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
-      (group && user?.email ? getBudgetPeriods(group.id, user.email) : getBudgetPeriods(null))
+      dataSource.getBudgetPeriods()
         .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
     ]);
     transactions.sort(compareByTimestampDesc);
