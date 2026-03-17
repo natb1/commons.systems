@@ -1,6 +1,9 @@
 import type { Timestamp } from "firebase/firestore";
 import type { Budget, BudgetId, BudgetPeriod, Rollover, Transaction, TransactionId } from "./firestore.js";
 
+const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+const INCOME_WEEKS = 12;
+
 export function computeNetAmount(amount: number, reimbursement: number): number {
   if (reimbursement < 0 || reimbursement > 100) {
     throw new RangeError(`reimbursement must be between 0 and 100, got ${reimbursement}`);
@@ -185,4 +188,42 @@ export function computeAllBudgetBalances(
   }
 
   return result;
+}
+
+/** Return the start of the next Monday 00:00 UTC from a millisecond timestamp. */
+function endOfWeekMs(timestampMs: number): number {
+  const d = new Date(timestampMs);
+  const day = d.getUTCDay(); // 0=Sun, 1=Mon, ...
+  const daysUntilMonday = day === 0 ? 1 : 8 - day;
+  const nextMonday = new Date(Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate() + daysUntilMonday,
+  ));
+  return nextMonday.getTime();
+}
+
+export function computeAverageWeeklyIncome(transactions: Transaction[]): number {
+  const incomeTxns = transactions.filter(
+    (t): t is Transaction & { timestamp: Timestamp } =>
+      t.category.startsWith("Income")
+      && t.timestamp !== null
+      && (t.normalizedId === null || t.normalizedPrimary),
+  );
+
+  if (incomeTxns.length === 0) return 0;
+
+  const latestMs = Math.max(...incomeTxns.map((t) => t.timestamp.toMillis()));
+  const windowEnd = endOfWeekMs(latestMs);
+  const windowStart = windowEnd - INCOME_WEEKS * MS_PER_WEEK;
+
+  let sum = 0;
+  for (const t of incomeTxns) {
+    const ms = t.timestamp.toMillis();
+    if (ms >= windowStart && ms < windowEnd) {
+      sum += computeNetAmount(t.amount, t.reimbursement);
+    }
+  }
+
+  return sum / INCOME_WEEKS;
 }

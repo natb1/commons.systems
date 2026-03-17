@@ -1,6 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { getBudgets, getBudgetPeriods, type Budget, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
+import { getBudgets, getBudgetPeriods, getTransactions, type Budget, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
+import { computeAverageWeeklyIncome } from "../balance.js";
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
   { value: "none", label: "None" },
@@ -79,6 +80,27 @@ function serializePeriods(periods: BudgetPeriod[]): string {
   return escapeHtml(JSON.stringify(data));
 }
 
+function formatCurrency(value: number): string {
+  return `$${value.toFixed(2)}`;
+}
+
+function renderMetricsSection(averageWeeklyIncome: number, totalWeeklyBudget: number): string {
+  return `<div id="budget-insights" class="budget-insights">
+    <div id="budget-metrics" class="budget-metrics">
+      <dl>
+        <div class="metric">
+          <dt>12-Week Avg Weekly Income</dt>
+          <dd>${formatCurrency(averageWeeklyIncome)}</dd>
+        </div>
+        <div class="metric">
+          <dt>Total Weekly Budget</dt>
+          <dd>${formatCurrency(totalWeeklyBudget)}</dd>
+        </div>
+      </dl>
+    </div>
+  </div>`;
+}
+
 function renderChartContainer(budgets: Budget[], periods: BudgetPeriod[]): string {
   return `<div id="budgets-chart-controls">
       <label>Jump to: <input type="date" id="chart-date-picker"></label>
@@ -92,14 +114,20 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
 
   let tableHtml: string;
   let chartHtml = "";
+  let metricsHtml = "";
   try {
-    const [budgets, periods] = await Promise.all([
+    const [budgets, periods, transactions] = await Promise.all([
       (group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null))
         .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
       (group && user?.email ? getBudgetPeriods(group.id, user.email) : getBudgetPeriods(null))
         .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
+      (group && user?.email ? getTransactions(group.id, user.email) : getTransactions(null))
+        .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
     ]);
     chartHtml = renderChartContainer(budgets, periods);
+    const averageWeeklyIncome = computeAverageWeeklyIncome(transactions);
+    const totalWeeklyBudget = budgets.reduce((s, b) => s + b.weeklyAllowance, 0);
+    metricsHtml = renderMetricsSection(averageWeeklyIncome, totalWeeklyBudget);
     tableHtml = renderBudgetTable(budgets, authorized);
   } catch (error) {
     tableHtml = renderLoadError(error, "budgets-error");
@@ -109,6 +137,7 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
     <h2>Budgets</h2>
     ${renderPageNotices(options, "budgets")}
     ${chartHtml}
+    ${metricsHtml}
     ${tableHtml}
   `;
 }
