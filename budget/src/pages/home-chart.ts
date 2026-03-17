@@ -65,9 +65,10 @@ export function filterByWeeks(
  * Build a category tree from transactions.
  *
  * Filters transactions by mode (spending excludes Income-prefixed categories,
- * income includes only Income-prefixed categories). Builds a hierarchy from
- * colon-separated category paths. Rolls up values and counts from leaves to
- * parents, then sorts children by value descending, name ascending.
+ * income includes only Income-prefixed categories) and excludes transactions
+ * with zero or negative net amounts (after reimbursement). Builds a hierarchy
+ * from colon-separated category paths. Rolls up values and counts from leaves
+ * to parents, then sorts children by value descending, name ascending.
  */
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
@@ -97,11 +98,13 @@ export function buildCategoryTree(
     node.count += 1;
   }
 
-  // Roll up values and counts: parent totals = sum of children
+  // Roll up values and counts: parent totals = sum of children + own direct value
   function rollUp(n: CategoryNode): number {
     if (n.children.length > 0) {
-      n.value = n.children.reduce((s, c) => s + rollUp(c), 0);
-      n.count = n.children.reduce((s, c) => s + c.count, 0);
+      const childSum = n.children.reduce((s, c) => s + rollUp(c), 0);
+      const childCount = n.children.reduce((s, c) => s + c.count, 0);
+      n.value = n.value + childSum;
+      n.count = n.count + childCount;
     }
     return n.value;
   }
@@ -152,18 +155,18 @@ function nodeHeight(value: number, rootValue: number, treeHeight: number, scale:
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const OVERLAP_GAP = 8;
+const NODE_SCALE = 0.6;
 
 /**
  * Post-process d3.tree positions so proportional-height node rects never
  * overlap.  For each depth column we push nodes apart where needed, then
  * re-centre the column within the available height.  When the total required
- * height exceeds the available space we scale positions to fit.
+ * height exceeds the available space we compress and reposition to fit.
  */
 function resolveOverlaps(
   nodes: HierarchyNode<CategoryNode>[],
   rootValue: number,
   treeHeight: number,
-  nodeScale: number,
 ): void {
   const byDepth = new Map<number, HierarchyNode<CategoryNode>[]>();
   for (const node of nodes) {
@@ -175,7 +178,7 @@ function resolveOverlaps(
 
   for (const [, group] of byDepth) {
     group.sort((a, b) => a.x! - b.x!);
-    const heights = group.map(n => nodeHeight(n.data.value, rootValue, treeHeight, nodeScale));
+    const heights = group.map(n => nodeHeight(n.data.value, rootValue, treeHeight, NODE_SCALE));
 
     for (let i = 1; i < group.length; i++) {
       const minDist = (heights[i - 1] + heights[i]) / 2 + OVERLAP_GAP;
@@ -200,12 +203,25 @@ function resolveOverlaps(
   }
 }
 
+function assertChartTransactions(data: unknown): asserts data is SerializedChartTransaction[] {
+  if (!Array.isArray(data)) throw new Error("Expected array of chart transactions");
+  for (const item of data) {
+    if (typeof item !== "object" || item === null) throw new Error("Invalid chart transaction entry");
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.category !== "string") throw new Error("Chart transaction missing category string");
+    if (typeof rec.amount !== "number") throw new Error("Chart transaction missing amount number");
+    if (typeof rec.reimbursement !== "number") throw new Error("Chart transaction missing reimbursement number");
+  }
+}
+
 export function hydrateCategorySankey(container: HTMLElement): void {
   const scriptEl = container.querySelector('script[type="application/json"]');
   if (!scriptEl?.textContent) {
     throw new Error("category-sankey container is missing transaction data");
   }
-  const allTxns: SerializedChartTransaction[] = JSON.parse(scriptEl.textContent);
+  const parsed: unknown = JSON.parse(scriptEl.textContent);
+  assertChartTransactions(parsed);
+  const allTxns = parsed;
   if (allTxns.length === 0) {
     container.textContent = "No transaction data to chart.";
     return;
@@ -223,23 +239,26 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   let currentMode: ChartMode = "spending";
 
   const controlsDiv = document.getElementById("sankey-controls");
-  const weeksInput = controlsDiv?.querySelector("#sankey-weeks") as HTMLInputElement | null;
-  const endSlider = controlsDiv?.querySelector("#sankey-end-week") as HTMLInputElement | null;
-  const endLabel = controlsDiv?.querySelector("#sankey-end-label") as HTMLElement | null;
-  const modeRadios = controlsDiv?.querySelectorAll<HTMLInputElement>('input[name="sankey-mode"]');
+  if (!controlsDiv) throw new Error("sankey-controls element not found");
+  const weeksInput = controlsDiv.querySelector("#sankey-weeks") as HTMLInputElement | null;
+  const endSlider = controlsDiv.querySelector("#sankey-end-week") as HTMLInputElement | null;
+  const endLabel = controlsDiv.querySelector("#sankey-end-label") as HTMLElement | null;
+  const modeRadios = controlsDiv.querySelectorAll<HTMLInputElement>('input[name="sankey-mode"]');
+  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0) {
+    throw new Error("sankey control elements missing");
+  }
 
-  if (endSlider) {
-    endSlider.min = "0";
-    endSlider.max = String(weeks.length - 1);
-    endSlider.value = String(currentEndWeekIdx);
-  }
-  if (endLabel) {
-    endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
-  }
+  endSlider.min = "0";
+  endSlider.max = String(weeks.length - 1);
+  endSlider.value = String(currentEndWeekIdx);
+  endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
 
   const fg = getComputedStyle(container).getPropertyValue("--fg").trim() || "#e0e0e0";
 
   function render(): void {
+    const containerWidth = container.clientWidth;
+    if (containerWidth === 0) return;
+
     const filtered = filterByWeeks(allTxns, weeks, currentNumWeeks, currentEndWeekIdx);
     const rootData = buildCategoryTree(filtered, currentMode);
 
@@ -261,7 +280,6 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
     const root = hierarchy(prunedRoot, d => d.children.length > 0 ? d.children : undefined);
 
-    // Track top-level category index per node for color assignment
     const topLevelIndices = new Map<HierarchyNode<CategoryNode>, number>();
     function assignIndex(node: HierarchyNode<CategoryNode>, index: number): void {
       topLevelIndices.set(node, index);
@@ -275,21 +293,18 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       return idx;
     }
 
-    const containerWidth = container.clientWidth || 600;
     const svgHeight = Math.round(containerWidth * 3 / 4);
     const margin = { top: 20, right: 160, bottom: 20, left: 10 };
     const treeWidth = containerWidth - margin.left - margin.right;
     const treeHeight = svgHeight - margin.top - margin.bottom;
 
-    const nodeScale = 0.6;
-
-    // d3.tree uses [height, width] — x maps to vertical, y to horizontal
+    // Passing [treeHeight, treeWidth] produces a horizontal layout: node.x is vertical, node.y is horizontal
     const layout = tree<CategoryNode>().size([treeHeight, treeWidth]);
     const treeRoot = layout(root);
 
-    resolveOverlaps(treeRoot.descendants(), rootData.value, treeHeight, nodeScale);
-
     const nodes = treeRoot.descendants();
+    resolveOverlaps(nodes, rootData.value, treeHeight);
+
     const links = treeRoot.links();
 
     const svg = document.createElementNS(SVG_NS, "svg");
@@ -301,7 +316,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     g.setAttribute("transform", `translate(${margin.left},${margin.top})`);
     svg.appendChild(g);
 
-    // Stacking at parent side creates the fan-out curve effect
+    // Track cumulative vertical offset within each parent node rect so child link bands stack without overlapping
     const parentStacks = new Map<HierarchyNode<CategoryNode>, number>();
 
     for (const link of links) {
@@ -312,8 +327,8 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
       if (parentValue === 0) continue;
 
-      const parentH = nodeHeight(source.data.value, rootData.value, treeHeight, nodeScale);
-      const childH = nodeHeight(target.data.value, rootData.value, treeHeight, nodeScale);
+      const parentH = nodeHeight(source.data.value, rootData.value, treeHeight, NODE_SCALE);
+      const childH = nodeHeight(target.data.value, rootData.value, treeHeight, NODE_SCALE);
       const bandWidth = (childValue / parentValue) * parentH;
 
       const stackOffset = parentStacks.get(source) ?? 0;
@@ -325,11 +340,12 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       const ty = target.x - childH / 2;
 
       const midX = (sx + tx) / 2;
+      const bw = Math.max(bandWidth, 2);
       const d = [
         `M ${sx} ${sy}`,
         `C ${midX} ${sy}, ${midX} ${ty}, ${tx} ${ty}`,
-        `L ${tx} ${ty + Math.max(bandWidth, 2)}`,
-        `C ${midX} ${ty + Math.max(bandWidth, 2)}, ${midX} ${sy + Math.max(bandWidth, 2)}, ${sx} ${sy + Math.max(bandWidth, 2)}`,
+        `L ${tx} ${ty + bw}`,
+        `C ${midX} ${ty + bw}, ${midX} ${sy + bw}, ${sx} ${sy + bw}`,
         `Z`,
       ].join(" ");
 
@@ -348,7 +364,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
     for (const node of nodes) {
       if (node.depth === 0) continue;
-      const h = nodeHeight(node.data.value, rootData.value, treeHeight, nodeScale);
+      const h = nodeHeight(node.data.value, rootData.value, treeHeight, NODE_SCALE);
       const w = 12;
       const topIdx = getTopLevelIndex(node);
       const hasChildren = (node.children?.length ?? 0) > 0 || collapsedPaths.has(node.data.fullPath);
@@ -370,7 +386,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
           } else {
             collapsedPaths.add(node.data.fullPath);
           }
-          render();
+          safeRender();
         });
       }
       nodeG.appendChild(rect);
@@ -395,7 +411,17 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     container.replaceChildren(svg);
   }
 
-  render();
+  function safeRender(): void {
+    try {
+      render();
+    } catch (error) {
+      console.error("Chart render error:", error);
+      container.replaceChildren();
+      container.textContent = "Chart rendering failed. Try refreshing the page.";
+    }
+  }
+
+  safeRender();
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   function debounced(fn: () => void, ms: number): void {
@@ -403,44 +429,39 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     debounceTimer = setTimeout(fn, ms);
   }
 
-  if (weeksInput) {
-    weeksInput.addEventListener("input", () => {
-      const v = parseInt(weeksInput.value, 10);
-      if (Number.isFinite(v) && v >= 1) {
-        currentNumWeeks = v;
-        debounced(render, 100);
+  weeksInput.addEventListener("input", () => {
+    const v = parseInt(weeksInput.value, 10);
+    if (Number.isFinite(v) && v >= 1) {
+      currentNumWeeks = v;
+      debounced(safeRender, 100);
+    }
+  });
+
+  endSlider.addEventListener("input", () => {
+    const v = parseInt(endSlider.value, 10);
+    if (Number.isFinite(v) && v >= 0 && v < weeks.length) {
+      currentEndWeekIdx = v;
+      endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
+      debounced(safeRender, 100);
+    }
+  });
+
+  modeRadios.forEach(radio => {
+    radio.addEventListener("change", () => {
+      if (radio.checked) {
+        const mode = radio.value;
+        if (mode !== "spending" && mode !== "income") throw new Error(`Invalid chart mode: ${mode}`);
+        currentMode = mode;
+        collapsedPaths.clear();
+        safeRender();
       }
     });
-  }
-
-  if (endSlider) {
-    endSlider.addEventListener("input", () => {
-      const v = parseInt(endSlider.value, 10);
-      if (Number.isFinite(v) && v >= 0 && v < weeks.length) {
-        currentEndWeekIdx = v;
-        if (endLabel) endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
-        debounced(render, 100);
-      }
-    });
-  }
-
-  if (modeRadios) {
-    modeRadios.forEach(radio => {
-      radio.addEventListener("change", () => {
-        if (radio.checked) {
-          const mode = radio.value;
-          if (mode !== "spending" && mode !== "income") throw new Error(`Invalid chart mode: ${mode}`);
-          currentMode = mode;
-          render();
-        }
-      });
-    });
-  }
+  });
 
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   const observer = new ResizeObserver(() => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(render, 150);
+    resizeTimer = setTimeout(safeRender, 150);
   });
   observer.observe(container);
 }

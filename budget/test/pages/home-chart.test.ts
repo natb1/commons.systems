@@ -39,6 +39,10 @@ function makeContainer(txns?: SerializedChartTransaction[]): HTMLElement {
   const controlsDiv = document.createElement("div");
   controlsDiv.id = "sankey-controls";
   controlsDiv.innerHTML = `
+    <fieldset id="sankey-mode">
+      <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
+      <label><input type="radio" name="sankey-mode" value="income"> Income</label>
+    </fieldset>
     <input id="sankey-weeks" type="number" value="12">
     <input id="sankey-end-week" type="range">
     <span id="sankey-end-label"></span>
@@ -133,6 +137,20 @@ describe("buildCategoryTree", () => {
     expect(food.count).toBe(2);
     expect(root.value).toBe(100);
     expect(root.count).toBe(2);
+  });
+
+  it("mixed direct and subcategory transactions are both counted", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Food:Groceries", amount: 30 }),
+    ]);
+    expect(root.children).toHaveLength(1);
+    const food = root.children[0];
+    expect(food.value).toBe(80);
+    expect(food.count).toBe(2);
+    expect(food.children).toHaveLength(1);
+    expect(food.children[0].name).toBe("Groceries");
+    expect(food.children[0].value).toBe(30);
   });
 
   it("children are sorted by value descending, then name ascending", () => {

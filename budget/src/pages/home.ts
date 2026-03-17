@@ -158,7 +158,7 @@ function serializeChartTransactions(transactions: Transaction[]): SerializedChar
 
 function renderCategorySankey(transactions: Transaction[]): string {
   const chartData = serializeChartTransactions(transactions);
-  const json = JSON.stringify(chartData);
+  const json = JSON.stringify(chartData).replace(/</g, "\\u003c");
   return `<div id="sankey-controls">
       <fieldset id="sankey-mode">
         <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>

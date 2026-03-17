@@ -119,7 +119,7 @@ function transition(next: AppState): void {
 // observer catches all of them. Sets dataset.hydrated to "true" on success or
 // "error" on failure to prevent retry loops.
 // Observer runs for page lifetime: each render replaces page content, so
-// tables start unhydrated and need re-initialization.
+// containers start unhydrated and need re-initialization.
 function hydrateTable(
   selector: string,
   hydrate: (el: HTMLElement) => void,
