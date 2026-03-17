@@ -20,6 +20,12 @@ export default defineConfig({
           ? (path) => path.replace("/api/feed-proxy", `/${FIREBASE_PROJECT_ID}/us-central1/feedProxy`)
           : undefined,
       },
+      "/feed.xml": {
+        target: `http://localhost:${FUNCTIONS_PORT}`,
+        rewrite: FIREBASE_PROJECT_ID
+          ? () => `/${FIREBASE_PROJECT_ID}/us-central1/rssFeed`
+          : undefined,
+      },
     },
   },
   test: {

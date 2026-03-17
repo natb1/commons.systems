@@ -210,12 +210,12 @@ describe("renderInfoPanel", () => {
   it("archive section includes RSS icon as img when rssFeedUrl provided", () => {
     const html = renderInfoPanel({
       ...defaultData(),
-      rssFeedUrl: "blob:http://localhost/rss",
+      rssFeedUrl: "/feed.xml",
     });
     expect(html).toContain('src="/icons/rss.svg"');
     expect(html).toContain('alt="RSS"');
-    expect(html).toContain('href="blob:http://localhost/rss"');
-    expect(html).toContain('download="feed.xml"');
+    expect(html).toContain('href="/feed.xml"');
+    expect(html).not.toContain("download=");
   });
 
   it("archive section has no RSS icon when rssFeedUrl undefined", () => {

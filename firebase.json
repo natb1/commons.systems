@@ -29,6 +29,12 @@
       "target": "landing",
       "rewrites": [
         {
+          "source": "/feed.xml",
+          "function": {
+            "functionId": "rssFeed"
+          }
+        },
+        {
           "source": "**",
           "destination": "/index.html"
         }
@@ -77,6 +83,12 @@
           "source": "/api/feed-proxy",
           "function": {
             "functionId": "feedProxy"
+          }
+        },
+        {
+          "source": "/feed.xml",
+          "function": {
+            "functionId": "rssFeed"
           }
         },
         {
