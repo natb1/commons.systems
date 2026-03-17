@@ -113,8 +113,9 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   const periods = deserializePeriods(periodsRaw);
   let chartResult: ChartResult = { weekLabels: [], periodStartMs: [] };
 
-  const pieContainer = document.getElementById("budgets-pie");
-  if (!pieContainer) throw new DataIntegrityError("budgets-pie container missing after successful chart render");
+  const pieEl = document.getElementById("budgets-pie");
+  if (!pieEl) throw new DataIntegrityError("budgets-pie container not found in page markup");
+  const pieContainer: HTMLElement = pieEl;
 
   function render(): void {
     chartResult = renderBudgetChart(container, { budgets, periods });
@@ -166,6 +167,11 @@ export function hydrateBudgetChart(container: HTMLElement): void {
       try {
         render();
       } catch (error) {
+        if (error instanceof TypeError || error instanceof ReferenceError
+            || error instanceof RangeError || error instanceof DataIntegrityError) {
+          setTimeout(() => { throw error; }, 0);
+          return;
+        }
         console.error("Chart re-render failed on resize:", error);
         return;
       }

@@ -5,9 +5,9 @@ import type { Budget, BudgetPeriod } from "../firestore.js";
 import { formatCurrency } from "../format.js";
 
 interface Slice {
-  name: string;
-  /** Aggregate spending; always > 0 (zero/negative budgets are excluded). */
-  total: number;
+  readonly name: string;
+  /** Aggregate spending across periods; always > 0 (slices with zero or negative totals are excluded). */
+  readonly total: number;
 }
 
 export function filterPeriodsToWindow(periods: BudgetPeriod[], windowWeeks: number): BudgetPeriod[] {
@@ -37,6 +37,9 @@ export function renderBudgetPieChart(
   container: HTMLElement,
   options: { budgets: Budget[]; periods: BudgetPeriod[]; windowWeeks: number },
 ): void {
+  if (!Number.isFinite(options.windowWeeks) || options.windowWeeks < 1)
+    throw new RangeError(`windowWeeks must be a positive integer, got ${options.windowWeeks}`);
+
   const filtered = filterPeriodsToWindow(options.periods, options.windowWeeks);
   const slices = aggregateByBudget(options.budgets, filtered);
 
@@ -67,15 +70,17 @@ export function renderBudgetPieChart(
   svg.setAttribute("role", "img");
   svg.setAttribute("aria-label", "Budget spending pie chart");
 
-  for (const a of arcs) {
+  const pcts = arcs.map(a => ((a.data.total / grandTotal) * 100).toFixed(1));
+
+  for (let i = 0; i < arcs.length; i++) {
+    const a = arcs[i];
     const path = document.createElementNS(ns, "path");
     const d = arcGen(a);
     if (d === null) throw new Error(`arc generator returned null for budget "${a.data.name}"`);
     path.setAttribute("d", d);
     path.setAttribute("fill", color(a.data.name));
-    const pct = ((a.data.total / grandTotal) * 100).toFixed(1);
     const title = document.createElementNS(ns, "title");
-    title.textContent = `${a.data.name}: ${formatCurrency(a.data.total)} (${pct}%)`;
+    title.textContent = `${a.data.name}: ${formatCurrency(a.data.total)} (${pcts[i]}%)`;
     path.appendChild(title);
     svg.appendChild(path);
   }
@@ -92,8 +97,8 @@ export function renderBudgetPieChart(
   // Legend
   const legend = document.createElement("div");
   legend.className = "pie-legend";
-  for (const a of arcs) {
-    const pct = ((a.data.total / grandTotal) * 100).toFixed(1);
+  for (let i = 0; i < arcs.length; i++) {
+    const a = arcs[i];
     const item = document.createElement("div");
     item.className = "pie-legend-item";
 
@@ -102,7 +107,7 @@ export function renderBudgetPieChart(
     swatch.style.backgroundColor = color(a.data.name);
 
     const label = document.createElement("span");
-    label.textContent = `${a.data.name} (${pct}%)`;
+    label.textContent = `${a.data.name} (${pcts[i]}%)`;
 
     item.appendChild(swatch);
     item.appendChild(label);

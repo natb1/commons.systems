@@ -130,6 +130,20 @@ describe("aggregateByBudget", () => {
     const slices = aggregateByBudget(budgets, periods);
     expect(slices).toHaveLength(0);
   });
+
+  it("excludes budgets whose periods sum to a negative total", () => {
+    const budgets = [
+      makeBudget({ id: "food" as any, name: "Food" }),
+      makeBudget({ id: "transport" as any, name: "Transport" }),
+    ];
+    const periods = [
+      makePeriod({ id: "f1", budgetId: "food", total: 50 }),
+      makePeriod({ id: "t1", budgetId: "transport", total: -30 }),
+    ];
+    const slices = aggregateByBudget(budgets, periods);
+    expect(slices).toHaveLength(1);
+    expect(slices[0]).toEqual({ name: "Food", total: 50 });
+  });
 });
 
 describe("renderBudgetPieChart", () => {
