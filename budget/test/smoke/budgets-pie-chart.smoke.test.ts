@@ -13,14 +13,16 @@ vi.mock("firebase/firestore", () => ({
 vi.mock("../../src/firestore.js", () => ({
   getBudgets: vi.fn(),
   getBudgetPeriods: vi.fn(),
+  getTransactions: vi.fn(),
 }));
 
 import { renderBudgets } from "../../src/pages/budgets";
-import { getBudgets, getBudgetPeriods, type Budget, type BudgetPeriod } from "../../src/firestore";
+import { getBudgets, getBudgetPeriods, getTransactions, type Budget, type BudgetPeriod } from "../../src/firestore";
 import { Timestamp } from "firebase/firestore";
 
 const mockGetBudgets = vi.mocked(getBudgets);
 const mockGetBudgetPeriods = vi.mocked(getBudgetPeriods);
+const mockGetTransactions = vi.mocked(getTransactions);
 
 function ts(dateStr: string): Timestamp {
   return Timestamp.fromDate(new Date(dateStr));
@@ -59,6 +61,7 @@ describe("budgets pie chart smoke", () => {
     mockGetBudgetPeriods.mockResolvedValue([
       period({ id: "food-w1", budgetId: "food", total: 80 }),
     ]);
+    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     expect(html).toContain("<h2>Budgets</h2>");
     expect(html).not.toContain('id="budgets-error"');
@@ -69,6 +72,7 @@ describe("budgets pie chart smoke", () => {
     mockGetBudgetPeriods.mockResolvedValue([
       period({ id: "food-w1", budgetId: "food", total: 80 }),
     ]);
+    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     expect(html).toContain('id="budgets-pie"');
   });
