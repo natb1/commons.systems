@@ -4,6 +4,7 @@ import { DataIntegrityError } from "../errors.js";
 import { showInputError, handleSaveError } from "./hydrate-util.js";
 import { renderBudgetChart, type ChartResult } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
+import type { SerializedBudget } from "./budgets.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
   const row = el.closest(".budget-row");
@@ -72,7 +73,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
 }
 
 function deserializeBudgets(raw: string): Budget[] {
-  let parsed: Array<{ id: string; name: string; weeklyAllowance: number; rollover: string }>;
+  let parsed: Array<Omit<SerializedBudget, "rollover"> & { rollover: string }>;
   try { parsed = JSON.parse(raw); } catch { throw new DataIntegrityError("Invalid budget chart data"); }
   return parsed.map(b => {
     if (b.rollover !== "none" && b.rollover !== "debt" && b.rollover !== "balance")
@@ -113,10 +114,11 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   let chartResult: ChartResult = { weekLabels: [], periodStartMs: [] };
 
   const pieContainer = document.getElementById("budgets-pie");
+  if (!pieContainer) throw new DataIntegrityError("budgets-pie container missing after successful chart render");
 
   function render(): void {
     chartResult = renderBudgetChart(container, { budgets, periods });
-    if (pieContainer) renderBudgetPieChart(pieContainer, { budgets, periods, windowWeeks: 12 });
+    renderBudgetPieChart(pieContainer, { budgets, periods, windowWeeks: 12 });
   }
 
   render();
@@ -161,7 +163,12 @@ export function hydrateBudgetChart(container: HTMLElement): void {
       const scrollRatio = wrapper instanceof HTMLElement && wrapper.scrollWidth > 0
         ? wrapper.scrollLeft / wrapper.scrollWidth
         : 1;
-      render();
+      try {
+        render();
+      } catch (error) {
+        console.error("Chart re-render failed on resize:", error);
+        return;
+      }
       const newWrapper = container.querySelector(".chart-scroll-wrapper");
       if (newWrapper instanceof HTMLElement) {
         newWrapper.scrollLeft = scrollRatio * newWrapper.scrollWidth;

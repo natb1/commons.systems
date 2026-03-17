@@ -2,25 +2,26 @@ import { pie, arc, type PieArcDatum } from "d3-shape";
 import { scaleOrdinal } from "d3-scale";
 import { schemeTableau10 } from "d3-scale-chromatic";
 import type { Budget, BudgetPeriod } from "../firestore.js";
+import { formatCurrency } from "../format.js";
 
 interface Slice {
   name: string;
+  /** Aggregate spending; always > 0 (zero/negative budgets are excluded). */
   total: number;
 }
 
 export function filterPeriodsToWindow(periods: BudgetPeriod[], windowWeeks: number): BudgetPeriod[] {
   const uniqueStarts = new Set<number>();
   for (const p of periods) uniqueStarts.add(p.periodStart.toMillis());
+  if (uniqueStarts.size <= windowWeeks) return periods;
   const sorted = [...uniqueStarts].sort((a, b) => a - b);
-  const cutoff = sorted.length <= windowWeeks ? sorted : sorted.slice(sorted.length - windowWeeks);
+  const cutoff = sorted.slice(sorted.length - windowWeeks);
   const cutoffSet = new Set(cutoff);
   return periods.filter(p => cutoffSet.has(p.periodStart.toMillis()));
 }
 
 export function aggregateByBudget(budgets: Budget[], periods: BudgetPeriod[]): Slice[] {
   const totals = new Map<string, number>();
-  const nameMap = new Map<string, string>();
-  for (const b of budgets) nameMap.set(b.id, b.name);
   for (const p of periods) {
     totals.set(p.budgetId, (totals.get(p.budgetId) ?? 0) + p.total);
   }
@@ -32,10 +33,6 @@ export function aggregateByBudget(budgets: Budget[], periods: BudgetPeriod[]): S
   return slices;
 }
 
-function formatCurrency(n: number): string {
-  return "$" + n.toFixed(2);
-}
-
 export function renderBudgetPieChart(
   container: HTMLElement,
   options: { budgets: Budget[]; periods: BudgetPeriod[]; windowWeeks: number },
@@ -44,10 +41,9 @@ export function renderBudgetPieChart(
   const slices = aggregateByBudget(options.budgets, filtered);
 
   if (slices.length === 0) {
-    container.replaceChildren();
     const msg = document.createElement("p");
     msg.textContent = "No spending data";
-    container.appendChild(msg);
+    container.replaceChildren(msg);
     return;
   }
 
@@ -73,7 +69,9 @@ export function renderBudgetPieChart(
 
   for (const a of arcs) {
     const path = document.createElementNS(ns, "path");
-    path.setAttribute("d", arcGen(a)!);
+    const d = arcGen(a);
+    if (d === null) throw new Error(`arc generator returned null for budget "${a.data.name}"`);
+    path.setAttribute("d", d);
     path.setAttribute("fill", color(a.data.name));
     const pct = ((a.data.total / grandTotal) * 100).toFixed(1);
     const title = document.createElementNS(ns, "title");
@@ -82,7 +80,7 @@ export function renderBudgetPieChart(
     svg.appendChild(path);
   }
 
-  // Center total text
+  // Grand total in the donut hole
   const text = document.createElementNS(ns, "text");
   text.setAttribute("text-anchor", "middle");
   text.setAttribute("dominant-baseline", "central");

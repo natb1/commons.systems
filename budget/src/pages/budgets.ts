@@ -2,6 +2,7 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { getBudgets, getBudgetPeriods, getTransactions, type Budget, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAverageWeeklyIncome } from "../balance.js";
+import { formatCurrency } from "../format.js";
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
   { value: "none", label: "None" },
@@ -50,7 +51,7 @@ function renderBudgetTable(budgets: Budget[], authorized: boolean): string {
     </div>`;
 }
 
-interface SerializedBudget {
+export interface SerializedBudget {
   readonly id: string;
   readonly name: string;
   readonly weeklyAllowance: number;
@@ -78,10 +79,6 @@ function serializePeriods(periods: BudgetPeriod[]): string {
     categoryBreakdown: p.categoryBreakdown,
   }));
   return escapeHtml(JSON.stringify(data));
-}
-
-function formatCurrency(value: number): string {
-  return `$${value.toFixed(2)}`;
 }
 
 function renderMetrics(averageWeeklyIncome: number, totalWeeklyBudget: number): string {

@@ -97,9 +97,8 @@ describe("renderBudgets", () => {
   });
 
   it("renders budget table with data", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([budget()]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     expect(html).toContain('id="budgets-table"');
     expect(html).toContain("Food");
@@ -107,25 +106,22 @@ describe("renderBudgets", () => {
   });
 
   it("renders error fallback when Firestore fails", async () => {
+    mockDefaults();
     mockGetBudgets.mockRejectedValue(new Error("connection failed"));
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     expect(html).toContain("Could not load data");
     expect(html).toContain('id="budgets-error"');
   });
 
   it("re-throws RangeError instead of showing fallback", async () => {
+    mockDefaults();
     mockGetBudgets.mockRejectedValue(new RangeError("out of range"));
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     await expect(renderBudgets({ user: null, group: null, groupError: false })).rejects.toThrow(RangeError);
   });
 
   it("re-throws DataIntegrityError instead of showing fallback", async () => {
+    mockDefaults();
     mockGetBudgets.mockRejectedValue(new DataIntegrityError("bad data"));
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     await expect(renderBudgets({ user: null, group: null, groupError: false })).rejects.toThrow(DataIntegrityError);
   });
 
@@ -143,9 +139,8 @@ describe("renderBudgets", () => {
   });
 
   it("renders edit controls for authorized users", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([budget({ groupId: "household" })]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain('class="edit-name"');
     expect(html).toContain('class="edit-allowance"');
@@ -157,9 +152,8 @@ describe("renderBudgets", () => {
   });
 
   it("renders disabled inputs for unauthorized users", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([budget()]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     expect(html).toContain('class="edit-name"');
     expect(html).toContain("disabled");
@@ -170,12 +164,11 @@ describe("renderBudgets", () => {
   });
 
   it("sorts budgets alphabetically by name", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([
       budget({ id: "vacation", name: "Vacation", weeklyAllowance: 100, rollover: "balance" }),
       budget({ id: "food", name: "Food", weeklyAllowance: 150, rollover: "none" }),
     ]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     // Check order within the budgets-table section (after chart container)
     const tableStart = html.indexOf('id="budgets-table"');
@@ -186,22 +179,20 @@ describe("renderBudgets", () => {
   });
 
   it("renders rollover select with correct selected state", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([budget({ rollover: "debt", groupId: "household" })]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain('<option value="debt" selected>');
     expect(html).not.toContain('<option value="none" selected>');
   });
 
   it("renders rollover labels for unauthorized users", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([
       budget({ id: "a", name: "A", rollover: "none" }),
       budget({ id: "b", name: "B", rollover: "debt" }),
       budget({ id: "c", name: "C", rollover: "balance" }),
     ]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     expect(html).toContain("None");
     expect(html).toContain("Debt only");
@@ -209,19 +200,17 @@ describe("renderBudgets", () => {
   });
 
   it("shows access denied message for permission-denied error", async () => {
+    mockDefaults();
     const error = new Error("permission denied");
     (error as any).code = "permission-denied";
     mockGetBudgets.mockRejectedValue(error);
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: mockUser, group: mockGroup, groupError: false });
     expect(html).toContain("Access denied");
   });
 
   it("renders chart container with data attributes", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([budget()]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     expect(html).toContain('id="budgets-chart"');
     expect(html).toContain('data-budgets="');
@@ -229,9 +218,8 @@ describe("renderBudgets", () => {
   });
 
   it("renders date picker for chart navigation", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([budget()]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     expect(html).toContain('id="chart-date-picker"');
     expect(html).toContain('type="date"');
@@ -239,9 +227,8 @@ describe("renderBudgets", () => {
   });
 
   it("data attributes contain valid JSON", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([budget()]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     // Extract data-budgets attribute value (HTML-escaped)
     const budgetsMatch = html.match(/data-budgets="([^"]*)"/);
@@ -254,11 +241,11 @@ describe("renderBudgets", () => {
   });
 
   it("renders metrics section with formatted currency", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([
       budget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 100 }),
       budget({ id: "fun" as Budget["id"], name: "Fun", weeklyAllowance: 50 }),
     ]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
     mockGetTransactions.mockResolvedValue([
       txn({
         id: "inc-1" as Transaction["id"],
@@ -276,10 +263,10 @@ describe("renderBudgets", () => {
   });
 
   it("renders zero income when no income transactions", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([
       budget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 75 }),
     ]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
     mockGetTransactions.mockResolvedValue([
       txn({
         id: "exp-1" as Transaction["id"],
@@ -294,21 +281,19 @@ describe("renderBudgets", () => {
   });
 
   it("computes correct total weekly budget sum", async () => {
+    mockDefaults();
     mockGetBudgets.mockResolvedValue([
       budget({ id: "a" as Budget["id"], name: "A", weeklyAllowance: 100 }),
       budget({ id: "b" as Budget["id"], name: "B", weeklyAllowance: 200 }),
       budget({ id: "c" as Budget["id"], name: "C", weeklyAllowance: 50 }),
     ]);
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     expect(html).toContain("$350.00");
   });
 
   it("metrics section absent on fetch error", async () => {
+    mockDefaults();
     mockGetBudgets.mockRejectedValue(new Error("connection failed"));
-    mockGetBudgetPeriods.mockResolvedValue([]);
-    mockGetTransactions.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
     expect(html).not.toContain('id="budget-metrics"');
   });

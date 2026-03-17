@@ -30,7 +30,7 @@ test.describe("budgets pie chart", () => {
     await expect(firstPath).toBeVisible({ timeout: 10000 });
     const titleText = await firstPath.locator("title").textContent();
     expect(titleText).toBeTruthy();
-    // Tooltip format: "BudgetName: $XX.XX (YY.Y%)"
+    // Tooltip format: "Food: $1,234.56 (67.8%)"
     expect(titleText).toMatch(/^.+: \$[\d,]+\.\d{2} \(\d+\.\d%\)$/);
   });
 });
