@@ -109,13 +109,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
   const budgets = deserializeBudgets(budgetsRaw);
   const periods = deserializePeriods(periodsRaw);
-  let chartResult: ChartResult = { weekLabels: [] };
-
-  // Build a sorted list of period start dates (ms) for date picker mapping.
-  // Each entry corresponds to a week label by index.
-  const periodStartDates = [...new Set(
-    periods.map(p => p.periodStart.toMillis()),
-  )].sort((a, b) => a - b);
+  let chartResult: ChartResult = { weekLabels: [], periodStartMs: [] };
 
   function render(): void {
     chartResult = renderBudgetChart(container, { budgets, periods });
@@ -125,20 +119,21 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
   // Configure date picker min/max from period date range
   const datePicker = document.getElementById("chart-date-picker") as HTMLInputElement | null;
-  if (datePicker && periodStartDates.length > 0) {
-    datePicker.min = toISODate(periodStartDates[0]);
-    datePicker.max = toISODate(periodStartDates[periodStartDates.length - 1]);
+  if (datePicker && chartResult.periodStartMs.length > 0) {
+    datePicker.min = toISODate(chartResult.periodStartMs[0]);
+    datePicker.max = toISODate(chartResult.periodStartMs[chartResult.periodStartMs.length - 1]);
 
     datePicker.addEventListener("change", () => {
       const wrapper = container.querySelector(".chart-scroll-wrapper");
       if (!(wrapper instanceof HTMLElement) || !datePicker.value) return;
 
+      const startMs = chartResult.periodStartMs;
       const selectedMs = new Date(datePicker.value + "T00:00:00").getTime();
       // Find nearest period start date
       let nearestIdx = 0;
       let nearestDist = Infinity;
-      for (let i = 0; i < periodStartDates.length; i++) {
-        const dist = Math.abs(periodStartDates[i] - selectedMs);
+      for (let i = 0; i < startMs.length; i++) {
+        const dist = Math.abs(startMs[i] - selectedMs);
         if (dist < nearestDist) {
           nearestDist = dist;
           nearestIdx = i;

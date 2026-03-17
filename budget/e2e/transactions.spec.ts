@@ -11,10 +11,10 @@ test.describe("transactions", () => {
     await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(9);
-    await expect(rows.nth(0)).toContainText("Airline Ticket");
-    await expect(rows.nth(1)).toContainText("Travel Guide");
-    await expect(rows.nth(8)).toContainText("Restaurant");
+    await expect(rows).toHaveCount(98);
+    await expect(rows.nth(0)).toContainText("Travel Bookshop");
+    await expect(rows.nth(1)).toContainText("Electric Company");
+    await expect(rows.nth(97)).toContainText("Restaurant");
   });
 
   test("seed transactions are read-only", async ({ page }) => {

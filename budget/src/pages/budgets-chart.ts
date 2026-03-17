@@ -9,6 +9,8 @@ export interface ChartOptions {
 
 export interface ChartResult {
   weekLabels: string[];
+  /** Period start timestamps in ms, sorted chronologically, one per unique week. */
+  periodStartMs: number[];
 }
 
 interface BarDatum {
@@ -24,9 +26,9 @@ function formatWeek(ts: { toDate(): Date }): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-/** Collect ordered unique week entries across all budgets, keyed by ms to avoid label collisions. */
+/** Collect ordered unique week entries across all budgets, deduplicating by timestamp. */
 function allWeekEntries(balanceMap: Map<BudgetId, PeriodBalance[]>): { label: string; ms: number }[] {
-  const seen = new Map<number, string>(); // ms → label
+  const seen = new Map<number, string>();
   for (const balances of balanceMap.values()) {
     for (const pb of balances) {
       const ms = pb.periodStart.toMillis();
@@ -39,9 +41,10 @@ function allWeekEntries(balanceMap: Map<BudgetId, PeriodBalance[]>): { label: st
 function buildChartData(
   budgets: Budget[],
   balanceMap: Map<BudgetId, PeriodBalance[]>,
-): { data: BarDatum[]; weekLabels: string[] } {
+): { data: BarDatum[]; weekLabels: string[]; periodStartMs: number[] } {
   const weekEntries = allWeekEntries(balanceMap);
   const weekLabels = weekEntries.map(e => e.label);
+  const periodStartMs = weekEntries.map(e => e.ms);
   const data: BarDatum[] = [];
 
   for (const budget of budgets) {
@@ -49,35 +52,26 @@ function buildChartData(
     const byMs = new Map<number, PeriodBalance>();
     for (const pb of balances) byMs.set(pb.periodStart.toMillis(), pb);
 
-    // Walk all weeks: fill missing periods (budget had no activity this week) with zero-spend rollover entries
+    // Walk all weeks: fill missing periods (no period record for this budget at this timestamp) with zero-spend rollover entries
     let accumulated = 0;
     for (const entry of weekEntries) {
       const pb = byMs.get(entry.ms);
-      if (pb) {
-        data.push({
-          week: entry.label,
-          budget: budget.name,
-          spent: pb.spent,
-          allowance: budget.weeklyAllowance,
-          balance: pb.runningBalance,
-        });
-        accumulated = pb.runningBalance;
-      } else {
-        // No period for this week — zero spend, rollover accumulates allowance
-        const balance = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
-        data.push({
-          week: entry.label,
-          budget: budget.name,
-          spent: 0,
-          allowance: budget.weeklyAllowance,
-          balance,
-        });
-        accumulated = balance;
-      }
+      const spent = pb ? pb.spent : 0;
+      const balance = pb
+        ? pb.runningBalance
+        : applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
+      data.push({
+        week: entry.label,
+        budget: budget.name,
+        spent,
+        allowance: budget.weeklyAllowance,
+        balance,
+      });
+      accumulated = balance;
     }
   }
 
-  return { data, weekLabels };
+  return { data, weekLabels, periodStartMs };
 }
 
 function getThemeFg(container: HTMLElement): string {
@@ -89,11 +83,11 @@ function getThemeFg(container: HTMLElement): string {
 export function renderBudgetChart(container: HTMLElement, options: ChartOptions): ChartResult {
   const { budgets, periods } = options;
   const balanceMap = computePeriodBalances(budgets, periods);
-  const { data, weekLabels } = buildChartData(budgets, balanceMap);
+  const { data, weekLabels, periodStartMs } = buildChartData(budgets, balanceMap);
 
   if (data.length === 0) {
     container.textContent = "No budget period data to chart.";
-    return { weekLabels: [] };
+    return { weekLabels: [], periodStartMs: [] };
   }
   const weekCount = weekLabels.length;
   const panelWidth = Math.max(budgets.length * 60 + 40, 120);
@@ -106,8 +100,12 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
   const fg = getThemeFg(container);
 
   // Compute shared Y domain so the fixed Y-axis and scrollable chart body use the same scale
-  const yMax = Math.max(...data.map(d => Math.max(d.spent, d.allowance, d.balance)));
-  const yMin = Math.min(0, ...data.map(d => d.balance));
+  let yMax = -Infinity;
+  let yMin = 0;
+  for (const d of data) {
+    yMax = Math.max(yMax, d.spent, d.allowance, d.balance);
+    yMin = Math.min(yMin, d.balance);
+  }
   const yDomain: [number, number] = [yMin, yMax];
 
   const sharedStyle = { background: "transparent", color: fg };
@@ -191,5 +189,5 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
 
   wrapper.scrollLeft = wrapper.scrollWidth;
 
-  return { weekLabels };
+  return { weekLabels, periodStartMs };
 }

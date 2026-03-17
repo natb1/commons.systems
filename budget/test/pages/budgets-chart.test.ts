@@ -65,6 +65,7 @@ describe("renderBudgetChart", () => {
     expect(container.querySelector(".chart-y-axis svg")).not.toBeNull();
     expect(container.querySelector(".chart-scroll-wrapper svg")).not.toBeNull();
     expect(result.weekLabels).toHaveLength(1);
+    expect(result.periodStartMs).toEqual([ts("2025-01-06").toMillis()]);
   });
 
   it("shows empty message when no periods", () => {
@@ -74,6 +75,7 @@ describe("renderBudgetChart", () => {
     expect(container.textContent).toBe("No budget period data to chart.");
     expect(container.querySelector("svg")).toBeNull();
     expect(result.weekLabels).toEqual([]);
+    expect(result.periodStartMs).toEqual([]);
   });
 
   it("renders all periods without filtering", () => {

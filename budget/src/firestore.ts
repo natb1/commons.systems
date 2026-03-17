@@ -45,7 +45,7 @@ export interface BudgetPeriod {
   readonly groupId: GroupId | null;
 }
 
-/** Serialized form of BudgetPeriod for HTML data attributes. Used by both home.ts (serializer) and home-hydrate.ts (parser). */
+/** Serialized form of BudgetPeriod for HTML data attributes. Serialized by page renderers and deserialized by their hydration counterparts. */
 export interface SerializedBudgetPeriod {
   readonly id: BudgetPeriodId;
   readonly budgetId: BudgetId;

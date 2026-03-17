@@ -192,12 +192,13 @@ describe("renderBudgets", () => {
     expect(html).toContain('data-periods="');
   });
 
-  it("renders window select with default 12", async () => {
+  it("renders date picker for chart navigation", async () => {
     mockGetBudgets.mockResolvedValue([budget()]);
     mockGetBudgetPeriods.mockResolvedValue([]);
     const html = await renderBudgets({ user: null, group: null, groupError: false });
-    expect(html).toContain('id="chart-window"');
-    expect(html).toContain('<option value="12" selected>');
+    expect(html).toContain('id="chart-date-picker"');
+    expect(html).toContain('type="date"');
+    expect(html).not.toContain('id="chart-window"');
   });
 
   it("data attributes contain valid JSON", async () => {

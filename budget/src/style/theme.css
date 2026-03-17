@@ -86,8 +86,23 @@
 
 #budgets-chart-controls { margin-bottom: 0.5rem; }
 #budgets-chart { width: 100%; margin-bottom: 1rem; }
-#budgets-chart svg { width: 100%; height: auto; }
-#chart-window {
+#budgets-chart [aria-label="tip"] text { fill: #222; }
+.chart-layout {
+  display: flex;
+  align-items: stretch;
+}
+.chart-y-axis {
+  flex-shrink: 0;
+}
+.chart-y-axis svg { display: block; height: auto; }
+.chart-scroll-wrapper {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.chart-scroll-wrapper svg { height: auto; display: block; }
+#chart-date-picker {
   background: var(--surface);
   color: var(--fg);
   border: 1px solid var(--border);

@@ -118,6 +118,7 @@ export function computeBudgetBalance(
 
 export interface PeriodBalance {
   readonly periodStart: Timestamp;
+  /** Net transaction total for this period. May be negative when credits/refunds exceed debits. */
   readonly spent: number;
   readonly runningBalance: number;
 }
