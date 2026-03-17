@@ -5,7 +5,7 @@ export interface Route {
 }
 
 export interface RouterOptions {
-  /** Called with the parsed path and query params at the start of each navigation, before route matching. Exceptions do not prevent the route from rendering. TypeError and ReferenceError are deferred as uncaught errors; other exceptions are caught and logged. */
+  /** Called with the parsed path and query params at the start of each navigation, before route matching. Exceptions do not prevent the route from rendering. TypeError and ReferenceError are deferred as uncaught errors; other exceptions are caught and reported via reportError. */
   onNavigate?: (nav: { path: string; params: URLSearchParams }) => void;
   /** Map an error to a user-facing message. Return undefined to use "Something went wrong. Please try again." */
   formatError?: (error: unknown) => string | undefined;
@@ -75,7 +75,11 @@ function createNavigator(
         }
       }
     } catch (error) {
-      console.error("Navigation error:", error);
+      if (error instanceof TypeError || error instanceof ReferenceError) {
+        setTimeout(() => { throw error; }, 0);
+      } else {
+        reportError(error);
+      }
       if (id === navigationId) {
         const message =
           options?.formatError?.(error) ??
@@ -99,6 +103,9 @@ export function parsePath(): { path: string; params: URLSearchParams } {
   };
 }
 
+/**
+ * @param routes - Ordered route list. The first route serves as fallback when no path matches.
+ */
 export function createHistoryRouter(
   outlet: HTMLElement,
   routes: [Route, ...Route[]],
@@ -111,6 +118,7 @@ export function createHistoryRouter(
 
   const onClick = (e: MouseEvent) => {
     if (nav.isDestroyed()) return;
+    if (e.button !== 0) return;
     const anchor = (e.target as Element).closest("a");
     if (!anchor) return;
     if (anchor.getAttribute("target") === "_blank") return;

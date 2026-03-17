@@ -279,12 +279,18 @@ func TestNormalizationRuleMatch_Regex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// For regex rules, ApplyNormalization compiles with (?i) prefix.
 			// Here we test via the full pipeline with 2 txns to form a group.
-			// Use the same statement ID so auto-normalization doesn't interfere.
+			// Rule-based normalization requires cross-statement membership;
+			// use different statement IDs for match cases and same for no-match
+			// (to avoid auto-normalization producing a false positive).
 			txn2 := tt.txn
 			txn2.DocID = "doc-2"
 			tt.txn.DocID = "doc-1"
 			tt.txn.StatementID = "s1"
-			txn2.StatementID = "s1"
+			if tt.want {
+				txn2.StatementID = "s2"
+			} else {
+				txn2.StatementID = "s1"
+			}
 			updates, err := ApplyNormalization(
 				[]store.NormTxn{tt.txn, txn2},
 				[]NormalizationRule{tt.rule},
@@ -310,19 +316,19 @@ func TestNormalizationRuleMatch_Regex(t *testing.T) {
 
 func TestApplyNormalization_AmountGrouping(t *testing.T) {
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
+	day2 := base.AddDate(0, 0, 1)
 	txns := []store.NormTxn{
-		{DocID: "a1", Description: "NETFLIX.COM", Amount: 1599, Timestamp: base, StatementID: "s1"},
-		{DocID: "a2", Description: "NETFLIX.COM", Amount: 1599, Timestamp: base.AddDate(0, 0, 1), StatementID: "s2"},
-		{DocID: "b1", Description: "NETFLIX.COM", Amount: 2299, Timestamp: base, StatementID: "s1"},
-		{DocID: "b2", Description: "NETFLIX.COM", Amount: 2299, Timestamp: base.AddDate(0, 0, 1), StatementID: "s2"},
+		// Two amounts on the same date, each in two overlapping statements
+		{DocID: "a1", Description: "NETFLIX.COM sub", Amount: 1599, Timestamp: base, StatementID: "s1"},
+		{DocID: "a2", Description: "NETFLIX.COM subscription", Amount: 1599, Timestamp: base, StatementID: "s2"},
+		{DocID: "b1", Description: "NETFLIX.COM premium", Amount: 2299, Timestamp: day2, StatementID: "s1"},
+		{DocID: "b2", Description: "NETFLIX.COM prem sub", Amount: 2299, Timestamp: day2, StatementID: "s2"},
 	}
 	rules := []NormalizationRule{{
 		ID:                   "r1",
 		Pattern:              "netflix",
 		CanonicalDescription: "Netflix",
-
-		DateWindowDays: 30,
-		Priority:       1,
+		Priority:             1,
 	}}
 
 	updates, err := ApplyNormalization(txns, rules)
@@ -343,32 +349,31 @@ func TestApplyNormalization_AmountGrouping(t *testing.T) {
 	}
 }
 
-func TestApplyNormalization_DateWindow(t *testing.T) {
+func TestApplyNormalization_ExactDateOnly(t *testing.T) {
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
 	txns := []store.NormTxn{
+		// Same date, different statements → duplicate
 		{DocID: "d1", Description: "ELECTRIC CO", Amount: 8500, Timestamp: base, StatementID: "s1"},
-		{DocID: "d2", Description: "ELECTRIC CO", Amount: 8500, Timestamp: base.AddDate(0, 0, 5), StatementID: "s2"},
-		{DocID: "d3", Description: "ELECTRIC CO", Amount: 8500, Timestamp: base.AddDate(0, 0, 30), StatementID: "s3"},
+		{DocID: "d2", Description: "ELECTRIC COMPANY", Amount: 8500, Timestamp: base, StatementID: "s2"},
+		// Different date → distinct transaction, not a duplicate
+		{DocID: "d3", Description: "ELECTRIC CO", Amount: 8500, Timestamp: base.AddDate(0, 0, 5), StatementID: "s3"},
 	}
 	rules := []NormalizationRule{{
 		ID:                   "r1",
 		Pattern:              "electric",
 		CanonicalDescription: "Electric Company",
-
-		DateWindowDays: 7,
-		Priority:       1,
+		Priority:             1,
 	}}
 
 	updates, err := ApplyNormalization(txns, rules)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// d1 and d2 are within 7 days -> grouped (2 updates)
-	// d3 is 25 days away from d2 -> excluded from the group (single, no update)
+	// d1 and d2 share date+amount across statements → 2 updates
+	// d3 is on a different date → standalone, no update
 	if len(updates) != 2 {
 		t.Fatalf("got %d updates, want 2", len(updates))
 	}
-	// Verify d1 and d2 are in the group
 	docIDs := make(map[string]bool)
 	for _, u := range updates {
 		docIDs[u.DocID] = true
@@ -380,18 +385,17 @@ func TestApplyNormalization_DateWindow(t *testing.T) {
 
 func TestApplyNormalization_PrimarySelection(t *testing.T) {
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
+	// Same date, 3 overlapping statements
 	txns := []store.NormTxn{
 		{DocID: "x1", Description: "WATER BILL", Amount: 5000, Timestamp: base, StatementID: "stmt-2025-01"},
-		{DocID: "x2", Description: "WATER BILL", Amount: 5000, Timestamp: base.AddDate(0, 0, 1), StatementID: "stmt-2025-03"},
-		{DocID: "x3", Description: "WATER BILL", Amount: 5000, Timestamp: base.AddDate(0, 0, 2), StatementID: "stmt-2025-02"},
+		{DocID: "x2", Description: "WATER BILL PAYMENT", Amount: 5000, Timestamp: base, StatementID: "stmt-2025-03"},
+		{DocID: "x3", Description: "WATER BILL CO", Amount: 5000, Timestamp: base, StatementID: "stmt-2025-02"},
 	}
 	rules := []NormalizationRule{{
 		ID:                   "r1",
 		Pattern:              "water bill",
 		CanonicalDescription: "Water Bill",
-
-		DateWindowDays: 30,
-		Priority:       1,
+		Priority:             1,
 	}}
 
 	updates, err := ApplyNormalization(txns, rules)
@@ -417,30 +421,29 @@ func TestApplyNormalization_PrimarySelection(t *testing.T) {
 		}
 	}
 
-	// Tiebreak by DocID when StatementIDs match
-	t.Run("doc ID tiebreak", func(t *testing.T) {
+	// Same-statement transactions are never grouped
+	t.Run("same statement not grouped", func(t *testing.T) {
 		txns := []store.NormTxn{
 			{DocID: "aa", Description: "WATER BILL", Amount: 5000, Timestamp: base, StatementID: "stmt-same"},
-			{DocID: "zz", Description: "WATER BILL", Amount: 5000, Timestamp: base.AddDate(0, 0, 1), StatementID: "stmt-same"},
+			{DocID: "zz", Description: "WATER BILL", Amount: 5000, Timestamp: base, StatementID: "stmt-same"},
 		}
 		updates, err := ApplyNormalization(txns, rules)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		for _, u := range updates {
-			if u.NormalizedID != "zz" {
-				t.Errorf("update for %s: NormalizedID = %q, want zz (doc ID tiebreak)", u.DocID, u.NormalizedID)
-			}
+		if len(updates) != 0 {
+			t.Errorf("got %d updates, want 0 (same-statement entries are distinct)", len(updates))
 		}
 	})
 }
 
 func TestApplyNormalization_FirstMatchWins(t *testing.T) {
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
+	// Same date, 3 overlapping statements
 	txns := []store.NormTxn{
 		{DocID: "t1", Description: "ACME ELECTRIC CO", Amount: 8500, Timestamp: base, StatementID: "s1"},
-		{DocID: "t2", Description: "ACME ELECTRIC CO", Amount: 8500, Timestamp: base.AddDate(0, 0, 1), StatementID: "s2"},
-		{DocID: "t3", Description: "ACME ELECTRIC CO", Amount: 8500, Timestamp: base.AddDate(0, 0, 2), StatementID: "s3"},
+		{DocID: "t2", Description: "ACME ELECTRIC COMPANY", Amount: 8500, Timestamp: base, StatementID: "s2"},
+		{DocID: "t3", Description: "ACME ELECTRIC", Amount: 8500, Timestamp: base, StatementID: "s3"},
 	}
 	// Lower priority number = higher priority (evaluated first)
 	rules := []NormalizationRule{
@@ -448,17 +451,13 @@ func TestApplyNormalization_FirstMatchWins(t *testing.T) {
 			ID:                   "low-priority",
 			Pattern:              "electric",
 			CanonicalDescription: "Electric Bill",
-
-			DateWindowDays: 30,
-			Priority:       10, // evaluated first
+			Priority:             10, // evaluated first
 		},
 		{
 			ID:                   "high-priority-number",
 			Pattern:              "acme",
 			CanonicalDescription: "ACME Corp",
-
-			DateWindowDays: 30,
-			Priority:       20, // evaluated second
+			Priority:             20, // evaluated second
 		},
 	}
 

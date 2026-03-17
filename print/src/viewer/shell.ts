@@ -18,9 +18,7 @@ export function renderViewerShell(item: MediaItem): string {
   return `
     <div class="viewer" data-orientation="landscape">
       <div class="viewer-content">
-        <div class="viewer-canvas-wrap">
-          <canvas id="viewer-canvas"></canvas>
-        </div>
+        <div class="viewer-canvas-wrap"></div>
       </div>
       <button class="viewer-panel-toggle" aria-expanded="true" aria-label="Toggle panel">&#9776;</button>
       <aside class="viewer-panel">
@@ -106,6 +104,8 @@ export function initViewer(
   }
   toggleBtn.addEventListener("click", handleToggle);
 
+  // Position persistence: Firestore for authenticated users, localStorage otherwise.
+  // Debounced to avoid writes on every sub-page turn.
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSavedPosition: string | null = null;
   // Set true when Firestore read fails at init; prevents overwriting unknown saved state on write.
@@ -132,9 +132,9 @@ export function initViewer(
 
   // Navigation
   function updateNav() {
-    position.textContent = `Page ${renderer.currentPage} / ${renderer.pageCount}`;
-    prevBtn.disabled = renderer.currentPage <= 1;
-    nextBtn.disabled = renderer.currentPage >= renderer.pageCount;
+    position.textContent = renderer.positionLabel;
+    prevBtn.disabled = !renderer.canGoPrev;
+    nextBtn.disabled = !renderer.canGoNext;
     scheduleSave();
   }
 
@@ -144,17 +144,13 @@ export function initViewer(
   }
 
   async function goPrev() {
-    if (renderer.currentPage > 1) {
-      await renderer.goToPage(renderer.currentPage - 1);
-      updateNav();
-    }
+    await renderer.prev();
+    updateNav();
   }
 
   async function goNext() {
-    if (renderer.currentPage < renderer.pageCount) {
-      await renderer.goToPage(renderer.currentPage + 1);
-      updateNav();
-    }
+    await renderer.next();
+    updateNav();
   }
 
   prevBtn.addEventListener("click", () => {

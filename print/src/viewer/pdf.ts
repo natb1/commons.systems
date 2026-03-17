@@ -58,8 +58,8 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   return {
     async init(containerEl: HTMLElement, url: string, initialPosition?: string): Promise<void> {
       container = containerEl;
-      canvas = containerEl.querySelector("canvas") as HTMLCanvasElement;
-      if (!canvas) throw new Error("Canvas element not found in container");
+      canvas = document.createElement("canvas");
+      containerEl.appendChild(canvas);
 
       const loadingTask = pdfjsLib.getDocument(url);
       const doc = await loadingTask.promise;
@@ -80,7 +80,9 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
         if (resizeTimer) clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
           resizeTimer = null;
-          renderPage(_currentPage).catch(onError ?? console.error);
+          renderPage(_currentPage).catch(onError ?? ((err: unknown) => {
+            reportError(new Error("PDF render failed during resize", { cause: err }));
+          }));
         }, 150);
       });
       resizeObserver.observe(container);
@@ -92,14 +94,34 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       await renderPage(page);
     },
 
-    get position() {
-      return String(_currentPage);
+    async next(): Promise<void> {
+      if (_currentPage < _pageCount) {
+        _currentPage++;
+        await renderPage(_currentPage);
+      }
     },
+
+    async prev(): Promise<void> {
+      if (_currentPage > 1) {
+        _currentPage--;
+        await renderPage(_currentPage);
+      }
+    },
+
+
     get pageCount() {
       return _pageCount;
     },
     get currentPage() {
       return _currentPage;
+    },
+    get canGoNext() { return _currentPage < _pageCount; },
+    get canGoPrev() { return _currentPage > 1; },
+    get position() {
+      return String(_currentPage);
+    },
+    get positionLabel() {
+      return `Page ${_currentPage} / ${_pageCount}`;
     },
 
     destroy(): void {
@@ -120,7 +142,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
         pdfDoc.destroy();
         pdfDoc = null;
       }
-      canvas = null;
+      if (canvas) {
+        canvas.remove();
+        canvas = null;
+      }
       container = null;
     },
   };

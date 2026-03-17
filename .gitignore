@@ -11,3 +11,4 @@ firestore-debug.log
 ui-debug.log
 .direnv/
 /tmp/
+budget-etl/budget-etl

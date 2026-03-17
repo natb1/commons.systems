@@ -5,6 +5,7 @@ import { getMediaDownloadUrl } from "../storage.js";
 import type { MediaItem } from "../types.js";
 import { renderViewerShell, initViewer } from "../viewer/shell.js";
 import { createPdfRenderer } from "../viewer/pdf.js";
+import { createEpubRenderer } from "../viewer/epub.js";
 import { createImageArchiveRenderer } from "../viewer/image-archive.js";
 
 const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
@@ -66,13 +67,21 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
 
   const uid = user?.uid ?? null;
 
-  if (item.mediaType === "pdf") {
-    cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url, item.id, uid);
-  } else if (item.mediaType === "image-archive") {
-    cleanupFn = initViewer(outlet, (onError) => createImageArchiveRenderer(onError), url, item.id, uid);
-  } else {
-    reportError(new Error(`Unsupported mediaType in viewer: ${item.mediaType}`));
-    const pos = outlet.querySelector(".viewer-position");
-    if (pos) pos.textContent = `Unsupported media type: ${item.mediaType}`;
+  switch (item.mediaType) {
+    case "pdf":
+      cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url, item.id, uid);
+      break;
+    case "epub":
+      cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), url, item.id, uid);
+      break;
+    case "image-archive":
+      cleanupFn = initViewer(outlet, (onError) => createImageArchiveRenderer(onError), url, item.id, uid);
+      break;
+    default: {
+      const _exhaustive: never = item.mediaType;
+      reportError(new Error(`Unsupported mediaType in viewer: ${_exhaustive}`));
+      const pos = outlet.querySelector(".viewer-position");
+      if (pos) pos.textContent = `Unsupported media type: ${_exhaustive}`;
+    }
   }
 }

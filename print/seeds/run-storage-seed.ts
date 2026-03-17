@@ -11,31 +11,29 @@ const bucket = process.env.STORAGE_BUCKET ?? "commons-systems.firebasestorage.ap
 for (const item of storageSeed) {
   const boundary = "----SeedBoundary";
   const metadataJson = JSON.stringify({ name: item.path, metadata: item.metadata });
+  const isBinary = Buffer.isBuffer(item.content);
 
-  let body: string | Uint8Array;
-  if (typeof item.content === "string") {
-    body =
-      `--${boundary}\r\n` +
-      `Content-Type: application/json\r\n\r\n` +
-      `${metadataJson}\r\n` +
-      `--${boundary}\r\n` +
-      `Content-Type: application/octet-stream\r\n\r\n` +
-      `${item.content}\r\n` +
-      `--${boundary}--\r\n`;
+  const metadataPart =
+    `--${boundary}\r\n` +
+    `Content-Type: application/json\r\n\r\n` +
+    `${metadataJson}\r\n`;
+
+  const contentHeader =
+    `--${boundary}\r\n` +
+    `Content-Type: application/octet-stream\r\n\r\n`;
+
+  const trailer = `\r\n--${boundary}--\r\n`;
+
+  let body: Buffer | string;
+  if (isBinary) {
+    body = Buffer.concat([
+      Buffer.from(metadataPart),
+      Buffer.from(contentHeader),
+      item.content as Buffer,
+      Buffer.from(trailer),
+    ]);
   } else {
-    const enc = new TextEncoder();
-    const header = enc.encode(
-      `--${boundary}\r\n` +
-        `Content-Type: application/json\r\n\r\n` +
-        `${metadataJson}\r\n` +
-        `--${boundary}\r\n` +
-        `Content-Type: application/octet-stream\r\n\r\n`,
-    );
-    const footer = enc.encode(`\r\n--${boundary}--\r\n`);
-    body = new Uint8Array(header.length + item.content.length + footer.length);
-    body.set(header);
-    body.set(item.content, header.length);
-    body.set(footer, header.length + item.content.length);
+    body = metadataPart + contentHeader + (item.content as string) + trailer;
   }
 
   const url = `http://${host}/upload/storage/v1/b/${bucket}/o?uploadType=multipart`;

@@ -15,6 +15,21 @@ ensure_deps
 
 cd "$REPO_ROOT/$APP_DIR"
 
+# Wait for Firebase CDN to serve the deployed content
+echo "Waiting for preview to become available at $BASE_URL..."
+for i in $(seq 1 15); do
+  if curl -sf "$BASE_URL" | grep -q '<script type="module"'; then
+    echo "Preview is ready."
+    break
+  fi
+  if [ "$i" -eq 15 ]; then
+    echo "ERROR: Preview at $BASE_URL did not serve expected content after 30s" >&2
+    curl -s "$BASE_URL" | head -20 >&2
+    exit 1
+  fi
+  sleep 2
+done
+
 # Install Playwright browsers (skip if nix provides them via PLAYWRIGHT_BROWSERS_PATH)
 if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
   npx playwright install --with-deps chromium

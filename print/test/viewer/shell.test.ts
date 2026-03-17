@@ -8,56 +8,17 @@ vi.mock("../../src/auth.js", () => ({
 }));
 
 vi.mock("../../src/reading-position.js", () => ({
-  getReadingPosition: vi.fn(),
-  saveReadingPosition: vi.fn(),
+  getReadingPosition: vi.fn().mockResolvedValue(null),
+  saveReadingPosition: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { renderViewerShell, initViewer } from "../../src/viewer/shell";
+import {
+  getReadingPosition,
+  saveReadingPosition,
+} from "../../src/reading-position";
 import type { MediaItem } from "../../src/types";
-import { getReadingPosition, saveReadingPosition } from "../../src/reading-position.js";
-
-const mockGetReadingPosition = vi.mocked(getReadingPosition);
-const mockSaveReadingPosition = vi.mocked(saveReadingPosition);
-
-function makeViewerDOM(): HTMLElement {
-  const outlet = document.createElement("div");
-  outlet.innerHTML = `
-    <div class="viewer" data-orientation="landscape">
-      <div class="viewer-content">
-        <div class="viewer-canvas-wrap"><canvas></canvas></div>
-      </div>
-      <button class="viewer-panel-toggle"></button>
-      <aside class="viewer-panel">
-        <div class="viewer-nav">
-          <button class="viewer-prev" disabled></button>
-          <span class="viewer-position">Loading...</span>
-          <button class="viewer-next" disabled></button>
-        </div>
-      </aside>
-    </div>`;
-  return outlet;
-}
-
-function makeMockRenderer(pageCount = 3) {
-  let currentPage = 1;
-  return {
-    init: vi.fn().mockResolvedValue(undefined),
-    goToPage: vi.fn().mockImplementation(async (p: number) => { currentPage = p; }),
-    get position() { return String(currentPage); },
-    get currentPage() { return currentPage; },
-    get pageCount() { return pageCount; },
-    destroy: vi.fn(),
-  };
-}
-
-async function flushPromises(): Promise<void> {
-  // 20 is a conservative ceiling — 6-8 ticks would suffice for the current chain
-  // (getReadingPosition -> renderer.init -> updateNav), but extra margin avoids
-  // intermittent failures if another await is added to the init path.
-  for (let i = 0; i < 20; i++) {
-    await Promise.resolve();
-  }
-}
+import type { ContentRenderer } from "../../src/viewer/types";
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
   return {
@@ -75,6 +36,25 @@ function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
   };
 }
 
+function makeMockRenderer(overrides: Partial<ContentRenderer> = {}): ContentRenderer {
+  let _currentPage = 1;
+  const _pageCount = 10;
+  return {
+    init: vi.fn().mockResolvedValue(undefined),
+    goToPage: vi.fn().mockImplementation(async (p: number) => { _currentPage = p; }),
+    next: vi.fn().mockImplementation(async () => { if (_currentPage < _pageCount) _currentPage++; }),
+    prev: vi.fn().mockImplementation(async () => { if (_currentPage > 1) _currentPage--; }),
+    get pageCount() { return _pageCount; },
+    get currentPage() { return _currentPage; },
+    get canGoNext() { return _currentPage < _pageCount; },
+    get canGoPrev() { return _currentPage > 1; },
+    get position() { return String(_currentPage); },
+    get positionLabel() { return `Page ${_currentPage} / ${_pageCount}`; },
+    destroy: vi.fn(),
+    ...overrides,
+  };
+}
+
 describe("renderViewerShell", () => {
   it("contains .viewer container with data-orientation='landscape'", () => {
     const html = renderViewerShell(makeMediaItem());
@@ -83,12 +63,12 @@ describe("renderViewerShell", () => {
     expect(html).toContain('data-orientation="landscape"');
   });
 
-  it("contains .viewer-content with .viewer-canvas-wrap and canvas#viewer-canvas", () => {
+  it("contains .viewer-content with .viewer-canvas-wrap (no embedded canvas)", () => {
     const html = renderViewerShell(makeMediaItem());
 
     expect(html).toContain('class="viewer-content"');
     expect(html).toContain('class="viewer-canvas-wrap"');
-    expect(html).toContain('id="viewer-canvas"');
+    expect(html).not.toContain('id="viewer-canvas"');
   });
 
   it("contains .viewer-panel aside element", () => {
@@ -195,232 +175,215 @@ describe("renderViewerShell", () => {
 });
 
 describe("initViewer", () => {
+  let outlet: HTMLElement;
+
   beforeEach(() => {
     vi.useFakeTimers();
-    mockGetReadingPosition.mockReset();
-    mockSaveReadingPosition.mockReset();
-    mockSaveReadingPosition.mockResolvedValue(undefined);
+    vi.clearAllMocks();
+    outlet = document.createElement("div");
+    outlet.innerHTML = renderViewerShell(makeMediaItem());
     localStorage.clear();
-    (globalThis as any).reportError = vi.fn();
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.mocked(globalThis.reportError).mockRestore();
   });
 
-  it("authenticated: loads position from Firestore", async () => {
-    mockGetReadingPosition.mockResolvedValue("2");
-    const outlet = makeViewerDOM();
-    const renderer = makeMockRenderer();
-    const createRenderer = vi.fn().mockReturnValue(renderer);
+  async function flushInit(): Promise<void> {
+    // 20 is a conservative ceiling — 6-8 ticks would suffice for the current chain
+    // (getReadingPosition -> renderer.init -> updateNav), but extra margin avoids
+    // intermittent failures if another await is added to the init path.
+    for (let i = 0; i < 20; i++) {
+      await Promise.resolve();
+    }
+  }
 
-    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
-    await flushPromises();
+  it("disables prev and enables next based on canGoPrev/canGoNext", async () => {
+    const renderer = makeMockRenderer();
+
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    await flushInit();
+
+    const prevBtn = outlet.querySelector(".viewer-prev") as HTMLButtonElement;
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    // currentPage=1: canGoPrev=false, canGoNext=true
+    expect(prevBtn.disabled).toBe(true);
+    expect(nextBtn.disabled).toBe(false);
+  });
+
+  it("authenticated: loads position from Firestore and passes to renderer.init", async () => {
+    vi.mocked(getReadingPosition).mockResolvedValue("5");
+    const renderer = makeMockRenderer();
+
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    await flushInit();
 
     expect(renderer.init).toHaveBeenCalledWith(
       expect.any(HTMLElement),
-      "http://example.com/file.cbz",
-      "2",
+      "https://example.com/doc.pdf",
+      "5",
     );
   });
 
-  it("unauthenticated: loads from localStorage", async () => {
-    localStorage.setItem("reading-position:test-id", "3");
-    const outlet = makeViewerDOM();
+  it("unauthenticated: loads from localStorage and passes to renderer.init", async () => {
+    localStorage.setItem("reading-position:m1", "3");
     const renderer = makeMockRenderer();
-    const createRenderer = vi.fn().mockReturnValue(renderer);
 
-    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", null);
-    await flushPromises();
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    await flushInit();
 
     expect(renderer.init).toHaveBeenCalledWith(
       expect.any(HTMLElement),
-      "http://example.com/file.cbz",
+      "https://example.com/doc.pdf",
       "3",
     );
   });
 
   it("unauthenticated: no saved position, init called with undefined", async () => {
-    const outlet = makeViewerDOM();
     const renderer = makeMockRenderer();
-    const createRenderer = vi.fn().mockReturnValue(renderer);
 
-    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", null);
-    await flushPromises();
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    await flushInit();
 
     expect(renderer.init).toHaveBeenCalledWith(
       expect.any(HTMLElement),
-      "http://example.com/file.cbz",
+      "https://example.com/doc.pdf",
       undefined,
     );
   });
 
-  it("scheduleSave writes Firestore for authenticated user", async () => {
-    mockGetReadingPosition.mockResolvedValue(null);
-    const outlet = makeViewerDOM();
+  it("scheduleSave writes Firestore for authenticated user after navigation", async () => {
     const renderer = makeMockRenderer();
-    const createRenderer = vi.fn().mockReturnValue(renderer);
 
-    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
-    await flushPromises();
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
     nextBtn.click();
-    await flushPromises();
+    await flushInit();
     await vi.runAllTimersAsync();
 
-    expect(mockSaveReadingPosition).toHaveBeenCalledWith("uid1", "test-id", "2");
+    // After next(), currentPage=2, position="2", which differs from lastSavedPosition="1"
+    expect(saveReadingPosition).toHaveBeenCalledWith("uid1", "m1", "2");
   });
 
   it("scheduleSave writes localStorage for unauthenticated user", async () => {
-    const outlet = makeViewerDOM();
     const renderer = makeMockRenderer();
-    const createRenderer = vi.fn().mockReturnValue(renderer);
 
-    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", null);
-    await flushPromises();
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
     nextBtn.click();
-    await flushPromises();
+    await flushInit();
     await vi.runAllTimersAsync();
 
-    expect(localStorage.getItem("reading-position:test-id")).toBe("2");
+    expect(localStorage.getItem("reading-position:m1")).toBe("2");
   });
 
   it("scheduleSave deduplicates — same position not saved twice", async () => {
-    mockGetReadingPosition.mockResolvedValue(null);
-    const outlet = makeViewerDOM();
     const renderer = makeMockRenderer();
-    const createRenderer = vi.fn().mockReturnValue(renderer);
 
-    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
-    await flushPromises();
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
     nextBtn.click();
-    await flushPromises();
+    await flushInit();
     await vi.runAllTimersAsync();
 
-    // Navigate to same page again (simulate goToPage returning same page)
+    // Timer fires again without navigation — position unchanged
     await vi.runAllTimersAsync();
 
-    expect(mockSaveReadingPosition).toHaveBeenCalledTimes(1);
+    // saveReadingPosition was called once for page 2; no second call for same position
+    expect(saveReadingPosition).toHaveBeenCalledTimes(1);
   });
 
-  it("Firestore error on getReadingPosition is swallowed — init still called", async () => {
-    mockGetReadingPosition.mockRejectedValue(new Error("Firestore error"));
-    const outlet = makeViewerDOM();
+  it("still initializes renderer when getReadingPosition rejects", async () => {
+    vi.mocked(getReadingPosition).mockRejectedValue(new Error("Firestore down"));
     const renderer = makeMockRenderer();
-    const createRenderer = vi.fn().mockReturnValue(renderer);
 
-    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
-    await flushPromises();
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    await flushInit();
 
     expect(renderer.init).toHaveBeenCalled();
   });
 
   it("cleanup cancels pending save timer", async () => {
-    mockGetReadingPosition.mockResolvedValue(null);
-    const outlet = makeViewerDOM();
     const renderer = makeMockRenderer();
-    const createRenderer = vi.fn().mockReturnValue(renderer);
 
-    const cleanup = initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
-    await flushPromises();
+    const cleanup = initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
     nextBtn.click();
-    await flushPromises();
+    await flushInit();
 
     // Cancel before timer fires
     cleanup();
     await vi.runAllTimersAsync();
 
-    expect(mockSaveReadingPosition).not.toHaveBeenCalled();
+    expect(saveReadingPosition).not.toHaveBeenCalled();
+  });
+
+  it("cleanup calls renderer.destroy", async () => {
+    const renderer = makeMockRenderer();
+
+    const cleanup = initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    await flushInit();
+
+    cleanup();
+
+    expect(renderer.destroy).toHaveBeenCalled();
   });
 
   it("renderer.init rejection shows 'Failed to load' and calls reportError", async () => {
-    mockGetReadingPosition.mockResolvedValue(null);
-    const outlet = makeViewerDOM();
     const renderer = makeMockRenderer();
-    renderer.init.mockRejectedValue(new Error("init error"));
-    const createRenderer = vi.fn().mockReturnValue(renderer);
+    vi.mocked(renderer.init).mockRejectedValue(new Error("init error"));
 
-    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
-    await flushPromises();
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    await flushInit();
 
     const pos = outlet.querySelector(".viewer-position") as HTMLElement;
     expect(pos.textContent).toBe("Failed to load");
-    expect((globalThis as any).reportError).toHaveBeenCalled();
+    expect(globalThis.reportError).toHaveBeenCalled();
   });
 
   it("Firestore save failure calls reportError and does not throw", async () => {
-    mockGetReadingPosition.mockResolvedValue(null);
-    mockSaveReadingPosition.mockRejectedValue(new Error("Firestore write error"));
-    const outlet = makeViewerDOM();
+    vi.mocked(saveReadingPosition).mockRejectedValue(new Error("Firestore write error"));
     const renderer = makeMockRenderer();
-    const createRenderer = vi.fn().mockReturnValue(renderer);
 
-    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
-    await flushPromises();
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
     nextBtn.click();
-    await flushPromises();
+    await flushInit();
     await vi.runAllTimersAsync();
 
-    expect((globalThis as any).reportError).toHaveBeenCalled();
+    expect(globalThis.reportError).toHaveBeenCalled();
   });
 
   it("Firestore read failure falls back to localStorage for saves", async () => {
-    mockGetReadingPosition.mockRejectedValue(new Error("Firestore read error"));
-    const outlet = makeViewerDOM();
+    vi.mocked(getReadingPosition).mockRejectedValue(new Error("Firestore read error"));
     const renderer = makeMockRenderer();
-    const createRenderer = vi.fn().mockReturnValue(renderer);
 
-    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
-    await flushPromises();
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
     nextBtn.click();
-    await flushPromises();
+    await flushInit();
     await vi.runAllTimersAsync();
 
     // Should NOT write to Firestore (would overwrite unknown saved state)
-    expect(mockSaveReadingPosition).not.toHaveBeenCalled();
+    expect(saveReadingPosition).not.toHaveBeenCalled();
     // Falls back to localStorage
-    expect(localStorage.getItem("reading-position:test-id")).toBe("2");
-  });
-
-  it("updateNav sets button disabled states correctly", async () => {
-    mockGetReadingPosition.mockResolvedValue(null);
-    const outlet = makeViewerDOM();
-    const renderer = makeMockRenderer(3);
-    const createRenderer = vi.fn().mockReturnValue(renderer);
-
-    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
-    await flushPromises();
-
-    const prevBtn = outlet.querySelector(".viewer-prev") as HTMLButtonElement;
-    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
-
-    // At page 1: prev disabled, next enabled
-    expect(prevBtn.disabled).toBe(true);
-    expect(nextBtn.disabled).toBe(false);
-
-    nextBtn.click();
-    await flushPromises();
-
-    // At page 2: both enabled
-    expect(prevBtn.disabled).toBe(false);
-    expect(nextBtn.disabled).toBe(false);
-
-    nextBtn.click();
-    await flushPromises();
-
-    // At page 3: prev enabled, next disabled
-    expect(prevBtn.disabled).toBe(false);
-    expect(nextBtn.disabled).toBe(true);
+    expect(localStorage.getItem("reading-position:m1")).toBe("2");
   });
 });

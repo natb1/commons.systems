@@ -1,10 +1,18 @@
-import { zipSync, zlibSync } from "fflate";
+import { deflateRawSync, deflateSync } from "node:zlib";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
-const enc = new TextEncoder();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function loadChapterBodies(): string[] {
+  const jsonPath = join(__dirname, "confessions-chapters.json");
+  return JSON.parse(readFileSync(jsonPath, "utf-8")) as string[];
+}
 
 export interface StorageSeedItem {
   path: string;
-  content: string | Uint8Array;
+  content: string | Buffer;
   metadata: Record<string, string>;
 }
 
@@ -40,53 +48,196 @@ function makePdf(pageCount: number): string {
   return body;
 }
 
-function crc32(data: Uint8Array): number {
+// Builds a minimal valid EPUB (ZIP archive) with the given number of chapters.
+// chapterBodies: optional array of HTML body content for each chapter.
+function makeEpub(chapterCount: number, chapterBodies: string[] = []): Buffer {
+  const files: { name: string; data: Buffer; store?: boolean }[] = [];
+
+  // mimetype must be first entry, stored uncompressed
+  files.push({
+    name: "mimetype",
+    data: Buffer.from("application/epub+zip"),
+    store: true,
+  });
+
+  // container.xml
+  files.push({
+    name: "META-INF/container.xml",
+    data: Buffer.from(
+      `<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`),
+  });
+
+  // Build manifest and spine entries
+  const manifestItems: string[] = [];
+  const spineItems: string[] = [];
+  for (let i = 1; i <= chapterCount; i++) {
+    manifestItems.push(
+      `    <item id="ch${i}" href="chapter${i}.xhtml" media-type="application/xhtml+xml"/>`,
+    );
+    spineItems.push(`    <itemref idref="ch${i}"/>`);
+  }
+
+  // content.opf
+  files.push({
+    name: "OEBPS/content.opf",
+    data: Buffer.from(
+      `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="uid">urn:uuid:00000000-0000-0000-0000-000000000001</dc:identifier>
+    <dc:title>Test EPUB</dc:title>
+    <dc:language>en</dc:language>
+    <meta property="dcterms:modified">2026-01-01T00:00:00Z</meta>
+  </metadata>
+  <manifest>
+${manifestItems.join("\n")}
+  </manifest>
+  <spine>
+${spineItems.join("\n")}
+  </spine>
+</package>`),
+  });
+
+  // Chapter XHTML files
+  for (let i = 1; i <= chapterCount; i++) {
+    const bodyHtml = chapterBodies[i - 1]
+      ?? `<h1>Chapter ${i}</h1><p>Content of chapter ${i}.</p>`;
+    files.push({
+      name: `OEBPS/chapter${i}.xhtml`,
+      data: Buffer.from(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Book ${i}</title></head>
+<body>${bodyHtml}</body>
+</html>`),
+    });
+  }
+
+  return buildZip(files);
+}
+
+// Minimal ZIP archive builder (subset of PKZIP APPNOTE 6.3.3; STORE and DEFLATE only).
+function buildZip(
+  entries: { name: string; data: Buffer; store?: boolean }[],
+): Buffer {
+  const localHeaders: Buffer[] = [];
+  const centralHeaders: Buffer[] = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const nameBytes = Buffer.from(entry.name, "utf-8");
+    const uncompressedSize = entry.data.length;
+    const crc = crc32(entry.data);
+    const useStore = entry.store === true;
+    const compressedData = useStore ? entry.data : deflateRawSync(entry.data);
+    const compressedSize = compressedData.length;
+    const method = useStore ? 0 : 8;
+
+    // Local file header (30 bytes + name + data)
+    const local = Buffer.alloc(30 + nameBytes.length + compressedSize);
+    local.writeUInt32LE(0x04034b50, 0); // signature
+    local.writeUInt16LE(20, 4); // version needed
+    local.writeUInt16LE(0, 6); // flags
+    local.writeUInt16LE(method, 8); // compression
+    local.writeUInt16LE(0, 10); // mod time
+    local.writeUInt16LE(0, 12); // mod date
+    local.writeUInt32LE(crc, 14); // crc32
+    local.writeUInt32LE(compressedSize, 18);
+    local.writeUInt32LE(uncompressedSize, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    local.writeUInt16LE(0, 28); // extra field length
+    nameBytes.copy(local, 30);
+    compressedData.copy(local, 30 + nameBytes.length);
+    localHeaders.push(local);
+
+    // Central directory header (46 bytes + name)
+    const central = Buffer.alloc(46 + nameBytes.length);
+    central.writeUInt32LE(0x02014b50, 0); // signature
+    central.writeUInt16LE(20, 4); // version made by
+    central.writeUInt16LE(20, 6); // version needed
+    central.writeUInt16LE(0, 8); // flags
+    central.writeUInt16LE(method, 10); // compression
+    central.writeUInt16LE(0, 12); // mod time
+    central.writeUInt16LE(0, 14); // mod date
+    central.writeUInt32LE(crc, 16); // crc32
+    central.writeUInt32LE(compressedSize, 20);
+    central.writeUInt32LE(uncompressedSize, 24);
+    central.writeUInt16LE(nameBytes.length, 28);
+    central.writeUInt16LE(0, 30); // extra field length
+    central.writeUInt16LE(0, 32); // comment length
+    central.writeUInt16LE(0, 34); // disk number
+    central.writeUInt16LE(0, 36); // internal attrs
+    central.writeUInt32LE(0, 38); // external attrs
+    central.writeUInt32LE(offset, 42); // local header offset
+    nameBytes.copy(central, 46);
+    centralHeaders.push(central);
+
+    offset += local.length;
+  }
+
+  const centralDirOffset = offset;
+  const centralDirSize = centralHeaders.reduce((s, b) => s + b.length, 0);
+
+  // End of central directory record (22 bytes)
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0); // signature
+  eocd.writeUInt16LE(0, 4); // disk number
+  eocd.writeUInt16LE(0, 6); // central dir disk
+  eocd.writeUInt16LE(entries.length, 8); // entries on this disk
+  eocd.writeUInt16LE(entries.length, 10); // total entries
+  eocd.writeUInt32LE(centralDirSize, 12);
+  eocd.writeUInt32LE(centralDirOffset, 16);
+  eocd.writeUInt16LE(0, 20); // comment length
+
+  return Buffer.concat([...localHeaders, ...centralHeaders, eocd]);
+}
+
+// CRC-32 (ISO 3309 polynomial, same as used by ZIP).
+function crc32(data: Buffer): number {
   let crc = 0xffffffff;
-  for (const byte of data) {
-    crc ^= byte;
-    for (let i = 0; i < 8; i++) {
-      crc = crc & 1 ? (0xedb88320 ^ (crc >>> 1)) : (crc >>> 1);
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
     }
   }
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function u32be(n: number): Uint8Array {
-  return new Uint8Array([(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff]);
+function u32be(n: number): Buffer {
+  const buf = Buffer.alloc(4);
+  buf.writeUInt32BE(n, 0);
+  return buf;
 }
 
-function pngChunk(type: string, data: Uint8Array): Uint8Array {
-  const typeBytes = enc.encode(type);
-  const crcInput = new Uint8Array(typeBytes.length + data.length);
-  crcInput.set(typeBytes);
-  crcInput.set(data, typeBytes.length);
-  const result = new Uint8Array(4 + 4 + data.length + 4);
-  result.set(u32be(data.length));
-  result.set(typeBytes, 4);
-  result.set(data, 8);
-  result.set(u32be(crc32(crcInput)), 8 + data.length);
-  return result;
+function pngChunk(type: string, data: Buffer): Buffer {
+  const typeBytes = Buffer.from(type, "ascii");
+  const crcInput = Buffer.concat([typeBytes, data]);
+  return Buffer.concat([u32be(data.length), typeBytes, data, u32be(crc32(crcInput))]);
 }
 
-function makePng1x1(): Uint8Array {
-  const sig = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  const ihdrData = new Uint8Array([0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
+function makePng1x1(): Buffer {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdrData = Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
   const ihdr = pngChunk("IHDR", ihdrData);
   // PNG IDAT scanline: [filter=0, R=255, G=255, B=255] — 1x1 white pixel
-  const idat = pngChunk("IDAT", zlibSync(new Uint8Array([0, 255, 255, 255])));
-  const iend = pngChunk("IEND", new Uint8Array(0));
-  const result = new Uint8Array(sig.length + ihdr.length + idat.length + iend.length);
-  let offset = 0;
-  for (const chunk of [sig, ihdr, idat, iend]) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return result;
+  const idat = pngChunk("IDAT", deflateSync(Buffer.from([0, 255, 255, 255])));
+  const iend = pngChunk("IEND", Buffer.alloc(0));
+  return Buffer.concat([sig, ihdr, idat, iend]);
 }
 
-function makeZip(): Uint8Array {
+function makeZip(): Buffer {
   const png = makePng1x1();
-  return zipSync({ "image-001.png": png, "image-002.png": png });
+  return buildZip([
+    { name: "image-001.png", data: png },
+    { name: "image-002.png", data: png },
+  ]);
 }
 
 const publicMeta = { publicDomain: "true" };
@@ -95,7 +246,7 @@ const testPrivateMeta = { publicDomain: "false", member_0: "test@example.com" };
 const storageSeed: StorageSeedItem[] = [
   {
     path: "print/prod/media/pg3296-images-3.epub",
-    content: "dummy epub content for testing",
+    content: makeEpub(3, loadChapterBodies()),
     metadata: publicMeta,
   },
   {
