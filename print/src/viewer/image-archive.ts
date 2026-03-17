@@ -1,4 +1,5 @@
-import { unzipSync } from "fflate";
+import { unzip, HTTPRangeReader } from "unzipit";
+import type { ZipEntry } from "unzipit";
 import type { ContentRenderer } from "./types.js";
 import { parsePositionPage } from "./types.js";
 
@@ -8,7 +9,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   // _onError accepted for factory signature consistency with createPdfRenderer. Unlike createPdfRenderer,
   // this renderer has no background re-render path (no ResizeObserver), so the callback is never invoked;
   // all errors surface as thrown exceptions from init.
-  let fileData: Uint8Array[] = [];
+  let sortedEntries: ZipEntry[] = [];
   let objectUrlCache: (string | null)[] = [];
   let imgEl: HTMLImageElement | null = null;
   // 0 is the pre-init sentinel; position returns "0" and canGoNext/canGoPrev return false until init resolves.
@@ -16,41 +17,37 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   let _pageCount = 0;
   let destroyed = false;
 
-  function getObjectUrl(index: number): string {
+  async function getObjectUrl(index: number): Promise<string> {
     if (!objectUrlCache[index]) {
-      objectUrlCache[index] = URL.createObjectURL(new Blob([fileData[index] as Uint8Array<ArrayBuffer>]));
+      const blob = await sortedEntries[index]!.blob();
+      objectUrlCache[index] = URL.createObjectURL(blob);
     }
     return objectUrlCache[index] as string;
   }
 
+  function prefetchPage(index: number): void {
+    if (index < 0 || index >= _pageCount || objectUrlCache[index] || destroyed) return;
+    void getObjectUrl(index).catch(() => {});
+  }
+
   return {
     async init(container: HTMLElement, url: string, initialPosition?: string): Promise<void> {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Failed to fetch archive: ${response.status}`);
+      const reader = new HTTPRangeReader(url);
+      const { entries } = await unzip(reader);
 
-      const buffer = await response.arrayBuffer();
-      let files: ReturnType<typeof unzipSync>;
-      try {
-        files = unzipSync(new Uint8Array(buffer));
-      } catch (err) {
-        throw new Error(
-          `Failed to decompress archive from ${url} (${buffer.byteLength} bytes): ${err instanceof Error ? err.message : String(err)}`,
-          { cause: err },
-        );
-      }
-
-      const imagePaths = Object.keys(files)
+      const imageEntries = Object.keys(entries)
         .filter((path) => IMAGE_EXT.test(path))
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .map((path) => entries[path]!);
 
-      if (imagePaths.length === 0) throw new Error("No images found in archive");
+      if (imageEntries.length === 0) throw new Error("No images found in archive");
 
-      fileData = imagePaths.map((path) => files[path] as Uint8Array<ArrayBuffer>);
-      objectUrlCache = new Array(fileData.length).fill(null);
-      _pageCount = fileData.length;
+      sortedEntries = imageEntries;
+      objectUrlCache = new Array(sortedEntries.length).fill(null);
+      _pageCount = sortedEntries.length;
 
       if (destroyed) {
-        fileData = [];
+        sortedEntries = [];
         objectUrlCache = [];
         return;
       }
@@ -60,8 +57,10 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
 
       imgEl = document.createElement("img");
       imgEl.alt = `Page ${startPage}`;
-      imgEl.src = getObjectUrl(startPage - 1);
+      imgEl.src = await getObjectUrl(startPage - 1);
       container.appendChild(imgEl);
+
+      prefetchPage(startPage);
     },
 
     async goToPage(page: number): Promise<void> {
@@ -69,7 +68,8 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       if (!imgEl) throw new Error("goToPage called after renderer was destroyed");
       _currentPage = page;
       imgEl.alt = `Page ${page}`;
-      imgEl.src = getObjectUrl(page - 1);
+      imgEl.src = await getObjectUrl(page - 1);
+      prefetchPage(page);
     },
 
     async next(): Promise<void> {
@@ -105,7 +105,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       for (const url of objectUrlCache) {
         if (url) URL.revokeObjectURL(url);
       }
-      fileData = [];
+      sortedEntries = [];
       objectUrlCache = [];
       if (imgEl) {
         imgEl.remove();
