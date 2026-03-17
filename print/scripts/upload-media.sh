@@ -75,6 +75,12 @@ else
     echo "error: private mode requires 1-3 email addresses (got ${#EMAILS[@]})" >&2
     usage
   fi
+  for email in "${EMAILS[@]}"; do
+    if [[ ! "$email" =~ ^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+$ ]]; then
+      echo "error: invalid email format: ${email}" >&2
+      exit 1
+    fi
+  done
 fi
 
 FILENAME="$(basename "$FILE_PATH")"
@@ -154,7 +160,7 @@ FIRESTORE_URL="https://firestore.googleapis.com/v1/projects/${PROJECT}/databases
 RESP_FILE=$(mktemp)
 trap 'rm -f "$RESP_FILE"' EXIT
 HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w '%{http_code}' -X POST "$FIRESTORE_URL" \
-  -H "Authorization: Bearer ${TOKEN}" \
+  --config <(echo "header = \"Authorization: Bearer ${TOKEN}\"") \
   -H "Content-Type: application/json" \
   -d "$FIRESTORE_BODY")
 

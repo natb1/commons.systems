@@ -72,6 +72,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -d) echo "$2" > "$STUB_DIR/curl-body.json"; shift 2 ;;
     -o) RESP_FILE="$2"; shift 2 ;;
+    --config) shift 2 ;;
     *)  shift ;;
   esac
 done
@@ -236,14 +237,22 @@ assert_eq "exits 1" "1" "$exit_code"
 assert_contains "stderr mentions email count" "1-3" "$stderr"
 teardown
 
-echo "Test 9: verification output includes document ID and gsutil stat"
+echo "Test 9: invalid email format -> exits 1"
+setup
+exit_code=0
+stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "pdf" "bad email@x.com" 2>&1) || exit_code=$?
+assert_eq "exits 1" "1" "$exit_code"
+assert_contains "stderr mentions invalid email" "invalid email format" "$stderr"
+teardown
+
+echo "Test 10: verification output includes document ID and gsutil stat"
 setup
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "epub" --public 2>&1)
 assert_contains "output has document ID" "auto-generated-id" "$output"
 assert_contains "output has gsutil stat" "1024 bytes" "$output"
 teardown
 
-echo "Test 10: GCS collision -> exits 1 with 'already exists'"
+echo "Test 11: GCS collision -> exits 1 with 'already exists'"
 setup
 touch "$TMPDIR_TEST/stub/stat-exists"
 exit_code=0
@@ -252,7 +261,7 @@ assert_eq "exits 1" "1" "$exit_code"
 assert_contains "stderr mentions already exists" "already exists" "$stderr"
 teardown
 
-echo "Test 11: no GCS collision -> upload proceeds"
+echo "Test 12: no GCS collision -> upload proceeds"
 setup
 # No stat-exists file means object doesn't exist
 exit_code=0
@@ -261,7 +270,7 @@ assert_eq "exits 0" "0" "$exit_code"
 assert_contains "output has document ID" "auto-generated-id" "$output"
 teardown
 
-echo "Test 12: Firestore API failure -> exits 1 with cleanup guidance"
+echo "Test 13: Firestore API failure -> exits 1 with cleanup guidance"
 setup
 touch "$TMPDIR_TEST/stub/curl-fail"
 exit_code=0
