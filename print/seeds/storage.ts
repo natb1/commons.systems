@@ -1,5 +1,7 @@
 import { zipSync, zlibSync } from "fflate";
 
+const enc = new TextEncoder();
+
 export interface StorageSeedItem {
   path: string;
   content: string | Uint8Array;
@@ -54,7 +56,6 @@ function u32be(n: number): Uint8Array {
 }
 
 function pngChunk(type: string, data: Uint8Array): Uint8Array {
-  const enc = new TextEncoder();
   const typeBytes = enc.encode(type);
   const crcInput = new Uint8Array(typeBytes.length + data.length);
   crcInput.set(typeBytes);
@@ -71,7 +72,7 @@ function makePng1x1(): Uint8Array {
   const sig = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const ihdrData = new Uint8Array([0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
   const ihdr = pngChunk("IHDR", ihdrData);
-  // Scanline: filter byte (0) + 3 RGB bytes
+  // PNG IDAT scanline: [filter=0, R=255, G=255, B=255] — 1x1 white pixel
   const idat = pngChunk("IDAT", zlibSync(new Uint8Array([0, 255, 255, 255])));
   const iend = pngChunk("IEND", new Uint8Array(0));
   const result = new Uint8Array(sig.length + ihdr.length + idat.length + iend.length);

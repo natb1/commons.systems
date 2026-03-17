@@ -1,14 +1,26 @@
 import { unzipSync } from "fflate";
 import type { ContentRenderer } from "./types.js";
+import { parsePositionPage } from "./types.js";
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
 
-export function createImageArchiveRenderer(_onError?: (err: unknown) => void): ContentRenderer {
-  let objectUrls: string[] = [];
+export function createImageArchiveRenderer(onError?: (err: unknown) => void): ContentRenderer {
+  // onError accepted for factory signature consistency; this renderer has no async
+  // post-init error paths so the callback is not currently used.
+  let fileData: Uint8Array[] = [];
+  let objectUrlCache: (string | null)[] = [];
   let imgEl: HTMLImageElement | null = null;
   let canvas: HTMLCanvasElement | null = null;
   let _currentPage = 0;
   let _pageCount = 0;
+  let destroyed = false;
+
+  function getObjectUrl(index: number): string {
+    if (!objectUrlCache[index]) {
+      objectUrlCache[index] = URL.createObjectURL(new Blob([fileData[index] as Uint8Array<ArrayBuffer>]));
+    }
+    return objectUrlCache[index] as string;
+  }
 
   return {
     async init(container: HTMLElement, url: string, initialPosition?: string): Promise<void> {
@@ -23,30 +35,33 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
 
       const imagePaths = Object.keys(files)
         .filter((path) => IMAGE_EXT.test(path))
-        .sort();
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
       if (imagePaths.length === 0) throw new Error("No images found in archive");
 
-      objectUrls = imagePaths.map((path) => URL.createObjectURL(new Blob([files[path] as Uint8Array<ArrayBuffer>])));
-      _pageCount = objectUrls.length;
+      fileData = imagePaths.map((path) => files[path] as Uint8Array<ArrayBuffer>);
+      objectUrlCache = new Array(fileData.length).fill(null);
+      _pageCount = fileData.length;
 
-      let startPage = 1;
-      if (initialPosition) {
-        const parsed = parseInt(initialPosition, 10);
-        if (parsed >= 1 && parsed <= _pageCount) startPage = parsed;
+      if (destroyed) {
+        fileData = [];
+        objectUrlCache = [];
+        return;
       }
+
+      const startPage = parsePositionPage(initialPosition, _pageCount);
       _currentPage = startPage;
 
       canvas.style.display = "none";
       imgEl = document.createElement("img");
-      imgEl.src = objectUrls[startPage - 1];
+      imgEl.src = getObjectUrl(startPage - 1);
       container.appendChild(imgEl);
     },
 
     async goToPage(page: number): Promise<void> {
       if (page < 1 || page > _pageCount || !imgEl) return;
       _currentPage = page;
-      imgEl.src = objectUrls[page - 1];
+      imgEl.src = getObjectUrl(page - 1);
     },
 
     get position() {
@@ -60,8 +75,12 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     },
 
     destroy(): void {
-      for (const url of objectUrls) URL.revokeObjectURL(url);
-      objectUrls = [];
+      destroyed = true;
+      for (const url of objectUrlCache) {
+        if (url) URL.revokeObjectURL(url);
+      }
+      fileData = [];
+      objectUrlCache = [];
       if (imgEl) {
         imgEl.remove();
         imgEl = null;

@@ -232,6 +232,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Reading positions are private to the owning user — only the uid owner can read or write.
+    match /print/{env}/reading-position/{positionId} {
+      allow read: if request.auth != null
+        && resource.data.uid == request.auth.uid;
+      allow create, update: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.mediaId is string
+        && request.resource.data.position is string;
+      allow delete: if false;
+    }
+
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
     // InsertFirestoreRules inserts new rule blocks immediately above this line.
     match /{document=**} {

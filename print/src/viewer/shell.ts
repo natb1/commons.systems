@@ -50,7 +50,6 @@ function loadLocalPosition(mediaId: string): string | null {
   try {
     return localStorage.getItem(localStorageKey(mediaId));
   } catch (e) {
-    if (e instanceof TypeError || e instanceof ReferenceError) throw e;
     reportError(new Error("Could not load reading position from localStorage", { cause: e }));
     return null;
   }
@@ -60,7 +59,6 @@ function saveLocalPosition(mediaId: string, position: string): void {
   try {
     localStorage.setItem(localStorageKey(mediaId), position);
   } catch (e) {
-    if (e instanceof TypeError || e instanceof ReferenceError) throw e;
     reportError(new Error("Could not save reading position to localStorage", { cause: e }));
   }
 }
@@ -106,8 +104,7 @@ export function initViewer(
   }
   toggleBtn.addEventListener("click", handleToggle);
 
-  // Position persistence: Firestore for authenticated users, localStorage otherwise.
-  // Debounced to avoid writes on every page turn.
+  // Position saved after each navigation — debounced (500ms) and deduplicated (only writes when position changes).
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSavedPosition: string | null = null;
 
@@ -116,11 +113,10 @@ export function initViewer(
     saveTimer = setTimeout(() => {
       saveTimer = null;
       const pos = renderer.position;
-      if (!pos || pos === lastSavedPosition) return;
+      if (!pos || pos === "0" || pos === lastSavedPosition) return;
       lastSavedPosition = pos;
       if (uid) {
         saveReadingPosition(uid, mediaId, pos).catch((err) => {
-          if (err instanceof TypeError || err instanceof ReferenceError) throw err;
           reportError(new Error("Failed to save reading position", { cause: err }));
         });
       } else {
@@ -134,6 +130,7 @@ export function initViewer(
     position.textContent = `Page ${renderer.currentPage} / ${renderer.pageCount}`;
     prevBtn.disabled = renderer.currentPage <= 1;
     nextBtn.disabled = renderer.currentPage >= renderer.pageCount;
+    // Persist position after each navigation
     scheduleSave();
   }
 
@@ -170,14 +167,13 @@ export function initViewer(
   }
   document.addEventListener("keydown", handleKeydown);
 
-  // Initialize renderer — load saved position, then init
+  // Initialize renderer — load saved position (Firestore if authenticated, localStorage otherwise), then init
   (async () => {
     let savedPosition: string | null = null;
     if (uid) {
       try {
         savedPosition = await getReadingPosition(uid, mediaId);
       } catch (err) {
-        if (err instanceof TypeError || err instanceof ReferenceError) throw err;
         reportError(new Error("Failed to restore reading position", { cause: err }));
       }
     } else {
@@ -185,9 +181,10 @@ export function initViewer(
     }
     lastSavedPosition = savedPosition;
     await renderer.init(canvasWrap, url, savedPosition ?? undefined);
+    lastSavedPosition = renderer.position; // sync to actual start page after init
     updateNav();
   })().catch((err) => {
-    console.error("Failed to load document:", err);
+    reportError(new Error("Viewer initialization failed", { cause: err }));
     position.textContent = "Failed to load";
   });
 
