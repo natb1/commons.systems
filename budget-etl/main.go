@@ -251,10 +251,12 @@ func runOutputJSON(allTxns []store.TransactionData, groupName string, outputPath
 	return nil
 }
 
-// runInputJSON reads an existing JSON export, re-applies categorization,
-// budget assignment, and normalization rules, computes budget periods, and
-// writes the updated result. Rules are always re-applied (not skipped for
-// pre-existing values) so rule changes take effect immediately.
+// runInputJSON reads an existing JSON export, recomputes categorization,
+// budget assignment, and normalization from rules, computes budget periods,
+// and writes the updated result. Category and budget from the input file are
+// not carried forward — the conversion to TransactionData starts with empty
+// fields, then transaction-specific rules pre-populate before general rules
+// fill the rest. This ensures rule changes take effect on every run.
 func runInputJSON(inputPath, outputPath string) error {
 	input, err := export.ReadFile(inputPath)
 	if err != nil {
@@ -293,125 +295,36 @@ func runInputJSON(inputPath, outputPath string) error {
 	}
 
 	// Apply transaction-specific rules (pre-populate category/budget)
-	applyTransactionRules(allTxns, txnDocIDs, txnRules)
+	if err := applyTransactionRules(allTxns, txnDocIDs, txnRules); err != nil {
+		return err
+	}
 
-	// Apply general categorization (skips pre-populated)
+	// Apply general categorization (skips transactions assigned by transaction-specific rules)
 	if err := rules.ApplyCategorization(allTxns, ruleSet); err != nil {
 		return fmt.Errorf("categorization: %w", err)
 	}
 
-	// Apply general budget assignment (skips pre-populated)
+	// Apply general budget assignment (skips transactions assigned by transaction-specific rules)
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
 
-	// Build normalization transactions
-	normTxns := make([]store.NormTxn, len(allTxns))
-	for i, t := range allTxns {
-		normTxns[i] = store.NormTxn{
-			DocID:       input.Transactions[i].ID,
-			Description: t.Description,
-			Institution: t.Institution,
-			Account:     t.Account,
-			Amount:      t.Amount,
-			Timestamp:   t.Timestamp,
-			StatementID: t.StatementID,
-		}
-	}
-
-	// Convert normalization rules
-	normRules := make([]rules.NormalizationRule, len(input.NormalizationRules))
-	for i, r := range input.NormalizationRules {
-		normRules[i] = rules.NormalizationRule{
-			ID:                   r.ID,
-			Pattern:              r.Pattern,
-			PatternType:          r.PatternType,
-			CanonicalDescription: r.CanonicalDescription,
-			DateWindowDays:       r.DateWindowDays,
-			Institution:          r.Institution,
-			Account:              r.Account,
-			Priority:             r.Priority,
-		}
-	}
-
 	// Apply normalization
-	normUpdates, err := rules.ApplyNormalization(normTxns, normRules)
+	normTxns := buildNormTxns(allTxns, txnDocIDs)
+	normMap, err := applyNormToMap(normTxns, convertNormRules(input.NormalizationRules))
 	if err != nil {
 		return fmt.Errorf("normalization: %w", err)
 	}
-	normMap := make(map[string]store.NormalizationUpdate, len(normUpdates))
-	for _, u := range normUpdates {
-		normMap[u.DocID] = u
+
+	// Build edits map from input transactions
+	editsMap := make(map[string]txnEdits, len(input.Transactions))
+	for _, t := range input.Transactions {
+		editsMap[t.ID] = txnEdits{note: t.Note, reimbursement: t.Reimbursement}
 	}
 
 	// Rebuild export transactions with categorization, budget, and normalization applied
-	exportTxns := make([]export.Transaction, len(allTxns))
-	for i, txn := range allTxns {
-		orig := input.Transactions[i]
-		et := export.Transaction{
-			ID:                orig.ID,
-			Institution:       txn.Institution,
-			Account:           txn.Account,
-			Description:       txn.Description,
-			Amount:            store.DollarAmount(txn.Amount),
-			Timestamp:         export.FormatTimestamp(txn.Timestamp),
-			StatementID:       txn.StatementID,
-			Category:          txn.Category,
-			Note:              orig.Note,
-			Reimbursement:     orig.Reimbursement,
-			NormalizedPrimary: true,
-		}
-		if txn.Budget != "" {
-			b := txn.Budget
-			et.Budget = &b
-		}
-		if nu, ok := normMap[orig.ID]; ok {
-			nid := nu.NormalizedID
-			et.NormalizedID = &nid
-			et.NormalizedPrimary = nu.NormalizedPrimary
-			ndesc := nu.NormalizedDescription
-			et.NormalizedDescription = &ndesc
-		}
-		exportTxns[i] = et
-	}
+	exportTxns := buildExportTxns(allTxns, txnDocIDs, normMap, editsMap)
+	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
 
-	// Compute budget periods using already-parsed timestamps from allTxns
-	fullTxns := make([]store.FullTransaction, len(exportTxns))
-	for i, et := range exportTxns {
-		ft := store.FullTransaction{
-			ID:                et.ID,
-			Category:          allTxns[i].Category,
-			Amount:            store.DollarAmount(allTxns[i].Amount),
-			Reimbursement:     input.Transactions[i].Reimbursement,
-			Timestamp:         allTxns[i].Timestamp,
-			NormalizedPrimary: et.NormalizedPrimary,
-		}
-		if allTxns[i].Budget != "" {
-			ft.Budget = allTxns[i].Budget
-		}
-		if et.NormalizedID != nil {
-			ft.NormalizedID = *et.NormalizedID
-		}
-		fullTxns[i] = ft
-	}
-
-	periods := store.ComputePeriods(fullTxns)
-
-	sort.Slice(periods, func(i, j int) bool {
-		return periods[i].ID < periods[j].ID
-	})
-	budgetPeriods := make([]export.BudgetPeriod, len(periods))
-	for i, p := range periods {
-		budgetPeriods[i] = export.BudgetPeriod{
-			ID:                p.ID,
-			BudgetID:          p.BudgetID,
-			PeriodStart:       export.FormatTimestamp(p.Start),
-			PeriodEnd:         export.FormatTimestamp(p.End),
-			Total:             p.Total,
-			Count:             p.Count,
-			CategoryBreakdown: p.CategoryBreakdown,
-		}
-	}
-
-	out := export.Output{
+	return writeOutputAndLog(outputPath, export.Output{
 		Version:            input.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
 		GroupID:             input.GroupID,
@@ -421,28 +334,7 @@ func runInputJSON(inputPath, outputPath string) error {
 		BudgetPeriods:      budgetPeriods,
 		Rules:              input.Rules,
 		NormalizationRules: input.NormalizationRules,
-	}
-
-	if err := export.WriteFile(outputPath, out); err != nil {
-		return fmt.Errorf("writing output: %w", err)
-	}
-
-	// Count results
-	var categorized, budgeted, normalized int
-	for _, et := range exportTxns {
-		if et.Category != "" {
-			categorized++
-		}
-		if et.Budget != nil {
-			budgeted++
-		}
-		if et.NormalizedID != nil && !et.NormalizedPrimary {
-			normalized++
-		}
-	}
-	log.Printf("wrote %d transactions (%d categorized, %d budgeted, %d non-primary normalized), %d budget periods to %s",
-		len(exportTxns), categorized, budgeted, normalized, len(budgetPeriods), outputPath)
-	return nil
+	})
 }
 
 // splitRules separates transaction-specific rules (with TransactionID) from general rules.
@@ -478,9 +370,9 @@ func convertExportRules(exportRules []export.Rule) []rules.Rule {
 // matching transaction-specific rules. These rules target a specific transaction
 // by doc ID rather than matching by pattern. General rules skip pre-populated
 // transactions (existing behavior in ApplyCategorization/ApplyBudgetAssignment).
-func applyTransactionRules(txns []store.TransactionData, txnDocIDs []string, txnRules []export.Rule) {
+func applyTransactionRules(txns []store.TransactionData, txnDocIDs []string, txnRules []export.Rule) error {
 	if len(txnRules) == 0 {
-		return
+		return nil
 	}
 	idIndex := make(map[string]int, len(txnDocIDs))
 	for i, id := range txnDocIDs {
@@ -496,15 +388,174 @@ func applyTransactionRules(txns []store.TransactionData, txnDocIDs []string, txn
 			txns[idx].Category = r.Target
 		case "budget_assignment":
 			txns[idx].Budget = r.Target
+		default:
+			return fmt.Errorf("transaction-specific rule %s: unrecognized type %q (expected \"categorization\" or \"budget_assignment\")", r.ID, r.Type)
 		}
 	}
+	return nil
+}
+
+// convertNormRules converts export normalization rules to rules engine format.
+func convertNormRules(exportRules []export.NormalizationRule) []rules.NormalizationRule {
+	out := make([]rules.NormalizationRule, len(exportRules))
+	for i, r := range exportRules {
+		out[i] = rules.NormalizationRule{
+			ID:                   r.ID,
+			Pattern:              r.Pattern,
+			PatternType:          r.PatternType,
+			CanonicalDescription: r.CanonicalDescription,
+			DateWindowDays:       r.DateWindowDays,
+			Institution:          r.Institution,
+			Account:              r.Account,
+			Priority:             r.Priority,
+		}
+	}
+	return out
+}
+
+// buildNormTxns converts transaction data and doc IDs to normalization input format.
+func buildNormTxns(allTxns []store.TransactionData, docIDs []string) []store.NormTxn {
+	out := make([]store.NormTxn, len(allTxns))
+	for i, t := range allTxns {
+		out[i] = store.NormTxn{
+			DocID:       docIDs[i],
+			Description: t.Description,
+			Institution: t.Institution,
+			Account:     t.Account,
+			Amount:      t.Amount,
+			Timestamp:   t.Timestamp,
+			StatementID: t.StatementID,
+		}
+	}
+	return out
+}
+
+// applyNormToMap applies normalization rules and returns a map keyed by doc ID.
+func applyNormToMap(normTxns []store.NormTxn, normRules []rules.NormalizationRule) (map[string]store.NormalizationUpdate, error) {
+	normUpdates, err := rules.ApplyNormalization(normTxns, normRules)
+	if err != nil {
+		return nil, err
+	}
+	normMap := make(map[string]store.NormalizationUpdate, len(normUpdates))
+	for _, u := range normUpdates {
+		normMap[u.DocID] = u
+	}
+	return normMap, nil
+}
+
+// txnEdits holds user-editable fields preserved across re-imports.
+type txnEdits struct {
+	note          string
+	reimbursement float64
+}
+
+// buildExportTxns converts internal transaction data to export format, applying
+// normalization results and user edits.
+func buildExportTxns(allTxns []store.TransactionData, docIDs []string, normMap map[string]store.NormalizationUpdate, editsMap map[string]txnEdits) []export.Transaction {
+	exportTxns := make([]export.Transaction, len(allTxns))
+	for i, txn := range allTxns {
+		docID := docIDs[i]
+		et := export.Transaction{
+			ID:                docID,
+			Institution:       txn.Institution,
+			Account:           txn.Account,
+			Description:       txn.Description,
+			Amount:            store.DollarAmount(txn.Amount),
+			Timestamp:         export.FormatTimestamp(txn.Timestamp),
+			StatementID:       txn.StatementID,
+			Category:          txn.Category,
+			NormalizedPrimary: true,
+		}
+		if txn.Budget != "" {
+			b := txn.Budget
+			et.Budget = &b
+		}
+		if edits, ok := editsMap[docID]; ok {
+			et.Note = edits.note
+			et.Reimbursement = edits.reimbursement
+		}
+		if nu, ok := normMap[docID]; ok {
+			nid := nu.NormalizedID
+			et.NormalizedID = &nid
+			et.NormalizedPrimary = nu.NormalizedPrimary
+			ndesc := nu.NormalizedDescription
+			et.NormalizedDescription = &ndesc
+		}
+		exportTxns[i] = et
+	}
+	return exportTxns
+}
+
+// computeExportPeriods builds budget periods from export transactions and internal
+// transaction data. Returns sorted budget periods.
+func computeExportPeriods(exportTxns []export.Transaction, allTxns []store.TransactionData) []export.BudgetPeriod {
+	fullTxns := make([]store.FullTransaction, len(exportTxns))
+	for i, et := range exportTxns {
+		ft := store.FullTransaction{
+			ID:                et.ID,
+			Category:          allTxns[i].Category,
+			Amount:            store.DollarAmount(allTxns[i].Amount),
+			Reimbursement:     et.Reimbursement,
+			Timestamp:         allTxns[i].Timestamp,
+			NormalizedPrimary: et.NormalizedPrimary,
+		}
+		if allTxns[i].Budget != "" {
+			ft.Budget = allTxns[i].Budget
+		}
+		if et.NormalizedID != nil {
+			ft.NormalizedID = *et.NormalizedID
+		}
+		fullTxns[i] = ft
+	}
+
+	periods := store.ComputePeriods(fullTxns)
+	sort.Slice(periods, func(i, j int) bool {
+		return periods[i].ID < periods[j].ID
+	})
+	budgetPeriods := make([]export.BudgetPeriod, len(periods))
+	for i, p := range periods {
+		budgetPeriods[i] = export.BudgetPeriod{
+			ID:                p.ID,
+			BudgetID:          p.BudgetID,
+			PeriodStart:       export.FormatTimestamp(p.Start),
+			PeriodEnd:         export.FormatTimestamp(p.End),
+			Total:             p.Total,
+			Count:             p.Count,
+			CategoryBreakdown: p.CategoryBreakdown,
+		}
+	}
+	return budgetPeriods
+}
+
+// writeOutputAndLog writes the export output to a file and logs a summary.
+func writeOutputAndLog(outputPath string, out export.Output) error {
+	if err := export.WriteFile(outputPath, out); err != nil {
+		return fmt.Errorf("writing output: %w", err)
+	}
+
+	var categorized, budgeted, normalized int
+	for _, et := range out.Transactions {
+		if et.Category != "" {
+			categorized++
+		}
+		if et.Budget != nil {
+			budgeted++
+		}
+		if et.NormalizedID != nil && !et.NormalizedPrimary {
+			normalized++
+		}
+	}
+	log.Printf("wrote %d transactions (%d categorized, %d budgeted, %d non-primary normalized), %d budget periods to %s",
+		len(out.Transactions), categorized, budgeted, normalized, len(out.BudgetPeriods), outputPath)
+	return nil
 }
 
 // runMerge combines new transactions from statement files (--dir) with existing
 // transactions from an input JSON file (--input). New transactions from statements
 // are merged with input by transaction doc ID. User edits (note, reimbursement)
 // from input are preserved. Transaction-specific rules pre-populate category/budget,
-// then general rules fill in the rest. The merged result is written to --output.
+// then general rules fill in the rest. Normalization rules are applied and budget
+// periods are computed for the merged result. The output is written to --output.
 func runMerge(inputPath, dir, groupName, outputPath string) error {
 	// Read input JSON
 	input, err := export.ReadFile(inputPath)
@@ -569,11 +620,7 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 
 	// Build TransactionData from dir, tracking which input IDs are covered
 	dirDocIDs := make(map[string]bool, totalTxns)
-	type userEdits struct {
-		note          string
-		reimbursement float64
-	}
-	editsMap := make(map[string]userEdits)
+	editsMap := make(map[string]txnEdits)
 
 	var allTxns []store.TransactionData
 	var allDocIDs []string
@@ -594,7 +641,7 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 			}
 
 			if inputTxn, ok := inputByID[docID]; ok {
-				editsMap[docID] = userEdits{
+				editsMap[docID] = txnEdits{
 					note:          inputTxn.Note,
 					reimbursement: inputTxn.Reimbursement,
 				}
@@ -624,7 +671,7 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 			TransactionID: t.ID,
 		})
 		allDocIDs = append(allDocIDs, t.ID)
-		editsMap[t.ID] = userEdits{
+		editsMap[t.ID] = txnEdits{
 			note:          t.Note,
 			reimbursement: t.Reimbursement,
 		}
@@ -637,121 +684,27 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 	txnRules, generalExportRules := splitRules(input.Rules)
 	ruleSet := convertExportRules(generalExportRules)
 
-	applyTransactionRules(allTxns, allDocIDs, txnRules)
+	if err := applyTransactionRules(allTxns, allDocIDs, txnRules); err != nil {
+		return err
+	}
 
 	if err := rules.ApplyCategorization(allTxns, ruleSet); err != nil {
 		return fmt.Errorf("categorization: %w", err)
 	}
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
 
-	// Build normalization transactions
-	normTxns := make([]store.NormTxn, len(allTxns))
-	for i, t := range allTxns {
-		normTxns[i] = store.NormTxn{
-			DocID:       allDocIDs[i],
-			Description: t.Description,
-			Institution: t.Institution,
-			Account:     t.Account,
-			Amount:      t.Amount,
-			Timestamp:   t.Timestamp,
-			StatementID: t.StatementID,
-		}
-	}
-
-	normRules := make([]rules.NormalizationRule, len(input.NormalizationRules))
-	for i, r := range input.NormalizationRules {
-		normRules[i] = rules.NormalizationRule{
-			ID:                   r.ID,
-			Pattern:              r.Pattern,
-			PatternType:          r.PatternType,
-			CanonicalDescription: r.CanonicalDescription,
-			DateWindowDays:       r.DateWindowDays,
-			Institution:          r.Institution,
-			Account:              r.Account,
-			Priority:             r.Priority,
-		}
-	}
-
-	normUpdates, err := rules.ApplyNormalization(normTxns, normRules)
+	// Apply normalization
+	normTxns := buildNormTxns(allTxns, allDocIDs)
+	normMap, err := applyNormToMap(normTxns, convertNormRules(input.NormalizationRules))
 	if err != nil {
 		return fmt.Errorf("normalization: %w", err)
 	}
-	normMap := make(map[string]store.NormalizationUpdate, len(normUpdates))
-	for _, u := range normUpdates {
-		normMap[u.DocID] = u
-	}
 
 	// Build export transactions
-	exportTxns := make([]export.Transaction, len(allTxns))
-	for i, txn := range allTxns {
-		docID := allDocIDs[i]
-		et := export.Transaction{
-			ID:                docID,
-			Institution:       txn.Institution,
-			Account:           txn.Account,
-			Description:       txn.Description,
-			Amount:            store.DollarAmount(txn.Amount),
-			Timestamp:         export.FormatTimestamp(txn.Timestamp),
-			StatementID:       txn.StatementID,
-			Category:          txn.Category,
-			NormalizedPrimary: true,
-		}
-		if txn.Budget != "" {
-			b := txn.Budget
-			et.Budget = &b
-		}
-		if edits, ok := editsMap[docID]; ok {
-			et.Note = edits.note
-			et.Reimbursement = edits.reimbursement
-		}
-		if nu, ok := normMap[docID]; ok {
-			nid := nu.NormalizedID
-			et.NormalizedID = &nid
-			et.NormalizedPrimary = nu.NormalizedPrimary
-			ndesc := nu.NormalizedDescription
-			et.NormalizedDescription = &ndesc
-		}
-		exportTxns[i] = et
-	}
+	exportTxns := buildExportTxns(allTxns, allDocIDs, normMap, editsMap)
+	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
 
-	// Compute budget periods
-	fullTxns := make([]store.FullTransaction, len(exportTxns))
-	for i, et := range exportTxns {
-		ft := store.FullTransaction{
-			ID:                et.ID,
-			Category:          allTxns[i].Category,
-			Amount:            store.DollarAmount(allTxns[i].Amount),
-			Reimbursement:     et.Reimbursement,
-			Timestamp:         allTxns[i].Timestamp,
-			NormalizedPrimary: et.NormalizedPrimary,
-		}
-		if allTxns[i].Budget != "" {
-			ft.Budget = allTxns[i].Budget
-		}
-		if et.NormalizedID != nil {
-			ft.NormalizedID = *et.NormalizedID
-		}
-		fullTxns[i] = ft
-	}
-
-	periods := store.ComputePeriods(fullTxns)
-	sort.Slice(periods, func(i, j int) bool {
-		return periods[i].ID < periods[j].ID
-	})
-	budgetPeriods := make([]export.BudgetPeriod, len(periods))
-	for i, p := range periods {
-		budgetPeriods[i] = export.BudgetPeriod{
-			ID:                p.ID,
-			BudgetID:          p.BudgetID,
-			PeriodStart:       export.FormatTimestamp(p.Start),
-			PeriodEnd:         export.FormatTimestamp(p.End),
-			Total:             p.Total,
-			Count:             p.Count,
-			CategoryBreakdown: p.CategoryBreakdown,
-		}
-	}
-
-	out := export.Output{
+	return writeOutputAndLog(outputPath, export.Output{
 		Version:            input.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
 		GroupID:             input.GroupID,
@@ -761,27 +714,7 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 		BudgetPeriods:      budgetPeriods,
 		Rules:              input.Rules,
 		NormalizationRules: input.NormalizationRules,
-	}
-
-	if err := export.WriteFile(outputPath, out); err != nil {
-		return fmt.Errorf("writing output: %w", err)
-	}
-
-	var categorized, budgeted, normalized int
-	for _, et := range exportTxns {
-		if et.Category != "" {
-			categorized++
-		}
-		if et.Budget != nil {
-			budgeted++
-		}
-		if et.NormalizedID != nil && !et.NormalizedPrimary {
-			normalized++
-		}
-	}
-	log.Printf("wrote %d transactions (%d categorized, %d budgeted, %d non-primary normalized), %d budget periods to %s",
-		len(exportTxns), categorized, budgeted, normalized, len(budgetPeriods), outputPath)
-	return nil
+	})
 }
 
 func runFirestore(ctx context.Context, client *store.Client, groupInfo store.GroupInfo, allTxns []store.TransactionData, parsed []parsedFile) error {

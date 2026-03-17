@@ -1,6 +1,10 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,14 +132,16 @@ func TestApplyTransactionRules(t *testing.T) {
 
 	t.Run("categorization rule pre-populates Category", func(t *testing.T) {
 		txns := []store.TransactionData{
-			{Description: "Coffee Shop", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+			{Description: "Test Item A", Amount: 500, Timestamp: ts, TransactionID: "t1"},
 		}
 		docIDs := []string{"doc-1"}
 		txnRules := []export.Rule{
 			{ID: "r1", Type: "categorization", Target: "Food:Coffee", TransactionID: "doc-1"},
 		}
 
-		applyTransactionRules(txns, docIDs, txnRules)
+		if err := applyTransactionRules(txns, docIDs, txnRules); err != nil {
+			t.Fatalf("applyTransactionRules: %v", err)
+		}
 
 		if txns[0].Category != "Food:Coffee" {
 			t.Errorf("Category: got %q, want %q", txns[0].Category, "Food:Coffee")
@@ -144,14 +150,16 @@ func TestApplyTransactionRules(t *testing.T) {
 
 	t.Run("budget_assignment rule pre-populates Budget", func(t *testing.T) {
 		txns := []store.TransactionData{
-			{Description: "Rent Payment", Amount: 150000, Timestamp: ts, TransactionID: "t1"},
+			{Description: "Test Item B", Amount: 150000, Timestamp: ts, TransactionID: "t1"},
 		}
 		docIDs := []string{"doc-1"}
 		txnRules := []export.Rule{
 			{ID: "r1", Type: "budget_assignment", Target: "budget-housing", TransactionID: "doc-1"},
 		}
 
-		applyTransactionRules(txns, docIDs, txnRules)
+		if err := applyTransactionRules(txns, docIDs, txnRules); err != nil {
+			t.Fatalf("applyTransactionRules: %v", err)
+		}
 
 		if txns[0].Budget != "budget-housing" {
 			t.Errorf("Budget: got %q, want %q", txns[0].Budget, "budget-housing")
@@ -160,14 +168,16 @@ func TestApplyTransactionRules(t *testing.T) {
 
 	t.Run("non-existent transaction IDs are ignored", func(t *testing.T) {
 		txns := []store.TransactionData{
-			{Description: "Coffee Shop", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+			{Description: "Test Item C", Amount: 500, Timestamp: ts, TransactionID: "t1"},
 		}
 		docIDs := []string{"doc-1"}
 		txnRules := []export.Rule{
 			{ID: "r1", Type: "categorization", Target: "Food:Coffee", TransactionID: "doc-nonexistent"},
 		}
 
-		applyTransactionRules(txns, docIDs, txnRules)
+		if err := applyTransactionRules(txns, docIDs, txnRules); err != nil {
+			t.Fatalf("applyTransactionRules: %v", err)
+		}
 
 		if txns[0].Category != "" {
 			t.Errorf("Category should be empty for non-matching rule, got %q", txns[0].Category)
@@ -176,7 +186,7 @@ func TestApplyTransactionRules(t *testing.T) {
 
 	t.Run("multiple rules for same transaction", func(t *testing.T) {
 		txns := []store.TransactionData{
-			{Description: "Coffee Shop", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+			{Description: "Test Item D", Amount: 500, Timestamp: ts, TransactionID: "t1"},
 		}
 		docIDs := []string{"doc-1"}
 		txnRules := []export.Rule{
@@ -184,7 +194,9 @@ func TestApplyTransactionRules(t *testing.T) {
 			{ID: "r2", Type: "budget_assignment", Target: "budget-food", TransactionID: "doc-1"},
 		}
 
-		applyTransactionRules(txns, docIDs, txnRules)
+		if err := applyTransactionRules(txns, docIDs, txnRules); err != nil {
+			t.Fatalf("applyTransactionRules: %v", err)
+		}
 
 		if txns[0].Category != "Food:Coffee" {
 			t.Errorf("Category: got %q, want %q", txns[0].Category, "Food:Coffee")
@@ -196,14 +208,31 @@ func TestApplyTransactionRules(t *testing.T) {
 
 	t.Run("empty txnRules is a no-op", func(t *testing.T) {
 		txns := []store.TransactionData{
-			{Description: "Coffee Shop", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+			{Description: "Test Item E", Amount: 500, Timestamp: ts, TransactionID: "t1"},
 		}
 		docIDs := []string{"doc-1"}
 
-		applyTransactionRules(txns, docIDs, nil)
+		if err := applyTransactionRules(txns, docIDs, nil); err != nil {
+			t.Fatalf("applyTransactionRules: %v", err)
+		}
 
 		if txns[0].Category != "" || txns[0].Budget != "" {
 			t.Errorf("expected empty Category/Budget with nil rules, got %q / %q", txns[0].Category, txns[0].Budget)
+		}
+	})
+
+	t.Run("unrecognized rule type returns error", func(t *testing.T) {
+		txns := []store.TransactionData{
+			{Description: "Test Item F", Amount: 500, Timestamp: ts, TransactionID: "t1"},
+		}
+		docIDs := []string{"doc-1"}
+		txnRules := []export.Rule{
+			{ID: "r1", Type: "invalid_type", Target: "something", TransactionID: "doc-1"},
+		}
+
+		err := applyTransactionRules(txns, docIDs, txnRules)
+		if err == nil {
+			t.Fatal("expected error for unrecognized rule type")
 		}
 	})
 }
@@ -214,21 +243,21 @@ func TestApplyTransactionRulesSkippedByGeneral(t *testing.T) {
 	// Two transactions: one with transaction-specific rules, one without.
 	txns := []store.TransactionData{
 		{
-			Description:   "Coffee Shop",
+			Description:   "test coffee purchase",
 			Amount:        500,
 			Timestamp:     ts,
-			Institution:   "chase",
-			Account:       "checking",
-			StatementID:   "stmt-1",
+			Institution:   "test_bank",
+			Account:       "1234",
+			StatementID:   "test_bank-1234-2025-01",
 			TransactionID: "t1",
 		},
 		{
-			Description:   "Another Coffee Shop",
+			Description:   "another test coffee purchase",
 			Amount:        600,
 			Timestamp:     ts,
-			Institution:   "chase",
-			Account:       "checking",
-			StatementID:   "stmt-1",
+			Institution:   "test_bank",
+			Account:       "1234",
+			StatementID:   "test_bank-1234-2025-01",
 			TransactionID: "t2",
 		},
 	}
@@ -247,7 +276,9 @@ func TestApplyTransactionRulesSkippedByGeneral(t *testing.T) {
 	}
 
 	// Step 1: Apply transaction-specific rules
-	applyTransactionRules(txns, docIDs, txnSpecificRules)
+	if err := applyTransactionRules(txns, docIDs, txnSpecificRules); err != nil {
+		t.Fatalf("applyTransactionRules: %v", err)
+	}
 
 	// Verify transaction-specific values applied to doc-1
 	if txns[0].Category != "Food:SpecialCoffee" {
@@ -279,5 +310,223 @@ func TestApplyTransactionRulesSkippedByGeneral(t *testing.T) {
 	}
 	if txns[1].Budget != "budget-generic" {
 		t.Errorf("txns[1].Budget: got %q, want %q", txns[1].Budget, "budget-generic")
+	}
+}
+
+// writeCSVFixture writes a minimal PNC-format CSV statement file to path.
+// Each entry is [date, amount, description, "", txnID, type].
+func writeCSVFixture(t *testing.T, path string, rows [][6]string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("creating fixture dir: %v", err)
+	}
+	var lines []string
+	lines = append(lines, "ACCT_NUMBER,FROM_DATE,TO_DATE,BALANCE,AVAILABLE")
+	for _, r := range rows {
+		lines = append(lines, strings.Join(r[:], ","))
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+}
+
+func TestRunMerge(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Create a statement dir: test_bank/1234/2025-01/stmt.csv
+	// Two transactions: txn-A (5.00 debit) and txn-B (12.50 debit)
+	csvPath := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixture(t, csvPath, [][6]string{
+		{"2025/01/10", "5.00", "TEST PURCHASE ALPHA", "", "TXN-A", "DEBIT"},
+		{"2025/01/15", "12.50", "TEST PURCHASE BETA", "", "TXN-B", "DEBIT"},
+	})
+
+	// Compute expected doc IDs for the dir transactions
+	docA := store.TransactionDocID("test_bank-1234-2025-01", "TXN-A")
+	docB := store.TransactionDocID("test_bank-1234-2025-01", "TXN-B")
+
+	// Create an input JSON with:
+	// - txn docA with a user note (overlaps with dir)
+	// - txn "input-only-1" (not in dir, retained)
+	// - A categorization rule matching "TEST PURCHASE" and a transaction-specific rule for docA
+	// - A budget assignment rule and budget definition
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "test-group",
+		Transactions: []export.Transaction{
+			{
+				ID:                docA,
+				Institution:       "test_bank",
+				Account:           "1234",
+				Description:       "TEST PURCHASE ALPHA",
+				Amount:            5.00,
+				Timestamp:         "2025-01-10T00:00:00Z",
+				StatementID:       "test_bank-1234-2025-01",
+				Category:          "Old:Category",
+				Note:              "user note on alpha",
+				Reimbursement:     50,
+				NormalizedPrimary: true,
+			},
+			{
+				ID:                "input-only-1",
+				Institution:       "other_bank",
+				Account:           "5678",
+				Description:       "TEST INPUT ONLY",
+				Amount:            20.00,
+				Timestamp:         "2025-01-20T00:00:00Z",
+				StatementID:       "other_bank-5678-2025-01",
+				Category:          "Old:InputOnly",
+				NormalizedPrimary: true,
+			},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-test", Type: "categorization", Pattern: "TEST PURCHASE", Target: "Test:General", Priority: 10},
+			{ID: "cat-test-input", Type: "categorization", Pattern: "TEST INPUT", Target: "Test:InputOnly", Priority: 10},
+			{ID: "txn-cat-a", Type: "categorization", Target: "Test:OverrideAlpha", TransactionID: docA},
+			{ID: "bud-test", Type: "budget_assignment", Pattern: "TEST", Target: "test-budget", Priority: 10},
+		},
+		Budgets: []export.Budget{
+			{ID: "test-budget", Name: "Test Budget", WeeklyAllowance: 100},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	statementsDir := filepath.Join(tmp, "statements")
+
+	if err := runMerge(inputPath, statementsDir, "", outputPath); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	// Read and verify output
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	// Should have 3 transactions: docA, docB from dir + input-only-1
+	if len(out.Transactions) != 3 {
+		t.Fatalf("expected 3 transactions, got %d", len(out.Transactions))
+	}
+
+	txnByID := make(map[string]export.Transaction)
+	for _, txn := range out.Transactions {
+		txnByID[txn.ID] = txn
+	}
+
+	// docA: transaction-specific rule overrides category, user edits preserved
+	txnA := txnByID[docA]
+	if txnA.Category != "Test:OverrideAlpha" {
+		t.Errorf("docA category: got %q, want %q", txnA.Category, "Test:OverrideAlpha")
+	}
+	if txnA.Note != "user note on alpha" {
+		t.Errorf("docA note: got %q, want %q", txnA.Note, "user note on alpha")
+	}
+	if txnA.Reimbursement != 50 {
+		t.Errorf("docA reimbursement: got %v, want 50", txnA.Reimbursement)
+	}
+	// Amount comes from dir (cents -> dollars): 500 cents = 5.00
+	if txnA.Amount != 5.00 {
+		t.Errorf("docA amount: got %v, want 5.00", txnA.Amount)
+	}
+
+	// docB: new from dir, general rule assigns category/budget
+	txnB := txnByID[docB]
+	if txnB.Category != "Test:General" {
+		t.Errorf("docB category: got %q, want %q", txnB.Category, "Test:General")
+	}
+	if txnB.Budget == nil || *txnB.Budget != "test-budget" {
+		t.Errorf("docB budget: got %v, want test-budget", txnB.Budget)
+	}
+
+	// input-only-1: retained from input, general rule re-categorizes
+	txnInput := txnByID["input-only-1"]
+	if txnInput.ID == "" {
+		t.Fatal("input-only-1 missing from output")
+	}
+	if txnInput.Category != "Test:InputOnly" {
+		t.Errorf("input-only category: got %q, want %q", txnInput.Category, "Test:InputOnly")
+	}
+	if txnInput.StatementID != "other_bank-5678-2025-01" {
+		t.Errorf("input-only statementId: got %q, want preserved", txnInput.StatementID)
+	}
+
+	// Group name: resolved from input file (no --group flag passed)
+	if out.GroupName != "test-group" {
+		t.Errorf("groupName: got %q, want %q", out.GroupName, "test-group")
+	}
+
+	// Budget periods should exist (at least one, since we have budgeted transactions)
+	if len(out.BudgetPeriods) == 0 {
+		t.Error("expected at least one budget period")
+	}
+
+	// Rules preserved in output (including transaction-specific)
+	if len(out.Rules) != 4 {
+		t.Errorf("expected 4 rules in output, got %d", len(out.Rules))
+	}
+}
+
+func TestRunMergeGroupNameOverride(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Minimal statement dir with one transaction
+	csvPath := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixture(t, csvPath, [][6]string{
+		{"2025/01/10", "5.00", "TEST ITEM", "", "TXN-X", "DEBIT"},
+	})
+
+	docX := store.TransactionDocID("test_bank-1234-2025-01", "TXN-X")
+	inputJSON := export.Output{
+		Version:   1,
+		GroupName: "original-group",
+		Transactions: []export.Transaction{
+			{
+				ID:                docX,
+				Institution:       "test_bank",
+				Account:           "1234",
+				Description:       "TEST ITEM",
+				Amount:            5.00,
+				Timestamp:         "2025-01-10T00:00:00Z",
+				StatementID:       "test_bank-1234-2025-01",
+				NormalizedPrimary: true,
+			},
+		},
+		Rules: []export.Rule{
+			{ID: "cat-test", Type: "categorization", Pattern: "TEST", Target: "Test:Cat", Priority: 1},
+		},
+		NormalizationRules: []export.NormalizationRule{},
+	}
+
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON); err != nil {
+		t.Fatalf("writing input: %v", err)
+	}
+
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(inputPath, filepath.Join(tmp, "statements"), "override-group", outputPath); err != nil {
+		t.Fatalf("runMerge: %v", err)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
+	}
+
+	if out.GroupName != "override-group" {
+		t.Errorf("groupName: got %q, want %q", out.GroupName, "override-group")
 	}
 }
