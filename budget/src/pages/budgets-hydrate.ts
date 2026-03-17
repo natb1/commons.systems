@@ -74,7 +74,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
 
 function deserializeBudgets(raw: string): Budget[] {
   let parsed: Array<Omit<SerializedBudget, "rollover"> & { rollover: string }>;
-  try { parsed = JSON.parse(raw); } catch { throw new DataIntegrityError("Invalid budget chart data"); }
+  try { parsed = JSON.parse(raw); } catch (e) { throw new DataIntegrityError(`Invalid budget chart data: ${e instanceof Error ? e.message : e}`); }
   return parsed.map(b => {
     if (b.rollover !== "none" && b.rollover !== "debt" && b.rollover !== "balance")
       throw new DataIntegrityError(`Invalid rollover value: ${b.rollover}`);
@@ -90,7 +90,7 @@ function deserializeBudgets(raw: string): Budget[] {
 
 function deserializePeriods(raw: string): BudgetPeriod[] {
   let parsed: SerializedBudgetPeriod[];
-  try { parsed = JSON.parse(raw); } catch { throw new DataIntegrityError("Invalid budget period chart data"); }
+  try { parsed = JSON.parse(raw); } catch (e) { throw new DataIntegrityError(`Invalid budget period chart data: ${e instanceof Error ? e.message : e}`); }
   return parsed.map(p => ({
     id: p.id as BudgetPeriodId,
     budgetId: p.budgetId as BudgetId,
@@ -115,11 +115,10 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
   const pieEl = document.getElementById("budgets-pie");
   if (!pieEl) throw new DataIntegrityError("budgets-pie container not found in page markup");
-  const pieContainer: HTMLElement = pieEl;
 
   function render(): void {
     chartResult = renderBudgetChart(container, { budgets, periods });
-    renderBudgetPieChart(pieContainer, { budgets, periods, windowWeeks: 12 });
+    renderBudgetPieChart(pieEl, { budgets, periods, windowWeeks: 12 });
   }
 
   render();
@@ -173,6 +172,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
           return;
         }
         console.error("Chart re-render failed on resize:", error);
+        setTimeout(() => { throw error; }, 0);
         return;
       }
       const newWrapper = container.querySelector(".chart-scroll-wrapper");

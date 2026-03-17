@@ -1,57 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Budget, BudgetPeriod } from "../../src/firestore";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { timestampMockFactory, ts, makeBudget, makePeriod, makeContainer } from "../helpers";
 
-vi.mock("firebase/firestore", () => ({
-  Timestamp: class Timestamp {
-    _date: Date;
-    constructor(d: Date) { this._date = d; }
-    toDate() { return this._date; }
-    toMillis() { return this._date.getTime(); }
-    static fromDate(d: Date) { return new Timestamp(d); }
-  },
-}));
+vi.mock("firebase/firestore", () => timestampMockFactory());
 
 import { Timestamp } from "firebase/firestore";
 import { filterPeriodsToWindow, aggregateByBudget, renderBudgetPieChart } from "../../src/pages/budgets-pie-chart";
 
-function ts(dateStr: string): Timestamp {
-  return Timestamp.fromDate(new Date(dateStr));
-}
+const containers: HTMLElement[] = [];
 
-function makeBudget(overrides: Partial<Budget> = {}): Budget {
-  return {
-    id: "food" as any,
-    name: "Food",
-    weeklyAllowance: 150,
-    rollover: "none",
-    groupId: null,
-    ...overrides,
-  };
-}
-
-function makePeriod(overrides: Partial<BudgetPeriod> & { id: string; budgetId: string }): BudgetPeriod {
-  return {
-    periodStart: ts("2025-01-13"),
-    periodEnd: ts("2025-01-20"),
-    total: 0,
-    count: 0,
-    categoryBreakdown: {},
-    groupId: null,
-    ...overrides,
-  } as BudgetPeriod;
-}
-
-function makeContainer(): HTMLElement {
-  const container = document.createElement("div");
-  container.style.setProperty("--fg", "#e0e0e0");
-  document.body.appendChild(container);
-  Object.defineProperty(container, "clientWidth", { value: 640 });
-  return container;
+function trackedContainer(): HTMLElement {
+  const c = makeContainer();
+  containers.push(c);
+  return c;
 }
 
 describe("filterPeriodsToWindow", () => {
   it("returns only the last windowWeeks weeks from 20 weeks of data", () => {
-    const periods: BudgetPeriod[] = [];
+    const periods = [];
     const baseDate = new Date("2025-01-06");
     for (let i = 0; i < 20; i++) {
       const start = new Date(baseDate.getTime() + i * 7 * 24 * 60 * 60 * 1000);
@@ -68,12 +33,10 @@ describe("filterPeriodsToWindow", () => {
     const result = filterPeriodsToWindow(periods, 12);
     expect(result).toHaveLength(12);
 
-    // Should contain weeks 8..19 (the last 12)
     const resultIds = result.map(p => (p as any).id);
     for (let i = 8; i < 20; i++) {
       expect(resultIds).toContain(`food-w${i}`);
     }
-    // Should not contain earlier weeks
     for (let i = 0; i < 8; i++) {
       expect(resultIds).not.toContain(`food-w${i}`);
     }
@@ -151,8 +114,13 @@ describe("renderBudgetPieChart", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    for (const c of containers) c.remove();
+    containers.length = 0;
+  });
+
   it("renders SVG paths and legend items for multiple budgets", () => {
-    const container = makeContainer();
+    const container = trackedContainer();
     const budgets = [
       makeBudget({ id: "food" as any, name: "Food" }),
       makeBudget({ id: "transport" as any, name: "Transport" }),
@@ -182,7 +150,7 @@ describe("renderBudgetPieChart", () => {
   });
 
   it("renders a single arc path for a single budget", () => {
-    const container = makeContainer();
+    const container = trackedContainer();
     const budgets = [makeBudget({ id: "food" as any, name: "Food" })];
     const periods = [
       makePeriod({ id: "f1", budgetId: "food", total: 75 }),
@@ -198,7 +166,7 @@ describe("renderBudgetPieChart", () => {
   });
 
   it("shows empty state message when all spending is zero", () => {
-    const container = makeContainer();
+    const container = trackedContainer();
     const budgets = [
       makeBudget({ id: "food" as any, name: "Food" }),
       makeBudget({ id: "transport" as any, name: "Transport" }),
@@ -215,7 +183,7 @@ describe("renderBudgetPieChart", () => {
   });
 
   it("legend percentages sum to approximately 100%", () => {
-    const container = makeContainer();
+    const container = trackedContainer();
     const budgets = [
       makeBudget({ id: "food" as any, name: "Food" }),
       makeBudget({ id: "transport" as any, name: "Transport" }),

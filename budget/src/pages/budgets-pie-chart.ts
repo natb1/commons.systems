@@ -6,7 +6,7 @@ import { formatCurrency } from "../format.js";
 
 interface Slice {
   readonly name: string;
-  /** Aggregate spending across periods; always > 0 (slices with zero or negative totals are excluded). */
+  /** Total spending summed across periods; always > 0 (slices with zero or negative totals are excluded). */
   readonly total: number;
 }
 
@@ -37,7 +37,7 @@ export function renderBudgetPieChart(
   container: HTMLElement,
   options: { budgets: Budget[]; periods: BudgetPeriod[]; windowWeeks: number },
 ): void {
-  if (!Number.isFinite(options.windowWeeks) || options.windowWeeks < 1)
+  if (!Number.isFinite(options.windowWeeks) || options.windowWeeks < 1 || !Number.isInteger(options.windowWeeks))
     throw new RangeError(`windowWeeks must be a positive integer, got ${options.windowWeeks}`);
 
   const filtered = filterPeriodsToWindow(options.periods, options.windowWeeks);
