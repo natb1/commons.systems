@@ -372,6 +372,109 @@ const seedTransactionDocs = [
   // vacation-2025-02-17: 45, 1, {Books:45}
   txn("seed-v17", "vacation", "Travel Bookshop", 45, "Travel:Books", "2025-02-21"),
 
+  // --- Income: biweekly paycheck + occasional freelance ---
+  // These have no budget assignment; category starts with "Income" for the metrics section.
+  // Biweekly paycheck (every other Friday, $2400)
+  {
+    id: "seed-i01", data: {
+      institution: "Example Bank", account: "Checking", description: "Payroll Deposit",
+      amount: 2400, note: "", category: "Income:Salary", reimbursement: 0,
+      budget: null, timestamp: new Date("2024-10-11"), statementId: "stmt-2024-10",
+      groupId: "household", memberEmails: ["test@example.com"],
+      normalizedId: null, normalizedPrimary: true, normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-i02", data: {
+      institution: "Example Bank", account: "Checking", description: "Payroll Deposit",
+      amount: 2400, note: "", category: "Income:Salary", reimbursement: 0,
+      budget: null, timestamp: new Date("2024-10-25"), statementId: "stmt-2024-10",
+      groupId: "household", memberEmails: ["test@example.com"],
+      normalizedId: null, normalizedPrimary: true, normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-i03", data: {
+      institution: "Example Bank", account: "Checking", description: "Payroll Deposit",
+      amount: 2400, note: "", category: "Income:Salary", reimbursement: 0,
+      budget: null, timestamp: new Date("2024-11-08"), statementId: "stmt-2024-11",
+      groupId: "household", memberEmails: ["test@example.com"],
+      normalizedId: null, normalizedPrimary: true, normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-i04", data: {
+      institution: "Example Bank", account: "Checking", description: "Payroll Deposit",
+      amount: 2400, note: "", category: "Income:Salary", reimbursement: 0,
+      budget: null, timestamp: new Date("2024-11-22"), statementId: "stmt-2024-11",
+      groupId: "household", memberEmails: ["test@example.com"],
+      normalizedId: null, normalizedPrimary: true, normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-i05", data: {
+      institution: "Example Bank", account: "Checking", description: "Payroll Deposit",
+      amount: 2400, note: "", category: "Income:Salary", reimbursement: 0,
+      budget: null, timestamp: new Date("2024-12-06"), statementId: "stmt-2024-12",
+      groupId: "household", memberEmails: ["test@example.com"],
+      normalizedId: null, normalizedPrimary: true, normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-i06", data: {
+      institution: "Example Bank", account: "Checking", description: "Payroll Deposit",
+      amount: 2400, note: "", category: "Income:Salary", reimbursement: 0,
+      budget: null, timestamp: new Date("2024-12-20"), statementId: "stmt-2024-12",
+      groupId: "household", memberEmails: ["test@example.com"],
+      normalizedId: null, normalizedPrimary: true, normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-i07", data: {
+      institution: "Example Bank", account: "Checking", description: "Payroll Deposit",
+      amount: 2400, note: "", category: "Income:Salary", reimbursement: 0,
+      budget: null, timestamp: new Date("2025-01-03"), statementId: "stmt-2025-01",
+      groupId: "household", memberEmails: ["test@example.com"],
+      normalizedId: null, normalizedPrimary: true, normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-i08", data: {
+      institution: "Example Bank", account: "Checking", description: "Freelance Payment",
+      amount: 500, note: "", category: "Income:Freelance", reimbursement: 0,
+      budget: null, timestamp: new Date("2025-01-10"), statementId: "stmt-2025-01",
+      groupId: "household", memberEmails: ["test@example.com"],
+      normalizedId: null, normalizedPrimary: true, normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-i09", data: {
+      institution: "Example Bank", account: "Checking", description: "Payroll Deposit",
+      amount: 2400, note: "", category: "Income:Salary", reimbursement: 0,
+      budget: null, timestamp: new Date("2025-01-17"), statementId: "stmt-2025-01",
+      groupId: "household", memberEmails: ["test@example.com"],
+      normalizedId: null, normalizedPrimary: true, normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-i10", data: {
+      institution: "Example Bank", account: "Checking", description: "Payroll Deposit",
+      amount: 2400, note: "", category: "Income:Salary", reimbursement: 0,
+      budget: null, timestamp: new Date("2025-01-31"), statementId: "stmt-2025-01",
+      groupId: "household", memberEmails: ["test@example.com"],
+      normalizedId: null, normalizedPrimary: true, normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-i11", data: {
+      institution: "Example Bank", account: "Checking", description: "Payroll Deposit",
+      amount: 2400, note: "", category: "Income:Salary", reimbursement: 0,
+      budget: null, timestamp: new Date("2025-02-14"), statementId: "stmt-2025-02",
+      groupId: "household", memberEmails: ["test@example.com"],
+      normalizedId: null, normalizedPrimary: true, normalizedDescription: null,
+    } satisfies TransactionSeedData,
+  },
+
   // Normalized CAFE NERO pair — in food-2025-01-20 period (primary counts toward period total)
   {
     id: "seed-norm-primary",
