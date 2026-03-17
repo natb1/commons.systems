@@ -1,6 +1,9 @@
 import type { Timestamp } from "firebase/firestore";
 import type { Budget, BudgetId, BudgetPeriod, Rollover, Transaction, TransactionId } from "./firestore.js";
 
+const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+const INCOME_WEEKS = 12;
+
 export function computeNetAmount(amount: number, reimbursement: number): number {
   if (reimbursement < 0 || reimbursement > 100) {
     throw new RangeError(`reimbursement must be between 0 and 100, got ${reimbursement}`);
@@ -185,4 +188,53 @@ export function computeAllBudgetBalances(
   }
 
   return result;
+}
+
+/** Return the start of the next Monday 00:00 UTC from a millisecond timestamp. A Monday input advances to the following Monday. */
+function endOfWeekMs(timestampMs: number): number {
+  const d = new Date(timestampMs);
+  const day = d.getUTCDay(); // 0=Sun, 1=Mon, ...
+  const daysUntilMonday = day === 0 ? 1 : 8 - day;
+  const nextMonday = new Date(Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate() + daysUntilMonday,
+  ));
+  return nextMonday.getTime();
+}
+
+/**
+ * Compute average weekly income over the trailing 12-week window ending at the
+ * Monday after the latest income transaction. Income transactions are identified
+ * by categories starting with "Income". Non-primary normalized duplicates and
+ * null-timestamp transactions are excluded. Returns 0 when no qualifying income
+ * transactions exist.
+ */
+export function computeAverageWeeklyIncome(transactions: Transaction[]): number {
+  const incomeTxns = transactions.filter(
+    (t): t is Transaction & { timestamp: Timestamp } =>
+      t.category.startsWith("Income")
+      && t.timestamp !== null
+      && (t.normalizedId === null || t.normalizedPrimary),
+  );
+
+  if (incomeTxns.length === 0) return 0;
+
+  let latestMs = -Infinity;
+  for (const t of incomeTxns) {
+    const ms = t.timestamp.toMillis();
+    if (ms > latestMs) latestMs = ms;
+  }
+  const windowEnd = endOfWeekMs(latestMs);
+  const windowStart = windowEnd - INCOME_WEEKS * MS_PER_WEEK;
+
+  let sum = 0;
+  for (const t of incomeTxns) {
+    const ms = t.timestamp.toMillis();
+    if (ms >= windowStart && ms < windowEnd) {
+      sum += computeNetAmount(t.amount, t.reimbursement);
+    }
+  }
+
+  return sum / INCOME_WEEKS;
 }

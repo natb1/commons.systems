@@ -1,12 +1,7 @@
-import eslint from "@eslint/js";
-import tseslint from "typescript-eslint";
+import baseConfig from "@commons-systems/config/eslint";
 
-export default tseslint.config(
-  eslint.configs.recommended,
-  ...tseslint.configs.recommended,
-  {
-    ignores: ["dist/"],
-  },
+export default [
+  ...baseConfig,
   {
     rules: {
       "@typescript-eslint/no-unused-vars": [
@@ -15,4 +10,4 @@ export default tseslint.config(
       ],
     },
   },
-);
+];
