@@ -9,6 +9,7 @@ import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { RenderPageOptions } from "./pages/render-options.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
+import { hydrateCategorySankey } from "./pages/home-chart.js";
 import { hydrateBudgetTable, hydrateBudgetChart } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
@@ -149,6 +150,7 @@ function hydrateTable(
 }
 
 const observer = new MutationObserver(() => {
+  hydrateTable("#category-sankey", hydrateCategorySankey);
   hydrateTable("#transactions-table", hydrateTransactionTable);
   hydrateTable("#budgets-chart", hydrateBudgetChart);
   hydrateTable("#budgets-table", hydrateBudgetTable);

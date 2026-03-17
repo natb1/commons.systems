@@ -5,6 +5,7 @@ import { getTransactions, getBudgets, getBudgetPeriods, type Transaction, type B
 import { computeAllBudgetBalances } from "../balance.js";
 import { DataIntegrityError } from "../errors.js";
 import { uniqueSorted } from "./hydrate-util.js";
+import type { SerializedChartTransaction } from "./home-chart.js";
 
 function formatTimestamp(ts: Timestamp | null): string {
   if (!ts) return "";
@@ -144,6 +145,27 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
   </details>`;
 }
 
+function serializeChartTransactions(transactions: Transaction[]): SerializedChartTransaction[] {
+  return transactions
+    .filter(t => t.normalizedId === null || t.normalizedPrimary)
+    .map(t => ({
+      category: t.category,
+      amount: t.amount,
+      reimbursement: t.reimbursement,
+      timestampMs: t.timestamp ? t.timestamp.toMillis() : null,
+    }));
+}
+
+function renderCategorySankey(transactions: Transaction[]): string {
+  const chartData = serializeChartTransactions(transactions);
+  const serialized = escapeHtml(JSON.stringify(chartData));
+  return `<div id="sankey-controls">
+      <label>Weeks: <input type="number" id="sankey-weeks" value="12" min="1" max="104"></label>
+      <label>Ending week: <input type="range" id="sankey-end-week"> <span id="sankey-end-label"></span></label>
+    </div>
+    <div id="category-sankey" data-transactions="${serialized}"></div>`;
+}
+
 function compareByTimestampDesc(a: Transaction, b: Transaction): number {
   if (!a.timestamp && !b.timestamp) return 0;
   if (!a.timestamp) return 1;
@@ -253,6 +275,7 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
   const groupName = group?.name ?? "";
 
   let tableHtml: string;
+  let chartHtml = "";
   try {
     const [transactions, budgets, budgetPeriods] = await Promise.all([
       (group && user?.email ? getTransactions(group.id, user.email) : getTransactions(null))
@@ -263,6 +286,7 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
         .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
     ]);
     transactions.sort(compareByTimestampDesc);
+    chartHtml = renderCategorySankey(transactions);
     tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets, budgetPeriods);
   } catch (error) {
     tableHtml = renderLoadError(error, "transactions-error");
@@ -271,6 +295,7 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
   return `
     <h2>Transactions</h2>
     ${renderPageNotices(options, "transactions")}
+    ${chartHtml}
     ${tableHtml}
   `;
 }

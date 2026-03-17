@@ -394,6 +394,47 @@ describe("renderHome", () => {
     expect(html).not.toContain("data-budget-periods");
   });
 
+  it("renders #category-sankey container with data-transactions attr", async () => {
+    mockGetTransactions.mockResolvedValue([
+      txn({ category: "Food:Groceries", amount: 52.30, reimbursement: 0 }),
+    ]);
+    const html = await renderHome({ user: null, group: null, groupError: false });
+    expect(html).toContain('id="category-sankey"');
+    expect(html).toContain("data-transactions");
+    expect(html).toContain("Food:Groceries");
+  });
+
+  it("renders sankey controls above chart container", async () => {
+    mockGetTransactions.mockResolvedValue([txn()]);
+    const html = await renderHome({ user: null, group: null, groupError: false });
+    expect(html).toContain('id="sankey-controls"');
+    expect(html).toContain('id="sankey-weeks"');
+    expect(html).toContain('id="sankey-end-week"');
+    expect(html).toContain('id="sankey-end-label"');
+  });
+
+  it("excludes non-primary normalized transactions from chart data", async () => {
+    mockGetTransactions.mockResolvedValue([
+      txn({
+        id: "txn-a", description: "Store A", amount: 50,
+        normalizedId: "norm-1", normalizedPrimary: true,
+      }),
+      txn({
+        id: "txn-b", description: "Store B", amount: 30,
+        normalizedId: "norm-1", normalizedPrimary: false,
+      }),
+    ]);
+    const html = await renderHome({ user: null, group: null, groupError: false });
+    // Parse the data-transactions JSON to verify filtering
+    const match = html.match(/data-transactions="([^"]+)"/);
+    expect(match).not.toBeNull();
+    const decoded = match![1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    const chartTxns = JSON.parse(decoded);
+    // Only the primary should be included
+    expect(chartTxns).toHaveLength(1);
+    expect(chartTxns[0].amount).toBe(50);
+  });
+
   describe("normalized transaction groups", () => {
     it("renders normalized group as single row", async () => {
       mockGetTransactions.mockResolvedValue([

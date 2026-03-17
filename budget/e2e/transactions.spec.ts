@@ -50,4 +50,25 @@ test.describe("transactions", () => {
     expect(balanceText).toBeTruthy();
     expect(Number(balanceText)).not.toBeNaN();
   });
+
+  test("sankey chart renders SVG", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#category-sankey svg")).toHaveCount(1);
+  });
+
+  test("sankey controls present", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#sankey-weeks")).toBeVisible();
+    await expect(page.locator("#sankey-end-week")).toBeVisible();
+  });
+
+  test("sankey chart has node elements", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    const nodes = page.locator("#category-sankey svg .sankey-node");
+    await expect(nodes.first()).toBeVisible();
+    expect(await nodes.count()).toBeGreaterThan(0);
+  });
 });
