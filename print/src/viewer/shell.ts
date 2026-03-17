@@ -27,9 +27,9 @@ export function renderViewerShell(item: MediaItem): string {
           <button class="viewer-prev" disabled aria-label="Previous page">&larr;</button>
           <span class="viewer-position">Loading...</span>
           <button class="viewer-next" disabled aria-label="Next page">&rarr;</button>
-          <button class="viewer-zoom-in" style="display:none" aria-label="Zoom in">+</button>
-          <button class="viewer-zoom-out" style="display:none" aria-label="Zoom out">&minus;</button>
-          <button class="viewer-zoom-reset" style="display:none" aria-label="Reset zoom">&#8865;</button>
+          <button class="viewer-zoom-in zoom-hidden" aria-label="Zoom in">+</button>
+          <button class="viewer-zoom-out zoom-hidden" aria-label="Zoom out">&minus;</button>
+          <button class="viewer-zoom-reset zoom-hidden" aria-label="Reset zoom">&#8865;</button>
         </div>
         <div class="viewer-meta">
           <h3 class="viewer-title">${escapeHtml(item.title)}</h3>
@@ -136,7 +136,7 @@ export function initViewer(
     }, 500);
   }
 
-  // Zoom controls — visible only when the renderer supports zoom
+  // Zoom controls — update enabled/disabled state
   function updateZoomState() {
     if (!renderer.zoomIn) return;
     zoomInBtn.disabled = false;
@@ -217,9 +217,9 @@ export function initViewer(
     // Without this sync, lastSavedPosition would differ from renderer.position, triggering a spurious write on first navigation.
     lastSavedPosition = renderer.position;
     if (renderer.zoomIn) {
-      zoomInBtn.style.display = "";
-      zoomOutBtn.style.display = "";
-      zoomResetBtn.style.display = "";
+      zoomInBtn.classList.remove("zoom-hidden");
+      zoomOutBtn.classList.remove("zoom-hidden");
+      zoomResetBtn.classList.remove("zoom-hidden");
       zoomInBtn.addEventListener("click", handleZoomIn);
       zoomOutBtn.addEventListener("click", handleZoomOut);
       zoomResetBtn.addEventListener("click", handleZoomReset);

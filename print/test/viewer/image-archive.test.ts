@@ -360,6 +360,10 @@ describe("createImageArchiveRenderer", () => {
     const renderer = createImageArchiveRenderer();
     await renderer.init(container, "https://example.com/archive.zip");
 
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(img, "clientHeight", { value: 300, configurable: true });
+
     renderer.zoomIn!();
     expect(container.classList.contains("zoomed")).toBe(true);
   });
@@ -374,6 +378,10 @@ describe("createImageArchiveRenderer", () => {
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
     await renderer.init(container, "https://example.com/archive.zip");
+
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(img, "clientHeight", { value: 300, configurable: true });
 
     renderer.zoomIn!();
     renderer.resetZoom!();
@@ -390,6 +398,10 @@ describe("createImageArchiveRenderer", () => {
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
     await renderer.init(container, "https://example.com/archive.zip");
+
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(img, "clientHeight", { value: 300, configurable: true });
 
     expect(renderer.isZoomed).toBe(false);
     renderer.zoomIn!();
@@ -409,6 +421,10 @@ describe("createImageArchiveRenderer", () => {
     const renderer = createImageArchiveRenderer();
     await renderer.init(container, "https://example.com/archive.zip");
 
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(img, "clientHeight", { value: 300, configurable: true });
+
     renderer.zoomIn!();
     await renderer.goToPage(2);
     expect(container.classList.contains("zoomed")).toBe(false);
@@ -426,6 +442,10 @@ describe("createImageArchiveRenderer", () => {
     const renderer = createImageArchiveRenderer();
     await renderer.init(container, "https://example.com/archive.zip");
 
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(img, "clientHeight", { value: 300, configurable: true });
+
     renderer.zoomIn!();
     await renderer.next();
     expect(container.classList.contains("zoomed")).toBe(false);
@@ -442,6 +462,10 @@ describe("createImageArchiveRenderer", () => {
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
     await renderer.init(container, "https://example.com/archive.zip");
+
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(img, "clientHeight", { value: 300, configurable: true });
 
     await renderer.goToPage(2);
     renderer.zoomIn!();
@@ -474,7 +498,7 @@ describe("createImageArchiveRenderer", () => {
     expect(renderer.isZoomed).toBe(true);
     const widthAfterSecond = parseFloat(img.style.width);
 
-    // Zoom scales relative to fitted size, 1.1x per step
+    // Zoom scales relative to fitted size, 1.2x per step
     expect(widthAfterSecond).toBeGreaterThan(widthAfterFirst);
     expect(widthAfterFirst).toBeCloseTo(400 * 1.2);
     expect(widthAfterSecond).toBeCloseTo(400 * 1.2 * 1.2);
@@ -491,11 +515,14 @@ describe("createImageArchiveRenderer", () => {
     const renderer = createImageArchiveRenderer();
     await renderer.init(container, "https://example.com/archive.zip");
 
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(img, "clientHeight", { value: 300, configurable: true });
+
     renderer.zoomIn!();
     renderer.zoomIn!();
     renderer.resetZoom!();
 
-    const img = container.querySelector("img") as HTMLImageElement;
     expect(img.style.width).toBe("");
     expect(img.style.height).toBe("");
     expect(renderer.isZoomed).toBe(false);
@@ -541,6 +568,10 @@ describe("createImageArchiveRenderer", () => {
     const renderer = createImageArchiveRenderer();
     await renderer.init(container, "https://example.com/archive.zip");
 
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(img, "clientHeight", { value: 300, configurable: true });
+
     renderer.zoomIn!();
     parent.scrollTop = 100;
     parent.scrollLeft = 50;
@@ -548,7 +579,6 @@ describe("createImageArchiveRenderer", () => {
     renderer.zoomOut!();
     expect(renderer.isZoomed).toBe(false);
     expect(container.classList.contains("zoomed")).toBe(false);
-    const img = container.querySelector("img") as HTMLImageElement;
     expect(img.style.width).toBe("");
     expect(parent.scrollTop).toBe(0);
     expect(parent.scrollLeft).toBe(0);
@@ -570,7 +600,7 @@ describe("createImageArchiveRenderer", () => {
     expect(renderer.isZoomed).toBe(false);
   });
 
-  it("zoomIn after destroy is a no-op", async () => {
+  it("zoomIn after destroy throws", async () => {
     const zip = makeZipBuffer({
       "image-001.png": new Uint8Array([1]),
       "image-002.png": new Uint8Array([2]),
@@ -582,7 +612,7 @@ describe("createImageArchiveRenderer", () => {
     await renderer.init(container, "https://example.com/archive.zip");
 
     renderer.destroy();
-    expect(() => renderer.zoomIn!()).not.toThrow();
+    expect(() => renderer.zoomIn!()).toThrow("zoomIn called on uninitialized or destroyed renderer");
   });
 
   it("resetZoom scrolls parent to top-left", async () => {

@@ -30,7 +30,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   let _currentPage = 0;
   let _pageCount = 0;
   let destroyed = false;
-  let _zoomLevel = 0; // 0 = fit-to-view, 1+ = zoomed (each step is 1.2x)
+  let _zoomLevel = 0; // 0 = fit-to-view, 1+ = zoomed (each step multiplies by ZOOM_FACTOR)
   let _fittedWidth = 0; // displayed width at fit-to-view (captured before first zoom)
   let _fittedHeight = 0;
 
@@ -86,7 +86,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     async goToPage(page: number): Promise<void> {
       if (page < 1 || page > _pageCount) return;
       if (!imgEl) throw new Error("goToPage called after renderer was destroyed");
-      this.resetZoom!();
+      if (this.resetZoom) this.resetZoom();
       _currentPage = page;
       imgEl.alt = `Page ${page}`;
       imgEl.src = getObjectUrl(page - 1);
@@ -121,17 +121,19 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     },
 
     zoomIn(): void {
-      if (!containerEl || !imgEl) return;
+      if (!containerEl || !imgEl) throw new Error("zoomIn called on uninitialized or destroyed renderer");
       if (_zoomLevel === 0) {
         _fittedWidth = imgEl.clientWidth;
         _fittedHeight = imgEl.clientHeight;
+        if (_fittedWidth === 0 || _fittedHeight === 0) return;
       }
       _zoomLevel++;
       applyZoom(containerEl, imgEl, _zoomLevel, _fittedWidth, _fittedHeight);
     },
 
     zoomOut(): void {
-      if (!containerEl || !imgEl || _zoomLevel <= 0) return;
+      if (!containerEl || !imgEl) throw new Error("zoomOut called on uninitialized or destroyed renderer");
+      if (_zoomLevel <= 0) return;
       _zoomLevel--;
       applyZoom(containerEl, imgEl, _zoomLevel, _fittedWidth, _fittedHeight);
       if (_zoomLevel === 0) {
@@ -144,7 +146,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     },
 
     resetZoom(): void {
-      if (!containerEl || !imgEl) return;
+      if (!containerEl || !imgEl) throw new Error("resetZoom called on uninitialized or destroyed renderer");
       _zoomLevel = 0;
       applyZoom(containerEl, imgEl, _zoomLevel, _fittedWidth, _fittedHeight);
       const scrollParent = containerEl.parentElement;

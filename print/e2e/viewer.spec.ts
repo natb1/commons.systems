@@ -269,7 +269,7 @@ test.describe("viewer", () => {
     // Click zoom-in multiple times (1.2x per step) to ensure image exceeds container
     const zoomIn = page.locator(".viewer-zoom-in");
     for (let i = 0; i < 5; i++) await zoomIn.click();
-    await page.waitForTimeout(300);
+    await expect(page.locator(".viewer-canvas-wrap.zoomed")).toBeVisible();
 
     const container = page.locator(".viewer-content");
     const containerBox = await container.boundingBox();
@@ -299,7 +299,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-zoom-out")).toBeEnabled();
 
     await page.locator(".viewer-zoom-out").click();
-    await page.waitForTimeout(300);
+    await expect(page.locator(".viewer-zoom-out")).toBeEnabled();
 
     // Still zoomed (went from level 3 to level 2)
     await expect(page.locator(".viewer-zoom-out")).toBeEnabled();
@@ -316,11 +316,11 @@ test.describe("viewer", () => {
     // Zoom in multiple steps
     const zoomIn = page.locator(".viewer-zoom-in");
     for (let i = 0; i < 3; i++) await zoomIn.click();
-    await page.waitForTimeout(300);
+    await expect(page.locator(".viewer-canvas-wrap.zoomed")).toBeVisible();
 
     // Reset zoom
     await page.locator(".viewer-zoom-reset").click();
-    await page.waitForTimeout(300);
+    await expect(page.locator(".viewer-canvas-wrap:not(.zoomed)")).toBeVisible();
 
     const container = page.locator(".viewer-content");
     const containerBox = await container.boundingBox();

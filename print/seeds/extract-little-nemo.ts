@@ -11,7 +11,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, readdirSync } from "node:fs";
 import { join, extname } from "node:path";
 import { tmpdir } from "node:os";
@@ -28,7 +28,7 @@ const count = parseInt(countArg ?? "5", 10);
 
 const tmp = mkdtempSync(join(tmpdir(), "cbz-extract-"));
 try {
-  execSync(`unzip -o -q "${cbzPath}" -d "${tmp}"`);
+  execFileSync("unzip", ["-o", "-q", cbzPath, "-d", tmp]);
 
   // Collect all image files recursively, sorted numerically
   function collectImages(dir: string): string[] {

@@ -116,14 +116,7 @@ body.viewer-active {
 }
 
 .viewer-prev,
-.viewer-next {
-  background: none;
-  border: 1px solid var(--muted-fg, #888);
-  border-radius: 3px;
-  cursor: pointer;
-  padding: 0.25rem 0.5rem;
-}
-
+.viewer-next,
 .viewer-zoom-in,
 .viewer-zoom-out,
 .viewer-zoom-reset {
@@ -132,6 +125,10 @@ body.viewer-active {
   border-radius: 3px;
   cursor: pointer;
   padding: 0.25rem 0.5rem;
+}
+
+.zoom-hidden {
+  display: none;
 }
 
 .viewer-prev:disabled,
