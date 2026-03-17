@@ -407,16 +407,17 @@ describe("createEpubRenderer", () => {
       expect(revokeStub).toHaveBeenCalledWith("blob:http://localhost/xyz-789");
     });
 
-    it("propagates fetch failure", async () => {
+    it("propagates fetch failure and calls reportError", async () => {
       const hookCb = await initAndGetHook();
       const doc = makeMockDoc([{ rel: "stylesheet", href: "blob:http://localhost/fail-000" }]);
 
       globalThis.fetch = vi.fn().mockRejectedValue(new Error("network error"));
 
       await expect(hookCb({ document: doc })).rejects.toThrow("network error");
+      expect(reportError).toHaveBeenCalled();
     });
 
-    it("throws on non-ok fetch response", async () => {
+    it("throws on non-ok fetch response and calls reportError", async () => {
       const hookCb = await initAndGetHook();
       const doc = makeMockDoc([{ rel: "stylesheet", href: "blob:http://localhost/bad-status" }]);
 
@@ -428,14 +429,16 @@ describe("createEpubRenderer", () => {
       });
 
       await expect(hookCb({ document: doc })).rejects.toThrow("Failed to fetch EPUB blob stylesheet: 404 Not Found");
+      expect(reportError).toHaveBeenCalled();
     });
 
-    it("throws when contents.document is missing", async () => {
+    it("throws when contents.document is missing and calls reportError", async () => {
       const hookCb = await initAndGetHook();
 
       await expect(hookCb({ document: undefined as unknown as Document })).rejects.toThrow(
         "epub.js content hook received contents without a document",
       );
+      expect(reportError).toHaveBeenCalled();
     });
   });
 
