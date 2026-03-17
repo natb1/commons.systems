@@ -1,7 +1,6 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("viewer", () => {
-  // All tests start by navigating to a PDF item's view page.
   // The seed data has 3 public items sorted by addedAt desc:
   //   1. "Republic" (plato-republic, PDF, 3 pages)
   //   2. "Phaedrus" (plato-phaedrus, PDF, 1 page)
@@ -14,7 +13,7 @@ test.describe("viewer", () => {
   test("viewer loads for PDF item", async ({ page }) => {
     await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
-    await expect(page.locator("#viewer-canvas")).toBeVisible();
+    await expect(page.locator(".viewer-canvas-wrap canvas")).toBeVisible();
     await expect(page.locator(".viewer-position")).toContainText("1 / 3");
   });
 
@@ -110,5 +109,48 @@ test.describe("viewer", () => {
       "data-orientation",
       "portrait",
     );
+  });
+
+  test("viewer loads for EPUB item", async ({ page }) => {
+    await page.goto("/view/gutenberg-3296");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-epub-container")).toBeVisible();
+    // Position label format: "Ch. 1/3 — p. 1/N"
+    await expect(page.locator(".viewer-position")).toContainText("Ch. 1/3", {
+      timeout: 15000,
+    });
+  });
+
+  test("EPUB sub-chapter navigation works", async ({ page }) => {
+    await page.goto("/view/gutenberg-3296");
+    const position = page.locator(".viewer-position");
+    await expect(position).toContainText("Ch. 1/3", { timeout: 15000 });
+
+    const prev = page.locator(".viewer-prev");
+    const next = page.locator(".viewer-next");
+
+    // At start: prev disabled, next enabled
+    await expect(prev).toBeDisabled();
+    await expect(next).toBeEnabled();
+
+    // Advance within chapter 1 (sub-chapter page turn).
+    // Exact sub-page number varies by viewport width (spread mode), so
+    // just verify we're still in Ch. 1 and sub-page is no longer 1/1.
+    await next.click();
+    await expect(position).not.toContainText("p. 1/1");
+    await expect(position).toContainText("Ch. 1/3");
+    await expect(prev).toBeEnabled();
+    await expect(next).toBeEnabled();
+  });
+
+  test("EPUB metadata is visible in panel", async ({ page }) => {
+    await page.goto("/view/gutenberg-3296");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+
+    await expect(page.locator(".viewer-title")).toContainText("Confessions");
+    await expect(page.locator(".viewer-panel .media-badge")).toContainText(
+      "epub",
+    );
+    await expect(page.locator(".viewer-pd")).toContainText("Public Domain");
   });
 });
