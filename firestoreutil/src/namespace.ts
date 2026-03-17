@@ -1,4 +1,6 @@
-export function validateNamespace(namespace: string): void {
+export type Namespace = string & { readonly __brand: unique symbol };
+
+export function validateNamespace(namespace: string): Namespace {
   if (!namespace) {
     throw new Error("namespace must not be empty");
   }
@@ -8,13 +10,13 @@ export function validateNamespace(namespace: string): void {
       `namespace must be in "{app}/{env}" format (got "${namespace}")`,
     );
   }
+  return namespace as Namespace;
 }
 
 export function nsCollectionPath(
-  namespace: string,
+  namespace: Namespace,
   collectionName: string,
 ): string {
-  validateNamespace(namespace);
   if (!collectionName) {
     throw new Error("collectionName must not be empty");
   }

@@ -1,4 +1,4 @@
-import { DataIntegrityError } from "../errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showDropdown } from "@commons-systems/style/components/autocomplete";
 
 const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();

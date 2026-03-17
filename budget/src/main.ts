@@ -11,7 +11,7 @@ import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { hydrateBudgetTable, hydrateBudgetChart } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { trackPageView } from "./firebase.js";
-import { DataIntegrityError } from "./errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { parseUploadedJson, toParsedData, UploadValidationError } from "./upload.js";
 import { storeParsedData, clearAll, hasData, getMeta } from "./idb.js";
 import { FirestoreSeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";

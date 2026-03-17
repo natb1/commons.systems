@@ -1,7 +1,7 @@
 import { Timestamp } from "firebase/firestore";
 import { type Budget, type BudgetId, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
-import { DataIntegrityError } from "../errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showInputError, handleSaveError } from "./hydrate-util.js";
 import { renderBudgetChart, type ChartResult } from "./budgets-chart.js";
 

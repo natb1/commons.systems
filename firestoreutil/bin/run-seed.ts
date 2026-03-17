@@ -1,6 +1,7 @@
 import { initializeApp, cert, type ServiceAccount } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { seed, type SeedSpec, type SeedOptions } from "../src/seed.js";
+import { validateNamespace } from "../src/namespace.js";
 
 const appName = process.env.APP_NAME;
 if (!appName) {
@@ -56,7 +57,8 @@ if (emulatorHost) {
 }
 
 const db = getFirestore();
-const spec: SeedSpec = { ...appSeed, namespace };
+const validatedNamespace = validateNamespace(namespace);
+const spec: SeedSpec = { ...appSeed, namespace: validatedNamespace };
 const seedOptions: SeedOptions = {
   includeTestOnly: process.env.SEED_TEST_ONLY === "true",
 };

@@ -1,5 +1,5 @@
 import type { DataSource } from "../data-source.js";
-import { DataIntegrityError } from "../errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export interface RenderPageOptions {
   authorized: boolean;

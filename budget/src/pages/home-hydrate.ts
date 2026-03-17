@@ -1,7 +1,7 @@
 import { type SerializedBudgetPeriod, type TransactionId, type BudgetId } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { computeNetAmount } from "../balance.js";
-import { DataIntegrityError } from "../errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
 
