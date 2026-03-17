@@ -170,6 +170,12 @@ if [ "$USES_FUNCTIONS" = true ]; then
   (cd "$REPO_ROOT" && npm run -w functions build)
 fi
 
+# Export the Firestore namespace so Cloud Functions running in the emulator
+# read from the same path that was seeded.
+if [ -n "$EMULATOR_NAMESPACE" ]; then
+  export FIRESTORE_NAMESPACE="$EMULATOR_NAMESPACE"
+fi
+
 npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
 EMULATOR_PID=$!
 

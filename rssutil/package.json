@@ -1,0 +1,9 @@
+{
+  "name": "@commons-systems/rssutil",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "test": "vitest run", "lint": "eslint src/" },
+  "dependencies": { "@commons-systems/htmlutil": "*" }
+}
