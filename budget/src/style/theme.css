@@ -150,20 +150,9 @@
   flex-shrink: 0;
 }
 
-/* --- Budget insights (metrics) --- */
+/* --- Budget metrics (inside .below-bar-chart-row) --- */
 
-.budget-insights {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-@media (min-width: 768px) {
-  .budget-insights {
-    grid-template-columns: 1fr 1fr;
-  }
-}
+.budget-metrics { flex: 1; min-width: 0; }
 
 .budget-metrics dl {
   display: flex;
