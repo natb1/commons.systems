@@ -21,6 +21,7 @@
     "@commons-systems/style": "*",
     "firebase": "^12.9.0",
     "missing.css": "^1.1.3",
+    "fflate": "^0.8.0",
     "pdfjs-dist": "^4.0.0"
   }
 }

@@ -1,6 +1,8 @@
+import { zipSync, zlibSync } from "fflate";
+
 export interface StorageSeedItem {
   path: string;
-  content: string;
+  content: string | Uint8Array;
   metadata: Record<string, string>;
 }
 
@@ -36,6 +38,56 @@ function makePdf(pageCount: number): string {
   return body;
 }
 
+function crc32(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc ^= byte;
+    for (let i = 0; i < 8; i++) {
+      crc = crc & 1 ? (0xedb88320 ^ (crc >>> 1)) : (crc >>> 1);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function u32be(n: number): Uint8Array {
+  return new Uint8Array([(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff]);
+}
+
+function pngChunk(type: string, data: Uint8Array): Uint8Array {
+  const enc = new TextEncoder();
+  const typeBytes = enc.encode(type);
+  const crcInput = new Uint8Array(typeBytes.length + data.length);
+  crcInput.set(typeBytes);
+  crcInput.set(data, typeBytes.length);
+  const result = new Uint8Array(4 + 4 + data.length + 4);
+  result.set(u32be(data.length));
+  result.set(typeBytes, 4);
+  result.set(data, 8);
+  result.set(u32be(crc32(crcInput)), 8 + data.length);
+  return result;
+}
+
+function makePng1x1(): Uint8Array {
+  const sig = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdrData = new Uint8Array([0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
+  const ihdr = pngChunk("IHDR", ihdrData);
+  // Scanline: filter byte (0) + 3 RGB bytes
+  const idat = pngChunk("IDAT", zlibSync(new Uint8Array([0, 255, 255, 255])));
+  const iend = pngChunk("IEND", new Uint8Array(0));
+  const result = new Uint8Array(sig.length + ihdr.length + idat.length + iend.length);
+  let offset = 0;
+  for (const chunk of [sig, ihdr, idat, iend]) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
+}
+
+function makeZip(): Uint8Array {
+  const png = makePng1x1();
+  return zipSync({ "image-001.png": png, "image-002.png": png });
+}
+
 const publicMeta = { publicDomain: "true" };
 const testPrivateMeta = { publicDomain: "false", "test@example.com": "member" };
 
@@ -59,6 +111,11 @@ const storageSeed: StorageSeedItem[] = [
     path: "print/prod/media/test-private-item.pdf",
     content: makePdf(1),
     metadata: testPrivateMeta,
+  },
+  {
+    path: "print/prod/media/test-image-archive.cbz",
+    content: makeZip(),
+    metadata: publicMeta,
   },
 ];
 
