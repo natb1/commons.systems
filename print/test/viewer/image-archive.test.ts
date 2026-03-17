@@ -516,6 +516,32 @@ describe("createImageArchiveRenderer", () => {
     expect(container.classList.contains("zoomed")).toBe(false);
   });
 
+  it("resize while zoomed triggers onZoomChange", async () => {
+    const { renderer } = await initZoomableRenderer();
+    const onChange = vi.fn();
+    renderer.onZoomChange = onChange;
+
+    renderer.zoomIn!();
+    expect(renderer.isZoomed).toBe(true);
+
+    // Trigger the ResizeObserver callback
+    for (const cb of resizeObserverCallbacks) cb();
+
+    expect(renderer.isZoomed).toBe(false);
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("resize at level 0 does not trigger onZoomChange", async () => {
+    const { renderer } = await initZoomableRenderer();
+    const onChange = vi.fn();
+    renderer.onZoomChange = onChange;
+
+    // Trigger the ResizeObserver callback at level 0
+    for (const cb of resizeObserverCallbacks) cb();
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("resize at level 0 is a no-op", async () => {
     const { renderer } = await initZoomableRenderer();
     expect(renderer.isZoomed).toBe(false);

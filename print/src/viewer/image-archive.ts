@@ -32,8 +32,10 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   let _currentPage = 0;
   let _pageCount = 0;
   let destroyed = false;
-  let _zoomLevel = 0; // 0 = fit-to-view, 1+ = zoomed (each step multiplies by ZOOM_FACTOR)
-  let _fittedWidth = 0; // displayed width at fit-to-view (captured before first zoom)
+  let _onZoomChange: (() => void) | undefined;
+  let _zoomLevel = 0; // 0 = fit-to-view, 1+ = zoomed (scale = ZOOM_FACTOR ** level, relative to fitted size)
+  // Fit-to-view display size, captured on first zoomIn as zoom scale base. Zero until first zoom; guarded in zoomIn.
+  let _fittedWidth = 0;
   let _fittedHeight = 0;
 
   function resetZoomState(): void {
@@ -46,6 +48,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       scrollParent.scrollTop = 0;
       scrollParent.scrollLeft = 0;
     }
+    _onZoomChange?.();
   }
 
   function getObjectUrl(index: number): string {
@@ -172,6 +175,9 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     get isZoomed(): boolean {
       return _zoomLevel > 0;
     },
+
+    get onZoomChange() { return _onZoomChange; },
+    set onZoomChange(cb: (() => void) | undefined) { _onZoomChange = cb; },
 
     destroy(): void {
       destroyed = true;

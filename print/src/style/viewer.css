@@ -57,6 +57,7 @@ body.viewer-active {
   max-height: 100%;
 }
 
+/* When zoomed, switch from centered fit-to-view to scrollable overflow layout */
 .viewer-canvas-wrap.zoomed {
   width: max-content;
   height: max-content;

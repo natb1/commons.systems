@@ -7,13 +7,14 @@ export interface ContentRenderer {
   readonly currentPage: number;
   readonly canGoNext: boolean;
   readonly canGoPrev: boolean;
-  /** String form of currentPage. Do not read before init resolves. */
+  /** Serialized position suitable for restoring via initialPosition. Do not read before init resolves. */
   readonly position: string;
   readonly positionLabel: string;
   zoomIn?(): void;
   zoomOut?(): void;
   resetZoom?(): void;
   readonly isZoomed?: boolean;
+  onZoomChange?: () => void;
   destroy(): void;
 }
 

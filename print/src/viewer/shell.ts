@@ -223,6 +223,7 @@ export function initViewer(
       zoomInBtn.addEventListener("click", handleZoomIn);
       zoomOutBtn.addEventListener("click", handleZoomOut);
       zoomResetBtn.addEventListener("click", handleZoomReset);
+      renderer.onZoomChange = updateZoomState;
     }
     updateNav();
   })().catch((err) => {
