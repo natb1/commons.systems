@@ -450,6 +450,126 @@ describe("createImageArchiveRenderer", () => {
     expect(renderer.isZoomed).toBe(false);
   });
 
+  it("zoomIn supports multiple zoom levels", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    const img = container.querySelector("img") as HTMLImageElement;
+    // jsdom doesn't render; mock the fitted display size captured on first zoom
+    Object.defineProperty(img, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(img, "clientHeight", { value: 300, configurable: true });
+
+    renderer.zoomIn!();
+    expect(renderer.isZoomed).toBe(true);
+    const widthAfterFirst = parseFloat(img.style.width);
+
+    renderer.zoomIn!();
+    expect(renderer.isZoomed).toBe(true);
+    const widthAfterSecond = parseFloat(img.style.width);
+
+    // Zoom scales relative to fitted size, 1.1x per step
+    expect(widthAfterSecond).toBeGreaterThan(widthAfterFirst);
+    expect(widthAfterFirst).toBeCloseTo(400 * 1.2);
+    expect(widthAfterSecond).toBeCloseTo(400 * 1.2 * 1.2);
+  });
+
+  it("resetZoom clears inline size styles", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    renderer.zoomIn!();
+    renderer.zoomIn!();
+    renderer.resetZoom!();
+
+    const img = container.querySelector("img") as HTMLImageElement;
+    expect(img.style.width).toBe("");
+    expect(img.style.height).toBe("");
+    expect(renderer.isZoomed).toBe(false);
+  });
+
+  it("zoomOut decreases zoom by one step", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    const img = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(img, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(img, "clientHeight", { value: 300, configurable: true });
+
+    renderer.zoomIn!();
+    renderer.zoomIn!();
+    const widthAtLevel2 = parseFloat(img.style.width);
+
+    renderer.zoomOut!();
+    const widthAtLevel1 = parseFloat(img.style.width);
+    expect(widthAtLevel1).toBeLessThan(widthAtLevel2);
+    expect(widthAtLevel1).toBeCloseTo(400 * 1.2);
+    expect(renderer.isZoomed).toBe(true);
+  });
+
+  it("zoomOut to level 0 returns to fit-to-view", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const parent = document.createElement("div");
+    const container = makeContainer();
+    parent.appendChild(container);
+
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    renderer.zoomIn!();
+    parent.scrollTop = 100;
+    parent.scrollLeft = 50;
+
+    renderer.zoomOut!();
+    expect(renderer.isZoomed).toBe(false);
+    expect(container.classList.contains("zoomed")).toBe(false);
+    const img = container.querySelector("img") as HTMLImageElement;
+    expect(img.style.width).toBe("");
+    expect(parent.scrollTop).toBe(0);
+    expect(parent.scrollLeft).toBe(0);
+  });
+
+  it("zoomOut at level 0 is a no-op", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    expect(renderer.isZoomed).toBe(false);
+    renderer.zoomOut!();
+    expect(renderer.isZoomed).toBe(false);
+  });
+
   it("zoomIn after destroy is a no-op", async () => {
     const zip = makeZipBuffer({
       "image-001.png": new Uint8Array([1]),

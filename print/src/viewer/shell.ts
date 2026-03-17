@@ -28,6 +28,7 @@ export function renderViewerShell(item: MediaItem): string {
           <span class="viewer-position">Loading...</span>
           <button class="viewer-next" disabled aria-label="Next page">&rarr;</button>
           <button class="viewer-zoom-in" style="display:none" aria-label="Zoom in">+</button>
+          <button class="viewer-zoom-out" style="display:none" aria-label="Zoom out">&minus;</button>
           <button class="viewer-zoom-reset" style="display:none" aria-label="Reset zoom">&#8865;</button>
         </div>
         <div class="viewer-meta">
@@ -80,6 +81,7 @@ export function initViewer(
   const toggleBtn = viewer.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
   const panel = viewer.querySelector(".viewer-panel") as HTMLElement;
   const zoomInBtn = viewer.querySelector(".viewer-zoom-in") as HTMLButtonElement;
+  const zoomOutBtn = viewer.querySelector(".viewer-zoom-out") as HTMLButtonElement;
   const zoomResetBtn = viewer.querySelector(".viewer-zoom-reset") as HTMLButtonElement;
 
   document.body.classList.add("viewer-active");
@@ -137,12 +139,18 @@ export function initViewer(
   // Zoom controls — visible only when the renderer supports zoom
   function updateZoomState() {
     if (!renderer.zoomIn) return;
-    zoomInBtn.disabled = !!renderer.isZoomed;
+    zoomInBtn.disabled = false;
+    zoomOutBtn.disabled = !renderer.isZoomed;
     zoomResetBtn.disabled = !renderer.isZoomed;
   }
 
   function handleZoomIn() {
     renderer.zoomIn!();
+    updateZoomState();
+  }
+
+  function handleZoomOut() {
+    renderer.zoomOut!();
     updateZoomState();
   }
 
@@ -210,8 +218,10 @@ export function initViewer(
     lastSavedPosition = renderer.position;
     if (renderer.zoomIn) {
       zoomInBtn.style.display = "";
+      zoomOutBtn.style.display = "";
       zoomResetBtn.style.display = "";
       zoomInBtn.addEventListener("click", handleZoomIn);
+      zoomOutBtn.addEventListener("click", handleZoomOut);
       zoomResetBtn.addEventListener("click", handleZoomReset);
     }
     updateNav();
@@ -227,6 +237,7 @@ export function initViewer(
     toggleBtn.removeEventListener("click", handleToggle);
     document.removeEventListener("keydown", handleKeydown);
     zoomInBtn.removeEventListener("click", handleZoomIn);
+    zoomOutBtn.removeEventListener("click", handleZoomOut);
     zoomResetBtn.removeEventListener("click", handleZoomReset);
     renderer.destroy();
   };

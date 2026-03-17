@@ -245,6 +245,7 @@ test.describe("viewer", () => {
     ).toBeVisible({ timeout: 15000 });
 
     await expect(page.locator(".viewer-zoom-in")).toBeVisible();
+    await expect(page.locator(".viewer-zoom-out")).toBeVisible();
     await expect(page.locator(".viewer-zoom-reset")).toBeVisible();
   });
 
@@ -255,6 +256,7 @@ test.describe("viewer", () => {
     ).toBeVisible({ timeout: 15000 });
 
     await expect(page.locator(".viewer-zoom-in")).not.toBeVisible();
+    await expect(page.locator(".viewer-zoom-out")).not.toBeVisible();
   });
 
   test("image archive: zoom-in button makes image larger than container", async ({
@@ -264,7 +266,9 @@ test.describe("viewer", () => {
     const img = page.locator(".viewer-canvas-wrap img");
     await expect(img).toBeVisible({ timeout: 15000 });
 
-    await page.locator(".viewer-zoom-in").click();
+    // Click zoom-in multiple times (1.2x per step) to ensure image exceeds container
+    const zoomIn = page.locator(".viewer-zoom-in");
+    for (let i = 0; i < 5; i++) await zoomIn.click();
     await page.waitForTimeout(300);
 
     const container = page.locator(".viewer-content");
@@ -279,6 +283,29 @@ test.describe("viewer", () => {
     expect(exceedsWidth || exceedsHeight).toBe(true);
   });
 
+  test("image archive: zoom-out button decreases zoom level", async ({
+    page,
+  }) => {
+    await page.goto("/view/test-image-archive");
+    const img = page.locator(".viewer-canvas-wrap img");
+    await expect(img).toBeVisible({ timeout: 15000 });
+
+    // Zoom-out should be disabled at default zoom
+    await expect(page.locator(".viewer-zoom-out")).toBeDisabled();
+
+    // Zoom in a few times, then zoom out
+    const zoomIn = page.locator(".viewer-zoom-in");
+    for (let i = 0; i < 3; i++) await zoomIn.click();
+    await expect(page.locator(".viewer-zoom-out")).toBeEnabled();
+
+    await page.locator(".viewer-zoom-out").click();
+    await page.waitForTimeout(300);
+
+    // Still zoomed (went from level 3 to level 2)
+    await expect(page.locator(".viewer-zoom-out")).toBeEnabled();
+    await expect(page.locator(".viewer-zoom-reset")).toBeEnabled();
+  });
+
   test("image archive: reset-zoom returns to fit-to-view", async ({
     page,
   }) => {
@@ -286,8 +313,9 @@ test.describe("viewer", () => {
     const img = page.locator(".viewer-canvas-wrap img");
     await expect(img).toBeVisible({ timeout: 15000 });
 
-    // Zoom in first
-    await page.locator(".viewer-zoom-in").click();
+    // Zoom in multiple steps
+    const zoomIn = page.locator(".viewer-zoom-in");
+    for (let i = 0; i < 3; i++) await zoomIn.click();
     await page.waitForTimeout(300);
 
     // Reset zoom
@@ -302,6 +330,10 @@ test.describe("viewer", () => {
     expect(imgBox).not.toBeNull();
     expect(imgBox!.width).toBeLessThanOrEqual(containerBox!.width);
     expect(imgBox!.height).toBeLessThanOrEqual(containerBox!.height);
+
+    // Zoom-out and reset should be disabled at fit-to-view
+    await expect(page.locator(".viewer-zoom-out")).toBeDisabled();
+    await expect(page.locator(".viewer-zoom-reset")).toBeDisabled();
   });
 
   test("image archive: page navigation resets zoom", async ({ page }) => {
@@ -310,7 +342,8 @@ test.describe("viewer", () => {
     await expect(img).toBeVisible({ timeout: 15000 });
 
     // Zoom in
-    await page.locator(".viewer-zoom-in").click();
+    const zoomIn = page.locator(".viewer-zoom-in");
+    for (let i = 0; i < 3; i++) await zoomIn.click();
     await page.waitForTimeout(300);
 
     // Navigate to next page
@@ -326,8 +359,9 @@ test.describe("viewer", () => {
     expect(imgBox!.width).toBeLessThanOrEqual(containerBox!.width);
     expect(imgBox!.height).toBeLessThanOrEqual(containerBox!.height);
 
-    // Zoom-in should be enabled, reset should be disabled (at default zoom)
+    // All zoom controls should reflect default state
     await expect(page.locator(".viewer-zoom-in")).toBeEnabled();
+    await expect(page.locator(".viewer-zoom-out")).toBeDisabled();
     await expect(page.locator(".viewer-zoom-reset")).toBeDisabled();
   });
 });

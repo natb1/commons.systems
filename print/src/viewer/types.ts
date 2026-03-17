@@ -11,6 +11,7 @@ export interface ContentRenderer {
   readonly position: string;
   readonly positionLabel: string;
   zoomIn?(): void;
+  zoomOut?(): void;
   resetZoom?(): void;
   readonly isZoomed?: boolean;
   destroy(): void;

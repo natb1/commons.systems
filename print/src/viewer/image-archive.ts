@@ -3,6 +3,20 @@ import type { ContentRenderer } from "./types.js";
 import { parsePositionPage } from "./types.js";
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
+const ZOOM_FACTOR = 1.2;
+
+function applyZoom(container: HTMLElement, img: HTMLImageElement, level: number, fittedWidth: number, fittedHeight: number): void {
+  if (level === 0) {
+    container.classList.remove("zoomed");
+    img.style.width = "";
+    img.style.height = "";
+  } else {
+    container.classList.add("zoomed");
+    const scale = ZOOM_FACTOR ** level;
+    img.style.width = `${fittedWidth * scale}px`;
+    img.style.height = `${fittedHeight * scale}px`;
+  }
+}
 
 export function createImageArchiveRenderer(_onError?: (err: unknown) => void): ContentRenderer {
   // _onError accepted for factory signature consistency with createPdfRenderer. Unlike createPdfRenderer,
@@ -16,6 +30,9 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   let _currentPage = 0;
   let _pageCount = 0;
   let destroyed = false;
+  let _zoomLevel = 0; // 0 = fit-to-view, 1+ = zoomed (each step is 1.2x)
+  let _fittedWidth = 0; // displayed width at fit-to-view (captured before first zoom)
+  let _fittedHeight = 0;
 
   function getObjectUrl(index: number): string {
     if (!objectUrlCache[index]) {
@@ -104,13 +121,32 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     },
 
     zoomIn(): void {
-      if (!containerEl) return;
-      containerEl.classList.add("zoomed");
+      if (!containerEl || !imgEl) return;
+      if (_zoomLevel === 0) {
+        _fittedWidth = imgEl.clientWidth;
+        _fittedHeight = imgEl.clientHeight;
+      }
+      _zoomLevel++;
+      applyZoom(containerEl, imgEl, _zoomLevel, _fittedWidth, _fittedHeight);
+    },
+
+    zoomOut(): void {
+      if (!containerEl || !imgEl || _zoomLevel <= 0) return;
+      _zoomLevel--;
+      applyZoom(containerEl, imgEl, _zoomLevel, _fittedWidth, _fittedHeight);
+      if (_zoomLevel === 0) {
+        const scrollParent = containerEl.parentElement;
+        if (scrollParent) {
+          scrollParent.scrollTop = 0;
+          scrollParent.scrollLeft = 0;
+        }
+      }
     },
 
     resetZoom(): void {
-      if (!containerEl) return;
-      containerEl.classList.remove("zoomed");
+      if (!containerEl || !imgEl) return;
+      _zoomLevel = 0;
+      applyZoom(containerEl, imgEl, _zoomLevel, _fittedWidth, _fittedHeight);
       const scrollParent = containerEl.parentElement;
       if (scrollParent) {
         scrollParent.scrollTop = 0;
@@ -119,7 +155,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     },
 
     get isZoomed(): boolean {
-      return containerEl?.classList.contains("zoomed") ?? false;
+      return _zoomLevel > 0;
     },
 
     destroy(): void {
