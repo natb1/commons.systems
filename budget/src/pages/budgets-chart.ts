@@ -23,7 +23,11 @@ interface BarDatum {
 
 function formatWeek(ts: { toDate(): Date }): string {
   const d = ts.toDate();
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  // Roll back to the preceding Sunday (week start) so labels stay consistent
+  // regardless of which weekday the period happens to begin on.
+  const sun = new Date(d);
+  sun.setDate(sun.getDate() - sun.getDay());
+  return `${sun.getMonth() + 1}/${sun.getDate()}`;
 }
 
 /** Collect ordered unique week entries across all budgets, deduplicating by timestamp. */
