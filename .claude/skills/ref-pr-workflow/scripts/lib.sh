@@ -16,18 +16,23 @@ detect_features() {
     return 1
   fi
 
+  # Detect Firestore: direct firebase SDK import or createAppContext usage
   USES_FIRESTORE=false
-  if grep -rq '"firebase/firestore"' "$app_src_dir" 2>/dev/null; then
+  if grep -rq -e '"firebase/firestore"' -e 'firebaseutil/app-context' "$app_src_dir" 2>/dev/null; then
     USES_FIRESTORE=true
   fi
 
+  # Detect Auth: direct firebase SDK import or authutil wrapper packages
   USES_AUTH=false
-  if grep -rq '"firebase/auth"' "$app_src_dir" 2>/dev/null; then
+  if grep -rq -e '"firebase/auth"' -e 'authutil/app-auth' -e 'authutil/firebase-auth' "$app_src_dir" 2>/dev/null; then
     USES_AUTH=true
   fi
 
+  # Detect Storage: direct firebase SDK import or createAppContext with storage option
   USES_STORAGE=false
-  if grep -rq '"firebase/storage"' "$app_src_dir" 2>/dev/null; then
+  if grep -rq -e '"firebase/storage"' "$app_src_dir" 2>/dev/null; then
+    USES_STORAGE=true
+  elif grep -rl 'firebaseutil/app-context' "$app_src_dir" 2>/dev/null | xargs grep -q 'storage:\s*true' 2>/dev/null; then
     USES_STORAGE=true
   fi
 

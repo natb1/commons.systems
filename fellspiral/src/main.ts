@@ -13,7 +13,7 @@ import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
-import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
+import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView } from "./firebase.js";
 
@@ -192,7 +192,7 @@ async function refreshAfterAuthChange(): Promise<void> {
   updateInfoPanel();
 }
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged((user) => {
   if (user?.uid === currentUser?.uid) return;
   currentUser = user;
   refreshAfterAuthChange().catch((err) => {

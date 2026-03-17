@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { deleteNamespace } from "../src/delete-namespace.js";
+import { validateNamespace } from "../src/namespace.js";
 
 function createMockFirestore() {
   const mockRecursiveDelete = vi.fn(async () => {});
@@ -17,41 +18,19 @@ function createMockFirestore() {
 describe("deleteNamespace", () => {
   it("calls recursiveDelete with the correct namespace path", async () => {
     const { db, mockDoc, mockRecursiveDelete } = createMockFirestore();
+    const ns = validateNamespace("app/preview-pr-49");
 
-    await deleteNamespace(db, "app/preview-pr-49");
+    await deleteNamespace(db, ns);
 
     expect(mockDoc).toHaveBeenCalledWith("app/preview-pr-49");
     expect(mockRecursiveDelete).toHaveBeenCalledWith({ path: "app/preview-pr-49" });
   });
 
-  it("throws on empty namespace", async () => {
-    const { db } = createMockFirestore();
-
-    await expect(deleteNamespace(db, "")).rejects.toThrow(
-      "namespace must not be empty",
-    );
-  });
-
-  it("rejects namespace without app/env format", async () => {
-    const { db } = createMockFirestore();
-
-    await expect(deleteNamespace(db, "prod")).rejects.toThrow(
-      'namespace must be in "{app}/{env}" format',
-    );
-  });
-
-  it("rejects multi-slash namespace", async () => {
-    const { db } = createMockFirestore();
-
-    await expect(deleteNamespace(db, "a/b/c")).rejects.toThrow(
-      'namespace must be in "{app}/{env}" format',
-    );
-  });
-
   it("rejects production namespace", async () => {
     const { db } = createMockFirestore();
+    const ns = validateNamespace("landing/prod");
 
-    await expect(deleteNamespace(db, "landing/prod")).rejects.toThrow(
+    await expect(deleteNamespace(db, ns)).rejects.toThrow(
       "refusing to delete production namespace: landing/prod",
     );
   });
