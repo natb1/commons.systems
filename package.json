@@ -2,6 +2,7 @@
   "name": "commons-systems",
   "private": true,
   "workspaces": [
+    "config",
     "analyticsutil",
     "authutil",
     "blog",
