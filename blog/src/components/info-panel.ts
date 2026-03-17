@@ -91,7 +91,7 @@ function renderArchive(published: PublishedPost[], rssFeedUrl: string | undefine
     .join("");
 
   const rssIcon = rssFeedUrl
-    ? ` <a href="${escapeHtml(rssFeedUrl)}" title="RSS" download="feed.xml"><img src="/icons/rss.svg" class="feed-icon" alt="RSS"></a>`
+    ? ` <a href="${escapeHtml(rssFeedUrl)}" title="RSS"><img src="/icons/rss.svg" class="feed-icon" alt="RSS"></a>`
     : "";
 
   return `<section class="panel-section">
