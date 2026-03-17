@@ -7,7 +7,6 @@
     "./post-types": "./src/post-types.ts",
     "./date": "./src/date.ts",
     "./github": "./src/github.ts",
-    "./feed": "./src/feed.ts",
     "./firestore": "./src/firestore.ts",
     "./blog-roll/types": "./src/blog-roll/types.ts",
     "./blog-roll/static-strategy": "./src/blog-roll/static-strategy.ts",

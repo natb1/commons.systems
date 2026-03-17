@@ -91,8 +91,8 @@ export async function handleRssFeed(req: Request, res: Response) {
   let snapshot;
   try {
     // Query only with the equality filter; sort in memory to avoid requiring a
-    // composite Firestore index. (The emulator does not enforce index
-    // requirements, so missing indexes only fail in production.)
+    // composite Firestore index. The post count per site is small enough that
+    // in-memory sorting is sufficient.
     snapshot = await db
       .collection(collectionPath)
       .where("published", "==", true)
@@ -121,11 +121,19 @@ export async function handleRssFeed(req: Request, res: Response) {
       );
       continue;
     }
+    const publishedAt = typeof d.publishedAt === "string" ? d.publishedAt : undefined;
+    if (d.publishedAt !== undefined && typeof d.publishedAt !== "string") {
+      console.warn(`Doc "${doc.id}" in "${collectionPath}": publishedAt is ${typeof d.publishedAt}, expected string`);
+    }
+    const previewDescription = typeof d.previewDescription === "string" ? d.previewDescription : undefined;
+    if (d.previewDescription !== undefined && typeof d.previewDescription !== "string") {
+      console.warn(`Doc "${doc.id}" in "${collectionPath}": previewDescription is ${typeof d.previewDescription}, expected string`);
+    }
     rssPosts.push({
       id: doc.id,
       title: d.title,
-      publishedAt: d.publishedAt,
-      previewDescription: d.previewDescription,
+      publishedAt,
+      previewDescription,
     });
   }
 

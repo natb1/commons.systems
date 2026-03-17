@@ -151,4 +151,16 @@ describe("generateRssXml", () => {
     expect(xml).toContain("https://commons.systems/post/newer-post");
     expect(xml).toContain("https://commons.systems/post/older-post");
   });
+
+  it("throws when config.title is empty", () => {
+    expect(() => generateRssXml(posts, { ...config, title: "" })).toThrow("RssConfig.title is required");
+  });
+
+  it("throws when config.siteUrl is empty", () => {
+    expect(() => generateRssXml(posts, { ...config, siteUrl: "" })).toThrow("RssConfig.siteUrl is required");
+  });
+
+  it("throws when config.feedUrl is empty", () => {
+    expect(() => generateRssXml(posts, { ...config, feedUrl: "" })).toThrow("RssConfig.feedUrl is required");
+  });
 });
