@@ -133,7 +133,7 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
     style: sharedStyle,
     x: { label: null, tickRotate: -45, padding: 0.1 },
     y: { label: null, axis: null, grid: true, domain: yDomain },
-    fx: { label: null, padding: 0.15 },
+    fx: { label: null, padding: 0.15, domain: weekLabels },
     color: { legend: false },
     marks: [
       Plot.tickY(data, {

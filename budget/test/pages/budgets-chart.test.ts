@@ -111,6 +111,19 @@ describe("renderBudgetChart", () => {
     expect(result.weekLabels).toHaveLength(1);
   });
 
+  it("weekLabels are in chronological order even when alphabetical differs", () => {
+    const container = makeContainer();
+    const budgets = [makeBudget({ weeklyAllowance: 100 })];
+    // Week-start labels: 12/7, 12/21, 12/28 — alphabetical would be "12/21", "12/28", "12/7"
+    const periods = [
+      makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-12-08"), periodEnd: ts("2025-12-15"), total: 10 }),
+      makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-12-22"), periodEnd: ts("2025-12-29"), total: 20 }),
+      makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-12-29"), periodEnd: ts("2026-01-05"), total: 30 }),
+    ];
+    const result = renderBudgetChart(container, { budgets, periods });
+    expect(result.weekLabels).toEqual(["12/7", "12/21", "12/28"]);
+  });
+
   it("non-overlapping budgets: gap weeks get zero-spend entries with correct rollover", () => {
     const container = makeContainer();
     const budgets = [
