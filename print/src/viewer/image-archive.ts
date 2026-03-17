@@ -27,7 +27,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
 
       if (imagePaths.length === 0) throw new Error("No images found in archive");
 
-      objectUrls = imagePaths.map((path) => URL.createObjectURL(new Blob([files[path]])));
+      objectUrls = imagePaths.map((path) => URL.createObjectURL(new Blob([files[path] as Uint8Array<ArrayBuffer>])));
       _pageCount = objectUrls.length;
       _currentPage = 1;
 
