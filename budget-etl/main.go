@@ -60,13 +60,6 @@ type parsedFile struct {
 }
 
 func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, firestoreMode bool) error {
-	// Resolve user email from gh CLI
-	email, err := resolveGHEmail()
-	if err != nil {
-		return err
-	}
-	log.Printf("authenticated as %s", email)
-
 	// Discover statement files
 	files, err := parse.DiscoverFiles(dir)
 	if err != nil {
@@ -128,6 +121,10 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 		return nil
 	}
 
+	if outputPath != "" {
+		return runOutputJSON(allTxns, groupName, outputPath)
+	}
+
 	// Resolve project ID
 	if projectID == "" {
 		projectID = os.Getenv("GOOGLE_CLOUD_PROJECT")
@@ -149,12 +146,17 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 	}
 	defer client.Close()
 
-	// Lookup group
+	// Authenticate and lookup group
+	email, err := resolveGHEmail()
+	if err != nil {
+		return err
+	}
+	log.Printf("authenticated as %s", email)
 	groupInfo, err := client.LookupGroup(ctx, email, groupName)
 	if err != nil {
 		return err
 	}
-	log.Printf("group %q (id=%s, members=%v)", groupName, groupInfo.ID, groupInfo.MemberEmails)
+	log.Printf("group %q (id=%s)", groupName, groupInfo.ID)
 
 	// Load rules from Firestore
 	ruleDocs, err := client.LoadRules(ctx, groupInfo.ID)
@@ -182,210 +184,42 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 	// Apply budget assignment rules
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
 
-	if outputPath != "" {
-		return runOutputJSON(ctx, client, groupInfo, groupName, allTxns, ruleDocs, outputPath)
-	}
 	return runFirestore(ctx, client, groupInfo, allTxns, parsed)
 }
 
-func runOutputJSON(ctx context.Context, client *store.Client, groupInfo store.GroupInfo, groupName string, allTxns []store.TransactionData, ruleDocs []store.RuleDoc, outputPath string) error {
-	// Load normalization rules and budgets concurrently
-	type normRulesResult struct {
-		docs []store.NormalizationRuleDoc
-		err  error
-	}
-	type budgetsResult struct {
-		docs []store.BudgetDoc
-		err  error
-	}
-	normRulesCh := make(chan normRulesResult, 1)
-	budgetsCh := make(chan budgetsResult, 1)
-	go func() {
-		docs, err := client.LoadNormalizationRules(ctx, groupInfo.ID)
-		normRulesCh <- normRulesResult{docs, err}
-	}()
-	go func() {
-		docs, err := client.LoadBudgets(ctx, groupInfo.ID)
-		budgetsCh <- budgetsResult{docs, err}
-	}()
-
-	normRulesRes := <-normRulesCh
-	if normRulesRes.err != nil {
-		return normRulesRes.err
-	}
-	budgetsRes := <-budgetsCh
-	if budgetsRes.err != nil {
-		return budgetsRes.err
-	}
-
-	// Build NormTxn from parsed transactions
-	normTxns := make([]store.NormTxn, len(allTxns))
-	for i, txn := range allTxns {
-		normTxns[i] = store.NormTxn{
-			DocID:       store.TransactionDocID(txn.StatementID, txn.TransactionID),
-			Description: txn.Description,
-			Institution: txn.Institution,
-			Account:     txn.Account,
-			Amount:      txn.Amount,
-			Timestamp:   txn.Timestamp,
-			StatementID: txn.StatementID,
-		}
-	}
-
-	// Apply normalization
-	normRules := make([]rules.NormalizationRule, len(normRulesRes.docs))
-	for i, rd := range normRulesRes.docs {
-		normRules[i] = rules.NormalizationRule{
-			ID:                   rd.ID,
-			Pattern:              rd.Pattern,
-			PatternType:          rd.PatternType,
-			CanonicalDescription: rd.CanonicalDescription,
-			DateWindowDays:       rd.DateWindowDays,
-			Institution:          rd.Institution,
-			Account:              rd.Account,
-			Priority:             rd.Priority,
-		}
-	}
-	normUpdates, err := rules.ApplyNormalization(normTxns, normRules)
-	if err != nil {
-		return fmt.Errorf("normalization: %w", err)
-	}
-
-	// Index normalization updates by doc ID
-	normByDocID := make(map[string]store.NormalizationUpdate, len(normUpdates))
-	for _, u := range normUpdates {
-		normByDocID[u.DocID] = u
-	}
-
-	// Build export transactions with normalization applied
+func runOutputJSON(allTxns []store.TransactionData, groupName string, outputPath string) error {
+	// Build export transactions (no categorization, no normalization, no budgets)
 	exportTxns := make([]export.Transaction, len(allTxns))
 	for i, txn := range allTxns {
-		docID := store.TransactionDocID(txn.StatementID, txn.TransactionID)
-		et := export.Transaction{
-			ID:                docID,
+		exportTxns[i] = export.Transaction{
+			ID:                store.TransactionDocID(txn.StatementID, txn.TransactionID),
 			Institution:       txn.Institution,
 			Account:           txn.Account,
 			Description:       txn.Description,
 			Amount:            store.DollarAmount(txn.Amount),
 			Timestamp:         export.FormatTimestamp(txn.Timestamp),
 			StatementID:       txn.StatementID,
-			Category:          txn.Category,
 			Note:              "",
 			Reimbursement:     0,
 			NormalizedPrimary: true,
-		}
-		if txn.Budget != "" {
-			b := txn.Budget
-			et.Budget = &b
-		}
-		if nu, ok := normByDocID[docID]; ok {
-			if nu.NormalizedID != "" {
-				et.NormalizedID = &nu.NormalizedID
-				et.NormalizedPrimary = nu.NormalizedPrimary
-				if nu.NormalizedDescription != "" {
-					et.NormalizedDescription = &nu.NormalizedDescription
-				}
-			}
-		}
-		exportTxns[i] = et
-	}
-
-	// Build FullTransaction for period computation
-	fullTxns := make([]store.FullTransaction, len(allTxns))
-	for i, txn := range allTxns {
-		docID := store.TransactionDocID(txn.StatementID, txn.TransactionID)
-		ft := store.FullTransaction{
-			ID:                docID,
-			Budget:            txn.Budget,
-			Category:          txn.Category,
-			Amount:            store.DollarAmount(txn.Amount),
-			Reimbursement:     0,
-			Timestamp:         txn.Timestamp,
-			NormalizedPrimary: true,
-		}
-		if nu, ok := normByDocID[docID]; ok && nu.NormalizedID != "" {
-			ft.NormalizedID = nu.NormalizedID
-			ft.NormalizedPrimary = nu.NormalizedPrimary
-		}
-		fullTxns[i] = ft
-	}
-
-	periodResults, err := store.ComputePeriods(fullTxns)
-	if err != nil {
-		return fmt.Errorf("computing periods: %w", err)
-	}
-
-	// Build export budget periods
-	exportPeriods := make([]export.BudgetPeriod, len(periodResults))
-	for i, pr := range periodResults {
-		exportPeriods[i] = export.BudgetPeriod{
-			ID:                pr.ID,
-			BudgetID:          pr.BudgetID,
-			PeriodStart:       export.FormatTimestamp(pr.Start),
-			PeriodEnd:         export.FormatTimestamp(pr.End),
-			Total:             pr.Total,
-			Count:             pr.Count,
-			CategoryBreakdown: pr.CategoryBreakdown,
-		}
-	}
-
-	// Build export budgets
-	exportBudgets := make([]export.Budget, len(budgetsRes.docs))
-	for i, b := range budgetsRes.docs {
-		exportBudgets[i] = export.Budget{
-			ID:              b.ID,
-			Name:            b.Name,
-			WeeklyAllowance: b.WeeklyAllowance,
-			Rollover:        b.Rollover,
-		}
-	}
-
-	// Build export rules
-	exportRules := make([]export.Rule, len(ruleDocs))
-	for i, r := range ruleDocs {
-		exportRules[i] = export.Rule{
-			ID:          r.ID,
-			Type:        r.Type,
-			Pattern:     r.Pattern,
-			Target:      r.Target,
-			Priority:    r.Priority,
-			Institution: r.Institution,
-			Account:     r.Account,
-		}
-	}
-
-	// Build export normalization rules
-	exportNormRules := make([]export.NormalizationRule, len(normRulesRes.docs))
-	for i, r := range normRulesRes.docs {
-		exportNormRules[i] = export.NormalizationRule{
-			ID:                   r.ID,
-			Pattern:              r.Pattern,
-			PatternType:          r.PatternType,
-			CanonicalDescription: r.CanonicalDescription,
-			DateWindowDays:       r.DateWindowDays,
-			Institution:          r.Institution,
-			Account:              r.Account,
-			Priority:             r.Priority,
 		}
 	}
 
 	out := export.Output{
 		Version:            1,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
-		GroupID:            groupInfo.ID,
 		GroupName:          groupName,
 		Transactions:       exportTxns,
-		Budgets:            exportBudgets,
-		BudgetPeriods:      exportPeriods,
-		Rules:              exportRules,
-		NormalizationRules: exportNormRules,
+		Budgets:            []export.Budget{},
+		BudgetPeriods:      []export.BudgetPeriod{},
+		Rules:              []export.Rule{},
+		NormalizationRules: []export.NormalizationRule{},
 	}
 
 	if err := export.WriteFile(outputPath, out); err != nil {
 		return fmt.Errorf("writing output file: %w", err)
 	}
-	log.Printf("wrote %d transactions, %d budgets, %d periods, %d rules, %d normalization rules to %s",
-		len(exportTxns), len(exportBudgets), len(exportPeriods), len(exportRules), len(exportNormRules), outputPath)
+	log.Printf("wrote %d transactions to %s", len(exportTxns), outputPath)
 	return nil
 }
 

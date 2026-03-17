@@ -82,6 +82,7 @@ func (c *Client) LookupGroup(ctx context.Context, email, groupName string) (Grou
 	return GroupInfo{}, fmt.Errorf("no group named %q found containing member %s", groupName, email)
 }
 
+
 // TransactionData holds the fields to write to a Firestore transaction document.
 type TransactionData struct {
 	Institution   string
