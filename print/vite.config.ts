@@ -1,20 +1,7 @@
-import { defineConfig } from "vite";
+import { createAppConfig } from "@commons-systems/config/vite";
 
-export default defineConfig({
+export default createAppConfig({
   resolve: {
-    dedupe: [
-      "firebase",
-      "firebase/app",
-      "firebase/analytics",
-      "firebase/auth",
-      "firebase/firestore",
-      "firebase/storage",
-      "pdfjs-dist",
-      "epubjs",
-    ],
-  },
-  test: {
-    environment: "happy-dom",
-    include: ["test/**/*.test.ts"],
+    dedupe: ["firebase/storage", "pdfjs-dist", "epubjs"],
   },
 });

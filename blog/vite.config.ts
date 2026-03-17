@@ -1,8 +1,5 @@
-import { defineConfig } from "vitest/config";
+import { createLibConfig } from "@commons-systems/config/vite";
 
-export default defineConfig({
-  test: {
-    environment: "happy-dom",
-    include: ["test/**/*.test.ts"],
-  },
+export default createLibConfig({
+  test: { environment: "happy-dom" },
 });
