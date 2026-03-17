@@ -56,6 +56,12 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             addedAt: "2026-01-17T00:00:00Z",
           },
         },
+      ],
+    },
+    {
+      name: "media",
+      testOnly: true,
+      documents: [
         {
           id: "test-image-archive",
           data: {
