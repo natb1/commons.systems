@@ -1,6 +1,7 @@
 import * as pdfjsLib from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { ContentRenderer } from "./types.js";
+import { parsePositionPage } from "./types.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
@@ -69,10 +70,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       pdfDoc = doc;
       _pageCount = pdfDoc.numPages;
 
-      const startPage = initialPosition ? parseInt(initialPosition, 10) : 1;
-      _currentPage = startPage >= 1 && startPage <= _pageCount ? startPage : 1;
+      const startPage = parsePositionPage(initialPosition, _pageCount);
+      _currentPage = startPage;
 
-      await renderPage(_currentPage);
+      await renderPage(startPage);
       if (destroyed) return;
 
       resizeObserver = new ResizeObserver(() => {
@@ -106,6 +107,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
         await renderPage(_currentPage);
       }
     },
+
 
     get pageCount() {
       return _pageCount;
