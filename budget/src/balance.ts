@@ -190,7 +190,7 @@ export function computeAllBudgetBalances(
   return result;
 }
 
-/** Return the start of the next Monday 00:00 UTC from a millisecond timestamp. */
+/** Return the start of the next Monday 00:00 UTC from a millisecond timestamp. A Monday input advances to the following Monday. */
 function endOfWeekMs(timestampMs: number): number {
   const d = new Date(timestampMs);
   const day = d.getUTCDay(); // 0=Sun, 1=Mon, ...
@@ -203,6 +203,13 @@ function endOfWeekMs(timestampMs: number): number {
   return nextMonday.getTime();
 }
 
+/**
+ * Compute average weekly income over the trailing 12-week window ending at the
+ * Monday after the latest income transaction. Income transactions are identified
+ * by categories starting with "Income". Non-primary normalized duplicates and
+ * null-timestamp transactions are excluded. Returns 0 when no qualifying income
+ * transactions exist.
+ */
 export function computeAverageWeeklyIncome(transactions: Transaction[]): number {
   const incomeTxns = transactions.filter(
     (t): t is Transaction & { timestamp: Timestamp } =>
@@ -213,7 +220,11 @@ export function computeAverageWeeklyIncome(transactions: Transaction[]): number 
 
   if (incomeTxns.length === 0) return 0;
 
-  const latestMs = Math.max(...incomeTxns.map((t) => t.timestamp.toMillis()));
+  let latestMs = -Infinity;
+  for (const t of incomeTxns) {
+    const ms = t.timestamp.toMillis();
+    if (ms > latestMs) latestMs = ms;
+  }
   const windowEnd = endOfWeekMs(latestMs);
   const windowStart = windowEnd - INCOME_WEEKS * MS_PER_WEEK;
 

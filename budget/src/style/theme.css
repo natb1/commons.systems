@@ -110,7 +110,7 @@
   border-radius: 4px;
 }
 
-/* --- Budget insights (metrics + pie chart) --- */
+/* --- Budget insights (metrics; second column reserved for #228 pie chart) --- */
 
 .budget-insights {
   display: grid;
