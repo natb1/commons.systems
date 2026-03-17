@@ -116,7 +116,7 @@ type NormalizationRule struct {
 	Pattern              string // case-insensitive substring (or regex if PatternType=="regex")
 	PatternType          string // "substring" (default) or "regex"
 	CanonicalDescription string
-	DateWindowDays       int // max days between adjacent grouped transactions (single-linkage); <= 0 means no date window (all matches in one group)
+	DateWindowDays       int // unused in grouping logic; preserved in JSON export and Firestore schemas
 	Institution          string
 	Account              string
 	Priority             int
@@ -143,49 +143,79 @@ func matchNormRule(rule NormalizationRule, re *regexp.Regexp, txn store.NormTxn)
 	return matchFields(rule.Pattern, rule.Institution, rule.Account, txn.Description, txn.Institution, txn.Account)
 }
 
+// amountDateKey groups transactions by exact amount and calendar date.
+type amountDateKey struct {
+	amount int64
+	day    string // "2006-01-02"
+}
+
 // groupByAmountAndDate partitions matched transactions by exact amount
-// then clusters by date using single-linkage within DateWindowDays.
-func groupByAmountAndDate(matches []store.NormTxn, rule NormalizationRule) [][]store.NormTxn {
+// and exact calendar date (UTC). Duplicates from overlapping statements
+// share the same amount and date; different dates are different transactions.
+func groupByAmountAndDate(matches []store.NormTxn) [][]store.NormTxn {
 	if len(matches) == 0 {
 		return nil
 	}
 
-	// Partition by exact amount — duplicates from overlapping statements
-	// always have the same amount.
-	partitions := make(map[int64][]store.NormTxn)
+	partitions := make(map[amountDateKey][]store.NormTxn)
 	for _, txn := range matches {
-		partitions[txn.Amount] = append(partitions[txn.Amount], txn)
+		key := amountDateKey{
+			amount: txn.Amount,
+			day:    txn.Timestamp.UTC().Truncate(24 * time.Hour).Format("2006-01-02"),
+		}
+		partitions[key] = append(partitions[key], txn)
 	}
 
 	var groups [][]store.NormTxn
-	window := time.Duration(rule.DateWindowDays) * 24 * time.Hour
-
 	for _, partition := range partitions {
-		// Sort by timestamp for single-linkage clustering
-		sort.Slice(partition, func(i, j int) bool {
-			return partition[i].Timestamp.Before(partition[j].Timestamp)
-		})
+		groups = append(groups, partition)
+	}
+	return groups
+}
 
-		if rule.DateWindowDays <= 0 {
-			// No date window: all matches in one group
-			groups = append(groups, partition)
-			continue
-		}
-
-		// Single-linkage: start new cluster when gap exceeds window
-		cluster := []store.NormTxn{partition[0]}
-		for i := 1; i < len(partition); i++ {
-			if partition[i].Timestamp.Sub(partition[i-1].Timestamp) <= window {
-				cluster = append(cluster, partition[i])
-			} else {
-				groups = append(groups, cluster)
-				cluster = []store.NormTxn{partition[i]}
-			}
-		}
-		groups = append(groups, cluster)
+// groupAcrossStatements takes transactions with the same amount and date and
+// returns sub-groups that span different statements. Each statement contributes
+// at most one transaction per sub-group. If a statement has N transactions and
+// another has M, min(N,M) sub-groups are formed; the remaining max(N,M)-min(N,M)
+// transactions are standalone (not duplicates).
+func groupAcrossStatements(group []store.NormTxn) [][]store.NormTxn {
+	byStmt := make(map[string][]store.NormTxn)
+	for _, txn := range group {
+		byStmt[txn.StatementID] = append(byStmt[txn.StatementID], txn)
+	}
+	if len(byStmt) < 2 {
+		return nil
+	}
+	stmtIDs := make([]string, 0, len(byStmt))
+	for id := range byStmt {
+		stmtIDs = append(stmtIDs, id)
+	}
+	sort.Strings(stmtIDs)
+	for _, txns := range byStmt {
+		sort.Slice(txns, func(i, j int) bool { return txns[i].DocID < txns[j].DocID })
 	}
 
-	return groups
+	maxCount := 0
+	for _, txns := range byStmt {
+		if len(txns) > maxCount {
+			maxCount = len(txns)
+		}
+	}
+
+	var result [][]store.NormTxn
+	for i := 0; i < maxCount; i++ {
+		var subgroup []store.NormTxn
+		for _, sid := range stmtIDs {
+			txns := byStmt[sid]
+			if i < len(txns) {
+				subgroup = append(subgroup, txns[i])
+			}
+		}
+		if len(subgroup) >= 2 {
+			result = append(result, subgroup)
+		}
+	}
+	return result
 }
 
 // selectPrimary picks the primary transaction from a group: latest statement
@@ -227,24 +257,18 @@ func autoNormalize(txns []store.NormTxn, normalized map[string]bool) []store.Nor
 		if len(group) < 2 {
 			continue
 		}
-		// Only form groups where 2+ transactions have different StatementID values
-		stmtIDs := make(map[string]bool)
-		for _, txn := range group {
-			stmtIDs[txn.StatementID] = true
-		}
-		if len(stmtIDs) < 2 {
-			continue
-		}
-
-		primary := selectPrimary(group)
-		for _, txn := range group {
-			normalized[txn.DocID] = true
-			updates = append(updates, store.NormalizationUpdate{
-				DocID:                 txn.DocID,
-				NormalizedID:          primary.DocID,
-				NormalizedPrimary:     txn.DocID == primary.DocID,
-				NormalizedDescription: primary.Description,
-			})
+		pairs := groupAcrossStatements(group)
+		for _, pair := range pairs {
+			primary := selectPrimary(pair)
+			for _, txn := range pair {
+				normalized[txn.DocID] = true
+				updates = append(updates, store.NormalizationUpdate{
+					DocID:                 txn.DocID,
+					NormalizedID:          primary.DocID,
+					NormalizedPrimary:     txn.DocID == primary.DocID,
+					NormalizedDescription: primary.Description,
+				})
+			}
 		}
 	}
 	return updates
@@ -304,20 +328,20 @@ func ApplyNormalization(txns []store.NormTxn, rules []NormalizationRule) ([]stor
 			}
 		}
 
-		groups := groupByAmountAndDate(matches, cr.rule)
+		groups := groupByAmountAndDate(matches)
 		for _, group := range groups {
-			if len(group) < 2 {
-				continue
-			}
-			primary := selectPrimary(group)
-			for _, txn := range group {
-				normalized[txn.DocID] = true
-				updates = append(updates, store.NormalizationUpdate{
-					DocID:                 txn.DocID,
-					NormalizedID:          primary.DocID,
-					NormalizedPrimary:     txn.DocID == primary.DocID,
-					NormalizedDescription: cr.rule.CanonicalDescription,
-				})
+			pairs := groupAcrossStatements(group)
+			for _, pair := range pairs {
+				primary := selectPrimary(pair)
+				for _, txn := range pair {
+					normalized[txn.DocID] = true
+					updates = append(updates, store.NormalizationUpdate{
+						DocID:                 txn.DocID,
+						NormalizedID:          primary.DocID,
+						NormalizedPrimary:     txn.DocID == primary.DocID,
+						NormalizedDescription: cr.rule.CanonicalDescription,
+					})
+				}
 			}
 		}
 	}
