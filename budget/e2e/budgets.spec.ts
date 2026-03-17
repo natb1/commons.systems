@@ -6,7 +6,7 @@ test.describe("budgets", () => {
     await expect(page.locator("main h2")).toHaveText("Budgets", { timeout: 30000 });
     await expect(page.locator("#budgets-error")).toHaveCount(0);
     await expect(page.locator("#budgets-chart")).toBeVisible();
-    await expect(page.locator("#budgets-chart svg")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("#budgets-chart svg").first()).toBeVisible({ timeout: 10000 });
   });
 
   test("seed budgets visible and read-only", async ({ page }) => {
@@ -32,12 +32,12 @@ test.describe("budgets", () => {
 
   test("SVG element present inside chart container", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("#budgets-chart svg")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("#budgets-chart svg").first()).toBeVisible({ timeout: 10000 });
   });
 
   test("date picker and chart layout with fixed axis", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("#budgets-chart svg")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("#budgets-chart svg").first()).toBeVisible({ timeout: 10000 });
     const datePicker = page.locator("#chart-date-picker");
     await expect(datePicker).toBeVisible();
     await expect(page.locator(".chart-layout")).toBeVisible();
@@ -47,8 +47,8 @@ test.describe("budgets", () => {
 
   test("chart has bars for budget periods", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("#budgets-chart svg")).toBeVisible({ timeout: 10000 });
-    const rects = page.locator("#budgets-chart svg rect");
+    await expect(page.locator("#budgets-chart svg").first()).toBeVisible({ timeout: 10000 });
+    const rects = page.locator(".chart-scroll-wrapper svg rect");
     const count = await rects.count();
     expect(count).toBeGreaterThan(0);
   });
