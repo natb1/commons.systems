@@ -1,7 +1,6 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("viewer", () => {
-  // All tests start by navigating to a PDF item's view page.
   // The seed data has 3 public items sorted by addedAt desc:
   //   1. "Republic" (plato-republic, PDF, 3 pages)
   //   2. "Phaedrus" (plato-phaedrus, PDF, 1 page)

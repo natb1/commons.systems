@@ -12,7 +12,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { mkdtempSync, rmSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
