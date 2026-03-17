@@ -238,7 +238,10 @@ service cloud.firestore {
       allow read: if request.auth != null
         // resource == null allows getDoc() on a non-existent doc (first visit)
         && (resource == null || request.auth.uid == resource.data.uid);
-      allow write: if request.auth != null && request.auth.uid == request.resource.data.uid;
+      allow write: if request.auth != null
+        && request.auth.uid == request.resource.data.uid
+        && request.resource.data.keys().hasAll(['uid', 'mediaId', 'position'])
+        && docId == request.auth.uid + "_" + request.resource.data.mediaId;
     }
 
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.

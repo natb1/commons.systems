@@ -66,9 +66,18 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
 
   const uid = user?.uid ?? null;
 
-  if (item.mediaType === "pdf") {
-    cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url, item.id, uid);
-  } else if (item.mediaType === "epub") {
-    cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), url, item.id, uid);
+  switch (item.mediaType) {
+    case "pdf":
+      cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url, item.id, uid);
+      break;
+    case "epub":
+      cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), url, item.id, uid);
+      break;
+    case "image-archive":
+      throw new Error(`Viewer does not support media type: ${item.mediaType}`);
+    default: {
+      const _exhaustive: never = item.mediaType;
+      throw new Error(`Unknown media type: ${_exhaustive}`);
+    }
   }
 }
