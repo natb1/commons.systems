@@ -47,7 +47,8 @@ export async function renderView(id: string, _user: User | null): Promise<string
     return renderViewerShell(item);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
-    console.error("Failed to load media item:", error);
+    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+    reportError(new Error("Failed to load media item", { cause: error }));
     return `
       <h2>Error</h2>
       <p id="view-error">Could not load this media item.</p>

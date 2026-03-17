@@ -327,26 +327,27 @@ describe("createEpubRenderer", () => {
   });
 
   describe("onError", () => {
-    it("registers onError on rendition displayError event", async () => {
+    it("registers onError on rendition displayerror event", async () => {
       const errorHandler = vi.fn();
       const renderer = createEpubRenderer(errorHandler);
       await renderer.init(container, "https://example.com/book.epub");
 
       const displayErrorCall = mockRendition.on.mock.calls.find(
-        (c: unknown[]) => c[0] === "displayError",
+        (c: unknown[]) => c[0] === "displayerror",
       );
       expect(displayErrorCall).toBeDefined();
       expect(displayErrorCall![1]).toBe(errorHandler);
     });
 
-    it("does not register displayError when onError is not provided", async () => {
+    it("registers reportError fallback when onError is not provided", async () => {
       const renderer = createEpubRenderer();
       await renderer.init(container, "https://example.com/book.epub");
 
       const displayErrorCall = mockRendition.on.mock.calls.find(
-        (c: unknown[]) => c[0] === "displayError",
+        (c: unknown[]) => c[0] === "displayerror",
       );
-      expect(displayErrorCall).toBeUndefined();
+      expect(displayErrorCall).toBeDefined();
+      expect(typeof displayErrorCall![1]).toBe("function");
     });
   });
 });

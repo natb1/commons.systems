@@ -18,8 +18,7 @@ export function createEpubRenderer(
 
   // epub.js next()/prev() resolve before the relocated event fires.
   // Callers await this to get updated position state. The 5s timeout
-  // prevents a permanent hang if the event never fires (e.g., at
-  // document boundaries or during errors).
+  // prevents a permanent hang if epub.js fails to emit the event.
   function waitForRelocated(): Promise<void> {
     return new Promise<void>((resolve) => {
       if (!rendition) { resolve(); return; }
@@ -46,7 +45,7 @@ export function createEpubRenderer(
 
       if (destroyed) return;
 
-      // spine.length exists at runtime in epubjs 0.3.93 but is missing from its type declarations.
+      // spine.length exists at runtime but is missing from the epubjs type declarations.
       _chapterCount = (book.spine as unknown as { length: number }).length;
       if (_chapterCount === 0) throw new Error("EPUB spine is empty — no chapters to render");
 
@@ -59,9 +58,9 @@ export function createEpubRenderer(
         _currentCfi = location.start.cfi;
       });
 
-      if (onError) {
-        rendition.on("displayError", onError);
-      }
+      rendition.on("displayerror", onError ?? ((err: unknown) => {
+        reportError(new Error("EPUB display error", { cause: err }));
+      }));
 
       await rendition.display(initialPosition ?? undefined);
       if (!initialPosition) {

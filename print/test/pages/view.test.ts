@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { DataIntegrityError } from "../../src/errors";
 
 const mockGetMediaItem = vi.fn();
@@ -61,6 +61,14 @@ const mockUser = { uid: "user-123", displayName: "Test" } as {
 describe("renderView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(globalThis.reportError).mockRestore();
   });
 
   describe("when id is empty", () => {

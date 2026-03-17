@@ -79,7 +79,9 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
         if (resizeTimer) clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
           resizeTimer = null;
-          renderPage(_currentPage).catch(onError ?? console.error);
+          renderPage(_currentPage).catch(onError ?? ((err: unknown) => {
+            reportError(new Error("PDF render failed during resize", { cause: err }));
+          }));
         }, 150);
       });
       resizeObserver.observe(container);
