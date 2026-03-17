@@ -82,6 +82,7 @@ func (c *Client) LookupGroup(ctx context.Context, email, groupName string) (Grou
 	return GroupInfo{}, fmt.Errorf("no group named %q found containing member %s", groupName, email)
 }
 
+
 // TransactionData holds the fields to write to a Firestore transaction document.
 type TransactionData struct {
 	Institution   string
@@ -160,7 +161,7 @@ func (c *Client) UpsertTransactions(ctx context.Context, group GroupInfo, txns [
 		// Build document references
 		refs := make([]*firestore.DocumentRef, len(chunk))
 		for j, txn := range chunk {
-			refs[j] = col.Doc(transactionDocID(txn.StatementID, txn.TransactionID))
+			refs[j] = col.Doc(TransactionDocID(txn.StatementID, txn.TransactionID))
 		}
 
 		// Batch read to check which documents exist
@@ -194,8 +195,8 @@ func (c *Client) UpsertTransactions(ctx context.Context, group GroupInfo, txns [
 	return result, nil
 }
 
-// dollarAmount converts int64 cents to float64 dollars for the Firestore schema.
-func dollarAmount(cents int64) float64 { return float64(cents) / 100 }
+// DollarAmount converts int64 cents to float64 dollars.
+func DollarAmount(cents int64) float64 { return float64(cents) / 100 }
 
 // allFields returns a map of all transaction document fields including user-editable defaults.
 // Amount is converted from int64 cents to float64 dollars for the Firestore schema.
@@ -226,7 +227,7 @@ func importFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 		"institution":  txn.Institution,
 		"account":      txn.Account,
 		"description":  txn.Description,
-		"amount":       dollarAmount(txn.Amount),
+		"amount":       DollarAmount(txn.Amount),
 		"timestamp":    txn.Timestamp,
 		"statementId":  txn.StatementID,
 		"groupId":      group.ID,
@@ -234,11 +235,11 @@ func importFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 	}
 }
 
-// transactionDocID generates a deterministic Firestore document ID from a
-// statement ID and transaction ID using a truncated sha256 hash (10 bytes /
-// 20 hex characters). Collision probability is negligible for the expected
-// transaction volume (< 1 million documents).
-func transactionDocID(statementID, transactionID string) string {
+// TransactionDocID generates a deterministic document ID from a statement ID
+// and transaction ID using a truncated sha256 hash (10 bytes / 20 hex characters).
+// Collision probability is negligible for the expected transaction volume
+// (< 1 million documents).
+func TransactionDocID(statementID, transactionID string) string {
 	if statementID == "" || transactionID == "" {
 		panic(fmt.Sprintf("transactionDocID: empty input (statement=%q, txn=%q)", statementID, transactionID))
 	}
@@ -343,61 +344,29 @@ type periodData struct {
 	categoryBreakdown map[string]float64
 }
 
-// txnFieldMap holds a transaction document's ID and field map for aggregation.
-type txnFieldMap struct {
-	id   string
-	data map[string]interface{}
-}
-
-// aggregateTransactionData groups transactions by budget period and computes
+// aggregateTransactions groups transactions by budget period and computes
 // total, count, and categoryBreakdown for each period. Non-primary normalized
-// transactions are excluded. Transactions with a nil or empty budget are
-// skipped (unassigned). Returns a map keyed by period ID.
-func aggregateTransactionData(txns []txnFieldMap) (map[string]*periodData, error) {
+// transactions are excluded. Transactions with an empty budget are skipped
+// (unassigned). Returns a map keyed by period ID.
+func aggregateTransactions(txns []FullTransaction) map[string]*periodData {
 	periods := make(map[string]*periodData)
 
 	for _, txn := range txns {
-		d := txn.data
-		// Skip non-primary normalized transactions from budget totals
-		if nid := d["normalizedId"]; nid != nil {
-			if primary, ok := d["normalizedPrimary"].(bool); ok && !primary {
-				continue
-			}
+		if txn.NormalizedID != "" && !txn.NormalizedPrimary {
+			continue
 		}
-		budgetID, _ := d["budget"].(string)
-		if budgetID == "" {
-			continue // unassigned transactions don't affect periods
+		if txn.Budget == "" {
+			continue
 		}
-		timestamp, ok := d["timestamp"].(time.Time)
-		if !ok {
-			return nil, fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", txn.id, d["timestamp"])
-		}
-		amount, ok := d["amount"].(float64)
-		if !ok {
-			return nil, fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", txn.id, d["amount"])
-		}
-		var reimbursement float64
-		switch v := d["reimbursement"].(type) {
-		case float64:
-			reimbursement = v
-		case int64:
-			reimbursement = float64(v)
-		default:
-			if v != nil {
-				return nil, fmt.Errorf("transaction %s: field 'reimbursement' is not a number (got %T)", txn.id, v)
-			}
-		}
-		category, _ := d["category"].(string)
 
-		net := amount * (1 - reimbursement/100)
-
-		ps := PeriodStart(timestamp)
-		key := PeriodID(budgetID, ps)
+		net := txn.Amount * (1 - txn.Reimbursement/100)
+		ps := PeriodStart(txn.Timestamp)
+		key := PeriodID(txn.Budget, ps)
 
 		pd, exists := periods[key]
 		if !exists {
 			pd = &periodData{
-				budgetID:          budgetID,
+				budgetID:          txn.Budget,
 				start:             ps,
 				categoryBreakdown: make(map[string]float64),
 			}
@@ -405,15 +374,12 @@ func aggregateTransactionData(txns []txnFieldMap) (map[string]*periodData, error
 		}
 		pd.total += net
 		pd.count++
-		// total includes all transactions; categoryBreakdown skips those with empty
-		// category. Currently ApplyCategorization enforces 100% coverage, but this
-		// guard handles legacy data that may lack category values.
-		if category != "" {
-			pd.categoryBreakdown[category] += net
+		if txn.Category != "" {
+			pd.categoryBreakdown[txn.Category] += net
 		}
 	}
 
-	return periods, nil
+	return periods
 }
 
 // RecalculatePeriods recomputes total, count, and categoryBreakdown for all
@@ -451,15 +417,41 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 		return fmt.Errorf("querying transactions for recalculation: %w", err)
 	}
 
-	// Extract transaction field maps for aggregation
-	txnMaps := make([]txnFieldMap, 0, len(txnDocs))
+	// Convert Firestore docs to FullTransaction for aggregation
+	fullTxns := make([]FullTransaction, 0, len(txnDocs))
 	for _, doc := range txnDocs {
-		txnMaps = append(txnMaps, txnFieldMap{id: doc.Ref.ID, data: doc.Data()})
+		d := doc.Data()
+		ft := FullTransaction{
+			ID:                doc.Ref.ID,
+			NormalizedPrimary: true,
+		}
+		ft.Budget, _ = d["budget"].(string)
+		ft.Category, _ = d["category"].(string)
+		if v, ok := d["amount"].(float64); ok {
+			ft.Amount = v
+		} else {
+			return fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", doc.Ref.ID, d["amount"])
+		}
+		switch v := d["reimbursement"].(type) {
+		case float64:
+			ft.Reimbursement = v
+		case int64:
+			ft.Reimbursement = float64(v)
+		}
+		if v, ok := d["timestamp"].(time.Time); ok {
+			ft.Timestamp = v
+		} else {
+			return fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", doc.Ref.ID, d["timestamp"])
+		}
+		if nid, ok := d["normalizedId"].(string); ok {
+			ft.NormalizedID = nid
+		}
+		if primary, ok := d["normalizedPrimary"].(bool); ok {
+			ft.NormalizedPrimary = primary
+		}
+		fullTxns = append(fullTxns, ft)
 	}
-	periods, err := aggregateTransactionData(txnMaps)
-	if err != nil {
-		return err
-	}
+	periods := aggregateTransactions(fullTxns)
 
 	// Collect all batch operations
 	type batchOp struct {
@@ -609,6 +601,55 @@ func (c *Client) LoadNormalizationRules(ctx context.Context, groupID string) ([]
 
 	log.Printf("loaded %d normalization rules for group %s", len(result), groupID)
 	return result, nil
+}
+
+// FullTransaction holds all fields needed for period aggregation.
+type FullTransaction struct {
+	ID                string
+	Budget            string // empty when unassigned
+	Category          string
+	Amount            float64 // dollars
+	Reimbursement     float64 // percentage (0-100)
+	Timestamp         time.Time
+	NormalizedID      string // empty when not normalized
+	NormalizedPrimary bool
+}
+
+// PeriodResult holds aggregated data for a single budget period.
+type PeriodResult struct {
+	ID                string
+	BudgetID          string
+	Start             time.Time
+	End               time.Time
+	Total             float64
+	Count             int
+	CategoryBreakdown map[string]float64
+}
+
+// ComputePeriods groups transactions by budget period and computes total, count,
+// and categoryBreakdown for each period. Non-primary normalized transactions
+// are excluded. Transactions with an empty budget are skipped (unassigned).
+func ComputePeriods(txns []FullTransaction) []PeriodResult {
+	periods := aggregateTransactions(txns)
+
+	result := make([]PeriodResult, 0, len(periods))
+	for key, pd := range periods {
+		total := math.Round(pd.total*100) / 100
+		roundedBreakdown := make(map[string]float64, len(pd.categoryBreakdown))
+		for cat, val := range pd.categoryBreakdown {
+			roundedBreakdown[cat] = math.Round(val*100) / 100
+		}
+		result = append(result, PeriodResult{
+			ID:                key,
+			BudgetID:          pd.budgetID,
+			Start:             pd.start,
+			End:               PeriodEnd(pd.start),
+			Total:             total,
+			Count:             pd.count,
+			CategoryBreakdown: roundedBreakdown,
+		})
+	}
+	return result
 }
 
 // TransactionDoc holds a transaction document's Firestore ID and field data.
