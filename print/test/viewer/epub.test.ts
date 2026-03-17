@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 interface RelocatedLocation {
   start: { index: number; cfi: string; displayed: { page: number; total: number } };
@@ -76,7 +76,7 @@ describe("createEpubRenderer", () => {
       expect(epubDiv?.tagName).toBe("DIV");
     });
 
-    it("sets currentPage to 1 after init (atStart)", async () => {
+    it("sets currentPage to 1 after init (chapter index 0)", async () => {
       const renderer = createEpubRenderer();
 
       await renderer.init(container, "https://example.com/book.epub");
@@ -254,6 +254,91 @@ describe("createEpubRenderer", () => {
       await renderer.init(container, "https://example.com/book.epub");
 
       expect(mockRendition.display).toHaveBeenCalledWith(undefined);
+    });
+  });
+
+  describe("canGoNext / canGoPrev", () => {
+    it("canGoPrev is false and canGoNext is true at start", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      expect(renderer.canGoPrev).toBe(false);
+      expect(renderer.canGoNext).toBe(true);
+    });
+
+    it("both are true in middle of book", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      const relocatedCb = mockRendition.on.mock.calls.find(
+        (c: unknown[]) => c[0] === "relocated",
+      )?.[1] as RelocatedCallback;
+      relocatedCb(makeLocation(2, 1, 3, false, false));
+
+      expect(renderer.canGoPrev).toBe(true);
+      expect(renderer.canGoNext).toBe(true);
+    });
+
+    it("canGoNext is false and canGoPrev is true at end", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      const relocatedCb = mockRendition.on.mock.calls.find(
+        (c: unknown[]) => c[0] === "relocated",
+      )?.[1] as RelocatedCallback;
+      relocatedCb(makeLocation(4, 3, 3, false, true));
+
+      expect(renderer.canGoPrev).toBe(true);
+      expect(renderer.canGoNext).toBe(false);
+    });
+  });
+
+  describe("waitForRelocated timeout", () => {
+    beforeEach(() => { vi.useFakeTimers(); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it("resolves after timeout when relocated never fires", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      // Move away from atStart so next() proceeds
+      const relocatedCb = mockRendition.on.mock.calls.find(
+        (c: unknown[]) => c[0] === "relocated",
+      )?.[1] as RelocatedCallback;
+      relocatedCb(makeLocation(1, 1, 3, false, false));
+
+      // once() captures the callback but never invokes it
+      mockRendition.once.mockImplementation(() => {});
+
+      const nextPromise = renderer.next();
+      vi.advanceTimersByTime(5000);
+      await nextPromise;
+
+      expect(mockRendition.next).toHaveBeenCalled();
+    });
+  });
+
+  describe("onError", () => {
+    it("registers onError on rendition displayError event", async () => {
+      const errorHandler = vi.fn();
+      const renderer = createEpubRenderer(errorHandler);
+      await renderer.init(container, "https://example.com/book.epub");
+
+      const displayErrorCall = mockRendition.on.mock.calls.find(
+        (c: unknown[]) => c[0] === "displayError",
+      );
+      expect(displayErrorCall).toBeDefined();
+      expect(displayErrorCall![1]).toBe(errorHandler);
+    });
+
+    it("does not register displayError when onError is not provided", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      const displayErrorCall = mockRendition.on.mock.calls.find(
+        (c: unknown[]) => c[0] === "displayError",
+      );
+      expect(displayErrorCall).toBeUndefined();
     });
   });
 });

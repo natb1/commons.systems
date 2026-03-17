@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("../../src/auth.js", () => ({
   auth: { type: "mock-auth" },
@@ -12,8 +12,13 @@ vi.mock("../../src/reading-position.js", () => ({
   saveReadingPosition: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { renderViewerShell } from "../../src/viewer/shell";
+import { renderViewerShell, initViewer } from "../../src/viewer/shell";
+import {
+  getReadingPosition,
+  saveReadingPosition,
+} from "../../src/reading-position";
 import type { MediaItem } from "../../src/types";
+import type { ContentRenderer } from "../../src/viewer/types";
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
   return {
@@ -147,5 +152,116 @@ describe("renderViewerShell", () => {
 
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
+  });
+});
+
+function makeMockRenderer(overrides: Partial<ContentRenderer> = {}): ContentRenderer {
+  return {
+    init: vi.fn().mockResolvedValue(undefined),
+    goToPage: vi.fn().mockResolvedValue(undefined),
+    next: vi.fn().mockResolvedValue(undefined),
+    prev: vi.fn().mockResolvedValue(undefined),
+    pageCount: 10,
+    currentPage: 1,
+    canGoNext: true,
+    canGoPrev: false,
+    position: "pos-1",
+    positionLabel: "Page 1 / 10",
+    destroy: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe("initViewer", () => {
+  let outlet: HTMLElement;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    outlet = document.createElement("div");
+    outlet.innerHTML = renderViewerShell(makeMediaItem());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("disables prev and enables next based on canGoPrev/canGoNext", async () => {
+    const renderer = makeMockRenderer({ canGoNext: true, canGoPrev: false });
+
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+
+    // Wait for async init to complete
+    await vi.advanceTimersByTimeAsync(0);
+
+    const prevBtn = outlet.querySelector(".viewer-prev") as HTMLButtonElement;
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    expect(prevBtn.disabled).toBe(true);
+    expect(nextBtn.disabled).toBe(false);
+  });
+
+  it("saves position to Firestore for authenticated users after navigation", async () => {
+    const renderer = makeMockRenderer({ canGoNext: true, canGoPrev: false, position: "pos-nav" });
+
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid-123");
+
+    // Wait for init (getReadingPosition resolves null, then renderer.init, then updateNav)
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Simulate navigation by clicking next
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Advance past debounce
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(saveReadingPosition).toHaveBeenCalledWith("uid-123", "m1", "pos-nav");
+  });
+
+  it("saves position to localStorage for anonymous users after navigation", async () => {
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {});
+
+    const renderer = makeMockRenderer({ canGoNext: true, canGoPrev: false, position: "pos-anon" });
+
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Simulate navigation
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Advance past debounce
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(setItemSpy).toHaveBeenCalledWith("reading-position:m1", "pos-anon");
+    setItemSpy.mockRestore();
+  });
+
+  it("cleanup calls renderer.destroy and removes keydown listener", async () => {
+    const renderer = makeMockRenderer();
+
+    const cleanup = initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    await vi.advanceTimersByTimeAsync(0);
+
+    cleanup();
+
+    expect(renderer.destroy).toHaveBeenCalled();
+  });
+
+  it("still initializes renderer when getReadingPosition rejects", async () => {
+    vi.mocked(getReadingPosition).mockRejectedValueOnce(new Error("Firestore down"));
+
+    const renderer = makeMockRenderer();
+
+    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid-123");
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(renderer.init).toHaveBeenCalled();
+    const positionEl = outlet.querySelector(".viewer-position") as HTMLElement;
+    expect(positionEl.textContent).toBe("Page 1 / 10");
   });
 });

@@ -111,6 +111,8 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     get currentPage() {
       return _currentPage;
     },
+    get canGoNext() { return _currentPage < _pageCount; },
+    get canGoPrev() { return _currentPage > 1; },
     get position() {
       return String(_currentPage);
     },

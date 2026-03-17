@@ -47,7 +47,8 @@ function localStorageKey(mediaId: string): string {
 function loadLocalPosition(mediaId: string): string | null {
   try {
     return localStorage.getItem(localStorageKey(mediaId));
-  } catch {
+  } catch (e) {
+    console.warn("Could not load reading position from localStorage:", e);
     return null;
   }
 }
@@ -55,8 +56,8 @@ function loadLocalPosition(mediaId: string): string | null {
 function saveLocalPosition(mediaId: string, position: string): void {
   try {
     localStorage.setItem(localStorageKey(mediaId), position);
-  } catch {
-    // localStorage may be unavailable (private browsing, quota)
+  } catch (e) {
+    console.warn("Could not save reading position to localStorage:", e);
   }
 }
 
@@ -101,15 +102,18 @@ export function initViewer(
   }
   toggleBtn.addEventListener("click", handleToggle);
 
-  // Position persistence (debounced)
+  // Position persistence: Firestore for authenticated users, localStorage otherwise.
+  // Debounced to avoid writes on every sub-page turn.
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastSavedPosition: string | null = null;
 
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
       const pos = renderer.position;
-      if (!pos) return;
+      if (!pos || pos === lastSavedPosition) return;
+      lastSavedPosition = pos;
       if (uid) {
         saveReadingPosition(uid, mediaId, pos).catch((err) => {
           console.error("Failed to save reading position:", err);
@@ -123,8 +127,8 @@ export function initViewer(
   // Navigation
   function updateNav() {
     position.textContent = renderer.positionLabel;
-    prevBtn.disabled = renderer.currentPage <= 1;
-    nextBtn.disabled = renderer.currentPage >= renderer.pageCount;
+    prevBtn.disabled = !renderer.canGoPrev;
+    nextBtn.disabled = !renderer.canGoNext;
     scheduleSave();
   }
 
@@ -161,10 +165,15 @@ export function initViewer(
   (async () => {
     let savedPosition: string | null = null;
     if (uid) {
-      savedPosition = await getReadingPosition(uid, mediaId);
+      try {
+        savedPosition = await getReadingPosition(uid, mediaId);
+      } catch (err) {
+        console.error("Failed to restore reading position:", err);
+      }
     } else {
       savedPosition = loadLocalPosition(mediaId);
     }
+    lastSavedPosition = savedPosition;
     await renderer.init(canvasWrap, url, savedPosition ?? undefined);
     updateNav();
   })().catch((err) => {

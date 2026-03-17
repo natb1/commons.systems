@@ -5,6 +5,8 @@ export interface ContentRenderer {
   prev(): Promise<void>;
   readonly pageCount: number;
   readonly currentPage: number;
+  readonly canGoNext: boolean;
+  readonly canGoPrev: boolean;
   readonly position: string;
   readonly positionLabel: string;
   destroy(): void;

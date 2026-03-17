@@ -16,17 +16,11 @@ export function createEpubRenderer(
   let _currentCfi = "";
   let destroyed = false;
 
-  // Suppress unused-parameter lint — onError reserved for future use by
-  // rendition error events, matching the PDF renderer's signature.
-  void onError;
-
   function waitForRelocated(): Promise<void> {
     return new Promise<void>((resolve) => {
-      if (!rendition) {
-        resolve();
-        return;
-      }
-      rendition.once("relocated", () => resolve());
+      if (!rendition) { resolve(); return; }
+      const timer = setTimeout(resolve, 5000);
+      rendition.once("relocated", () => { clearTimeout(timer); resolve(); });
     });
   }
 
@@ -48,7 +42,7 @@ export function createEpubRenderer(
 
       if (destroyed) return;
 
-      // spine.length exists at runtime but is missing from @types/epubjs
+      // spine.length exists at runtime but is missing from @types/epubjs. Re-check after upgrading.
       _chapterCount = (book.spine as unknown as { length: number }).length;
 
       rendition.on("relocated", (location: Location) => {
@@ -59,6 +53,10 @@ export function createEpubRenderer(
         _atEnd = location.atEnd;
         _currentCfi = location.start.cfi;
       });
+
+      if (onError) {
+        rendition.on("displayError", onError);
+      }
 
       await rendition.display(initialPosition ?? undefined);
       if (!initialPosition) {
@@ -89,17 +87,13 @@ export function createEpubRenderer(
     },
 
     get pageCount() {
-      // Shell uses currentPage >= pageCount to disable "next".
-      // Return 2 so only currentPage=2 (atEnd) disables it.
-      return 2;
+      return _chapterCount;
     },
     get currentPage() {
-      // Shell uses currentPage <= 1 to disable "prev".
-      // Return 1 when atStart, 2 when atEnd, otherwise in between.
-      if (_atStart) return 1;
-      if (_atEnd) return 2;
-      return 1.5; // neither boundary — both buttons enabled
+      return _chapterIndex + 1;
     },
+    get canGoNext() { return !_atEnd; },
+    get canGoPrev() { return !_atStart; },
     get position() {
       return _currentCfi;
     },
