@@ -2,7 +2,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
-  testDir: ".",
+  testDir: ".", // resolves relative to the consuming config file's directory
   use: {
     baseURL: process.env.BASE_URL || "http://localhost:5173",
   },

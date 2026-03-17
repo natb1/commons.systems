@@ -1,5 +1,8 @@
-import { mergeConfig, defineConfig } from "vite";
-import { defineConfig as defineTestConfig } from "vitest/config";
+// App configs include firebase module deduplication and happy-dom for
+// browser-environment tests. Lib configs omit both — libraries that need
+// happy-dom should pass it as an override.
+import { mergeConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 const firebaseDedupe = [
   "firebase",
@@ -19,16 +22,18 @@ const appBase = defineConfig({
   },
 });
 
-const libBase = defineTestConfig({
+const libBase = defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
   },
 });
 
+/** @param {import('vite').UserConfig} overrides */
 export function createAppConfig(overrides = {}) {
   return mergeConfig(appBase, overrides);
 }
 
+/** @param {import('vite').UserConfig} overrides */
 export function createLibConfig(overrides = {}) {
   return mergeConfig(libBase, overrides);
 }
