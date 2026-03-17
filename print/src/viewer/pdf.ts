@@ -1,6 +1,7 @@
 import * as pdfjsLib from "pdfjs-dist";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { ContentRenderer } from "./types.js";
+import { parsePositionPage } from "./types.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
@@ -69,11 +70,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       pdfDoc = doc;
       _pageCount = pdfDoc.numPages;
 
-      let startPage = 1;
-      if (initialPosition) {
-        const parsed = parseInt(initialPosition, 10);
-        if (parsed >= 1 && parsed <= _pageCount) startPage = parsed;
-      }
+      const startPage = parsePositionPage(initialPosition, _pageCount);
       _currentPage = startPage;
 
       await renderPage(startPage);

@@ -2,10 +2,11 @@ import { test, expect } from "@playwright/test";
 
 test.describe("viewer", () => {
   // All tests start by navigating to a PDF item's view page.
-  // The seed data has 3 public items sorted by addedAt desc:
+  // The seed data has 4 public items sorted by addedAt desc:
   //   1. "Republic" (plato-republic, PDF, 3 pages)
   //   2. "Phaedrus" (plato-phaedrus, PDF, 1 page)
   //   3. "Confessions..." (gutenberg-3296, EPUB)
+  //   4. "Test Image Archive" (test-image-archive, image-archive, 2 images)
   //
   // Navigate to Republic (3 pages) for navigation testing:
   //   page.goto("/view/plato-republic")

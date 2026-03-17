@@ -5,8 +5,8 @@ import { parsePositionPage } from "./types.js";
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
 
 export function createImageArchiveRenderer(onError?: (err: unknown) => void): ContentRenderer {
-  // onError accepted for factory signature consistency; this renderer has no async
-  // post-init error paths so the callback is not currently used.
+  // onError accepted for factory signature consistency with createPdfRenderer; errors in this renderer
+  // propagate via thrown exceptions rather than the callback.
   let fileData: Uint8Array[] = [];
   let objectUrlCache: (string | null)[] = [];
   let imgEl: HTMLImageElement | null = null;

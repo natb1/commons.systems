@@ -51,8 +51,8 @@ describe("createImageArchiveRenderer", () => {
 
     const img = container.querySelector("img") as HTMLImageElement;
     expect(img).not.toBeNull();
-    // First URL created corresponds to image-001.png (sorted first)
-    expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
+    // Only the first page's URL is created on init (lazy loading)
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
   it("hides canvas on init", async () => {
@@ -152,7 +152,8 @@ describe("createImageArchiveRenderer", () => {
 
     renderer.destroy();
 
-    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
+    // Only URLs that were actually created (page 1 on init, no goToPage calls) are revoked
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
     expect(container.querySelector("img")).toBeNull();
   });
 

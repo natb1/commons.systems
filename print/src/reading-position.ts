@@ -2,12 +2,6 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { db, NAMESPACE } from "./firebase.js";
 
-interface ReadingPosition {
-  uid: string;
-  mediaId: string;
-  position: string;
-}
-
 function positionDocRef(uid: string, mediaId: string) {
   const path = nsCollectionPath(NAMESPACE, "reading-position");
   return doc(db, path, `${uid}_${mediaId}`);

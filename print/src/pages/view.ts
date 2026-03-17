@@ -47,10 +47,10 @@ export async function renderView(id: string, _user: User | null): Promise<string
     return renderViewerShell(item);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
-    console.error("Failed to load media item:", error);
+    reportError(new Error("Failed to load media item", { cause: error }));
     return `
       <h2>Error</h2>
-      <p id="view-error">Could not load this media item.</p>
+      <p id="view-error">Could not load this media item. Try refreshing the page.</p>
       ${BACK_LINK}
     `;
   }

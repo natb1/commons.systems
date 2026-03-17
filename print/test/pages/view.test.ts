@@ -84,6 +84,7 @@ describe("afterRenderView", () => {
 describe("renderView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (globalThis as any).reportError = vi.fn();
   });
 
   describe("when id is empty", () => {

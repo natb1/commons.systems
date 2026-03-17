@@ -83,7 +83,7 @@ export function initViewer(
   document.body.classList.add("viewer-active");
 
   function handleRenderError(err: unknown) {
-    console.error("Render failed:", err);
+    reportError(new Error("Render failed", { cause: err }));
     position.textContent = "Render failed";
   }
 
@@ -104,10 +104,10 @@ export function initViewer(
   }
   toggleBtn.addEventListener("click", handleToggle);
 
-  // Position saved after each navigation — debounced (500ms) and deduplicated (only writes when position changes).
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSavedPosition: string | null = null;
 
+  // Persist position after each navigation — debounced (500ms) and deduplicated (only writes when position changes).
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
@@ -130,12 +130,11 @@ export function initViewer(
     position.textContent = `Page ${renderer.currentPage} / ${renderer.pageCount}`;
     prevBtn.disabled = renderer.currentPage <= 1;
     nextBtn.disabled = renderer.currentPage >= renderer.pageCount;
-    // Persist position after each navigation
     scheduleSave();
   }
 
   function handleNavError(err: unknown) {
-    console.error("Page navigation failed:", err);
+    reportError(new Error("Page navigation failed", { cause: err }));
     position.textContent = "Navigation failed";
   }
 
@@ -167,7 +166,8 @@ export function initViewer(
   }
   document.addEventListener("keydown", handleKeydown);
 
-  // Initialize renderer — load saved position (Firestore if authenticated, localStorage otherwise), then init
+  // Initialize renderer — load saved position (Firestore if authenticated, localStorage otherwise), then init.
+  // Firestore errors are non-fatal: position restore is skipped and init proceeds from page 1.
   (async () => {
     let savedPosition: string | null = null;
     if (uid) {
@@ -181,7 +181,7 @@ export function initViewer(
     }
     lastSavedPosition = savedPosition;
     await renderer.init(canvasWrap, url, savedPosition ?? undefined);
-    lastSavedPosition = renderer.position; // sync to actual start page after init
+    lastSavedPosition = renderer.position; // sync to actual start page — parsePositionPage may have clamped savedPosition to 1 if out of range
     updateNav();
   })().catch((err) => {
     reportError(new Error("Viewer initialization failed", { cause: err }));

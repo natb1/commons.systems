@@ -51,6 +51,7 @@ function makeMockRenderer(pageCount = 3) {
 }
 
 async function flushPromises(): Promise<void> {
+  // 20 iterations drain nested promise chains: getReadingPosition -> renderer.init -> updateNav each add depth.
   for (let i = 0; i < 20; i++) {
     await Promise.resolve();
   }
