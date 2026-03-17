@@ -7,6 +7,7 @@ functions/lib/
 .firebase-acceptance-*
 .firebase-qa-*
 test-results/
+firebase-debug.log
 firestore-debug.log
 ui-debug.log
 .direnv/
