@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
   "exports": {
     "./tsconfig.app.json": "./tsconfig.app.json",
     "./tsconfig.lib.json": "./tsconfig.lib.json",
