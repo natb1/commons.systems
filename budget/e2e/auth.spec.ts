@@ -3,14 +3,14 @@ import { signIn } from "@commons-systems/authutil/e2e/sign-in";
 
 test.describe("auth", () => {
   test("seed data visible when not signed in", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await expect(page.locator("#seed-data-notice")).toBeVisible();
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(9);
+    await expect(rows).toHaveCount(98);
   });
 
   test("nav shows sign-in link when not signed in", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await expect(page.locator("#sign-in")).toBeVisible();
     await expect(page.locator("#sign-out")).not.toBeVisible();
   });
@@ -18,7 +18,7 @@ test.describe("auth", () => {
   test("nav shows user display and sign-out after sign-in", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await signIn(page);
     await expect(page.locator("#sign-out")).toBeVisible();
     await expect(page.locator("#user-display")).toContainText("natb1");
@@ -27,7 +27,7 @@ test.describe("auth", () => {
   test("authorized user sees own transactions with inline editing", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await signIn(page);
     await expect(page.locator("#transactions-table")).toBeVisible();
     await expect(page.locator("#seed-data-notice")).toHaveCount(0);
@@ -44,10 +44,9 @@ test.describe("auth", () => {
   test("budget input shows autocomplete dropdown on focus", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await signIn(page);
     await expect(page.locator("#transactions-table")).toBeVisible();
-    // Wait for the authenticated re-render (2 rows vs 9 seed rows)
     await expect(page.locator("#transactions-table .txn-row")).toHaveCount(2);
     // Open a row — click the description text (not an input) to toggle
     const firstRow = page.locator("#transactions-table .txn-row").first();
@@ -64,7 +63,7 @@ test.describe("auth", () => {
   test("category input shows autocomplete dropdown on focus", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await signIn(page);
     await expect(page.locator("#transactions-table")).toBeVisible();
     const categoryInput = page.locator(".edit-category").first();
@@ -78,10 +77,9 @@ test.describe("auth", () => {
   test("expanded details show group name for authorized user", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await signIn(page);
     await expect(page.locator("#transactions-table")).toBeVisible();
-    // Wait for the authenticated re-render (2 rows vs 9 seed rows)
     await expect(page.locator("#transactions-table .txn-row")).toHaveCount(2);
     // Open the first row — click the description text (not an input)
     const firstRow = page.locator("#transactions-table .txn-row").first();
@@ -91,7 +89,7 @@ test.describe("auth", () => {
   });
 
   test("inline edit saves and persists", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await signIn(page);
     await expect(page.locator("#transactions-table")).toBeVisible();
     const noteInput = page.locator(".edit-note").first();
@@ -109,13 +107,13 @@ test.describe("auth", () => {
   });
 
   test("sign-out returns to seed data view", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await signIn(page);
     await expect(page.locator("#sign-out")).toBeVisible();
     await page.locator("#sign-out").click();
     await page.waitForSelector("#sign-in");
     await expect(page.locator("#seed-data-notice")).toBeVisible();
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(9);
+    await expect(rows).toHaveCount(98);
   });
 });

@@ -82,6 +82,34 @@
   border-radius: 4px;
 }
 
+/* --- Budget chart --- */
+
+#budgets-chart-controls { margin-bottom: 0.5rem; }
+#budgets-chart { width: 100%; margin-bottom: 1rem; }
+#budgets-chart [aria-label="tip"] text { fill: #222; }
+.chart-layout {
+  display: flex;
+  align-items: stretch;
+}
+.chart-y-axis {
+  flex-shrink: 0;
+}
+.chart-y-axis svg { display: block; height: auto; }
+.chart-scroll-wrapper {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.chart-scroll-wrapper svg { height: auto; display: block; }
+#chart-date-picker {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
 /* --- Rules table --- */
 
 #rules-table[data-active-filter="categorization"] .rule-row[data-rule-type="budget_assignment"],
