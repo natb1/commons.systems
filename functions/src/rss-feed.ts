@@ -3,7 +3,7 @@ import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { generateRssXml, type RssPost } from "@commons-systems/rssutil";
+import { generateRssXml, type RssPost } from "./rss-xml.js";
 
 interface AppConfig {
   namespace: string;
