@@ -158,7 +158,7 @@ function serializeChartTransactions(transactions: Transaction[]): SerializedChar
 
 function renderCategorySankey(transactions: Transaction[]): string {
   const chartData = serializeChartTransactions(transactions);
-  const serialized = escapeHtml(JSON.stringify(chartData));
+  const json = JSON.stringify(chartData);
   return `<div id="sankey-controls">
       <fieldset id="sankey-mode">
         <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
@@ -167,7 +167,7 @@ function renderCategorySankey(transactions: Transaction[]): string {
       <label>Weeks: <input type="number" id="sankey-weeks" value="12" min="1" max="104"></label>
       <label>Ending week: <input type="range" id="sankey-end-week"> <span id="sankey-end-label"></span></label>
     </div>
-    <div id="category-sankey" data-transactions="${serialized}"></div>`;
+    <div id="category-sankey"><script type="application/json" id="sankey-data">${json}</script></div>`;
 }
 
 function compareByTimestampDesc(a: Transaction, b: Transaction): number {

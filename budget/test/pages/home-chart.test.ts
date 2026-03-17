@@ -37,6 +37,7 @@ function txn(overrides: Partial<SerializedChartTransaction> = {}): SerializedCha
 
 function makeContainer(txns?: SerializedChartTransaction[]): HTMLElement {
   const controlsDiv = document.createElement("div");
+  controlsDiv.id = "sankey-controls";
   controlsDiv.innerHTML = `
     <input id="sankey-weeks" type="number" value="12">
     <input id="sankey-end-week" type="range">
@@ -47,7 +48,11 @@ function makeContainer(txns?: SerializedChartTransaction[]): HTMLElement {
   const container = document.createElement("div");
   container.style.setProperty("--fg", "#e0e0e0");
   if (txns !== undefined) {
-    container.dataset.transactions = JSON.stringify(txns);
+    const script = document.createElement("script");
+    script.type = "application/json";
+    script.id = "sankey-data";
+    script.textContent = JSON.stringify(txns);
+    container.appendChild(script);
   }
   document.body.appendChild(container);
   Object.defineProperty(container, "clientWidth", { value: 640 });
@@ -223,6 +228,11 @@ describe("filterByWeeks", () => {
     const result = filterByWeeks([txn()], [], 4, 0);
     expect(result).toEqual([]);
   });
+
+  it("out-of-bounds endWeekIdx throws RangeError", () => {
+    expect(() => filterByWeeks([txn()], weeks, 1, -1)).toThrow(RangeError);
+    expect(() => filterByWeeks([txn()], weeks, 1, 3)).toThrow(RangeError);
+  });
 });
 
 describe("distinctWeeks", () => {
@@ -264,7 +274,7 @@ describe("hydrateCategorySankey", () => {
     document.body.innerHTML = "";
   });
 
-  it("SVG element is created inside container when data-transactions attr present", () => {
+  it("SVG element is created inside container when script tag present", () => {
     const container = makeContainer([
       txn({ category: "Food", amount: 50 }),
       txn({ category: "Transport", amount: 30 }),
@@ -280,11 +290,9 @@ describe("hydrateCategorySankey", () => {
     expect(container.querySelector("svg")).toBeNull();
   });
 
-  it("no data-transactions attr — function returns without modifying container", () => {
+  it("missing script tag throws error", () => {
     const container = makeContainer();
-    const originalHTML = container.innerHTML;
-    hydrateCategorySankey(container);
-    expect(container.innerHTML).toBe(originalHTML);
+    expect(() => hydrateCategorySankey(container)).toThrow("missing transaction data");
   });
 
   it("sankey nodes and links are rendered", () => {

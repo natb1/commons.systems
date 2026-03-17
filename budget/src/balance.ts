@@ -1,7 +1,7 @@
 import type { Timestamp } from "firebase/firestore";
 import type { Budget, BudgetId, BudgetPeriod, Rollover, Transaction, TransactionId } from "./firestore.js";
 
-const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 const INCOME_WEEKS = 12;
 
 export function computeNetAmount(amount: number, reimbursement: number): number {

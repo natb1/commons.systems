@@ -123,6 +123,7 @@ function transition(next: AppState): void {
 function hydrateTable(
   selector: string,
   hydrate: (el: HTMLElement) => void,
+  errorLabel?: string,
 ): void {
   const table = app.querySelector(selector) as HTMLElement | null;
   if (!table || table.dataset.hydrated) return;
@@ -144,13 +145,15 @@ function hydrateTable(
     const msg = document.createElement("p");
     msg.textContent = error instanceof DataIntegrityError
       ? "A data error occurred. Please contact support."
-      : "Editing is temporarily unavailable. Try refreshing the page.";
+      : errorLabel
+        ? `${errorLabel} is temporarily unavailable. Try refreshing the page.`
+        : "Editing is temporarily unavailable. Try refreshing the page.";
     table.appendChild(msg);
   }
 }
 
 const observer = new MutationObserver(() => {
-  hydrateTable("#category-sankey", hydrateCategorySankey);
+  hydrateTable("#category-sankey", hydrateCategorySankey, "Chart rendering");
   hydrateTable("#transactions-table", hydrateTransactionTable);
   hydrateTable("#budgets-chart", hydrateBudgetChart);
   hydrateTable("#budgets-table", hydrateBudgetTable);

@@ -394,13 +394,13 @@ describe("renderHome", () => {
     expect(html).not.toContain("data-budget-periods");
   });
 
-  it("renders #category-sankey container with data-transactions attr", async () => {
+  it("renders #category-sankey container with script tag for chart data", async () => {
     mockGetTransactions.mockResolvedValue([
       txn({ category: "Food:Groceries", amount: 52.30, reimbursement: 0 }),
     ]);
     const html = await renderHome({ user: null, group: null, groupError: false });
     expect(html).toContain('id="category-sankey"');
-    expect(html).toContain("data-transactions");
+    expect(html).toContain('<script type="application/json" id="sankey-data">');
     expect(html).toContain("Food:Groceries");
   });
 
@@ -425,12 +425,10 @@ describe("renderHome", () => {
       }),
     ]);
     const html = await renderHome({ user: null, group: null, groupError: false });
-    // Parse the data-transactions JSON to verify filtering
-    const match = html.match(/data-transactions="([^"]+)"/);
+    // Parse the JSON from the script tag to verify filtering
+    const match = html.match(/<script type="application\/json" id="sankey-data">([\s\S]*?)<\/script>/);
     expect(match).not.toBeNull();
-    const decoded = match![1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-    const chartTxns = JSON.parse(decoded);
-    // Only the primary should be included
+    const chartTxns = JSON.parse(match![1]);
     expect(chartTxns).toHaveLength(1);
     expect(chartTxns[0].amount).toBe(50);
   });
