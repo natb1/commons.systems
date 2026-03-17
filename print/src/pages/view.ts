@@ -5,6 +5,7 @@ import { getMediaDownloadUrl } from "../storage.js";
 import type { MediaItem } from "../types.js";
 import { renderViewerShell, initViewer } from "../viewer/shell.js";
 import { createPdfRenderer } from "../viewer/pdf.js";
+import { createEpubRenderer } from "../viewer/epub.js";
 
 const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
@@ -46,7 +47,8 @@ export async function renderView(id: string, _user: User | null): Promise<string
     return renderViewerShell(item);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
-    console.error("Failed to load media item:", error);
+    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+    reportError(new Error("Failed to load media item", { cause: error }));
     return `
       <h2>Error</h2>
       <p id="view-error">Could not load this media item.</p>
@@ -55,7 +57,7 @@ export async function renderView(id: string, _user: User | null): Promise<string
   }
 }
 
-export function afterRenderView(outlet: HTMLElement): void {
+export function afterRenderView(outlet: HTMLElement, user: User | null): void {
   if (!pendingItem || !pendingUrl) return;
 
   const item = pendingItem;
@@ -63,7 +65,20 @@ export function afterRenderView(outlet: HTMLElement): void {
   pendingItem = null;
   pendingUrl = null;
 
-  if (item.mediaType !== "pdf") return;
+  const uid = user?.uid ?? null;
 
-  cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url);
+  switch (item.mediaType) {
+    case "pdf":
+      cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url, item.id, uid);
+      break;
+    case "epub":
+      cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), url, item.id, uid);
+      break;
+    case "image-archive":
+      throw new Error(`Viewer does not support media type: ${item.mediaType}`);
+    default: {
+      const _exhaustive: never = item.mediaType;
+      throw new Error(`Unknown media type: ${_exhaustive}`);
+    }
+  }
 }

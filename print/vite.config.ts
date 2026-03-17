@@ -10,6 +10,7 @@ export default defineConfig({
       "firebase/firestore",
       "firebase/storage",
       "pdfjs-dist",
+      "epubjs",
     ],
   },
   test: {

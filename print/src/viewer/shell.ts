@@ -1,6 +1,10 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { MediaItem } from "../types.js";
 import type { ContentRenderer } from "./types.js";
+import {
+  getReadingPosition,
+  saveReadingPosition,
+} from "../reading-position.js";
 
 function renderTags(tags: Record<string, string>): string {
   const entries = Object.entries(tags);
@@ -14,9 +18,7 @@ export function renderViewerShell(item: MediaItem): string {
   return `
     <div class="viewer" data-orientation="landscape">
       <div class="viewer-content">
-        <div class="viewer-canvas-wrap">
-          <canvas id="viewer-canvas"></canvas>
-        </div>
+        <div class="viewer-canvas-wrap"></div>
       </div>
       <button class="viewer-panel-toggle" aria-expanded="true" aria-label="Toggle panel">&#9776;</button>
       <aside class="viewer-panel">
@@ -38,10 +40,35 @@ export function renderViewerShell(item: MediaItem): string {
   `;
 }
 
+function localStorageKey(mediaId: string): string {
+  return `reading-position:${mediaId}`;
+}
+
+function loadLocalPosition(mediaId: string): string | null {
+  try {
+    return localStorage.getItem(localStorageKey(mediaId));
+  } catch (e) {
+    if (e instanceof TypeError || e instanceof ReferenceError) throw e;
+    reportError(new Error("Could not load reading position from localStorage", { cause: e }));
+    return null;
+  }
+}
+
+function saveLocalPosition(mediaId: string, position: string): void {
+  try {
+    localStorage.setItem(localStorageKey(mediaId), position);
+  } catch (e) {
+    if (e instanceof TypeError || e instanceof ReferenceError) throw e;
+    reportError(new Error("Could not save reading position to localStorage", { cause: e }));
+  }
+}
+
 export function initViewer(
   outlet: HTMLElement,
   createRenderer: (onError: (err: unknown) => void) => ContentRenderer,
   url: string,
+  mediaId: string,
+  uid: string | null,
 ): () => void {
   const viewer = outlet.querySelector(".viewer") as HTMLElement;
   if (!viewer) throw new Error(".viewer element not found");
@@ -56,7 +83,7 @@ export function initViewer(
   document.body.classList.add("viewer-active");
 
   function handleRenderError(err: unknown) {
-    console.error("Render failed:", err);
+    reportError(new Error("Render failed", { cause: err }));
     position.textContent = "Render failed";
   }
 
@@ -77,30 +104,50 @@ export function initViewer(
   }
   toggleBtn.addEventListener("click", handleToggle);
 
+  // Position persistence: Firestore for authenticated users, localStorage otherwise.
+  // Debounced to avoid writes on every sub-page turn.
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastSavedPosition: string | null = null;
+
+  function scheduleSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      const pos = renderer.position;
+      if (!pos || pos === lastSavedPosition) return;
+      lastSavedPosition = pos;
+      if (uid) {
+        saveReadingPosition(uid, mediaId, pos).catch((err) => {
+          if (err instanceof TypeError || err instanceof ReferenceError) throw err;
+          reportError(new Error("Failed to save reading position", { cause: err }));
+        });
+      } else {
+        saveLocalPosition(mediaId, pos);
+      }
+    }, 500);
+  }
+
   // Navigation
   function updateNav() {
-    position.textContent = `Page ${renderer.currentPage} / ${renderer.pageCount}`;
-    prevBtn.disabled = renderer.currentPage <= 1;
-    nextBtn.disabled = renderer.currentPage >= renderer.pageCount;
+    position.textContent = renderer.positionLabel;
+    prevBtn.disabled = !renderer.canGoPrev;
+    nextBtn.disabled = !renderer.canGoNext;
+    scheduleSave();
   }
 
   function handleNavError(err: unknown) {
-    console.error("Page navigation failed:", err);
+    reportError(new Error("Page navigation failed", { cause: err }));
     position.textContent = "Navigation failed";
   }
 
   async function goPrev() {
-    if (renderer.currentPage > 1) {
-      await renderer.goToPage(renderer.currentPage - 1);
-      updateNav();
-    }
+    await renderer.prev();
+    updateNav();
   }
 
   async function goNext() {
-    if (renderer.currentPage < renderer.pageCount) {
-      await renderer.goToPage(renderer.currentPage + 1);
-      updateNav();
-    }
+    await renderer.next();
+    updateNav();
   }
 
   prevBtn.addEventListener("click", () => {
@@ -117,18 +164,30 @@ export function initViewer(
   }
   document.addEventListener("keydown", handleKeydown);
 
-  // Initialize renderer
-  renderer
-    .init(canvasWrap, url)
-    .then(() => {
-      updateNav();
-    })
-    .catch((err) => {
-      console.error("Failed to load document:", err);
-      position.textContent = "Failed to load";
-    });
+  // Initialize renderer — load saved position, then init
+  (async () => {
+    let savedPosition: string | null = null;
+    if (uid) {
+      try {
+        savedPosition = await getReadingPosition(uid, mediaId);
+      } catch (err) {
+        if (err instanceof TypeError || err instanceof ReferenceError) throw err;
+        reportError(new Error("Failed to restore reading position", { cause: err }));
+      }
+    } else {
+      savedPosition = loadLocalPosition(mediaId);
+    }
+    lastSavedPosition = savedPosition;
+    await renderer.init(canvasWrap, url, savedPosition ?? undefined);
+    updateNav();
+  })().catch((err) => {
+    if (err instanceof TypeError || err instanceof ReferenceError) throw err;
+    reportError(new Error("Failed to load document", { cause: err }));
+    position.textContent = "Failed to load";
+  });
 
   return () => {
+    if (saveTimer) clearTimeout(saveTimer);
     document.body.classList.remove("viewer-active");
     orientationQuery.removeEventListener("change", updateOrientation);
     toggleBtn.removeEventListener("click", handleToggle);
