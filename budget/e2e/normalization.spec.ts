@@ -13,7 +13,7 @@ test.describe("normalization", () => {
   test("normalized transactions render as single row with canonical description", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
 
     // Exactly one .normalized-group row should appear for the seed data
@@ -33,7 +33,7 @@ test.describe("normalization", () => {
   test("expanding normalized row reveals original transactions", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
 
     const group = page.locator("#transactions-table .normalized-group").first();
@@ -60,7 +60,7 @@ test.describe("normalization", () => {
   test("budget balance reflects only primary transaction amount", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
 
     const group = page.locator("#transactions-table .normalized-group").first();
@@ -91,7 +91,7 @@ test.describe("normalization", () => {
   test("ungrouped transactions display normally without normalized-group class", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
 
     // Coffee Shop is an ungrouped seed transaction (normalizedId is null)

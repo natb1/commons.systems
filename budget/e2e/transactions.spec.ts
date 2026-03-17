@@ -2,30 +2,30 @@ import { test, expect } from "@playwright/test";
 
 test.describe("transactions", () => {
   test("Firestore connectivity @smoke", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await expect(page.locator("main h2")).toHaveText("Transactions", { timeout: 30000 });
     await expect(page.locator("#transactions-error")).toHaveCount(0);
   });
 
   test("seed transactions visible sorted by date descending", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(9);
-    await expect(rows.nth(0)).toContainText("Airline Ticket");
-    await expect(rows.nth(1)).toContainText("Travel Guide");
-    await expect(rows.nth(8)).toContainText("Restaurant");
+    await expect(rows).toHaveCount(98);
+    await expect(rows.nth(0)).toContainText("Travel Bookshop");
+    await expect(rows.nth(1)).toContainText("Electric Company");
+    await expect(rows.nth(97)).toContainText("Restaurant");
   });
 
   test("seed transactions are read-only", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
     const inputs = page.locator("#transactions-table .txn-summary-content input");
     await expect(inputs).toHaveCount(0);
   });
 
   test("expanded row shows date and statement link", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
     const firstRow = page.locator("#transactions-table .txn-row").first();
     await firstRow.locator("summary").click();
@@ -37,7 +37,7 @@ test.describe("transactions", () => {
   });
 
   test("expanded row shows budget balance for budgeted transaction", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
     // Coffee Shop is a budgeted transaction in the food budget with a matching period
     const coffeeRow = page.locator("#transactions-table .txn-row", { hasText: "Coffee Shop" });
