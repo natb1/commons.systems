@@ -113,8 +113,9 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   const periods = deserializePeriods(periodsRaw);
   let chartResult: ChartResult = { weekLabels: [], periodStartMs: [] };
 
-  const pieEl = document.getElementById("budgets-pie");
-  if (!pieEl) throw new DataIntegrityError("budgets-pie container not found in page markup");
+  const pieElOrNull = document.getElementById("budgets-pie");
+  if (!pieElOrNull) throw new DataIntegrityError("budgets-pie container not found in page markup");
+  const pieEl: HTMLElement = pieElOrNull;
 
   function render(): void {
     chartResult = renderBudgetChart(container, { budgets, periods });
