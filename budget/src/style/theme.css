@@ -110,6 +110,51 @@
   border-radius: 4px;
 }
 
+/* --- Budget insights (metrics; second column reserved for #228 pie chart) --- */
+
+.budget-insights {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 768px) {
+  .budget-insights {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.budget-metrics dl {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 0;
+}
+
+.metric {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1rem;
+  flex: 1 1 0;
+  min-width: 10rem;
+}
+
+.metric dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+  margin-bottom: 0.25rem;
+}
+
+.metric dd {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin: 0;
+}
+
 /* --- Rules table --- */
 
 #rules-table[data-active-filter="categorization"] .rule-row[data-rule-type="budget_assignment"],
