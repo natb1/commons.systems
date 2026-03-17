@@ -27,6 +27,10 @@ vi.mock("../../src/viewer/pdf.js", () => ({
   createPdfRenderer: vi.fn().mockReturnValue({}),
 }));
 
+vi.mock("../../src/viewer/image-archive.js", () => ({
+  createImageArchiveRenderer: vi.fn().mockReturnValue({}),
+}));
+
 vi.mock("../../src/viewer/epub.js", () => ({
   createEpubRenderer: vi.fn().mockReturnValue({}),
 }));
@@ -35,6 +39,7 @@ import { renderView, afterRenderView, cleanupView } from "../../src/pages/view";
 import type { MediaItem } from "../../src/types";
 import { getMediaDownloadUrl } from "../../src/storage";
 import { renderViewerShell, initViewer } from "../../src/viewer/shell";
+import { createImageArchiveRenderer } from "../../src/viewer/image-archive";
 import { createEpubRenderer } from "../../src/viewer/epub";
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
@@ -57,6 +62,30 @@ const mockUser = { uid: "user-123", displayName: "Test" } as {
   uid: string;
   displayName: string;
 };
+
+describe("afterRenderView", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cleanupView();
+  });
+
+  it("initializes image archive renderer when mediaType is image-archive", async () => {
+    const item = makeMediaItem({ mediaType: "image-archive", storagePath: "media/archive.cbz" });
+    mockGetMediaItem.mockResolvedValue(item);
+
+    const outlet = document.createElement("div");
+    outlet.innerHTML = '<div class="viewer"></div>';
+
+    await renderView("item-1", null);
+    afterRenderView(outlet, null);
+
+    expect(initViewer).toHaveBeenCalled();
+    // Verify the factory passed to initViewer creates an image archive renderer
+    const factory = vi.mocked(initViewer).mock.calls[0][1];
+    factory(vi.fn());
+    expect(createImageArchiveRenderer).toHaveBeenCalled();
+  });
+});
 
 describe("renderView", () => {
   beforeEach(() => {

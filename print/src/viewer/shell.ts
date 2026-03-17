@@ -48,7 +48,6 @@ function loadLocalPosition(mediaId: string): string | null {
   try {
     return localStorage.getItem(localStorageKey(mediaId));
   } catch (e) {
-    if (e instanceof TypeError || e instanceof ReferenceError) throw e;
     reportError(new Error("Could not load reading position from localStorage", { cause: e }));
     return null;
   }
@@ -58,7 +57,6 @@ function saveLocalPosition(mediaId: string, position: string): void {
   try {
     localStorage.setItem(localStorageKey(mediaId), position);
   } catch (e) {
-    if (e instanceof TypeError || e instanceof ReferenceError) throw e;
     reportError(new Error("Could not save reading position to localStorage", { cause: e }));
   }
 }
@@ -84,7 +82,9 @@ export function initViewer(
 
   function handleRenderError(err: unknown) {
     reportError(new Error("Render failed", { cause: err }));
-    position.textContent = "Render failed";
+    position.textContent = "Render failed. Try refreshing the page.";
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
   }
 
   const renderer = createRenderer(handleRenderError);
@@ -108,7 +108,11 @@ export function initViewer(
   // Debounced to avoid writes on every sub-page turn.
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSavedPosition: string | null = null;
+  // Set true when Firestore read fails at init; prevents overwriting unknown saved state on write.
+  let firestoreReadFailed = false;
 
+  // Persist position after each navigation — debounced (500ms), deduplicated (skips matching position).
+  // Skips Firestore writes if the initial read failed.
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
@@ -116,9 +120,8 @@ export function initViewer(
       const pos = renderer.position;
       if (!pos || pos === lastSavedPosition) return;
       lastSavedPosition = pos;
-      if (uid) {
+      if (uid && !firestoreReadFailed) {
         saveReadingPosition(uid, mediaId, pos).catch((err) => {
-          if (err instanceof TypeError || err instanceof ReferenceError) throw err;
           reportError(new Error("Failed to save reading position", { cause: err }));
         });
       } else {
@@ -137,7 +140,7 @@ export function initViewer(
 
   function handleNavError(err: unknown) {
     reportError(new Error("Page navigation failed", { cause: err }));
-    position.textContent = "Navigation failed";
+    position.textContent = "Navigation failed. Try refreshing the page.";
   }
 
   async function goPrev() {
@@ -164,25 +167,28 @@ export function initViewer(
   }
   document.addEventListener("keydown", handleKeydown);
 
-  // Initialize renderer — load saved position, then init
+  // Initialize renderer — load saved position (Firestore if authenticated, localStorage otherwise), then init.
+  // Position-load errors are non-fatal: if Firestore or localStorage fails, init proceeds from page 1.
   (async () => {
     let savedPosition: string | null = null;
     if (uid) {
       try {
         savedPosition = await getReadingPosition(uid, mediaId);
       } catch (err) {
-        if (err instanceof TypeError || err instanceof ReferenceError) throw err;
         reportError(new Error("Failed to restore reading position", { cause: err }));
+        firestoreReadFailed = true;
       }
     } else {
       savedPosition = loadLocalPosition(mediaId);
     }
     lastSavedPosition = savedPosition;
     await renderer.init(canvasWrap, url, savedPosition ?? undefined);
+    // Sync to actual start page: parsePositionPage may have clamped savedPosition to 1 if out of range.
+    // Without this sync, lastSavedPosition would differ from renderer.position, triggering a spurious write on first navigation.
+    lastSavedPosition = renderer.position;
     updateNav();
   })().catch((err) => {
-    if (err instanceof TypeError || err instanceof ReferenceError) throw err;
-    reportError(new Error("Failed to load document", { cause: err }));
+    reportError(new Error("Viewer initialization failed", { cause: err }));
     position.textContent = "Failed to load";
   });
 

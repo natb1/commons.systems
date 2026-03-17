@@ -15,7 +15,11 @@ vi.mock("../src/firebase.js", () => ({
   NAMESPACE: "print/test",
 }));
 
-import { getReadingPosition, saveReadingPosition } from "../src/reading-position";
+vi.mock("@commons-systems/firestoreutil/namespace", () => ({
+  nsCollectionPath: vi.fn(() => "print/test/reading-position"),
+}));
+
+import { getReadingPosition, saveReadingPosition } from "../src/reading-position.js";
 
 describe("reading-position", () => {
   beforeEach(() => {
@@ -50,16 +54,38 @@ describe("reading-position", () => {
 
       expect(result).toBeNull();
     });
+
+    it("returns null when position field missing", async () => {
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ uid: "user-1", mediaId: "media-1" }),
+      });
+
+      const result = await getReadingPosition("user-1", "media-1");
+
+      expect(result).toBeNull();
+    });
+
+    it("returns null when position field is non-string (e.g. legacy numeric value)", async () => {
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({ uid: "user-1", mediaId: "media-1", position: 5 }),
+      });
+
+      const result = await getReadingPosition("user-1", "media-1");
+
+      expect(result).toBeNull();
+    });
   });
 
   describe("saveReadingPosition", () => {
     it("writes uid, mediaId, and position to Firestore", async () => {
-      await saveReadingPosition("user-1", "media-1", "epubcfi(/6/4)");
+      await saveReadingPosition("user-1", "media-1", "7");
 
       expect(mockSetDoc).toHaveBeenCalledWith("mock-doc-ref", {
         uid: "user-1",
         mediaId: "media-1",
-        position: "epubcfi(/6/4)",
+        position: "7",
       });
       expect(mockDoc).toHaveBeenCalledWith(
         { type: "mock-firestore" },

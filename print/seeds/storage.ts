@@ -1,4 +1,4 @@
-import { deflateRawSync } from "node:zlib";
+import { deflateRawSync, deflateSync } from "node:zlib";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -210,6 +210,36 @@ function crc32(data: Buffer): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
+function u32be(n: number): Buffer {
+  const buf = Buffer.alloc(4);
+  buf.writeUInt32BE(n, 0);
+  return buf;
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const typeBytes = Buffer.from(type, "ascii");
+  const crcInput = Buffer.concat([typeBytes, data]);
+  return Buffer.concat([u32be(data.length), typeBytes, data, u32be(crc32(crcInput))]);
+}
+
+function makePng1x1(): Buffer {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdrData = Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
+  const ihdr = pngChunk("IHDR", ihdrData);
+  // PNG IDAT scanline: [filter=0, R=255, G=255, B=255] — 1x1 white pixel
+  const idat = pngChunk("IDAT", deflateSync(Buffer.from([0, 255, 255, 255])));
+  const iend = pngChunk("IEND", Buffer.alloc(0));
+  return Buffer.concat([sig, ihdr, idat, iend]);
+}
+
+function makeZip(): Buffer {
+  const png = makePng1x1();
+  return buildZip([
+    { name: "image-001.png", data: png },
+    { name: "image-002.png", data: png },
+  ]);
+}
+
 const publicMeta = { publicDomain: "true" };
 const testPrivateMeta = { publicDomain: "false", member_0: "test@example.com" };
 
@@ -233,6 +263,11 @@ const storageSeed: StorageSeedItem[] = [
     path: "print/prod/media/test-private-item.pdf",
     content: makePdf(1),
     metadata: testPrivateMeta,
+  },
+  {
+    path: "print/prod/media/test-image-archive.cbz",
+    content: makeZip(),
+    metadata: publicMeta,
   },
 ];
 

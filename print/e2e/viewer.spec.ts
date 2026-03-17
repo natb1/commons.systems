@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("viewer", () => {
-  // The seed data has 3 public items sorted by addedAt desc:
+  // The seed data has 4 public items sorted by addedAt desc:
   //   1. "Republic" (plato-republic, PDF, 3 pages)
   //   2. "Phaedrus" (plato-phaedrus, PDF, 1 page)
   //   3. "Confessions..." (gutenberg-3296, EPUB)
+  //   4. "Test Image Archive" (test-image-archive, image-archive, 2 images)
   //
   // Navigate to Republic (3 pages) for navigation testing:
   //   page.goto("/view/plato-republic")
@@ -87,6 +88,52 @@ test.describe("viewer", () => {
       "pdf",
     );
     await expect(page.locator(".viewer-pd")).toContainText("Public Domain");
+  });
+
+  test("viewer loads for image archive item", async ({ page }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-canvas-wrap img")).toBeVisible();
+    await expect(page.locator(".viewer-position")).toContainText("1 / 2");
+  });
+
+  test("image navigation works", async ({ page }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 2", {
+      timeout: 15000,
+    });
+
+    const prev = page.locator(".viewer-prev");
+    const next = page.locator(".viewer-next");
+
+    // Image 1: prev disabled, next enabled
+    await expect(prev).toBeDisabled();
+    await expect(next).toBeEnabled();
+
+    // Go to image 2
+    await next.click();
+    await expect(page.locator(".viewer-position")).toContainText("2 / 2");
+    await expect(prev).toBeEnabled();
+    await expect(next).toBeDisabled();
+
+    // Go back to image 1
+    await prev.click();
+    await expect(page.locator(".viewer-position")).toContainText("1 / 2");
+    await expect(prev).toBeDisabled();
+    await expect(next).toBeEnabled();
+  });
+
+  test("keyboard navigation works for image archive", async ({ page }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 2", {
+      timeout: 15000,
+    });
+
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator(".viewer-position")).toContainText("2 / 2");
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 2");
   });
 
   test("desktop shows landscape orientation", async ({ page }, testInfo) => {

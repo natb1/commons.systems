@@ -61,6 +61,20 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
           },
         },
         {
+          id: "test-image-archive",
+          data: {
+            title: "Test Image Archive",
+            mediaType: "image-archive",
+            tags: { source: "test" },
+            publicDomain: true,
+            sourceNotes: "Test CBZ archive for emulator testing",
+            storagePath: "media/test-image-archive.cbz",
+            groupId: null,
+            memberEmails: [],
+            addedAt: "2026-01-19T00:00:00Z",
+          },
+        },
+        {
           id: "test-private-item",
           data: {
             title: "Test Private Item",

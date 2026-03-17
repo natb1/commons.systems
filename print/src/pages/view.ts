@@ -6,6 +6,7 @@ import type { MediaItem } from "../types.js";
 import { renderViewerShell, initViewer } from "../viewer/shell.js";
 import { createPdfRenderer } from "../viewer/pdf.js";
 import { createEpubRenderer } from "../viewer/epub.js";
+import { createImageArchiveRenderer } from "../viewer/image-archive.js";
 
 const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
@@ -47,11 +48,10 @@ export async function renderView(id: string, _user: User | null): Promise<string
     return renderViewerShell(item);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
-    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     reportError(new Error("Failed to load media item", { cause: error }));
     return `
       <h2>Error</h2>
-      <p id="view-error">Could not load this media item.</p>
+      <p id="view-error">Could not load this media item. Try refreshing the page.</p>
       ${BACK_LINK}
     `;
   }
@@ -75,10 +75,13 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
       cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), url, item.id, uid);
       break;
     case "image-archive":
-      throw new Error(`Viewer does not support media type: ${item.mediaType}`);
+      cleanupFn = initViewer(outlet, (onError) => createImageArchiveRenderer(onError), url, item.id, uid);
+      break;
     default: {
       const _exhaustive: never = item.mediaType;
-      throw new Error(`Unknown media type: ${_exhaustive}`);
+      reportError(new Error(`Unsupported mediaType in viewer: ${_exhaustive}`));
+      const pos = outlet.querySelector(".viewer-position");
+      if (pos) pos.textContent = `Unsupported media type: ${_exhaustive}`;
     }
   }
 }

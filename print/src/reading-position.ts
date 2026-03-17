@@ -19,7 +19,9 @@ export async function getReadingPosition(
 ): Promise<string | null> {
   const snap = await getDoc(positionDocRef(uid, mediaId));
   if (!snap.exists()) return null;
-  return (snap.data() as ReadingPosition).position;
+  const data = snap.data();
+  const position = typeof data?.position === "string" ? data.position : null;
+  return position;
 }
 
 export async function saveReadingPosition(
@@ -27,5 +29,5 @@ export async function saveReadingPosition(
   mediaId: string,
   position: string,
 ): Promise<void> {
-  await setDoc(positionDocRef(uid, mediaId), { uid, mediaId, position });
+  await setDoc(positionDocRef(uid, mediaId), { uid, mediaId, position } satisfies ReadingPosition);
 }
