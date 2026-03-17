@@ -86,6 +86,19 @@ func FormatTimestamp(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
 
+// ReadFile reads and unmarshals a JSON file into an Output struct.
+func ReadFile(path string) (Output, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Output{}, fmt.Errorf("reading %s: %w", path, err)
+	}
+	var out Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		return Output{}, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	return out, nil
+}
+
 // WriteFile marshals data as indented JSON and writes it atomically to path
 // via a temp file and rename.
 func WriteFile(path string, data Output) error {

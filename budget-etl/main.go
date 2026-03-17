@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,19 +22,37 @@ import (
 )
 
 func main() {
-	dir := flag.String("dir", "", "Path to statement directory (required)")
-	group := flag.String("group", "", "Group name to upload transactions for (required)")
+	dir := flag.String("dir", "", "Path to statement directory")
+	group := flag.String("group", "", "Group name to upload transactions for")
 	env := flag.String("env", "prod", "Firestore environment namespace")
 	dryRun := flag.Bool("dry-run", false, "Parse and print summary without writing to Firestore")
 	projectID := flag.String("project", "", "Firebase project ID (default: inferred from environment)")
 	outputPath := flag.String("output", "", "Write JSON file instead of Firestore")
 	firestoreFlag := flag.Bool("firestore", false, "Write to Firestore (required when --output is not set)")
+	inputPath := flag.String("input", "", "Read rules/budgets/transactions from existing JSON file")
 
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: budget-etl --dir <path> --group <name> [--output <path> | --firestore] [--env <env>] [--dry-run]")
+		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--env <env>] [--dry-run]")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if *inputPath != "" && *firestoreFlag {
+		fmt.Fprintln(os.Stderr, "Error: --input and --firestore are mutually exclusive")
+		os.Exit(1)
+	}
+	if *inputPath != "" && *outputPath == "" {
+		fmt.Fprintln(os.Stderr, "Error: --input requires --output")
+		os.Exit(1)
+	}
+
+	if *inputPath != "" && *dir == "" {
+		if err := runInputJSON(*inputPath, *outputPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if *dir == "" || *group == "" {
 		flag.Usage()
@@ -220,6 +239,200 @@ func runOutputJSON(allTxns []store.TransactionData, groupName string, outputPath
 		return fmt.Errorf("writing output file: %w", err)
 	}
 	log.Printf("wrote %d transactions to %s", len(exportTxns), outputPath)
+	return nil
+}
+
+func runInputJSON(inputPath, outputPath string) error {
+	input, err := export.ReadFile(inputPath)
+	if err != nil {
+		return fmt.Errorf("reading input: %w", err)
+	}
+	log.Printf("read %d transactions, %d rules, %d normalization rules, %d budgets from %s",
+		len(input.Transactions), len(input.Rules), len(input.NormalizationRules), len(input.Budgets), inputPath)
+
+	// Convert export rules to rules.Rule
+	ruleSet := make([]rules.Rule, len(input.Rules))
+	for i, r := range input.Rules {
+		ruleSet[i] = rules.Rule{
+			ID:          r.ID,
+			Type:        r.Type,
+			Pattern:     r.Pattern,
+			Target:      r.Target,
+			Priority:    r.Priority,
+			Institution: r.Institution,
+			Account:     r.Account,
+		}
+	}
+
+	// Convert transactions to store.TransactionData for categorization/budget assignment
+	allTxns := make([]store.TransactionData, len(input.Transactions))
+	for i, t := range input.Transactions {
+		ts, err := time.Parse(time.RFC3339, t.Timestamp)
+		if err != nil {
+			return fmt.Errorf("transaction %s: invalid timestamp %q: %w", t.ID, t.Timestamp, err)
+		}
+		allTxns[i] = store.TransactionData{
+			Institution:   t.Institution,
+			Account:       t.Account,
+			Description:   t.Description,
+			Amount:        int64(math.Round(t.Amount * 100)),
+			Timestamp:     ts,
+			StatementID:   t.StatementID,
+			TransactionID: t.ID,
+		}
+	}
+
+	// Apply categorization (always re-apply; rules may have changed)
+	if err := rules.ApplyCategorization(allTxns, ruleSet); err != nil {
+		return fmt.Errorf("categorization: %w", err)
+	}
+
+	// Apply budget assignment (always re-apply; rules may have changed)
+	rules.ApplyBudgetAssignment(allTxns, ruleSet)
+
+	// Build normalization transactions
+	normTxns := make([]store.NormTxn, len(allTxns))
+	for i, t := range allTxns {
+		normTxns[i] = store.NormTxn{
+			DocID:       input.Transactions[i].ID,
+			Description: t.Description,
+			Institution: t.Institution,
+			Account:     t.Account,
+			Amount:      t.Amount,
+			Timestamp:   t.Timestamp,
+			StatementID: t.StatementID,
+		}
+	}
+
+	// Convert normalization rules
+	normRules := make([]rules.NormalizationRule, len(input.NormalizationRules))
+	for i, r := range input.NormalizationRules {
+		normRules[i] = rules.NormalizationRule{
+			ID:                   r.ID,
+			Pattern:              r.Pattern,
+			PatternType:          r.PatternType,
+			CanonicalDescription: r.CanonicalDescription,
+			DateWindowDays:       r.DateWindowDays,
+			Institution:          r.Institution,
+			Account:              r.Account,
+			Priority:             r.Priority,
+		}
+	}
+
+	// Apply normalization
+	normUpdates, err := rules.ApplyNormalization(normTxns, normRules)
+	if err != nil {
+		return fmt.Errorf("normalization: %w", err)
+	}
+	normMap := make(map[string]store.NormalizationUpdate, len(normUpdates))
+	for _, u := range normUpdates {
+		normMap[u.DocID] = u
+	}
+
+	// Rebuild export transactions with categorization, budget, and normalization applied
+	exportTxns := make([]export.Transaction, len(allTxns))
+	for i, txn := range allTxns {
+		orig := input.Transactions[i]
+		et := export.Transaction{
+			ID:                orig.ID,
+			Institution:       txn.Institution,
+			Account:           txn.Account,
+			Description:       txn.Description,
+			Amount:            store.DollarAmount(txn.Amount),
+			Timestamp:         export.FormatTimestamp(txn.Timestamp),
+			StatementID:       txn.StatementID,
+			Category:          txn.Category,
+			Note:              orig.Note,
+			Reimbursement:     orig.Reimbursement,
+			NormalizedPrimary: true,
+		}
+		if txn.Budget != "" {
+			b := txn.Budget
+			et.Budget = &b
+		}
+		if nu, ok := normMap[orig.ID]; ok {
+			nid := nu.NormalizedID
+			et.NormalizedID = &nid
+			et.NormalizedPrimary = nu.NormalizedPrimary
+			ndesc := nu.NormalizedDescription
+			et.NormalizedDescription = &ndesc
+		}
+		exportTxns[i] = et
+	}
+
+	// Compute budget periods
+	fullTxns := make([]store.FullTransaction, len(exportTxns))
+	for i, et := range exportTxns {
+		ts, _ := time.Parse(time.RFC3339, et.Timestamp)
+		ft := store.FullTransaction{
+			ID:                et.ID,
+			Category:          et.Category,
+			Amount:            et.Amount,
+			Reimbursement:     et.Reimbursement,
+			Timestamp:         ts,
+			NormalizedPrimary: et.NormalizedPrimary,
+		}
+		if et.Budget != nil {
+			ft.Budget = *et.Budget
+		}
+		if et.NormalizedID != nil {
+			ft.NormalizedID = *et.NormalizedID
+		}
+		fullTxns[i] = ft
+	}
+
+	periods, err := store.ComputePeriods(fullTxns)
+	if err != nil {
+		return fmt.Errorf("computing periods: %w", err)
+	}
+
+	sort.Slice(periods, func(i, j int) bool {
+		return periods[i].ID < periods[j].ID
+	})
+	budgetPeriods := make([]export.BudgetPeriod, len(periods))
+	for i, p := range periods {
+		budgetPeriods[i] = export.BudgetPeriod{
+			ID:                p.ID,
+			BudgetID:          p.BudgetID,
+			PeriodStart:       export.FormatTimestamp(p.Start),
+			PeriodEnd:         export.FormatTimestamp(p.End),
+			Total:             p.Total,
+			Count:             p.Count,
+			CategoryBreakdown: p.CategoryBreakdown,
+		}
+	}
+
+	out := export.Output{
+		Version:            input.Version,
+		ExportedAt:         export.FormatTimestamp(time.Now()),
+		GroupID:             input.GroupID,
+		GroupName:           input.GroupName,
+		Transactions:       exportTxns,
+		Budgets:            input.Budgets,
+		BudgetPeriods:      budgetPeriods,
+		Rules:              input.Rules,
+		NormalizationRules: input.NormalizationRules,
+	}
+
+	if err := export.WriteFile(outputPath, out); err != nil {
+		return fmt.Errorf("writing output: %w", err)
+	}
+
+	// Count results
+	var categorized, budgeted, normalized int
+	for _, et := range exportTxns {
+		if et.Category != "" {
+			categorized++
+		}
+		if et.Budget != nil {
+			budgeted++
+		}
+		if et.NormalizedID != nil && !et.NormalizedPrimary {
+			normalized++
+		}
+	}
+	log.Printf("wrote %d transactions (%d categorized, %d budgeted, %d non-primary normalized), %d budget periods to %s",
+		len(exportTxns), categorized, budgeted, normalized, len(budgetPeriods), outputPath)
 	return nil
 }
 

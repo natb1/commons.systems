@@ -195,6 +195,100 @@ func TestWriteFileRoundTrip(t *testing.T) {
 	}
 }
 
+func TestReadFile(t *testing.T) {
+	budget := "groceries"
+	normID := "norm-abc"
+	normDesc := "GROCERY STORE"
+
+	original := Output{
+		Version:    1,
+		ExportedAt: FormatTimestamp(time.Date(2025, 6, 15, 10, 30, 0, 0, time.UTC)),
+		GroupName:  "household",
+		Transactions: []Transaction{
+			{
+				ID:                    "txn-001",
+				Institution:           "pnc",
+				Account:               "5111",
+				Description:           "KROGER #1234",
+				Amount:                52.30,
+				Timestamp:             "2025-06-10T00:00:00Z",
+				StatementID:           "pnc-5111-2025-06",
+				Category:              "Food:Groceries",
+				Budget:                &budget,
+				NormalizedID:          &normID,
+				NormalizedPrimary:     true,
+				NormalizedDescription: &normDesc,
+			},
+		},
+		Budgets: []Budget{
+			{ID: "food", Name: "food", WeeklyAllowance: 375, Rollover: "none"},
+		},
+		BudgetPeriods: []BudgetPeriod{},
+		Rules: []Rule{
+			{ID: "r1", Type: "categorization", Pattern: "KROGER", Target: "Food:Groceries", Priority: 10},
+		},
+		NormalizationRules: []NormalizationRule{
+			{ID: "nr1", Pattern: "KROGER", PatternType: "substring", CanonicalDescription: "GROCERY STORE", DateWindowDays: 0, Institution: "pnc", Priority: 10},
+		},
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "budget.json")
+
+	if err := WriteFile(path, original); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got, err := ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	if got.Version != 1 {
+		t.Errorf("version = %d, want 1", got.Version)
+	}
+	if got.GroupName != "household" {
+		t.Errorf("groupName = %q, want household", got.GroupName)
+	}
+	if len(got.Transactions) != 1 {
+		t.Fatalf("transactions = %d, want 1", len(got.Transactions))
+	}
+	if got.Transactions[0].Category != "Food:Groceries" {
+		t.Errorf("category = %q, want Food:Groceries", got.Transactions[0].Category)
+	}
+	if got.Transactions[0].Budget == nil || *got.Transactions[0].Budget != "groceries" {
+		t.Errorf("budget = %v, want groceries", got.Transactions[0].Budget)
+	}
+	if len(got.Rules) != 1 {
+		t.Errorf("rules = %d, want 1", len(got.Rules))
+	}
+	if len(got.NormalizationRules) != 1 {
+		t.Errorf("normRules = %d, want 1", len(got.NormalizationRules))
+	}
+	if len(got.Budgets) != 1 {
+		t.Errorf("budgets = %d, want 1", len(got.Budgets))
+	}
+}
+
+func TestReadFileNotFound(t *testing.T) {
+	_, err := ReadFile("/nonexistent/path.json")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestReadFileInvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(path, []byte("{invalid"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ReadFile(path)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
 func TestTimestampsAreISO8601(t *testing.T) {
 	ts := FormatTimestamp(time.Date(2025, 1, 6, 15, 30, 45, 0, time.UTC))
 	if ts != "2025-01-06T15:30:45Z" {
