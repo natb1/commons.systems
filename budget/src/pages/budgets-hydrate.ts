@@ -3,6 +3,7 @@ import { updateBudget, type Budget, type BudgetId, type BudgetPeriod, type Budge
 import { DataIntegrityError } from "../errors.js";
 import { showInputError, handleSaveError } from "./hydrate-util.js";
 import { renderBudgetChart, type ChartResult } from "./budgets-chart.js";
+import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
   const row = el.closest(".budget-row");
@@ -111,8 +112,11 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   const periods = deserializePeriods(periodsRaw);
   let chartResult: ChartResult = { weekLabels: [], periodStartMs: [] };
 
+  const pieContainer = document.getElementById("budgets-pie");
+
   function render(): void {
     chartResult = renderBudgetChart(container, { budgets, periods });
+    if (pieContainer) renderBudgetPieChart(pieContainer, { budgets, periods, windowWeeks: 12 });
   }
 
   render();

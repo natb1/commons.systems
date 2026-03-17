@@ -1,0 +1,119 @@
+import { pie, arc, type PieArcDatum } from "d3-shape";
+import { scaleOrdinal } from "d3-scale";
+import { schemeTableau10 } from "d3-scale-chromatic";
+import type { Budget, BudgetPeriod } from "../firestore.js";
+
+interface Slice {
+  name: string;
+  total: number;
+}
+
+export function filterPeriodsToWindow(periods: BudgetPeriod[], windowWeeks: number): BudgetPeriod[] {
+  const uniqueStarts = new Set<number>();
+  for (const p of periods) uniqueStarts.add(p.periodStart.toMillis());
+  const sorted = [...uniqueStarts].sort((a, b) => a - b);
+  const cutoff = sorted.length <= windowWeeks ? sorted : sorted.slice(sorted.length - windowWeeks);
+  const cutoffSet = new Set(cutoff);
+  return periods.filter(p => cutoffSet.has(p.periodStart.toMillis()));
+}
+
+export function aggregateByBudget(budgets: Budget[], periods: BudgetPeriod[]): Slice[] {
+  const totals = new Map<string, number>();
+  const nameMap = new Map<string, string>();
+  for (const b of budgets) nameMap.set(b.id, b.name);
+  for (const p of periods) {
+    totals.set(p.budgetId, (totals.get(p.budgetId) ?? 0) + p.total);
+  }
+  const slices: Slice[] = [];
+  for (const b of budgets) {
+    const total = totals.get(b.id) ?? 0;
+    if (total > 0) slices.push({ name: b.name, total });
+  }
+  return slices;
+}
+
+function formatCurrency(n: number): string {
+  return "$" + n.toFixed(2);
+}
+
+export function renderBudgetPieChart(
+  container: HTMLElement,
+  options: { budgets: Budget[]; periods: BudgetPeriod[]; windowWeeks: number },
+): void {
+  const filtered = filterPeriodsToWindow(options.periods, options.windowWeeks);
+  const slices = aggregateByBudget(options.budgets, filtered);
+
+  if (slices.length === 0) {
+    container.replaceChildren();
+    const msg = document.createElement("p");
+    msg.textContent = "No spending data";
+    container.appendChild(msg);
+    return;
+  }
+
+  const grandTotal = slices.reduce((s, d) => s + d.total, 0);
+  const color = scaleOrdinal<string>().domain(slices.map(s => s.name)).range(schemeTableau10);
+
+  const size = Math.min(300, container.clientWidth || 300);
+  const outerRadius = size / 2;
+  const innerRadius = outerRadius * 0.5;
+
+  const pieGen = pie<Slice>().value(d => d.total).sort(null);
+  const arcGen = arc<PieArcDatum<Slice>>().innerRadius(innerRadius).outerRadius(outerRadius);
+  const arcs = pieGen(slices);
+
+  const ns = "http://www.w3.org/2000/svg";
+
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", `${-outerRadius} ${-outerRadius} ${size} ${size}`);
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Budget spending pie chart");
+
+  for (const a of arcs) {
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", arcGen(a)!);
+    path.setAttribute("fill", color(a.data.name));
+    const pct = ((a.data.total / grandTotal) * 100).toFixed(1);
+    const title = document.createElementNS(ns, "title");
+    title.textContent = `${a.data.name}: ${formatCurrency(a.data.total)} (${pct}%)`;
+    path.appendChild(title);
+    svg.appendChild(path);
+  }
+
+  // Center total text
+  const text = document.createElementNS(ns, "text");
+  text.setAttribute("text-anchor", "middle");
+  text.setAttribute("dominant-baseline", "central");
+  text.setAttribute("fill", "currentColor");
+  text.setAttribute("font-size", "14");
+  text.textContent = formatCurrency(grandTotal);
+  svg.appendChild(text);
+
+  // Legend
+  const legend = document.createElement("div");
+  legend.className = "pie-legend";
+  for (const a of arcs) {
+    const pct = ((a.data.total / grandTotal) * 100).toFixed(1);
+    const item = document.createElement("div");
+    item.className = "pie-legend-item";
+
+    const swatch = document.createElement("span");
+    swatch.className = "pie-legend-swatch";
+    swatch.style.backgroundColor = color(a.data.name);
+
+    const label = document.createElement("span");
+    label.textContent = `${a.data.name} (${pct}%)`;
+
+    item.appendChild(swatch);
+    item.appendChild(label);
+    legend.appendChild(item);
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "pie-chart-wrapper";
+  wrapper.appendChild(svg);
+  wrapper.appendChild(legend);
+  container.replaceChildren(wrapper);
+}

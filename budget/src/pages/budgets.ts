@@ -83,7 +83,10 @@ function renderChartContainer(budgets: Budget[], periods: BudgetPeriod[]): strin
   return `<div id="budgets-chart-controls">
       <label>Jump to: <input type="date" id="chart-date-picker"></label>
     </div>
-    <div id="budgets-chart" data-budgets="${serializeBudgets(budgets)}" data-periods="${serializePeriods(periods)}"></div>`;
+    <div id="budgets-chart" data-budgets="${serializeBudgets(budgets)}" data-periods="${serializePeriods(periods)}"></div>
+    <div class="below-bar-chart-row">
+      <div id="budgets-pie"></div>
+    </div>`;
 }
 
 export async function renderBudgets(options: RenderPageOptions): Promise<string> {
