@@ -1,7 +1,3 @@
-import { defineConfig } from "vitest/config";
+import { createLibConfig } from "@commons-systems/config/vite";
 
-export default defineConfig({
-  test: {
-    include: ["test/**/*.test.ts"],
-  },
-});
+export default createLibConfig();
