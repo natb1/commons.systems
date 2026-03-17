@@ -289,6 +289,32 @@ func TestReadFileInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestReadFileValidation(t *testing.T) {
+	dir := t.TempDir()
+
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{"missing version", `{"groupName":"test","transactions":[]}`},
+		{"zero version", `{"version":0,"groupName":"test","transactions":[]}`},
+		{"missing groupName", `{"version":1,"transactions":[]}`},
+		{"missing transactions", `{"version":1,"groupName":"test"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(dir, tt.name+".json")
+			if err := os.WriteFile(path, []byte(tt.content), 0644); err != nil {
+				t.Fatal(err)
+			}
+			_, err := ReadFile(path)
+			if err == nil {
+				t.Fatalf("expected validation error for %s", tt.name)
+			}
+		})
+	}
+}
+
 func TestTimestampsAreISO8601(t *testing.T) {
 	ts := FormatTimestamp(time.Date(2025, 1, 6, 15, 30, 45, 0, time.UTC))
 	if ts != "2025-01-06T15:30:45Z" {

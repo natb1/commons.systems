@@ -116,7 +116,7 @@ type NormalizationRule struct {
 	Pattern              string // case-insensitive substring (or regex if PatternType=="regex")
 	PatternType          string // "substring" (default) or "regex"
 	CanonicalDescription string
-	DateWindowDays       int // unused; kept for schema compatibility
+	DateWindowDays       int // unused in grouping logic; preserved in JSON export and Firestore schemas
 	Institution          string
 	Account              string
 	Priority             int
@@ -173,13 +173,12 @@ func groupByAmountAndDate(matches []store.NormTxn) [][]store.NormTxn {
 	return groups
 }
 
-// pairAcrossStatements takes a group of transactions with the same amount and
-// date and returns pairs that span different statements. Each statement
-// contributes at most one transaction per pair. If a statement has N
-// transactions and another has M, min(N,M) pairs are formed; the remaining
-// max(N,M)-min(N,M) transactions are standalone (not duplicates).
-func pairAcrossStatements(group []store.NormTxn) [][]store.NormTxn {
-	// Bucket by statement, sorted by DocID for deterministic pairing.
+// groupAcrossStatements takes transactions with the same amount and date and
+// returns sub-groups that span different statements. Each statement contributes
+// at most one transaction per sub-group. If a statement has N transactions and
+// another has M, min(N,M) sub-groups are formed; the remaining max(N,M)-min(N,M)
+// transactions are standalone (not duplicates).
+func groupAcrossStatements(group []store.NormTxn) [][]store.NormTxn {
 	byStmt := make(map[string][]store.NormTxn)
 	for _, txn := range group {
 		byStmt[txn.StatementID] = append(byStmt[txn.StatementID], txn)
@@ -196,8 +195,6 @@ func pairAcrossStatements(group []store.NormTxn) [][]store.NormTxn {
 		sort.Slice(txns, func(i, j int) bool { return txns[i].DocID < txns[j].DocID })
 	}
 
-	// The number of distinct real transactions is max(count per statement).
-	// Pair index i across all statements that have an i-th entry.
 	maxCount := 0
 	for _, txns := range byStmt {
 		if len(txns) > maxCount {
@@ -205,20 +202,20 @@ func pairAcrossStatements(group []store.NormTxn) [][]store.NormTxn {
 		}
 	}
 
-	var pairs [][]store.NormTxn
+	var result [][]store.NormTxn
 	for i := 0; i < maxCount; i++ {
-		var pair []store.NormTxn
+		var subgroup []store.NormTxn
 		for _, sid := range stmtIDs {
 			txns := byStmt[sid]
 			if i < len(txns) {
-				pair = append(pair, txns[i])
+				subgroup = append(subgroup, txns[i])
 			}
 		}
-		if len(pair) >= 2 {
-			pairs = append(pairs, pair)
+		if len(subgroup) >= 2 {
+			result = append(result, subgroup)
 		}
 	}
-	return pairs
+	return result
 }
 
 // selectPrimary picks the primary transaction from a group: latest statement
@@ -260,7 +257,7 @@ func autoNormalize(txns []store.NormTxn, normalized map[string]bool) []store.Nor
 		if len(group) < 2 {
 			continue
 		}
-		pairs := pairAcrossStatements(group)
+		pairs := groupAcrossStatements(group)
 		for _, pair := range pairs {
 			primary := selectPrimary(pair)
 			for _, txn := range pair {
@@ -333,7 +330,7 @@ func ApplyNormalization(txns []store.NormTxn, rules []NormalizationRule) ([]stor
 
 		groups := groupByAmountAndDate(matches)
 		for _, group := range groups {
-			pairs := pairAcrossStatements(group)
+			pairs := groupAcrossStatements(group)
 			for _, pair := range pairs {
 				primary := selectPrimary(pair)
 				for _, txn := range pair {

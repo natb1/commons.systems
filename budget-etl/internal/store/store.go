@@ -344,61 +344,29 @@ type periodData struct {
 	categoryBreakdown map[string]float64
 }
 
-// txnFieldMap holds a transaction document's ID and field map for aggregation.
-type txnFieldMap struct {
-	id   string
-	data map[string]interface{}
-}
-
-// aggregateTransactionData groups transactions by budget period and computes
+// aggregateTransactions groups transactions by budget period and computes
 // total, count, and categoryBreakdown for each period. Non-primary normalized
-// transactions are excluded. Transactions with a nil or empty budget are
-// skipped (unassigned). Returns a map keyed by period ID.
-func aggregateTransactionData(txns []txnFieldMap) (map[string]*periodData, error) {
+// transactions are excluded. Transactions with an empty budget are skipped
+// (unassigned). Returns a map keyed by period ID.
+func aggregateTransactions(txns []FullTransaction) map[string]*periodData {
 	periods := make(map[string]*periodData)
 
 	for _, txn := range txns {
-		d := txn.data
-		// Skip non-primary normalized transactions from budget totals
-		if nid := d["normalizedId"]; nid != nil {
-			if primary, ok := d["normalizedPrimary"].(bool); ok && !primary {
-				continue
-			}
+		if txn.NormalizedID != "" && !txn.NormalizedPrimary {
+			continue
 		}
-		budgetID, _ := d["budget"].(string)
-		if budgetID == "" {
-			continue // unassigned transactions don't affect periods
+		if txn.Budget == "" {
+			continue
 		}
-		timestamp, ok := d["timestamp"].(time.Time)
-		if !ok {
-			return nil, fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", txn.id, d["timestamp"])
-		}
-		amount, ok := d["amount"].(float64)
-		if !ok {
-			return nil, fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", txn.id, d["amount"])
-		}
-		var reimbursement float64
-		switch v := d["reimbursement"].(type) {
-		case float64:
-			reimbursement = v
-		case int64:
-			reimbursement = float64(v)
-		default:
-			if v != nil {
-				return nil, fmt.Errorf("transaction %s: field 'reimbursement' is not a number (got %T)", txn.id, v)
-			}
-		}
-		category, _ := d["category"].(string)
 
-		net := amount * (1 - reimbursement/100)
-
-		ps := PeriodStart(timestamp)
-		key := PeriodID(budgetID, ps)
+		net := txn.Amount * (1 - txn.Reimbursement/100)
+		ps := PeriodStart(txn.Timestamp)
+		key := PeriodID(txn.Budget, ps)
 
 		pd, exists := periods[key]
 		if !exists {
 			pd = &periodData{
-				budgetID:          budgetID,
+				budgetID:          txn.Budget,
 				start:             ps,
 				categoryBreakdown: make(map[string]float64),
 			}
@@ -406,15 +374,12 @@ func aggregateTransactionData(txns []txnFieldMap) (map[string]*periodData, error
 		}
 		pd.total += net
 		pd.count++
-		// total includes all transactions; categoryBreakdown skips those with empty
-		// category. Currently ApplyCategorization enforces 100% coverage, but this
-		// guard handles legacy data that may lack category values.
-		if category != "" {
-			pd.categoryBreakdown[category] += net
+		if txn.Category != "" {
+			pd.categoryBreakdown[txn.Category] += net
 		}
 	}
 
-	return periods, nil
+	return periods
 }
 
 // RecalculatePeriods recomputes total, count, and categoryBreakdown for all
@@ -452,15 +417,41 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 		return fmt.Errorf("querying transactions for recalculation: %w", err)
 	}
 
-	// Extract transaction field maps for aggregation
-	txnMaps := make([]txnFieldMap, 0, len(txnDocs))
+	// Convert Firestore docs to FullTransaction for aggregation
+	fullTxns := make([]FullTransaction, 0, len(txnDocs))
 	for _, doc := range txnDocs {
-		txnMaps = append(txnMaps, txnFieldMap{id: doc.Ref.ID, data: doc.Data()})
+		d := doc.Data()
+		ft := FullTransaction{
+			ID:                doc.Ref.ID,
+			NormalizedPrimary: true,
+		}
+		ft.Budget, _ = d["budget"].(string)
+		ft.Category, _ = d["category"].(string)
+		if v, ok := d["amount"].(float64); ok {
+			ft.Amount = v
+		} else {
+			return fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", doc.Ref.ID, d["amount"])
+		}
+		switch v := d["reimbursement"].(type) {
+		case float64:
+			ft.Reimbursement = v
+		case int64:
+			ft.Reimbursement = float64(v)
+		}
+		if v, ok := d["timestamp"].(time.Time); ok {
+			ft.Timestamp = v
+		} else {
+			return fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", doc.Ref.ID, d["timestamp"])
+		}
+		if nid, ok := d["normalizedId"].(string); ok {
+			ft.NormalizedID = nid
+		}
+		if primary, ok := d["normalizedPrimary"].(bool); ok {
+			ft.NormalizedPrimary = primary
+		}
+		fullTxns = append(fullTxns, ft)
 	}
-	periods, err := aggregateTransactionData(txnMaps)
-	if err != nil {
-		return err
-	}
+	periods := aggregateTransactions(fullTxns)
 
 	// Collect all batch operations
 	type batchOp struct {
@@ -612,53 +603,7 @@ func (c *Client) LoadNormalizationRules(ctx context.Context, groupID string) ([]
 	return result, nil
 }
 
-// BudgetDoc holds a budget document read from Firestore.
-type BudgetDoc struct {
-	ID              string
-	Name            string
-	WeeklyAllowance float64
-	Rollover        string // "none", "debt", "balance"
-}
-
-// LoadBudgets reads budgets from budget/{env}/budgets, filtered by groupId.
-func (c *Client) LoadBudgets(ctx context.Context, groupID string) ([]BudgetDoc, error) {
-	col := c.fs.Collection(fmt.Sprintf("budget/%s/budgets", c.env))
-	docs, err := col.Where("groupId", "==", groupID).Documents(ctx).GetAll()
-	if err != nil {
-		return nil, fmt.Errorf("querying budgets: %w", err)
-	}
-
-	result := make([]BudgetDoc, 0, len(docs))
-	for _, doc := range docs {
-		d := doc.Data()
-		b := BudgetDoc{ID: doc.Ref.ID}
-		v, ok := d["name"].(string)
-		if !ok {
-			return nil, fmt.Errorf("budget %s: field 'name' is not a string (got %T)", doc.Ref.ID, d["name"])
-		}
-		b.Name = v
-		switch wa := d["weeklyAllowance"].(type) {
-		case float64:
-			b.WeeklyAllowance = wa
-		case int64:
-			b.WeeklyAllowance = float64(wa)
-		default:
-			return nil, fmt.Errorf("budget %s: field 'weeklyAllowance' is not a number (got %T)", doc.Ref.ID, d["weeklyAllowance"])
-		}
-		if v, ok := d["rollover"].(string); ok {
-			b.Rollover = v
-		} else if d["rollover"] != nil {
-			return nil, fmt.Errorf("budget %s: field 'rollover' is not a string (got %T)", doc.Ref.ID, d["rollover"])
-		}
-		result = append(result, b)
-	}
-
-	log.Printf("loaded %d budgets for group %s", len(result), groupID)
-	return result, nil
-}
-
-// FullTransaction holds all fields needed for period aggregation without
-// exposing the internal txnFieldMap type.
+// FullTransaction holds all fields needed for period aggregation.
 type FullTransaction struct {
 	ID                string
 	Budget            string // empty when unassigned
@@ -684,32 +629,8 @@ type PeriodResult struct {
 // ComputePeriods groups transactions by budget period and computes total, count,
 // and categoryBreakdown for each period. Non-primary normalized transactions
 // are excluded. Transactions with an empty budget are skipped (unassigned).
-func ComputePeriods(txns []FullTransaction) ([]PeriodResult, error) {
-	// Convert to txnFieldMap for aggregation
-	maps := make([]txnFieldMap, len(txns))
-	for i, t := range txns {
-		var normalizedID interface{}
-		if t.NormalizedID != "" {
-			normalizedID = t.NormalizedID
-		}
-		maps[i] = txnFieldMap{
-			id: t.ID,
-			data: map[string]interface{}{
-				"budget":            t.Budget,
-				"category":          t.Category,
-				"amount":            t.Amount,
-				"reimbursement":     t.Reimbursement,
-				"timestamp":         t.Timestamp,
-				"normalizedId":      normalizedID,
-				"normalizedPrimary": t.NormalizedPrimary,
-			},
-		}
-	}
-
-	periods, err := aggregateTransactionData(maps)
-	if err != nil {
-		return nil, err
-	}
+func ComputePeriods(txns []FullTransaction) []PeriodResult {
+	periods := aggregateTransactions(txns)
 
 	result := make([]PeriodResult, 0, len(periods))
 	for key, pd := range periods {
@@ -728,7 +649,7 @@ func ComputePeriods(txns []FullTransaction) ([]PeriodResult, error) {
 			CategoryBreakdown: roundedBreakdown,
 		})
 	}
-	return result, nil
+	return result
 }
 
 // TransactionDoc holds a transaction document's Firestore ID and field data.

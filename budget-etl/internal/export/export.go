@@ -87,6 +87,8 @@ func FormatTimestamp(t time.Time) string {
 }
 
 // ReadFile reads and unmarshals a JSON file into an Output struct.
+// Returns an error if the file is missing, contains invalid JSON, or
+// is missing required fields (version, groupName, transactions).
 func ReadFile(path string) (Output, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -95,6 +97,15 @@ func ReadFile(path string) (Output, error) {
 	var out Output
 	if err := json.Unmarshal(data, &out); err != nil {
 		return Output{}, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	if out.Version == 0 {
+		return Output{}, fmt.Errorf("parsing %s: missing or zero 'version' field", path)
+	}
+	if out.GroupName == "" {
+		return Output{}, fmt.Errorf("parsing %s: missing required field 'groupName'", path)
+	}
+	if out.Transactions == nil {
+		return Output{}, fmt.Errorf("parsing %s: missing required field 'transactions'", path)
 	}
 	return out, nil
 }

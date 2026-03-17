@@ -45,8 +45,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Error: --input requires --output")
 		os.Exit(1)
 	}
+	if *inputPath != "" && *dir != "" {
+		fmt.Fprintln(os.Stderr, "Error: --input and --dir are mutually exclusive")
+		os.Exit(1)
+	}
 
-	if *inputPath != "" && *dir == "" {
+	if *inputPath != "" {
 		if err := runInputJSON(*inputPath, *outputPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -206,8 +210,10 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 	return runFirestore(ctx, client, groupInfo, allTxns, parsed)
 }
 
+// runOutputJSON writes parsed transactions as a JSON file without applying
+// rules. Category, budget, and normalization fields are left empty. Use
+// --input to apply rules in a subsequent pass.
 func runOutputJSON(allTxns []store.TransactionData, groupName string, outputPath string) error {
-	// Build export transactions (no categorization, no normalization, no budgets)
 	exportTxns := make([]export.Transaction, len(allTxns))
 	for i, txn := range allTxns {
 		exportTxns[i] = export.Transaction{
@@ -242,10 +248,17 @@ func runOutputJSON(allTxns []store.TransactionData, groupName string, outputPath
 	return nil
 }
 
+// runInputJSON reads an existing JSON export, re-applies categorization,
+// budget assignment, and normalization rules, computes budget periods, and
+// writes the updated result. Rules are always re-applied (not skipped for
+// pre-existing values) so rule changes take effect immediately.
 func runInputJSON(inputPath, outputPath string) error {
 	input, err := export.ReadFile(inputPath)
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
+	}
+	if input.Version != 1 {
+		return fmt.Errorf("unsupported input version %d (expected 1)", input.Version)
 	}
 	log.Printf("read %d transactions, %d rules, %d normalization rules, %d budgets from %s",
 		len(input.Transactions), len(input.Rules), len(input.NormalizationRules), len(input.Budgets), inputPath)
@@ -360,20 +373,19 @@ func runInputJSON(inputPath, outputPath string) error {
 		exportTxns[i] = et
 	}
 
-	// Compute budget periods
+	// Compute budget periods using already-parsed timestamps from allTxns
 	fullTxns := make([]store.FullTransaction, len(exportTxns))
 	for i, et := range exportTxns {
-		ts, _ := time.Parse(time.RFC3339, et.Timestamp)
 		ft := store.FullTransaction{
 			ID:                et.ID,
-			Category:          et.Category,
-			Amount:            et.Amount,
-			Reimbursement:     et.Reimbursement,
-			Timestamp:         ts,
+			Category:          allTxns[i].Category,
+			Amount:            store.DollarAmount(allTxns[i].Amount),
+			Reimbursement:     input.Transactions[i].Reimbursement,
+			Timestamp:         allTxns[i].Timestamp,
 			NormalizedPrimary: et.NormalizedPrimary,
 		}
-		if et.Budget != nil {
-			ft.Budget = *et.Budget
+		if allTxns[i].Budget != "" {
+			ft.Budget = allTxns[i].Budget
 		}
 		if et.NormalizedID != nil {
 			ft.NormalizedID = *et.NormalizedID
@@ -381,10 +393,7 @@ func runInputJSON(inputPath, outputPath string) error {
 		fullTxns[i] = ft
 	}
 
-	periods, err := store.ComputePeriods(fullTxns)
-	if err != nil {
-		return fmt.Errorf("computing periods: %w", err)
-	}
+	periods := store.ComputePeriods(fullTxns)
 
 	sort.Slice(periods, func(i, j int) bool {
 		return periods[i].ID < periods[j].ID

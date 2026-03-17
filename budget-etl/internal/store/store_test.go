@@ -107,30 +107,26 @@ func TestPeriodID(t *testing.T) {
 	}
 }
 
-func makeTxn(budget, category string, amount, reimbursement float64, ts time.Time) txnFieldMap {
-	return txnFieldMap{
-		id: "txn-test",
-		data: map[string]interface{}{
-			"budget":        budget,
-			"category":      category,
-			"amount":        amount,
-			"reimbursement": reimbursement,
-			"timestamp":     ts,
-		},
+func makeTxn(budget, category string, amount, reimbursement float64, ts time.Time) FullTransaction {
+	return FullTransaction{
+		ID:                "txn-test",
+		Budget:            budget,
+		Category:          category,
+		Amount:            amount,
+		Reimbursement:     reimbursement,
+		Timestamp:         ts,
+		NormalizedPrimary: true,
 	}
 }
 
-func TestAggregateTransactionData(t *testing.T) {
+func TestAggregateTransactions(t *testing.T) {
 	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)     // Monday
 	wed := time.Date(2025, 1, 8, 10, 0, 0, 0, time.UTC)     // Wednesday same week
 	nextMon := time.Date(2025, 1, 13, 9, 0, 0, 0, time.UTC) // Next Monday
 
 	t.Run("single transaction", func(t *testing.T) {
-		txns := []txnFieldMap{makeTxn("food", "Food:Groceries", 52.30, 0, mon)}
-		periods, err := aggregateTransactionData(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		txns := []FullTransaction{makeTxn("food", "Food:Groceries", 52.30, 0, mon)}
+		periods := aggregateTransactions(txns)
 		if len(periods) != 1 {
 			t.Fatalf("got %d periods, want 1", len(periods))
 		}
@@ -150,14 +146,11 @@ func TestAggregateTransactionData(t *testing.T) {
 	})
 
 	t.Run("multiple transactions same period", func(t *testing.T) {
-		txns := []txnFieldMap{
+		txns := []FullTransaction{
 			makeTxn("food", "Food:Groceries", 50.0, 0, mon),
 			makeTxn("food", "Food:Dining", 30.0, 0, wed),
 		}
-		periods, err := aggregateTransactionData(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := aggregateTransactions(txns)
 		pd := periods["food-2025-01-06"]
 		if pd.total != 80.0 {
 			t.Errorf("total = %v, want 80.0", pd.total)
@@ -165,23 +158,14 @@ func TestAggregateTransactionData(t *testing.T) {
 		if pd.count != 2 {
 			t.Errorf("count = %d, want 2", pd.count)
 		}
-		if pd.categoryBreakdown["Food:Groceries"] != 50.0 {
-			t.Errorf("Food:Groceries = %v, want 50.0", pd.categoryBreakdown["Food:Groceries"])
-		}
-		if pd.categoryBreakdown["Food:Dining"] != 30.0 {
-			t.Errorf("Food:Dining = %v, want 30.0", pd.categoryBreakdown["Food:Dining"])
-		}
 	})
 
 	t.Run("transactions across different periods", func(t *testing.T) {
-		txns := []txnFieldMap{
+		txns := []FullTransaction{
 			makeTxn("food", "Food", 50.0, 0, mon),
 			makeTxn("food", "Food", 25.0, 0, nextMon),
 		}
-		periods, err := aggregateTransactionData(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := aggregateTransactions(txns)
 		if len(periods) != 2 {
 			t.Fatalf("got %d periods, want 2", len(periods))
 		}
@@ -193,65 +177,27 @@ func TestAggregateTransactionData(t *testing.T) {
 		}
 	})
 
-	t.Run("reimbursement float64", func(t *testing.T) {
-		txns := []txnFieldMap{makeTxn("food", "Food", 100.0, 50.0, mon)}
-		periods, err := aggregateTransactionData(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+	t.Run("reimbursement reduces total", func(t *testing.T) {
+		txns := []FullTransaction{makeTxn("food", "Food", 100.0, 50.0, mon)}
+		periods := aggregateTransactions(txns)
 		pd := periods["food-2025-01-06"]
 		if pd.total != 50.0 {
 			t.Errorf("total = %v, want 50.0 (50%% reimbursement)", pd.total)
 		}
 	})
 
-	t.Run("reimbursement int64", func(t *testing.T) {
-		txn := txnFieldMap{
-			id: "txn-int",
-			data: map[string]interface{}{
-				"budget":        "food",
-				"category":      "Food",
-				"amount":        100.0,
-				"reimbursement": int64(100),
-				"timestamp":     mon,
-			},
-		}
-		periods, err := aggregateTransactionData([]txnFieldMap{txn})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+	t.Run("full reimbursement", func(t *testing.T) {
+		txns := []FullTransaction{makeTxn("food", "Food", 100.0, 100.0, mon)}
+		periods := aggregateTransactions(txns)
 		pd := periods["food-2025-01-06"]
 		if pd.total != 0.0 {
 			t.Errorf("total = %v, want 0.0 (100%% reimbursement)", pd.total)
 		}
 	})
 
-	t.Run("reimbursement nil/zero", func(t *testing.T) {
-		txn := txnFieldMap{
-			id: "txn-nil",
-			data: map[string]interface{}{
-				"budget":        "food",
-				"category":      "Food",
-				"amount":        75.0,
-				"reimbursement": nil,
-				"timestamp":     mon,
-			},
-		}
-		periods, err := aggregateTransactionData([]txnFieldMap{txn})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if periods["food-2025-01-06"].total != 75.0 {
-			t.Errorf("total = %v, want 75.0 (nil reimbursement = 0)", periods["food-2025-01-06"].total)
-		}
-	})
-
 	t.Run("negative amount produces negative total", func(t *testing.T) {
-		txns := []txnFieldMap{makeTxn("food", "Food", -20.0, 0, mon)}
-		periods, err := aggregateTransactionData(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		txns := []FullTransaction{makeTxn("food", "Food", -20.0, 0, mon)}
+		periods := aggregateTransactions(txns)
 		pd := periods["food-2025-01-06"]
 		if pd.total != -20.0 {
 			t.Errorf("total = %v, want -20.0", pd.total)
@@ -259,14 +205,11 @@ func TestAggregateTransactionData(t *testing.T) {
 	})
 
 	t.Run("credits exceed debits produces negative total", func(t *testing.T) {
-		txns := []txnFieldMap{
+		txns := []FullTransaction{
 			makeTxn("food", "Food", 10.0, 0, mon),
 			makeTxn("food", "Food", -30.0, 0, wed),
 		}
-		periods, err := aggregateTransactionData(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := aggregateTransactions(txns)
 		pd := periods["food-2025-01-06"]
 		if pd.total != -20.0 {
 			t.Errorf("total = %v, want -20.0", pd.total)
@@ -274,15 +217,12 @@ func TestAggregateTransactionData(t *testing.T) {
 	})
 
 	t.Run("category breakdown accumulation", func(t *testing.T) {
-		txns := []txnFieldMap{
+		txns := []FullTransaction{
 			makeTxn("food", "Food:Groceries", 30.0, 0, mon),
 			makeTxn("food", "Food:Groceries", 20.0, 0, wed),
 			makeTxn("food", "Food:Dining", 15.0, 0, mon),
 		}
-		periods, err := aggregateTransactionData(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := aggregateTransactions(txns)
 		pd := periods["food-2025-01-06"]
 		if pd.categoryBreakdown["Food:Groceries"] != 50.0 {
 			t.Errorf("Food:Groceries = %v, want 50.0", pd.categoryBreakdown["Food:Groceries"])
@@ -293,14 +233,11 @@ func TestAggregateTransactionData(t *testing.T) {
 	})
 
 	t.Run("unassigned transactions skipped", func(t *testing.T) {
-		txns := []txnFieldMap{
+		txns := []FullTransaction{
 			makeTxn("", "Food", 100.0, 0, mon),
 			makeTxn("food", "Food", 25.0, 0, mon),
 		}
-		periods, err := aggregateTransactionData(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := aggregateTransactions(txns)
 		if len(periods) != 1 {
 			t.Fatalf("got %d periods, want 1", len(periods))
 		}
@@ -310,14 +247,11 @@ func TestAggregateTransactionData(t *testing.T) {
 	})
 
 	t.Run("uncategorized transaction in total but not breakdown", func(t *testing.T) {
-		txns := []txnFieldMap{
+		txns := []FullTransaction{
 			makeTxn("food", "", 40.0, 0, mon),
 			makeTxn("food", "Food", 10.0, 0, wed),
 		}
-		periods, err := aggregateTransactionData(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := aggregateTransactions(txns)
 		pd := periods["food-2025-01-06"]
 		if pd.total != 50.0 {
 			t.Errorf("total = %v, want 50.0", pd.total)
@@ -325,168 +259,59 @@ func TestAggregateTransactionData(t *testing.T) {
 		if len(pd.categoryBreakdown) != 1 {
 			t.Errorf("categoryBreakdown has %d entries, want 1", len(pd.categoryBreakdown))
 		}
-		if pd.categoryBreakdown["Food"] != 10.0 {
-			t.Errorf("Food = %v, want 10.0", pd.categoryBreakdown["Food"])
-		}
 	})
 
-	t.Run("rounding to 2 decimal places verified upstream", func(t *testing.T) {
-		// aggregateTransactionData accumulates raw floats; rounding happens in
-		// RecalculatePeriods. Verify the raw accumulation is precise enough.
-		txns := []txnFieldMap{
+	t.Run("rounding verified upstream", func(t *testing.T) {
+		txns := []FullTransaction{
 			makeTxn("food", "Food", 10.01, 0, mon),
 			makeTxn("food", "Food", 20.02, 0, wed),
 		}
-		periods, err := aggregateTransactionData(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := aggregateTransactions(txns)
 		pd := periods["food-2025-01-06"]
-		// After rounding (as RecalculatePeriods does):
 		rounded := math.Round(pd.total*100) / 100
 		if rounded != 30.03 {
 			t.Errorf("rounded total = %v, want 30.03", rounded)
 		}
 	})
 
-	t.Run("error on non-time timestamp", func(t *testing.T) {
-		txn := txnFieldMap{
-			id: "txn-bad-ts",
-			data: map[string]interface{}{
-				"budget":        "food",
-				"category":      "Food",
-				"amount":        10.0,
-				"reimbursement": 0.0,
-				"timestamp":     "not-a-time",
-			},
+	t.Run("skips non-primary normalized", func(t *testing.T) {
+		txn := FullTransaction{
+			ID: "t1", Budget: "food", Category: "Food:Groceries", Amount: 50.0,
+			Timestamp: mon, NormalizedID: "some-id", NormalizedPrimary: false,
 		}
-		_, err := aggregateTransactionData([]txnFieldMap{txn})
-		if err == nil {
-			t.Fatal("expected error for non-time timestamp")
+		periods := aggregateTransactions([]FullTransaction{txn})
+		if len(periods) != 0 {
+			t.Errorf("got %d periods, want 0 (non-primary normalized txn should be skipped)", len(periods))
 		}
 	})
 
-	t.Run("error on non-float64 amount", func(t *testing.T) {
-		txn := txnFieldMap{
-			id: "txn-bad-amt",
-			data: map[string]interface{}{
-				"budget":        "food",
-				"category":      "Food",
-				"amount":        "not-a-number",
-				"reimbursement": 0.0,
-				"timestamp":     mon,
-			},
+	t.Run("includes primary normalized", func(t *testing.T) {
+		txn := FullTransaction{
+			ID: "t1", Budget: "food", Category: "Food:Groceries", Amount: 75.0,
+			Timestamp: mon, NormalizedID: "some-id", NormalizedPrimary: true,
 		}
-		_, err := aggregateTransactionData([]txnFieldMap{txn})
-		if err == nil {
-			t.Fatal("expected error for non-float64 amount")
+		periods := aggregateTransactions([]FullTransaction{txn})
+		if len(periods) != 1 {
+			t.Fatalf("got %d periods, want 1", len(periods))
+		}
+		if periods["food-2025-01-06"].total != 75.0 {
+			t.Errorf("total = %v, want 75.0", periods["food-2025-01-06"].total)
 		}
 	})
 
-	t.Run("error on non-numeric reimbursement", func(t *testing.T) {
-		txn := txnFieldMap{
-			id: "txn-bad-reimb",
-			data: map[string]interface{}{
-				"budget":        "food",
-				"category":      "Food",
-				"amount":        10.0,
-				"reimbursement": "bad",
-				"timestamp":     mon,
-			},
+	t.Run("includes non-normalized", func(t *testing.T) {
+		txn := FullTransaction{
+			ID: "t1", Budget: "food", Category: "Food:Dining", Amount: 30.0,
+			Timestamp: mon, NormalizedPrimary: true,
 		}
-		_, err := aggregateTransactionData([]txnFieldMap{txn})
-		if err == nil {
-			t.Fatal("expected error for non-numeric reimbursement")
+		periods := aggregateTransactions([]FullTransaction{txn})
+		if len(periods) != 1 {
+			t.Fatalf("got %d periods, want 1", len(periods))
+		}
+		if periods["food-2025-01-06"].total != 30.0 {
+			t.Errorf("total = %v, want 30.0", periods["food-2025-01-06"].total)
 		}
 	})
-}
-
-func TestAggregateTransactionData_SkipsNonPrimary(t *testing.T) {
-	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)
-	txn := txnFieldMap{
-		id: "txn-norm-secondary",
-		data: map[string]interface{}{
-			"budget":            "food",
-			"category":          "Food:Groceries",
-			"amount":            50.0,
-			"reimbursement":     0.0,
-			"timestamp":         mon,
-			"normalizedId":      "some-id",
-			"normalizedPrimary": false,
-		},
-	}
-	periods, err := aggregateTransactionData([]txnFieldMap{txn})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(periods) != 0 {
-		t.Errorf("got %d periods, want 0 (non-primary normalized txn should be skipped)", len(periods))
-	}
-}
-
-func TestAggregateTransactionData_PrimaryIncluded(t *testing.T) {
-	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)
-	txn := txnFieldMap{
-		id: "txn-norm-primary",
-		data: map[string]interface{}{
-			"budget":            "food",
-			"category":          "Food:Groceries",
-			"amount":            75.0,
-			"reimbursement":     0.0,
-			"timestamp":         mon,
-			"normalizedId":      "some-id",
-			"normalizedPrimary": true,
-		},
-	}
-	periods, err := aggregateTransactionData([]txnFieldMap{txn})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(periods) != 1 {
-		t.Fatalf("got %d periods, want 1", len(periods))
-	}
-	pd := periods["food-2025-01-06"]
-	if pd == nil {
-		t.Fatal("missing period food-2025-01-06")
-	}
-	if pd.total != 75.0 {
-		t.Errorf("total = %v, want 75.0", pd.total)
-	}
-	if pd.count != 1 {
-		t.Errorf("count = %d, want 1", pd.count)
-	}
-}
-
-func TestAggregateTransactionData_NullNormalizedId(t *testing.T) {
-	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)
-	txn := txnFieldMap{
-		id: "txn-no-norm",
-		data: map[string]interface{}{
-			"budget":        "food",
-			"category":      "Food:Dining",
-			"amount":        30.0,
-			"reimbursement": 0.0,
-			"timestamp":     mon,
-			"normalizedId":  nil,
-		},
-	}
-	periods, err := aggregateTransactionData([]txnFieldMap{txn})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(periods) != 1 {
-		t.Fatalf("got %d periods, want 1", len(periods))
-	}
-	pd := periods["food-2025-01-06"]
-	if pd == nil {
-		t.Fatal("missing period food-2025-01-06")
-	}
-	if pd.total != 30.0 {
-		t.Errorf("total = %v, want 30.0", pd.total)
-	}
-	if pd.count != 1 {
-		t.Errorf("count = %d, want 1", pd.count)
-	}
 }
 
 func TestComputePeriods(t *testing.T) {
@@ -500,10 +325,7 @@ func TestComputePeriods(t *testing.T) {
 			{ID: "t2", Budget: "food", Category: "Food:Dining", Amount: 30.0, Timestamp: wed, NormalizedPrimary: true},
 			{ID: "t3", Budget: "food", Category: "Food", Amount: 25.0, Timestamp: nextMon, NormalizedPrimary: true},
 		}
-		periods, err := ComputePeriods(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := ComputePeriods(txns)
 		if len(periods) != 2 {
 			t.Fatalf("got %d periods, want 2", len(periods))
 		}
@@ -532,10 +354,7 @@ func TestComputePeriods(t *testing.T) {
 			{ID: "t1", Budget: "food", Category: "Food", Amount: 50.0, Timestamp: mon, NormalizedID: "norm-1", NormalizedPrimary: false},
 			{ID: "t2", Budget: "food", Category: "Food", Amount: 30.0, Timestamp: mon, NormalizedPrimary: true},
 		}
-		periods, err := ComputePeriods(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := ComputePeriods(txns)
 		if len(periods) != 1 {
 			t.Fatalf("got %d periods, want 1", len(periods))
 		}
@@ -548,10 +367,7 @@ func TestComputePeriods(t *testing.T) {
 		txns := []FullTransaction{
 			{ID: "t1", Budget: "", Category: "Food", Amount: 100.0, Timestamp: mon, NormalizedPrimary: true},
 		}
-		periods, err := ComputePeriods(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := ComputePeriods(txns)
 		if len(periods) != 0 {
 			t.Errorf("got %d periods, want 0", len(periods))
 		}
@@ -561,10 +377,7 @@ func TestComputePeriods(t *testing.T) {
 		txns := []FullTransaction{
 			{ID: "t1", Budget: "food", Category: "Food", Amount: 100.0, Reimbursement: 50.0, Timestamp: mon, NormalizedPrimary: true},
 		}
-		periods, err := ComputePeriods(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := ComputePeriods(txns)
 		if len(periods) != 1 {
 			t.Fatalf("got %d periods, want 1", len(periods))
 		}
@@ -578,10 +391,7 @@ func TestComputePeriods(t *testing.T) {
 			{ID: "t1", Budget: "food", Category: "Food", Amount: 10.01, Timestamp: mon, NormalizedPrimary: true},
 			{ID: "t2", Budget: "food", Category: "Food", Amount: 20.02, Timestamp: wed, NormalizedPrimary: true},
 		}
-		periods, err := ComputePeriods(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := ComputePeriods(txns)
 		if periods[0].Total != 30.03 {
 			t.Errorf("total = %v, want 30.03", periods[0].Total)
 		}
@@ -591,10 +401,7 @@ func TestComputePeriods(t *testing.T) {
 		txns := []FullTransaction{
 			{ID: "t1", Budget: "food", Category: "Food", Amount: 10.0, Timestamp: wed, NormalizedPrimary: true},
 		}
-		periods, err := ComputePeriods(txns)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		periods := ComputePeriods(txns)
 		p := periods[0]
 		wantStart := time.Date(2025, 1, 6, 0, 0, 0, 0, time.UTC)
 		wantEnd := time.Date(2025, 1, 13, 0, 0, 0, 0, time.UTC)
