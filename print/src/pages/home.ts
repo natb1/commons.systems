@@ -1,6 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { User } from "../auth.js";
-import { DataIntegrityError } from "../errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
 import { getMediaDownloadUrl } from "../storage.js";
 import type { MediaItem, MediaType } from "../types.js";

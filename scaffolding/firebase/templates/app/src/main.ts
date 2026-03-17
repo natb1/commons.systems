@@ -6,7 +6,7 @@ import { renderAbout } from "./pages/about.js";
 import { renderNotes } from "./pages/notes.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
-import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
+import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { trackPageView } from "./firebase.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
@@ -41,7 +41,7 @@ const router = createHistoryRouter(
   { onNavigate: ({ path }) => trackPageView(path) },
 );
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged((user) => {
   updateNav(user);
   router.navigate();
 });

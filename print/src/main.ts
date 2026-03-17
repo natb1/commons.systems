@@ -1,13 +1,13 @@
 import "missing.css";
 import "./style/theme.css";
 import { createHistoryRouter } from "@commons-systems/router";
-import { DataIntegrityError } from "./errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { renderHome, afterRenderHome } from "./pages/home.js";
 import { renderView, afterRenderView, cleanupView } from "./pages/view.js";
 import { renderAbout } from "./pages/about.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
-import { auth, signIn, signOut, onAuthStateChanged } from "./auth.js";
+import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
 import { trackPageView } from "./firebase.js";
 
@@ -56,7 +56,7 @@ const router = createHistoryRouter(
   },
 );
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged((user) => {
   currentUser = user;
   navEl.user = user;
   router.navigate();
