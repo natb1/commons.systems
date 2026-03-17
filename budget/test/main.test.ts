@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { DataIntegrityError } from "../src/errors";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 // Mock all modules that main.ts imports at the top level
 vi.mock("@commons-systems/router", () => ({

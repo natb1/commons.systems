@@ -4,7 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    "./config": "./src/config.ts"
+    "./config": "./src/config.ts",
+    "./app-context": "./src/app-context.ts"
+  },
+  "peerDependencies": {
+    "firebase": ">=12",
+    "@commons-systems/analyticsutil": "*",
+    "@commons-systems/firestoreutil": "*"
   },
   "scripts": {
     "test": "vitest run",

@@ -4,10 +4,10 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut as firebaseSignOut,
-  onAuthStateChanged,
+  onAuthStateChanged as fbOnAuthStateChanged,
 } from "firebase/auth";
 import type { FirebaseApp } from "firebase/app";
-import type { Auth } from "firebase/auth";
+import type { Auth, NextOrObserver, Unsubscribe, User } from "firebase/auth";
 import { setupAuthEmulator } from "./emulator-auth.js";
 
 export interface FirebaseAuthOptions {
@@ -67,7 +67,7 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
   auth: Auth;
   signIn(): void;
   signOut(): Promise<void>;
-  onAuthStateChanged: typeof onAuthStateChanged;
+  onAuthStateChanged: (nextOrObserver: NextOrObserver<User | null>) => Unsubscribe;
 } {
   const auth = getAuth(app);
 
@@ -98,5 +98,11 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
     });
   }
 
-  return { auth, signIn, signOut, onAuthStateChanged };
+  return {
+    auth,
+    signIn,
+    signOut,
+    onAuthStateChanged: (nextOrObserver) =>
+      fbOnAuthStateChanged(auth, nextOrObserver),
+  };
 }

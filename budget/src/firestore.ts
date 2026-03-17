@@ -3,7 +3,7 @@ import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { requireString, requireNumber, requireNonNegativeNumber, optionalString } from "@commons-systems/firestoreutil/validate";
 
 import { db, NAMESPACE } from "./firebase.js";
-import { DataIntegrityError } from "./errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
 
