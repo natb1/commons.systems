@@ -3,7 +3,10 @@ service firebase.storage {
   match /b/{bucket}/o {
     match /print/{env}/media/{fileName} {
       allow read: if resource.metadata["publicDomain"] == "true"
-        || (request.auth != null && resource.metadata[request.auth.token.email] == "member");
+        || (request.auth != null && (
+            resource.metadata["member_0"] == request.auth.token.email
+         || resource.metadata["member_1"] == request.auth.token.email
+         || resource.metadata["member_2"] == request.auth.token.email));
       allow write: if false;
     }
     match /{allPaths=**} {
