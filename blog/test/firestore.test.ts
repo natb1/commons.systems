@@ -25,7 +25,9 @@ import type { User } from "firebase/auth";
 import type { Firestore } from "firebase/firestore";
 
 const mockDb = { type: "mock-firestore" } as unknown as Firestore;
-const NAMESPACE = "test/ns";
+import type { Namespace } from "@commons-systems/firestoreutil/namespace";
+
+const NAMESPACE = "test/ns" as Namespace;
 
 const publishedPost = {
   id: "hello-world",
