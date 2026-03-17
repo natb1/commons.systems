@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -82,6 +83,16 @@ func TestWriteFileRoundTrip(t *testing.T) {
 				Priority:    10,
 				Institution: "",
 				Account:     "",
+			},
+			{
+				ID:            "rule-002",
+				Type:          "categorization",
+				Pattern:       "",
+				Target:        "Food:Dining",
+				Priority:      20,
+				Institution:   "capital_one",
+				Account:       "4549",
+				TransactionID: "txn-002",
 			},
 		},
 		NormalizationRules: []NormalizationRule{
@@ -185,8 +196,14 @@ func TestWriteFileRoundTrip(t *testing.T) {
 	}
 
 	// Verify rules
-	if len(got.Rules) != 1 {
-		t.Fatalf("rules count = %d, want 1", len(got.Rules))
+	if len(got.Rules) != 2 {
+		t.Fatalf("rules count = %d, want 2", len(got.Rules))
+	}
+	if got.Rules[0].TransactionID != "" {
+		t.Errorf("rules[0].transactionId = %q, want empty", got.Rules[0].TransactionID)
+	}
+	if got.Rules[1].TransactionID != "txn-002" {
+		t.Errorf("rules[1].transactionId = %q, want txn-002", got.Rules[1].TransactionID)
 	}
 
 	// Verify normalization rules
@@ -392,6 +409,71 @@ func TestNoMemberEmailsOrGroupIDInTransactions(t *testing.T) {
 		if _, exists := raw[field]; exists {
 			t.Errorf("field %q should not be present in transaction JSON", field)
 		}
+	}
+}
+
+func TestRuleTransactionIDRoundTrip(t *testing.T) {
+	withTxnID := Rule{
+		ID:            "rule-with-txn",
+		Type:          "categorization",
+		Pattern:       "SPECIFIC CHARGE",
+		Target:        "Food:Dining",
+		Priority:      10,
+		Institution:   "pnc",
+		Account:       "5111",
+		TransactionID: "abc123",
+	}
+
+	withoutTxnID := Rule{
+		ID:       "rule-without-txn",
+		Type:     "categorization",
+		Pattern:  "KROGER",
+		Target:   "Food:Groceries",
+		Priority: 5,
+	}
+
+	// Marshal both
+	bWith, err := json.Marshal(withTxnID)
+	if err != nil {
+		t.Fatalf("Marshal withTxnID: %v", err)
+	}
+	bWithout, err := json.Marshal(withoutTxnID)
+	if err != nil {
+		t.Fatalf("Marshal withoutTxnID: %v", err)
+	}
+
+	// Verify transactionId presence/absence in raw JSON
+	withStr := string(bWith)
+	if want := `"transactionId":"abc123"`; !strings.Contains(withStr, want) {
+		t.Errorf("JSON with TransactionID missing %s, got: %s", want, withStr)
+	}
+
+	withoutStr := string(bWithout)
+	if strings.Contains(withoutStr, `"transactionId"`) {
+		t.Errorf("JSON without TransactionID should omit key, got: %s", withoutStr)
+	}
+
+	// Unmarshal and verify round-trip
+	var gotWith Rule
+	if err := json.Unmarshal(bWith, &gotWith); err != nil {
+		t.Fatalf("Unmarshal withTxnID: %v", err)
+	}
+	if gotWith.TransactionID != "abc123" {
+		t.Errorf("round-trip TransactionID = %q, want abc123", gotWith.TransactionID)
+	}
+	if gotWith.ID != "rule-with-txn" {
+		t.Errorf("round-trip ID = %q, want rule-with-txn", gotWith.ID)
+	}
+	if gotWith.Target != "Food:Dining" {
+		t.Errorf("round-trip Target = %q, want Food:Dining", gotWith.Target)
+	}
+
+	var gotWithout Rule
+	if err := json.Unmarshal(bWithout, &gotWithout); err != nil {
+		t.Fatalf("Unmarshal withoutTxnID: %v", err)
+	}
+	if gotWithout.TransactionID != "" {
+		t.Errorf("round-trip TransactionID = %q, want empty", gotWithout.TransactionID)
 	}
 }
 
