@@ -6,7 +6,7 @@ test.describe("auth", () => {
     await page.goto("/transactions");
     await expect(page.locator("#seed-data-notice")).toBeVisible();
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(98);
+    await expect(rows).toHaveCount(109);
   });
 
   test("nav shows sign-in link when not signed in", async ({ page }) => {
@@ -114,6 +114,6 @@ test.describe("auth", () => {
     await page.waitForSelector("#sign-in");
     await expect(page.locator("#seed-data-notice")).toBeVisible();
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(98);
+    await expect(rows).toHaveCount(109);
   });
 });
