@@ -1,12 +1,9 @@
 import {
-  generateRssXml as generateRssXmlBase,
+  generateRssXml,
   type RssConfig,
   type RssPost,
 } from "@commons-systems/rssutil";
 import { isPublished, type PostMeta } from "./post-types.js";
-
-export type { RssConfig };
-export { generateRssXmlBase as generateRssXml };
 
 export function generateFeedXml(posts: PostMeta[], config: RssConfig): string {
   const published = posts
@@ -20,5 +17,5 @@ export function generateFeedXml(posts: PostMeta[], config: RssConfig): string {
     previewDescription: p.previewDescription,
   }));
 
-  return generateRssXmlBase(rssPosts, config);
+  return generateRssXml(rssPosts, config);
 }

@@ -91,6 +91,15 @@ describe("generateRssXml", () => {
     expect(xml).not.toContain("<lastBuildDate>");
   });
 
+  it("omits lastBuildDate when first post has invalid date", () => {
+    const badDate: RssPost[] = [
+      { id: "bad", title: "Bad Date", publishedAt: "not-a-date" },
+    ];
+    const xml = generateRssXml(badDate, config);
+    expect(xml).not.toContain("<lastBuildDate>");
+    expect(xml).not.toContain("Invalid Date");
+  });
+
   it("includes xmlns:atom namespace", () => {
     const xml = generateRssXml(posts, config);
     expect(xml).toContain('xmlns:atom="http://www.w3.org/2005/Atom"');

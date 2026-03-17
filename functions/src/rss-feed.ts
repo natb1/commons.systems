@@ -57,7 +57,7 @@ function resolveAppConfig(host: string): AppConfig | undefined {
   }
 
   // Emulator: localhost or 127.0.0.1 (stripped of port).
-  // Use FIRESTORE_NAMESPACE env var (set by the acceptance test harness) to
+  // Use FIRESTORE_NAMESPACE env var (set by the test harness or QA server) to
   // read from the same Firestore path that was seeded.
   const hostWithoutPort = host.replace(/:\d+$/, "");
   if (hostWithoutPort === "localhost" || hostWithoutPort === "127.0.0.1") {
@@ -91,8 +91,8 @@ export async function handleRssFeed(req: Request, res: Response) {
   let snapshot;
   try {
     // Query only with the equality filter; sort in memory to avoid requiring a
-    // composite Firestore index (the emulator doesn't enforce index requirements,
-    // so an index-related failure only surfaces in production / preview deploys).
+    // composite Firestore index. (The emulator does not enforce index
+    // requirements, so missing indexes only fail in production.)
     snapshot = await db
       .collection(collectionPath)
       .where("published", "==", true)

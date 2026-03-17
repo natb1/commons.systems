@@ -54,7 +54,7 @@ describe("handleRssFeed", () => {
     vi.restoreAllMocks();
     mockDocs.length = 0;
     mockGetRejects = false;
-    // Seed two published posts for default test scenarios
+    // Seed two posts for default test scenarios (the mock returns all docs without filtering)
     mockDocs.push(
       {
         id: "newer-post",

@@ -15,12 +15,20 @@ export interface RssConfig {
 }
 
 export function generateRssXml(posts: RssPost[], config: RssConfig): string {
+  if (!config.title) throw new Error("RssConfig.title is required");
+  if (!config.siteUrl) throw new Error("RssConfig.siteUrl is required");
+  if (!config.feedUrl) throw new Error("RssConfig.feedUrl is required");
+
   const rawPrefix = config.postLinkPrefix ?? "/post/";
   const postLinkPrefix = rawPrefix.replace(/^\//, "");
 
-  const lastBuildDate =
+  const firstDate =
     posts.length > 0 && posts[0].publishedAt
-      ? `\n    <lastBuildDate>${new Date(posts[0].publishedAt).toUTCString()}</lastBuildDate>`
+      ? new Date(posts[0].publishedAt)
+      : undefined;
+  const lastBuildDate =
+    firstDate && !isNaN(firstDate.getTime())
+      ? `\n    <lastBuildDate>${firstDate.toUTCString()}</lastBuildDate>`
       : "";
 
   const items = posts
