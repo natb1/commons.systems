@@ -29,6 +29,7 @@ const mockRendition = {
   next: vi.fn().mockResolvedValue(undefined),
   prev: vi.fn().mockResolvedValue(undefined),
   destroy: vi.fn(),
+  hooks: { content: { register: vi.fn() } },
 };
 
 const mockSpine = {
@@ -323,6 +324,94 @@ describe("createEpubRenderer", () => {
       await nextPromise;
 
       expect(mockRendition.next).toHaveBeenCalled();
+    });
+  });
+
+  describe("content hook", () => {
+    let originalFetch: typeof globalThis.fetch;
+    let revokeStub: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      originalFetch = globalThis.fetch;
+      revokeStub = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+      revokeStub.mockRestore();
+    });
+
+    async function initAndGetHook(): Promise<(contents: { document: Document }) => Promise<void>> {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      const hookCb = mockRendition.hooks.content.register.mock.calls[0][0] as
+        (contents: { document: Document }) => Promise<void>;
+      expect(hookCb).toBeTypeOf("function");
+      return hookCb;
+    }
+
+    function makeMockDoc(links: { rel: string; href: string }[]): Document {
+      const doc = document.implementation.createHTMLDocument("test");
+      for (const { rel, href } of links) {
+        const link = doc.createElement("link");
+        link.setAttribute("rel", rel);
+        doc.head.appendChild(link);
+        // Set href after appending to avoid happy-dom fetching blob URLs
+        link.setAttribute("href", href);
+      }
+      return doc;
+    }
+
+    it("replaces blob stylesheet links with inline styles", async () => {
+      const hookCb = await initAndGetHook();
+      const doc = makeMockDoc([{ rel: "stylesheet", href: "blob:http://localhost/abc-123" }]);
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        text: () => Promise.resolve("body { color: red; }"),
+      });
+
+      await hookCb({ document: doc });
+
+      const style = doc.head.querySelector("style");
+      expect(style).not.toBeNull();
+      expect(style!.textContent).toBe("body { color: red; }");
+      expect(doc.head.querySelector('link[rel="stylesheet"]')).toBeNull();
+    });
+
+    it("leaves non-blob stylesheet links unchanged", async () => {
+      const hookCb = await initAndGetHook();
+      const doc = makeMockDoc([{ rel: "stylesheet", href: "https://example.com/style.css" }]);
+
+      globalThis.fetch = vi.fn();
+
+      await hookCb({ document: doc });
+
+      expect(doc.head.querySelector('link[rel="stylesheet"]')).not.toBeNull();
+      expect(doc.head.querySelector("style")).toBeNull();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
+    it("revokes blob URLs after replacement", async () => {
+      const hookCb = await initAndGetHook();
+      const doc = makeMockDoc([{ rel: "stylesheet", href: "blob:http://localhost/xyz-789" }]);
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        text: () => Promise.resolve("h1 { font-size: 2em; }"),
+      });
+
+      await hookCb({ document: doc });
+
+      expect(revokeStub).toHaveBeenCalledWith("blob:http://localhost/xyz-789");
+    });
+
+    it("propagates fetch failure", async () => {
+      const hookCb = await initAndGetHook();
+      const doc = makeMockDoc([{ rel: "stylesheet", href: "blob:http://localhost/fail-000" }]);
+
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error("network error"));
+
+      await expect(hookCb({ document: doc })).rejects.toThrow("network error");
     });
   });
 

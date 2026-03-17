@@ -72,8 +72,16 @@ function makeEpub(chapterCount: number, chapterBodies: string[] = []): Buffer {
 </container>`),
   });
 
+  // CSS stylesheet
+  files.push({
+    name: "OEBPS/style.css",
+    data: Buffer.from("body { color: #333; font-family: Georgia, serif; }"),
+  });
+
   // Build manifest and spine entries
-  const manifestItems: string[] = [];
+  const manifestItems: string[] = [
+    `    <item id="css" href="style.css" media-type="text/css"/>`,
+  ];
   const spineItems: string[] = [];
   for (let i = 1; i <= chapterCount; i++) {
     manifestItems.push(
@@ -113,7 +121,7 @@ ${spineItems.join("\n")}
         `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>Book ${i}</title></head>
+<head><title>Book ${i}</title><link rel="stylesheet" href="style.css"/></head>
 <body>${bodyHtml}</body>
 </html>`),
     });

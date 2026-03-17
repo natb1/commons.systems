@@ -49,6 +49,23 @@ export function createEpubRenderer(
       _chapterCount = (book.spine as unknown as { length: number }).length;
       if (_chapterCount === 0) throw new Error("EPUB spine is empty — no chapters to render");
 
+      rendition.hooks.content.register(async (contents: { document: Document }) => {
+        const doc = contents.document;
+        if (!doc) return;
+        const links = doc.querySelectorAll('link[rel="stylesheet"]');
+        for (const link of Array.from(links)) {
+          const href = link.getAttribute("href");
+          if (!href || !href.startsWith("blob:")) continue;
+          const response = await fetch(href);
+          const cssText = await response.text();
+          const style = doc.createElement("style");
+          style.textContent = cssText;
+          link.parentNode!.insertBefore(style, link);
+          link.remove();
+          URL.revokeObjectURL(href);
+        }
+      });
+
       rendition.on("relocated", (location: Location) => {
         _chapterIndex = location.start.index;
         _subPage = location.start.displayed.page;
