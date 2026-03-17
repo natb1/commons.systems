@@ -20,7 +20,7 @@ vi.mock("firebase/storage", () => ({
 }));
 
 vi.mock("@commons-systems/firestoreutil/namespace", () => ({
-  validateNamespace: vi.fn(),
+  validateNamespace: vi.fn((ns: string) => ns),
 }));
 
 vi.mock("@commons-systems/analyticsutil", () => ({
@@ -73,7 +73,7 @@ describe("createAppContext", () => {
 
   it("returns correct shape with { storage: true }", async () => {
     const createAppContext = await loadModule();
-    const ctx = createAppContext("myapp", "app-id-123", { storage: true });
+    const ctx = await createAppContext("myapp", "app-id-123", { storage: true });
 
     expect(ctx).toHaveProperty("app", mockApp);
     expect(ctx).toHaveProperty("db", mockDb);
@@ -126,7 +126,7 @@ describe("createAppContext", () => {
     const createAppContext = await loadModule();
     const mocks = await loadMocks();
 
-    createAppContext("myapp", "app-id-123", { storage: true });
+    await createAppContext("myapp", "app-id-123", { storage: true });
 
     expect(mocks.connectStorageEmulator).toHaveBeenCalledWith(
       mockStorage,

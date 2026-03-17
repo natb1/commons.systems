@@ -16,7 +16,7 @@ detect_features() {
     return 1
   fi
 
-  # Detect Firestore: direct firebase SDK import or createAppContext (which always initializes Firestore)
+  # Detect Firestore: direct firebase SDK import or createAppContext usage
   USES_FIRESTORE=false
   if grep -rq -e '"firebase/firestore"' -e 'firebaseutil/app-context' "$app_src_dir" 2>/dev/null; then
     USES_FIRESTORE=true
@@ -32,8 +32,7 @@ detect_features() {
   USES_STORAGE=false
   if grep -rq -e '"firebase/storage"' "$app_src_dir" 2>/dev/null; then
     USES_STORAGE=true
-  elif grep -rq 'firebaseutil/app-context' "$app_src_dir" 2>/dev/null && \
-       grep -rq 'storage:\s*true' "$app_src_dir" 2>/dev/null; then
+  elif grep -rl 'firebaseutil/app-context' "$app_src_dir" 2>/dev/null | xargs grep -q 'storage:\s*true' 2>/dev/null; then
     USES_STORAGE=true
   fi
 

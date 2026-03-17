@@ -11,7 +11,7 @@ import type { RenderPageOptions } from "./pages/render-options.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { hydrateBudgetTable, hydrateBudgetChart } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
-import { auth, signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
+import { signIn, signOut, onAuthStateChanged, type User } from "./auth.js";
 import { getUserGroups as _getUserGroups, type Group } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView } from "./firebase.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
@@ -207,7 +207,7 @@ const handleAuth = createAuthStateHandler({
   setState: (next) => { state = next; },
 });
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged((user) => {
   handleAuth(user).catch((error) => {
     console.error("Unhandled error in auth state handler:", error);
   });

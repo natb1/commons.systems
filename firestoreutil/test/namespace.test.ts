@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { nsCollectionPath, validateNamespace } from "../src/namespace.js";
 
 describe("validateNamespace", () => {
-  it("accepts valid namespace", () => {
-    expect(() => validateNamespace("app/prod")).not.toThrow();
+  it("accepts valid namespace and returns it", () => {
+    expect(validateNamespace("app/prod")).toBe("app/prod");
   });
 
   it("throws on empty namespace", () => {

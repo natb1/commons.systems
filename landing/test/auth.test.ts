@@ -30,10 +30,9 @@ describe("auth module", () => {
     expect(mockCreateAppAuth).toHaveBeenCalledWith({ type: "mock-app" });
   });
 
-  it("re-exports auth, signIn, signOut, onAuthStateChanged", async () => {
+  it("re-exports signIn, signOut, onAuthStateChanged", async () => {
     const mod = await import("../src/auth");
 
-    expect(mod.auth).toBe(mockResult.auth);
     expect(mod.signIn).toBe(mockResult.signIn);
     expect(mod.signOut).toBe(mockResult.signOut);
     expect(mod.onAuthStateChanged).toBe(mockResult.onAuthStateChanged);
