@@ -100,11 +100,10 @@ export function buildCategoryTree(
 
   // Roll up values and counts: parent totals = sum of children + own direct value
   function rollUp(n: CategoryNode): number {
-    if (n.children.length > 0) {
-      const childSum = n.children.reduce((s, c) => s + rollUp(c), 0);
-      const childCount = n.children.reduce((s, c) => s + c.count, 0);
-      n.value = n.value + childSum;
-      n.count = n.count + childCount;
+    for (const c of n.children) {
+      rollUp(c);
+      n.value += c.value;
+      n.count += c.count;
     }
     return n.value;
   }
@@ -148,8 +147,8 @@ function tooltipText(data: CategoryNode, rootValue: number): string {
   return `${data.fullPath}\n${formatCurrency(data.value)} (${pct}%)\n${data.count} transactions`;
 }
 
-function nodeHeight(value: number, rootValue: number, treeHeight: number, scale: number): number {
-  return Math.max((value / rootValue) * treeHeight * scale, 4);
+function nodeHeight(value: number, rootValue: number, treeHeight: number): number {
+  return Math.max((value / rootValue) * treeHeight * NODE_SCALE, 4);
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -178,7 +177,7 @@ function resolveOverlaps(
 
   for (const [, group] of byDepth) {
     group.sort((a, b) => a.x! - b.x!);
-    const heights = group.map(n => nodeHeight(n.data.value, rootValue, treeHeight, NODE_SCALE));
+    const heights = group.map(n => nodeHeight(n.data.value, rootValue, treeHeight));
 
     for (let i = 1; i < group.length; i++) {
       const minDist = (heights[i - 1] + heights[i]) / 2 + OVERLAP_GAP;
@@ -211,6 +210,7 @@ function assertChartTransactions(data: unknown): asserts data is SerializedChart
     if (typeof rec.category !== "string") throw new Error("Chart transaction missing category string");
     if (typeof rec.amount !== "number") throw new Error("Chart transaction missing amount number");
     if (typeof rec.reimbursement !== "number") throw new Error("Chart transaction missing reimbursement number");
+    if (rec.timestampMs !== null && typeof rec.timestampMs !== "number") throw new Error("Chart transaction timestampMs must be number or null");
   }
 }
 
@@ -263,7 +263,6 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     const rootData = buildCategoryTree(filtered, currentMode);
 
     if (rootData.value === 0) {
-      container.replaceChildren();
       container.textContent = currentMode === "income"
         ? "No income in selected window."
         : "No spending in selected window.";
@@ -327,8 +326,8 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
       if (parentValue === 0) continue;
 
-      const parentH = nodeHeight(source.data.value, rootData.value, treeHeight, NODE_SCALE);
-      const childH = nodeHeight(target.data.value, rootData.value, treeHeight, NODE_SCALE);
+      const parentH = nodeHeight(source.data.value, rootData.value, treeHeight);
+      const childH = nodeHeight(target.data.value, rootData.value, treeHeight);
       const bandWidth = (childValue / parentValue) * parentH;
 
       const stackOffset = parentStacks.get(source) ?? 0;
@@ -364,7 +363,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
     for (const node of nodes) {
       if (node.depth === 0) continue;
-      const h = nodeHeight(node.data.value, rootData.value, treeHeight, NODE_SCALE);
+      const h = nodeHeight(node.data.value, rootData.value, treeHeight);
       const w = 12;
       const topIdx = getTopLevelIndex(node);
       const hasChildren = (node.children?.length ?? 0) > 0 || collapsedPaths.has(node.data.fullPath);
@@ -415,9 +414,12 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     try {
       render();
     } catch (error) {
-      console.error("Chart render error:", error);
-      container.replaceChildren();
       container.textContent = "Chart rendering failed. Try refreshing the page.";
+      if (error instanceof TypeError || error instanceof ReferenceError) {
+        setTimeout(() => { throw error; }, 0);
+        return;
+      }
+      console.error("Chart render error:", error);
     }
   }
 

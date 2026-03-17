@@ -290,7 +290,11 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
         .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
     ]);
     transactions.sort(compareByTimestampDesc);
-    chartHtml = renderCategorySankey(transactions);
+    try {
+      chartHtml = renderCategorySankey(transactions);
+    } catch (chartError) {
+      console.error("Chart serialization failed:", chartError);
+    }
     tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets, budgetPeriods);
   } catch (error) {
     tableHtml = renderLoadError(error, "transactions-error");
