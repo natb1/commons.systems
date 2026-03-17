@@ -10,6 +10,9 @@ export interface ContentRenderer {
   /** String form of currentPage. Do not read before init resolves. */
   readonly position: string;
   readonly positionLabel: string;
+  zoomIn?(): void;
+  resetZoom?(): void;
+  readonly isZoomed?: boolean;
   destroy(): void;
 }
 

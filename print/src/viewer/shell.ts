@@ -27,6 +27,8 @@ export function renderViewerShell(item: MediaItem): string {
           <button class="viewer-prev" disabled aria-label="Previous page">&larr;</button>
           <span class="viewer-position">Loading...</span>
           <button class="viewer-next" disabled aria-label="Next page">&rarr;</button>
+          <button class="viewer-zoom-in" style="display:none" aria-label="Zoom in">+</button>
+          <button class="viewer-zoom-reset" style="display:none" aria-label="Reset zoom">&#8865;</button>
         </div>
         <div class="viewer-meta">
           <h3 class="viewer-title">${escapeHtml(item.title)}</h3>
@@ -77,6 +79,8 @@ export function initViewer(
   const position = viewer.querySelector(".viewer-position") as HTMLElement;
   const toggleBtn = viewer.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
   const panel = viewer.querySelector(".viewer-panel") as HTMLElement;
+  const zoomInBtn = viewer.querySelector(".viewer-zoom-in") as HTMLButtonElement;
+  const zoomResetBtn = viewer.querySelector(".viewer-zoom-reset") as HTMLButtonElement;
 
   document.body.classList.add("viewer-active");
 
@@ -130,11 +134,29 @@ export function initViewer(
     }, 500);
   }
 
+  // Zoom controls — visible only when the renderer supports zoom
+  function updateZoomState() {
+    if (!renderer.zoomIn) return;
+    zoomInBtn.disabled = !!renderer.isZoomed;
+    zoomResetBtn.disabled = !renderer.isZoomed;
+  }
+
+  function handleZoomIn() {
+    renderer.zoomIn!();
+    updateZoomState();
+  }
+
+  function handleZoomReset() {
+    renderer.resetZoom!();
+    updateZoomState();
+  }
+
   // Navigation
   function updateNav() {
     position.textContent = renderer.positionLabel;
     prevBtn.disabled = !renderer.canGoPrev;
     nextBtn.disabled = !renderer.canGoNext;
+    updateZoomState();
     scheduleSave();
   }
 
@@ -186,6 +208,12 @@ export function initViewer(
     // Sync to actual start page: parsePositionPage may have clamped savedPosition to 1 if out of range.
     // Without this sync, lastSavedPosition would differ from renderer.position, triggering a spurious write on first navigation.
     lastSavedPosition = renderer.position;
+    if (renderer.zoomIn) {
+      zoomInBtn.style.display = "";
+      zoomResetBtn.style.display = "";
+      zoomInBtn.addEventListener("click", handleZoomIn);
+      zoomResetBtn.addEventListener("click", handleZoomReset);
+    }
     updateNav();
   })().catch((err) => {
     reportError(new Error("Viewer initialization failed", { cause: err }));
@@ -198,6 +226,8 @@ export function initViewer(
     orientationQuery.removeEventListener("change", updateOrientation);
     toggleBtn.removeEventListener("click", handleToggle);
     document.removeEventListener("keydown", handleKeydown);
+    zoomInBtn.removeEventListener("click", handleZoomIn);
+    zoomResetBtn.removeEventListener("click", handleZoomReset);
     renderer.destroy();
   };
 }

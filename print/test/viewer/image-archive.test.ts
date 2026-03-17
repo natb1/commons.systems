@@ -348,4 +348,143 @@ describe("createImageArchiveRenderer", () => {
 
     expect(renderer.currentPage).toBe(1);
   });
+
+  it("zoomIn() adds zoomed class to container", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    renderer.zoomIn!();
+    expect(container.classList.contains("zoomed")).toBe(true);
+  });
+
+  it("resetZoom() removes zoomed class from container", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    renderer.zoomIn!();
+    renderer.resetZoom!();
+    expect(container.classList.contains("zoomed")).toBe(false);
+  });
+
+  it("isZoomed reflects current state", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    expect(renderer.isZoomed).toBe(false);
+    renderer.zoomIn!();
+    expect(renderer.isZoomed).toBe(true);
+    renderer.resetZoom!();
+    expect(renderer.isZoomed).toBe(false);
+  });
+
+  it("goToPage resets zoom", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    renderer.zoomIn!();
+    await renderer.goToPage(2);
+    expect(container.classList.contains("zoomed")).toBe(false);
+    expect(renderer.isZoomed).toBe(false);
+  });
+
+  it("next() resets zoom", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    renderer.zoomIn!();
+    await renderer.next();
+    expect(container.classList.contains("zoomed")).toBe(false);
+    expect(renderer.isZoomed).toBe(false);
+  });
+
+  it("prev() resets zoom", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    await renderer.goToPage(2);
+    renderer.zoomIn!();
+    await renderer.prev();
+    expect(container.classList.contains("zoomed")).toBe(false);
+    expect(renderer.isZoomed).toBe(false);
+  });
+
+  it("zoomIn after destroy is a no-op", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    renderer.destroy();
+    expect(() => renderer.zoomIn!()).not.toThrow();
+  });
+
+  it("resetZoom scrolls parent to top-left", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const parent = document.createElement("div");
+    const container = makeContainer();
+    parent.appendChild(container);
+
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    renderer.zoomIn!();
+    parent.scrollTop = 150;
+    parent.scrollLeft = 75;
+
+    renderer.resetZoom!();
+    expect(parent.scrollTop).toBe(0);
+    expect(parent.scrollLeft).toBe(0);
+  });
 });

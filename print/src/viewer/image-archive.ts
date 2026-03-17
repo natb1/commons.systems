@@ -11,6 +11,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   let fileData: Uint8Array[] = [];
   let objectUrlCache: (string | null)[] = [];
   let imgEl: HTMLImageElement | null = null;
+  let containerEl: HTMLElement | null = null;
   // 0 is the pre-init sentinel; position returns "0" and canGoNext/canGoPrev return false until init resolves.
   let _currentPage = 0;
   let _pageCount = 0;
@@ -58,6 +59,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       const startPage = parsePositionPage(initialPosition, _pageCount);
       _currentPage = startPage;
 
+      containerEl = container;
       imgEl = document.createElement("img");
       imgEl.alt = `Page ${startPage}`;
       imgEl.src = getObjectUrl(startPage - 1);
@@ -67,6 +69,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     async goToPage(page: number): Promise<void> {
       if (page < 1 || page > _pageCount) return;
       if (!imgEl) throw new Error("goToPage called after renderer was destroyed");
+      this.resetZoom!();
       _currentPage = page;
       imgEl.alt = `Page ${page}`;
       imgEl.src = getObjectUrl(page - 1);
@@ -98,6 +101,25 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     },
     get currentPage() {
       return _currentPage;
+    },
+
+    zoomIn(): void {
+      if (!containerEl) return;
+      containerEl.classList.add("zoomed");
+    },
+
+    resetZoom(): void {
+      if (!containerEl) return;
+      containerEl.classList.remove("zoomed");
+      const scrollParent = containerEl.parentElement;
+      if (scrollParent) {
+        scrollParent.scrollTop = 0;
+        scrollParent.scrollLeft = 0;
+      }
+    },
+
+    get isZoomed(): boolean {
+      return containerEl?.classList.contains("zoomed") ?? false;
     },
 
     destroy(): void {
