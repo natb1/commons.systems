@@ -1,6 +1,6 @@
 import type { User } from "firebase/auth";
 import type { Group } from "@commons-systems/authutil/groups";
-import { DataIntegrityError } from "../errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export type RenderPageOptions =
   | { user: null; group: null; groupError: false }

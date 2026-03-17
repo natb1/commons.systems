@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { DataIntegrityError } from "../../src/errors";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 const mockGetPublicMedia = vi.fn();
 const mockGetAllAccessibleMedia = vi.fn();

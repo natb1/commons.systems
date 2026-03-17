@@ -1,7 +1,10 @@
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import type { Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
-import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
+import {
+  nsCollectionPath,
+  type Namespace,
+} from "@commons-systems/firestoreutil/namespace";
 import { DataIntegrityError } from "./errors.js";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
 
@@ -20,7 +23,7 @@ export interface Group {
   readonly name: string;
 }
 
-function groupsPath(namespace: string): string {
+function groupsPath(namespace: Namespace): string {
   return nsCollectionPath(namespace, "groups");
 }
 
@@ -34,7 +37,7 @@ function requireEmail(caller: string, user: User): string {
   return user.email;
 }
 
-export async function getUserGroups(db: Firestore, namespace: string, user: User): Promise<Group[]> {
+export async function getUserGroups(db: Firestore, namespace: Namespace, user: User): Promise<Group[]> {
   const email = requireEmail("getUserGroups", user);
   const q = query(collection(db, groupsPath(namespace)), where("members", "array-contains", email));
   const snapshot = await getDocs(q);
@@ -55,7 +58,7 @@ function isPermissionDenied(error: unknown): boolean {
 
 export async function isInGroup(
   db: Firestore,
-  namespace: string,
+  namespace: Namespace,
   user: User | null,
   groupId: GroupId,
 ): Promise<boolean> {
