@@ -33,6 +33,9 @@ read -r VITE_PORT EXTRA_PORTS <<< "$(find_available_ports "$PORT_COUNT")"
 echo "Vite dev server will use port $VITE_PORT"
 
 NAMESPACE=""
+if [ "$USES_FIRESTORE" = true ]; then
+  NAMESPACE=$(get_firestore_namespace "$APP_NAME" "$(get_env_suffix qa)")
+fi
 FIRESTORE_PORT=""
 AUTH_PORT=""
 STORAGE_PORT=""
@@ -130,6 +133,7 @@ fi
 
 # Start Firebase emulators in background (if any emulators needed)
 if [ -n "$EMULATOR_LIST" ]; then
+  FIRESTORE_NAMESPACE="$NAMESPACE" \
   npx firebase-tools emulators:start --only "$EMULATOR_LIST" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
   EMULATOR_PID=$!
 fi
@@ -150,7 +154,6 @@ if [ "$USES_FIRESTORE" = true ]; then
   echo "Firebase Firestore emulator ready on port ${FIRESTORE_PORT}"
 
   # Seed Firestore with worktree-scoped qa namespace (e.g., "myapp/qa-main")
-  NAMESPACE=$(get_firestore_namespace "$APP_NAME" "$(get_env_suffix qa)")
   echo "Seeding Firestore (namespace: ${NAMESPACE})..."
   APP_NAME="$APP_NAME" \
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \

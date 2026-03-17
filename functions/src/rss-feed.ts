@@ -90,7 +90,7 @@ export async function handleRssFeed(req: Request, res: Response) {
     return;
   }
 
-  if (getApps().length === 0) initializeApp();
+  if (getApps().length === 0) initializeApp({ projectId: "commons-systems" });
   const db = getFirestore();
 
   // Query only with the equality filter; sort in memory to avoid requiring a
