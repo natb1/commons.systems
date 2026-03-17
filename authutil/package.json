@@ -8,6 +8,7 @@
     "./emulator-auth": "./src/emulator-auth.ts",
     "./errors": "./src/errors.ts",
     "./firebase-auth": "./src/firebase-auth.ts",
+    "./app-auth": "./src/app-auth.ts",
     "./groups": "./src/groups.ts",
     "./e2e/sign-in": "./e2e/sign-in.ts"
   },

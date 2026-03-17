@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { nsCollectionPath } from "./namespace.js";
+import { nsCollectionPath, type Namespace } from "./namespace.js";
 
 export interface SeedDocument<T extends Record<string, unknown> = Record<string, unknown>> {
   id: string;
@@ -21,7 +21,7 @@ export interface SeedCollection {
 }
 
 export interface SeedSpec {
-  namespace: string;
+  namespace: Namespace;
   collections: SeedCollection[];
 }
 

@@ -1,5 +1,5 @@
 import type { User } from "../auth.js";
-import { DataIntegrityError } from "../errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { getMediaItem } from "../firestore.js";
 import { getMediaDownloadUrl } from "../storage.js";
 import type { MediaItem } from "../types.js";

@@ -1,6 +1,7 @@
 import { initializeApp, cert, type ServiceAccount } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { deleteNamespace } from "../src/delete-namespace.js";
+import { validateNamespace } from "../src/namespace.js";
 
 const namespace = process.env.FIRESTORE_NAMESPACE;
 if (!namespace) {
@@ -33,5 +34,6 @@ if (emulatorHost) {
   console.log(`Using emulator at ${emulatorHost}`);
 }
 
-await deleteNamespace(db, namespace);
+const validatedNamespace = validateNamespace(namespace);
+await deleteNamespace(db, validatedNamespace);
 console.log("Namespace deleted.");
