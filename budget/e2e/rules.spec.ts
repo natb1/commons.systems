@@ -119,7 +119,7 @@ test.describe("rules", () => {
 
   test("clicking rules nav link navigates to rules page", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("main h2")).toHaveText("Transactions");
+    await expect(page.locator("main h2")).toHaveText("Budgets");
     await page.click('app-nav a[href="/rules"]');
     await expect(page.locator("main h2")).toHaveText("Rules");
   });
