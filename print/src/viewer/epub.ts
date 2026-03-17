@@ -29,6 +29,8 @@ export function createEpubRenderer(
 
   return {
     async init(containerEl: HTMLElement, url: string, initialPosition?: string): Promise<void> {
+      if (book) throw new Error("EPUB renderer already initialized");
+
       containerDiv = document.createElement("div");
       containerDiv.className = "viewer-epub-container";
       containerEl.appendChild(containerDiv);
@@ -49,23 +51,33 @@ export function createEpubRenderer(
       _chapterCount = (book.spine as unknown as { length: number }).length;
       if (_chapterCount === 0) throw new Error("EPUB spine is empty — no chapters to render");
 
+      // epub.js creates blob: URLs for EPUB stylesheets without setting a MIME type.
+      // Browsers ignore stylesheets served without text/css, so we fetch each blob,
+      // read its CSS text, and replace the <link> with an inline <style> element.
       rendition.hooks.content.register(async (contents: { document: Document }) => {
         try {
           const doc = contents.document;
           if (!doc) throw new Error("epub.js content hook received contents without a document");
-          const links = doc.querySelectorAll('link[rel="stylesheet"]');
-          for (const link of Array.from(links)) {
+          const links = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'));
+          const blobLinks = links.filter((link) => {
             const href = link.getAttribute("href");
-            if (!href || !href.startsWith("blob:")) continue;
-            const response = await fetch(href);
-            if (!response.ok) throw new Error(`Failed to fetch EPUB blob stylesheet: ${response.status} ${response.statusText}`);
-            const cssText = await response.text();
+            return href && href.startsWith("blob:");
+          });
+          const results = await Promise.all(
+            blobLinks.map(async (link) => {
+              const href = link.getAttribute("href")!;
+              const response = await fetch(href);
+              if (!response.ok) throw new Error(`Failed to fetch EPUB blob stylesheet: ${response.status} ${response.statusText}`);
+              return { link, href, cssText: await response.text() };
+            }),
+          );
+          for (const { link, href, cssText } of results) {
+            URL.revokeObjectURL(href);
             const style = doc.createElement("style");
             style.textContent = cssText;
             if (!link.parentNode) throw new Error("EPUB stylesheet link has no parent node");
             link.parentNode.insertBefore(style, link);
             link.remove();
-            URL.revokeObjectURL(href);
           }
         } catch (err) {
           reportError(err instanceof Error ? err : new Error("EPUB content hook failed", { cause: err }));

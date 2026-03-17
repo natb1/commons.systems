@@ -85,6 +85,15 @@ describe("createEpubRenderer", () => {
       expect(epubDiv?.tagName).toBe("DIV");
     });
 
+    it("throws if init is called twice", async () => {
+      const renderer = createEpubRenderer();
+      await renderer.init(container, "https://example.com/book.epub");
+
+      await expect(renderer.init(container, "https://example.com/book.epub")).rejects.toThrow(
+        "EPUB renderer already initialized",
+      );
+    });
+
     it("sets currentPage to 1 after init (chapter index 0)", async () => {
       const renderer = createEpubRenderer();
 
