@@ -99,13 +99,12 @@ export function buildCategoryTree(
   }
 
   // Roll up values and counts: parent totals = sum of children + own direct value
-  function rollUp(n: CategoryNode): number {
+  function rollUp(n: CategoryNode): void {
     for (const c of n.children) {
       rollUp(c);
       n.value += c.value;
       n.count += c.count;
     }
-    return n.value;
   }
   rollUp(root);
 
