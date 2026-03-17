@@ -84,10 +84,12 @@
 
 /* --- Category sankey tree --- */
 
-#sankey-controls { margin-bottom: 0.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+#sankey-controls { max-width: 1200px; margin: 0 auto 0.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
 #sankey-controls input[type="number"] { width: 4rem; }
 #sankey-controls input[type="range"] { flex: 1; max-width: 200px; }
-#category-sankey { width: 100%; margin-bottom: 1rem; overflow: auto; }
+#sankey-mode { border: none; padding: 0; margin: 0; display: flex; gap: 0.5rem; }
+#sankey-mode label { cursor: pointer; white-space: nowrap; }
+#category-sankey { width: 100%; max-width: 1200px; margin: 0 auto 1rem; }
 #category-sankey svg { display: block; }
 .sankey-node rect { cursor: pointer; }
 .sankey-node text { font-size: 11px; pointer-events: none; }

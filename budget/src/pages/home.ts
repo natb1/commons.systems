@@ -160,6 +160,10 @@ function renderCategorySankey(transactions: Transaction[]): string {
   const chartData = serializeChartTransactions(transactions);
   const serialized = escapeHtml(JSON.stringify(chartData));
   return `<div id="sankey-controls">
+      <fieldset id="sankey-mode">
+        <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
+        <label><input type="radio" name="sankey-mode" value="income"> Income</label>
+      </fieldset>
       <label>Weeks: <input type="number" id="sankey-weeks" value="12" min="1" max="104"></label>
       <label>Ending week: <input type="range" id="sankey-end-week"> <span id="sankey-end-label"></span></label>
     </div>

@@ -1,5 +1,7 @@
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
 
+export type ChartMode = "spending" | "income";
+
 export interface SerializedChartTransaction {
   category: string;
   amount: number;
@@ -58,12 +60,18 @@ export function filterByWeeks(
 }
 
 /** Build a category tree from transactions. */
-export function buildCategoryTree(txns: SerializedChartTransaction[]): CategoryNode {
+export function buildCategoryTree(
+  txns: SerializedChartTransaction[],
+  mode: ChartMode = "spending",
+): CategoryNode {
   const root: CategoryNode = { name: "All", fullPath: "", value: 0, count: 0, children: [] };
 
   for (const t of txns) {
     const net = computeNetAmount(t.amount, t.reimbursement);
     if (net <= 0) continue;
+    const isIncome = t.category.split(":")[0] === "Income";
+    if (mode === "spending" && isIncome) continue;
+    if (mode === "income" && !isIncome) continue;
     const parts = t.category.split(":");
     let node = root;
     let path = "";
@@ -89,6 +97,13 @@ export function buildCategoryTree(txns: SerializedChartTransaction[]): CategoryN
     return n.value;
   }
   rollUp(root);
+
+  // Sort deterministically: by value descending, then name ascending
+  function sortChildren(n: CategoryNode): void {
+    n.children.sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
+    n.children.forEach(sortChildren);
+  }
+  sortChildren(root);
 
   return root;
 }
@@ -125,17 +140,6 @@ function formatDate(ms: number): string {
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-interface LayoutNode {
-  data: CategoryNode;
-  x: number; // tree x → SVG y
-  y: number; // tree y → SVG x
-  depth: number;
-  parent: LayoutNode | null;
-  children?: LayoutNode[];
-  topLevelIndex: number;
-  collapsed: boolean;
-}
-
 interface IndexedNode extends HierarchyNode<CategoryNode> {
   topLevelIndex: number;
 }
@@ -147,6 +151,60 @@ function asIndexed(node: HierarchyNode<CategoryNode>): IndexedNode {
 function assignTopLevelIndex(node: HierarchyNode<CategoryNode>, index: number): void {
   asIndexed(node).topLevelIndex = index;
   node.children?.forEach(c => assignTopLevelIndex(c, index));
+}
+
+const OVERLAP_GAP = 8;
+
+/**
+ * Post-process d3.tree positions so proportional-height node rects never
+ * overlap.  For each depth column we push nodes apart where needed, then
+ * re-centre the column within the available height.  When the total required
+ * height exceeds the available space we scale positions to fit.
+ */
+function resolveOverlaps(
+  nodes: HierarchyNode<CategoryNode>[],
+  rootValue: number,
+  treeHeight: number,
+  nodeScale: number,
+): void {
+  const byDepth = new Map<number, HierarchyNode<CategoryNode>[]>();
+  for (const node of nodes) {
+    if (node.depth === 0) continue;
+    const group = byDepth.get(node.depth) ?? [];
+    group.push(node);
+    byDepth.set(node.depth, group);
+  }
+
+  for (const [, group] of byDepth) {
+    // After tree layout, x is always defined
+    group.sort((a, b) => a.x! - b.x!);
+    const heights = group.map(n => Math.max((n.data.value / rootValue) * treeHeight * nodeScale, 4));
+
+    // Forward pass: push down any node whose rect overlaps the previous
+    for (let i = 1; i < group.length; i++) {
+      const minDist = (heights[i - 1] + heights[i]) / 2 + OVERLAP_GAP;
+      if (group[i].x! - group[i - 1].x! < minDist) {
+        group[i].x = group[i - 1].x! + minDist;
+      }
+    }
+
+    // Compute extent after pushing
+    const top = group[0].x! - heights[0] / 2;
+    const bottom = group[group.length - 1].x! + heights[group.length - 1] / 2;
+    const used = bottom - top;
+
+    if (used <= treeHeight) {
+      // Enough room — just centre the column
+      const offset = (treeHeight - used) / 2 - top;
+      for (const node of group) node.x = node.x! + offset;
+    } else {
+      // Compress to fit while preserving order and proportional gaps
+      const scale = treeHeight / used;
+      for (const node of group) {
+        node.x = (node.x! - top) * scale;
+      }
+    }
+  }
 }
 
 export function hydrateCategorySankey(container: HTMLElement): void {
@@ -167,12 +225,14 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   const collapsedPaths = new Set<string>();
   let currentNumWeeks = 12;
   let currentEndWeekIdx = weeks.length - 1;
+  let currentMode: ChartMode = "spending";
 
   // Controls
   const controlsDiv = container.previousElementSibling;
   const weeksInput = controlsDiv?.querySelector("#sankey-weeks") as HTMLInputElement | null;
   const endSlider = controlsDiv?.querySelector("#sankey-end-week") as HTMLInputElement | null;
   const endLabel = controlsDiv?.querySelector("#sankey-end-label") as HTMLElement | null;
+  const modeRadios = controlsDiv?.querySelectorAll<HTMLInputElement>('input[name="sankey-mode"]');
 
   if (endSlider) {
     endSlider.min = "0";
@@ -187,11 +247,13 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
   function render(): void {
     const filtered = filterByWeeks(allTxns, weeks, currentNumWeeks, currentEndWeekIdx);
-    const rootData = buildCategoryTree(filtered);
+    const rootData = buildCategoryTree(filtered, currentMode);
 
     if (rootData.value === 0) {
       container.replaceChildren();
-      container.textContent = "No spending in selected window.";
+      container.textContent = currentMode === "income"
+        ? "No income in selected window."
+        : "No spending in selected window.";
       return;
     }
 
@@ -204,37 +266,41 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     }
     const prunedRoot = pruneCollapsed(rootData);
 
+    // d3 hierarchy for tree layout
     const root = hierarchy(prunedRoot, d => d.children.length > 0 ? d.children : undefined);
-
-    // Assign top-level color indices
     root.children?.forEach((child, i) => assignTopLevelIndex(child, i));
     asIndexed(root).topLevelIndex = -1;
 
-    const leafCount = root.leaves().length;
-    const nodeHeight = 24;
-    const treeHeight = Math.max(leafCount * nodeHeight, 200);
-    const treeWidth = (root.height + 1) * 200;
+    // Layout dimensions — 4:3 aspect ratio, fill container width
+    const containerWidth = container.clientWidth || 600;
+    const svgHeight = Math.round(containerWidth * 3 / 4);
     const margin = { top: 20, right: 160, bottom: 20, left: 10 };
-    const svgWidth = treeWidth + margin.left + margin.right;
-    const svgHeight = treeHeight + margin.top + margin.bottom;
+    const treeWidth = containerWidth - margin.left - margin.right;
+    const treeHeight = svgHeight - margin.top - margin.bottom;
+
+    // Scale factor shrinks node/band heights to leave breathing room between branches
+    const nodeScale = 0.6;
 
     const layout = tree<CategoryNode>().size([treeHeight, treeWidth]);
     const treeRoot = layout(root);
 
-    const nodes = treeRoot.descendants() as unknown as LayoutNode[];
+    // Adjust positions so proportional-height rects don't overlap
+    resolveOverlaps(treeRoot.descendants(), rootData.value, treeHeight, nodeScale);
+
+    const nodes = treeRoot.descendants();
     const links = treeRoot.links();
 
     const svg = document.createElementNS(SVG_NS, "svg");
-    svg.setAttribute("viewBox", `0 0 ${svgWidth} ${svgHeight}`);
-    svg.setAttribute("width", String(svgWidth));
+    svg.setAttribute("viewBox", `0 0 ${containerWidth} ${svgHeight}`);
+    svg.setAttribute("width", "100%");
     svg.setAttribute("height", String(svgHeight));
 
     const g = document.createElementNS(SVG_NS, "g");
     g.setAttribute("transform", `translate(${margin.left},${margin.top})`);
     svg.appendChild(g);
 
-    // Draw links as sankey bands
-    // First, compute stacking offsets at each parent
+    // Draw links as sankey bands with curved bezier paths
+    // Stacking at parent side creates the fan-out curve effect
     const parentStacks = new Map<HierarchyNode<CategoryNode>, number>();
 
     for (const link of links) {
@@ -245,13 +311,15 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
       if (parentValue === 0) continue;
 
-      const parentH = Math.max((source.data.value / rootData.value) * treeHeight, 4);
-      const childH = Math.max((target.data.value / rootData.value) * treeHeight, 4);
+      const parentH = Math.max((source.data.value / rootData.value) * treeHeight * nodeScale, 4);
+      const childH = Math.max((target.data.value / rootData.value) * treeHeight * nodeScale, 4);
       const bandWidth = (childValue / parentValue) * parentH;
 
       const stackOffset = parentStacks.get(source) ?? 0;
       parentStacks.set(source, stackOffset + bandWidth);
 
+      // source.x = vertical position (d3 tree convention: x is vertical)
+      // source.y = horizontal position
       const sx = source.y;
       const sy = source.x - parentH / 2 + stackOffset;
       const tx = target.y;
@@ -283,9 +351,9 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     // Draw nodes
     for (const node of nodes) {
       if (node.depth === 0) continue; // skip root
-      const h = Math.max((node.data.value / rootData.value) * treeHeight, 4);
+      const h = Math.max((node.data.value / rootData.value) * treeHeight * nodeScale, 4);
       const w = 12;
-      const topIdx = node.topLevelIndex ?? 0;
+      const topIdx = asIndexed(node).topLevelIndex ?? 0;
       const hasChildren = (node.children?.length ?? 0) > 0 || collapsedPaths.has(node.data.fullPath);
 
       const nodeG = document.createElementNS(SVG_NS, "g");
@@ -360,6 +428,17 @@ export function hydrateCategorySankey(container: HTMLElement): void {
         if (endLabel) endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
         debounced(render, 100);
       }
+    });
+  }
+
+  if (modeRadios) {
+    modeRadios.forEach(radio => {
+      radio.addEventListener("change", () => {
+        if (radio.checked) {
+          currentMode = radio.value as ChartMode;
+          render();
+        }
+      });
     });
   }
 

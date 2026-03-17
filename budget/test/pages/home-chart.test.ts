@@ -10,7 +10,7 @@ vi.mock("firebase/firestore", () => ({
   },
 }));
 
-import type { SerializedChartTransaction } from "../../src/pages/home-chart";
+import type { SerializedChartTransaction, ChartMode } from "../../src/pages/home-chart";
 import {
   buildCategoryTree,
   filterByWeeks,
@@ -128,6 +128,60 @@ describe("buildCategoryTree", () => {
     expect(food.count).toBe(2);
     expect(root.value).toBe(100);
     expect(root.count).toBe(2);
+  });
+
+  it("children are sorted by value descending, then name ascending", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Alpha", amount: 10 }),
+      txn({ category: "Beta", amount: 30 }),
+      txn({ category: "Gamma", amount: 30 }),
+      txn({ category: "Delta", amount: 20 }),
+    ]);
+    const names = root.children.map(c => c.name);
+    expect(names).toEqual(["Beta", "Gamma", "Delta", "Alpha"]);
+  });
+
+  it("sort order is deterministic across multiple calls", () => {
+    const txns = [
+      txn({ category: "Z", amount: 50 }),
+      txn({ category: "A", amount: 50 }),
+      txn({ category: "M", amount: 50 }),
+    ];
+    const names1 = buildCategoryTree(txns).children.map(c => c.name);
+    const names2 = buildCategoryTree(txns).children.map(c => c.name);
+    expect(names1).toEqual(names2);
+    expect(names1).toEqual(["A", "M", "Z"]); // equal values → alphabetical
+  });
+
+  it("income mode includes only Income-prefixed categories", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Income:Salary", amount: 2400 }),
+      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Income:Freelance", amount: 500 }),
+    ], "income");
+    expect(root.children).toHaveLength(1);
+    const income = root.children[0];
+    expect(income.name).toBe("Income");
+    expect(income.children).toHaveLength(2);
+    expect(income.value).toBe(2900);
+  });
+
+  it("spending mode excludes Income-prefixed categories", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Income:Salary", amount: 2400 }),
+      txn({ category: "Food", amount: 50 }),
+    ], "spending");
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0].name).toBe("Food");
+    expect(root.value).toBe(50);
+  });
+
+  it("income mode with no income returns empty tree", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50 }),
+    ], "income");
+    expect(root.value).toBe(0);
+    expect(root.children).toHaveLength(0);
   });
 });
 
