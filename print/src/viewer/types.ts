@@ -1,7 +1,7 @@
 export interface ContentRenderer {
   init(container: HTMLElement, url: string, initialPosition?: string): Promise<void>;
   goToPage(page: number): Promise<void>;
-  /** String form of currentPage; "0" before init completes. */
+  /** String form of currentPage. Do not read before init resolves. */
   readonly position: string;
   readonly pageCount: number;
   readonly currentPage: number;

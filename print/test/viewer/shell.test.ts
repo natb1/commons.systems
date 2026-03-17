@@ -51,7 +51,9 @@ function makeMockRenderer(pageCount = 3) {
 }
 
 async function flushPromises(): Promise<void> {
-  // 20 iterations drain nested promise chains: getReadingPosition -> renderer.init -> updateNav each add depth.
+  // 20 is a conservative ceiling — 6-8 ticks would suffice for the current chain
+  // (getReadingPosition -> renderer.init -> updateNav), but extra margin avoids
+  // intermittent failures if another await is added to the init path.
   for (let i = 0; i < 20; i++) {
     await Promise.resolve();
   }
@@ -336,6 +338,59 @@ describe("initViewer", () => {
     await vi.runAllTimersAsync();
 
     expect(mockSaveReadingPosition).not.toHaveBeenCalled();
+  });
+
+  it("renderer.init rejection shows 'Failed to load' and calls reportError", async () => {
+    mockGetReadingPosition.mockResolvedValue(null);
+    const outlet = makeViewerDOM();
+    const renderer = makeMockRenderer();
+    renderer.init.mockRejectedValue(new Error("init error"));
+    const createRenderer = vi.fn().mockReturnValue(renderer);
+
+    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
+    await flushPromises();
+
+    const pos = outlet.querySelector(".viewer-position") as HTMLElement;
+    expect(pos.textContent).toBe("Failed to load");
+    expect((globalThis as any).reportError).toHaveBeenCalled();
+  });
+
+  it("Firestore save failure calls reportError and does not throw", async () => {
+    mockGetReadingPosition.mockResolvedValue(null);
+    mockSaveReadingPosition.mockRejectedValue(new Error("Firestore write error"));
+    const outlet = makeViewerDOM();
+    const renderer = makeMockRenderer();
+    const createRenderer = vi.fn().mockReturnValue(renderer);
+
+    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
+    await flushPromises();
+
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushPromises();
+    await vi.runAllTimersAsync();
+
+    expect((globalThis as any).reportError).toHaveBeenCalled();
+  });
+
+  it("Firestore read failure falls back to localStorage for saves", async () => {
+    mockGetReadingPosition.mockRejectedValue(new Error("Firestore read error"));
+    const outlet = makeViewerDOM();
+    const renderer = makeMockRenderer();
+    const createRenderer = vi.fn().mockReturnValue(renderer);
+
+    initViewer(outlet, createRenderer, "http://example.com/file.cbz", "test-id", "uid1");
+    await flushPromises();
+
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushPromises();
+    await vi.runAllTimersAsync();
+
+    // Should NOT write to Firestore (would overwrite unknown saved state)
+    expect(mockSaveReadingPosition).not.toHaveBeenCalled();
+    // Falls back to localStorage
+    expect(localStorage.getItem("reading-position:test-id")).toBe("2");
   });
 
   it("updateNav sets button disabled states correctly", async () => {

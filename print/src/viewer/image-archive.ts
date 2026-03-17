@@ -4,9 +4,10 @@ import { parsePositionPage } from "./types.js";
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
 
-export function createImageArchiveRenderer(onError?: (err: unknown) => void): ContentRenderer {
-  // onError accepted for factory signature consistency with createPdfRenderer; errors in this renderer
-  // propagate via thrown exceptions rather than the callback.
+export function createImageArchiveRenderer(_onError?: (err: unknown) => void): ContentRenderer {
+  // _onError accepted for factory signature consistency with createPdfRenderer. Unlike createPdfRenderer,
+  // this renderer has no background re-render path (no ResizeObserver), so the callback is never invoked;
+  // all errors surface as thrown exceptions from init.
   let fileData: Uint8Array[] = [];
   let objectUrlCache: (string | null)[] = [];
   let imgEl: HTMLImageElement | null = null;
@@ -52,15 +53,20 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
       const startPage = parsePositionPage(initialPosition, _pageCount);
       _currentPage = startPage;
 
+      // Hide the canvas rather than remove it: the PDF renderer locates it via querySelector on the
+      // same container, and hiding avoids a layout shift on destroy.
       canvas.style.display = "none";
       imgEl = document.createElement("img");
+      imgEl.alt = `Page ${startPage}`;
       imgEl.src = getObjectUrl(startPage - 1);
       container.appendChild(imgEl);
     },
 
     async goToPage(page: number): Promise<void> {
-      if (page < 1 || page > _pageCount || !imgEl) return;
+      if (page < 1 || page > _pageCount) return;
+      if (!imgEl) throw new Error("goToPage called after renderer was destroyed");
       _currentPage = page;
+      imgEl.alt = `Page ${page}`;
       imgEl.src = getObjectUrl(page - 1);
     },
 

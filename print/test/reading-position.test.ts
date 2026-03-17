@@ -56,6 +56,17 @@ describe("getReadingPosition", () => {
 
     expect(result).toBeNull();
   });
+
+  it("returns null when position field is non-string (e.g. legacy numeric value)", async () => {
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ uid: "u1", mediaId: "m1", position: 5 }),
+    } as any);
+
+    const result = await getReadingPosition("u1", "m1");
+
+    expect(result).toBeNull();
+  });
 });
 
 describe("saveReadingPosition", () => {

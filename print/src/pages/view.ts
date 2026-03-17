@@ -70,5 +70,9 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
     cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url, item.id, uid);
   } else if (item.mediaType === "image-archive") {
     cleanupFn = initViewer(outlet, (onError) => createImageArchiveRenderer(onError), url, item.id, uid);
+  } else {
+    reportError(new Error(`Unsupported mediaType in viewer: ${item.mediaType}`));
+    const pos = outlet.querySelector(".viewer-position");
+    if (pos) pos.textContent = `Unsupported media type: ${item.mediaType}`;
   }
 }

@@ -221,6 +221,74 @@ describe("createImageArchiveRenderer", () => {
     expect(renderer.position).toBe("3");
   });
 
+  it("throws on non-ok HTTP response with status code", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 404 }),
+    );
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+
+    await expect(renderer.init(container, "https://example.com/archive.zip")).rejects.toThrow(
+      "Failed to fetch archive: 404",
+    );
+  });
+
+  it("throws when ZIP contains no image files", async () => {
+    const zip = makeZipBuffer({
+      "readme.txt": new Uint8Array([0]),
+      "data.json": new Uint8Array([0]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+
+    await expect(renderer.init(container, "https://example.com/archive.zip")).rejects.toThrow(
+      "No images found in archive",
+    );
+  });
+
+  it("destroy during in-flight init prevents DOM mutations", async () => {
+    const zip = makeZipBuffer({ "image-001.png": new Uint8Array([1]) });
+    let resolveFetch!: (value: unknown) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockReturnValue(
+        new Promise((resolve) => { resolveFetch = resolve; }),
+      ),
+    );
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+
+    const initPromise = renderer.init(container, "https://example.com/archive.zip");
+    renderer.destroy();
+
+    // Resolve fetch after destroy
+    resolveFetch({ ok: true, arrayBuffer: () => Promise.resolve(zip) });
+    await initPromise;
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("goToPage throws after destroy", async () => {
+    const zip = makeZipBuffer({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    mockFetch(zip);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+    renderer.destroy();
+
+    await expect(renderer.goToPage(1)).rejects.toThrow("goToPage called after renderer was destroyed");
+  });
+
   it("ignores out-of-range initialPosition and starts at page 1", async () => {
     const zip = makeZipBuffer({
       "image-001.png": new Uint8Array([1]),
