@@ -368,6 +368,7 @@ describe("createEpubRenderer", () => {
       const doc = makeMockDoc([{ rel: "stylesheet", href: "blob:http://localhost/abc-123" }]);
 
       globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
         text: () => Promise.resolve("body { color: red; }"),
       });
 
@@ -397,6 +398,7 @@ describe("createEpubRenderer", () => {
       const doc = makeMockDoc([{ rel: "stylesheet", href: "blob:http://localhost/xyz-789" }]);
 
       globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
         text: () => Promise.resolve("h1 { font-size: 2em; }"),
       });
 
@@ -412,6 +414,28 @@ describe("createEpubRenderer", () => {
       globalThis.fetch = vi.fn().mockRejectedValue(new Error("network error"));
 
       await expect(hookCb({ document: doc })).rejects.toThrow("network error");
+    });
+
+    it("throws on non-ok fetch response", async () => {
+      const hookCb = await initAndGetHook();
+      const doc = makeMockDoc([{ rel: "stylesheet", href: "blob:http://localhost/bad-status" }]);
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        text: () => Promise.resolve(""),
+      });
+
+      await expect(hookCb({ document: doc })).rejects.toThrow("Failed to fetch EPUB blob stylesheet: 404 Not Found");
+    });
+
+    it("throws when contents.document is missing", async () => {
+      const hookCb = await initAndGetHook();
+
+      await expect(hookCb({ document: undefined as unknown as Document })).rejects.toThrow(
+        "epub.js content hook received contents without a document",
+      );
     });
   });
 

@@ -51,16 +51,18 @@ export function createEpubRenderer(
 
       rendition.hooks.content.register(async (contents: { document: Document }) => {
         const doc = contents.document;
-        if (!doc) return;
+        if (!doc) throw new Error("epub.js content hook received contents without a document");
         const links = doc.querySelectorAll('link[rel="stylesheet"]');
         for (const link of Array.from(links)) {
           const href = link.getAttribute("href");
           if (!href || !href.startsWith("blob:")) continue;
           const response = await fetch(href);
+          if (!response.ok) throw new Error(`Failed to fetch EPUB blob stylesheet: ${response.status} ${response.statusText}`);
           const cssText = await response.text();
           const style = doc.createElement("style");
           style.textContent = cssText;
-          link.parentNode!.insertBefore(style, link);
+          if (!link.parentNode) throw new Error("EPUB stylesheet link has no parent node");
+          link.parentNode.insertBefore(style, link);
           link.remove();
           URL.revokeObjectURL(href);
         }
