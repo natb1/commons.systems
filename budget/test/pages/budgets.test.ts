@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { DataIntegrityError } from "../../src/errors";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 vi.mock("firebase/firestore", () => ({
   Timestamp: class Timestamp {
