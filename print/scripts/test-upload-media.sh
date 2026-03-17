@@ -19,26 +19,39 @@ setup() {
   # Create a test file to upload
   echo "test content" > "$TMPDIR_TEST/stub/test-file.cbz"
 
-  # gsutil stub: logs invocations
+  # gsutil stub: logs invocations and captures -h headers
   cat > "$TMPDIR_TEST/bin/gsutil" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 echo "$@" >> "$STUB_DIR/gsutil.log"
 
-case "$1" in
-  cp)   echo "Copying $2..." ;;
-  stat) echo "gs://bucket/path: 1024 bytes" ;;
-  setmeta)
-    # Save all -h headers
-    shift
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        -h) echo "$2" >> "$STUB_DIR/setmeta-headers.log"; shift 2 ;;
-        *)  shift ;;
-      esac
-    done
-    ;;
-esac
+# Capture -h headers from any subcommand (cp, setmeta, etc.)
+ARGS=("$@")
+for ((i=0; i<${#ARGS[@]}; i++)); do
+  if [ "${ARGS[$i]}" = "-h" ] && [ $((i+1)) -lt ${#ARGS[@]} ]; then
+    echo "${ARGS[$((i+1))]}" >> "$STUB_DIR/meta-headers.log"
+  fi
+done
+
+# Subcommand-specific output
+for arg in "$@"; do
+  case "$arg" in
+    cp)   echo "Copying..." ;;
+    stat)
+      # If -q flag is present, this is a pre-flight existence check
+      for a in "$@"; do
+        if [ "$a" = "-q" ]; then
+          if [ -f "$STUB_DIR/stat-exists" ]; then
+            exit 0
+          else
+            exit 1
+          fi
+        fi
+      done
+      echo "gs://bucket/path: 1024 bytes"
+      ;;
+  esac
+done
 STUB
   chmod +x "$TMPDIR_TEST/bin/gsutil"
 
@@ -50,17 +63,36 @@ STUB
   chmod +x "$TMPDIR_TEST/bin/gcloud"
 
   # curl stub: saves POST body, returns canned Firestore response
+  # Supports failure mode: create $STUB_DIR/curl-fail to simulate HTTP error
   cat > "$TMPDIR_TEST/bin/curl" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
-# Find -d arg and save it
+RESP_FILE=""
+# Find -d arg (save body) and -o arg (output file)
 while [ $# -gt 0 ]; do
   case "$1" in
     -d) echo "$2" > "$STUB_DIR/curl-body.json"; shift 2 ;;
+    -o) RESP_FILE="$2"; shift 2 ;;
     *)  shift ;;
   esac
 done
-echo '{"name":"projects/commons-systems/databases/(default)/documents/print/prod/media/auto-generated-id"}'
+if [ -f "$STUB_DIR/curl-fail" ]; then
+  BODY='{"error":{"code":403,"message":"Permission denied","status":"PERMISSION_DENIED"}}'
+  if [ -n "$RESP_FILE" ]; then
+    echo "$BODY" > "$RESP_FILE"
+  else
+    echo "$BODY"
+  fi
+  echo "403"
+else
+  BODY='{"name":"projects/commons-systems/databases/(default)/documents/print/prod/media/auto-generated-id"}'
+  if [ -n "$RESP_FILE" ]; then
+    echo "$BODY" > "$RESP_FILE"
+  else
+    echo "$BODY"
+  fi
+  echo "200"
+fi
 STUB
   chmod +x "$TMPDIR_TEST/bin/curl"
 
@@ -156,7 +188,7 @@ teardown
 echo "Test 4: public upload -> correct GCS metadata and Firestore body"
 setup
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "My Title" "image-archive" --public 2>&1)
-headers=$(cat "$TMPDIR_TEST/stub/setmeta-headers.log")
+headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
 assert_contains "GCS has publicDomain:true" "x-goog-meta-publicDomain:true" "$headers"
 assert_not_contains "GCS has no member_0" "member_0" "$headers"
 curl_body=$(cat "$TMPDIR_TEST/stub/curl-body.json")
@@ -169,7 +201,7 @@ teardown
 echo "Test 5: private with 1 email -> correct GCS metadata and Firestore body"
 setup
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Private Item" "epub" "alice@example.com" 2>&1)
-headers=$(cat "$TMPDIR_TEST/stub/setmeta-headers.log")
+headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
 assert_contains "GCS has publicDomain:false" "x-goog-meta-publicDomain:false" "$headers"
 assert_contains "GCS has member_0" "x-goog-meta-member_0:alice@example.com" "$headers"
 curl_body=$(cat "$TMPDIR_TEST/stub/curl-body.json")
@@ -180,7 +212,7 @@ teardown
 echo "Test 6: private with 3 emails -> all member keys set"
 setup
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Multi" "pdf" "a@x.com" "b@x.com" "c@x.com" 2>&1)
-headers=$(cat "$TMPDIR_TEST/stub/setmeta-headers.log")
+headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
 assert_contains "GCS has member_0" "x-goog-meta-member_0:a@x.com" "$headers"
 assert_contains "GCS has member_1" "x-goog-meta-member_1:b@x.com" "$headers"
 assert_contains "GCS has member_2" "x-goog-meta-member_2:c@x.com" "$headers"
@@ -211,6 +243,34 @@ setup
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "epub" --public 2>&1)
 assert_contains "output has document ID" "auto-generated-id" "$output"
 assert_contains "output has gsutil stat" "1024 bytes" "$output"
+teardown
+
+echo "Test 10: GCS collision -> exits 1 with 'already exists'"
+setup
+touch "$TMPDIR_TEST/stub/stat-exists"
+exit_code=0
+stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "epub" --public 2>&1) || exit_code=$?
+assert_eq "exits 1" "1" "$exit_code"
+assert_contains "stderr mentions already exists" "already exists" "$stderr"
+teardown
+
+echo "Test 11: no GCS collision -> upload proceeds"
+setup
+# No stat-exists file means object doesn't exist
+exit_code=0
+output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "epub" --public 2>&1) || exit_code=$?
+assert_eq "exits 0" "0" "$exit_code"
+assert_contains "output has document ID" "auto-generated-id" "$output"
+teardown
+
+echo "Test 12: Firestore API failure -> exits 1 with cleanup guidance"
+setup
+touch "$TMPDIR_TEST/stub/curl-fail"
+exit_code=0
+stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "epub" --public 2>&1) || exit_code=$?
+assert_eq "exits 1" "1" "$exit_code"
+assert_contains "stderr mentions HTTP code" "HTTP 403" "$stderr"
+assert_contains "stderr mentions cleanup" "gsutil rm" "$stderr"
 teardown
 
 echo ""

@@ -1,5 +1,17 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
+type MediaSeedData = {
+  title: string;
+  mediaType: "epub" | "pdf" | "image-archive";
+  tags: Record<string, string>;
+  publicDomain: boolean;
+  sourceNotes: string;
+  storagePath: string;
+  groupId: string | null;
+  memberEmails: string[];
+  addedAt: string;
+};
+
 // Production media upload is handled by print/scripts/upload-media.sh.
 // Emulator seeding is automated via seeds/run-storage-seed.ts.
 //
@@ -26,7 +38,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             groupId: null,
             memberEmails: [],
             addedAt: "2026-01-15T00:00:00Z",
-          },
+          } satisfies MediaSeedData,
         },
         {
           id: "plato-phaedrus",
@@ -40,7 +52,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             groupId: null,
             memberEmails: [],
             addedAt: "2026-01-16T00:00:00Z",
-          },
+          } satisfies MediaSeedData,
         },
         {
           id: "plato-republic",
@@ -54,7 +66,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             groupId: null,
             memberEmails: [],
             addedAt: "2026-01-17T00:00:00Z",
-          },
+          } satisfies MediaSeedData,
         },
       ],
     },
@@ -74,7 +86,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             groupId: null,
             memberEmails: [],
             addedAt: "2026-01-19T00:00:00Z",
-          },
+          } satisfies MediaSeedData,
         },
         {
           id: "test-private-item",
@@ -88,7 +100,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             groupId: "test-group",
             memberEmails: ["test@example.com"],
             addedAt: "2026-01-18T00:00:00Z",
-          },
+          } satisfies MediaSeedData,
         },
       ],
     },

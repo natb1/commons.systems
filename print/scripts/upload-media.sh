@@ -74,7 +74,7 @@ if [ "$1" = "--public" ]; then
   fi
 else
   EMAILS=("$@")
-  if [ ${#EMAILS[@]} -lt 1 ] || [ ${#EMAILS[@]} -gt 3 ]; then
+  if [ ${#EMAILS[@]} -gt 3 ]; then
     echo "error: private mode requires 1-3 email addresses (got ${#EMAILS[@]})" >&2
     usage
   fi
@@ -84,21 +84,25 @@ FILENAME="$(basename "$FILE_PATH")"
 GCS_DEST="${BUCKET}/${COLLECTION_PATH}/${FILENAME}"
 ADDED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-# Upload file to GCS
-echo "Uploading ${FILENAME} to GCS..."
-gsutil cp "$FILE_PATH" "$GCS_DEST"
+# Check for existing object at destination
+if gsutil -q stat "$GCS_DEST" 2>/dev/null; then
+  echo "error: object already exists at ${GCS_DEST}" >&2
+  echo "Rename the file or remove the existing object: gsutil rm ${GCS_DEST}" >&2
+  exit 1
+fi
 
-# Set GCS metadata
-echo "Setting GCS metadata..."
+# Upload file to GCS with metadata
+echo "Uploading ${FILENAME} to GCS..."
+META_ARGS=()
 if [ "$PUBLIC" = true ]; then
-  gsutil setmeta -h "x-goog-meta-publicDomain:true" "$GCS_DEST"
+  META_ARGS+=(-h "x-goog-meta-publicDomain:true")
 else
-  META_ARGS=(-h "x-goog-meta-publicDomain:false")
+  META_ARGS+=(-h "x-goog-meta-publicDomain:false")
   for i in "${!EMAILS[@]}"; do
     META_ARGS+=(-h "x-goog-meta-member_${i}:${EMAILS[$i]}")
   done
-  gsutil setmeta "${META_ARGS[@]}" "$GCS_DEST"
 fi
+gsutil "${META_ARGS[@]}" cp "$FILE_PATH" "$GCS_DEST"
 
 # Verify GCS upload
 echo ""
@@ -109,15 +113,11 @@ gsutil stat "$GCS_DEST"
 echo ""
 echo "Creating Firestore document..."
 
-# Build memberEmails array
-MEMBER_VALUES=""
-if [ "$PUBLIC" = false ]; then
-  for email in "${EMAILS[@]}"; do
-    if [ -n "$MEMBER_VALUES" ]; then
-      MEMBER_VALUES="${MEMBER_VALUES},"
-    fi
-    MEMBER_VALUES="${MEMBER_VALUES}{\"stringValue\":\"${email}\"}"
-  done
+# Build memberEmails array as JSON via jq
+if [ ${#EMAILS[@]} -eq 0 ]; then
+  MEMBER_JSON="[]"
+else
+  MEMBER_JSON=$(printf '%s\n' "${EMAILS[@]}" | jq -R '{ stringValue: . }' | jq -s '.')
 fi
 
 FIRESTORE_BODY=$(jq -n \
@@ -126,7 +126,7 @@ FIRESTORE_BODY=$(jq -n \
   --argjson publicDomain "$PUBLIC" \
   --arg storagePath "media/${FILENAME}" \
   --arg addedAt "$ADDED_AT" \
-  --argjson memberValues "[$MEMBER_VALUES]" \
+  --argjson memberValues "$MEMBER_JSON" \
   '{
     fields: {
       title: { stringValue: $title },
@@ -141,15 +141,39 @@ FIRESTORE_BODY=$(jq -n \
     }
   }')
 
-TOKEN="$(gcloud auth print-access-token)"
+if ! TOKEN="$(gcloud auth print-access-token 2>&1)"; then
+  echo "error: failed to get auth token. Run 'gcloud auth login' first." >&2
+  echo "The file was already uploaded to GCS at: ${GCS_DEST}" >&2
+  echo "To clean up: gsutil rm ${GCS_DEST}" >&2
+  exit 1
+fi
 FIRESTORE_URL="https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${COLLECTION_PATH}"
 
-RESPONSE=$(curl -sf -X POST "$FIRESTORE_URL" \
+RESP_FILE=$(mktemp)
+HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w '%{http_code}' -X POST "$FIRESTORE_URL" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
   -d "$FIRESTORE_BODY")
 
+if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+  echo "error: Firestore API returned HTTP ${HTTP_CODE}:" >&2
+  cat "$RESP_FILE" >&2
+  echo "" >&2
+  echo "The file was uploaded to GCS at: ${GCS_DEST}" >&2
+  echo "To clean up: gsutil rm ${GCS_DEST}" >&2
+  rm -f "$RESP_FILE"
+  exit 1
+fi
+
+RESPONSE=$(cat "$RESP_FILE")
+rm -f "$RESP_FILE"
+
 DOC_ID=$(echo "$RESPONSE" | jq -r '.name | split("/") | last')
+if [ -z "$DOC_ID" ] || [ "$DOC_ID" = "null" ]; then
+  echo "error: unexpected Firestore response — could not extract document ID" >&2
+  echo "Raw response: $RESPONSE" >&2
+  exit 1
+fi
 
 echo ""
 echo "=== Firestore Document ==="

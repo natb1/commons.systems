@@ -30,6 +30,7 @@ export interface SeedOptions {
 }
 
 export async function seed(db: Firestore, spec: SeedSpec, options?: SeedOptions): Promise<void> {
+  const idsByCollection = new Map<string, Set<string>>();
   for (const collection of spec.collections) {
     if (collection.testOnly && !options?.includeTestOnly) {
       console.log(`Skipping testOnly collection "${collection.name}"`);
@@ -41,6 +42,16 @@ export async function seed(db: Firestore, spec: SeedSpec, options?: SeedOptions)
     if (dupes.length > 0) {
       throw new Error(`duplicate document ids in "${collection.name}": ${[...new Set(dupes)].join(", ")}`);
     }
+    const seen = idsByCollection.get(collection.name) ?? new Set<string>();
+    for (const doc of collection.documents) {
+      if (seen.has(doc.id)) {
+        throw new Error(
+          `duplicate document id "${doc.id}" across "${collection.name}" collection entries`,
+        );
+      }
+      seen.add(doc.id);
+    }
+    idsByCollection.set(collection.name, seen);
     for (const doc of collection.documents) {
       if (!doc.id) throw new Error(`seed document in "${collection.name}" has empty id`);
       try {
