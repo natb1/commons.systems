@@ -29,9 +29,10 @@ function parseEmulatorHost(
   let url: URL;
   try {
     url = new URL(`http://${value}`);
-  } catch {
+  } catch (error) {
     throw new Error(
       `Invalid emulator host in ${envVar}: "${value}" (expected hostname:port)`,
+      { cause: error },
     );
   }
   const port = Number(url.port);
@@ -47,8 +48,10 @@ function parseEmulatorHost(
  * Env vars:
  * - `VITE_FIRESTORE_NAMESPACE` — required in dev/preview (throws if missing); defaults to `{appName}/prod` in production
  * - `VITE_FIRESTORE_EMULATOR_HOST` — connects Firestore emulator when set (hostname:port)
- * - `VITE_GA_MEASUREMENT_ID` — enables Google Analytics when set
+ * - `VITE_GA_MEASUREMENT_ID` — activates page-view tracking when set; returns a no-op tracker otherwise
  * - `VITE_STORAGE_EMULATOR_HOST` — connects Storage emulator when set and `opts.storage` is true (hostname:port)
+ *
+ * Returns synchronously unless `opts.storage` is true, in which case it returns a Promise (storage SDK is dynamically imported).
  */
 export function createAppContext(
   appName: string,

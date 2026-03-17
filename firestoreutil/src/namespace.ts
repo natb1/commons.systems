@@ -14,10 +14,9 @@ export function validateNamespace(namespace: string): Namespace {
 }
 
 export function nsCollectionPath(
-  namespace: string,
+  namespace: Namespace,
   collectionName: string,
 ): string {
-  validateNamespace(namespace);
   if (!collectionName) {
     throw new Error("collectionName must not be empty");
   }
