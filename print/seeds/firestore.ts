@@ -1,14 +1,10 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
-// Production Cloud Storage seeding is manual (emulator seeding is automated via seeds/run-storage-seed.ts):
-// 1. Download files from the sources listed in each item's sourceNotes
-// 2. Upload to print/{env}/media/{filename} in Firebase Cloud Storage:
-//      gsutil cp <file> gs://commons-systems.firebasestorage.app/print/prod/media/
-// 3. Set custom metadata on each object:
-//    - Public domain: gsutil setmeta -h "x-goog-meta-publicDomain:true" gs://.../<file>
-//    - Private: gsutil setmeta -h "x-goog-meta-publicDomain:false" -h "x-goog-meta-{email}:member" gs://.../<file>
-// Note: Firestore uses memberEmails array for access control; Storage uses per-email custom metadata keys.
-// Both must be kept in sync when granting access to private items (see firestore.rules, storage.rules).
+// Production media upload is handled by print/scripts/upload-media.sh.
+// Emulator seeding is automated via seeds/run-storage-seed.ts.
+//
+// Usage: print/scripts/upload-media.sh <file> <title> <mediaType> [--public | <email> ...]
+// See the script for details on GCS metadata and Firestore document creation.
 //
 // Private media documents and groups are managed manually (not in this seed).
 // The media collection is non-convergent so prod deploys won't delete private items.
