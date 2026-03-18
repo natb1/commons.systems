@@ -1,4 +1,4 @@
-export type Spread = { left: number; right: number | null };
+export type Spread = { readonly left: number; readonly right: number | null };
 
 /**
  * Build ordered spread array for a document.
@@ -14,10 +14,7 @@ export function spreadsForPageCount(pageCount: number): Spread[] {
   return spreads;
 }
 
-/**
- * 0-based index into the spread array for the spread containing `page`.
- * Page 1 -> 0, page >= 2 -> Math.floor((page - 2) / 2) + 1.
- */
+/** 0-based index into the spread array for the spread containing `page`. */
 export function spreadIndexForPage(page: number, pageCount: number): number {
   if (pageCount <= 0 || page < 1) return 0;
   if (page > pageCount) page = pageCount;

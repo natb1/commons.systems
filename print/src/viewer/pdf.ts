@@ -15,6 +15,39 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let renderTask: RenderTask | null = null;
   let destroyed = false;
+  const spreadRenderTasks: RenderTask[] = [];
+
+  async function renderPageToCanvas(
+    pageNum: number,
+    targetCanvas: HTMLCanvasElement,
+    containerRect: DOMRect,
+  ): Promise<RenderTask | null> {
+    const page = await pdfDoc!.getPage(pageNum);
+    if (destroyed) return null;
+
+    const baseViewport = page.getViewport({ scale: 1 });
+    const scaleX = containerRect.width / baseViewport.width;
+    const scaleY = containerRect.height / baseViewport.height;
+    const cssScale = Math.min(scaleX, scaleY);
+    const pixelScale = cssScale * window.devicePixelRatio;
+    const viewport = page.getViewport({ scale: pixelScale });
+
+    targetCanvas.width = viewport.width;
+    targetCanvas.height = viewport.height;
+    targetCanvas.style.width = `${viewport.width / window.devicePixelRatio}px`;
+    targetCanvas.style.height = `${viewport.height / window.devicePixelRatio}px`;
+
+    const ctx = targetCanvas.getContext("2d");
+    if (!ctx) throw new Error("Could not acquire 2D canvas context");
+    const task = page.render({ canvasContext: ctx, viewport });
+
+    try {
+      await task.promise;
+    } catch (e) {
+      if ((e as Error).name !== "RenderingCancelledException") throw e;
+    }
+    return task;
+  }
 
   async function renderPage(pageNum: number): Promise<void> {
     if (!pdfDoc || !canvas || !container) return;
@@ -24,67 +57,29 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       renderTask = null;
     }
 
-    const page = await pdfDoc.getPage(pageNum);
-    if (destroyed || !container) return;
     const containerRect = container.getBoundingClientRect();
     if (containerRect.width === 0 || containerRect.height === 0) return;
 
-    // Scale to fit container; render at devicePixelRatio for sharp text.
-    const baseViewport = page.getViewport({ scale: 1 });
-    const scaleX = containerRect.width / baseViewport.width;
-    const scaleY = containerRect.height / baseViewport.height;
-    const cssScale = Math.min(scaleX, scaleY);
-    const pixelScale = cssScale * window.devicePixelRatio;
-
-    const viewport = page.getViewport({ scale: pixelScale });
-
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    canvas.style.width = `${viewport.width / window.devicePixelRatio}px`;
-    canvas.style.height = `${viewport.height / window.devicePixelRatio}px`;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Could not acquire 2D canvas context");
-    renderTask = page.render({ canvasContext: ctx, viewport });
-
-    try {
-      await renderTask.promise;
-    } catch (e) {
-      if ((e as Error).name !== "RenderingCancelledException") throw e;
-    }
-    renderTask = null;
+    const task = await renderPageToCanvas(pageNum, canvas, containerRect);
+    if (task) renderTask = task;
   }
 
-  async function renderPageIntoContainer(pageNum: number, target: HTMLElement): Promise<void> {
+  function cancelSpreadRenderTasks(): void {
+    for (const task of spreadRenderTasks) task.cancel();
+    spreadRenderTasks.length = 0;
+  }
+
+  async function renderPageInto(pageNum: number, target: HTMLElement): Promise<void> {
     if (!pdfDoc) return;
-    const page = await pdfDoc.getPage(pageNum);
-    if (destroyed) return;
+    if (pageNum < 1 || pageNum > _pageCount) return;
     const targetRect = target.getBoundingClientRect();
     if (targetRect.width === 0 || targetRect.height === 0) return;
 
     const c = document.createElement("canvas");
     target.appendChild(c);
 
-    const baseViewport = page.getViewport({ scale: 1 });
-    const scaleX = targetRect.width / baseViewport.width;
-    const scaleY = targetRect.height / baseViewport.height;
-    const cssScale = Math.min(scaleX, scaleY);
-    const pixelScale = cssScale * window.devicePixelRatio;
-    const viewport = page.getViewport({ scale: pixelScale });
-
-    c.width = viewport.width;
-    c.height = viewport.height;
-    c.style.width = `${viewport.width / window.devicePixelRatio}px`;
-    c.style.height = `${viewport.height / window.devicePixelRatio}px`;
-
-    const ctx = c.getContext("2d");
-    if (!ctx) throw new Error("Could not acquire 2D canvas context");
-    const task = page.render({ canvasContext: ctx, viewport });
-    try {
-      await task.promise;
-    } catch (e) {
-      if ((e as Error).name !== "RenderingCancelledException") throw e;
-    }
+    const task = await renderPageToCanvas(pageNum, c, targetRect);
+    if (task) spreadRenderTasks.push(task);
   }
 
   return {
@@ -140,9 +135,9 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       }
     },
 
-
-    async renderPageInto(page: number, target: HTMLElement): Promise<void> {
-      await renderPageIntoContainer(page, target);
+    renderPageInto(page: number, target: HTMLElement): Promise<void> {
+      cancelSpreadRenderTasks();
+      return renderPageInto(page, target);
     },
 
     get pageCount() {
@@ -170,6 +165,7 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
         renderTask.cancel();
         renderTask = null;
       }
+      cancelSpreadRenderTasks();
       if (resizeObserver) {
         resizeObserver.disconnect();
         resizeObserver = null;

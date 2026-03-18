@@ -524,13 +524,13 @@ describe("initViewer spread mode", () => {
     spreadBtn.click();
     await flushInit();
 
-    expect(localStorage.getItem("spread-mode")).toBe("true");
+    expect(localStorage.getItem("spread-mode:m1")).toBe("true");
 
     // Leave spread mode
     spreadBtn.click();
     await flushInit();
 
-    expect(localStorage.getItem("spread-mode")).toBe("false");
+    expect(localStorage.getItem("spread-mode:m1")).toBe("false");
   });
 
   it("mode switching syncs position — toggle spread on at page 3 maps to correct spread index", async () => {
