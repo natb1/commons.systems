@@ -53,6 +53,25 @@ test.describe("navigation", () => {
     await expect(page.locator("main h2")).toHaveText("Transactions");
   });
 
+  test("clicking accounts nav link shows Accounts heading @smoke", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("main h2")).toHaveText("Budgets", { timeout: 10000 });
+    await page.click('app-nav a[href="/accounts"]');
+    await expect(page.locator("main h2")).toHaveText("Accounts");
+  });
+
+  test("direct URL to /accounts loads accounts page", async ({ page }) => {
+    await page.goto("/accounts");
+    await expect(page.locator("main h2")).toHaveText("Accounts");
+  });
+
+  test("accounts table visible with seed data rows", async ({ page }) => {
+    await page.goto("/accounts");
+    const table = page.locator("#accounts-table");
+    await expect(table).toBeVisible();
+    await expect(table.locator("tbody tr").first()).toBeVisible();
+  });
+
   test("unknown path falls back to home page", async ({ page }) => {
     await page.goto("/nonexistent");
     await expect(page.locator("main h2")).toHaveText("Budgets");

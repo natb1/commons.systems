@@ -52,4 +52,10 @@ test.describe("navigation", () => {
     await page.goto("/nonexistent");
     await expect(page.locator("main h2")).toHaveText("Library");
   });
+
+  test("spread toggle button exists on viewer page for PDF @smoke", async ({ page }) => {
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-spread-toggle")).toBeAttached();
+  });
 });

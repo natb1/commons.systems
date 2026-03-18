@@ -10,6 +10,7 @@ export interface ContentRenderer {
   /** Serialized position suitable for restoring via initialPosition. Do not read before init resolves. */
   readonly position: string;
   readonly positionLabel: string;
+  renderPageInto?(page: number, container: HTMLElement): Promise<void>;
   zoomIn?(): void;
   zoomOut?(): void;
   resetZoom?(): void;
