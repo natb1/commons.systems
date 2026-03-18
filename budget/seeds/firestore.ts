@@ -2,7 +2,7 @@
 // The firestoreutil seed runner writes these specs to Firestore using the Admin SDK,
 // which converts Date objects to Timestamps on write.
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { Transaction, Budget, BudgetPeriod, Rule, NormalizationRule } from "../src/firestore.js";
+import type { Transaction, Statement, Budget, BudgetPeriod, Rule, NormalizationRule } from "../src/firestore.js";
 import type { Group } from "@commons-systems/authutil/groups";
 
 /** Seed groups include `members` (used in queries and security rules, omitted from the authutil Group type) */
@@ -36,6 +36,8 @@ type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "periodEnd
 type RuleSeedData = Omit<Rule, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
 
 type NormalizationRuleSeedData = Omit<NormalizationRule, "id"> & { memberEmails: string[] };
+
+type StatementSeedData = Omit<Statement, "id"> & { memberEmails: string[] };
 
 const budgetDocs: { id: string; data: BudgetSeedData }[] = [
   {
@@ -544,6 +546,81 @@ const seedNormalizationRuleDocs: { id: string; data: NormalizationRuleSeedData }
   },
 ];
 
+const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
+  {
+    id: "stmt-checking-2025-01",
+    data: {
+      statementId: "Example Bank-Checking-2025-01" as any,
+      institution: "Example Bank",
+      account: "Checking",
+      balance: 3742.15,
+      period: "2025-01",
+      groupId: "household" as any,
+      memberEmails: ["test@example.com"],
+    } satisfies StatementSeedData,
+  },
+  {
+    id: "stmt-checking-2025-02",
+    data: {
+      statementId: "Example Bank-Checking-2025-02" as any,
+      institution: "Example Bank",
+      account: "Checking",
+      balance: 3825.50,
+      period: "2025-02",
+      groupId: "household" as any,
+      memberEmails: ["test@example.com"],
+    } satisfies StatementSeedData,
+  },
+  {
+    id: "stmt-cc-2025-01",
+    data: {
+      statementId: "Example Bank-Credit Card-2025-01" as any,
+      institution: "Example Bank",
+      account: "Credit Card",
+      balance: -312.50,
+      period: "2025-01",
+      groupId: "household" as any,
+      memberEmails: ["test@example.com"],
+    } satisfies StatementSeedData,
+  },
+  {
+    id: "stmt-cc-2025-02",
+    data: {
+      statementId: "Example Bank-Credit Card-2025-02" as any,
+      institution: "Example Bank",
+      account: "Credit Card",
+      balance: -285.00,
+      period: "2025-02",
+      groupId: "household" as any,
+      memberEmails: ["test@example.com"],
+    } satisfies StatementSeedData,
+  },
+  {
+    id: "stmt-savings-2025-01",
+    data: {
+      statementId: "Example Credit Union-Savings-2025-01" as any,
+      institution: "Example Credit Union",
+      account: "Savings",
+      balance: 945.00,
+      period: "2025-01",
+      groupId: "household" as any,
+      memberEmails: ["test@example.com"],
+    } satisfies StatementSeedData,
+  },
+  {
+    id: "stmt-savings-2025-02",
+    data: {
+      statementId: "Example Credit Union-Savings-2025-02" as any,
+      institution: "Example Credit Union",
+      account: "Savings",
+      balance: 980.00,
+      period: "2025-02",
+      groupId: "household" as any,
+      memberEmails: ["test@example.com"],
+    } satisfies StatementSeedData,
+  },
+];
+
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
     {
@@ -618,6 +695,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
     { name: "rules", testOnly: true, documents: seedRuleDocs },
     { name: "seed-normalization-rules", convergent: true, documents: seedNormalizationRuleDocs },
     { name: "normalization-rules", testOnly: true, documents: seedNormalizationRuleDocs },
+    { name: "seed-statements", convergent: true, documents: seedStatementDocs },
+    { name: "statements", testOnly: true, documents: seedStatementDocs },
   ],
 };
 

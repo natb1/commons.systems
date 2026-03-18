@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase/firestore";
 import type {
   Transaction,
+  Statement,
   Budget,
   BudgetPeriod,
   Rule,
@@ -33,6 +34,7 @@ interface RawOutput {
   budgetPeriods: RawBudgetPeriod[];
   rules: RawRule[];
   normalizationRules: RawNormalizationRule[];
+  statements: RawStatement[];
 }
 
 interface RawTransaction {
@@ -90,8 +92,18 @@ interface RawNormalizationRule {
   priority: number;
 }
 
+interface RawStatement {
+  id: string;
+  statementId: string;
+  institution: string;
+  account: string;
+  balance: number;
+  period: string;
+}
+
 export interface ParsedUpload {
   transactions: Transaction[];
+  statements: Statement[];
   budgets: Budget[];
   budgetPeriods: BudgetPeriod[];
   rules: Rule[];
@@ -221,8 +233,21 @@ export function parseUploadedJson(text: string): ParsedUpload {
     }),
   );
 
+  const statements: Statement[] = (raw.statements ?? []).map(
+    (s: RawStatement, i: number) => ({
+      id: requireId(s.id, "statement", i),
+      statementId: (s.statementId ?? "") as StatementId,
+      institution: s.institution ?? "",
+      account: s.account ?? "",
+      balance: s.balance ?? 0,
+      period: s.period ?? "",
+      groupId: null as GroupId | null,
+    }),
+  );
+
   return {
     transactions,
+    statements,
     budgets,
     budgetPeriods,
     rules,
@@ -285,6 +310,14 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       institution: r.institution,
       account: r.account,
       priority: r.priority,
+    })),
+    statements: parsed.statements.map((s) => ({
+      id: s.id,
+      statementId: s.statementId,
+      institution: s.institution,
+      account: s.account,
+      balance: s.balance,
+      period: s.period,
     })),
     meta: {
       key: "upload",
