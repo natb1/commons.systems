@@ -78,8 +78,13 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
 
   // Sort data by budget order then week so stacking follows sortedBudgets order
   const budgetOrder = new Map(sortedBudgets.map((b, i) => [b, i]));
-  areaData.sort((a, b) => (budgetOrder.get(a.budget) ?? 0) - (budgetOrder.get(b.budget) ?? 0)
-    || a.weekIndex - b.weekIndex);
+  areaData.sort((a, b) => {
+    const aOrder = budgetOrder.get(a.budget);
+    const bOrder = budgetOrder.get(b.budget);
+    if (aOrder === undefined) throw new Error(`Unknown budget in sort: "${a.budget}"`);
+    if (bOrder === undefined) throw new Error(`Unknown budget in sort: "${b.budget}"`);
+    return aOrder - bOrder || a.weekIndex - b.weekIndex;
+  });
 
   // Scrollable chart body with stacked areas
   const chartSvg = Plot.plot({

@@ -21,7 +21,7 @@ function netAmount(t: Transaction): number {
   return computeNetAmount(t.amount, t.reimbursement);
 }
 
-/** Filter to timestamped, non-duplicate-normalized income transactions. */
+/** Filter to timestamped income transactions, excluding non-primary normalized duplicates. */
 function filterIncomeTransactions(transactions: Transaction[]): TimestampedTransaction[] {
   return transactions.filter(
     (t): t is TimestampedTransaction =>
@@ -217,14 +217,16 @@ export interface PerBudgetPoint {
   readonly avg3Spending: number;
 }
 
-/** Compute trailing rolling average. For indices with fewer than `windowSize` prior values, averages over available values. */
+/** Compute trailing rolling average over a window of `windowSize` values including the current index. For indices with fewer than `windowSize` preceding values, averages over available values. */
 export function computeRollingAverage(values: number[], windowSize: number): number[] {
   if (windowSize < 1) throw new RangeError(`windowSize must be >= 1, got ${windowSize}`);
   const result: number[] = [];
+  let sum = 0;
   for (let i = 0; i < values.length; i++) {
-    const start = Math.max(0, i - windowSize + 1);
-    const window = values.slice(start, i + 1);
-    result.push(window.reduce((a, b) => a + b, 0) / window.length);
+    sum += values[i];
+    if (i >= windowSize) sum -= values[i - windowSize];
+    const count = Math.min(i + 1, windowSize);
+    result.push(sum / count);
   }
   return result;
 }
@@ -238,7 +240,7 @@ export function toSundayEntry(d: Date): { label: string; ms: number } {
   return { label, ms: sun.getTime() };
 }
 
-/** Single pass over periods: build ordered unique week entries and sum totals per week. */
+/** Build ordered unique week entries and sum totals per week. Returns weeks sorted chronologically. */
 function indexPeriodsByWeek(periods: BudgetPeriod[]): {
   weeks: [number, string][];
   weeklySpending: Map<number, number>;
@@ -291,7 +293,7 @@ export function computeAggregateTrend(
 
 /**
  * Compute per-budget 3-week rolling average of non-income spending.
- * Includes an "Other" series for transactions with no budget assignment.
+ * Includes an "Other" series when qualifying unbudgeted transactions exist.
  */
 export function computePerBudgetTrend(
   budgets: Budget[],

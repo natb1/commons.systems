@@ -108,16 +108,37 @@ function deserializePeriods(raw: string): BudgetPeriod[] {
   }));
 }
 
-function deserializeAggregateTrend(raw: string): AggregatePoint[] {
+function deserializeJSON(raw: string, label: string): unknown {
   try { return JSON.parse(raw); } catch (e) {
-    throw new DataIntegrityError(`Invalid aggregate trend data: ${e instanceof Error ? e.message : e}`);
+    throw new DataIntegrityError(`Invalid ${label}: ${e instanceof Error ? e.message : e}`);
   }
 }
 
-function deserializePerBudgetTrend(raw: string): PerBudgetPoint[] {
-  try { return JSON.parse(raw); } catch (e) {
-    throw new DataIntegrityError(`Invalid per-budget trend data: ${e instanceof Error ? e.message : e}`);
+function deserializeAggregateTrend(raw: string): AggregatePoint[] {
+  const parsed = deserializeJSON(raw, "aggregate trend data");
+  if (!Array.isArray(parsed)) throw new DataIntegrityError("Aggregate trend data is not an array");
+  for (let i = 0; i < parsed.length; i++) {
+    const el = parsed[i];
+    if (typeof el.weekLabel !== "string" || typeof el.weekMs !== "number"
+      || typeof el.avg12Income !== "number" || typeof el.avg12Spending !== "number"
+      || typeof el.avg3Spending !== "number") {
+      throw new DataIntegrityError(`Aggregate trend element ${i} missing or invalid fields: expected weekLabel(string), weekMs(number), avg12Income(number), avg12Spending(number), avg3Spending(number)`);
+    }
   }
+  return parsed as AggregatePoint[];
+}
+
+function deserializePerBudgetTrend(raw: string): PerBudgetPoint[] {
+  const parsed = deserializeJSON(raw, "per-budget trend data");
+  if (!Array.isArray(parsed)) throw new DataIntegrityError("Per-budget trend data is not an array");
+  for (let i = 0; i < parsed.length; i++) {
+    const el = parsed[i];
+    if (typeof el.weekLabel !== "string" || typeof el.weekMs !== "number"
+      || typeof el.budget !== "string" || typeof el.avg3Spending !== "number") {
+      throw new DataIntegrityError(`Per-budget trend element ${i} missing or invalid fields: expected weekLabel(string), weekMs(number), budget(string), avg3Spending(number)`);
+    }
+  }
+  return parsed as PerBudgetPoint[];
 }
 
 function getAllScrollWrappers(): HTMLElement[] {

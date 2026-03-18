@@ -70,7 +70,7 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
 
   const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
 
-  // Chart body with faceted dots; line paths drawn by overlay SVG below
+  // Chart body with faceted dots; line paths drawn by overlaySvg
   const seriesOrder: SeriesName[] = [SERIES_INCOME, SERIES_12W_SPENDING, SERIES_3W_SPENDING];
   const chartSvg = Plot.plot({
     width: chartWidth,
@@ -127,8 +127,8 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   overlaySvg.style.left = "0";
   overlaySvg.style.pointerEvents = "none";
 
-  // Read dot positions from the rendered chart. Only X needs adjustment — facet panels apply
-  // horizontal translate transforms, but Y is already in absolute chart space from the shared domain.
+  // Read dot positions from the rendered chart. Only X needs adjustment — Plot (as of v0.6)
+  // applies horizontal translate transforms to facet panels, but Y is in absolute chart space.
   const dots = chartSvg.querySelectorAll("circle");
   if (dots.length !== lineData.length) {
     throw new Error(`Expected ${lineData.length} dots but found ${dots.length}`);
@@ -145,6 +145,7 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
       if (cxAttr === null || cyAttr === null) throw new Error(`Dot ${idx - 1} missing cx/cy attributes`);
       let cx = parseFloat(cxAttr);
       const cy = parseFloat(cyAttr);
+      if (Number.isNaN(cx) || Number.isNaN(cy)) throw new Error(`Dot ${idx - 1} has non-numeric cx/cy: cx="${cxAttr}", cy="${cyAttr}"`);
       let el: Element | null = dot.parentElement;
       while (el && el !== chartSvg) {
         const transform = el.getAttribute("transform");
