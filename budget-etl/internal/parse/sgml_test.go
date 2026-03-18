@@ -22,6 +22,11 @@ func TestParseSGML(t *testing.T) {
 		t.Fatalf("expected 2 transactions, got %d", len(txns))
 	}
 
+	// Balance: LEDGERBAL BALAMT=5432.10 → 543210 cents
+	if result.Balance != 543210 {
+		t.Errorf("Balance = %d, want %d", result.Balance, 543210)
+	}
+
 	// First: DEBIT, TRNAMT=-81.71 → budget amount = +8171 cents
 	t.Run("debit", func(t *testing.T) {
 		txn := txns[0]

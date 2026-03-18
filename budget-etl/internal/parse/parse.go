@@ -126,6 +126,7 @@ func detectFormat(path string) (format, error) {
 // along with a flag indicating if the file was skipped (e.g., investment accounts).
 type ParseResult struct {
 	Transactions []Transaction
+	Balance      int64 // cents; 0 if absent. Raw signed value from statement.
 	Skipped      bool
 	SkipReason   string
 }
