@@ -142,6 +142,17 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
       }
     },
 
+    async renderPageInto(page: number, target: HTMLElement): Promise<void> {
+      if (page < 1 || page > _pageCount) return;
+      const url = await getObjectUrl(page - 1);
+      if (destroyed) return;
+      const img = document.createElement("img");
+      img.alt = `Page ${page}`;
+      img.src = url;
+      target.appendChild(img);
+      prefetchNextPage(page);
+    },
+
     async goToPage(page: number): Promise<void> {
       if (!imgEl) throw new Error("goToPage called after renderer was destroyed");
       if (page < 1 || page > _pageCount) return;
