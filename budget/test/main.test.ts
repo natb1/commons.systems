@@ -25,13 +25,11 @@ vi.mock("../src/firebase.js", () => ({
   trackPageView: vi.fn(),
 }));
 
-const mockHasData = vi.fn<() => Promise<boolean>>();
 const mockGetMeta = vi.fn();
 const mockStoreParsedData = vi.fn();
 const mockClearAll = vi.fn();
 
 vi.mock("../src/idb.js", () => ({
-  hasData: mockHasData,
   getMeta: mockGetMeta,
   storeParsedData: mockStoreParsedData,
   clearAll: mockClearAll,
@@ -99,7 +97,7 @@ describe("main module", () => {
       db: { type: "mock-firestore" }, NAMESPACE: "app/test", trackPageView: vi.fn(),
     }));
     vi.mock("../src/idb.js", () => ({
-      hasData: mockHasData, getMeta: mockGetMeta, storeParsedData: mockStoreParsedData, clearAll: mockClearAll,
+      getMeta: mockGetMeta, storeParsedData: mockStoreParsedData, clearAll: mockClearAll,
     }));
     vi.mock("../src/upload.js", () => ({
       parseUploadedJson: vi.fn(), toParsedData: vi.fn(),
@@ -150,7 +148,7 @@ describe("main module", () => {
       db: { type: "mock-firestore" }, NAMESPACE: "app/test", trackPageView: vi.fn(),
     }));
     vi.mock("../src/idb.js", () => ({
-      hasData: mockHasData, getMeta: mockGetMeta, storeParsedData: mockStoreParsedData, clearAll: mockClearAll,
+      getMeta: mockGetMeta, storeParsedData: mockStoreParsedData, clearAll: mockClearAll,
     }));
     vi.mock("../src/upload.js", () => ({
       parseUploadedJson: vi.fn(), toParsedData: vi.fn(),

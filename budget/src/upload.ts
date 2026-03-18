@@ -132,8 +132,9 @@ export function parseUploadedJson(text: string): ParsedUpload {
   let raw: RawOutput;
   try {
     raw = JSON.parse(text);
-  } catch {
-    throw new UploadValidationError("Invalid JSON file");
+  } catch (e) {
+    const detail = e instanceof SyntaxError ? `: ${e.message}` : "";
+    throw new UploadValidationError(`Invalid JSON file${detail}`);
   }
 
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
@@ -186,7 +187,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
 
   const budgetPeriods: BudgetPeriod[] = (raw.budgetPeriods ?? []).map((p: RawBudgetPeriod, i: number) => ({
     id: requireId(p.id, "budgetPeriod", i) as BudgetPeriodId,
-    budgetId: p.budgetId as BudgetId,
+    budgetId: requireId(p.budgetId, "budgetPeriod.budgetId", i) as BudgetId,
     periodStart: parseTimestamp(p.periodStart, "budgetPeriod.periodStart"),
     periodEnd: parseTimestamp(p.periodEnd, "budgetPeriod.periodEnd"),
     total: p.total ?? 0,
@@ -232,7 +233,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
   };
 }
 
-/** Convert a ParsedUpload to the format expected by storeParsedData (plain objects with Timestamps converted to millis). */
+/** Convert a ParsedUpload to the format expected by storeParsedData. Converts Timestamps to milliseconds and drops fields not stored in IDB (e.g. groupId). */
 export function toParsedData(parsed: ParsedUpload): ParsedData {
   return {
     transactions: parsed.transactions.map((t) => ({

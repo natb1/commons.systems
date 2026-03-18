@@ -7,7 +7,7 @@ import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListene
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
- * Returns {} when the attribute is absent (seed data view).
+ * Returns {} when the attribute is absent.
  * Throws DataIntegrityError for non-empty values that are not valid JSON objects with string values.
  */
 function parseBudgetMap(raw: string | undefined): Record<string, BudgetId> {
@@ -97,28 +97,23 @@ async function syncPeriodTotals(
   const net = computeNetAmount(amount, reimbursement);
 
   try {
+    const ds = getActiveDataSource();
     if (oldBudgetId) {
       const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
       if (oldPeriod) {
-        await getActiveDataSource().adjustBudgetPeriodTotal(oldPeriod.id, -net);
+        await ds.adjustBudgetPeriodTotal(oldPeriod.id, -net);
         oldPeriod.total -= net;
       }
     }
     if (newBudgetId) {
       const newPeriod = findPeriod(budgetPeriods, newBudgetId, timestampMs);
       if (newPeriod) {
-        await getActiveDataSource().adjustBudgetPeriodTotal(newPeriod.id, net);
+        await ds.adjustBudgetPeriodTotal(newPeriod.id, net);
         newPeriod.total += net;
       }
     }
   } catch (periodError) {
-    if (periodError instanceof TypeError || periodError instanceof ReferenceError) {
-      throw periodError;
-    }
-    console.error("Failed to update budget period totals:", periodError);
-    clearBalanceDisplay(row);
-    const balanceEl = row.querySelector(".budget-balance") as HTMLElement | null;
-    if (balanceEl) balanceEl.title = "Budget totals may be incorrect. Reload to recalculate.";
+    handlePeriodSyncError(row, periodError);
   }
 }
 
@@ -154,17 +149,22 @@ async function syncPeriodOnReimbursementChange(
       period.total += delta;
     }
   } catch (periodError) {
-    if (periodError instanceof TypeError || periodError instanceof ReferenceError) {
-      throw periodError;
-    }
-    console.error("Failed to update budget period totals:", periodError);
-    clearBalanceDisplay(row);
-    const balanceEl = row.querySelector(".budget-balance") as HTMLElement | null;
-    if (balanceEl) balanceEl.title = "Budget totals may be incorrect. Reload to recalculate.";
+    handlePeriodSyncError(row, periodError);
   }
 }
 
-/** Replace the displayed balance with "--". Recalculation happens on next page load. */
+/** Handle a non-programmer error from adjustBudgetPeriodTotal: log, clear balance, set tooltip. */
+function handlePeriodSyncError(row: HTMLElement, error: unknown): void {
+  if (error instanceof TypeError || error instanceof ReferenceError) {
+    throw error;
+  }
+  console.error("Failed to update budget period totals:", error);
+  clearBalanceDisplay(row);
+  const balanceEl = row.querySelector(".budget-balance") as HTMLElement | null;
+  if (balanceEl) balanceEl.title = "Budget totals may be incorrect. Re-upload your data file to correct them.";
+}
+
+/** Replace the displayed balance with "--". Recalculation happens on next navigation. */
 function clearBalanceDisplay(row: HTMLElement): void {
   const balanceDd = row.querySelector(".budget-balance") as HTMLElement | null;
   if (balanceDd) {

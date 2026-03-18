@@ -72,7 +72,7 @@ export interface ParsedData {
 
 export async function storeParsedData(data: ParsedData): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction(STORE_NAMES as unknown as string[], "readwrite");
+  const tx = db.transaction([...STORE_NAMES], "readwrite");
   const stores: Record<string, IDBObjectStore> = {};
   for (const name of STORE_NAMES) {
     stores[name] = tx.objectStore(name);
@@ -147,23 +147,13 @@ export async function deleteRecord(storeName: StoreName, id: string): Promise<vo
 
 export async function clearAll(): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction(STORE_NAMES as unknown as string[], "readwrite");
+  const tx = db.transaction([...STORE_NAMES], "readwrite");
   for (const name of STORE_NAMES) {
     tx.objectStore(name).clear();
   }
   await new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
-  });
-}
-
-export async function hasData(): Promise<boolean> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("meta", "readonly");
-    const request = tx.objectStore("meta").get("upload");
-    request.onsuccess = () => resolve(request.result !== undefined);
-    request.onerror = () => reject(request.error);
   });
 }
 

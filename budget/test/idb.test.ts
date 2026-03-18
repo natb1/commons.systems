@@ -7,7 +7,6 @@ import {
   put,
   deleteRecord,
   clearAll,
-  hasData,
   getMeta,
   closeDb,
 } from "../src/idb";
@@ -129,23 +128,6 @@ describe("clearAll", () => {
     expect(await getAll("rules")).toHaveLength(0);
     expect(await getAll("normalizationRules")).toHaveLength(0);
     expect(await getAll("meta")).toHaveLength(0);
-  });
-});
-
-describe("hasData", () => {
-  it("returns false initially", async () => {
-    expect(await hasData()).toBe(false);
-  });
-
-  it("returns true after storing data", async () => {
-    await storeParsedData(makeParsedData());
-    expect(await hasData()).toBe(true);
-  });
-
-  it("returns false after clearAll", async () => {
-    await storeParsedData(makeParsedData());
-    await clearAll();
-    expect(await hasData()).toBe(false);
   });
 });
 
