@@ -83,12 +83,12 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   }
 
   return {
-    async init(containerEl: HTMLElement, url: string, initialPosition?: string): Promise<void> {
+    async init(containerEl: HTMLElement, source: string | ArrayBuffer, initialPosition?: string): Promise<void> {
       container = containerEl;
       canvas = document.createElement("canvas");
       containerEl.appendChild(canvas);
 
-      const loadingTask = pdfjsLib.getDocument(url);
+      const loadingTask = pdfjsLib.getDocument(source);
       const doc = await loadingTask.promise;
       if (destroyed) {
         doc.destroy();

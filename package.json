@@ -12,6 +12,7 @@
     "firestoreutil",
     "functions",
     "htmlutil",
+    "idbutil",
     "landing",
     "print",
     "router",

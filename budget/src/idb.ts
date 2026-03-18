@@ -1,7 +1,5 @@
+import { createDbConnection } from "@commons-systems/idbutil/connection";
 import type { Rollover, RuleType } from "./firestore.js";
-
-const DB_NAME = "budget";
-const DB_VERSION = 2;
 
 const STORE_NAMES = [
   "transactions",
@@ -15,47 +13,20 @@ const STORE_NAMES = [
 
 export type StoreName = (typeof STORE_NAMES)[number];
 
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function openDb(): Promise<IDBDatabase> {
-  if (!dbPromise) {
-    dbPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = () => {
-        const db = request.result;
-        for (const name of STORE_NAMES) {
-          if (!db.objectStoreNames.contains(name)) {
-            db.createObjectStore(name, { keyPath: name === "meta" ? "key" : "id" });
-          }
-        }
-      };
-      request.onsuccess = () => {
-        request.result.onclose = () => { dbPromise = null; };
-        resolve(request.result);
-      };
-      request.onblocked = () => {
-        dbPromise = null;
-        reject(new Error("Database upgrade blocked. Close other tabs using this app and try again."));
-      };
-      request.onerror = () => { dbPromise = null; reject(request.error); };
-    });
-  }
-  return dbPromise;
-}
+const { openDb, closeDb: closeDbConn } = createDbConnection({
+  name: "budget",
+  version: 2,
+  onUpgrade(db) {
+    for (const name of STORE_NAMES) {
+      if (!db.objectStoreNames.contains(name)) {
+        db.createObjectStore(name, { keyPath: name === "meta" ? "key" : "id" });
+      }
+    }
+  },
+});
 
 /** Close the cached DB connection. Primarily for test cleanup. */
-export async function closeDb(): Promise<void> {
-  if (dbPromise) {
-    const pending = dbPromise;
-    dbPromise = null;
-    try {
-      const db = await pending;
-      db.close();
-    } catch {
-      // Connection already failed; nothing to close.
-    }
-  }
-}
+export const closeDb = closeDbConn;
 
 export interface UploadMeta {
   key: "upload";

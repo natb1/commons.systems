@@ -364,6 +364,79 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-zoom-reset")).toBeDisabled();
   });
 
+  test("PDF loads from cache on second view @cache", async ({ page }) => {
+    // First visit: load the PDF normally
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 3", {
+      timeout: 15000,
+    });
+
+    // Navigate away
+    await page.locator(".viewer-back").click();
+    await expect(page.locator("main h2")).toHaveText("Library");
+
+    // Block all Firebase Storage requests
+    await page.route("**/*.googleapis.com/**", (route) => route.abort());
+
+    // Second visit: should load from cache
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 3", {
+      timeout: 15000,
+    });
+  });
+
+  test("EPUB loads from cache on second view @cache", async ({ page }) => {
+    // First visit: load the EPUB normally
+    await page.goto("/view/gutenberg-3296");
+    await expect(page.locator(".viewer-position")).toContainText("Ch. 1/3", {
+      timeout: 15000,
+    });
+
+    // Navigate away
+    await page.locator(".viewer-back").click();
+    await expect(page.locator("main h2")).toHaveText("Library");
+
+    // Block all Firebase Storage requests
+    await page.route("**/*.googleapis.com/**", (route) => route.abort());
+
+    // Second visit: should load from cache
+    await page.goto("/view/gutenberg-3296");
+    await expect(page.locator(".viewer-position")).toContainText("Ch. 1/3", {
+      timeout: 15000,
+    });
+  });
+
+  test("image archive loads from cache on second view @cache", async ({
+    page,
+  }) => {
+    // First visit: load the image archive normally
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
+      timeout: 15000,
+    });
+
+    // Navigate to page 2 to trigger lazy loading
+    await page.locator(".viewer-next").click();
+    await expect(page.locator(".viewer-position")).toContainText("2 / 5");
+
+    // Navigate away
+    await page.locator(".viewer-back").click();
+    await expect(page.locator("main h2")).toHaveText("Library");
+
+    // Block all Firebase Storage requests
+    await page.route("**/*.googleapis.com/**", (route) => route.abort());
+
+    // Second visit: should load from cache
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
+      timeout: 15000,
+    });
+
+    // Navigate to page 2 to verify lazy-loaded pages also cached
+    await page.locator(".viewer-next").click();
+    await expect(page.locator(".viewer-position")).toContainText("2 / 5");
+  });
+
   test("spread toggle visible for PDF and image-archive, hidden for EPUB", async ({
     page,
   }) => {
@@ -485,6 +558,6 @@ test.describe("viewer", () => {
 
     // ArrowLeft goes back to spread 2-3
     await page.keyboard.press("ArrowLeft");
-    await expect(page.locator(".viewer-position")).toContainText(/Pages 2\u20133 \/ 5/);
+    await expect(page.locator(".viewer-position")).toContainText(/Pages 2\u20133 \/ 5/)
   });
 });
