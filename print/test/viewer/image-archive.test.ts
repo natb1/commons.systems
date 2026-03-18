@@ -41,16 +41,16 @@ describe("createImageArchiveRenderer", () => {
     resizeObserverCallbacks = [];
   });
 
-  async function initZoomableRenderer(opts: { pageCount?: number; withParent?: boolean } = {}) {
-    const { pageCount = 2, withParent = false } = opts;
+  async function initZoomableRenderer(opts: { pageCount?: number } = {}) {
+    const { pageCount = 2 } = opts;
     const files: Record<string, Uint8Array> = {};
     for (let i = 1; i <= pageCount; i++) {
       files[`image-${String(i).padStart(3, "0")}.png`] = new Uint8Array([i]);
     }
     mockFetch(makeZipBuffer(files));
     const container = makeContainer();
-    const parent = withParent ? document.createElement("div") : null;
-    if (parent) parent.appendChild(container);
+    const parent = document.createElement("div");
+    parent.appendChild(container);
     const renderer = createImageArchiveRenderer();
     await renderer.init(container, "https://example.com/archive.zip");
     const img = container.querySelector("img") as HTMLImageElement;
@@ -465,18 +465,18 @@ describe("createImageArchiveRenderer", () => {
   });
 
   it("zoomOut to level 0 returns to fit-to-view", async () => {
-    const { container, img, renderer, parent } = await initZoomableRenderer({ withParent: true });
+    const { container, img, renderer, parent } = await initZoomableRenderer();
 
     renderer.zoomIn!();
-    parent!.scrollTop = 100;
-    parent!.scrollLeft = 50;
+    parent.scrollTop = 100;
+    parent.scrollLeft = 50;
 
     renderer.zoomOut!();
     expect(renderer.isZoomed).toBe(false);
     expect(container.classList.contains("zoomed")).toBe(false);
     expect(img.style.width).toBe("");
-    expect(parent!.scrollTop).toBe(0);
-    expect(parent!.scrollLeft).toBe(0);
+    expect(parent.scrollTop).toBe(0);
+    expect(parent.scrollLeft).toBe(0);
   });
 
   it("zoomOut at level 0 is a no-op", async () => {
@@ -493,15 +493,15 @@ describe("createImageArchiveRenderer", () => {
   });
 
   it("resetZoom scrolls parent to top-left", async () => {
-    const { renderer, parent } = await initZoomableRenderer({ withParent: true });
+    const { renderer, parent } = await initZoomableRenderer();
 
     renderer.zoomIn!();
-    parent!.scrollTop = 150;
-    parent!.scrollLeft = 75;
+    parent.scrollTop = 150;
+    parent.scrollLeft = 75;
 
     renderer.resetZoom!();
-    expect(parent!.scrollTop).toBe(0);
-    expect(parent!.scrollLeft).toBe(0);
+    expect(parent.scrollTop).toBe(0);
+    expect(parent.scrollLeft).toBe(0);
   });
 
   it("resize resets zoom to fit-to-view", async () => {

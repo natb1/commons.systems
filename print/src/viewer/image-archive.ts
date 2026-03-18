@@ -104,8 +104,10 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       imgEl.src = getObjectUrl(startPage - 1);
       container.appendChild(imgEl);
 
-      resizeObserver = new ResizeObserver(() => { resetZoomState(); });
-      resizeObserver.observe(container);
+      if (scrollParent) {
+        resizeObserver = new ResizeObserver(() => { resetZoomState(); });
+        resizeObserver.observe(scrollParent);
+      }
     },
 
     async goToPage(page: number): Promise<void> {
