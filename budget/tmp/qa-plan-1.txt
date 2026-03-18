@@ -1,0 +1,52 @@
+QA Testing Plan — Budget Trend Line Charts (#262)
+==================================================
+
+Smoke check: 195/195 acceptance tests passed (mobile, tablet, desktop)
+
+App URL: http://localhost:60437
+Auth: Sign in via GitHub (emulator fake account picker), test@example.com
+
+Manual Test Cases
+-----------------
+
+1. AGGREGATE TREND CHART
+   - [ ] Three colored dot/line series visible above the bar chart
+   - [ ] Legend shows 3 labeled items with matching colors
+
+2. PER-BUDGET AREA CHART
+   - [ ] Stacked colored bars visible between trend chart and bar chart
+   - [ ] Legend shows one item per budget with matching colors
+
+3. SYNCHRONIZED SCROLLING
+   - [ ] Scrolling bar chart scrolls trend chart and area chart to same position
+   - [ ] Scrolling trend chart scrolls bar chart and area chart
+   - [ ] Scrolling area chart scrolls the other two charts
+
+4. DATE PICKER SYNC
+   - [ ] Selecting a date in the date picker scrolls all three charts to that week
+
+5. NEW METRIC
+   - [ ] "12-Week Avg Weekly Spending" visible in the metrics section with a dollar value
+
+6. WEEK COLUMN ALIGNMENT
+   - [ ] Week labels line up vertically across all three charts
+
+7. RESIZE BEHAVIOR
+   - [ ] Resize browser window — all charts re-render correctly
+   - [ ] Scroll position is maintained after resize
+
+8. FIXED Y-AXIS
+   - [ ] Y-axes stay visible while horizontally scrolling each chart
+
+Edge Cases
+----------
+
+9. NARROW VIEWPORT
+   - [ ] Shrink to mobile width — charts still render, scroll works
+
+10. SCROLL BOUNDARIES
+    - [ ] Scroll to leftmost position — all charts synced
+    - [ ] Scroll to rightmost position — all charts synced
+
+11. RAPID SCROLLING
+    - [ ] Scroll quickly back and forth — no jitter or desync between charts

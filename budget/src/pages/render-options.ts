@@ -1,32 +1,15 @@
-import type { User } from "firebase/auth";
-import type { Group } from "@commons-systems/authutil/groups";
+import type { DataSource } from "../data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
-export type RenderPageOptions =
-  | { user: null; group: null; groupError: false }
-  | { user: User; group: Group; groupError: false }
-  | { user: User; group: null; groupError: boolean };
+export interface RenderPageOptions {
+  authorized: boolean;
+  groupName: string;
+  dataSource: DataSource;
+}
 
-/**
- * Build the auth/seed notice HTML shown above page content.
- * Returns groupErrorNotice + seedNotice concatenated.
- */
 export function renderPageNotices(options: RenderPageOptions, entityLabel: string): string {
-  const { user, group, groupError } = options;
-  const authorized = group !== null;
-
-  const groupErrorNotice = groupError && user
-    ? '<p id="group-error" class="auth-error">Could not load group data. Showing example data. Try refreshing the page.</p>'
-    : "";
-
-  let seedNotice = "";
-  if (!authorized && !groupError) {
-    seedNotice = user
-      ? '<p id="seed-data-notice">Viewing example data. You are not a member of any groups.</p>'
-      : `<p id="seed-data-notice">Viewing example data. Sign in to see your ${entityLabel}.</p>`;
-  }
-
-  return `${groupErrorNotice}${seedNotice}`;
+  if (options.authorized) return "";
+  return `<p id="seed-data-notice">Viewing example data. Load a data file to see your ${entityLabel}.</p>`;
 }
 
 /**

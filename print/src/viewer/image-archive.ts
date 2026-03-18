@@ -1,4 +1,5 @@
-import { unzipSync } from "fflate";
+import { unzip, HTTPRangeReader } from "unzipit";
+import type { ZipEntry } from "unzipit";
 import type { ContentRenderer } from "./types.js";
 import { parsePositionPage } from "./types.js";
 
@@ -18,17 +19,21 @@ function applyZoom(container: HTMLElement, img: HTMLImageElement, level: number,
   }
 }
 
-export function createImageArchiveRenderer(_onError?: (err: unknown) => void): ContentRenderer {
-  // _onError accepted for factory signature consistency with createPdfRenderer. Unlike createPdfRenderer,
-  // this renderer's ResizeObserver only resets zoom state (no re-rendering), so the callback is never
-  // invoked; all errors surface as thrown exceptions from the renderer's methods.
-  let fileData: Uint8Array[] = [];
-  let objectUrlCache: (string | null)[] = [];
+type PageSlot = {
+  entry: ZipEntry;
+  urlPromise: Promise<string> | null;
+  resolvedUrl: string | null;
+};
+
+export function createImageArchiveRenderer(onError?: (err: unknown) => void): ContentRenderer {
+  // onError used for background prefetch errors that cannot propagate as exceptions.
+  // init and goToPage propagate errors via rejection; zoom operations throw synchronously.
+  let pages: PageSlot[] = [];
   let imgEl: HTMLImageElement | null = null;
   let containerEl: HTMLElement | null = null;
   let scrollParent: HTMLElement | null = null;
   let resizeObserver: ResizeObserver | null = null;
-  // 0 is the pre-init sentinel; position returns "0" and canGoNext/canGoPrev return false until init resolves.
+  // 0 is the sentinel for uninitialized/destroyed state; position returns "0" and canGoNext/canGoPrev return false.
   let _currentPage = 0;
   let _pageCount = 0;
   let destroyed = false;
@@ -55,42 +60,67 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     _onZoomChange?.();
   }
 
-  function getObjectUrl(index: number): string {
-    if (!objectUrlCache[index]) {
-      objectUrlCache[index] = URL.createObjectURL(new Blob([fileData[index] as Uint8Array<ArrayBuffer>]));
+  async function getObjectUrl(index: number): Promise<string> {
+    const slot = pages[index]!;
+    if (!slot.urlPromise) {
+      slot.urlPromise = slot.entry.blob()
+        .then(blob => {
+          if (destroyed) return "";
+          const url = URL.createObjectURL(blob);
+          slot.resolvedUrl = url;
+          return url;
+        })
+        .catch(err => {
+          slot.urlPromise = null;
+          throw err;
+        });
     }
-    return objectUrlCache[index] as string;
+    return slot.urlPromise!;
+  }
+
+  /** Prefetch the next page after the given 1-based page number. */
+  function prefetchNextPage(page: number): void {
+    const index = page; // 1-based page N → 0-based index N (i.e. the page after N)
+    if (index < 0 || index >= _pageCount || pages[index]!.urlPromise || destroyed) return;
+    void getObjectUrl(index).catch((err) => {
+      if (onError) onError(err);
+      else console.warn("Image prefetch failed for page", index + 1, err);
+    });
   }
 
   return {
     async init(container: HTMLElement, url: string, initialPosition?: string): Promise<void> {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Failed to fetch archive: ${response.status}`);
-
-      const buffer = await response.arrayBuffer();
-      let files: ReturnType<typeof unzipSync>;
+      let entries: Record<string, ZipEntry>;
       try {
-        files = unzipSync(new Uint8Array(buffer));
+        const reader = new HTTPRangeReader(url);
+        ({ entries } = await unzip(reader));
       } catch (err) {
-        throw new Error(
-          `Failed to decompress archive from ${url} (${buffer.byteLength} bytes): ${err instanceof Error ? err.message : String(err)}`,
-          { cause: err },
-        );
+        console.warn("Range-based archive loading failed, falling back to full download:", err);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Failed to fetch archive: ${res.status}`);
+        const buf = await res.arrayBuffer();
+        try {
+          ({ entries } = await unzip(buf));
+        } catch (unzipErr) {
+          throw new Error(
+            `Failed to decompress archive from ${url} (${buf.byteLength} bytes)`,
+            { cause: unzipErr },
+          );
+        }
       }
 
-      const imagePaths = Object.keys(files)
+      const imageEntries = Object.keys(entries)
         .filter((path) => IMAGE_EXT.test(path))
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .map((path) => entries[path]!);
 
-      if (imagePaths.length === 0) throw new Error("No images found in archive");
+      if (imageEntries.length === 0) throw new Error("No images found in archive");
 
-      fileData = imagePaths.map((path) => files[path] as Uint8Array<ArrayBuffer>);
-      objectUrlCache = new Array(fileData.length).fill(null);
-      _pageCount = fileData.length;
+      pages = imageEntries.map(entry => ({ entry, urlPromise: null, resolvedUrl: null }));
+      _pageCount = pages.length;
 
       if (destroyed) {
-        fileData = [];
-        objectUrlCache = [];
+        pages = [];
         return;
       }
 
@@ -101,8 +131,10 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       scrollParent = container.parentElement;
       imgEl = document.createElement("img");
       imgEl.alt = `Page ${startPage}`;
-      imgEl.src = getObjectUrl(startPage - 1);
+      imgEl.src = await getObjectUrl(startPage - 1);
       container.appendChild(imgEl);
+
+      prefetchNextPage(startPage);
 
       if (scrollParent) {
         resizeObserver = new ResizeObserver(() => { resetZoomState(); });
@@ -111,12 +143,15 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     },
 
     async goToPage(page: number): Promise<void> {
-      if (page < 1 || page > _pageCount) return;
       if (!imgEl) throw new Error("goToPage called after renderer was destroyed");
+      if (page < 1 || page > _pageCount) return;
       resetZoomState();
       _currentPage = page;
       imgEl.alt = `Page ${page}`;
-      imgEl.src = getObjectUrl(page - 1);
+      const url = await getObjectUrl(page - 1);
+      if (destroyed) return;
+      imgEl.src = url;
+      prefetchNextPage(page);
     },
 
     async next(): Promise<void> {
@@ -185,11 +220,11 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       destroyed = true;
       resizeObserver?.disconnect();
       resizeObserver = null;
-      for (const url of objectUrlCache) {
-        if (url) URL.revokeObjectURL(url);
+      for (const page of pages) {
+        if (page.resolvedUrl) URL.revokeObjectURL(page.resolvedUrl);
       }
-      fileData = [];
-      objectUrlCache = [];
+      pages = [];
+      _pageCount = 0;
       if (imgEl) {
         imgEl.remove();
         imgEl = null;

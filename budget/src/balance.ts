@@ -383,7 +383,8 @@ function endOfWeekMs(timestampMs: number): number {
  * Monday after the latest income transaction. Income transactions are identified
  * by categories starting with "Income". Non-primary normalized duplicates and
  * null-timestamp transactions are excluded. Returns 0 when no qualifying income
- * transactions exist.
+ * transactions exist. Amounts are absolute-valued before summing, so both
+ * positive and negative income conventions produce a positive result.
  */
 export function computeAverageWeeklyIncome(transactions: Transaction[]): number {
   const incomeTxns = transactions.filter(
@@ -407,7 +408,7 @@ export function computeAverageWeeklyIncome(transactions: Transaction[]): number 
   for (const t of incomeTxns) {
     const ms = t.timestamp.toMillis();
     if (ms >= windowStart && ms < windowEnd) {
-      sum += computeNetAmount(t.amount, t.reimbursement);
+      sum += Math.abs(computeNetAmount(t.amount, t.reimbursement));
     }
   }
 

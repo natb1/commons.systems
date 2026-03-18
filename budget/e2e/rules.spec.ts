@@ -1,5 +1,9 @@
+import path from "path";
+import { fileURLToPath } from "url";
 import { test, expect } from "@playwright/test";
-import { signIn } from "@commons-systems/authutil/e2e/sign-in";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const fixturePath = path.join(__dirname, "fixtures", "test-budget.json");
 
 test.describe("rules", () => {
   test("page loads without JS errors @smoke", async ({ page }) => {
@@ -89,7 +93,7 @@ test.describe("rules", () => {
   test("unauthenticated user sees seed data notice", async ({ page }) => {
     await page.goto("/rules");
     await expect(page.locator("#seed-data-notice")).toBeVisible();
-    await expect(page.locator("#seed-data-notice")).toContainText("Sign in");
+    await expect(page.locator("#seed-data-notice")).toContainText("Load a data file");
   });
 
   test("unauthenticated user sees no add or delete buttons", async ({ page }) => {
@@ -99,22 +103,24 @@ test.describe("rules", () => {
     await expect(page.locator(".delete-rule")).toHaveCount(0);
   });
 
-  test("authenticated user sees editable inputs and controls", async ({ page }) => {
+  test("user with uploaded data sees editable inputs and controls", async ({ page }) => {
     await page.goto("/rules");
-    await signIn(page);
-    await expect(page.locator("#rules-table")).toBeVisible();
-    await expect(page.locator("#seed-data-notice")).toHaveCount(0);
+    await expect(page.locator("#seed-data-notice")).toBeVisible();
 
-    // Authenticated view renders inputs for inline editing
+    // Upload fixture to become "authorized"
+    const fileInput = page.locator('input[type="file"]');
+    await fileInput.setInputFiles(fixturePath);
+
+    await expect(page.locator("#seed-data-notice")).toHaveCount(0);
+    await expect(page.locator("#rules-table")).toBeVisible();
+
+    // Fixture has 1 categorization rule, 0 budget, 0 normalization
     const rows = page.locator("#rules-table .rule-row");
-    await expect(rows).toHaveCount(8);
-    // 6 regular rules have pattern/target/priority/institution/account;
-    // 2 normalization rules have pattern/canonical/priority/date-window
-    await expect(page.locator(".edit-pattern")).toHaveCount(8);
-    await expect(page.locator(".edit-target")).toHaveCount(6);
-    await expect(page.locator(".edit-canonical")).toHaveCount(2);
+    await expect(rows).toHaveCount(1);
+    await expect(page.locator(".edit-pattern")).toHaveCount(1);
+    await expect(page.locator(".edit-target")).toHaveCount(1);
     await expect(page.locator("#add-rule")).toBeVisible();
-    await expect(page.locator(".delete-rule")).toHaveCount(8);
+    await expect(page.locator(".delete-rule")).toHaveCount(1);
   });
 
   test("clicking rules nav link navigates to rules page", async ({ page }) => {

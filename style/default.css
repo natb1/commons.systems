@@ -154,3 +154,11 @@ main {
 .autocomplete-item.selected {
   background: var(--border);
 }
+
+.upload-label {
+  cursor: pointer;
+  text-decoration: underline;
+}
+.upload-label:hover {
+  text-decoration-thickness: 2px;
+}

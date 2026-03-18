@@ -1,6 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { getBudgets, getBudgetPeriods, getTransactions, type Budget, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
+import { type Budget, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAverageWeeklyIncome, computeAverageWeeklySpending, computeAggregateTrend, computePerBudgetTrend, type AggregatePoint, type PerBudgetPoint } from "../balance.js";
 import { formatCurrency } from "../format.js";
 
@@ -124,18 +124,17 @@ function renderChartContainer(
 }
 
 export async function renderBudgets(options: RenderPageOptions): Promise<string> {
-  const { user, group } = options;
-  const authorized = group !== null;
+  const { authorized, dataSource } = options;
 
   let tableHtml: string;
   let chartHtml = "";
   try {
     const [budgets, periods, transactions] = await Promise.all([
-      (group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null))
+      dataSource.getBudgets()
         .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
-      (group && user?.email ? getBudgetPeriods(group.id, user.email) : getBudgetPeriods(null))
+      dataSource.getBudgetPeriods()
         .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
-      (group && user?.email ? getTransactions(group.id, user.email) : getTransactions(null))
+      dataSource.getTransactions()
         .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
     ]);
     const averageWeeklyIncome = computeAverageWeeklyIncome(transactions);

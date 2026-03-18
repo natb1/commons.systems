@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase/firestore";
-import { updateBudget, type Budget, type BudgetId, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod } from "../firestore.js";
+import { type Budget, type BudgetId, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod } from "../firestore.js";
+import { getActiveDataSource } from "../active-data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showInputError, handleSaveError } from "./hydrate-util.js";
 import { renderBudgetChart, type ChartResult } from "./budgets-chart.js";
@@ -32,14 +33,14 @@ export function hydrateBudgetTable(container: HTMLElement): void {
           showInputError(target, "Budget name cannot be empty");
           return;
         }
-        await updateBudget(budgetId, { name: target.value });
+        await getActiveDataSource().updateBudget(budgetId, { name: target.value });
       } else if (target.classList.contains("edit-allowance")) {
         const allowance = Number(target.value);
         if (!Number.isFinite(allowance) || allowance < 0) {
           showInputError(target, "Weekly allowance must be a non-negative number");
           return;
         }
-        await updateBudget(budgetId, { weeklyAllowance: allowance });
+        await getActiveDataSource().updateBudget(budgetId, { weeklyAllowance: allowance });
       } else {
         return;
       }
@@ -65,7 +66,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
         showInputError(target, "Invalid rollover value");
         return;
       }
-      await updateBudget(budgetId, { rollover: value });
+      await getActiveDataSource().updateBudget(budgetId, { rollover: value });
       // Update the selected attribute (not just .value) so showInputError can
       // revert to the last-saved value via option[selected].
       if (saved) saved.removeAttribute("selected");
@@ -226,6 +227,10 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   const observer = new ResizeObserver(() => {
+    if (!container.isConnected) {
+      observer.disconnect();
+      return;
+    }
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       // Capture scroll ratio from first wrapper (all are synced)
