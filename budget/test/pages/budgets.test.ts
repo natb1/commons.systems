@@ -270,6 +270,27 @@ describe("renderBudgets", () => {
     expect(html).toContain("$350.00");
   });
 
+  it("renders 12-Week Avg Weekly Spending metric", async () => {
+    mockDefaults();
+    mockGetBudgets.mockResolvedValue([
+      makeBudget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 100 }),
+    ]);
+    mockGetBudgetPeriods.mockResolvedValue([
+      {
+        id: "food-w1",
+        budgetId: "food",
+        periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+        periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+        total: 80,
+        count: 1,
+        categoryBreakdown: {},
+        groupId: null,
+      },
+    ] as any);
+    const html = await renderBudgets({ user: null, group: null, groupError: false });
+    expect(html).toContain("12-Week Avg Weekly Spending");
+  });
+
   it("metrics section absent on fetch error", async () => {
     mockDefaults();
     mockGetBudgets.mockRejectedValue(new Error("connection failed"));

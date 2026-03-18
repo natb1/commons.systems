@@ -4,6 +4,10 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showInputError, handleSaveError } from "./hydrate-util.js";
 import { renderBudgetChart, type ChartResult } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
+import { renderAggregateTrendChart } from "./budgets-trend-chart.js";
+import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
+import type { AggregatePoint } from "../balance.js";
+import type { PerBudgetPoint } from "../balance.js";
 import type { SerializedBudget } from "./budgets.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
@@ -103,6 +107,39 @@ function deserializePeriods(raw: string): BudgetPeriod[] {
   }));
 }
 
+function deserializeAggregateTrend(raw: string): AggregatePoint[] {
+  try { return JSON.parse(raw); } catch (e) {
+    throw new DataIntegrityError(`Invalid aggregate trend data: ${e instanceof Error ? e.message : e}`);
+  }
+}
+
+function deserializePerBudgetTrend(raw: string): PerBudgetPoint[] {
+  try { return JSON.parse(raw); } catch (e) {
+    throw new DataIntegrityError(`Invalid per-budget trend data: ${e instanceof Error ? e.message : e}`);
+  }
+}
+
+function getAllScrollWrappers(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>(".chart-scroll-wrapper"));
+}
+
+function setupScrollSync(): void {
+  let syncing = false;
+  function syncScroll(source: HTMLElement): void {
+    if (syncing) return;
+    syncing = true;
+    const ratio = source.scrollWidth > 0 ? source.scrollLeft / source.scrollWidth : 0;
+    for (const w of getAllScrollWrappers()) {
+      if (w !== source) w.scrollLeft = ratio * w.scrollWidth;
+    }
+    syncing = false;
+  }
+
+  for (const w of getAllScrollWrappers()) {
+    w.addEventListener("scroll", () => syncScroll(w));
+  }
+}
+
 export function hydrateBudgetChart(container: HTMLElement): void {
   const budgetsRaw = container.dataset.budgets;
   const periodsRaw = container.dataset.periods;
@@ -117,12 +154,35 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   if (!pieElOrNull) throw new DataIntegrityError("budgets-pie container not found in page markup");
   const pieEl: HTMLElement = pieElOrNull;
 
+  const trendEl = document.getElementById("budgets-trend-chart");
+  const areaEl = document.getElementById("budgets-area-chart");
+
+  // Deserialize trend data
+  const aggregateTrend = trendEl?.dataset.aggregateTrend
+    ? deserializeAggregateTrend(trendEl.dataset.aggregateTrend)
+    : [];
+  const perBudgetTrend = areaEl?.dataset.perBudgetTrend
+    ? deserializePerBudgetTrend(areaEl.dataset.perBudgetTrend)
+    : [];
+
+  // Compute panelWidth from bar chart logic for pixel alignment
+  const panelWidth = Math.max(budgets.length * 60 + 40, 120);
+
   function render(): void {
     chartResult = renderBudgetChart(container, { budgets, periods });
     renderBudgetPieChart(pieEl, { budgets, periods, windowWeeks: 12 });
+
+    const containerWidth = container.clientWidth || 640;
+    if (trendEl && aggregateTrend.length > 0) {
+      renderAggregateTrendChart(trendEl, { data: aggregateTrend, containerWidth, panelWidth });
+    }
+    if (areaEl && perBudgetTrend.length > 0) {
+      renderPerBudgetAreaChart(areaEl, { data: perBudgetTrend, containerWidth, panelWidth });
+    }
   }
 
   render();
+  setupScrollSync();
 
   // Configure date picker min/max from period date range
   const datePicker = document.getElementById("chart-date-picker") as HTMLInputElement | null;
@@ -131,8 +191,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
     datePicker.max = toISODate(chartResult.weeks[chartResult.weeks.length - 1].ms);
 
     datePicker.addEventListener("change", () => {
-      const wrapper = container.querySelector(".chart-scroll-wrapper");
-      if (!(wrapper instanceof HTMLElement) || !datePicker.value) return;
+      if (!datePicker.value) return;
 
       const weeks = chartResult.weeks;
       const selectedMs = new Date(datePicker.value + "T00:00:00").getTime();
@@ -150,9 +209,12 @@ export function hydrateBudgetChart(container: HTMLElement): void {
       const weekCount = chartResult.weeks.length;
       if (weekCount === 0) return;
 
-      const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
-      const left = weekCount <= 1 ? 0 : Math.round((nearestIdx / (weekCount - 1)) * scrollMax);
-      wrapper.scrollTo({ left: Math.max(0, left - wrapper.clientWidth / 2), behavior: "smooth" });
+      // Scroll all wrappers to the selected week
+      for (const wrapper of getAllScrollWrappers()) {
+        const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
+        const left = weekCount <= 1 ? 0 : Math.round((nearestIdx / (weekCount - 1)) * scrollMax);
+        wrapper.scrollTo({ left: Math.max(0, left - wrapper.clientWidth / 2), behavior: "smooth" });
+      }
     });
   }
 
@@ -160,9 +222,10 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   const observer = new ResizeObserver(() => {
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      const wrapper = container.querySelector(".chart-scroll-wrapper");
-      const scrollRatio = wrapper instanceof HTMLElement && wrapper.scrollWidth > 0
-        ? wrapper.scrollLeft / wrapper.scrollWidth
+      // Capture scroll ratio from any wrapper
+      const wrappers = getAllScrollWrappers();
+      const scrollRatio = wrappers.length > 0 && wrappers[0].scrollWidth > 0
+        ? wrappers[0].scrollLeft / wrappers[0].scrollWidth
         : 1;
       try {
         render();
@@ -176,9 +239,9 @@ export function hydrateBudgetChart(container: HTMLElement): void {
         setTimeout(() => { throw error; }, 0);
         return;
       }
-      const newWrapper = container.querySelector(".chart-scroll-wrapper");
-      if (newWrapper instanceof HTMLElement) {
-        newWrapper.scrollLeft = scrollRatio * newWrapper.scrollWidth;
+      // Restore scroll position on all wrappers
+      for (const w of getAllScrollWrappers()) {
+        w.scrollLeft = scrollRatio * w.scrollWidth;
       }
     }, 150);
   });
