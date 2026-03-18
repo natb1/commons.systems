@@ -125,7 +125,11 @@ function getAllScrollWrappers(): HTMLElement[] {
 
 function setupScrollSync(): void {
   let syncing = false;
-  function syncScroll(source: HTMLElement): void {
+  // Use capture on document so scroll events from any .chart-scroll-wrapper
+  // are handled even after DOM replacement by render()/ResizeObserver.
+  document.addEventListener("scroll", (e) => {
+    const source = e.target;
+    if (!(source instanceof HTMLElement) || !source.classList.contains("chart-scroll-wrapper")) return;
     if (syncing) return;
     syncing = true;
     const ratio = source.scrollWidth > 0 ? source.scrollLeft / source.scrollWidth : 0;
@@ -133,11 +137,7 @@ function setupScrollSync(): void {
       if (w !== source) w.scrollLeft = ratio * w.scrollWidth;
     }
     syncing = false;
-  }
-
-  for (const w of getAllScrollWrappers()) {
-    w.addEventListener("scroll", () => syncScroll(w));
-  }
+  }, true);
 }
 
 export function hydrateBudgetChart(container: HTMLElement): void {
