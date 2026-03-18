@@ -5,5 +5,8 @@
   "type": "module",
   "exports": {
     "./connection": "./src/connection.ts"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.0.0"
   }
 }

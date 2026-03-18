@@ -114,7 +114,7 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void, sto
     if (index < 0 || index >= _pageCount || pages[index]!.urlPromise || destroyed) return;
     void getObjectUrl(index).catch((err) => {
       if (onError) onError(err);
-      else console.warn("Image prefetch failed for page", index + 1, err);
+      else reportError(new Error(`Image prefetch failed for page ${index + 1}`, { cause: err }));
     });
   }
 
@@ -151,7 +151,7 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void, sto
             : new HTTPRangeReader(source);
           ({ entries } = await unzip(reader));
         } catch (err) {
-          console.warn("Range-based archive loading failed, falling back to full download:", err);
+          reportError(new Error("Range-based archive loading failed, falling back to full download", { cause: err }));
           const buf = await fetchArchiveBuffer(source);
           try {
             ({ entries } = await unzip(buf));

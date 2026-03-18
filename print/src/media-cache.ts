@@ -1,3 +1,11 @@
+/**
+ * IndexedDB-backed LRU cache for print media files (PDFs, EPUBs, image archive chunks).
+ *
+ * Two object stores: `media-data` holds blobs, `media-meta` holds size + lastAccessed
+ * metadata (separated so eviction scans never load large blobs). A sentinel `__total__`
+ * entry in meta tracks aggregate cache size for O(1) capacity checks. 500 MB cap with
+ * LRU eviction. Whole files and range-request chunks share the same stores.
+ */
 import { createDbConnection } from "@commons-systems/idbutil/connection";
 
 export const MAX_CACHE_BYTES = 500 * 1024 * 1024;
@@ -64,6 +72,22 @@ async function getTotalSize(db: IDBDatabase): Promise<number> {
   });
 }
 
+/** Read __total__ within `metaStore`'s transaction, subtract `evictedSize`, and write back. */
+function updateTotalAfterEviction(
+  metaStore: IDBObjectStore,
+  evictedSize: number,
+  fallbackTotal: number,
+  resolve: () => void,
+): void {
+  const totalReq = metaStore.get(TOTAL_KEY);
+  totalReq.onsuccess = () => {
+    const totalEntry = totalReq.result as MetaEntry | undefined;
+    const currentTotal = totalEntry ? totalEntry.size : fallbackTotal;
+    metaStore.put({ key: TOTAL_KEY, size: currentTotal - evictedSize, lastAccessed: 0 });
+    resolve();
+  };
+}
+
 async function evictIfNeeded(db: IDBDatabase, incomingSize: number): Promise<void> {
   const totalSize = await getTotalSize(db);
 
@@ -80,26 +104,12 @@ async function evictIfNeeded(db: IDBDatabase, incomingSize: number): Promise<voi
     const req = evictIndex.openCursor();
     req.onsuccess = () => {
       if (remaining <= 0) {
-        // Update __total__ with evicted amount
-        const totalReq = metaStore.get(TOTAL_KEY);
-        totalReq.onsuccess = () => {
-          const totalEntry = totalReq.result as MetaEntry | undefined;
-          const currentTotal = totalEntry ? totalEntry.size : totalSize;
-          metaStore.put({ key: TOTAL_KEY, size: currentTotal - evictedSize, lastAccessed: 0 });
-          resolve();
-        };
+        updateTotalAfterEviction(metaStore, evictedSize, totalSize, resolve);
         return;
       }
       const cursor = req.result;
       if (!cursor) {
-        // Ran out of entries; update __total__
-        const totalReq = metaStore.get(TOTAL_KEY);
-        totalReq.onsuccess = () => {
-          const totalEntry = totalReq.result as MetaEntry | undefined;
-          const currentTotal = totalEntry ? totalEntry.size : totalSize;
-          metaStore.put({ key: TOTAL_KEY, size: currentTotal - evictedSize, lastAccessed: 0 });
-          resolve();
-        };
+        updateTotalAfterEviction(metaStore, evictedSize, totalSize, resolve);
         return;
       }
       const entry = cursor.value as MetaEntry;
@@ -118,16 +128,16 @@ function chunkKey(storagePath: string, offset: number, length: number): string {
   return `${storagePath}:${offset}:${length}`;
 }
 
-export async function getFile(storagePath: string): Promise<ArrayBuffer | null> {
+async function getEntry<T extends ArrayBuffer | Uint8Array>(key: string): Promise<T | null> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DATA_STORE, "readonly");
-    const req = tx.objectStore(DATA_STORE).get(storagePath);
+    const req = tx.objectStore(DATA_STORE).get(key);
     req.onsuccess = () => {
       const entry = req.result as DataEntry | undefined;
       if (entry) {
-        touchLastAccessed(db, storagePath);
-        resolve(entry.data as ArrayBuffer);
+        touchLastAccessed(db, key);
+        resolve(entry.data as T);
       } else {
         resolve(null);
       }
@@ -136,7 +146,7 @@ export async function getFile(storagePath: string): Promise<ArrayBuffer | null> 
   });
 }
 
-export async function putFile(storagePath: string, data: ArrayBuffer): Promise<void> {
+async function putEntry(key: string, data: ArrayBuffer | Uint8Array): Promise<void> {
   const db = await openDb();
   await evictIfNeeded(db, data.byteLength);
   return new Promise((resolve, reject) => {
@@ -144,14 +154,14 @@ export async function putFile(storagePath: string, data: ArrayBuffer): Promise<v
     const dataStore = tx.objectStore(DATA_STORE);
     const metaStore = tx.objectStore(META_STORE);
 
-    // Check if key already exists to adjust total correctly
-    const existingReq = metaStore.get(storagePath);
+    // If this key already exists, subtract its old size from the total before adding the new size
+    const existingReq = metaStore.get(key);
     existingReq.onsuccess = () => {
       const existing = existingReq.result as MetaEntry | undefined;
       const oldSize = existing ? existing.size : 0;
 
-      dataStore.put({ key: storagePath, data });
-      metaStore.put({ key: storagePath, size: data.byteLength, lastAccessed: Date.now() });
+      dataStore.put({ key, data });
+      metaStore.put({ key, size: data.byteLength, lastAccessed: Date.now() });
 
       // Update __total__
       const totalReq = metaStore.get(TOTAL_KEY);
@@ -167,53 +177,20 @@ export async function putFile(storagePath: string, data: ArrayBuffer): Promise<v
   });
 }
 
-export async function getChunk(storagePath: string, offset: number, length: number): Promise<Uint8Array | null> {
-  const db = await openDb();
-  const key = chunkKey(storagePath, offset, length);
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DATA_STORE, "readonly");
-    const req = tx.objectStore(DATA_STORE).get(key);
-    req.onsuccess = () => {
-      const entry = req.result as DataEntry | undefined;
-      if (entry) {
-        touchLastAccessed(db, key);
-        resolve(entry.data as Uint8Array);
-      } else {
-        resolve(null);
-      }
-    };
-    req.onerror = () => reject(req.error);
-  });
+export function getFile(storagePath: string): Promise<ArrayBuffer | null> {
+  return getEntry<ArrayBuffer>(storagePath);
 }
 
-export async function putChunk(storagePath: string, offset: number, length: number, data: Uint8Array): Promise<void> {
-  const db = await openDb();
-  const key = chunkKey(storagePath, offset, length);
-  await evictIfNeeded(db, data.byteLength);
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction([DATA_STORE, META_STORE], "readwrite");
-    const dataStore = tx.objectStore(DATA_STORE);
-    const metaStore = tx.objectStore(META_STORE);
+export function putFile(storagePath: string, data: ArrayBuffer): Promise<void> {
+  return putEntry(storagePath, data);
+}
 
-    const existingReq = metaStore.get(key);
-    existingReq.onsuccess = () => {
-      const existing = existingReq.result as MetaEntry | undefined;
-      const oldSize = existing ? existing.size : 0;
+export function getChunk(storagePath: string, offset: number, length: number): Promise<Uint8Array | null> {
+  return getEntry<Uint8Array>(chunkKey(storagePath, offset, length));
+}
 
-      dataStore.put({ key, data });
-      metaStore.put({ key, size: data.byteLength, lastAccessed: Date.now() });
-
-      const totalReq = metaStore.get(TOTAL_KEY);
-      totalReq.onsuccess = () => {
-        const totalEntry = totalReq.result as MetaEntry | undefined;
-        const currentTotal = totalEntry ? totalEntry.size : 0;
-        metaStore.put({ key: TOTAL_KEY, size: currentTotal - oldSize + data.byteLength, lastAccessed: 0 });
-      };
-    };
-
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+export function putChunk(storagePath: string, offset: number, length: number, data: Uint8Array): Promise<void> {
+  return putEntry(chunkKey(storagePath, offset, length), data);
 }
 
 export async function clearCache(): Promise<void> {

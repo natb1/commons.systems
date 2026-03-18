@@ -14,6 +14,9 @@ function stubBrowserGlobals() {
     observe() {}
     disconnect() {}
   });
+  if (typeof globalThis.reportError !== "function") {
+    vi.stubGlobal("reportError", vi.fn());
+  }
 }
 
 stubBrowserGlobals();
@@ -524,7 +527,7 @@ describe("createImageArchiveRenderer", () => {
     await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(prefetchError));
   });
 
-  it("logs warning when prefetch fails without onError", async () => {
+  it("reports error when prefetch fails without onError", async () => {
     const entries = makeMockEntries({
       "image-001.png": new Uint8Array([1]),
       "image-002.png": new Uint8Array([2]),
@@ -533,15 +536,15 @@ describe("createImageArchiveRenderer", () => {
     entries.entries["image-002.png"]!.blob = vi.fn().mockRejectedValue(prefetchError);
     mockUnzip.mockResolvedValue(entries as unknown as ZipInfo);
 
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const reportSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
     const container = makeContainer();
     const renderer = createImageArchiveRenderer();
     await renderer.init(container, "https://example.com/archive.zip");
 
-    await vi.waitFor(() => expect(warnSpy).toHaveBeenCalledWith(
-      "Image prefetch failed for page", 2, prefetchError,
+    await vi.waitFor(() => expect(reportSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Image prefetch failed for page 2" }),
     ));
-    warnSpy.mockRestore();
+    reportSpy.mockRestore();
   });
 
   it("retries after a failed blob fetch (poisoned cache cleared)", async () => {

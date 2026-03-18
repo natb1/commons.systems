@@ -28,7 +28,7 @@ vi.mock("../../src/viewer/pdf.js", () => ({
 }));
 
 vi.mock("../../src/viewer/image-archive.js", () => ({
-  createImageArchiveRenderer: vi.fn().mockReturnValue({}),  // accepts (onError, storagePath?)
+  createImageArchiveRenderer: vi.fn().mockReturnValue({}),
 }));
 
 vi.mock("../../src/viewer/epub.js", () => ({

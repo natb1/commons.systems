@@ -4,10 +4,21 @@ interface DbConnectionConfig {
   onUpgrade: (db: IDBDatabase, oldVersion: number) => void;
 }
 
+/**
+ * Create a memoized `openDb`/`closeDb` pair for a versioned IndexedDB database.
+ *
+ * `openDb` reuses the same connection until it is closed (explicitly via `closeDb`
+ * or by the browser, e.g. during storage pressure). `closeDb` is idempotent and
+ * safe to call when no connection exists.
+ */
 export function createDbConnection(config: DbConnectionConfig): {
   openDb: () => Promise<IDBDatabase>;
   closeDb: () => Promise<void>;
 } {
+  if (!config.name) throw new Error("DbConnectionConfig.name must be a non-empty string");
+  if (!Number.isInteger(config.version) || config.version < 1) {
+    throw new Error(`DbConnectionConfig.version must be a positive integer, got ${config.version}`);
+  }
   let dbPromise: Promise<IDBDatabase> | null = null;
 
   function openDb(): Promise<IDBDatabase> {
@@ -38,8 +49,8 @@ export function createDbConnection(config: DbConnectionConfig): {
       try {
         const db = await pending;
         db.close();
-      } catch {
-        // Connection already failed; nothing to close.
+      } catch (err) {
+        reportError(new Error("closeDb: failed to close database connection", { cause: err }));
       }
     }
   }
