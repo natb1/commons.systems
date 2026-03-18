@@ -78,8 +78,9 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
     return slot.urlPromise!;
   }
 
-  // Prefetches the blob URL for the page at the given 0-based index, if not already cached.
-  function prefetchPage(index: number): void {
+  /** Prefetch the next page after the given 1-based page number. */
+  function prefetchNextPage(page: number): void {
+    const index = page; // 1-based page N → 0-based index N (i.e. the page after N)
     if (index < 0 || index >= _pageCount || pages[index]!.urlPromise || destroyed) return;
     void getObjectUrl(index).catch((err) => {
       if (onError) onError(err);
@@ -133,7 +134,7 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
       imgEl.src = await getObjectUrl(startPage - 1);
       container.appendChild(imgEl);
 
-      prefetchPage(startPage);
+      prefetchNextPage(startPage);
 
       if (scrollParent) {
         resizeObserver = new ResizeObserver(() => { resetZoomState(); });
@@ -150,7 +151,7 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
       const url = await getObjectUrl(page - 1);
       if (destroyed) return;
       imgEl.src = url;
-      prefetchPage(page);
+      prefetchNextPage(page);
     },
 
     async next(): Promise<void> {

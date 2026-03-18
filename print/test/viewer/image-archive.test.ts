@@ -382,8 +382,6 @@ describe("createImageArchiveRenderer", () => {
     renderer.destroy();
     resolveBlob(new Blob([new Uint8Array([2])]));
     await goToPromise;
-
-    // No TypeError — goToPage returned silently after destroy
   });
 
   it("ignores out-of-range initialPosition and starts at page 1", async () => {
