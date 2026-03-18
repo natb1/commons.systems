@@ -1,4 +1,4 @@
-import { getAll, getMeta, type UploadMeta } from "./idb.js";
+import { getAll, getMeta } from "./idb.js";
 
 interface IdbTransaction {
   id: string;
