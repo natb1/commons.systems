@@ -1,18 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ZipEntry, ZipInfo } from "unzipit";
 
-vi.stubGlobal("URL", {
-  createObjectURL: vi.fn((blob: Blob) => `blob:mock-${Math.random()}`),
-  revokeObjectURL: vi.fn(),
-});
-
 // ResizeObserver mock — stores callbacks so tests can trigger resize events
 let resizeObserverCallbacks: Array<() => void> = [];
-vi.stubGlobal("ResizeObserver", class {
-  constructor(cb: () => void) { resizeObserverCallbacks.push(cb); }
-  observe() {}
-  disconnect() {}
-});
+
+function stubBrowserGlobals() {
+  vi.stubGlobal("URL", {
+    createObjectURL: vi.fn((blob: Blob) => `blob:mock-${Math.random()}`),
+    revokeObjectURL: vi.fn(),
+  });
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(cb: () => void) { resizeObserverCallbacks.push(cb); }
+    observe() {}
+    disconnect() {}
+  });
+}
+
+stubBrowserGlobals();
 
 function makeMockEntry(data: Uint8Array): ZipEntry {
   return {
@@ -55,17 +59,10 @@ function mockEntries(files: Record<string, Uint8Array>) {
   return result;
 }
 
+/** Re-apply global stubs after tests that call vi.stubGlobal("fetch", ...). */
 function restoreGlobalStubs() {
   vi.unstubAllGlobals();
-  vi.stubGlobal("URL", {
-    createObjectURL: vi.fn((blob: Blob) => `blob:mock-${Math.random()}`),
-    revokeObjectURL: vi.fn(),
-  });
-  vi.stubGlobal("ResizeObserver", class {
-    constructor(cb: () => void) { resizeObserverCallbacks.push(cb); }
-    observe() {}
-    disconnect() {}
-  });
+  stubBrowserGlobals();
 }
 
 function makeContainer(): HTMLElement {
@@ -345,7 +342,6 @@ describe("createImageArchiveRenderer", () => {
     const initPromise = renderer.init(container, "https://example.com/archive.zip");
     renderer.destroy();
 
-    // Resolve unzip after destroy
     resolveUnzip(makeMockEntries({ "image-001.png": new Uint8Array([1]) }));
     await initPromise;
 
@@ -496,7 +492,6 @@ describe("createImageArchiveRenderer", () => {
     const renderer = createImageArchiveRenderer(onError);
     await renderer.init(container, "https://example.com/archive.zip");
 
-    // Wait for prefetch error to propagate
     await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(prefetchError));
   });
 

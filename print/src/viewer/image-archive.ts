@@ -25,9 +25,9 @@ type PageSlot = {
   resolvedUrl: string | null;
 };
 
-export function createImageArchiveRenderer(_onError?: (err: unknown) => void): ContentRenderer {
-  // _onError used for background prefetch errors that cannot propagate as exceptions.
-  // Synchronous operations (zoom, resize) and awaited operations (init, goToPage) throw directly.
+export function createImageArchiveRenderer(onError?: (err: unknown) => void): ContentRenderer {
+  // onError used for background prefetch errors that cannot propagate as exceptions.
+  // Synchronous operations (zoom) and awaited operations (init, goToPage) throw directly.
   let pages: PageSlot[] = [];
   let imgEl: HTMLImageElement | null = null;
   let containerEl: HTMLElement | null = null;
@@ -61,27 +61,28 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   }
 
   async function getObjectUrl(index: number): Promise<string> {
-    if (!pages[index]!.urlPromise) {
-      pages[index]!.urlPromise = pages[index]!.entry.blob()
+    const slot = pages[index]!;
+    if (!slot.urlPromise) {
+      slot.urlPromise = slot.entry.blob()
         .then(blob => {
+          if (destroyed) return "";
           const url = URL.createObjectURL(blob);
-          pages[index]!.resolvedUrl = url;
+          slot.resolvedUrl = url;
           return url;
         })
         .catch(err => {
-          pages[index]!.urlPromise = null;
+          slot.urlPromise = null;
           throw err;
         });
     }
-    return pages[index]!.urlPromise!;
+    return slot.urlPromise!;
   }
 
-  // Prefetches the page at the given 0-based index. Callers pass the 1-based
-  // current page number, which equals the 0-based index of the next page.
+  // Prefetches the blob URL for the page at the given 0-based index, if not already cached.
   function prefetchPage(index: number): void {
     if (index < 0 || index >= _pageCount || pages[index]!.urlPromise || destroyed) return;
     void getObjectUrl(index).catch((err) => {
-      if (_onError) _onError(err);
+      if (onError) onError(err);
       else console.warn("Image prefetch failed for page", index + 1, err);
     });
   }
@@ -141,8 +142,8 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
     },
 
     async goToPage(page: number): Promise<void> {
-      if (page < 1 || page > _pageCount) return;
       if (!imgEl) throw new Error("goToPage called after renderer was destroyed");
+      if (page < 1 || page > _pageCount) return;
       resetZoomState();
       _currentPage = page;
       imgEl.alt = `Page ${page}`;
@@ -220,6 +221,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
         if (page.resolvedUrl) URL.revokeObjectURL(page.resolvedUrl);
       }
       pages = [];
+      _pageCount = 0;
       if (imgEl) {
         imgEl.remove();
         imgEl = null;
