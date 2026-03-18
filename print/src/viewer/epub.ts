@@ -28,14 +28,14 @@ export function createEpubRenderer(
   }
 
   return {
-    async init(containerEl: HTMLElement, url: string, initialPosition?: string): Promise<void> {
+    async init(containerEl: HTMLElement, source: string | ArrayBuffer, initialPosition?: string): Promise<void> {
       if (book) throw new Error("EPUB renderer already initialized");
 
       containerDiv = document.createElement("div");
       containerDiv.className = "viewer-epub-container";
       containerEl.appendChild(containerDiv);
 
-      book = ePub(url);
+      book = ePub(source);
       rendition = book.renderTo(containerDiv, {
         width: "100%",
         height: "100%",

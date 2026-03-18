@@ -2,6 +2,7 @@ import { unzip, HTTPRangeReader } from "unzipit";
 import type { ZipEntry } from "unzipit";
 import type { ContentRenderer } from "./types.js";
 import { parsePositionPage } from "./types.js";
+import { getChunk, putChunk, getFile, putFile } from "../media-cache.js";
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
 const ZOOM_FACTOR = 1.2;
@@ -25,7 +26,36 @@ type PageSlot = {
   resolvedUrl: string | null;
 };
 
-export function createImageArchiveRenderer(onError?: (err: unknown) => void): ContentRenderer {
+export class CachedRangeReader {
+  private inner: HTTPRangeReader;
+  private storagePath: string;
+
+  constructor(url: string, storagePath: string) {
+    this.inner = new HTTPRangeReader(url);
+    this.storagePath = storagePath;
+  }
+
+  async getLength(): Promise<number> {
+    return this.inner.getLength();
+  }
+
+  async read(offset: number, length: number): Promise<Uint8Array> {
+    try {
+      const cached = await getChunk(this.storagePath, offset, length);
+      if (cached) return cached;
+    } catch (err) {
+      reportError(new Error("Chunk cache lookup failed, fetching from network", { cause: err }));
+    }
+    const data: Uint8Array = await this.inner.read(offset, length);
+    // Cache write is best-effort; failure does not affect the current read
+    putChunk(this.storagePath, offset, length, data).catch((err) => {
+      reportError(new Error("Failed to cache archive chunk", { cause: err }));
+    });
+    return data;
+  }
+}
+
+export function createImageArchiveRenderer(onError?: (err: unknown) => void, storagePath?: string): ContentRenderer {
   // onError used for background prefetch errors that cannot propagate as exceptions.
   // init and goToPage propagate errors via rejection; zoom operations throw synchronously.
   let pages: PageSlot[] = [];
@@ -80,32 +110,57 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
 
   /** Prefetch the next page after the given 1-based page number. */
   function prefetchNextPage(page: number): void {
-    const index = page; // 1-based page N → 0-based index N (i.e. the page after N)
+    const index = page; // next page after 1-based page N has 0-based index N
     if (index < 0 || index >= _pageCount || pages[index]!.urlPromise || destroyed) return;
     void getObjectUrl(index).catch((err) => {
       if (onError) onError(err);
-      else console.warn("Image prefetch failed for page", index + 1, err);
+      else reportError(new Error(`Image prefetch failed for page ${index + 1}`, { cause: err }));
     });
   }
 
-  return {
-    async init(container: HTMLElement, url: string, initialPosition?: string): Promise<void> {
-      let entries: Record<string, ZipEntry>;
+  async function fetchArchiveBuffer(url: string): Promise<ArrayBuffer> {
+    if (storagePath) {
       try {
-        const reader = new HTTPRangeReader(url);
-        ({ entries } = await unzip(reader));
+        const cached = await getFile(storagePath);
+        if (cached) return cached;
       } catch (err) {
-        console.warn("Range-based archive loading failed, falling back to full download:", err);
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Failed to fetch archive: ${res.status}`);
-        const buf = await res.arrayBuffer();
+        reportError(new Error("Cache lookup failed for archive fallback", { cause: err }));
+      }
+    }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch archive: ${res.status}`);
+    const buf = await res.arrayBuffer();
+    if (storagePath) {
+      // Cache write is best-effort; failure does not affect the current view
+      putFile(storagePath, buf).catch((err) => {
+        reportError(new Error("Failed to cache archive download", { cause: err }));
+      });
+    }
+    return buf;
+  }
+
+  return {
+    async init(container: HTMLElement, source: string | ArrayBuffer, initialPosition?: string): Promise<void> {
+      let entries: Record<string, ZipEntry>;
+      if (typeof source !== "string") {
+        ({ entries } = await unzip(source));
+      } else {
         try {
-          ({ entries } = await unzip(buf));
-        } catch (unzipErr) {
-          throw new Error(
-            `Failed to decompress archive from ${url} (${buf.byteLength} bytes)`,
-            { cause: unzipErr },
-          );
+          const reader = storagePath
+            ? new CachedRangeReader(source, storagePath)
+            : new HTTPRangeReader(source);
+          ({ entries } = await unzip(reader));
+        } catch (err) {
+          reportError(new Error("Range-based archive loading failed, falling back to full download", { cause: err }));
+          const buf = await fetchArchiveBuffer(source);
+          try {
+            ({ entries } = await unzip(buf));
+          } catch (unzipErr) {
+            throw new Error(
+              `Failed to decompress archive from ${source} (${buf.byteLength} bytes)`,
+              { cause: unzipErr },
+            );
+          }
         }
       }
 

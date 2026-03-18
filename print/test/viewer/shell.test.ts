@@ -206,7 +206,7 @@ describe("initViewer", () => {
   it("disables prev and enables next based on canGoPrev/canGoNext", async () => {
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     const prevBtn = outlet.querySelector(".viewer-prev") as HTMLButtonElement;
@@ -219,7 +219,7 @@ describe("initViewer", () => {
     vi.mocked(getReadingPosition).mockResolvedValue("5");
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
     await flushInit();
 
     expect(renderer.init).toHaveBeenCalledWith(
@@ -233,7 +233,7 @@ describe("initViewer", () => {
     localStorage.setItem("reading-position:m1", "3");
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     expect(renderer.init).toHaveBeenCalledWith(
@@ -246,7 +246,7 @@ describe("initViewer", () => {
   it("unauthenticated: no saved position, init called with undefined", async () => {
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     expect(renderer.init).toHaveBeenCalledWith(
@@ -259,7 +259,7 @@ describe("initViewer", () => {
   it("scheduleSave writes Firestore for authenticated user after navigation", async () => {
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -274,7 +274,7 @@ describe("initViewer", () => {
   it("scheduleSave writes localStorage for unauthenticated user", async () => {
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -288,7 +288,7 @@ describe("initViewer", () => {
   it("scheduleSave deduplicates — same position not saved twice", async () => {
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -307,7 +307,7 @@ describe("initViewer", () => {
     vi.mocked(getReadingPosition).mockRejectedValue(new Error("Firestore down"));
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
     await flushInit();
 
     expect(renderer.init).toHaveBeenCalled();
@@ -316,7 +316,7 @@ describe("initViewer", () => {
   it("cleanup cancels pending save timer", async () => {
     const renderer = makeMockRenderer();
 
-    const cleanup = initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -333,7 +333,7 @@ describe("initViewer", () => {
   it("cleanup calls renderer.destroy", async () => {
     const renderer = makeMockRenderer();
 
-    const cleanup = initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     cleanup();
@@ -345,7 +345,7 @@ describe("initViewer", () => {
     const renderer = makeMockRenderer();
     vi.mocked(renderer.init).mockRejectedValue(new Error("init error"));
 
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
     await flushInit();
 
     const pos = outlet.querySelector(".viewer-position") as HTMLElement;
@@ -357,7 +357,7 @@ describe("initViewer", () => {
     vi.mocked(saveReadingPosition).mockRejectedValue(new Error("Firestore write error"));
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -375,7 +375,7 @@ describe("initViewer", () => {
     initViewer(
       outlet,
       (onError) => { capturedOnError = onError; return renderer; },
-      "https://example.com/doc.pdf",
+      () => Promise.resolve("https://example.com/doc.pdf"),
       "m1",
       null,
     );
@@ -400,7 +400,7 @@ describe("initViewer", () => {
     vi.mocked(getReadingPosition).mockRejectedValue(new Error("Firestore read error"));
     const renderer = makeMockRenderer();
 
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -451,7 +451,7 @@ describe("initViewer spread mode", () => {
   it("spread toggle button shown for renderers with renderPageInto, hidden otherwise", async () => {
     // With renderPageInto: button should not have spread-hidden
     const spreadRenderer = makeMockSpreadRenderer();
-    initViewer(outlet, () => spreadRenderer, "https://example.com/doc.pdf", "m1", null);
+    initViewer(outlet, () => spreadRenderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLElement;
@@ -461,7 +461,7 @@ describe("initViewer spread mode", () => {
     const outlet2 = document.createElement("div");
     outlet2.innerHTML = renderViewerShell(makeMediaItem());
     const plainRenderer = makeMockRenderer();
-    initViewer(outlet2, () => plainRenderer, "https://example.com/doc.pdf", "m2", null);
+    initViewer(outlet2, () => plainRenderer, () => Promise.resolve("https://example.com/doc.pdf"), "m2", null);
     await flushInit();
 
     const spreadBtn2 = outlet2.querySelector(".viewer-spread-toggle") as HTMLElement;
@@ -470,7 +470,7 @@ describe("initViewer spread mode", () => {
 
   it("spread navigation advances by spread and calls renderPageInto with correct pages", async () => {
     const renderer = makeMockSpreadRenderer();
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     // Enter spread mode
@@ -494,7 +494,7 @@ describe("initViewer spread mode", () => {
 
   it("spread position label shows 'Pages X\u2013Y / Z' format", async () => {
     const renderer = makeMockSpreadRenderer();
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     // Enter spread mode
@@ -516,7 +516,7 @@ describe("initViewer spread mode", () => {
 
   it("spread preference persisted to localStorage", async () => {
     const renderer = makeMockSpreadRenderer();
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     // Enter spread mode
@@ -535,7 +535,7 @@ describe("initViewer spread mode", () => {
 
   it("mode switching syncs position — toggle spread on at page 3 maps to correct spread index", async () => {
     const renderer = makeMockSpreadRenderer();
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     // Navigate to page 3 in single mode
@@ -563,7 +563,7 @@ describe("initViewer spread mode", () => {
       resetZoom: vi.fn(),
       isZoomed: false,
     });
-    initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     // Enter spread mode

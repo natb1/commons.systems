@@ -12,6 +12,7 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@commons-systems/idbutil": "*",
     "@commons-systems/analyticsutil": "*",
     "@commons-systems/authutil": "*",
     "@commons-systems/firebaseutil": "*",

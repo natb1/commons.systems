@@ -7,6 +7,7 @@ import { renderViewerShell, initViewer } from "../viewer/shell.js";
 import { createPdfRenderer } from "../viewer/pdf.js";
 import { createEpubRenderer } from "../viewer/epub.js";
 import { createImageArchiveRenderer } from "../viewer/image-archive.js";
+import { getFile, putFile } from "../media-cache.js";
 
 const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
@@ -57,11 +58,29 @@ export async function renderView(id: string, _user: User | null): Promise<string
   }
 }
 
+async function resolveFileSource(url: string, storagePath: string): Promise<string | ArrayBuffer> {
+  try {
+    const cached = await getFile(storagePath);
+    if (cached) return cached;
+  } catch (err) {
+    reportError(new Error("Cache lookup failed, fetching from network", { cause: err }));
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch media: ${res.status}`);
+  const buf = await res.arrayBuffer();
+  // Cache write is best-effort; failure does not affect the current view
+  putFile(storagePath, buf).catch((err) => {
+    reportError(new Error("Failed to cache media file", { cause: err }));
+  });
+  return buf;
+}
+
 export function afterRenderView(outlet: HTMLElement, user: User | null): void {
   if (!pendingItem || !pendingUrl) return;
 
   const item = pendingItem;
   const url = pendingUrl;
+  const spath = item.storagePath;
   pendingItem = null;
   pendingUrl = null;
 
@@ -69,13 +88,13 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
 
   switch (item.mediaType) {
     case "pdf":
-      cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), url, item.id, uid);
+      cleanupFn = initViewer(outlet, (onError) => createPdfRenderer(onError), () => resolveFileSource(url, spath), item.id, uid);
       break;
     case "epub":
-      cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), url, item.id, uid);
+      cleanupFn = initViewer(outlet, (onError) => createEpubRenderer(onError), () => resolveFileSource(url, spath), item.id, uid);
       break;
     case "image-archive":
-      cleanupFn = initViewer(outlet, (onError) => createImageArchiveRenderer(onError), url, item.id, uid);
+      cleanupFn = initViewer(outlet, (onError) => createImageArchiveRenderer(onError, spath), () => Promise.resolve(url), item.id, uid);
       break;
     default: {
       const _exhaustive: never = item.mediaType;
