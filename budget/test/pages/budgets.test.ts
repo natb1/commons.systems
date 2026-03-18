@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type { DataSource } from "../../src/data-source";
-import { timestampMockFactory } from "../helpers";
+import { timestampMockFactory, createMockDataSource } from "../helpers";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
@@ -37,26 +37,6 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
-    ...overrides,
-  };
-}
-
-function createMockDataSource(overrides: Partial<DataSource> = {}): DataSource {
-  return {
-    getTransactions: vi.fn().mockResolvedValue([]),
-    getBudgets: vi.fn().mockResolvedValue([]),
-    getBudgetPeriods: vi.fn().mockResolvedValue([]),
-    getRules: vi.fn().mockResolvedValue([]),
-    getNormalizationRules: vi.fn().mockResolvedValue([]),
-    updateTransaction: vi.fn(),
-    updateBudget: vi.fn(),
-    adjustBudgetPeriodTotal: vi.fn(),
-    createRule: vi.fn(),
-    updateRule: vi.fn(),
-    deleteRule: vi.fn(),
-    createNormalizationRule: vi.fn(),
-    updateNormalizationRule: vi.fn(),
-    deleteNormalizationRule: vi.fn(),
     ...overrides,
   };
 }

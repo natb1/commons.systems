@@ -75,8 +75,8 @@ function findPeriod(periods: HydrationPeriod[], budgetId: BudgetId, timestampMs:
 /**
  * Adjust stored period totals when a transaction's budget changes.
  * The two writes (decrement old period, increment new period) are not atomic.
- * If either write fails, totals drift until the next ETL import runs
- * RecalculatePeriods.
+ * If either write fails, totals drift until corrected (by ETL re-import for
+ * server data, or re-uploading the data file for local data).
  * categoryBreakdown is not updated by client-side changes; it reflects the last ETL run.
  */
 async function syncPeriodTotals(
@@ -117,6 +117,8 @@ async function syncPeriodTotals(
     }
     console.error("Failed to update budget period totals:", periodError);
     clearBalanceDisplay(row);
+    const balanceEl = row.querySelector(".budget-balance") as HTMLElement | null;
+    if (balanceEl) balanceEl.title = "Budget totals may be incorrect. Reload to recalculate.";
   }
 }
 
@@ -157,6 +159,8 @@ async function syncPeriodOnReimbursementChange(
     }
     console.error("Failed to update budget period totals:", periodError);
     clearBalanceDisplay(row);
+    const balanceEl = row.querySelector(".budget-balance") as HTMLElement | null;
+    if (balanceEl) balanceEl.title = "Budget totals may be incorrect. Reload to recalculate.";
   }
 }
 

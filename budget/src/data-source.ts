@@ -222,6 +222,18 @@ function toNormalizationRule(row: IdbNormalizationRule): NormalizationRule {
   };
 }
 
+/** Read-modify-write: get a record, throw if missing, merge fields, put back. */
+async function updateRecord<T extends { id: string }>(
+  store: Parameters<typeof get>[0],
+  id: string,
+  label: string,
+  fields: Partial<T>,
+): Promise<void> {
+  const row = await get<T>(store, id);
+  if (!row) throw new Error(`${label} ${id} not found`);
+  await put(store, { ...row, ...fields } as unknown as Record<string, unknown>);
+}
+
 export class IdbDataSource implements DataSource {
   async getTransactions(): Promise<Transaction[]> {
     const rows = await getAll<IdbTransaction>("transactions");
@@ -252,20 +264,14 @@ export class IdbDataSource implements DataSource {
     id: TransactionId,
     fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
   ): Promise<void> {
-    const row = await get<IdbTransaction>("transactions", id);
-    if (!row) throw new Error(`Transaction ${id} not found`);
-    const updated = { ...row, ...fields };
-    await put("transactions", updated as unknown as Record<string, unknown>);
+    await updateRecord<IdbTransaction>("transactions", id, "Transaction", fields);
   }
 
   async updateBudget(
     id: BudgetId,
     fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
   ): Promise<void> {
-    const row = await get<IdbBudget>("budgets", id);
-    if (!row) throw new Error(`Budget ${id} not found`);
-    const updated = { ...row, ...fields };
-    await put("budgets", updated as unknown as Record<string, unknown>);
+    await updateRecord<IdbBudget>("budgets", id, "Budget", fields);
   }
 
   async adjustBudgetPeriodTotal(id: BudgetPeriodId, delta: number): Promise<void> {
@@ -273,8 +279,7 @@ export class IdbDataSource implements DataSource {
     if (delta === 0) return;
     const row = await get<IdbBudgetPeriod>("budgetPeriods", id);
     if (!row) throw new Error(`Budget period ${id} not found`);
-    const updated = { ...row, total: row.total + delta };
-    await put("budgetPeriods", updated as unknown as Record<string, unknown>);
+    await put("budgetPeriods", { ...row, total: row.total + delta } as unknown as Record<string, unknown>);
   }
 
   async createRule(fields: Omit<Rule, "id" | "groupId">): Promise<RuleId> {
@@ -296,10 +301,7 @@ export class IdbDataSource implements DataSource {
     id: RuleId,
     fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account">>,
   ): Promise<void> {
-    const row = await get<IdbRule>("rules", id);
-    if (!row) throw new Error(`Rule ${id} not found`);
-    const updated = { ...row, ...fields };
-    await put("rules", updated as unknown as Record<string, unknown>);
+    await updateRecord<IdbRule>("rules", id, "Rule", fields);
   }
 
   async deleteRule(id: RuleId): Promise<void> {
@@ -326,10 +328,7 @@ export class IdbDataSource implements DataSource {
     id: string,
     fields: Partial<Pick<NormalizationRule, "pattern" | "patternType" | "canonicalDescription" | "dateWindowDays" | "priority" | "institution" | "account">>,
   ): Promise<void> {
-    const row = await get<IdbNormalizationRule>("normalizationRules", id);
-    if (!row) throw new Error(`Normalization rule ${id} not found`);
-    const updated = { ...row, ...fields };
-    await put("normalizationRules", updated as unknown as Record<string, unknown>);
+    await updateRecord<IdbNormalizationRule>("normalizationRules", id, "Normalization rule", fields);
   }
 
   async deleteNormalizationRule(id: string): Promise<void> {

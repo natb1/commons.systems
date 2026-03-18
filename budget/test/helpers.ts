@@ -1,6 +1,8 @@
+import { vi } from "vitest";
 import type { Budget, BudgetPeriod } from "../src/firestore";
 import type { Timestamp } from "firebase/firestore";
 import type { ParsedData } from "../src/idb";
+import type { DataSource } from "../src/data-source";
 
 class MockTimestamp {
   _date: Date;
@@ -105,6 +107,26 @@ export function makeParsedData(overrides: Partial<ParsedData> = {}): ParsedData 
       version: 1,
       exportedAt: "2025-06-15T10:30:00Z",
     },
+    ...overrides,
+  };
+}
+
+export function createMockDataSource(overrides: Partial<DataSource> = {}): DataSource {
+  return {
+    getTransactions: vi.fn().mockResolvedValue([]),
+    getBudgets: vi.fn().mockResolvedValue([]),
+    getBudgetPeriods: vi.fn().mockResolvedValue([]),
+    getRules: vi.fn().mockResolvedValue([]),
+    getNormalizationRules: vi.fn().mockResolvedValue([]),
+    updateTransaction: vi.fn(),
+    updateBudget: vi.fn(),
+    adjustBudgetPeriodTotal: vi.fn(),
+    createRule: vi.fn(),
+    updateRule: vi.fn(),
+    deleteRule: vi.fn(),
+    createNormalizationRule: vi.fn(),
+    updateNormalizationRule: vi.fn(),
+    deleteNormalizationRule: vi.fn(),
     ...overrides,
   };
 }

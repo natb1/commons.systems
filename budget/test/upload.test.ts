@@ -221,6 +221,32 @@ describe("parseUploadedJson", () => {
       "JSON must be an object",
     );
   });
+
+  it("throws UploadValidationError for invalid rollover value", () => {
+    const input = {
+      ...validInput,
+      budgets: [{ ...validInput.budgets[0], rollover: "invalid" }],
+    };
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      UploadValidationError,
+    );
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      'Invalid rollover value: "invalid"',
+    );
+  });
+
+  it("throws UploadValidationError for invalid rule type", () => {
+    const input = {
+      ...validInput,
+      rules: [{ ...validInput.rules[0], type: "unknown" }],
+    };
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      UploadValidationError,
+    );
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      'Invalid rule type: "unknown"',
+    );
+  });
 });
 
 describe("toParsedData", () => {
@@ -261,5 +287,15 @@ describe("toParsedData", () => {
       version: 1,
       exportedAt: "2025-06-15T10:30:00Z",
     });
+  });
+
+  it("converts empty string timestamp to null timestampMs", () => {
+    const input = {
+      ...validInput,
+      transactions: [{ ...validInput.transactions[0], timestamp: "" }],
+    };
+    const parsed = parseUploadedJson(JSON.stringify(input));
+    const data = toParsedData(parsed);
+    expect(data.transactions[0].timestampMs).toBeNull();
   });
 });

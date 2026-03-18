@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type { DataSource } from "../../src/data-source";
+import { createMockDataSource } from "../helpers";
 
 vi.mock("firebase/firestore", () => ({
   Timestamp: class Timestamp {
@@ -66,32 +67,20 @@ const defaultPeriods: BudgetPeriod[] = [
   },
 ];
 
-function createMockDataSource(overrides: Partial<DataSource> = {}): DataSource {
-  return {
-    getTransactions: vi.fn().mockResolvedValue([]),
+function seedOptions(dsOverrides: Partial<DataSource> = {}) {
+  return { authorized: false, groupName: "", dataSource: createMockDataSource({
     getBudgets: vi.fn().mockResolvedValue(defaultBudgets),
     getBudgetPeriods: vi.fn().mockResolvedValue(defaultPeriods),
-    getRules: vi.fn().mockResolvedValue([]),
-    getNormalizationRules: vi.fn().mockResolvedValue([]),
-    updateTransaction: vi.fn(),
-    updateBudget: vi.fn(),
-    adjustBudgetPeriodTotal: vi.fn(),
-    createRule: vi.fn(),
-    updateRule: vi.fn(),
-    deleteRule: vi.fn(),
-    createNormalizationRule: vi.fn(),
-    updateNormalizationRule: vi.fn(),
-    deleteNormalizationRule: vi.fn(),
-    ...overrides,
-  };
-}
-
-function seedOptions(dsOverrides: Partial<DataSource> = {}) {
-  return { authorized: false, groupName: "", dataSource: createMockDataSource(dsOverrides) };
+    ...dsOverrides,
+  }) };
 }
 
 function localOptions(dsOverrides: Partial<DataSource> = {}) {
-  return { authorized: true, groupName: "household", dataSource: createMockDataSource(dsOverrides) };
+  return { authorized: true, groupName: "household", dataSource: createMockDataSource({
+    getBudgets: vi.fn().mockResolvedValue(defaultBudgets),
+    getBudgetPeriods: vi.fn().mockResolvedValue(defaultPeriods),
+    ...dsOverrides,
+  }) };
 }
 
 describe("renderHome", () => {

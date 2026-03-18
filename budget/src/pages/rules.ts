@@ -121,9 +121,12 @@ export async function renderRules(options: RenderPageOptions): Promise<string> {
   let tableHtml: string;
   try {
     const [rules, budgets, normalizationRules] = await Promise.all([
-      dataSource.getRules(),
-      dataSource.getBudgets(),
-      dataSource.getNormalizationRules(),
+      dataSource.getRules()
+        .catch((e) => { console.error("Failed to load rules:", e); throw e; }),
+      dataSource.getBudgets()
+        .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
+      dataSource.getNormalizationRules()
+        .catch((e) => { console.error("Failed to load normalization rules:", e); throw e; }),
     ]);
     const budgetNames = budgets.map(b => b.name);
     const categoryTargets = uniqueSorted(rules.filter(r => r.type === "categorization").map(r => r.target));
@@ -131,7 +134,6 @@ export async function renderRules(options: RenderPageOptions): Promise<string> {
     const uniqueAccounts = uniqueSorted(rules.map(r => r.account));
     tableHtml = renderRulesTable({ rules, normalizationRules, authorized, budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts });
   } catch (error) {
-    console.error("Failed to load rules:", error);
     tableHtml = renderLoadError(error, "rules-error");
   }
 

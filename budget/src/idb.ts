@@ -12,34 +12,40 @@ const STORE_NAMES = [
 
 export type StoreName = (typeof STORE_NAMES)[number];
 
-let cachedDb: IDBDatabase | null = null;
+let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
-  if (cachedDb) return Promise.resolve(cachedDb);
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      for (const name of STORE_NAMES) {
-        if (!db.objectStoreNames.contains(name)) {
-          db.createObjectStore(name, { keyPath: name === "meta" ? "key" : "id" });
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        for (const name of STORE_NAMES) {
+          if (!db.objectStoreNames.contains(name)) {
+            db.createObjectStore(name, { keyPath: name === "meta" ? "key" : "id" });
+          }
         }
-      }
-    };
-    request.onsuccess = () => {
-      cachedDb = request.result;
-      cachedDb.onclose = () => { cachedDb = null; };
-      resolve(cachedDb);
-    };
-    request.onerror = () => reject(request.error);
-  });
+      };
+      request.onsuccess = () => {
+        request.result.onclose = () => { dbPromise = null; };
+        resolve(request.result);
+      };
+      request.onblocked = () => {
+        dbPromise = null;
+        reject(new Error("Database upgrade blocked. Close other tabs using this app and try again."));
+      };
+      request.onerror = () => { dbPromise = null; reject(request.error); };
+    });
+  }
+  return dbPromise;
 }
 
 /** Close the cached DB connection. Primarily for test cleanup. */
-export function closeDb(): void {
-  if (cachedDb) {
-    cachedDb.close();
-    cachedDb = null;
+export async function closeDb(): Promise<void> {
+  if (dbPromise) {
+    const db = await dbPromise;
+    db.close();
+    dbPromise = null;
   }
 }
 

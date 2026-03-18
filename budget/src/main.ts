@@ -37,9 +37,8 @@ const uploadContainer = document.createElement("div");
 uploadContainer.className = "nav-upload";
 uploadContainer.innerHTML = `<label class="upload-label" tabindex="0">Load data<input type="file" accept=".json" class="upload-input" hidden></label>`;
 const authContainer = navEl.querySelector(".nav-auth");
-if (authContainer) {
-  authContainer.appendChild(uploadContainer);
-}
+if (!authContainer) throw new Error(".nav-auth container not found in nav element");
+authContainer.appendChild(uploadContainer);
 
 const uploadInput = uploadContainer.querySelector(".upload-input") as HTMLInputElement;
 const uploadLabel = uploadContainer.querySelector(".upload-label") as HTMLLabelElement;
@@ -49,9 +48,7 @@ const localInfoContainer = document.createElement("div");
 localInfoContainer.className = "nav-local-info";
 localInfoContainer.hidden = true;
 localInfoContainer.innerHTML = `<span class="local-group-name"></span><button class="clear-data">Clear data</button>`;
-if (authContainer) {
-  authContainer.appendChild(localInfoContainer);
-}
+authContainer.appendChild(localInfoContainer);
 
 const groupNameSpan = localInfoContainer.querySelector(".local-group-name") as HTMLSpanElement;
 const clearButton = localInfoContainer.querySelector(".clear-data") as HTMLButtonElement;
@@ -60,9 +57,7 @@ const clearButton = localInfoContainer.querySelector(".clear-data") as HTMLButto
 const errorEl = document.createElement("p");
 errorEl.className = "upload-error";
 errorEl.hidden = true;
-if (authContainer) {
-  authContainer.appendChild(errorEl);
-}
+authContainer.appendChild(errorEl);
 
 function showUploadError(message: string): void {
   errorEl.textContent = message;

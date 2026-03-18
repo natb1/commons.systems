@@ -292,6 +292,7 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
       chartHtml = renderCategorySankey(transactions);
     } catch (chartError) {
       console.error("Chart serialization failed:", chartError);
+      chartHtml = `<p class="chart-error">Chart unavailable.</p>`;
     }
     tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets, budgetPeriods);
   } catch (error) {

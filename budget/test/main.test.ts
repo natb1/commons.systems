@@ -55,7 +55,7 @@ vi.mock("../src/active-data-source.js", () => ({
 }));
 
 // Set up DOM elements before dynamic import
-document.body.innerHTML = '<div id="nav"></div><div id="app"></div>';
+document.body.innerHTML = '<div id="nav"><span class="nav-auth"></span></div><div id="app"></div>';
 
 type AppState = import("../src/main").AppState;
 
@@ -78,7 +78,7 @@ describe("main module", () => {
 
     // Reset module cache and re-import to trigger initialization
     vi.resetModules();
-    document.body.innerHTML = '<div id="nav"></div><div id="app"></div>';
+    document.body.innerHTML = '<div id="nav"><span class="nav-auth"></span></div><div id="app"></div>';
 
     // Re-declare all mocks since resetModules clears them
     vi.mock("@commons-systems/router", () => ({
@@ -131,7 +131,7 @@ describe("main module", () => {
     });
 
     vi.resetModules();
-    document.body.innerHTML = '<div id="nav"></div><div id="app"></div>';
+    document.body.innerHTML = '<div id="nav"><span class="nav-auth"></span></div><div id="app"></div>';
 
     vi.mock("@commons-systems/router", () => ({
       createHistoryRouter: () => ({ navigate: vi.fn(), destroy: vi.fn(), showTerminalError: vi.fn() }),
