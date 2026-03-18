@@ -11,7 +11,9 @@ const mockOnAuthStateChanged = vi.fn();
 const mockSetupAuthEmulator = vi.fn();
 
 vi.mock("firebase/auth", () => {
-  class GithubAuthProvider {}
+  class GithubAuthProvider {
+    addScope() {}
+  }
   return {
     getAuth: (...args: unknown[]) => mockGetAuth(...args),
     GithubAuthProvider,
