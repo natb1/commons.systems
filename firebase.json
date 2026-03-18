@@ -18,6 +18,15 @@
               "value": "text/x-opml+xml; charset=utf-8"
             }
           ]
+        },
+        {
+          "source": "/feed.xml",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/rss+xml; charset=utf-8"
+            }
+          ]
         }
       ],
       "ignore": [
@@ -28,12 +37,6 @@
       "public": "landing/dist",
       "target": "landing",
       "rewrites": [
-        {
-          "source": "/feed.xml",
-          "function": {
-            "functionId": "rssFeed"
-          }
-        },
         {
           "source": "**",
           "destination": "/index.html"
@@ -76,6 +79,15 @@
               "value": "text/x-opml+xml; charset=utf-8"
             }
           ]
+        },
+        {
+          "source": "/feed.xml",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/rss+xml; charset=utf-8"
+            }
+          ]
         }
       ],
       "rewrites": [
@@ -83,12 +95,6 @@
           "source": "/api/feed-proxy",
           "function": {
             "functionId": "feedProxy"
-          }
-        },
-        {
-          "source": "/feed.xml",
-          "function": {
-            "functionId": "rssFeed"
           }
         },
         {
