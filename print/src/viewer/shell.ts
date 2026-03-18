@@ -180,6 +180,7 @@ export function initViewer(
   let spreadZoomLevel = 0;
   let spreadResizeObserver: ResizeObserver | null = null;
   let spreadResizeTimer: ReturnType<typeof setTimeout> | null = null;
+  let preSpreadPage = 1;
 
   function getSpreadPosition(): string {
     if (spreadEnabled && spreads.length > 0) {
@@ -221,6 +222,7 @@ export function initViewer(
 
   function enterSpreadMode(currentPage: number): void {
     spreadEnabled = true;
+    preSpreadPage = currentPage;
     spreads = spreadsForPageCount(renderer.pageCount);
     spreadIndex = spreadIndexForPage(currentPage, renderer.pageCount);
     spreadZoomLevel = 0;
@@ -249,7 +251,12 @@ export function initViewer(
   }
 
   function leaveSpreadMode(): number {
-    const currentPage = spreads.length > 0 ? spreads[spreadIndex]!.left : 1;
+    const spread = spreads.length > 0 ? spreads[spreadIndex]! : null;
+    const currentPage = spread !== null
+      && preSpreadPage >= spread.left
+      && (spread.right === null || preSpreadPage <= spread.right)
+      ? preSpreadPage
+      : (spread?.left ?? 1);
     spreadEnabled = false;
     spreads = [];
     spreadIndex = 0;
