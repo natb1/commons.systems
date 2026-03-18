@@ -100,7 +100,9 @@
 
 #budgets-chart-controls { margin-bottom: 0.5rem; }
 #budgets-chart { width: 100%; margin-bottom: 1rem; }
-#budgets-chart [aria-label="tip"] text { fill: #222; }
+#budgets-chart [aria-label="tip"] text,
+#budgets-trend-chart [aria-label="tip"] text,
+#budgets-area-chart [aria-label="tip"] text { fill: #222; }
 .chart-layout {
   display: flex;
   align-items: stretch;

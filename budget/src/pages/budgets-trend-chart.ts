@@ -94,21 +94,27 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
     x: { axis: null, domain: [0, 1] },
     y: { label: null, axis: null, grid: true, domain: yDomain },
     fx: { label: null, padding: 0.15, domain: weekLabels },
-    marks: seriesOrder.map(series =>
-      Plot.dot(
-        lineData.filter(d => d.series === series),
-        {
-          fx: "week",
-          x: () => 0.5,
-          y: "value",
-          fill: seriesColors[series],
-          r: 3,
-          stroke: seriesDash[series] ? fg : undefined,
-          strokeWidth: seriesDash[series] ? 0.5 : 0,
-          strokeDasharray: seriesDash[series],
-        },
+    marks: [
+      ...seriesOrder.map(series =>
+        Plot.dot(
+          lineData.filter(d => d.series === series),
+          {
+            fx: "week",
+            x: () => 0.5,
+            y: "value",
+            fill: seriesColors[series],
+            r: 3,
+          },
+        ),
       ),
-    ),
+      Plot.tip(lineData, Plot.pointer({
+        fx: "week",
+        x: () => 0.5,
+        y: "value",
+        title: (d: LineDatum) =>
+          `${d.series}\nWeek: ${d.week}\n$${d.value.toFixed(2)}`,
+      })),
+    ],
   });
 
   chartSvg.style.width = `${chartWidth}px`;

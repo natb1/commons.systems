@@ -96,7 +96,12 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
     marks: [Plot.ruleY([0])],
   });
 
-  // Scrollable chart body with stacked areas
+  // Sort data by budget order then week so stacking follows sortedBudgets order
+  const budgetOrder = new Map(sortedBudgets.map((b, i) => [b, i]));
+  areaData.sort((a, b) => (budgetOrder.get(a.budget) ?? 0) - (budgetOrder.get(b.budget) ?? 0)
+    || a.weekIndex - b.weekIndex);
+
+  // Scrollable chart body with stacked lines
   const chartSvg = Plot.plot({
     width: chartWidth,
     height,
@@ -104,22 +109,54 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
     marginLeft: 0,
     marginRight,
     style: sharedStyle,
-    x: { label: null, tickRotate: -45, padding: 0.1 },
+    x: {
+      label: null,
+      tickRotate: -45,
+      domain: [0, weekCount - 1],
+      ticks: weekLabels.map((_, i) => i),
+      tickFormat: (i: number) => weekLabels[i] ?? "",
+    },
     y: { label: null, axis: null, grid: true, domain: yDomain },
-    fx: { label: null, padding: 0.15, domain: weekLabels },
     color: {
       domain: colorDomain,
       range: colorRange,
       legend: false,
     },
     marks: [
-      Plot.barY(areaData, Plot.stackY({
-        x: () => "all",
+      Plot.areaY(areaData, Plot.stackY({
+        x: "weekIndex",
         y: "value",
-        fx: "week",
+        z: "budget",
         fill: "budget",
-        order: colorDomain,
+        fillOpacity: 0.4,
+        order: null,
+        curve: "monotone-x",
       })),
+      Plot.lineY(areaData, Plot.stackY({
+        x: "weekIndex",
+        y: "value",
+        z: "budget",
+        stroke: "budget",
+        strokeWidth: 1.5,
+        order: null,
+        curve: "monotone-x",
+      })),
+      Plot.dot(areaData, Plot.stackY({
+        x: "weekIndex",
+        y: "value",
+        z: "budget",
+        r: 4,
+        fill: "budget",
+        order: null,
+      })),
+      Plot.tip(areaData, Plot.stackY(Plot.pointer({
+        x: "weekIndex",
+        y: "value",
+        z: "budget",
+        order: null,
+        title: (d: AreaDatum) =>
+          `${d.budget}\nWeek: ${d.week}\n$${d.value.toFixed(2)}`,
+      }))),
       Plot.ruleY([0]),
     ],
   });
