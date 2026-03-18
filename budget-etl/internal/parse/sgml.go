@@ -104,7 +104,7 @@ func parseSGMLBalance(text string) (int64, error) {
 	}
 	balAmt := sgmlTagValue(text[idx:], "BALAMT")
 	if balAmt == "" {
-		return 0, nil
+		return 0, fmt.Errorf("LEDGERBAL block found but BALAMT is empty")
 	}
 	cents, err := parseCents(balAmt)
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 // parseCSV parses a PNC-format CSV file.
 // PNC CSV format:
 //
-//	Line 1: account metadata (account number, dates, balances) — skipped
+//	Line 1: account metadata [acctNumber, fromDate, toDate, balance, available] — balance extracted
 //	Lines 2+: positional data rows with 6 fields:
 //	  [0] Date, [1] Amount, [2] Description, [3] (empty), [4] TransactionID, [5] Type
 //

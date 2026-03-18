@@ -128,7 +128,6 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 
 	// Build all TransactionData and StatementData across all files
 	allTxns := make([]store.TransactionData, 0, totalTxns)
-	allStmts := make([]store.StatementData, 0, len(parsed))
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
 			allTxns = append(allTxns, store.TransactionData{
@@ -141,14 +140,8 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 				TransactionID: t.TransactionID,
 			})
 		}
-		allStmts = append(allStmts, store.StatementData{
-			StatementID: pf.sf.StatementID(),
-			Institution: pf.sf.Institution,
-			Account:     pf.sf.Account,
-			Balance:     pf.result.Balance,
-			Period:      pf.sf.Period,
-		})
 	}
+	allStmts := buildStatementData(parsed)
 
 	if dryRun {
 		printSummary(parsed, totalTxns, skipped)
@@ -625,16 +618,7 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
 	// Build statements from dir-parsed files
-	dirStmts := make([]store.StatementData, 0, len(parsed))
-	for _, pf := range parsed {
-		dirStmts = append(dirStmts, store.StatementData{
-			StatementID: pf.sf.StatementID(),
-			Institution: pf.sf.Institution,
-			Account:     pf.sf.Account,
-			Balance:     pf.result.Balance,
-			Period:      pf.sf.Period,
-		})
-	}
+	dirStmts := buildStatementData(parsed)
 
 	// Build input lookup by doc ID
 	inputByID := make(map[string]export.Transaction, len(input.Transactions))
@@ -943,6 +927,21 @@ func readFirebaseRC() (string, error) {
 		}
 		dir = parent
 	}
+}
+
+// buildStatementData converts parsed files to store.StatementData.
+func buildStatementData(parsed []parsedFile) []store.StatementData {
+	out := make([]store.StatementData, len(parsed))
+	for i, pf := range parsed {
+		out[i] = store.StatementData{
+			StatementID: pf.sf.StatementID(),
+			Institution: pf.sf.Institution,
+			Account:     pf.sf.Account,
+			Balance:     pf.result.Balance,
+			Period:      pf.sf.Period,
+		}
+	}
+	return out
 }
 
 // buildExportStatements converts store.StatementData to export.Statement.
