@@ -84,6 +84,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Seed statements are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-statements/{statementId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Statements are scoped to group members via a denormalized `memberEmails` field.
+    // Client writes are denied; data is managed via the Admin SDK in ETL.
+    match /budget/{env}/statements/{statementId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow write: if false;
+    }
+
     // Seed budget periods are public read-only example data for unauthenticated users
     match /budget/{env}/seed-budget-periods/{periodId} {
       allow read: if true;
