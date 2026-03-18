@@ -15,10 +15,21 @@ type Output struct {
 	GroupID            string              `json:"groupId"`
 	GroupName          string              `json:"groupName"`
 	Transactions       []Transaction       `json:"transactions"`
+	Statements         []Statement         `json:"statements"`
 	Budgets            []Budget            `json:"budgets"`
 	BudgetPeriods      []BudgetPeriod      `json:"budgetPeriods"`
 	Rules              []Rule              `json:"rules"`
 	NormalizationRules []NormalizationRule `json:"normalizationRules"`
+}
+
+// Statement is a statement-level record in the JSON output.
+type Statement struct {
+	ID          string  `json:"id"`
+	StatementID string  `json:"statementId"`
+	Institution string  `json:"institution"`
+	Account     string  `json:"account"`
+	Balance     float64 `json:"balance"`
+	Period      string  `json:"period"`
 }
 
 // Transaction is a single transaction in the JSON output.

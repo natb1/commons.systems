@@ -19,6 +19,16 @@ func TestWriteFileRoundTrip(t *testing.T) {
 		ExportedAt: FormatTimestamp(time.Date(2025, 6, 15, 10, 30, 0, 0, time.UTC)),
 		GroupID:    "group-123",
 		GroupName:  "household",
+		Statements: []Statement{
+			{
+				ID:          "stmt-doc-001",
+				StatementID: "bankone-1234-2025-06",
+				Institution: "bankone",
+				Account:     "1234",
+				Balance:     1429.61,
+				Period:      "2025-06",
+			},
+		},
 		Transactions: []Transaction{
 			{
 				ID:                    "txn-001",
@@ -138,6 +148,17 @@ func TestWriteFileRoundTrip(t *testing.T) {
 	}
 	if got.GroupName != "household" {
 		t.Errorf("groupName = %q, want household", got.GroupName)
+	}
+
+	// Verify statements
+	if len(got.Statements) != 1 {
+		t.Fatalf("statements count = %d, want 1", len(got.Statements))
+	}
+	if got.Statements[0].Balance != 1429.61 {
+		t.Errorf("statement[0].balance = %v, want 1429.61", got.Statements[0].Balance)
+	}
+	if got.Statements[0].StatementID != "bankone-1234-2025-06" {
+		t.Errorf("statement[0].statementId = %q, want bankone-1234-2025-06", got.Statements[0].StatementID)
 	}
 
 	// Verify transactions
