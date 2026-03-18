@@ -46,5 +46,9 @@
   "rules": [
     {"id": "r-1", "type": "categorization", "pattern": "KROGER", "target": "Food:Groceries", "priority": 1, "institution": "", "account": ""}
   ],
-  "normalizationRules": []
+  "normalizationRules": [],
+  "statements": [
+    {"id": "stmt-bankone-1234-2025-06", "statementId": "bankone-1234-2025-06", "institution": "bankone", "account": "1234", "balance": 1234.56, "period": "2025-06"},
+    {"id": "stmt-cap1-4444-2025-06", "statementId": "capital_one-4444-2025-06", "institution": "banktwo", "account": "4444", "balance": -150.25, "period": "2025-06"}
+  ]
 }

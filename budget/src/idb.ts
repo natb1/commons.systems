@@ -1,5 +1,5 @@
 const DB_NAME = "budget";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORE_NAMES = [
   "transactions",
@@ -7,6 +7,7 @@ const STORE_NAMES = [
   "budgetPeriods",
   "rules",
   "normalizationRules",
+  "statements",
   "meta",
 ] as const;
 
@@ -67,6 +68,7 @@ export interface ParsedData {
   budgetPeriods: Record<string, unknown>[];
   rules: Record<string, unknown>[];
   normalizationRules: Record<string, unknown>[];
+  statements: Record<string, unknown>[];
   meta: UploadMeta;
 }
 
@@ -97,6 +99,7 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
   for (const record of data.budgetPeriods) stores.budgetPeriods.put(record);
   for (const record of data.rules) stores.rules.put(record);
   for (const record of data.normalizationRules) stores.normalizationRules.put(record);
+  for (const record of data.statements) stores.statements.put(record);
   stores.meta.put(data.meta);
 
   await new Promise<void>((resolve, reject) => {
