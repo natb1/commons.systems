@@ -8,6 +8,7 @@ import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import type { RenderPageOptions } from "./pages/render-options.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
+import { hydrateCategorySankey } from "./pages/home-chart.js";
 import { hydrateBudgetTable, hydrateBudgetChart } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { trackPageView } from "./firebase.js";
@@ -126,9 +127,15 @@ function transition(next: AppState): void {
 }
 
 // Hydrate interactive containers (tables, chart) whenever they appear in the DOM.
+// Multiple code paths trigger renders (navigation, auth state changes), so an
+// observer catches all of them. Sets dataset.hydrated to "true" on success or
+// "error" on failure to prevent retry loops.
+// Observer runs for page lifetime: each render replaces page content, so
+// containers start unhydrated and need re-initialization.
 function hydrateTable(
   selector: string,
   hydrate: (el: HTMLElement) => void,
+  errorLabel?: string,
 ): void {
   const table = app.querySelector(selector) as HTMLElement | null;
   if (!table || table.dataset.hydrated) return;
@@ -148,12 +155,15 @@ function hydrateTable(
     const msg = document.createElement("p");
     msg.textContent = error instanceof DataIntegrityError
       ? "A data error occurred. Please contact support."
-      : "Editing is temporarily unavailable. Try refreshing the page.";
+      : errorLabel
+        ? `${errorLabel} is temporarily unavailable. Try refreshing the page.`
+        : "Editing is temporarily unavailable. Try refreshing the page.";
     table.appendChild(msg);
   }
 }
 
 const observer = new MutationObserver(() => {
+  hydrateTable("#category-sankey", hydrateCategorySankey, "Chart rendering");
   hydrateTable("#transactions-table", hydrateTransactionTable);
   hydrateTable("#budgets-chart", hydrateBudgetChart);
   hydrateTable("#budgets-table", hydrateBudgetTable);

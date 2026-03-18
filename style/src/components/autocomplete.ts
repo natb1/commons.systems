@@ -1,6 +1,12 @@
 let dropdownController: AbortController | null = null;
 let activeInput: HTMLInputElement | null = null;
 let listenersRegistered = false;
+let showTimestamp = 0;
+
+function handleScroll(): void {
+  if (Date.now() - showTimestamp < 100) return;
+  removeDropdown();
+}
 
 function clearAriaAutocomplete(el: HTMLInputElement): void {
   el.removeAttribute("aria-activedescendant");
@@ -102,21 +108,25 @@ export function showDropdown(input: HTMLInputElement, options: string[], filterO
   dropdown.style.left = `${rect.left + window.scrollX}px`;
   dropdown.style.width = `${rect.width}px`;
   document.body.appendChild(dropdown);
+  showTimestamp = Date.now();
 }
 
 /** Idempotent global listener registration for autocomplete dismiss behavior. */
 export function registerAutocompleteListeners(): void {
   if (listenersRegistered) return;
   listenersRegistered = true;
-  // Capture phase: dismiss dropdown before child scroll handlers run
-  window.addEventListener("scroll", removeDropdown, true);
+  // Capture phase: dismiss dropdown before child scroll handlers run.
+  // handleScroll ignores scroll events within 100ms of showing the
+  // dropdown — these are browser auto-scrolls (e.g., focus scroll-into-view)
+  // rather than user-initiated scrolls.
+  window.addEventListener("scroll", handleScroll, true);
   window.addEventListener("resize", removeDropdown);
   document.addEventListener("click", handleOutsideClick);
 }
 
 export function _resetForTest(): void {
   if (listenersRegistered) {
-    window.removeEventListener("scroll", removeDropdown, true);
+    window.removeEventListener("scroll", handleScroll, true);
     window.removeEventListener("resize", removeDropdown);
     document.removeEventListener("click", handleOutsideClick);
     listenersRegistered = false;
