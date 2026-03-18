@@ -3,6 +3,7 @@ import "./style/theme.css";
 import { createHistoryRouter } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderBudgets } from "./pages/budgets.js";
+import { renderAccounts } from "./pages/accounts.js";
 import { renderRules } from "./pages/rules.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
@@ -29,7 +30,7 @@ export type AppState =
 
 let state: AppState = { source: "seed" };
 
-navEl.links = [{ href: "/", label: "budgets" }, { href: "/transactions", label: "transactions" }, { href: "/rules", label: "rules" }];
+navEl.links = [{ href: "/", label: "budgets" }, { href: "/transactions", label: "transactions" }, { href: "/accounts", label: "accounts" }, { href: "/rules", label: "rules" }];
 navEl.showAuth = false;
 
 // File upload UI
@@ -102,6 +103,7 @@ const router = createHistoryRouter(
   [
     { path: "/", render: () => renderBudgets(renderOptions()) },
     { path: "/transactions", render: () => renderHome(renderOptions()) },
+    { path: "/accounts", render: () => renderAccounts(renderOptions()) },
     { path: "/rules", render: () => renderRules(renderOptions()) },
   ],
   {

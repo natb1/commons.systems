@@ -2,6 +2,12 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import type { MediaItem } from "../types.js";
 import type { ContentRenderer } from "./types.js";
 import {
+  spreadsForPageCount,
+  spreadIndexForPage,
+  spreadPositionLabel,
+} from "./spread.js";
+import type { Spread } from "./spread.js";
+import {
   getReadingPosition,
   saveReadingPosition,
 } from "../reading-position.js";
@@ -30,6 +36,7 @@ export function renderViewerShell(item: MediaItem): string {
           <button class="viewer-zoom-in zoom-hidden" aria-label="Zoom in">+</button>
           <button class="viewer-zoom-out zoom-hidden" aria-label="Zoom out">&minus;</button>
           <button class="viewer-zoom-reset zoom-hidden" aria-label="Reset zoom">&#8865;</button>
+          <button class="viewer-spread-toggle spread-hidden" aria-label="Toggle spread view" aria-pressed="false">&#9783;</button>
         </div>
         <div class="viewer-meta">
           <h3 class="viewer-title">${escapeHtml(item.title)}</h3>
@@ -83,7 +90,9 @@ export function initViewer(
   const zoomInBtn = viewer.querySelector(".viewer-zoom-in") as HTMLButtonElement;
   const zoomOutBtn = viewer.querySelector(".viewer-zoom-out") as HTMLButtonElement;
   const zoomResetBtn = viewer.querySelector(".viewer-zoom-reset") as HTMLButtonElement;
+  const spreadToggleBtn = viewer.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
 
+  const spreadKey = `spread-mode:${mediaId}`;
   document.body.classList.add("viewer-active");
 
   function handleRenderError(err: unknown) {
@@ -123,7 +132,7 @@ export function initViewer(
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
-      const pos = renderer.position;
+      const pos = getSpreadPosition();
       if (!pos || pos === lastSavedPosition) return;
       lastSavedPosition = pos;
       if (uid && !firestoreReadFailed) {
@@ -140,30 +149,169 @@ export function initViewer(
   function updateZoomState() {
     if (!renderer.zoomIn) return;
     zoomInBtn.disabled = false;
-    zoomOutBtn.disabled = !renderer.isZoomed;
-    zoomResetBtn.disabled = !renderer.isZoomed;
+    if (spreadEnabled) {
+      zoomOutBtn.disabled = spreadZoomLevel <= 0;
+      zoomResetBtn.disabled = spreadZoomLevel <= 0;
+    } else {
+      zoomOutBtn.disabled = !renderer.isZoomed;
+      zoomResetBtn.disabled = !renderer.isZoomed;
+    }
   }
 
+  // Zoom handlers dispatch between spread mode (CSS transform) and renderer zoom
   function handleZoomIn() {
-    renderer.zoomIn!();
+    if (spreadEnabled) {
+      spreadZoomLevel++;
+      updateSpreadZoom();
+    } else {
+      renderer.zoomIn!();
+    }
     updateZoomState();
   }
 
   function handleZoomOut() {
-    renderer.zoomOut!();
+    if (spreadEnabled) {
+      if (spreadZoomLevel <= 0) return;
+      spreadZoomLevel--;
+      updateSpreadZoom();
+    } else {
+      renderer.zoomOut!();
+    }
     updateZoomState();
   }
 
   function handleZoomReset() {
-    renderer.resetZoom!();
+    if (spreadEnabled) {
+      spreadZoomLevel = 0;
+      updateSpreadZoom();
+    } else {
+      renderer.resetZoom!();
+    }
     updateZoomState();
+  }
+
+  let spreadToggleCleanup: (() => void) | null = null;
+  let spreadEnabled = false;
+  let spreads: Spread[] = [];
+  let spreadIndex = 0;
+  let spreadZoomLevel = 0;
+  let spreadResizeObserver: ResizeObserver | null = null;
+  let spreadResizeTimer: ReturnType<typeof setTimeout> | null = null;
+  // Page the user was on when entering spread mode; used to restore position on exit.
+  let preSpreadPage = 1;
+
+  function getSpreadPosition(): string {
+    if (spreadEnabled && spreads.length > 0) {
+      return String(spreads[spreadIndex]!.left);
+    }
+    return renderer.position;
+  }
+
+  async function renderSpread(): Promise<void> {
+    if (!renderer.renderPageInto || spreads.length === 0) return;
+    const spread = spreads[spreadIndex]!;
+    const isSolo = spread.right === null;
+
+    const leftEl = canvasWrap.querySelector(".spread-left") as HTMLElement;
+    const rightEl = canvasWrap.querySelector(".spread-right") as HTMLElement;
+    leftEl.innerHTML = "";
+    rightEl.innerHTML = "";
+
+    canvasWrap.classList.toggle("solo", isSolo);
+
+    await renderer.renderPageInto(spread.left, leftEl);
+    if (spread.right !== null) {
+      await renderer.renderPageInto(spread.right, rightEl);
+    }
+  }
+
+  function updateSpreadZoom(): void {
+    if (spreadZoomLevel === 0) {
+      canvasWrap.style.transform = "";
+      canvasWrap.classList.remove("zoomed");
+    } else {
+      const scale = 1.2 ** spreadZoomLevel;
+      canvasWrap.style.transform = `scale(${scale})`;
+      canvasWrap.style.transformOrigin = "top left";
+      canvasWrap.classList.add("zoomed");
+    }
+  }
+
+  function enterSpreadMode(currentPage: number): void {
+    spreadEnabled = true;
+    preSpreadPage = currentPage;
+    spreads = spreadsForPageCount(renderer.pageCount);
+    spreadIndex = spreadIndexForPage(currentPage, renderer.pageCount);
+    spreadZoomLevel = 0;
+
+    // Create sub-containers (CSS hides the single-page renderer element)
+    canvasWrap.classList.add("spread-mode");
+    const leftEl = document.createElement("div");
+    leftEl.className = "spread-page spread-left";
+    const rightEl = document.createElement("div");
+    rightEl.className = "spread-page spread-right";
+    canvasWrap.appendChild(leftEl);
+    canvasWrap.appendChild(rightEl);
+
+    spreadToggleBtn.setAttribute("aria-pressed", "true");
+    try { localStorage.setItem(spreadKey, "true"); }
+    catch (e) { reportError(new Error("Could not save spread preference", { cause: e })); }
+
+    spreadResizeObserver = new ResizeObserver(() => {
+      if (spreadResizeTimer) clearTimeout(spreadResizeTimer);
+      spreadResizeTimer = setTimeout(() => {
+        spreadResizeTimer = null;
+        renderSpread().catch(handleRenderError);
+      }, 150);
+    });
+    spreadResizeObserver.observe(canvasWrap);
+  }
+
+  function leaveSpreadMode(): number {
+    const spread = spreads.length > 0 ? spreads[spreadIndex]! : null;
+    const currentPage = spread !== null
+      && preSpreadPage >= spread.left
+      && (spread.right === null || preSpreadPage <= spread.right)
+      ? preSpreadPage
+      : (spread?.left ?? 1);
+    spreadEnabled = false;
+    spreads = [];
+    spreadIndex = 0;
+    spreadZoomLevel = 0;
+
+    canvasWrap.querySelectorAll(".spread-page").forEach(el => el.remove());
+    canvasWrap.classList.remove("spread-mode", "solo");
+    canvasWrap.style.transform = "";
+    canvasWrap.style.transformOrigin = "";
+    canvasWrap.classList.remove("zoomed");
+
+    spreadToggleBtn.setAttribute("aria-pressed", "false");
+    try { localStorage.setItem(spreadKey, "false"); }
+    catch (e) { reportError(new Error("Could not save spread preference", { cause: e })); }
+
+    if (spreadResizeObserver) {
+      spreadResizeObserver.disconnect();
+      spreadResizeObserver = null;
+    }
+    if (spreadResizeTimer) {
+      clearTimeout(spreadResizeTimer);
+      spreadResizeTimer = null;
+    }
+
+    return currentPage;
   }
 
   // Navigation
   function updateNav() {
-    position.textContent = renderer.positionLabel;
-    prevBtn.disabled = !renderer.canGoPrev;
-    nextBtn.disabled = !renderer.canGoNext;
+    if (spreadEnabled && spreads.length > 0) {
+      position.textContent = spreadPositionLabel(spreads[spreadIndex]!, renderer.pageCount);
+      prevBtn.disabled = spreadIndex <= 0;
+      nextBtn.disabled = spreadIndex >= spreads.length - 1;
+    } else {
+      position.textContent = renderer.positionLabel;
+      prevBtn.disabled = !renderer.canGoPrev;
+      nextBtn.disabled = !renderer.canGoNext;
+    }
     updateZoomState();
     scheduleSave();
   }
@@ -174,12 +322,26 @@ export function initViewer(
   }
 
   async function goPrev() {
-    await renderer.prev();
+    if (spreadEnabled) {
+      if (spreadIndex > 0) {
+        spreadIndex--;
+        await renderSpread();
+      }
+    } else {
+      await renderer.prev();
+    }
     updateNav();
   }
 
   async function goNext() {
-    await renderer.next();
+    if (spreadEnabled) {
+      if (spreadIndex < spreads.length - 1) {
+        spreadIndex++;
+        await renderSpread();
+      }
+    } else {
+      await renderer.next();
+    }
     updateNav();
   }
 
@@ -196,6 +358,20 @@ export function initViewer(
     else if (e.key === "ArrowRight") goNext().catch(handleNavError);
   }
   document.addEventListener("keydown", handleKeydown);
+
+  // Spread toggle
+  async function handleSpreadToggle() {
+    if (spreadEnabled) {
+      const currentPage = leaveSpreadMode();
+      await renderer.goToPage(currentPage);
+      updateNav();
+    } else {
+      const currentPage = renderer.currentPage;
+      enterSpreadMode(currentPage);
+      await renderSpread();
+      updateNav();
+    }
+  }
 
   // Initialize renderer — load saved position (Firestore if authenticated, localStorage otherwise), then init.
   // Position-load errors are non-fatal: if Firestore or localStorage fails, init proceeds from page 1.
@@ -225,6 +401,19 @@ export function initViewer(
       zoomResetBtn.addEventListener("click", handleZoomReset);
       renderer.onZoomChange = updateZoomState;
     }
+    if (renderer.renderPageInto) {
+      spreadToggleBtn.classList.remove("spread-hidden");
+      const onSpreadToggle = () => { handleSpreadToggle().catch(handleRenderError); };
+      spreadToggleBtn.addEventListener("click", onSpreadToggle);
+      spreadToggleCleanup = () => { spreadToggleBtn.removeEventListener("click", onSpreadToggle); };
+      let preferSpread = false;
+      try { preferSpread = localStorage.getItem(spreadKey) === "true"; }
+      catch (e) { reportError(new Error("Could not load spread preference", { cause: e })); }
+      if (preferSpread) {
+        enterSpreadMode(renderer.currentPage);
+        await renderSpread();
+      }
+    }
     updateNav();
   })().catch((err) => {
     reportError(new Error("Viewer initialization failed", { cause: err }));
@@ -240,6 +429,9 @@ export function initViewer(
     zoomInBtn.removeEventListener("click", handleZoomIn);
     zoomOutBtn.removeEventListener("click", handleZoomOut);
     zoomResetBtn.removeEventListener("click", handleZoomReset);
+    spreadToggleCleanup?.();
+    if (spreadResizeObserver) spreadResizeObserver.disconnect();
+    if (spreadResizeTimer) clearTimeout(spreadResizeTimer);
     renderer.destroy();
   };
 }

@@ -46,5 +46,9 @@
   "rules": [
     {"id": "r-1", "type": "categorization", "pattern": "KROGER", "target": "Food:Groceries", "priority": 1, "institution": "", "account": ""}
   ],
-  "normalizationRules": []
+  "normalizationRules": [],
+  "statements": [
+    {"id": "stmt-pnc-5111-2025-06", "statementId": "pnc-5111-2025-06", "institution": "pnc", "account": "5111", "balance": 1234.56, "period": "2025-06"},
+    {"id": "stmt-cap1-4444-2025-06", "statementId": "capital_one-4444-2025-06", "institution": "capital_one", "account": "4444", "balance": -150.25, "period": "2025-06"}
+  ]
 }
