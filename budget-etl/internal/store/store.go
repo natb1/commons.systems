@@ -83,6 +83,61 @@ func (c *Client) LookupGroup(ctx context.Context, email, groupName string) (Grou
 }
 
 
+// StatementData holds the fields to write to a Firestore statement document.
+type StatementData struct {
+	StatementID  string
+	Institution  string
+	Account      string
+	Balance      int64 // cents; raw signed value from statement
+	Period       string
+	GroupID      string
+	MemberEmails []string
+}
+
+// StatementDocID generates a deterministic document ID from a statement ID
+// using a truncated sha256 hash (10 bytes / 20 hex characters), matching
+// the TransactionDocID scheme.
+func StatementDocID(statementID string) string {
+	if statementID == "" {
+		panic("statementDocID: empty statementID")
+	}
+	h := sha256.Sum256([]byte(statementID))
+	return fmt.Sprintf("%x", h[:10])
+}
+
+// UpsertStatements writes statement documents to Firestore in batches of 500.
+// Full overwrite (no merge) — statements have no user-editable fields.
+func (c *Client) UpsertStatements(ctx context.Context, stmts []StatementData) error {
+	col := c.fs.Collection(fmt.Sprintf("budget/%s/statements", c.env))
+
+	const maxBatch = 500
+	for i := 0; i < len(stmts); i += maxBatch {
+		end := i + maxBatch
+		if end > len(stmts) {
+			end = len(stmts)
+		}
+		batch := c.fs.Batch()
+		for _, stmt := range stmts[i:end] {
+			ref := col.Doc(StatementDocID(stmt.StatementID))
+			batch.Set(ref, map[string]interface{}{
+				"statementId":  stmt.StatementID,
+				"institution":  stmt.Institution,
+				"account":      stmt.Account,
+				"balance":      DollarAmount(stmt.Balance),
+				"period":       stmt.Period,
+				"groupId":      stmt.GroupID,
+				"memberEmails": stmt.MemberEmails,
+			})
+		}
+		if _, err := batch.Commit(ctx); err != nil {
+			return fmt.Errorf("committing statement batch: %w", err)
+		}
+	}
+
+	log.Printf("upserted %d statements", len(stmts))
+	return nil
+}
+
 // TransactionData holds the fields to write to a Firestore transaction document.
 type TransactionData struct {
 	Institution   string
