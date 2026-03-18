@@ -21,9 +21,9 @@ describe("createAppConfig", () => {
 
   it("merges overrides into base config", () => {
     const config = createAppConfig({
-      server: { proxy: { "/feed.xml": { target: "http://localhost:5001" } } },
+      server: { proxy: { "/api/example": { target: "http://localhost:5001" } } },
     });
-    expect(config.server?.proxy?.["/feed.xml"]?.target).toBe(
+    expect(config.server?.proxy?.["/api/example"]?.target).toBe(
       "http://localhost:5001",
     );
     expect(config.resolve?.dedupe).toContain("firebase");
