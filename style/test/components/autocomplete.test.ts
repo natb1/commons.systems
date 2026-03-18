@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import {
   showDropdown,
   removeDropdown,
@@ -293,7 +293,8 @@ describe("registerAutocompleteListeners", () => {
     expect(getDropdown()).not.toBeNull();
   });
 
-  it("scroll dismisses dropdown", () => {
+  it("scroll within grace period does not dismiss dropdown", () => {
+    vi.useFakeTimers();
     registerAutocompleteListeners();
     const input = createInput();
     input.value = "";
@@ -301,8 +302,22 @@ describe("registerAutocompleteListeners", () => {
     expect(getDropdown()).not.toBeNull();
 
     window.dispatchEvent(new Event("scroll"));
+    expect(getDropdown()).not.toBeNull();
+    vi.useRealTimers();
+  });
 
+  it("scroll after grace period dismisses dropdown", () => {
+    vi.useFakeTimers();
+    registerAutocompleteListeners();
+    const input = createInput();
+    input.value = "";
+    showDropdown(input, ["A"]);
+    expect(getDropdown()).not.toBeNull();
+
+    vi.advanceTimersByTime(100);
+    window.dispatchEvent(new Event("scroll"));
     expect(getDropdown()).toBeNull();
+    vi.useRealTimers();
   });
 
   it("resize dismisses dropdown", () => {
