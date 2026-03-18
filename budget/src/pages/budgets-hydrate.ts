@@ -123,21 +123,19 @@ function getAllScrollWrappers(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".chart-scroll-wrapper"));
 }
 
-function setupScrollSync(): void {
-  let syncing = false;
-  // Use capture on document so scroll events from any .chart-scroll-wrapper
-  // are handled even after DOM replacement by render()/ResizeObserver.
-  document.addEventListener("scroll", (e) => {
-    const source = e.target;
-    if (!(source instanceof HTMLElement) || !source.classList.contains("chart-scroll-wrapper")) return;
-    if (syncing) return;
-    syncing = true;
-    const ratio = source.scrollWidth > 0 ? source.scrollLeft / source.scrollWidth : 0;
-    for (const w of getAllScrollWrappers()) {
-      if (w !== source) w.scrollLeft = ratio * w.scrollWidth;
-    }
-    syncing = false;
-  }, true);
+let scrollSyncing = false;
+function attachScrollSync(): void {
+  for (const w of getAllScrollWrappers()) {
+    w.addEventListener("scroll", () => {
+      if (scrollSyncing) return;
+      scrollSyncing = true;
+      const ratio = w.scrollWidth > 0 ? w.scrollLeft / w.scrollWidth : 0;
+      for (const other of getAllScrollWrappers()) {
+        if (other !== w) other.scrollLeft = ratio * other.scrollWidth;
+      }
+      scrollSyncing = false;
+    });
+  }
 }
 
 export function hydrateBudgetChart(container: HTMLElement): void {
@@ -182,7 +180,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   }
 
   render();
-  setupScrollSync();
+  attachScrollSync();
 
   // Configure date picker min/max from period date range
   const datePicker = document.getElementById("chart-date-picker") as HTMLInputElement | null;
@@ -239,7 +237,8 @@ export function hydrateBudgetChart(container: HTMLElement): void {
         setTimeout(() => { throw error; }, 0);
         return;
       }
-      // Restore scroll position on all wrappers
+      // Re-attach scroll sync and restore scroll position on new wrappers
+      attachScrollSync();
       for (const w of getAllScrollWrappers()) {
         w.scrollLeft = scrollRatio * w.scrollWidth;
       }

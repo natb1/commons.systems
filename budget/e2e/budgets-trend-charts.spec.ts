@@ -45,6 +45,12 @@ test.describe("budgets trend charts", () => {
 
     const barScroll = page.locator("#budgets-chart .chart-scroll-wrapper");
 
+    // Wait for initial scroll position to stabilize (ResizeObserver restores scroll after render)
+    await expect(async () => {
+      const barLeft = await barScroll.evaluate((el) => el.scrollLeft);
+      expect(barLeft).toBeGreaterThan(0);
+    }).toPass({ timeout: 5000 });
+
     // Scroll bar chart to the start
     await barScroll.evaluate((el) => { el.scrollLeft = 0; });
 
