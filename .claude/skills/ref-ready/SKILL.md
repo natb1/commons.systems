@@ -51,6 +51,7 @@ Detect input mode from `$INPUT`:
   - Closed siblings: summary only (`title,number,state`)
 
   > See `ref-memory-management` Issue Context Loading for the authoritative list of content types. This skill extends the base field set with `labels, assignees, projectItems` for evaluation.
+  > See `ref-github-issues` for sub-issue, parent, and dependency API syntax.
 
 - Otherwise → **description mode**: treat `$INPUT` as the issue body text. Prompt user for a title if not provided.
 
@@ -165,6 +166,8 @@ Apply the approved improvements for each issue in sequence:
   gh issue create --title "<title>" --body "<improved body>"
   ```
   Record the new issue number as `<N>`.
+
+When decomposition (Step 3f) creates new issues, establish relationships using the `ref-github-issues` API syntax — do not encode relationships as text in issue bodies. Use sub-issues for scope breakdown and dependencies for sequencing constraints.
 
 ## Step 6. Post-Processing
 
