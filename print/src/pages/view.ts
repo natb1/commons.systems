@@ -13,7 +13,6 @@ const BACK_LINK = '<a href="/" class="viewer-back">&larr; Back to Library</a>';
 
 let pendingItem: MediaItem | null = null;
 let pendingUrl: string | null = null;
-let pendingStoragePath: string | null = null;
 let cleanupFn: (() => void) | null = null;
 
 export function cleanupView(): void {
@@ -23,7 +22,6 @@ export function cleanupView(): void {
   }
   pendingItem = null;
   pendingUrl = null;
-  pendingStoragePath = null;
 }
 
 export async function renderView(id: string, _user: User | null): Promise<string> {
@@ -48,7 +46,6 @@ export async function renderView(id: string, _user: User | null): Promise<string
     const url = await getMediaDownloadUrl(item.storagePath);
     pendingItem = item;
     pendingUrl = url;
-    pendingStoragePath = item.storagePath;
     return renderViewerShell(item);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
@@ -62,12 +59,19 @@ export async function renderView(id: string, _user: User | null): Promise<string
 }
 
 async function resolveFileSource(url: string, storagePath: string): Promise<string | ArrayBuffer> {
-  const cached = await getFile(storagePath);
-  if (cached) return cached;
+  try {
+    const cached = await getFile(storagePath);
+    if (cached) return cached;
+  } catch (err) {
+    reportError(new Error("Cache lookup failed, fetching from network", { cause: err }));
+  }
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch media: ${res.status}`);
   const buf = await res.arrayBuffer();
-  putFile(storagePath, buf).catch(() => {});
+  // Cache write is best-effort; failure does not affect the current view
+  putFile(storagePath, buf).catch((err) => {
+    reportError(new Error("Failed to cache media file", { cause: err }));
+  });
   return buf;
 }
 
@@ -76,10 +80,9 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
 
   const item = pendingItem;
   const url = pendingUrl;
-  const spath = pendingStoragePath!;
+  const spath = item.storagePath;
   pendingItem = null;
   pendingUrl = null;
-  pendingStoragePath = null;
 
   const uid = user?.uid ?? null;
 

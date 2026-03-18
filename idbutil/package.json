@@ -1,0 +1,9 @@
+{
+  "name": "@commons-systems/idbutil",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./connection": "./src/connection.ts"
+  }
+}

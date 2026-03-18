@@ -35,7 +35,7 @@ export function createEpubRenderer(
       containerDiv.className = "viewer-epub-container";
       containerEl.appendChild(containerDiv);
 
-      book = ePub(source as string);
+      book = ePub(source);
       rendition = book.renderTo(containerDiv, {
         width: "100%",
         height: "100%",
