@@ -159,6 +159,10 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   const observer = new ResizeObserver(() => {
+    if (!container.isConnected) {
+      observer.disconnect();
+      return;
+    }
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       const wrapper = container.querySelector(".chart-scroll-wrapper");

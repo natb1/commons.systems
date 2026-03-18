@@ -232,7 +232,7 @@ export function computeAverageWeeklyIncome(transactions: Transaction[]): number 
   for (const t of incomeTxns) {
     const ms = t.timestamp.toMillis();
     if (ms >= windowStart && ms < windowEnd) {
-      sum += computeNetAmount(t.amount, t.reimbursement);
+      sum -= computeNetAmount(t.amount, t.reimbursement);
     }
   }
 
