@@ -110,20 +110,49 @@
   border-radius: 4px;
 }
 
-/* --- Budget insights (metrics; second column reserved for #228 pie chart) --- */
-
-.budget-insights {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
+/* --- Below bar chart row (pie chart + metrics) --- */
+.below-bar-chart-row { margin-top: 1rem; }
 
 @media (min-width: 768px) {
-  .budget-insights {
-    grid-template-columns: 1fr 1fr;
+  .below-bar-chart-row {
+    display: flex;
+    gap: 2rem;
   }
 }
+
+#budgets-pie { flex: 1; min-width: 0; }
+
+.pie-chart-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.pie-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pie-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* --- Budget metrics (inside .below-bar-chart-row) --- */
+
+.budget-metrics { flex: 1; min-width: 0; }
 
 .budget-metrics dl {
   display: flex;

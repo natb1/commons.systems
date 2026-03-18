@@ -277,7 +277,7 @@ describe("seed", () => {
     );
   });
 
-  it("throws on duplicate document ids", async () => {
+  it("throws on duplicate document ids within a single entry", async () => {
     const { db } = createMockFirestore();
 
     const spec: SeedSpec = {
@@ -295,6 +295,29 @@ describe("seed", () => {
 
     await expect(seed(db, spec)).rejects.toThrow(
       'duplicate document ids in "posts": dupe',
+    );
+  });
+
+  it("throws on duplicate document ids across collection entries", async () => {
+    const { db } = createMockFirestore();
+
+    const spec: SeedSpec = {
+      namespace: "app/prod",
+      collections: [
+        {
+          name: "media",
+          documents: [{ id: "shared-id", data: { title: "First" } }],
+        },
+        {
+          name: "media",
+          testOnly: true,
+          documents: [{ id: "shared-id", data: { title: "Second" } }],
+        },
+      ],
+    };
+
+    await expect(seed(db, spec, { includeTestOnly: true })).rejects.toThrow(
+      'duplicate document id "shared-id" across "media" collection entries',
     );
   });
 

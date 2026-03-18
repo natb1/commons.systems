@@ -1,53 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Budget, BudgetPeriod } from "../../src/firestore";
+import { timestampMockFactory, ts, makeBudget, makePeriod, makeContainer } from "../helpers";
 
-vi.mock("firebase/firestore", () => ({
-  Timestamp: class Timestamp {
-    _date: Date;
-    constructor(d: Date) { this._date = d; }
-    toDate() { return this._date; }
-    toMillis() { return this._date.getTime(); }
-    static fromDate(d: Date) { return new Timestamp(d); }
-  },
-}));
+vi.mock("firebase/firestore", () => timestampMockFactory());
 
 import { Timestamp } from "firebase/firestore";
 import { renderBudgetChart } from "../../src/pages/budgets-chart";
-
-function ts(dateStr: string): Timestamp {
-  return Timestamp.fromDate(new Date(dateStr));
-}
-
-function makeBudget(overrides: Partial<Budget> = {}): Budget {
-  return {
-    id: "food" as any,
-    name: "Food",
-    weeklyAllowance: 150,
-    rollover: "none",
-    groupId: null,
-    ...overrides,
-  };
-}
-
-function makePeriod(overrides: Partial<BudgetPeriod> & { id: string; budgetId: string }): BudgetPeriod {
-  return {
-    periodStart: ts("2025-01-13"),
-    periodEnd: ts("2025-01-20"),
-    total: 0,
-    count: 0,
-    categoryBreakdown: {},
-    groupId: null,
-    ...overrides,
-  } as BudgetPeriod;
-}
-
-function makeContainer(): HTMLElement {
-  const container = document.createElement("div");
-  container.style.setProperty("--fg", "#e0e0e0");
-  document.body.appendChild(container);
-  Object.defineProperty(container, "clientWidth", { value: 640 });
-  return container;
-}
 
 describe("renderBudgetChart", () => {
   beforeEach(() => {
@@ -64,8 +21,8 @@ describe("renderBudgetChart", () => {
     expect(container.querySelector(".chart-layout")).not.toBeNull();
     expect(container.querySelector(".chart-y-axis svg")).not.toBeNull();
     expect(container.querySelector(".chart-scroll-wrapper svg")).not.toBeNull();
-    expect(result.weekLabels).toHaveLength(1);
-    expect(result.periodStartMs).toEqual([ts("2025-01-06").toMillis()]);
+    expect(result.weeks.map(w => w.label)).toHaveLength(1);
+    expect(result.weeks.map(w => w.ms)).toEqual([ts("2025-01-06").toMillis()]);
   });
 
   it("shows empty message when no periods", () => {
@@ -74,8 +31,8 @@ describe("renderBudgetChart", () => {
     const result = renderBudgetChart(container, { budgets, periods: [] });
     expect(container.textContent).toBe("No budget period data to chart.");
     expect(container.querySelector("svg")).toBeNull();
-    expect(result.weekLabels).toEqual([]);
-    expect(result.periodStartMs).toEqual([]);
+    expect(result.weeks.map(w => w.label)).toEqual([]);
+    expect(result.weeks.map(w => w.ms)).toEqual([]);
   });
 
   it("renders all periods without filtering", () => {
@@ -89,7 +46,7 @@ describe("renderBudgetChart", () => {
 
     const container = makeContainer();
     const result = renderBudgetChart(container, { budgets, periods });
-    expect(result.weekLabels).toHaveLength(4);
+    expect(result.weeks.map(w => w.label)).toHaveLength(4);
   });
 
   it("multiple budgets: creates bars for each budget", () => {
@@ -108,7 +65,20 @@ describe("renderBudgetChart", () => {
     const svgText = chartSvg!.textContent || "";
     expect(svgText).toContain("Food");
     expect(svgText).toContain("Vacation");
-    expect(result.weekLabels).toHaveLength(1);
+    expect(result.weeks.map(w => w.label)).toHaveLength(1);
+  });
+
+  it("weekLabels are in chronological order even when alphabetical differs", () => {
+    const container = makeContainer();
+    const budgets = [makeBudget({ weeklyAllowance: 100 })];
+    // Week-start labels: 12/7, 12/21, 12/28 — alphabetical would be "12/21", "12/28", "12/7"
+    const periods = [
+      makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-12-08"), periodEnd: ts("2025-12-15"), total: 10 }),
+      makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-12-22"), periodEnd: ts("2025-12-29"), total: 20 }),
+      makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-12-29"), periodEnd: ts("2026-01-05"), total: 30 }),
+    ];
+    const result = renderBudgetChart(container, { budgets, periods });
+    expect(result.weeks.map(w => w.label)).toEqual(["12/7", "12/21", "12/28"]);
   });
 
   it("non-overlapping budgets: gap weeks get zero-spend entries with correct rollover", () => {
@@ -117,14 +87,13 @@ describe("renderBudgetChart", () => {
       makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100, rollover: "balance" }),
       makeBudget({ id: "vacation" as any, name: "Vacation", weeklyAllowance: 50, rollover: "none" }),
     ];
-    // Food has w1 only, Vacation has w2 only — each has a gap week
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
       makePeriod({ id: "vac-w2", budgetId: "vacation", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 20 }),
     ];
     const result = renderBudgetChart(container, { budgets, periods });
     // Both weeks should appear for both budgets
-    expect(result.weekLabels).toHaveLength(2);
+    expect(result.weeks.map(w => w.label)).toHaveLength(2);
     // SVG should contain both budget names (each has a bar in both weeks)
     const svgText = container.querySelector(".chart-scroll-wrapper svg")!.textContent || "";
     expect(svgText).toContain("Food");

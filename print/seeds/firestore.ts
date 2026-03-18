@@ -1,14 +1,13 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
+import type { MediaItem } from "../src/types.js";
 
-// Production Cloud Storage seeding is manual (emulator seeding is automated via seeds/run-storage-seed.ts):
-// 1. Download files from the sources listed in each item's sourceNotes
-// 2. Upload to print/{env}/media/{filename} in Firebase Cloud Storage:
-//      gsutil cp <file> gs://commons-systems.firebasestorage.app/print/prod/media/
-// 3. Set custom metadata on each object:
-//    - Public domain: gsutil setmeta -h "x-goog-meta-publicDomain:true" gs://.../<file>
-//    - Private: gsutil setmeta -h "x-goog-meta-publicDomain:false" -h "x-goog-meta-{email}:member" gs://.../<file>
-// Note: Firestore uses memberEmails array for access control; Storage uses per-email custom metadata keys.
-// Both must be kept in sync when granting access to private items (see firestore.rules, storage.rules).
+type MediaSeedData = Omit<MediaItem, "id">;
+
+// Production media upload is handled by print/scripts/upload-media.sh.
+// Emulator seeding is automated via seeds/run-storage-seed.ts.
+//
+// Usage: print/scripts/upload-media.sh <file> <title> <mediaType> [--public | <email> ...]
+// See the script for details on GCS metadata and Firestore document creation.
 //
 // Private media documents and groups are managed manually (not in this seed).
 // The media collection is non-convergent so prod deploys won't delete private items.
@@ -30,7 +29,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             groupId: null,
             memberEmails: [],
             addedAt: "2026-01-15T00:00:00Z",
-          },
+          } satisfies MediaSeedData,
         },
         {
           id: "plato-phaedrus",
@@ -44,7 +43,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             groupId: null,
             memberEmails: [],
             addedAt: "2026-01-16T00:00:00Z",
-          },
+          } satisfies MediaSeedData,
         },
         {
           id: "plato-republic",
@@ -58,21 +57,27 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             groupId: null,
             memberEmails: [],
             addedAt: "2026-01-17T00:00:00Z",
-          },
+          } satisfies MediaSeedData,
         },
+      ],
+    },
+    {
+      name: "media",
+      testOnly: true,
+      documents: [
         {
           id: "test-image-archive",
           data: {
-            title: "Test Image Archive",
+            title: "Little Nemo in Slumberland (pages 1-5)",
             mediaType: "image-archive",
-            tags: { source: "test" },
+            tags: { source: "Internet Archive", creator: "Winsor McCay" },
             publicDomain: true,
-            sourceNotes: "Test CBZ archive for emulator testing",
+            sourceNotes: "Public domain comic strip by Winsor McCay (1905-1914), sourced from Internet Archive",
             storagePath: "media/test-image-archive.cbz",
             groupId: null,
             memberEmails: [],
             addedAt: "2026-01-19T00:00:00Z",
-          },
+          } satisfies MediaSeedData,
         },
         {
           id: "test-private-item",
@@ -86,7 +91,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             groupId: "test-group",
             memberEmails: ["test@example.com"],
             addedAt: "2026-01-18T00:00:00Z",
-          },
+          } satisfies MediaSeedData,
         },
       ],
     },
