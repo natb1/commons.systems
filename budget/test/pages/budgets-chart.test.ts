@@ -5,6 +5,7 @@ vi.mock("firebase/firestore", () => timestampMockFactory());
 
 import { Timestamp } from "firebase/firestore";
 import { renderBudgetChart } from "../../src/pages/budgets-chart";
+import { toSundayEntry } from "../../src/balance";
 
 describe("renderBudgetChart", () => {
   beforeEach(() => {
@@ -22,7 +23,7 @@ describe("renderBudgetChart", () => {
     expect(container.querySelector(".chart-y-axis svg")).not.toBeNull();
     expect(container.querySelector(".chart-scroll-wrapper svg")).not.toBeNull();
     expect(result.weeks.map(w => w.label)).toHaveLength(1);
-    expect(result.weeks.map(w => w.ms)).toEqual([ts("2025-01-06").toMillis()]);
+    expect(result.weeks.map(w => w.ms)).toEqual([toSundayEntry(ts("2025-01-06").toDate()).ms]);
   });
 
   it("shows empty message when no periods", () => {

@@ -1,8 +1,8 @@
 import * as Plot from "@observablehq/plot";
 import { schemeTableau10 } from "d3-scale-chromatic";
-import type { PerBudgetPoint } from "../balance.js";
+import { UNBUDGETED_SERIES, type PerBudgetPoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
-import { getThemeFg, assembleChartLayout } from "./chart-util.js";
+import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
 export interface AreaChartOptions {
   readonly data: PerBudgetPoint[];
@@ -38,8 +38,8 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   weekEntries.forEach(([ms], i) => weekIndexMap.set(ms, i));
 
   const budgetNames = [...new Set(data.map(d => d.budget))];
-  const sortedBudgets = budgetNames.filter(n => n !== "Other").sort();
-  if (budgetNames.includes("Other")) sortedBudgets.push("Other");
+  const sortedBudgets = budgetNames.filter(n => n !== UNBUDGETED_SERIES).sort();
+  if (budgetNames.includes(UNBUDGETED_SERIES)) sortedBudgets.push(UNBUDGETED_SERIES);
 
   const areaData: AreaDatum[] = [];
   for (const d of data) {
@@ -53,17 +53,14 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
     });
   }
 
-  // Assign colors: budgets get Tableau10, "Other" gets gray
+  // Assign colors: budgets get Tableau10, UNBUDGETED_SERIES gets gray
   const colorDomain = sortedBudgets;
   const colorRange = sortedBudgets.map((name, i) =>
-    name === "Other" ? "#9e9e9e" : schemeTableau10[i % schemeTableau10.length],
+    name === UNBUDGETED_SERIES ? "#9e9e9e" : schemeTableau10[i % schemeTableau10.length],
   );
 
-  const axisWidth = 50;
-  const marginRight = 20;
-  const chartWidth = Math.max(weekCount * panelWidth + marginRight, containerWidth - axisWidth);
+  const chartWidth = computeChartWidth(weekCount, panelWidth, containerWidth);
   const height = 200;
-  const marginBottom = 50;
 
   const fg = getThemeFg(container);
   const sharedStyle = { background: "transparent", color: fg };
@@ -77,17 +74,7 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   for (const total of weekTotals.values()) yMax = Math.max(yMax, total);
   const yDomain: [number, number] = [0, yMax * 1.1 || 1];
 
-  const axisSvg = Plot.plot({
-    width: axisWidth,
-    height,
-    marginBottom,
-    marginLeft: axisWidth - 1,
-    marginRight: 0,
-    style: sharedStyle,
-    x: { axis: null, domain: [0, 1] },
-    y: { label: "$", grid: false, domain: yDomain },
-    marks: [Plot.ruleY([0])],
-  });
+  const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
 
   // Sort data by budget order then week so stacking follows sortedBudgets order
   const budgetOrder = new Map(sortedBudgets.map((b, i) => [b, i]));
@@ -98,9 +85,9 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   const chartSvg = Plot.plot({
     width: chartWidth,
     height,
-    marginBottom,
+    marginBottom: MARGIN_BOTTOM,
     marginLeft: 0,
-    marginRight,
+    marginRight: MARGIN_RIGHT,
     style: sharedStyle,
     x: {
       label: null,

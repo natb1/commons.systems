@@ -1,7 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import type { Budget, BudgetId, BudgetPeriod } from "../firestore.js";
 import { applyRollover, computePeriodBalances, toSundayEntry, type PeriodBalance } from "../balance.js";
-import { getThemeFg, computePanelWidth, assembleChartLayout } from "./chart-util.js";
+import { getThemeFg, computePanelWidth, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
 export interface ChartOptions {
   budgets: Budget[];
@@ -48,7 +48,10 @@ function buildChartData(
   for (const budget of budgets) {
     const balances = balanceMap.get(budget.id) ?? [];
     const byMs = new Map<number, PeriodBalance>();
-    for (const pb of balances) byMs.set(pb.periodStart.toMillis(), pb);
+    for (const pb of balances) {
+      const key = toSundayEntry(pb.periodStart.toDate()).ms;
+      byMs.set(key, pb);
+    }
 
     // Walk all weeks: fill missing periods (no period record for this budget at this timestamp) with zero-spend rollover entries
     let accumulated = 0;
@@ -84,11 +87,9 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
   }
   const weekCount = weeks.length;
   const panelWidth = computePanelWidth(budgets.length);
-  const axisWidth = 50;
-  const marginRight = 20;
-  const chartWidth = Math.max(weekCount * panelWidth + marginRight, (container.clientWidth || 640) - axisWidth);
+  const containerWidth = container.clientWidth || 640;
+  const chartWidth = computeChartWidth(weekCount, panelWidth, containerWidth);
   const height = 300;
-  const marginBottom = 50;
 
   const fg = getThemeFg(container);
 
@@ -103,26 +104,15 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
 
   const sharedStyle = { background: "transparent", color: fg };
 
-  // Fixed Y-axis (stays visible while scrolling)
-  const axisSvg = Plot.plot({
-    width: axisWidth,
-    height,
-    marginBottom,
-    marginLeft: axisWidth - 1,
-    marginRight: 0,
-    style: sharedStyle,
-    x: { axis: null, domain: [0, 1] },
-    y: { label: "$", grid: false, domain: yDomain },
-    marks: [Plot.ruleY([0])],
-  });
+  const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
 
   // Scrollable chart body (no Y-axis)
   const chartSvg = Plot.plot({
     width: chartWidth,
     height,
-    marginBottom,
+    marginBottom: MARGIN_BOTTOM,
     marginLeft: 0,
-    marginRight,
+    marginRight: MARGIN_RIGHT,
     style: sharedStyle,
     x: { label: null, tickRotate: -45, padding: 0.1 },
     y: { label: null, axis: null, grid: true, domain: yDomain },

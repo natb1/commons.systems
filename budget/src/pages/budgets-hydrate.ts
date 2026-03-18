@@ -130,13 +130,14 @@ let scrollAbort: AbortController | null = null;
 function attachScrollSync(): void {
   if (scrollAbort) scrollAbort.abort();
   scrollAbort = new AbortController();
-  for (const w of getAllScrollWrappers()) {
+  const wrappers = getAllScrollWrappers();
+  for (const w of wrappers) {
     w.addEventListener("scroll", () => {
       if (scrollSyncing) return;
       scrollSyncing = true;
       try {
         const ratio = w.scrollWidth > 0 ? w.scrollLeft / w.scrollWidth : 0;
-        for (const other of getAllScrollWrappers()) {
+        for (const other of wrappers) {
           if (other !== w) other.scrollLeft = ratio * other.scrollWidth;
         }
       } finally {
@@ -240,7 +241,10 @@ export function hydrateBudgetChart(container: HTMLElement): void {
       try {
         render();
       } catch (error) {
-        container.textContent = "Chart rendering failed on resize. Try refreshing the page.";
+        const msg = "Chart rendering failed on resize. Try refreshing the page.";
+        container.textContent = msg;
+        trendEl.textContent = msg;
+        areaEl.textContent = msg;
         setTimeout(() => { throw error; }, 0);
         return;
       }

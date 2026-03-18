@@ -1,7 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import type { AggregatePoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
-import { getThemeFg, assembleChartLayout } from "./chart-util.js";
+import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
 export interface TrendChartOptions {
   readonly data: AggregatePoint[];
@@ -58,11 +58,8 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
     lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_3W_SPENDING, value: d.avg3Spending });
   }
 
-  const axisWidth = 50;
-  const marginRight = 20;
-  const chartWidth = Math.max(weekCount * panelWidth + marginRight, containerWidth - axisWidth);
+  const chartWidth = computeChartWidth(weekCount, panelWidth, containerWidth);
   const height = 200;
-  const marginBottom = 50;
 
   const fg = getThemeFg(container);
   const sharedStyle = { background: "transparent", color: fg };
@@ -71,26 +68,16 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   for (const d of lineData) yMax = Math.max(yMax, d.value);
   const yDomain: [number, number] = [0, yMax * 1.1 || 1];
 
-  const axisSvg = Plot.plot({
-    width: axisWidth,
-    height,
-    marginBottom,
-    marginLeft: axisWidth - 1,
-    marginRight: 0,
-    style: sharedStyle,
-    x: { axis: null, domain: [0, 1] },
-    y: { label: "$", grid: false, domain: yDomain },
-    marks: [Plot.ruleY([0])],
-  });
+  const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
 
-  // Scrollable chart body: faceted dots and tooltips; overlay SVG reads dot positions to draw line paths
+  // Chart body with faceted dots; line paths drawn by overlay SVG below
   const seriesOrder: SeriesName[] = [SERIES_INCOME, SERIES_12W_SPENDING, SERIES_3W_SPENDING];
   const chartSvg = Plot.plot({
     width: chartWidth,
     height,
-    marginBottom,
+    marginBottom: MARGIN_BOTTOM,
     marginLeft: 0,
-    marginRight,
+    marginRight: MARGIN_RIGHT,
     style: sharedStyle,
     x: { axis: null, domain: [0, 1] },
     y: { label: null, axis: null, grid: true, domain: yDomain },
@@ -140,7 +127,8 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   overlaySvg.style.left = "0";
   overlaySvg.style.pointerEvents = "none";
 
-  // Read dot positions from the rendered chart, accumulating X-axis parent translate transforms
+  // Read dot positions from the rendered chart. Only X needs adjustment — facet panels apply
+  // horizontal translate transforms, but Y is already in absolute chart space from the shared domain.
   const dots = chartSvg.querySelectorAll("circle");
   if (dots.length !== lineData.length) {
     throw new Error(`Expected ${lineData.length} dots but found ${dots.length}`);
