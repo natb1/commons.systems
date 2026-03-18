@@ -363,4 +363,128 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-zoom-out")).toBeDisabled();
     await expect(page.locator(".viewer-zoom-reset")).toBeDisabled();
   });
+
+  test("spread toggle visible for PDF and image-archive, hidden for EPUB", async ({
+    page,
+  }) => {
+    // PDF: spread toggle should be visible
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-spread-toggle")).not.toHaveClass(/spread-hidden/);
+
+    // Image-archive: spread toggle should be visible
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-spread-toggle")).not.toHaveClass(/spread-hidden/);
+
+    // EPUB: spread toggle should remain hidden
+    await page.goto("/view/gutenberg-3296");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-spread-toggle")).toHaveClass(/spread-hidden/);
+  });
+
+  test("two pages visible in spread mode for interior pages", async ({
+    page,
+  }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-position")).toContainText("1 / 5");
+
+    // Enable spread mode
+    await page.locator(".viewer-spread-toggle").click();
+    await expect(page.locator(".viewer-spread-toggle")).toHaveAttribute("aria-pressed", "true");
+
+    // Navigate to spread 2-3
+    await page.locator(".viewer-next").click();
+    await expect(page.locator(".viewer-position")).toContainText(/Pages 2/);
+
+    // Two img elements should be in .spread-page containers
+    const spreadPages = page.locator(".spread-page img");
+    await expect(spreadPages).toHaveCount(2);
+  });
+
+  test("page 1 displayed solo and centered in spread mode", async ({
+    page,
+  }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+
+    // Enable spread mode (starts on page 1)
+    await page.locator(".viewer-spread-toggle").click();
+    await expect(page.locator(".viewer-spread-toggle")).toHaveAttribute("aria-pressed", "true");
+
+    // Canvas wrap should have both spread-mode and solo classes
+    await expect(page.locator(".viewer-canvas-wrap.spread-mode.solo")).toBeVisible();
+  });
+
+  test("navigation advances by spread, position label updates", async ({
+    page,
+  }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
+      timeout: 15000,
+    });
+
+    // Enable spread mode
+    await page.locator(".viewer-spread-toggle").click();
+    await expect(page.locator(".viewer-spread-toggle")).toHaveAttribute("aria-pressed", "true");
+
+    // Page 1 solo
+    await expect(page.locator(".viewer-position")).toContainText("Page 1 / 5");
+
+    // Advance to spread 2-3
+    await page.locator(".viewer-next").click();
+    await expect(page.locator(".viewer-position")).toContainText(/Pages 2\u20133 \/ 5/);
+
+    // Advance to spread 4-5
+    await page.locator(".viewer-next").click();
+    await expect(page.locator(".viewer-position")).toContainText(/Pages 4\u20135 \/ 5/);
+  });
+
+  test("toggle spread on/off preserves position", async ({ page }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
+      timeout: 15000,
+    });
+
+    // Navigate to page 3 in single-page mode
+    await page.locator(".viewer-next").click();
+    await expect(page.locator(".viewer-position")).toContainText("2 / 5");
+    await page.locator(".viewer-next").click();
+    await expect(page.locator(".viewer-position")).toContainText("3 / 5");
+
+    // Toggle spread on -- page 3 is in the 2-3 spread
+    await page.locator(".viewer-spread-toggle").click();
+    await expect(page.locator(".viewer-spread-toggle")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".viewer-position")).toContainText(/Pages 2\u20133 \/ 5/);
+
+    // Toggle spread off -- should return to page 3 area
+    await page.locator(".viewer-spread-toggle").click();
+    await expect(page.locator(".viewer-spread-toggle")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".viewer-position")).toContainText("3 / 5");
+  });
+
+  test("keyboard arrows advance by spread", async ({ page }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
+      timeout: 15000,
+    });
+
+    // Enable spread mode
+    await page.locator(".viewer-spread-toggle").click();
+    await expect(page.locator(".viewer-spread-toggle")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator(".viewer-position")).toContainText("Page 1 / 5");
+
+    // ArrowRight advances to next spread
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator(".viewer-position")).toContainText(/Pages 2\u20133 \/ 5/);
+
+    // ArrowRight again to spread 4-5
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator(".viewer-position")).toContainText(/Pages 4\u20135 \/ 5/);
+
+    // ArrowLeft goes back to spread 2-3
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.locator(".viewer-position")).toContainText(/Pages 2\u20133 \/ 5/);
+  });
 });

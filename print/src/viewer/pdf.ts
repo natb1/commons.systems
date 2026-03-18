@@ -55,6 +55,38 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     renderTask = null;
   }
 
+  async function renderPageIntoContainer(pageNum: number, target: HTMLElement): Promise<void> {
+    if (!pdfDoc) return;
+    const page = await pdfDoc.getPage(pageNum);
+    if (destroyed) return;
+    const targetRect = target.getBoundingClientRect();
+    if (targetRect.width === 0 || targetRect.height === 0) return;
+
+    const c = document.createElement("canvas");
+    target.appendChild(c);
+
+    const baseViewport = page.getViewport({ scale: 1 });
+    const scaleX = targetRect.width / baseViewport.width;
+    const scaleY = targetRect.height / baseViewport.height;
+    const cssScale = Math.min(scaleX, scaleY);
+    const pixelScale = cssScale * window.devicePixelRatio;
+    const viewport = page.getViewport({ scale: pixelScale });
+
+    c.width = viewport.width;
+    c.height = viewport.height;
+    c.style.width = `${viewport.width / window.devicePixelRatio}px`;
+    c.style.height = `${viewport.height / window.devicePixelRatio}px`;
+
+    const ctx = c.getContext("2d");
+    if (!ctx) throw new Error("Could not acquire 2D canvas context");
+    const task = page.render({ canvasContext: ctx, viewport });
+    try {
+      await task.promise;
+    } catch (e) {
+      if ((e as Error).name !== "RenderingCancelledException") throw e;
+    }
+  }
+
   return {
     async init(containerEl: HTMLElement, url: string, initialPosition?: string): Promise<void> {
       container = containerEl;
@@ -108,6 +140,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       }
     },
 
+
+    async renderPageInto(page: number, target: HTMLElement): Promise<void> {
+      await renderPageIntoContainer(page, target);
+    },
 
     get pageCount() {
       return _pageCount;
