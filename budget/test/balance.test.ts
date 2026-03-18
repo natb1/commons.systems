@@ -602,7 +602,14 @@ describe("computeAverageWeeklyIncome", () => {
   });
 
   it("single income txn returns amount / 12", () => {
-    // Income amounts are negative (credit convention — money received)
+    const txns = [
+      makeTxn({ id: "t1", category: "Income", amount: 1200, timestamp: ts("2025-03-10T12:00:00Z") }),
+    ];
+    expect(computeAverageWeeklyIncome(txns)).toBe(100);
+  });
+
+  it("negative income amounts (credit convention) produce positive result", () => {
+    // Uploaded bank data uses negative amounts for credits (money received)
     const txns = [
       makeTxn({ id: "t1", category: "Income", amount: -1200, timestamp: ts("2025-03-10T12:00:00Z") }),
     ];
@@ -612,8 +619,8 @@ describe("computeAverageWeeklyIncome", () => {
   it("multiple income txns within window are summed then divided by 12", () => {
     // Two txns in the same week
     const txns = [
-      makeTxn({ id: "t1", category: "Income", amount: -600, timestamp: ts("2025-03-10T12:00:00Z") }),
-      makeTxn({ id: "t2", category: "Income", amount: -600, timestamp: ts("2025-03-12T12:00:00Z") }),
+      makeTxn({ id: "t1", category: "Income", amount: 600, timestamp: ts("2025-03-10T12:00:00Z") }),
+      makeTxn({ id: "t2", category: "Income", amount: 600, timestamp: ts("2025-03-12T12:00:00Z") }),
     ];
     expect(computeAverageWeeklyIncome(txns)).toBe(100);
   });
@@ -623,8 +630,8 @@ describe("computeAverageWeeklyIncome", () => {
     // windowStart = 2025-03-17 minus 12 weeks = 2024-12-23T00:00:00Z
     // A txn on 2024-12-22 is before windowStart and should be excluded
     const txns = [
-      makeTxn({ id: "old", category: "Income", amount: -9999, timestamp: ts("2024-12-22T23:59:59Z") }),
-      makeTxn({ id: "recent", category: "Income", amount: -1200, timestamp: ts("2025-03-10T12:00:00Z") }),
+      makeTxn({ id: "old", category: "Income", amount: 9999, timestamp: ts("2024-12-22T23:59:59Z") }),
+      makeTxn({ id: "recent", category: "Income", amount: 1200, timestamp: ts("2025-03-10T12:00:00Z") }),
     ];
     // Only 1200 counts → 1200/12 = 100
     expect(computeAverageWeeklyIncome(txns)).toBe(100);
@@ -635,7 +642,7 @@ describe("computeAverageWeeklyIncome", () => {
       makeTxn({
         id: "primary",
         category: "Income",
-        amount: -1200,
+        amount: 1200,
         timestamp: ts("2025-03-10T12:00:00Z"),
         normalizedId: "norm-1",
         normalizedPrimary: true,
@@ -643,7 +650,7 @@ describe("computeAverageWeeklyIncome", () => {
       makeTxn({
         id: "secondary",
         category: "Income",
-        amount: -600,
+        amount: 600,
         timestamp: ts("2025-03-10T12:00:00Z"),
         normalizedId: "norm-1",
         normalizedPrimary: false,
@@ -655,25 +662,25 @@ describe("computeAverageWeeklyIncome", () => {
 
   it("excludes null-timestamp txns", () => {
     const txns = [
-      makeTxn({ id: "no-ts", category: "Income", amount: -9999, timestamp: null }),
-      makeTxn({ id: "with-ts", category: "Income", amount: -1200, timestamp: ts("2025-03-10T12:00:00Z") }),
+      makeTxn({ id: "no-ts", category: "Income", amount: 9999, timestamp: null }),
+      makeTxn({ id: "with-ts", category: "Income", amount: 1200, timestamp: ts("2025-03-10T12:00:00Z") }),
     ];
     expect(computeAverageWeeklyIncome(txns)).toBe(100);
   });
 
   it("handles subcategories like Income:Salary and Income:Freelance", () => {
     const txns = [
-      makeTxn({ id: "t1", category: "Income:Salary", amount: -600, timestamp: ts("2025-03-10T12:00:00Z") }),
-      makeTxn({ id: "t2", category: "Income:Freelance", amount: -600, timestamp: ts("2025-03-11T12:00:00Z") }),
+      makeTxn({ id: "t1", category: "Income:Salary", amount: 600, timestamp: ts("2025-03-10T12:00:00Z") }),
+      makeTxn({ id: "t2", category: "Income:Freelance", amount: 600, timestamp: ts("2025-03-11T12:00:00Z") }),
     ];
     // Both match category.startsWith("Income"): (600+600)/12 = 100
     expect(computeAverageWeeklyIncome(txns)).toBe(100);
   });
 
   it("applies reimbursement via computeNetAmount", () => {
-    // amount=-1000, reimbursement=50 → net = -1000 * (1 - 50/100) = -500 → negated = 500
+    // amount=1000, reimbursement=50 → net = 1000 * (1 - 50/100) = 500
     const txns = [
-      makeTxn({ id: "t1", category: "Income", amount: -1000, reimbursement: 50, timestamp: ts("2025-03-10T12:00:00Z") }),
+      makeTxn({ id: "t1", category: "Income", amount: 1000, reimbursement: 50, timestamp: ts("2025-03-10T12:00:00Z") }),
     ];
     // 500/12 ≈ 41.6667
     expect(computeAverageWeeklyIncome(txns)).toBeCloseTo(500 / 12, 10);
@@ -684,16 +691,16 @@ describe("computeAverageWeeklyIncome", () => {
     // windowStart = 2025-03-17 minus 12 weeks = 2024-12-23T00:00:00Z
     // A txn exactly at windowStart boundary should be included (>=)
     const txns = [
-      makeTxn({ id: "boundary", category: "Income", amount: -240, timestamp: ts("2024-12-23T00:00:00Z") }),
-      makeTxn({ id: "latest", category: "Income", amount: -1200, timestamp: ts("2025-03-12T12:00:00Z") }),
+      makeTxn({ id: "boundary", category: "Income", amount: 240, timestamp: ts("2024-12-23T00:00:00Z") }),
+      makeTxn({ id: "latest", category: "Income", amount: 1200, timestamp: ts("2025-03-12T12:00:00Z") }),
     ];
     // Both included: (240 + 1200) / 12 = 120
     expect(computeAverageWeeklyIncome(txns)).toBe(120);
 
     // A txn 1ms before windowStart should be excluded
     const txnsWithExcluded = [
-      makeTxn({ id: "before", category: "Income", amount: -9999, timestamp: ts("2024-12-22T23:59:59.999Z") }),
-      makeTxn({ id: "latest2", category: "Income", amount: -1200, timestamp: ts("2025-03-12T12:00:00Z") }),
+      makeTxn({ id: "before", category: "Income", amount: 9999, timestamp: ts("2024-12-22T23:59:59.999Z") }),
+      makeTxn({ id: "latest2", category: "Income", amount: 1200, timestamp: ts("2025-03-12T12:00:00Z") }),
     ];
     expect(computeAverageWeeklyIncome(txnsWithExcluded)).toBe(100);
   });
