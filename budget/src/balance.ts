@@ -229,7 +229,7 @@ function toSundayEntry(d: Date): { label: string; ms: number } {
  * Weeks are derived from budget periods. Income is computed from transactions.
  */
 export function computeAggregateTrend(
-  budgets: Budget[],
+  _budgets: Budget[],
   periods: BudgetPeriod[],
   transactions: Transaction[],
 ): AggregatePoint[] {
