@@ -7,7 +7,7 @@ import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListene
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
- * Returns {} when the attribute is absent (unauthorized users).
+ * Returns {} when the attribute is absent (seed data view).
  * Throws DataIntegrityError for non-empty values that are not valid JSON objects with string values.
  */
 function parseBudgetMap(raw: string | undefined): Record<string, BudgetId> {
@@ -74,11 +74,9 @@ function findPeriod(periods: HydrationPeriod[], budgetId: BudgetId, timestampMs:
 
 /**
  * Adjust stored period totals when a transaction's budget changes.
- * Each write uses Firestore increment for per-field atomicity, but the two
- * writes (decrement old period, increment new period) are not wrapped in a
- * transaction. If either write fails, totals drift until manual correction
- * (page loads read stored totals, not recomputed from transactions).
- * The ETL's RecalculatePeriods corrects any drift on the next import.
+ * The two writes (decrement old period, increment new period) are not atomic.
+ * If either write fails, totals drift until the next ETL import runs
+ * RecalculatePeriods.
  * categoryBreakdown is not updated by client-side changes; it reflects the last ETL run.
  */
 async function syncPeriodTotals(

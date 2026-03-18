@@ -68,31 +68,31 @@ export class FirestoreSeedDataSource implements DataSource {
   async getNormalizationRules(): Promise<NormalizationRule[]> {
     return fsGetNormalizationRules(null);
   }
-  updateTransaction(): Promise<void> {
+  async updateTransaction(): Promise<void> {
     throw new Error("Seed data is read-only");
   }
-  updateBudget(): Promise<void> {
+  async updateBudget(): Promise<void> {
     throw new Error("Seed data is read-only");
   }
-  adjustBudgetPeriodTotal(): Promise<void> {
+  async adjustBudgetPeriodTotal(): Promise<void> {
     throw new Error("Seed data is read-only");
   }
-  createRule(): Promise<RuleId> {
+  async createRule(): Promise<RuleId> {
     throw new Error("Seed data is read-only");
   }
-  updateRule(): Promise<void> {
+  async updateRule(): Promise<void> {
     throw new Error("Seed data is read-only");
   }
-  deleteRule(): Promise<void> {
+  async deleteRule(): Promise<void> {
     throw new Error("Seed data is read-only");
   }
-  createNormalizationRule(): Promise<string> {
+  async createNormalizationRule(): Promise<string> {
     throw new Error("Seed data is read-only");
   }
-  updateNormalizationRule(): Promise<void> {
+  async updateNormalizationRule(): Promise<void> {
     throw new Error("Seed data is read-only");
   }
-  deleteNormalizationRule(): Promise<void> {
+  async deleteNormalizationRule(): Promise<void> {
     throw new Error("Seed data is read-only");
   }
 }

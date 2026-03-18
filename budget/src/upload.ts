@@ -116,6 +116,13 @@ function requireRollover(value: string): Rollover {
   throw new UploadValidationError(`Invalid rollover value: "${value}"`);
 }
 
+function requireId(value: unknown, entity: string, index: number): string {
+  if (typeof value !== "string" || value === "") {
+    throw new UploadValidationError(`${entity}[${index}] is missing a valid id`);
+  }
+  return value;
+}
+
 function requireRuleType(value: string): RuleType {
   if (value === "categorization" || value === "budget_assignment") return value;
   throw new UploadValidationError(`Invalid rule type: "${value}"`);
@@ -151,8 +158,8 @@ export function parseUploadedJson(text: string): ParsedUpload {
     throw new UploadValidationError("Missing required field: transactions");
   }
 
-  const transactions: Transaction[] = raw.transactions.map((t: RawTransaction) => ({
-    id: t.id as TransactionId,
+  const transactions: Transaction[] = raw.transactions.map((t: RawTransaction, i: number) => ({
+    id: requireId(t.id, "transaction", i) as TransactionId,
     institution: t.institution ?? "",
     account: t.account ?? "",
     description: t.description ?? "",
@@ -169,16 +176,16 @@ export function parseUploadedJson(text: string): ParsedUpload {
     normalizedDescription: t.normalizedDescription || null,
   }));
 
-  const budgets: Budget[] = (raw.budgets ?? []).map((b: RawBudget) => ({
-    id: b.id as BudgetId,
+  const budgets: Budget[] = (raw.budgets ?? []).map((b: RawBudget, i: number) => ({
+    id: requireId(b.id, "budget", i) as BudgetId,
     name: b.name,
     weeklyAllowance: b.weeklyAllowance ?? 0,
     rollover: requireRollover(b.rollover ?? "none"),
     groupId: null as GroupId | null,
   }));
 
-  const budgetPeriods: BudgetPeriod[] = (raw.budgetPeriods ?? []).map((p: RawBudgetPeriod) => ({
-    id: p.id as BudgetPeriodId,
+  const budgetPeriods: BudgetPeriod[] = (raw.budgetPeriods ?? []).map((p: RawBudgetPeriod, i: number) => ({
+    id: requireId(p.id, "budgetPeriod", i) as BudgetPeriodId,
     budgetId: p.budgetId as BudgetId,
     periodStart: parseTimestamp(p.periodStart, "budgetPeriod.periodStart"),
     periodEnd: parseTimestamp(p.periodEnd, "budgetPeriod.periodEnd"),
@@ -188,8 +195,8 @@ export function parseUploadedJson(text: string): ParsedUpload {
     groupId: null as GroupId | null,
   }));
 
-  const rules: Rule[] = (raw.rules ?? []).map((r: RawRule) => ({
-    id: r.id as RuleId,
+  const rules: Rule[] = (raw.rules ?? []).map((r: RawRule, i: number) => ({
+    id: requireId(r.id, "rule", i) as RuleId,
     type: requireRuleType(r.type),
     pattern: r.pattern ?? "",
     target: r.target ?? "",
@@ -200,8 +207,8 @@ export function parseUploadedJson(text: string): ParsedUpload {
   }));
 
   const normalizationRules: NormalizationRule[] = (raw.normalizationRules ?? []).map(
-    (r: RawNormalizationRule) => ({
-      id: r.id,
+    (r: RawNormalizationRule, i: number) => ({
+      id: requireId(r.id, "normalizationRule", i),
       pattern: r.pattern ?? "",
       patternType: emptyToNull(r.patternType ?? ""),
       canonicalDescription: r.canonicalDescription ?? "",

@@ -12,7 +12,10 @@ const STORE_NAMES = [
 
 export type StoreName = (typeof STORE_NAMES)[number];
 
-export function openDb(): Promise<IDBDatabase> {
+let cachedDb: IDBDatabase | null = null;
+
+function openDb(): Promise<IDBDatabase> {
+  if (cachedDb) return Promise.resolve(cachedDb);
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
@@ -23,9 +26,21 @@ export function openDb(): Promise<IDBDatabase> {
         }
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      cachedDb = request.result;
+      cachedDb.onclose = () => { cachedDb = null; };
+      resolve(cachedDb);
+    };
     request.onerror = () => reject(request.error);
   });
+}
+
+/** Close the cached DB connection. Primarily for test cleanup. */
+export function closeDb(): void {
+  if (cachedDb) {
+    cachedDb.close();
+    cachedDb = null;
+  }
 }
 
 export interface UploadMeta {
@@ -77,7 +92,6 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
-  db.close();
 }
 
 export async function getAll<T>(storeName: StoreName): Promise<T[]> {
@@ -85,14 +99,8 @@ export async function getAll<T>(storeName: StoreName): Promise<T[]> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readonly");
     const request = tx.objectStore(storeName).getAll();
-    request.onsuccess = () => {
-      db.close();
-      resolve(request.result as T[]);
-    };
-    request.onerror = () => {
-      db.close();
-      reject(request.error);
-    };
+    request.onsuccess = () => resolve(request.result as T[]);
+    request.onerror = () => reject(request.error);
   });
 }
 
@@ -101,14 +109,8 @@ export async function get<T>(storeName: StoreName, id: string): Promise<T | unde
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readonly");
     const request = tx.objectStore(storeName).get(id);
-    request.onsuccess = () => {
-      db.close();
-      resolve(request.result as T | undefined);
-    };
-    request.onerror = () => {
-      db.close();
-      reject(request.error);
-    };
+    request.onsuccess = () => resolve(request.result as T | undefined);
+    request.onerror = () => reject(request.error);
   });
 }
 
@@ -117,14 +119,8 @@ export async function put(storeName: StoreName, record: Record<string, unknown>)
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const request = tx.objectStore(storeName).put(record);
-    request.onsuccess = () => {
-      db.close();
-      resolve();
-    };
-    request.onerror = () => {
-      db.close();
-      reject(request.error);
-    };
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
   });
 }
 
@@ -133,14 +129,8 @@ export async function deleteRecord(storeName: StoreName, id: string): Promise<vo
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const request = tx.objectStore(storeName).delete(id);
-    request.onsuccess = () => {
-      db.close();
-      resolve();
-    };
-    request.onerror = () => {
-      db.close();
-      reject(request.error);
-    };
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
   });
 }
 
@@ -154,7 +144,6 @@ export async function clearAll(): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
-  db.close();
 }
 
 export async function hasData(): Promise<boolean> {
@@ -162,14 +151,8 @@ export async function hasData(): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction("meta", "readonly");
     const request = tx.objectStore("meta").get("upload");
-    request.onsuccess = () => {
-      db.close();
-      resolve(request.result !== undefined);
-    };
-    request.onerror = () => {
-      db.close();
-      reject(request.error);
-    };
+    request.onsuccess = () => resolve(request.result !== undefined);
+    request.onerror = () => reject(request.error);
   });
 }
 

@@ -183,6 +183,39 @@ describe("parseUploadedJson", () => {
     expect(result.transactions[0].budget).toBe("groceries");
   });
 
+  it("throws UploadValidationError for missing transaction id", () => {
+    const input = {
+      ...validInput,
+      transactions: [{ ...validInput.transactions[0], id: undefined }],
+    };
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      UploadValidationError,
+    );
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      "transaction[0] is missing a valid id",
+    );
+  });
+
+  it("throws UploadValidationError for empty budget id", () => {
+    const input = {
+      ...validInput,
+      budgets: [{ ...validInput.budgets[0], id: "" }],
+    };
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      "budget[0] is missing a valid id",
+    );
+  });
+
+  it("throws UploadValidationError for missing rule id", () => {
+    const input = {
+      ...validInput,
+      rules: [{ ...validInput.rules[0], id: undefined }],
+    };
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      "rule[0] is missing a valid id",
+    );
+  });
+
   it("throws for non-object JSON", () => {
     expect(() => parseUploadedJson(JSON.stringify([1, 2, 3]))).toThrow(
       "JSON must be an object",

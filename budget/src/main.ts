@@ -127,7 +127,7 @@ function transition(next: AppState): void {
 }
 
 // Hydrate interactive containers (tables, chart) whenever they appear in the DOM.
-// Multiple code paths trigger renders (navigation, auth state changes), so an
+// Multiple code paths trigger renders (navigation, data source changes), so an
 // observer catches all of them. Sets dataset.hydrated to "true" on success or
 // "error" on failure to prevent retry loops.
 // Observer runs for page lifetime: each render replaces page content, so
@@ -217,6 +217,7 @@ clearButton.addEventListener("click", async () => {
     transition({ source: "seed" });
   } catch (error) {
     console.error("Failed to clear data:", error);
+    showUploadError("Failed to clear data. Try closing other tabs or refreshing the page.");
   }
 });
 
@@ -235,5 +236,6 @@ async function initialize(): Promise<void> {
 
 initialize().catch((error) => {
   console.error("Initialization error:", error);
+  showUploadError("Could not load saved data. You may need to re-upload your file.");
   transition({ source: "seed" });
 });

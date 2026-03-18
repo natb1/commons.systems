@@ -9,94 +9,35 @@ import {
   clearAll,
   hasData,
   getMeta,
-  type ParsedData,
+  closeDb,
 } from "../src/idb";
+import { makeParsedData as makeBaseParsedData } from "./helpers";
 
-function makeParsedData(): ParsedData {
-  return {
-    transactions: [
-      {
-        id: "txn-1",
-        institution: "pnc",
-        account: "5111",
-        description: "KROGER",
-        amount: 52.3,
-        timestampMs: 1718064000000,
-        statementId: "stmt-1",
-        category: "Food",
-        budget: "groceries",
-        note: "",
-        reimbursement: 0,
-        normalizedId: null,
-        normalizedPrimary: true,
-        normalizedDescription: null,
-      },
-      {
-        id: "txn-2",
-        institution: "chase",
-        account: "9999",
-        description: "TARGET",
-        amount: 20,
-        timestampMs: 1718064000000,
-        statementId: "stmt-2",
-        category: "Shopping",
-        budget: null,
-        note: "returns",
-        reimbursement: 0,
-        normalizedId: null,
-        normalizedPrimary: true,
-        normalizedDescription: null,
-      },
-    ],
-    budgets: [
-      { id: "groceries", name: "Groceries", weeklyAllowance: 100, rollover: "none" },
-    ],
-    budgetPeriods: [
-      {
-        id: "bp-1",
-        budgetId: "groceries",
-        periodStartMs: 1718064000000,
-        periodEndMs: 1718668800000,
-        total: 52.3,
-        count: 1,
-        categoryBreakdown: { Food: 52.3 },
-      },
-    ],
-    rules: [
-      {
-        id: "r-1",
-        type: "categorization",
-        pattern: "KROGER",
-        target: "Food",
-        priority: 1,
-        institution: null,
-        account: null,
-      },
-    ],
-    normalizationRules: [
-      {
-        id: "nr-1",
-        pattern: "KROGER.*",
-        patternType: null,
-        canonicalDescription: "KROGER",
-        dateWindowDays: 7,
-        institution: null,
-        account: null,
-        priority: 1,
-      },
-    ],
-    meta: {
-      key: "upload",
-      groupName: "household",
-      version: 1,
-      exportedAt: "2025-06-15T10:30:00Z",
-    },
-  };
+const secondTxn = {
+  id: "txn-2",
+  institution: "chase",
+  account: "9999",
+  description: "TARGET",
+  amount: 20,
+  timestampMs: 1718064000000,
+  statementId: "stmt-2",
+  category: "Shopping",
+  budget: null,
+  note: "returns",
+  reimbursement: 0,
+  normalizedId: null,
+  normalizedPrimary: true,
+  normalizedDescription: null,
+};
+
+function makeParsedData() {
+  const base = makeBaseParsedData();
+  return { ...base, transactions: [...base.transactions, secondTxn] };
 }
 
 // Each test gets a fresh database by deleting between tests
 beforeEach(async () => {
-  // Delete the database to ensure a clean state
+  closeDb();
   await new Promise<void>((resolve, reject) => {
     const req = indexedDB.deleteDatabase("budget");
     req.onsuccess = () => resolve();

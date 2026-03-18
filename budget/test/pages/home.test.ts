@@ -414,18 +414,20 @@ describe("renderHome", () => {
   });
 
   it("renders #category-sankey container with script tag for chart data", async () => {
-    mockGetTransactions.mockResolvedValue([
-      txn({ category: "Food:Groceries", amount: 52.30, reimbursement: 0 }),
-    ]);
-    const html = await renderHome({ user: null, group: null, groupError: false });
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ category: "Food:Groceries", amount: 52.30, reimbursement: 0 }),
+      ]),
+    }));
     expect(html).toContain('id="category-sankey"');
     expect(html).toContain('<script type="application/json" id="sankey-data">');
     expect(html).toContain("Food:Groceries");
   });
 
   it("renders sankey controls above chart container", async () => {
-    mockGetTransactions.mockResolvedValue([txn()]);
-    const html = await renderHome({ user: null, group: null, groupError: false });
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([txn()]),
+    }));
     expect(html).toContain('id="sankey-controls"');
     expect(html).toContain('id="sankey-weeks"');
     expect(html).toContain('id="sankey-end-week"');
@@ -433,17 +435,18 @@ describe("renderHome", () => {
   });
 
   it("excludes non-primary normalized transactions from chart data", async () => {
-    mockGetTransactions.mockResolvedValue([
-      txn({
-        id: "txn-a", description: "Store A", amount: 50,
-        normalizedId: "norm-1", normalizedPrimary: true,
-      }),
-      txn({
-        id: "txn-b", description: "Store B", amount: 30,
-        normalizedId: "norm-1", normalizedPrimary: false,
-      }),
-    ]);
-    const html = await renderHome({ user: null, group: null, groupError: false });
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({
+          id: "txn-a", description: "Store A", amount: 50,
+          normalizedId: "norm-1", normalizedPrimary: true,
+        }),
+        txn({
+          id: "txn-b", description: "Store B", amount: 30,
+          normalizedId: "norm-1", normalizedPrimary: false,
+        }),
+      ]),
+    }));
     // Parse the JSON from the script tag to verify filtering
     const match = html.match(/<script type="application\/json" id="sankey-data">([\s\S]*?)<\/script>/);
     expect(match).not.toBeNull();

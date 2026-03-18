@@ -25,77 +25,13 @@ vi.mock("../src/firestore.js", () => ({
   getNormalizationRules: vi.fn(),
 }));
 
-import { storeParsedData, type ParsedData } from "../src/idb";
+import { storeParsedData, closeDb } from "../src/idb";
 import { IdbDataSource, FirestoreSeedDataSource } from "../src/data-source";
 import type { TransactionId, BudgetPeriodId, RuleId } from "../src/firestore";
-
-function makeParsedData(): ParsedData {
-  return {
-    transactions: [
-      {
-        id: "txn-1",
-        institution: "pnc",
-        account: "5111",
-        description: "KROGER",
-        amount: 52.3,
-        timestampMs: 1718064000000,
-        statementId: "stmt-1",
-        category: "Food",
-        budget: "groceries",
-        note: "",
-        reimbursement: 0,
-        normalizedId: null,
-        normalizedPrimary: true,
-        normalizedDescription: null,
-      },
-    ],
-    budgets: [
-      { id: "groceries", name: "Groceries", weeklyAllowance: 100, rollover: "none" },
-    ],
-    budgetPeriods: [
-      {
-        id: "bp-1",
-        budgetId: "groceries",
-        periodStartMs: 1718064000000,
-        periodEndMs: 1718668800000,
-        total: 52.3,
-        count: 1,
-        categoryBreakdown: { Food: 52.3 },
-      },
-    ],
-    rules: [
-      {
-        id: "r-1",
-        type: "categorization",
-        pattern: "KROGER",
-        target: "Food",
-        priority: 1,
-        institution: null,
-        account: null,
-      },
-    ],
-    normalizationRules: [
-      {
-        id: "nr-1",
-        pattern: "KROGER.*",
-        patternType: null,
-        canonicalDescription: "KROGER",
-        dateWindowDays: 7,
-        institution: null,
-        account: null,
-        priority: 1,
-      },
-    ],
-    meta: {
-      key: "upload",
-      groupName: "household",
-      version: 1,
-      exportedAt: "2025-06-15T10:30:00Z",
-    },
-  };
-}
+import { makeParsedData } from "./helpers";
 
 beforeEach(async () => {
+  closeDb();
   await new Promise<void>((resolve, reject) => {
     const req = indexedDB.deleteDatabase("budget");
     req.onsuccess = () => resolve();
@@ -220,24 +156,16 @@ describe("IdbDataSource", () => {
 });
 
 describe("FirestoreSeedDataSource", () => {
-  it("throws 'Seed data is read-only' for write methods", () => {
+  it("rejects with 'Seed data is read-only' for write methods", async () => {
     const ds = new FirestoreSeedDataSource();
-    expect(() => ds.updateTransaction()).toThrow("Seed data is read-only");
-    expect(() => ds.updateBudget()).toThrow("Seed data is read-only");
-    expect(() => ds.adjustBudgetPeriodTotal()).toThrow(
-      "Seed data is read-only",
-    );
-    expect(() => ds.createRule()).toThrow("Seed data is read-only");
-    expect(() => ds.updateRule()).toThrow("Seed data is read-only");
-    expect(() => ds.deleteRule()).toThrow("Seed data is read-only");
-    expect(() => ds.createNormalizationRule()).toThrow(
-      "Seed data is read-only",
-    );
-    expect(() => ds.updateNormalizationRule()).toThrow(
-      "Seed data is read-only",
-    );
-    expect(() => ds.deleteNormalizationRule()).toThrow(
-      "Seed data is read-only",
-    );
+    await expect(ds.updateTransaction()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.updateBudget()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.adjustBudgetPeriodTotal()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.createRule()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.updateRule()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.deleteRule()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.createNormalizationRule()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.updateNormalizationRule()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.deleteNormalizationRule()).rejects.toThrow("Seed data is read-only");
   });
 });
