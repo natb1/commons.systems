@@ -363,6 +363,29 @@ describe("createImageArchiveRenderer", () => {
     await expect(renderer.goToPage(1)).rejects.toThrow("goToPage called after renderer was destroyed");
   });
 
+  it("goToPage returns silently when destroyed during blob fetch", async () => {
+    const entries = makeMockEntries({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    let resolveBlob!: (value: Blob) => void;
+    entries.entries["image-002.png"]!.blob = vi.fn().mockReturnValue(
+      new Promise((resolve) => { resolveBlob = resolve; }),
+    );
+    mockUnzip.mockResolvedValue(entries as unknown as ZipInfo);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    const goToPromise = renderer.goToPage(2);
+    renderer.destroy();
+    resolveBlob(new Blob([new Uint8Array([2])]));
+    await goToPromise;
+
+    // No TypeError — goToPage returned silently after destroy
+  });
+
   it("ignores out-of-range initialPosition and starts at page 1", async () => {
     mockEntries({
       "image-001.png": new Uint8Array([1]),
@@ -478,7 +501,7 @@ describe("createImageArchiveRenderer", () => {
     expect(result.entries["image-002.png"]!.blob).toHaveBeenCalledTimes(1);
   });
 
-  it("calls _onError when prefetch fails", async () => {
+  it("calls onError when prefetch fails", async () => {
     const onError = vi.fn();
     const entries = makeMockEntries({
       "image-001.png": new Uint8Array([1]),
@@ -495,7 +518,7 @@ describe("createImageArchiveRenderer", () => {
     await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(prefetchError));
   });
 
-  it("logs warning when prefetch fails without _onError", async () => {
+  it("logs warning when prefetch fails without onError", async () => {
     const entries = makeMockEntries({
       "image-001.png": new Uint8Array([1]),
       "image-002.png": new Uint8Array([2]),

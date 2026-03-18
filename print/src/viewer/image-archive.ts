@@ -27,13 +27,13 @@ type PageSlot = {
 
 export function createImageArchiveRenderer(onError?: (err: unknown) => void): ContentRenderer {
   // onError used for background prefetch errors that cannot propagate as exceptions.
-  // Synchronous operations (zoom) and awaited operations (init, goToPage) throw directly.
+  // init and goToPage propagate errors via rejection; zoom operations throw synchronously.
   let pages: PageSlot[] = [];
   let imgEl: HTMLImageElement | null = null;
   let containerEl: HTMLElement | null = null;
   let scrollParent: HTMLElement | null = null;
   let resizeObserver: ResizeObserver | null = null;
-  // 0 is the pre-init sentinel; position returns "0" and canGoNext/canGoPrev return false until init resolves.
+  // 0 is the sentinel for uninitialized/destroyed state; position returns "0" and canGoNext/canGoPrev return false.
   let _currentPage = 0;
   let _pageCount = 0;
   let destroyed = false;
@@ -147,7 +147,9 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void): Co
       resetZoomState();
       _currentPage = page;
       imgEl.alt = `Page ${page}`;
-      imgEl.src = await getObjectUrl(page - 1);
+      const url = await getObjectUrl(page - 1);
+      if (destroyed) return;
+      imgEl.src = url;
       prefetchPage(page);
     },
 
