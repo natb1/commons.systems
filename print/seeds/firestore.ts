@@ -68,11 +68,11 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
         {
           id: "test-image-archive",
           data: {
-            title: "Test Image Archive",
+            title: "Little Nemo in Slumberland (pages 1-5)",
             mediaType: "image-archive",
-            tags: { source: "test" },
+            tags: { source: "Internet Archive", creator: "Winsor McCay" },
             publicDomain: true,
-            sourceNotes: "Test CBZ archive for emulator testing",
+            sourceNotes: "Public domain comic strip by Winsor McCay (1905-1914), sourced from Internet Archive",
             storagePath: "media/test-image-archive.cbz",
             groupId: null,
             memberEmails: [],
