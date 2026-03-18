@@ -11,5 +11,5 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 .direnv/
-/tmp/
+**/tmp/
 budget-etl/budget-etl

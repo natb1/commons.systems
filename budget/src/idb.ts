@@ -1,3 +1,5 @@
+import type { Rollover, RuleType } from "./firestore.js";
+
 const DB_NAME = "budget";
 const DB_VERSION = 2;
 
@@ -62,13 +64,77 @@ export interface UploadMeta {
   exportedAt: string;
 }
 
+export interface IdbTransaction {
+  id: string;
+  institution: string;
+  account: string;
+  description: string;
+  amount: number;
+  note: string;
+  category: string;
+  reimbursement: number;
+  budget: string | null;
+  timestampMs: number | null;
+  statementId: string | null;
+  normalizedId: string | null;
+  normalizedPrimary: boolean;
+  normalizedDescription: string | null;
+}
+
+export interface IdbBudget {
+  id: string;
+  name: string;
+  weeklyAllowance: number;
+  rollover: Rollover;
+}
+
+export interface IdbBudgetPeriod {
+  id: string;
+  budgetId: string;
+  periodStartMs: number;
+  periodEndMs: number;
+  total: number;
+  count: number;
+  categoryBreakdown: Record<string, number>;
+}
+
+export interface IdbRule {
+  id: string;
+  type: RuleType;
+  pattern: string;
+  target: string;
+  priority: number;
+  institution: string | null;
+  account: string | null;
+}
+
+export interface IdbNormalizationRule {
+  id: string;
+  pattern: string;
+  patternType: string | null;
+  canonicalDescription: string;
+  dateWindowDays: number;
+  institution: string | null;
+  account: string | null;
+  priority: number;
+}
+
+export interface IdbStatement {
+  id: string;
+  statementId: string;
+  institution: string;
+  account: string;
+  balance: number;
+  period: string;
+}
+
 export interface ParsedData {
-  transactions: Record<string, unknown>[];
-  budgets: Record<string, unknown>[];
-  budgetPeriods: Record<string, unknown>[];
-  rules: Record<string, unknown>[];
-  normalizationRules: Record<string, unknown>[];
-  statements: Record<string, unknown>[];
+  transactions: IdbTransaction[];
+  budgets: IdbBudget[];
+  budgetPeriods: IdbBudgetPeriod[];
+  rules: IdbRule[];
+  normalizationRules: IdbNormalizationRule[];
+  statements: IdbStatement[];
   meta: UploadMeta;
 }
 
