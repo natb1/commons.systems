@@ -43,9 +43,14 @@ function openDb(): Promise<IDBDatabase> {
 /** Close the cached DB connection. Primarily for test cleanup. */
 export async function closeDb(): Promise<void> {
   if (dbPromise) {
-    const db = await dbPromise;
-    db.close();
+    const pending = dbPromise;
     dbPromise = null;
+    try {
+      const db = await pending;
+      db.close();
+    } catch {
+      // Connection already failed; nothing to close.
+    }
   }
 }
 

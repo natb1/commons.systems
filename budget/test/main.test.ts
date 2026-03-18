@@ -72,8 +72,7 @@ describe("main module", () => {
     expect(localState.source).toBe("local");
   });
 
-  it("transitions to seed state when hasData returns false", async () => {
-    mockHasData.mockResolvedValue(false);
+  it("transitions to seed state when no local data exists", async () => {
     mockGetMeta.mockResolvedValue(undefined);
 
     // Reset module cache and re-import to trigger initialization
@@ -118,11 +117,10 @@ describe("main module", () => {
     // Wait for initialization to complete
     await new Promise(r => setTimeout(r, 0));
 
-    expect(mockHasData).toHaveBeenCalled();
+    expect(mockGetMeta).toHaveBeenCalled();
   });
 
-  it("transitions to local state when hasData returns true with meta", async () => {
-    mockHasData.mockResolvedValue(true);
+  it("transitions to local state when meta exists", async () => {
     mockGetMeta.mockResolvedValue({
       key: "upload",
       groupName: "household",
@@ -170,7 +168,6 @@ describe("main module", () => {
     // Wait for initialization to complete
     await new Promise(r => setTimeout(r, 0));
 
-    expect(mockHasData).toHaveBeenCalled();
     expect(mockGetMeta).toHaveBeenCalled();
   });
 });

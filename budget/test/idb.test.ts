@@ -37,7 +37,7 @@ function makeParsedData() {
 
 // Each test gets a fresh database by deleting between tests
 beforeEach(async () => {
-  closeDb();
+  await closeDb();
   await new Promise<void>((resolve, reject) => {
     const req = indexedDB.deleteDatabase("budget");
     req.onsuccess = () => resolve();

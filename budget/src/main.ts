@@ -14,7 +14,7 @@ import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { trackPageView } from "./firebase.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { parseUploadedJson, toParsedData, UploadValidationError } from "./upload.js";
-import { storeParsedData, clearAll, hasData, getMeta } from "./idb.js";
+import { storeParsedData, clearAll, getMeta } from "./idb.js";
 import { FirestoreSeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
 import { setActiveDataSource } from "./active-data-source.js";
 
@@ -218,18 +218,16 @@ clearButton.addEventListener("click", async () => {
 
 // Startup: check for existing local data
 async function initialize(): Promise<void> {
-  const hasLocalData = await hasData();
-  if (hasLocalData) {
-    const meta = await getMeta();
-    if (meta) {
-      transition({ source: "local", groupName: meta.groupName });
-      return;
-    }
+  const meta = await getMeta();
+  if (meta) {
+    transition({ source: "local", groupName: meta.groupName });
+    return;
   }
   transition({ source: "seed" });
 }
 
 initialize().catch((error) => {
+  if (error instanceof TypeError || error instanceof ReferenceError) throw error;
   console.error("Initialization error:", error);
   showUploadError("Could not load saved data. You may need to re-upload your file.");
   transition({ source: "seed" });

@@ -75,9 +75,9 @@ function findPeriod(periods: HydrationPeriod[], budgetId: BudgetId, timestampMs:
 /**
  * Adjust stored period totals when a transaction's budget changes.
  * The two writes (decrement old period, increment new period) are not atomic.
- * If either write fails, totals drift until corrected (by ETL re-import for
- * server data, or re-uploading the data file for local data).
- * categoryBreakdown is not updated by client-side changes; it reflects the last ETL run.
+ * If either write fails, totals drift until corrected by re-uploading the data file.
+ * categoryBreakdown is not updated by client-side changes; it reflects the
+ * original data source snapshot.
  */
 async function syncPeriodTotals(
   row: HTMLElement,

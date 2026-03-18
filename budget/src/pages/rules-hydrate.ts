@@ -19,13 +19,12 @@ export function hydrateRulesTable(container: HTMLElement): void {
   const accountOptions = parseJsonArray(container.dataset.accountOptions);
 
   const filterSelect = document.getElementById("rule-type-filter") as HTMLSelectElement | null;
-  if (filterSelect) {
+  if (!filterSelect) throw new Error("#rule-type-filter select not found");
+  container.dataset.activeFilter = filterSelect.value;
+  filterSelect.addEventListener("change", () => {
     container.dataset.activeFilter = filterSelect.value;
-    filterSelect.addEventListener("change", () => {
-      container.dataset.activeFilter = filterSelect.value;
-      removeDropdown();
-    });
-  }
+    removeDropdown();
+  });
 
   type FilterType = RuleType | "normalization";
 

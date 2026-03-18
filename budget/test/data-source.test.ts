@@ -31,7 +31,7 @@ import type { TransactionId, BudgetPeriodId, RuleId } from "../src/firestore";
 import { makeParsedData } from "./helpers";
 
 beforeEach(async () => {
-  closeDb();
+  await closeDb();
   await new Promise<void>((resolve, reject) => {
     const req = indexedDB.deleteDatabase("budget");
     req.onsuccess = () => resolve();
