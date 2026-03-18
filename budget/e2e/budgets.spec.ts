@@ -40,15 +40,15 @@ test.describe("budgets", () => {
     await expect(page.locator("#budgets-chart svg").first()).toBeVisible({ timeout: 10000 });
     const datePicker = page.locator("#chart-date-picker");
     await expect(datePicker).toBeVisible();
-    await expect(page.locator(".chart-layout")).toBeVisible();
-    await expect(page.locator(".chart-y-axis")).toBeVisible();
-    await expect(page.locator(".chart-scroll-wrapper")).toBeVisible();
+    await expect(page.locator("#budgets-chart .chart-layout")).toBeVisible();
+    await expect(page.locator("#budgets-chart .chart-y-axis")).toBeVisible();
+    await expect(page.locator("#budgets-chart .chart-scroll-wrapper")).toBeVisible();
   });
 
   test("chart has bars for budget periods", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#budgets-chart svg").first()).toBeVisible({ timeout: 10000 });
-    const rects = page.locator(".chart-scroll-wrapper svg rect");
+    const rects = page.locator("#budgets-chart .chart-scroll-wrapper svg rect");
     const count = await rects.count();
     expect(count).toBeGreaterThan(0);
   });
