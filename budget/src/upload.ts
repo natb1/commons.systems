@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase/firestore";
 import type {
   Transaction,
+  Statement,
   Budget,
   BudgetPeriod,
   Rule,
@@ -33,6 +34,7 @@ interface RawOutput {
   budgetPeriods: RawBudgetPeriod[];
   rules: RawRule[];
   normalizationRules: RawNormalizationRule[];
+  statements: RawStatement[];
 }
 
 interface RawTransaction {
@@ -90,8 +92,18 @@ interface RawNormalizationRule {
   priority: number;
 }
 
+interface RawStatement {
+  id: string;
+  statementId: string;
+  institution: string;
+  account: string;
+  balance: number;
+  period: string;
+}
+
 export interface ParsedUpload {
   transactions: Transaction[];
+  statements: Statement[];
   budgets: Budget[];
   budgetPeriods: BudgetPeriod[];
   rules: Rule[];
@@ -119,6 +131,20 @@ function requireRollover(value: string): Rollover {
 function requireId(value: unknown, entity: string, index: number): string {
   if (typeof value !== "string" || value === "") {
     throw new UploadValidationError(`${entity}[${index}] is missing a valid id`);
+  }
+  return value;
+}
+
+function requireString(value: unknown, entity: string, index: number, field: string): string {
+  if (typeof value !== "string" || value === "") {
+    throw new UploadValidationError(`${entity}[${index}].${field} is missing or empty`);
+  }
+  return value;
+}
+
+function requireFiniteNumber(value: unknown, entity: string, index: number, field: string): number {
+  if (typeof value !== "number" || !isFinite(value)) {
+    throw new UploadValidationError(`${entity}[${index}].${field} must be a finite number`);
   }
   return value;
 }
@@ -221,8 +247,21 @@ export function parseUploadedJson(text: string): ParsedUpload {
     }),
   );
 
+  const statements: Statement[] = (raw.statements ?? []).map(
+    (s: RawStatement, i: number) => ({
+      id: requireId(s.id, "statement", i),
+      statementId: requireId(s.statementId, "statement.statementId", i) as StatementId,
+      institution: requireString(s.institution, "statement", i, "institution"),
+      account: requireString(s.account, "statement", i, "account"),
+      balance: requireFiniteNumber(s.balance, "statement", i, "balance"),
+      period: requireString(s.period, "statement", i, "period"),
+      groupId: null as GroupId | null,
+    }),
+  );
+
   return {
     transactions,
+    statements,
     budgets,
     budgetPeriods,
     rules,
@@ -285,6 +324,14 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       institution: r.institution,
       account: r.account,
       priority: r.priority,
+    })),
+    statements: parsed.statements.map((s) => ({
+      id: s.id,
+      statementId: s.statementId,
+      institution: s.institution,
+      account: s.account,
+      balance: s.balance,
+      period: s.period,
     })),
     meta: {
       key: "upload",
