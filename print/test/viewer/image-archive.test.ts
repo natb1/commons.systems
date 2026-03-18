@@ -814,4 +814,89 @@ describe("createImageArchiveRenderer", () => {
 
     restoreGlobalStubs();
   });
+
+  describe("renderPageInto", () => {
+    it("creates an img element in the target container with correct src and alt", async () => {
+      mockEntries({
+        "image-001.png": new Uint8Array([1]),
+        "image-002.png": new Uint8Array([2]),
+      });
+
+      const container = makeContainer();
+      const renderer = createImageArchiveRenderer();
+      await renderer.init(container, "https://example.com/archive.zip");
+
+      const target = makeContainer();
+      await renderer.renderPageInto(2, target);
+
+      const img = target.querySelector("img") as HTMLImageElement;
+      expect(img).not.toBeNull();
+      expect(img.alt).toBe("Page 2");
+      expect(img.src).toMatch(/^blob:mock-/);
+    });
+
+    it("triggers prefetch for adjacent pages", async () => {
+      const result = mockEntries({
+        "image-001.png": new Uint8Array([1]),
+        "image-002.png": new Uint8Array([2]),
+        "image-003.png": new Uint8Array([3]),
+      });
+
+      const container = makeContainer();
+      const renderer = createImageArchiveRenderer();
+      await renderer.init(container, "https://example.com/archive.zip");
+
+      // After init: page 1 fetched, page 2 prefetched
+      expect(result.entries["image-003.png"]!.blob).not.toHaveBeenCalled();
+
+      const target = makeContainer();
+      await renderer.renderPageInto(2, target);
+
+      // renderPageInto(2) should prefetch page 3
+      expect(result.entries["image-003.png"]!.blob).toHaveBeenCalledTimes(1);
+    });
+
+    it("is a no-op for out-of-range page numbers", async () => {
+      mockEntries({
+        "image-001.png": new Uint8Array([1]),
+        "image-002.png": new Uint8Array([2]),
+      });
+
+      const container = makeContainer();
+      const renderer = createImageArchiveRenderer();
+      await renderer.init(container, "https://example.com/archive.zip");
+
+      const target = makeContainer();
+      await renderer.renderPageInto(0, target);
+      expect(target.querySelector("img")).toBeNull();
+
+      const target2 = makeContainer();
+      await renderer.renderPageInto(3, target2);
+      expect(target2.querySelector("img")).toBeNull();
+    });
+
+    it("returns without appending if destroyed during blob fetch", async () => {
+      const entries = makeMockEntries({
+        "image-001.png": new Uint8Array([1]),
+        "image-002.png": new Uint8Array([2]),
+      });
+      let resolveBlob!: (value: Blob) => void;
+      entries.entries["image-002.png"]!.blob = vi.fn().mockReturnValue(
+        new Promise((resolve) => { resolveBlob = resolve; }),
+      );
+      mockUnzip.mockResolvedValue(entries as unknown as ZipInfo);
+
+      const container = makeContainer();
+      const renderer = createImageArchiveRenderer();
+      await renderer.init(container, "https://example.com/archive.zip");
+
+      const target = makeContainer();
+      const renderPromise = renderer.renderPageInto(2, target);
+      renderer.destroy();
+      resolveBlob(new Blob([new Uint8Array([2])]));
+      await renderPromise;
+
+      expect(target.querySelector("img")).toBeNull();
+    });
+  });
 });

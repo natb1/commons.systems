@@ -6,6 +6,7 @@ const STORE_NAMES = [
   "budgetPeriods",
   "rules",
   "normalizationRules",
+  "statements",
   "meta",
 ] as const;
 
@@ -13,7 +14,7 @@ export type StoreName = (typeof STORE_NAMES)[number];
 
 const { openDb, closeDb: closeDbConn } = createDbConnection({
   name: "budget",
-  version: 1,
+  version: 2,
   onUpgrade(db) {
     for (const name of STORE_NAMES) {
       if (!db.objectStoreNames.contains(name)) {
@@ -39,6 +40,7 @@ export interface ParsedData {
   budgetPeriods: Record<string, unknown>[];
   rules: Record<string, unknown>[];
   normalizationRules: Record<string, unknown>[];
+  statements: Record<string, unknown>[];
   meta: UploadMeta;
 }
 
@@ -69,6 +71,7 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
   for (const record of data.budgetPeriods) stores.budgetPeriods.put(record);
   for (const record of data.rules) stores.rules.put(record);
   for (const record of data.normalizationRules) stores.normalizationRules.put(record);
+  for (const record of data.statements) stores.statements.put(record);
   stores.meta.put(data.meta);
 
   await new Promise<void>((resolve, reject) => {

@@ -1,21 +1,23 @@
 import { Timestamp } from "firebase/firestore";
 import type {
   Transaction,
+  Statement,
   Budget,
   BudgetPeriod,
   Rule,
   NormalizationRule,
   TransactionId,
+  StatementId,
   BudgetId,
   BudgetPeriodId,
   RuleId,
   RuleType,
   Rollover,
   GroupId,
-  StatementId,
 } from "./firestore.js";
 import {
   getTransactions as fsGetTransactions,
+  getStatements as fsGetStatements,
   getBudgets as fsGetBudgets,
   getBudgetPeriods as fsGetBudgetPeriods,
   getRules as fsGetRules,
@@ -25,6 +27,7 @@ import { getAll, get, put, deleteRecord } from "./idb.js";
 
 export interface DataSource {
   getTransactions(): Promise<Transaction[]>;
+  getStatements(): Promise<Statement[]>;
   getBudgets(): Promise<Budget[]>;
   getBudgetPeriods(): Promise<BudgetPeriod[]>;
   getRules(): Promise<Rule[]>;
@@ -55,6 +58,9 @@ export interface DataSource {
 export class FirestoreSeedDataSource implements DataSource {
   async getTransactions(): Promise<Transaction[]> {
     return fsGetTransactions(null);
+  }
+  async getStatements(): Promise<Statement[]> {
+    return fsGetStatements(null);
   }
   async getBudgets(): Promise<Budget[]> {
     return fsGetBudgets(null);
@@ -141,6 +147,15 @@ interface IdbRule {
   account: string | null;
 }
 
+interface IdbStatement {
+  id: string;
+  statementId: string;
+  institution: string;
+  account: string;
+  balance: number;
+  period: string;
+}
+
 interface IdbNormalizationRule {
   id: string;
   pattern: string;
@@ -208,6 +223,18 @@ function toRule(row: IdbRule): Rule {
   };
 }
 
+function toStatement(row: IdbStatement): Statement {
+  return {
+    id: row.id,
+    statementId: row.statementId as StatementId,
+    institution: row.institution,
+    account: row.account,
+    balance: row.balance,
+    period: row.period,
+    groupId: null as GroupId | null,
+  };
+}
+
 function toNormalizationRule(row: IdbNormalizationRule): NormalizationRule {
   return {
     id: row.id,
@@ -238,6 +265,11 @@ export class IdbDataSource implements DataSource {
   async getTransactions(): Promise<Transaction[]> {
     const rows = await getAll<IdbTransaction>("transactions");
     return rows.map(toTransaction);
+  }
+
+  async getStatements(): Promise<Statement[]> {
+    const rows = await getAll<IdbStatement>("statements");
+    return rows.map(toStatement);
   }
 
   async getBudgets(): Promise<Budget[]> {

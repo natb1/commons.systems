@@ -316,7 +316,7 @@ describe("initViewer", () => {
   it("cleanup cancels pending save timer", async () => {
     const renderer = makeMockRenderer();
 
-    const cleanup = initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", "uid1");
+    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", "uid1");
     await flushInit();
 
     const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
@@ -333,7 +333,7 @@ describe("initViewer", () => {
   it("cleanup calls renderer.destroy", async () => {
     const renderer = makeMockRenderer();
 
-    const cleanup = initViewer(outlet, () => renderer, "https://example.com/doc.pdf", "m1", null);
+    const cleanup = initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
     await flushInit();
 
     cleanup();
@@ -412,5 +412,180 @@ describe("initViewer", () => {
     expect(saveReadingPosition).not.toHaveBeenCalled();
     // Falls back to localStorage
     expect(localStorage.getItem("reading-position:m1")).toBe("2");
+  });
+});
+
+describe("initViewer spread mode", () => {
+  let outlet: HTMLElement;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    outlet = document.createElement("div");
+    outlet.innerHTML = renderViewerShell(makeMediaItem());
+    localStorage.clear();
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.mocked(globalThis.reportError).mockRestore();
+  });
+
+  async function flushInit(): Promise<void> {
+    for (let i = 0; i < 20; i++) {
+      await Promise.resolve();
+    }
+  }
+
+  function makeMockSpreadRenderer(overrides: Partial<ContentRenderer> = {}): ContentRenderer {
+    return makeMockRenderer({
+      renderPageInto: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    });
+  }
+
+  it("spread toggle button shown for renderers with renderPageInto, hidden otherwise", async () => {
+    // With renderPageInto: button should not have spread-hidden
+    const spreadRenderer = makeMockSpreadRenderer();
+    initViewer(outlet, () => spreadRenderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLElement;
+    expect(spreadBtn.classList.contains("spread-hidden")).toBe(false);
+
+    // Without renderPageInto: button should keep spread-hidden
+    const outlet2 = document.createElement("div");
+    outlet2.innerHTML = renderViewerShell(makeMediaItem());
+    const plainRenderer = makeMockRenderer();
+    initViewer(outlet2, () => plainRenderer, () => Promise.resolve("https://example.com/doc.pdf"), "m2", null);
+    await flushInit();
+
+    const spreadBtn2 = outlet2.querySelector(".viewer-spread-toggle") as HTMLElement;
+    expect(spreadBtn2.classList.contains("spread-hidden")).toBe(true);
+  });
+
+  it("spread navigation advances by spread and calls renderPageInto with correct pages", async () => {
+    const renderer = makeMockSpreadRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    // Enter spread mode
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    // Spread 0 is page 1 (solo). Click next to go to spread 1 (pages 2-3).
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushInit();
+
+    const renderPageInto = vi.mocked(renderer.renderPageInto!);
+    // renderPageInto should have been called with page 2 (left) and page 3 (right)
+    const calls = renderPageInto.mock.calls;
+    // Find calls for the last spread render (pages 2 and 3)
+    const lastCalls = calls.slice(-2);
+    expect(lastCalls[0]![0]).toBe(2);
+    expect(lastCalls[1]![0]).toBe(3);
+  });
+
+  it("spread position label shows 'Pages X\u2013Y / Z' format", async () => {
+    const renderer = makeMockSpreadRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    // Enter spread mode
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    // Spread 0 is solo page 1 -> "Page 1 / 10"
+    const pos = outlet.querySelector(".viewer-position") as HTMLElement;
+    expect(pos.textContent).toBe("Page 1 / 10");
+
+    // Navigate to spread 1 (pages 2-3) -> "Pages 2\u20133 / 10"
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushInit();
+
+    expect(pos.textContent).toBe("Pages 2\u20133 / 10");
+  });
+
+  it("spread preference persisted to localStorage", async () => {
+    const renderer = makeMockSpreadRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    // Enter spread mode
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    expect(localStorage.getItem("spread-mode:m1")).toBe("true");
+
+    // Leave spread mode
+    spreadBtn.click();
+    await flushInit();
+
+    expect(localStorage.getItem("spread-mode:m1")).toBe("false");
+  });
+
+  it("mode switching syncs position — toggle spread on at page 3 maps to correct spread index", async () => {
+    const renderer = makeMockSpreadRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    // Navigate to page 3 in single mode
+    await renderer.goToPage(3);
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    // We need to trigger updateNav, so click next then prev to land on page 3
+    // Or just go to page 3 and toggle spread. The shell reads renderer.currentPage.
+    // goToPage sets _currentPage=3, then toggle spread reads it.
+
+    // Enter spread mode — shell reads renderer.currentPage (3)
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    // Page 3 is in spread index 1 (pages 2-3). Position label should reflect that.
+    const pos = outlet.querySelector(".viewer-position") as HTMLElement;
+    expect(pos.textContent).toBe("Pages 2\u20133 / 10");
+  });
+
+  it("zoom in spread mode applies CSS transform on canvasWrap", async () => {
+    const renderer = makeMockSpreadRenderer({
+      renderPageInto: vi.fn().mockResolvedValue(undefined),
+      zoomIn: vi.fn(),
+      zoomOut: vi.fn(),
+      resetZoom: vi.fn(),
+      isZoomed: false,
+    });
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    // Enter spread mode
+    const spreadBtn = outlet.querySelector(".viewer-spread-toggle") as HTMLButtonElement;
+    spreadBtn.click();
+    await flushInit();
+
+    const canvasWrap = outlet.querySelector(".viewer-canvas-wrap") as HTMLElement;
+    const zoomInBtn = outlet.querySelector(".viewer-zoom-in") as HTMLButtonElement;
+
+    // Zoom in once
+    zoomInBtn.click();
+    await flushInit();
+
+    expect(canvasWrap.style.transform).toBe("scale(1.2)");
+    expect(canvasWrap.classList.contains("zoomed")).toBe(true);
+
+    // Zoom in again
+    zoomInBtn.click();
+    await flushInit();
+
+    // 1.2^2 = 1.44
+    expect(canvasWrap.style.transform).toBe(`scale(${1.2 ** 2})`);
   });
 });
