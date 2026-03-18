@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Upload a media file to GCS and create the corresponding Firestore document.
 # Targets the commons-systems production project and bucket. No dry-run or staging mode.
-# Usage: upload-media.sh <file> <title> <mediaType> [--public | <email1> [email2] [email3]]
+# Usage: upload-media.sh <file> <title> <mediaType> [--public | --group <groupId>]
 set -euo pipefail
 
 BUCKET="gs://commons-systems.firebasestorage.app"
 PROJECT="commons-systems"
 COLLECTION_PATH="print/prod/media"
+GROUPS_PATH="print/prod/groups"
 
 usage() {
   cat >&2 <<EOF
-Usage: upload-media.sh <file> <title> <mediaType> [--public | <email1> [email2] [email3]]
+Usage: upload-media.sh <file> <title> <mediaType> [--public | --group <groupId>]
 
 Arguments:
   file        Local file path to upload
@@ -18,8 +19,8 @@ Arguments:
   mediaType   One of: epub, pdf, image-archive
 
 Mode (pick one):
-  --public              Mark as public domain (no emails required)
-  <email1> [email2] ... 1-3 member email addresses (private mode)
+  --public              Mark as public domain
+  --group <groupId>     Restrict to members of a Firestore group
 EOF
   exit 1
 }
@@ -53,12 +54,12 @@ case "$MEDIA_TYPE" in
     ;;
 esac
 
-# Parse mode: --public or 1-3 emails
+# Parse mode: --public or --group <groupId>
 PUBLIC=false
-EMAILS=()
+GROUP_ID=""
 
 if [ $# -eq 0 ]; then
-  echo "error: must specify --public or 1-3 email addresses" >&2
+  echo "error: must specify --public or --group <groupId>" >&2
   usage
 fi
 
@@ -66,21 +67,59 @@ if [ "$1" = "--public" ]; then
   PUBLIC=true
   shift
   if [ $# -gt 0 ]; then
-    echo "error: --public does not accept email arguments" >&2
+    echo "error: --public does not accept additional arguments" >&2
+    usage
+  fi
+elif [ "$1" = "--group" ]; then
+  shift
+  if [ $# -eq 0 ]; then
+    echo "error: --group requires a group ID argument" >&2
+    usage
+  fi
+  GROUP_ID="$1"
+  shift
+  if [ $# -gt 0 ]; then
+    echo "error: --group accepts only one argument" >&2
     usage
   fi
 else
-  EMAILS=("$@")
-  if [ ${#EMAILS[@]} -gt 3 ]; then
-    echo "error: private mode requires 1-3 email addresses (got ${#EMAILS[@]})" >&2
-    usage
+  echo "error: must specify --public or --group <groupId>" >&2
+  usage
+fi
+
+# Get auth token early — needed for both group lookup and Firestore doc creation
+if ! TOKEN="$(gcloud auth print-access-token 2>&1)"; then
+  echo "error: failed to get auth token. Run 'gcloud auth login' first." >&2
+  exit 1
+fi
+
+# Resolve group members if in group mode
+EMAILS=()
+if [ -n "$GROUP_ID" ]; then
+  GROUPS_URL="https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${GROUPS_PATH}/${GROUP_ID}"
+  GROUP_RESP_FILE=$(mktemp)
+  trap 'rm -f "$GROUP_RESP_FILE"' EXIT
+  GROUP_HTTP=$(curl -sS -o "$GROUP_RESP_FILE" -w '%{http_code}' "$GROUPS_URL" \
+    --config <(echo "header = \"Authorization: Bearer ${TOKEN}\""))
+
+  if [ "$GROUP_HTTP" -lt 200 ] || [ "$GROUP_HTTP" -ge 300 ]; then
+    echo "error: group '${GROUP_ID}' not found (HTTP ${GROUP_HTTP})" >&2
+    exit 1
   fi
-  for email in "${EMAILS[@]}"; do
-    if [[ ! "$email" =~ ^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+$ ]]; then
-      echo "error: invalid email format: ${email}" >&2
-      exit 1
-    fi
-  done
+
+  GROUP_DOC=$(cat "$GROUP_RESP_FILE")
+  rm -f "$GROUP_RESP_FILE"
+  trap - EXIT
+
+  MEMBER_LIST=$(echo "$GROUP_DOC" | jq -r '.fields.members.arrayValue.values[]?.stringValue // empty')
+  if [ -z "$MEMBER_LIST" ]; then
+    echo "error: group '${GROUP_ID}' has no members" >&2
+    exit 1
+  fi
+
+  while IFS= read -r email; do
+    EMAILS+=("$email")
+  done <<< "$MEMBER_LIST"
 fi
 
 FILENAME="$(basename "$FILE_PATH")"
@@ -106,9 +145,7 @@ if [ "$PUBLIC" = true ]; then
   META_ARGS+=(-h "x-goog-meta-publicDomain:true")
 else
   META_ARGS+=(-h "x-goog-meta-publicDomain:false")
-  for i in "${!EMAILS[@]}"; do
-    META_ARGS+=(-h "x-goog-meta-member_${i}:${EMAILS[$i]}")
-  done
+  META_ARGS+=(-h "x-goog-meta-groupId:${GROUP_ID}")
 fi
 gsutil "${META_ARGS[@]}" cp "$FILE_PATH" "$GCS_DEST"
 
@@ -128,6 +165,13 @@ else
   MEMBER_JSON=$(printf '%s\n' "${EMAILS[@]}" | jq -R '{ stringValue: . }' | jq -s '.')
 fi
 
+# Build groupId field
+if [ -n "$GROUP_ID" ]; then
+  GROUP_JSON=$(jq -n --arg gid "$GROUP_ID" '{ stringValue: $gid }')
+else
+  GROUP_JSON='{ "nullValue": null }'
+fi
+
 FIRESTORE_BODY=$(jq -n \
   --arg title "$TITLE" \
   --arg mediaType "$MEDIA_TYPE" \
@@ -135,6 +179,7 @@ FIRESTORE_BODY=$(jq -n \
   --arg storagePath "media/${FILENAME}" \
   --arg addedAt "$ADDED_AT" \
   --argjson memberValues "$MEMBER_JSON" \
+  --argjson groupId "$GROUP_JSON" \
   '{
     fields: {
       title: { stringValue: $title },
@@ -143,18 +188,12 @@ FIRESTORE_BODY=$(jq -n \
       publicDomain: { booleanValue: $publicDomain },
       sourceNotes: { stringValue: "" },
       storagePath: { stringValue: $storagePath },
-      groupId: { nullValue: null },
+      groupId: $groupId,
       memberEmails: { arrayValue: { values: $memberValues } },
       addedAt: { stringValue: $addedAt }
     }
   }')
 
-if ! TOKEN="$(gcloud auth print-access-token 2>&1)"; then
-  echo "error: failed to get auth token. Run 'gcloud auth login' first." >&2
-  echo "The file was already uploaded to GCS at: ${GCS_DEST}" >&2
-  echo "To clean up: gsutil rm ${GCS_DEST}" >&2
-  exit 1
-fi
 FIRESTORE_URL="https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${COLLECTION_PATH}"
 
 RESP_FILE=$(mktemp)

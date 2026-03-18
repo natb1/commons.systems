@@ -61,37 +61,47 @@ echo "fake-token"
 STUB
   chmod +x "$TMPDIR_TEST/bin/gcloud"
 
-  # curl stub: saves POST body, returns canned Firestore response
-  # Supports failure mode: create $STUB_DIR/curl-fail to simulate HTTP error
+  # curl stub: handles GET (group lookup) and POST (doc creation)
+  # Failure modes:
+  #   $STUB_DIR/curl-fail       -> Firestore doc creation returns 403
+  #   $STUB_DIR/curl-group-fail -> Group lookup returns 404
   cat > "$TMPDIR_TEST/bin/curl" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 RESP_FILE=""
-# Find -d arg (save body) and -o arg (output file)
-while [ $# -gt 0 ]; do
-  case "$1" in
-    -d) echo "$2" > "$STUB_DIR/curl-body.json"; shift 2 ;;
-    -o) RESP_FILE="$2"; shift 2 ;;
-    --config) shift 2 ;;
-    *)  shift ;;
+HAS_DATA=false
+# Parse args to detect -d (POST) vs GET, and find -o target
+ARGS=("$@")
+for ((i=0; i<${#ARGS[@]}; i++)); do
+  case "${ARGS[$i]}" in
+    -d) HAS_DATA=true; echo "${ARGS[$((i+1))]}" > "$STUB_DIR/curl-body.json"; i=$((i+1)) ;;
+    -o) RESP_FILE="${ARGS[$((i+1))]}"; i=$((i+1)) ;;
+    --config) i=$((i+1)) ;;
   esac
 done
-if [ -f "$STUB_DIR/curl-fail" ]; then
-  BODY='{"error":{"code":403,"message":"Permission denied","status":"PERMISSION_DENIED"}}'
-  if [ -n "$RESP_FILE" ]; then
-    echo "$BODY" > "$RESP_FILE"
+
+if [ "$HAS_DATA" = true ]; then
+  # POST: Firestore doc creation
+  if [ -f "$STUB_DIR/curl-fail" ]; then
+    BODY='{"error":{"code":403,"message":"Permission denied","status":"PERMISSION_DENIED"}}'
+    if [ -n "$RESP_FILE" ]; then echo "$BODY" > "$RESP_FILE"; else echo "$BODY"; fi
+    echo "403"
   else
-    echo "$BODY"
+    BODY='{"name":"projects/commons-systems/databases/(default)/documents/print/prod/media/auto-generated-id"}'
+    if [ -n "$RESP_FILE" ]; then echo "$BODY" > "$RESP_FILE"; else echo "$BODY"; fi
+    echo "200"
   fi
-  echo "403"
 else
-  BODY='{"name":"projects/commons-systems/databases/(default)/documents/print/prod/media/auto-generated-id"}'
-  if [ -n "$RESP_FILE" ]; then
-    echo "$BODY" > "$RESP_FILE"
+  # GET: group lookup
+  if [ -f "$STUB_DIR/curl-group-fail" ]; then
+    BODY='{"error":{"code":404,"message":"NOT_FOUND"}}'
+    if [ -n "$RESP_FILE" ]; then echo "$BODY" > "$RESP_FILE"; else echo "$BODY"; fi
+    echo "404"
   else
-    echo "$BODY"
+    BODY='{"name":"projects/commons-systems/databases/(default)/documents/print/prod/groups/test-group","fields":{"name":{"stringValue":"test-group"},"members":{"arrayValue":{"values":[{"stringValue":"alice@example.com"},{"stringValue":"bob@example.com"}]}}}}'
+    if [ -n "$RESP_FILE" ]; then echo "$BODY" > "$RESP_FILE"; else echo "$BODY"; fi
+    echo "200"
   fi
-  echo "200"
 fi
 STUB
   chmod +x "$TMPDIR_TEST/bin/curl"
@@ -189,70 +199,61 @@ setup
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "My Title" "image-archive" --public 2>&1)
 headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
 assert_contains "GCS has publicDomain:true" "x-goog-meta-publicDomain:true" "$headers"
-assert_not_contains "GCS has no member_0" "member_0" "$headers"
+assert_not_contains "GCS has no groupId" "groupId" "$headers"
 curl_body=$(cat "$TMPDIR_TEST/stub/curl-body.json")
 assert_contains "Firestore publicDomain is true" '"booleanValue": true' "$curl_body"
 assert_contains "Firestore memberEmails is empty array" '"values": []' "$curl_body"
+assert_contains "Firestore groupId is null" '"nullValue": null' "$curl_body"
 assert_contains "Firestore mediaType" '"stringValue": "image-archive"' "$curl_body"
 assert_contains "Firestore title" '"stringValue": "My Title"' "$curl_body"
 teardown
 
-echo "Test 5: private with 1 email -> correct GCS metadata and Firestore body"
+echo "Test 5: --group -> resolves members and sets groupId"
 setup
-output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Private Item" "epub" "alice@example.com" 2>&1)
+output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Private Item" "epub" --group test-group 2>&1)
 headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
 assert_contains "GCS has publicDomain:false" "x-goog-meta-publicDomain:false" "$headers"
-assert_contains "GCS has member_0" "x-goog-meta-member_0:alice@example.com" "$headers"
+assert_contains "GCS has groupId" "x-goog-meta-groupId:test-group" "$headers"
 curl_body=$(cat "$TMPDIR_TEST/stub/curl-body.json")
 assert_contains "Firestore publicDomain is false" '"booleanValue": false' "$curl_body"
 assert_contains "Firestore has alice email" '"stringValue": "alice@example.com"' "$curl_body"
+assert_contains "Firestore has bob email" '"stringValue": "bob@example.com"' "$curl_body"
+assert_contains "Firestore groupId is set" '"stringValue": "test-group"' "$curl_body"
 teardown
 
-echo "Test 6: private with 3 emails -> all member keys set"
-setup
-output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Multi" "pdf" "a@x.com" "b@x.com" "c@x.com" 2>&1)
-headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
-assert_contains "GCS has member_0" "x-goog-meta-member_0:a@x.com" "$headers"
-assert_contains "GCS has member_1" "x-goog-meta-member_1:b@x.com" "$headers"
-assert_contains "GCS has member_2" "x-goog-meta-member_2:c@x.com" "$headers"
-curl_body=$(cat "$TMPDIR_TEST/stub/curl-body.json")
-assert_contains "Firestore has a@x.com" '"stringValue": "a@x.com"' "$curl_body"
-assert_contains "Firestore has b@x.com" '"stringValue": "b@x.com"' "$curl_body"
-assert_contains "Firestore has c@x.com" '"stringValue": "c@x.com"' "$curl_body"
-teardown
-
-echo "Test 7: private with 0 emails -> exits 1"
+echo "Test 6: --group without argument -> exits 1"
 setup
 exit_code=0
-stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "pdf" 2>&1) || exit_code=$?
+stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "pdf" --group 2>&1) || exit_code=$?
 assert_eq "exits 1" "1" "$exit_code"
-assert_contains "stderr mentions email requirement" "email" "$stderr"
+assert_contains "stderr mentions group ID required" "--group requires" "$stderr"
 teardown
 
-echo "Test 8: private with 4 emails -> exits 1"
+echo "Test 7: neither --public nor --group -> exits 1"
 setup
 exit_code=0
-stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "pdf" "a@x" "b@x" "c@x" "d@x" 2>&1) || exit_code=$?
+stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "pdf" "something" 2>&1) || exit_code=$?
 assert_eq "exits 1" "1" "$exit_code"
-assert_contains "stderr mentions email count" "1-3" "$stderr"
+assert_contains "stderr mentions required flags" "--public or --group" "$stderr"
 teardown
 
-echo "Test 9: invalid email format -> exits 1"
+echo "Test 8: --group nonexistent -> exits 1 with not found"
 setup
+touch "$TMPDIR_TEST/stub/curl-group-fail"
 exit_code=0
-stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "pdf" "bad email@x.com" 2>&1) || exit_code=$?
+stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "pdf" --group nonexistent 2>&1) || exit_code=$?
 assert_eq "exits 1" "1" "$exit_code"
-assert_contains "stderr mentions invalid email" "invalid email format" "$stderr"
+assert_contains "stderr mentions not found" "not found" "$stderr"
 teardown
 
-echo "Test 10: verification output includes document ID and gsutil stat"
+echo "Test 9: verification output includes document ID and gsutil stat"
 setup
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "epub" --public 2>&1)
 assert_contains "output has document ID" "auto-generated-id" "$output"
 assert_contains "output has gsutil stat" "1024 bytes" "$output"
 teardown
 
-echo "Test 11: GCS collision -> exits 1 with 'already exists'"
+echo "Test 10: GCS collision -> exits 1 with 'already exists'"
 setup
 touch "$TMPDIR_TEST/stub/stat-exists"
 exit_code=0
@@ -261,7 +262,7 @@ assert_eq "exits 1" "1" "$exit_code"
 assert_contains "stderr mentions already exists" "already exists" "$stderr"
 teardown
 
-echo "Test 12: no GCS collision -> upload proceeds"
+echo "Test 11: no GCS collision -> upload proceeds"
 setup
 # No stat-exists file means object doesn't exist
 exit_code=0
@@ -270,7 +271,7 @@ assert_eq "exits 0" "0" "$exit_code"
 assert_contains "output has document ID" "auto-generated-id" "$output"
 teardown
 
-echo "Test 13: Firestore API failure -> exits 1 with cleanup guidance"
+echo "Test 12: Firestore API failure -> exits 1 with cleanup guidance"
 setup
 touch "$TMPDIR_TEST/stub/curl-fail"
 exit_code=0
