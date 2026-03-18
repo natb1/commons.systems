@@ -5,14 +5,14 @@ import type { ChartResult, WeekEntry } from "./budgets-chart.js";
 import { getThemeFg, assembleChartLayout } from "./chart-util.js";
 
 export interface AreaChartOptions {
-  data: PerBudgetPoint[];
-  containerWidth: number;
-  panelWidth: number;
+  readonly data: PerBudgetPoint[];
+  readonly containerWidth: number;
+  readonly panelWidth: number;
 }
 
 interface AreaDatum {
   weekIndex: number;
-  week: string;
+  weekLabel: string;
   budget: string;
   value: number;
 }
@@ -47,7 +47,7 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
     if (weekIndex === undefined) throw new Error(`Unknown weekMs: ${d.weekMs}`);
     areaData.push({
       weekIndex,
-      week: d.weekLabel,
+      weekLabel: d.weekLabel,
       budget: d.budget,
       value: d.avg3Spending,
     });
@@ -151,7 +151,7 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
         z: "budget",
         order: null,
         title: (d: AreaDatum) =>
-          `${d.budget}\nWeek: ${d.week}\n$${d.value.toFixed(2)}`,
+          `${d.budget}\nWeek: ${d.weekLabel}\n$${d.value.toFixed(2)}`,
       }))),
       Plot.ruleY([0]),
     ],

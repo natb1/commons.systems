@@ -4,9 +4,9 @@ import type { ChartResult, WeekEntry } from "./budgets-chart.js";
 import { getThemeFg, assembleChartLayout } from "./chart-util.js";
 
 export interface TrendChartOptions {
-  data: AggregatePoint[];
-  containerWidth: number;
-  panelWidth: number;
+  readonly data: AggregatePoint[];
+  readonly containerWidth: number;
+  readonly panelWidth: number;
 }
 
 const SERIES_INCOME = "12-Week Avg Income";
@@ -46,7 +46,6 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   const weekLabels = weeks.map(w => w.label);
   const weekCount = weeks.length;
 
-  // Build series data: one dot per series per week
   const weekIndexMap = new Map<number, number>();
   data.forEach((d, i) => weekIndexMap.set(d.weekMs, i));
 
@@ -84,7 +83,7 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
     marks: [Plot.ruleY([0])],
   });
 
-  // Scrollable chart body: faceted dots with pointer tooltips (lines drawn via overlay SVG below)
+  // Scrollable chart body: faceted dots and tooltips; overlay SVG reads dot positions to draw line paths
   const seriesOrder: SeriesName[] = [SERIES_INCOME, SERIES_12W_SPENDING, SERIES_3W_SPENDING];
   const chartSvg = Plot.plot({
     width: chartWidth,
@@ -141,7 +140,7 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   overlaySvg.style.left = "0";
   overlaySvg.style.pointerEvents = "none";
 
-  // Read dot positions from the rendered chart, accumulating parent transforms
+  // Read dot positions from the rendered chart, accumulating X-axis parent translate transforms
   const dots = chartSvg.querySelectorAll("circle");
   if (dots.length !== lineData.length) {
     throw new Error(`Expected ${lineData.length} dots but found ${dots.length}`);

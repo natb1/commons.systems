@@ -1,7 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import type { Budget, BudgetId, BudgetPeriod } from "../firestore.js";
-import { applyRollover, computePeriodBalances, type PeriodBalance } from "../balance.js";
-import { getThemeFg, computePanelWidth } from "./chart-util.js";
+import { applyRollover, computePeriodBalances, toSundayEntry, type PeriodBalance } from "../balance.js";
+import { getThemeFg, computePanelWidth, assembleChartLayout } from "./chart-util.js";
 
 export interface ChartOptions {
   budgets: Budget[];
@@ -26,23 +26,13 @@ interface BarDatum {
   balance: number;
 }
 
-function formatWeek(ts: { toDate(): Date }): string {
-  const d = ts.toDate();
-  if (isNaN(d.getTime())) throw new Error("formatWeek received an invalid Date from timestamp");
-  // Normalize to the Sunday of the same week so labels stay consistent
-  // regardless of which weekday the period happens to begin on.
-  const sun = new Date(d);
-  sun.setDate(sun.getDate() - sun.getDay());
-  return `${sun.getMonth() + 1}/${sun.getDate()}`;
-}
-
 /** Collect ordered unique week entries across all budgets, deduplicating by timestamp. */
 function allWeekEntries(balanceMap: Map<BudgetId, PeriodBalance[]>): { label: string; ms: number }[] {
   const seen = new Map<number, string>();
   for (const balances of balanceMap.values()) {
     for (const pb of balances) {
-      const ms = pb.periodStart.toMillis();
-      if (!seen.has(ms)) seen.set(ms, formatWeek(pb.periodStart));
+      const entry = toSundayEntry(pb.periodStart.toDate());
+      if (!seen.has(entry.ms)) seen.set(entry.ms, entry.label);
     }
   }
   return [...seen.entries()].sort((a, b) => a[0] - b[0]).map(([ms, label]) => ({ label, ms }));
@@ -175,19 +165,7 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
   chartSvg.style.width = `${chartWidth}px`;
   chartSvg.style.minWidth = `${chartWidth}px`;
 
-  const layout = document.createElement("div");
-  layout.className = "chart-layout";
-
-  const axisDiv = document.createElement("div");
-  axisDiv.className = "chart-y-axis";
-  axisDiv.appendChild(axisSvg);
-
-  const wrapper = document.createElement("div");
-  wrapper.className = "chart-scroll-wrapper";
-  wrapper.appendChild(chartSvg);
-
-  layout.appendChild(axisDiv);
-  layout.appendChild(wrapper);
+  const { layout, wrapper } = assembleChartLayout(axisSvg, chartSvg);
   container.replaceChildren(layout);
 
   wrapper.scrollLeft = wrapper.scrollWidth;

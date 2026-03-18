@@ -183,12 +183,8 @@ export function hydrateBudgetChart(container: HTMLElement): void {
     renderBudgetPieChart(pieEl, { budgets, periods, windowWeeks: 12 });
 
     const containerWidth = container.clientWidth || 640;
-    if (aggregateTrend.length > 0) {
-      renderAggregateTrendChart(trendEl, { data: aggregateTrend, containerWidth, panelWidth });
-    }
-    if (perBudgetTrend.length > 0) {
-      renderPerBudgetAreaChart(areaEl, { data: perBudgetTrend, containerWidth, panelWidth });
-    }
+    renderAggregateTrendChart(trendEl, { data: aggregateTrend, containerWidth, panelWidth });
+    renderPerBudgetAreaChart(areaEl, { data: perBudgetTrend, containerWidth, panelWidth });
   }
 
   render();
@@ -244,12 +240,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
       try {
         render();
       } catch (error) {
-        if (error instanceof TypeError || error instanceof ReferenceError
-            || error instanceof RangeError || error instanceof DataIntegrityError) {
-          setTimeout(() => { throw error; }, 0);
-          return;
-        }
-        console.error("Chart re-render failed on resize:", error);
+        container.textContent = "Chart rendering failed on resize. Try refreshing the page.";
         setTimeout(() => { throw error; }, 0);
         return;
       }

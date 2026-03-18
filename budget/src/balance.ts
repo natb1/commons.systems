@@ -218,7 +218,7 @@ export function computeRollingAverage(values: number[], windowSize: number): num
 }
 
 /** Normalize a Date to the Sunday of the same week, returning "M/D" label and ms timestamp. */
-function toSundayEntry(d: Date): { label: string; ms: number } {
+export function toSundayEntry(d: Date): { label: string; ms: number } {
   const sun = new Date(d);
   sun.setDate(sun.getDate() - sun.getDay());
   const label = `${sun.getMonth() + 1}/${sun.getDate()}`;
@@ -235,6 +235,16 @@ function weekEntriesFromPeriods(periods: BudgetPeriod[]): [number, string][] {
   return [...weekMap.entries()].sort((a, b) => a[0] - b[0]);
 }
 
+/** Sum period totals per week-ms key. */
+function weeklySpendingFromPeriods(periods: BudgetPeriod[]): Map<number, number> {
+  const result = new Map<number, number>();
+  for (const p of periods) {
+    const entry = toSundayEntry(p.periodStart.toDate());
+    result.set(entry.ms, (result.get(entry.ms) ?? 0) + p.total);
+  }
+  return result;
+}
+
 /**
  * Compute aggregate trend data: rolling averages of income and spending per week.
  * Weeks are derived from budget periods. Income is computed from transactions.
@@ -246,12 +256,7 @@ export function computeAggregateTrend(
   const weeks = weekEntriesFromPeriods(periods);
   if (weeks.length === 0) return [];
 
-  // Weekly spending: sum of all period totals per week (single pass)
-  const weeklySpending = new Map<number, number>();
-  for (const p of periods) {
-    const entry = toSundayEntry(p.periodStart.toDate());
-    weeklySpending.set(entry.ms, (weeklySpending.get(entry.ms) ?? 0) + p.total);
-  }
+  const weeklySpending = weeklySpendingFromPeriods(periods);
 
   // Weekly income: sum income transactions per week
   const incomeTxns = transactions.filter(
@@ -358,12 +363,7 @@ export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
   const weeks = weekEntriesFromPeriods(periods);
   if (weeks.length === 0) return 0;
 
-  const weekTotals = new Map<number, number>();
-  for (const p of periods) {
-    const entry = toSundayEntry(p.periodStart.toDate());
-    weekTotals.set(entry.ms, (weekTotals.get(entry.ms) ?? 0) + p.total);
-  }
-
+  const weekTotals = weeklySpendingFromPeriods(periods);
   const trailing = weeks.slice(-12);
   return trailing.reduce((sum, [ms]) => sum + (weekTotals.get(ms) ?? 0), 0) / trailing.length;
 }
