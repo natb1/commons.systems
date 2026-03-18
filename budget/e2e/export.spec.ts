@@ -1,14 +1,5 @@
 import { test, expect } from "@playwright/test";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixturePath = path.join(__dirname, "fixtures", "test-budget.json");
-
-async function uploadFixture(page: import("@playwright/test").Page): Promise<void> {
-  const fileInput = page.locator(".upload-input");
-  await fileInput.setInputFiles(fixturePath);
-}
+import { uploadFixture } from "./helpers";
 
 test.describe("export", () => {
   test.beforeEach(async ({ page }) => {

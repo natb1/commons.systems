@@ -192,6 +192,10 @@ uploadInput.addEventListener("change", () => {
   const file = uploadInput.files?.[0];
   if (file) {
     handleFileUpload(file).catch((error) => {
+      if (error instanceof TypeError || error instanceof ReferenceError) {
+        setTimeout(() => { throw error; }, 0);
+        return;
+      }
       console.error("Unhandled upload error:", error);
     });
   }

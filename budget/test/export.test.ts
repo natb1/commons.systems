@@ -127,7 +127,7 @@ function setupMocks() {
       case "statements":
         return Promise.resolve(idbStatements);
       default:
-        return Promise.resolve([]);
+        throw new Error(`Unmocked store name in test: "${storeName}"`);
     }
   });
   mockGetMeta.mockResolvedValue(meta);
