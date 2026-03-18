@@ -1,4 +1,5 @@
-import { updateTransaction, adjustBudgetPeriodTotal, type SerializedBudgetPeriod, type TransactionId, type BudgetId } from "../firestore.js";
+import { type SerializedBudgetPeriod, type TransactionId, type BudgetId } from "../firestore.js";
+import { getActiveDataSource } from "../active-data-source.js";
 import { computeNetAmount } from "../balance.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
@@ -6,7 +7,7 @@ import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListene
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
- * Returns {} when the attribute is absent (unauthorized users).
+ * Returns {} when the attribute is absent.
  * Throws DataIntegrityError for non-empty values that are not valid JSON objects with string values.
  */
 function parseBudgetMap(raw: string | undefined): Record<string, BudgetId> {
@@ -73,12 +74,10 @@ function findPeriod(periods: HydrationPeriod[], budgetId: BudgetId, timestampMs:
 
 /**
  * Adjust stored period totals when a transaction's budget changes.
- * Each write uses Firestore increment for per-field atomicity, but the two
- * writes (decrement old period, increment new period) are not wrapped in a
- * transaction. If either write fails, totals drift until manual correction
- * (page loads read stored totals, not recomputed from transactions).
- * The ETL's RecalculatePeriods corrects any drift on the next import.
- * categoryBreakdown is not updated by client-side changes; it reflects the last ETL run.
+ * The two writes (decrement old period, increment new period) are not atomic.
+ * If either write fails, totals drift until corrected by re-uploading the data file.
+ * categoryBreakdown is not updated by client-side changes; it reflects the
+ * original data source snapshot.
  */
 async function syncPeriodTotals(
   row: HTMLElement,
@@ -98,26 +97,23 @@ async function syncPeriodTotals(
   const net = computeNetAmount(amount, reimbursement);
 
   try {
+    const ds = getActiveDataSource();
     if (oldBudgetId) {
       const oldPeriod = findPeriod(budgetPeriods, oldBudgetId, timestampMs);
       if (oldPeriod) {
-        await adjustBudgetPeriodTotal(oldPeriod.id, -net);
+        await ds.adjustBudgetPeriodTotal(oldPeriod.id, -net);
         oldPeriod.total -= net;
       }
     }
     if (newBudgetId) {
       const newPeriod = findPeriod(budgetPeriods, newBudgetId, timestampMs);
       if (newPeriod) {
-        await adjustBudgetPeriodTotal(newPeriod.id, net);
+        await ds.adjustBudgetPeriodTotal(newPeriod.id, net);
         newPeriod.total += net;
       }
     }
   } catch (periodError) {
-    if (periodError instanceof TypeError || periodError instanceof ReferenceError) {
-      throw periodError;
-    }
-    console.error("Failed to update budget period totals:", periodError);
-    clearBalanceDisplay(row);
+    handlePeriodSyncError(row, periodError);
   }
 }
 
@@ -149,19 +145,26 @@ async function syncPeriodOnReimbursementChange(
   try {
     const period = findPeriod(budgetPeriods, budgetId, timestampMs);
     if (period) {
-      await adjustBudgetPeriodTotal(period.id, delta);
+      await getActiveDataSource().adjustBudgetPeriodTotal(period.id, delta);
       period.total += delta;
     }
   } catch (periodError) {
-    if (periodError instanceof TypeError || periodError instanceof ReferenceError) {
-      throw periodError;
-    }
-    console.error("Failed to update budget period totals:", periodError);
-    clearBalanceDisplay(row);
+    handlePeriodSyncError(row, periodError);
   }
 }
 
-/** Replace the displayed balance with "--". Recalculation happens on next page load. */
+/** Handle a non-programmer error from adjustBudgetPeriodTotal: log, clear balance, set tooltip. */
+function handlePeriodSyncError(row: HTMLElement, error: unknown): void {
+  if (error instanceof TypeError || error instanceof ReferenceError) {
+    throw error;
+  }
+  console.error("Failed to update budget period totals:", error);
+  clearBalanceDisplay(row);
+  const balanceEl = row.querySelector(".budget-balance") as HTMLElement | null;
+  if (balanceEl) balanceEl.title = "Budget totals may be incorrect. Re-upload your data file to correct them.";
+}
+
+/** Replace the displayed balance with "--". Recalculation happens on next navigation. */
 function clearBalanceDisplay(row: HTMLElement): void {
   const balanceDd = row.querySelector(".budget-balance") as HTMLElement | null;
   if (balanceDd) {
@@ -211,9 +214,9 @@ export function hydrateTransactionTable(container: HTMLElement): void {
 
     try {
       if (input.classList.contains("edit-note")) {
-        await updateTransaction(txnId, { note: input.value });
+        await getActiveDataSource().updateTransaction(txnId, { note: input.value });
       } else if (input.classList.contains("edit-category")) {
-        await updateTransaction(txnId, { category: input.value });
+        await getActiveDataSource().updateTransaction(txnId, { category: input.value });
       } else if (input.classList.contains("edit-reimbursement")) {
         const reimbursement = Number(input.value);
         if (!Number.isFinite(reimbursement)) {
@@ -221,7 +224,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
           return;
         }
         const oldReimbursement = Number(row.dataset.reimbursement);
-        await updateTransaction(txnId, { reimbursement });
+        await getActiveDataSource().updateTransaction(txnId, { reimbursement });
         await syncPeriodOnReimbursementChange(row, oldReimbursement, reimbursement, budgetPeriods);
         row.dataset.reimbursement = String(reimbursement);
         clearBalanceDisplay(row);
@@ -233,7 +236,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         }
         const newBudgetId = value ? budgetNameToId[value] : null;
         const oldBudgetId = (row.dataset.budgetId || null) as BudgetId | null;
-        await updateTransaction(txnId, { budget: newBudgetId });
+        await getActiveDataSource().updateTransaction(txnId, { budget: newBudgetId });
         await syncPeriodTotals(row, oldBudgetId, newBudgetId, budgetPeriods);
 
         if (newBudgetId) {

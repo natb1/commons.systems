@@ -1,6 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { getRules, getBudgets, getNormalizationRules, type Rule, type NormalizationRule } from "../firestore.js";
+import { type Rule, type NormalizationRule } from "../firestore.js";
 import { uniqueSorted } from "./hydrate-util.js";
 
 export function renderRow(rule: Rule, editable: boolean): string {
@@ -62,7 +62,6 @@ interface RulesTableOptions {
   rules: Rule[];
   normalizationRules: NormalizationRule[];
   authorized: boolean;
-  groupId: string;
   budgetNames: string[];
   categoryTargets: string[];
   uniqueInstitutions: string[];
@@ -70,14 +69,14 @@ interface RulesTableOptions {
 }
 
 function renderRulesTable(opts: RulesTableOptions): string {
-  const { rules, normalizationRules, authorized, groupId, budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts } = opts;
+  const { rules, normalizationRules, authorized, budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts } = opts;
   const sorted = [...rules].sort((a, b) => a.priority - b.priority || a.pattern.localeCompare(b.pattern));
   const rows = sorted.map(r => renderRow(r, authorized)).join("\n");
   const sortedNorm = [...normalizationRules].sort((a, b) => a.priority - b.priority || a.pattern.localeCompare(b.pattern));
   const normRows = sortedNorm.map(r => renderNormalizationRow(r, authorized)).join("\n");
 
   const addButton = authorized
-    ? `<button id="add-rule" data-group-id="${escapeHtml(groupId)}">Add Rule</button>`
+    ? `<button id="add-rule">Add Rule</button>`
     : "";
 
   const dataAttrs = authorized
@@ -117,23 +116,24 @@ function renderRulesTable(opts: RulesTableOptions): string {
 }
 
 export async function renderRules(options: RenderPageOptions): Promise<string> {
-  const { user, group } = options;
-  const authorized = group !== null;
+  const { authorized, dataSource } = options;
 
   let tableHtml: string;
   try {
     const [rules, budgets, normalizationRules] = await Promise.all([
-      group && user?.email ? getRules(group.id, user.email) : getRules(null),
-      group && user?.email ? getBudgets(group.id, user.email) : getBudgets(null),
-      group && user?.email ? getNormalizationRules(group.id, user.email) : getNormalizationRules(null),
+      dataSource.getRules()
+        .catch((e) => { console.error("Failed to load rules:", e); throw e; }),
+      dataSource.getBudgets()
+        .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
+      dataSource.getNormalizationRules()
+        .catch((e) => { console.error("Failed to load normalization rules:", e); throw e; }),
     ]);
     const budgetNames = budgets.map(b => b.name);
     const categoryTargets = uniqueSorted(rules.filter(r => r.type === "categorization").map(r => r.target));
     const uniqueInstitutions = uniqueSorted(rules.map(r => r.institution));
     const uniqueAccounts = uniqueSorted(rules.map(r => r.account));
-    tableHtml = renderRulesTable({ rules, normalizationRules, authorized, groupId: group?.id ?? "", budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts });
+    tableHtml = renderRulesTable({ rules, normalizationRules, authorized, budgetNames, categoryTargets, uniqueInstitutions, uniqueAccounts });
   } catch (error) {
-    console.error("Failed to load rules:", error);
     tableHtml = renderLoadError(error, "rules-error");
   }
 

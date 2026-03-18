@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "exportedAt": "2025-06-15T10:30:00Z",
+  "groupId": "test-group",
+  "groupName": "Test Household",
+  "transactions": [
+    {
+      "id": "txn-001",
+      "institution": "bankone",
+      "account": "1234",
+      "description": "KROGER #1234",
+      "amount": 52.30,
+      "timestamp": "2025-06-10T00:00:00Z",
+      "statementId": "stmt-1",
+      "category": "Food:Groceries",
+      "budget": "groceries",
+      "note": "weekly shopping",
+      "reimbursement": 0,
+      "normalizedId": null,
+      "normalizedPrimary": true,
+      "normalizedDescription": null
+    },
+    {
+      "id": "txn-002",
+      "institution": "banktwo",
+      "account": "4444",
+      "description": "AMAZON",
+      "amount": 29.99,
+      "timestamp": "2025-06-11T00:00:00Z",
+      "statementId": "stmt-2",
+      "category": "Shopping",
+      "budget": null,
+      "note": "",
+      "reimbursement": 0,
+      "normalizedId": null,
+      "normalizedPrimary": true,
+      "normalizedDescription": null
+    }
+  ],
+  "budgets": [
+    {"id": "groceries", "name": "Groceries", "weeklyAllowance": 100, "rollover": "none"}
+  ],
+  "budgetPeriods": [
+    {"id": "bp-1", "budgetId": "groceries", "periodStart": "2025-06-09T00:00:00Z", "periodEnd": "2025-06-16T00:00:00Z", "total": 52.30, "count": 1, "categoryBreakdown": {"Food:Groceries": 52.30}}
+  ],
+  "rules": [
+    {"id": "r-1", "type": "categorization", "pattern": "KROGER", "target": "Food:Groceries", "priority": 1, "institution": "", "account": ""}
+  ],
+  "normalizationRules": []
+}
