@@ -56,6 +56,16 @@ export interface SerializedBudgetPeriod {
   readonly categoryBreakdown: Record<string, number>;
 }
 
+export interface Statement {
+  readonly id: string;
+  readonly statementId: StatementId;
+  readonly institution: string;
+  readonly account: string;
+  readonly balance: number;
+  readonly period: string;
+  readonly groupId: GroupId | null;
+}
+
 export interface Transaction {
   readonly id: TransactionId;
   readonly institution: string;
@@ -190,6 +200,24 @@ export async function getTransactions(groupId: GroupId | null, email?: string): 
       // Defaults to true for un-normalized transactions (field may be missing or null)
       normalizedPrimary: data.normalizedPrimary !== false,
       normalizedDescription: optionalString(data.normalizedDescription, "normalizedDescription"),
+    };
+  });
+}
+
+export async function getStatements(groupId: null): Promise<Statement[]>;
+export async function getStatements(groupId: GroupId, email: string): Promise<Statement[]>;
+export async function getStatements(groupId: GroupId | null, email?: string): Promise<Statement[]> {
+  const docs = await queryGroupCollection("statements", "seed-", groupId, email);
+  return docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      statementId: requireString(data.statementId, "statementId") as StatementId,
+      institution: requireString(data.institution, "institution"),
+      account: requireString(data.account, "account"),
+      balance: requireNumber(data.balance, "balance"),
+      period: requireString(data.period, "period"),
+      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     };
   });
 }

@@ -115,6 +115,7 @@ export function makeParsedData(overrides: Partial<ParsedData> = {}): ParsedData 
 export function createMockDataSource(overrides: Partial<DataSource> = {}): DataSource {
   return {
     getTransactions: vi.fn().mockResolvedValue([]),
+    getStatements: vi.fn().mockResolvedValue([]),
     getBudgets: vi.fn().mockResolvedValue([]),
     getBudgetPeriods: vi.fn().mockResolvedValue([]),
     getRules: vi.fn().mockResolvedValue([]),
