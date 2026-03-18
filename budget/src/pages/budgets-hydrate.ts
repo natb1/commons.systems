@@ -112,7 +112,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
   const budgets = deserializeBudgets(budgetsRaw);
   const periods = deserializePeriods(periodsRaw);
-  let chartResult: ChartResult = { weekLabels: [], periodStartMs: [] };
+  let chartResult: ChartResult = { weeks: [] };
 
   const pieElOrNull = document.getElementById("budgets-pie");
   if (!pieElOrNull) throw new DataIntegrityError("budgets-pie container not found in page markup");
@@ -127,28 +127,28 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
   // Configure date picker min/max from period date range
   const datePicker = document.getElementById("chart-date-picker") as HTMLInputElement | null;
-  if (datePicker && chartResult.periodStartMs.length > 0) {
-    datePicker.min = toISODate(chartResult.periodStartMs[0]);
-    datePicker.max = toISODate(chartResult.periodStartMs[chartResult.periodStartMs.length - 1]);
+  if (datePicker && chartResult.weeks.length > 0) {
+    datePicker.min = toISODate(chartResult.weeks[0].ms);
+    datePicker.max = toISODate(chartResult.weeks[chartResult.weeks.length - 1].ms);
 
     datePicker.addEventListener("change", () => {
       const wrapper = container.querySelector(".chart-scroll-wrapper");
       if (!(wrapper instanceof HTMLElement) || !datePicker.value) return;
 
-      const startMs = chartResult.periodStartMs;
+      const weeks = chartResult.weeks;
       const selectedMs = new Date(datePicker.value + "T00:00:00").getTime();
       // Find nearest period start date
       let nearestIdx = 0;
       let nearestDist = Infinity;
-      for (let i = 0; i < startMs.length; i++) {
-        const dist = Math.abs(startMs[i] - selectedMs);
+      for (let i = 0; i < weeks.length; i++) {
+        const dist = Math.abs(weeks[i].ms - selectedMs);
         if (dist < nearestDist) {
           nearestDist = dist;
           nearestIdx = i;
         }
       }
 
-      const weekCount = chartResult.weekLabels.length;
+      const weekCount = chartResult.weeks.length;
       if (weekCount === 0) return;
 
       const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
