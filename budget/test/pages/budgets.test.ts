@@ -1,16 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type { DataSource } from "../../src/data-source";
+import { timestampMockFactory } from "../helpers";
 
-vi.mock("firebase/firestore", () => ({
-  Timestamp: class Timestamp {
-    _date: Date;
-    constructor(d: Date) { this._date = d; }
-    toDate() { return this._date; }
-    toMillis() { return this._date.getTime(); }
-    static fromDate(d: Date) { return new Timestamp(d); }
-  },
-}));
+vi.mock("firebase/firestore", () => timestampMockFactory());
 
 import { renderBudgets } from "../../src/pages/budgets";
 import type { Budget, Transaction } from "../../src/firestore";
