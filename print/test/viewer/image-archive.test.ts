@@ -55,6 +55,19 @@ function mockEntries(files: Record<string, Uint8Array>) {
   return result;
 }
 
+function restoreGlobalStubs() {
+  vi.unstubAllGlobals();
+  vi.stubGlobal("URL", {
+    createObjectURL: vi.fn((blob: Blob) => `blob:mock-${Math.random()}`),
+    revokeObjectURL: vi.fn(),
+  });
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(cb: () => void) { resizeObserverCallbacks.push(cb); }
+    observe() {}
+    disconnect() {}
+  });
+}
+
 function makeContainer(): HTMLElement {
   return document.createElement("div");
 }
@@ -401,16 +414,20 @@ describe("createImageArchiveRenderer", () => {
     expect(mockUnzip).toHaveBeenCalledTimes(2);
     expect(mockUnzip).toHaveBeenLastCalledWith(mockArrayBuffer);
 
-    vi.unstubAllGlobals();
-    vi.stubGlobal("URL", {
-      createObjectURL: vi.fn((blob: Blob) => `blob:mock-${Math.random()}`),
-      revokeObjectURL: vi.fn(),
-    });
-    vi.stubGlobal("ResizeObserver", class {
-      constructor(cb: () => void) { resizeObserverCallbacks.push(cb); }
-      observe() {}
-      disconnect() {}
-    });
+    restoreGlobalStubs();
+  });
+
+  it("throws on non-ok HTTP response in fallback path", async () => {
+    mockUnzip.mockRejectedValueOnce(new Error("Range not supported"));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await expect(renderer.init(container, "https://example.com/archive.zip")).rejects.toThrow(
+      "Failed to fetch archive: 404",
+    );
+
+    restoreGlobalStubs();
   });
 
   it("prefetches next page after init", async () => {

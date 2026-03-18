@@ -20,10 +20,10 @@ function applyZoom(container: HTMLElement, img: HTMLImageElement, level: number,
 }
 
 export function createImageArchiveRenderer(_onError?: (err: unknown) => void): ContentRenderer {
-  // _onError accepted for factory signature consistency with createPdfRenderer. Unlike createPdfRenderer,
-  // this renderer's ResizeObserver only resets zoom state (no re-rendering), so the callback is never
-  // invoked; all errors surface as thrown exceptions from the renderer's methods.
+  // _onError used for background prefetch errors that cannot propagate as exceptions.
+  // Synchronous operations (zoom, resize) and awaited operations (init, goToPage) throw directly.
   let sortedEntries: ZipEntry[] = [];
+  let objectUrlPromises: (Promise<string> | null)[] = [];
   let objectUrlCache: (string | null)[] = [];
   let imgEl: HTMLImageElement | null = null;
   let containerEl: HTMLElement | null = null;
@@ -57,16 +57,20 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   }
 
   async function getObjectUrl(index: number): Promise<string> {
-    if (!objectUrlCache[index]) {
-      const blob = await sortedEntries[index]!.blob();
-      objectUrlCache[index] = URL.createObjectURL(blob);
+    if (!objectUrlPromises[index]) {
+      objectUrlPromises[index] = sortedEntries[index]!.blob()
+        .then(blob => {
+          const url = URL.createObjectURL(blob);
+          objectUrlCache[index] = url;
+          return url;
+        });
     }
-    return objectUrlCache[index] as string;
+    return objectUrlPromises[index]!;
   }
 
   function prefetchPage(index: number): void {
-    if (index < 0 || index >= _pageCount || objectUrlCache[index] || destroyed) return;
-    void getObjectUrl(index).catch(() => {});
+    if (index < 0 || index >= _pageCount || objectUrlPromises[index] || destroyed) return;
+    void getObjectUrl(index).catch((err) => { _onError?.(err); });
   }
 
   return {
@@ -75,9 +79,8 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       try {
         const reader = new HTTPRangeReader(url);
         ({ entries } = await unzip(reader));
-      } catch {
-        // Fall back to full download when Range requests are unavailable
-        // (e.g. Firebase Storage emulator).
+      } catch (err) {
+        console.warn("Range-based archive loading failed, falling back to full download:", err);
         const res = await fetch(url);
         if (!res.ok) throw new Error(`Failed to fetch archive: ${res.status}`);
         ({ entries } = await unzip(await res.arrayBuffer()));
@@ -91,11 +94,13 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       if (imageEntries.length === 0) throw new Error("No images found in archive");
 
       sortedEntries = imageEntries;
+      objectUrlPromises = new Array(sortedEntries.length).fill(null);
       objectUrlCache = new Array(sortedEntries.length).fill(null);
       _pageCount = sortedEntries.length;
 
       if (destroyed) {
         sortedEntries = [];
+        objectUrlPromises = [];
         objectUrlCache = [];
         return;
       }
@@ -198,6 +203,7 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
         if (url) URL.revokeObjectURL(url);
       }
       sortedEntries = [];
+      objectUrlPromises = [];
       objectUrlCache = [];
       if (imgEl) {
         imgEl.remove();
