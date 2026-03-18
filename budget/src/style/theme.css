@@ -82,6 +82,20 @@
   border-radius: 4px;
 }
 
+/* --- Category sankey tree --- */
+
+#sankey-controls { max-width: 1200px; margin: 0 auto 0.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+#sankey-controls input[type="number"] { width: 4rem; }
+#sankey-controls input[type="range"] { flex: 1; max-width: 200px; }
+#sankey-mode { border: none; padding: 0; margin: 0; display: flex; gap: 0.5rem; }
+#sankey-mode label { cursor: pointer; white-space: nowrap; }
+#category-sankey { width: 100%; max-width: 1200px; margin: 0 auto 1rem; }
+#category-sankey svg { display: block; }
+.sankey-node rect { cursor: default; }
+.sankey-node text { font-size: 11px; pointer-events: none; }
+.sankey-link { opacity: 0.4; }
+.sankey-link:hover { opacity: 0.7; }
+
 /* --- Budget chart --- */
 
 #budgets-chart-controls { margin-bottom: 0.5rem; }
