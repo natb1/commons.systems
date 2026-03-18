@@ -82,6 +82,7 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
   });
 
   const provider = new GithubAuthProvider();
+  provider.addScope("user:email");
 
   function signIn(): void {
     signInWithRedirect(auth, provider).catch((error) => {

@@ -50,10 +50,30 @@ body.viewer-active {
   justify-content: center;
 }
 
-.viewer-canvas-wrap canvas {
+.viewer-canvas-wrap canvas,
+.viewer-canvas-wrap img {
   display: block;
   max-width: 100%;
   max-height: 100%;
+}
+
+/* When zoomed, switch from centered fit-to-view to scrollable overflow layout */
+.viewer-canvas-wrap.zoomed {
+  width: max-content;
+  height: max-content;
+  align-items: start;
+  justify-content: start;
+}
+
+.viewer-canvas-wrap.zoomed img {
+  max-width: none;
+  max-height: none;
+}
+
+.viewer-content:has(.zoomed) {
+  overflow: auto;
+  align-items: start;
+  justify-content: start;
 }
 
 .viewer-epub-container {
@@ -97,7 +117,10 @@ body.viewer-active {
 }
 
 .viewer-prev,
-.viewer-next {
+.viewer-next,
+.viewer-zoom-in,
+.viewer-zoom-out,
+.viewer-zoom-reset {
   background: none;
   border: 1px solid var(--muted-fg, #888);
   border-radius: 3px;
@@ -105,8 +128,15 @@ body.viewer-active {
   padding: 0.25rem 0.5rem;
 }
 
+.zoom-hidden {
+  display: none;
+}
+
 .viewer-prev:disabled,
-.viewer-next:disabled {
+.viewer-next:disabled,
+.viewer-zoom-in:disabled,
+.viewer-zoom-out:disabled,
+.viewer-zoom-reset:disabled {
   opacity: 0.3;
   cursor: default;
 }

@@ -27,6 +27,9 @@ export function renderViewerShell(item: MediaItem): string {
           <button class="viewer-prev" disabled aria-label="Previous page">&larr;</button>
           <span class="viewer-position">Loading...</span>
           <button class="viewer-next" disabled aria-label="Next page">&rarr;</button>
+          <button class="viewer-zoom-in zoom-hidden" aria-label="Zoom in">+</button>
+          <button class="viewer-zoom-out zoom-hidden" aria-label="Zoom out">&minus;</button>
+          <button class="viewer-zoom-reset zoom-hidden" aria-label="Reset zoom">&#8865;</button>
         </div>
         <div class="viewer-meta">
           <h3 class="viewer-title">${escapeHtml(item.title)}</h3>
@@ -77,6 +80,9 @@ export function initViewer(
   const position = viewer.querySelector(".viewer-position") as HTMLElement;
   const toggleBtn = viewer.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
   const panel = viewer.querySelector(".viewer-panel") as HTMLElement;
+  const zoomInBtn = viewer.querySelector(".viewer-zoom-in") as HTMLButtonElement;
+  const zoomOutBtn = viewer.querySelector(".viewer-zoom-out") as HTMLButtonElement;
+  const zoomResetBtn = viewer.querySelector(".viewer-zoom-reset") as HTMLButtonElement;
 
   document.body.classList.add("viewer-active");
 
@@ -130,11 +136,35 @@ export function initViewer(
     }, 500);
   }
 
+  // Zoom controls — update enabled/disabled state
+  function updateZoomState() {
+    if (!renderer.zoomIn) return;
+    zoomInBtn.disabled = false;
+    zoomOutBtn.disabled = !renderer.isZoomed;
+    zoomResetBtn.disabled = !renderer.isZoomed;
+  }
+
+  function handleZoomIn() {
+    renderer.zoomIn!();
+    updateZoomState();
+  }
+
+  function handleZoomOut() {
+    renderer.zoomOut!();
+    updateZoomState();
+  }
+
+  function handleZoomReset() {
+    renderer.resetZoom!();
+    updateZoomState();
+  }
+
   // Navigation
   function updateNav() {
     position.textContent = renderer.positionLabel;
     prevBtn.disabled = !renderer.canGoPrev;
     nextBtn.disabled = !renderer.canGoNext;
+    updateZoomState();
     scheduleSave();
   }
 
@@ -186,6 +216,15 @@ export function initViewer(
     // Sync to actual start page: parsePositionPage may have clamped savedPosition to 1 if out of range.
     // Without this sync, lastSavedPosition would differ from renderer.position, triggering a spurious write on first navigation.
     lastSavedPosition = renderer.position;
+    if (renderer.zoomIn) {
+      zoomInBtn.classList.remove("zoom-hidden");
+      zoomOutBtn.classList.remove("zoom-hidden");
+      zoomResetBtn.classList.remove("zoom-hidden");
+      zoomInBtn.addEventListener("click", handleZoomIn);
+      zoomOutBtn.addEventListener("click", handleZoomOut);
+      zoomResetBtn.addEventListener("click", handleZoomReset);
+      renderer.onZoomChange = updateZoomState;
+    }
     updateNav();
   })().catch((err) => {
     reportError(new Error("Viewer initialization failed", { cause: err }));
@@ -198,6 +237,9 @@ export function initViewer(
     orientationQuery.removeEventListener("change", updateOrientation);
     toggleBtn.removeEventListener("click", handleToggle);
     document.removeEventListener("keydown", handleKeydown);
+    zoomInBtn.removeEventListener("click", handleZoomIn);
+    zoomOutBtn.removeEventListener("click", handleZoomOut);
+    zoomResetBtn.removeEventListener("click", handleZoomReset);
     renderer.destroy();
   };
 }
