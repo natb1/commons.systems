@@ -18,6 +18,7 @@ import { parseUploadedJson, toParsedData, UploadValidationError } from "./upload
 import { storeParsedData, clearAll, getMeta } from "./idb.js";
 import { FirestoreSeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
 import { setActiveDataSource } from "./active-data-source.js";
+import { exportToJson } from "./export.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -44,28 +45,29 @@ authContainer.appendChild(uploadContainer);
 const uploadInput = uploadContainer.querySelector(".upload-input") as HTMLInputElement;
 const uploadLabel = uploadContainer.querySelector(".upload-label") as HTMLLabelElement;
 
-// Group name + clear button (shown when local data is loaded)
+// Group name, export button, and clear button (shown when local data is loaded)
 const localInfoContainer = document.createElement("div");
 localInfoContainer.className = "nav-local-info";
 localInfoContainer.hidden = true;
-localInfoContainer.innerHTML = `<span class="local-group-name"></span><button class="clear-data">Clear data</button>`;
+localInfoContainer.innerHTML = `<span class="local-group-name"></span><button class="export-data">Export</button><button class="clear-data">Clear data</button>`;
 authContainer.appendChild(localInfoContainer);
 
 const groupNameSpan = localInfoContainer.querySelector(".local-group-name") as HTMLSpanElement;
+const exportButton = localInfoContainer.querySelector(".export-data") as HTMLButtonElement;
 const clearButton = localInfoContainer.querySelector(".clear-data") as HTMLButtonElement;
 
 // Error display
 const errorEl = document.createElement("p");
-errorEl.className = "upload-error";
+errorEl.className = "nav-error";
 errorEl.hidden = true;
 authContainer.appendChild(errorEl);
 
-function showUploadError(message: string): void {
+function showNavError(message: string): void {
   errorEl.textContent = message;
   errorEl.hidden = false;
 }
 
-function clearUploadError(): void {
+function clearNavError(): void {
   errorEl.hidden = true;
   errorEl.textContent = "";
 }
@@ -119,7 +121,7 @@ const router = createHistoryRouter(
 function transition(next: AppState): void {
   state = next;
   updateNav();
-  clearUploadError();
+  clearNavError();
   router.navigate();
 }
 
@@ -170,7 +172,7 @@ observer.observe(app, { childList: true, subtree: true });
 
 // File upload handler
 async function handleFileUpload(file: File): Promise<void> {
-  clearUploadError();
+  clearNavError();
   try {
     const text = await file.text();
     const parsed = parseUploadedJson(text);
@@ -179,12 +181,12 @@ async function handleFileUpload(file: File): Promise<void> {
     transition({ source: "local", groupName: parsed.groupName });
   } catch (error) {
     if (error instanceof UploadValidationError) {
-      showUploadError(error.message);
+      showNavError(error.message);
       return;
     }
     if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     console.error("Upload failed:", error);
-    showUploadError("Upload failed. Please try again.");
+    showNavError("Upload failed. Please try again.");
   }
 }
 
@@ -192,6 +194,10 @@ uploadInput.addEventListener("change", () => {
   const file = uploadInput.files?.[0];
   if (file) {
     handleFileUpload(file).catch((error) => {
+      if (error instanceof TypeError || error instanceof ReferenceError) {
+        setTimeout(() => { throw error; }, 0);
+        return;
+      }
       console.error("Unhandled upload error:", error);
     });
   }
@@ -207,14 +213,37 @@ uploadLabel.addEventListener("keydown", (e) => {
   }
 });
 
+// Export handler
+exportButton.addEventListener("click", async () => {
+  try {
+    const json = await exportToJson();
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const date = new Date().toISOString().slice(0, 10);
+    const groupName = state.source === "local" ? state.groupName : "budget";
+    a.download = `budget-${groupName}-${date}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+    console.error("Export failed:", error);
+    showNavError(error instanceof Error ? error.message : "Export failed. Please try again.");
+  }
+});
+
 // Clear data handler
 clearButton.addEventListener("click", async () => {
   try {
     await clearAll();
     transition({ source: "seed" });
   } catch (error) {
+    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     console.error("Failed to clear data:", error);
-    showUploadError("Failed to clear data. Try closing other tabs or refreshing the page.");
+    showNavError("Failed to clear data. Try closing other tabs or refreshing the page.");
   }
 });
 
@@ -231,6 +260,6 @@ async function initialize(): Promise<void> {
 initialize().catch((error) => {
   if (error instanceof TypeError || error instanceof ReferenceError) throw error;
   console.error("Initialization error:", error);
-  showUploadError("Could not load saved data. You may need to re-upload your file.");
+  showNavError("Could not load saved data. You may need to re-upload your file.");
   transition({ source: "seed" });
 });

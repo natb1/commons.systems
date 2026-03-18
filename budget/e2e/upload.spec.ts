@@ -1,14 +1,5 @@
 import { test, expect } from "@playwright/test";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixturePath = path.join(__dirname, "fixtures", "test-budget.json");
-
-async function uploadFixture(page: import("@playwright/test").Page): Promise<void> {
-  const fileInput = page.locator(".upload-input");
-  await fileInput.setInputFiles(fixturePath);
-}
+import { uploadFixture } from "./helpers";
 
 test.describe("upload", () => {
   test.beforeEach(async ({ page }) => {
@@ -62,8 +53,8 @@ test.describe("upload", () => {
       mimeType: "application/json",
       buffer: Buffer.from("not valid json {{{"),
     });
-    await expect(page.locator(".upload-error")).toBeVisible({ timeout: 5000 });
-    await expect(page.locator(".upload-error")).toContainText("Invalid JSON");
+    await expect(page.locator(".nav-error")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".nav-error")).toContainText("Invalid JSON");
   });
 
   test("upload JSON with wrong version shows error", async ({ page }) => {
@@ -84,7 +75,7 @@ test.describe("upload", () => {
       mimeType: "application/json",
       buffer: Buffer.from(badVersion),
     });
-    await expect(page.locator(".upload-error")).toBeVisible({ timeout: 5000 });
-    await expect(page.locator(".upload-error")).toContainText("Unsupported version");
+    await expect(page.locator(".nav-error")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".nav-error")).toContainText("Unsupported version");
   });
 });
