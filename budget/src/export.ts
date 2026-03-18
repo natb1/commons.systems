@@ -1,4 +1,4 @@
-/** Serializes IndexedDB stores back to the upload JSON format. Inverse of upload.ts toParsedData. */
+/** Serializes IndexedDB stores back to the upload JSON format. Inverse of the upload pipeline (parseUploadedJson + toParsedData in upload.ts). */
 import { getAll, getMeta } from "./idb.js";
 import type { IdbTransaction, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbStatement } from "./idb.js";
 

@@ -62,8 +62,8 @@ test.describe("upload", () => {
       mimeType: "application/json",
       buffer: Buffer.from("not valid json {{{"),
     });
-    await expect(page.locator(".upload-error")).toBeVisible({ timeout: 5000 });
-    await expect(page.locator(".upload-error")).toContainText("Invalid JSON");
+    await expect(page.locator(".nav-error")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".nav-error")).toContainText("Invalid JSON");
   });
 
   test("upload JSON with wrong version shows error", async ({ page }) => {
@@ -84,7 +84,7 @@ test.describe("upload", () => {
       mimeType: "application/json",
       buffer: Buffer.from(badVersion),
     });
-    await expect(page.locator(".upload-error")).toBeVisible({ timeout: 5000 });
-    await expect(page.locator(".upload-error")).toContainText("Unsupported version");
+    await expect(page.locator(".nav-error")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".nav-error")).toContainText("Unsupported version");
   });
 });

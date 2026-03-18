@@ -57,7 +57,7 @@ const clearButton = localInfoContainer.querySelector(".clear-data") as HTMLButto
 
 // Error display
 const errorEl = document.createElement("p");
-errorEl.className = "upload-error";
+errorEl.className = "nav-error";
 errorEl.hidden = true;
 authContainer.appendChild(errorEl);
 
@@ -66,7 +66,7 @@ function showNavError(message: string): void {
   errorEl.hidden = false;
 }
 
-function clearUploadError(): void {
+function clearNavError(): void {
   errorEl.hidden = true;
   errorEl.textContent = "";
 }
@@ -119,7 +119,7 @@ const router = createHistoryRouter(
 function transition(next: AppState): void {
   state = next;
   updateNav();
-  clearUploadError();
+  clearNavError();
   router.navigate();
 }
 
@@ -170,7 +170,7 @@ observer.observe(app, { childList: true, subtree: true });
 
 // File upload handler
 async function handleFileUpload(file: File): Promise<void> {
-  clearUploadError();
+  clearNavError();
   try {
     const text = await file.text();
     const parsed = parseUploadedJson(text);
@@ -225,7 +225,7 @@ exportButton.addEventListener("click", async () => {
   } catch (error) {
     if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     console.error("Export failed:", error);
-    showNavError("Export failed. Please try again.");
+    showNavError(error instanceof Error ? error.message : "Export failed. Please try again.");
   }
 });
 
@@ -235,6 +235,7 @@ clearButton.addEventListener("click", async () => {
     await clearAll();
     transition({ source: "seed" });
   } catch (error) {
+    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     console.error("Failed to clear data:", error);
     showNavError("Failed to clear data. Try closing other tabs or refreshing the page.");
   }

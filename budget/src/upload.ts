@@ -33,7 +33,7 @@ interface RawOutput {
   budgetPeriods: RawBudgetPeriod[];
   rules: RawRule[];
   normalizationRules: RawNormalizationRule[];
-  statements: RawStatement[];
+  statements: IdbStatement[];
 }
 
 interface RawTransaction {
@@ -89,15 +89,6 @@ interface RawNormalizationRule {
   institution: string;
   account: string;
   priority: number;
-}
-
-interface RawStatement {
-  id: string;
-  statementId: string;
-  institution: string;
-  account: string;
-  balance: number;
-  period: string;
 }
 
 export interface ParsedUpload {
@@ -233,7 +224,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
   );
 
   const statements: IdbStatement[] = (raw.statements ?? []).map(
-    (s: RawStatement, i: number) => ({
+    (s: IdbStatement, i: number) => ({
       id: requireId(s.id, "statement", i),
       statementId: s.statementId ?? "",
       institution: s.institution ?? "",

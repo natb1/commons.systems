@@ -145,7 +145,7 @@ describe("exportToJson", () => {
     vi.restoreAllMocks();
   });
 
-  it("exports all 5 collections with correct field mappings", async () => {
+  it("exports all 6 collections with correct field mappings", async () => {
     const json = await exportToJson();
     const output = JSON.parse(json);
 
@@ -223,25 +223,13 @@ describe("exportToJson", () => {
     expect(output.normalizationRules[0].institution).toBe("");
     expect(output.normalizationRules[0].account).toBe("");
 
-    // Transaction with null statementId
-    mockGetAll.mockImplementation((storeName: string) => {
-      switch (storeName) {
-        case "transactions":
-          return Promise.resolve([{ ...idbTransactions[0], statementId: null }]);
-        case "budgets":
-          return Promise.resolve(idbBudgets);
-        case "budgetPeriods":
-          return Promise.resolve(idbBudgetPeriods);
-        case "rules":
-          return Promise.resolve(idbRules);
-        case "normalizationRules":
-          return Promise.resolve(idbNormalizationRules);
-        case "statements":
-          return Promise.resolve(idbStatements);
-        default:
-          return Promise.resolve([]);
-      }
-    });
+    // Transaction with null statementId — override just the transactions store
+    const original = mockGetAll.getMockImplementation()!;
+    mockGetAll.mockImplementation((storeName: string) =>
+      storeName === "transactions"
+        ? Promise.resolve([{ ...idbTransactions[0], statementId: null }])
+        : original(storeName),
+    );
     const json2 = await exportToJson();
     const output2 = JSON.parse(json2);
     expect(output2.transactions[0].statementId).toBe("");
