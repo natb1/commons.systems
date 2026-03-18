@@ -20,19 +20,19 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 - All 7 tasks MUST be launched in a single message (parallel execution) with `run_in_background: true`
 - Wait for all 7 tasks to complete using TaskOutput with `block: true` before proceeding. Note each task's `output_file` path.
 - If any task other than `/review` fails to launch, log a warning but continue — `/review` results alone are sufficient to proceed
-- Construct `tmp/codequality-output-<N>.txt` by concatenating the output files with Bash — do NOT use the Write tool or re-output verbatim content:
+- Construct `tmp/codequality-output-<N>.txt` by calling the concat script — do NOT use the Write tool or re-output verbatim content:
   ```bash
-  mkdir -p tmp && {
-    printf '## /review Output\n\n'; cat "$REVIEW_OUT";
-    printf '\n\n## pr-review-toolkit: code-reviewer\n\n'; cat "$CODE_REVIEWER_OUT";
-    printf '\n\n## /simplify Output\n\n'; cat "$SIMPLIFY_OUT";
-    printf '\n\n## pr-review-toolkit: comment-analyzer\n\n'; cat "$COMMENT_ANALYZER_OUT";
-    printf '\n\n## pr-review-toolkit: pr-test-analyzer\n\n'; cat "$PR_TEST_ANALYZER_OUT";
-    printf '\n\n## pr-review-toolkit: silent-failure-hunter\n\n'; cat "$SILENT_FAILURE_OUT";
-    printf '\n\n## pr-review-toolkit: type-design-analyzer\n\n'; cat "$TYPE_DESIGN_OUT";
-  } > tmp/codequality-output-<N>.txt
+  .claude/skills/ref-pr-workflow/scripts/concat-review-output.sh \
+    tmp/codequality-output-<N>.txt \
+    "/review Output:$REVIEW_OUT" \
+    "pr-review-toolkit: code-reviewer:$CODE_REVIEWER_OUT" \
+    "/simplify Output:$SIMPLIFY_OUT" \
+    "pr-review-toolkit: comment-analyzer:$COMMENT_ANALYZER_OUT" \
+    "pr-review-toolkit: pr-test-analyzer:$PR_TEST_ANALYZER_OUT" \
+    "pr-review-toolkit: silent-failure-hunter:$SILENT_FAILURE_OUT" \
+    "pr-review-toolkit: type-design-analyzer:$TYPE_DESIGN_OUT"
   ```
-  Substitute each `$*_OUT` variable with the `output_file` path from the corresponding Task result. For unavailable tasks, replace `cat` with `echo "Task unavailable"`.
+  Substitute each `$*_OUT` variable with the `output_file` path from the corresponding Task result. For unavailable tasks, pass an empty path (e.g., `"label:"`) — the script prints "Task unavailable".
 
 **Evaluation instructions:**
 - **Aggregate and deduplicate** findings across all tasks — merge near-identical findings into single entries noting which tasks raised them

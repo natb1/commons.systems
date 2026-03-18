@@ -11,8 +11,6 @@ import type {
   BudgetId,
   BudgetPeriodId,
   RuleId,
-  RuleType,
-  Rollover,
   GroupId,
 } from "./firestore.js";
 import {
@@ -24,6 +22,7 @@ import {
   getNormalizationRules as fsGetNormalizationRules,
 } from "./firestore.js";
 import { getAll, get, put, deleteRecord } from "./idb.js";
+import type { IdbTransaction, IdbStatement, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule } from "./idb.js";
 
 export interface DataSource {
   getTransactions(): Promise<Transaction[]>;
@@ -103,70 +102,6 @@ export class FirestoreSeedDataSource implements DataSource {
   }
 }
 
-interface IdbTransaction {
-  id: string;
-  institution: string;
-  account: string;
-  description: string;
-  amount: number;
-  note: string;
-  category: string;
-  reimbursement: number;
-  budget: string | null;
-  timestampMs: number | null;
-  statementId: string | null;
-  normalizedId: string | null;
-  normalizedPrimary: boolean;
-  normalizedDescription: string | null;
-}
-
-interface IdbBudget {
-  id: string;
-  name: string;
-  weeklyAllowance: number;
-  rollover: string;
-}
-
-interface IdbBudgetPeriod {
-  id: string;
-  budgetId: string;
-  periodStartMs: number;
-  periodEndMs: number;
-  total: number;
-  count: number;
-  categoryBreakdown: Record<string, number>;
-}
-
-interface IdbRule {
-  id: string;
-  type: string;
-  pattern: string;
-  target: string;
-  priority: number;
-  institution: string | null;
-  account: string | null;
-}
-
-interface IdbStatement {
-  id: string;
-  statementId: string;
-  institution: string;
-  account: string;
-  balance: number;
-  period: string;
-}
-
-interface IdbNormalizationRule {
-  id: string;
-  pattern: string;
-  patternType: string | null;
-  canonicalDescription: string;
-  dateWindowDays: number;
-  institution: string | null;
-  account: string | null;
-  priority: number;
-}
-
 function toTransaction(row: IdbTransaction): Transaction {
   return {
     id: row.id as TransactionId,
@@ -192,7 +127,7 @@ function toBudget(row: IdbBudget): Budget {
     id: row.id as BudgetId,
     name: row.name,
     weeklyAllowance: row.weeklyAllowance,
-    rollover: row.rollover as Rollover,
+    rollover: row.rollover,
     groupId: null as GroupId | null,
   };
 }
@@ -213,7 +148,7 @@ function toBudgetPeriod(row: IdbBudgetPeriod): BudgetPeriod {
 function toRule(row: IdbRule): Rule {
   return {
     id: row.id as RuleId,
-    type: row.type as RuleType,
+    type: row.type,
     pattern: row.pattern,
     target: row.target,
     priority: row.priority,
