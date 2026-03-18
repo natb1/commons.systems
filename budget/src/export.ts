@@ -1,59 +1,6 @@
+/** Serializes IndexedDB stores back to the upload JSON format. Inverse of upload.ts toParsedData. */
 import { getAll, getMeta } from "./idb.js";
-
-interface IdbTransaction {
-  id: string;
-  institution: string | null;
-  account: string | null;
-  description: string;
-  amount: number;
-  timestampMs: number | null;
-  statementId: string | null;
-  category: string;
-  budget: string | null;
-  note: string;
-  reimbursement: number;
-  normalizedId: string | null;
-  normalizedPrimary: boolean;
-  normalizedDescription: string | null;
-}
-
-interface IdbBudget {
-  id: string;
-  name: string;
-  weeklyAllowance: number;
-  rollover: string;
-}
-
-interface IdbBudgetPeriod {
-  id: string;
-  budgetId: string;
-  periodStartMs: number;
-  periodEndMs: number;
-  total: number;
-  count: number;
-  categoryBreakdown: Record<string, number>;
-}
-
-interface IdbRule {
-  id: string;
-  type: string;
-  pattern: string;
-  target: string;
-  priority: number;
-  institution: string | null;
-  account: string | null;
-}
-
-interface IdbNormalizationRule {
-  id: string;
-  pattern: string;
-  patternType: string | null;
-  canonicalDescription: string;
-  dateWindowDays: number;
-  institution: string | null;
-  account: string | null;
-  priority: number;
-}
+import type { IdbTransaction, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbStatement } from "./idb.js";
 
 function msToIso(ms: number | null): string {
   if (ms === null) return "";
@@ -65,12 +12,13 @@ function nullToEmpty(value: string | null): string {
 }
 
 export async function exportToJson(): Promise<string> {
-  const [transactions, budgets, budgetPeriods, rules, normalizationRules, meta] = await Promise.all([
+  const [transactions, budgets, budgetPeriods, rules, normalizationRules, statements, meta] = await Promise.all([
     getAll<IdbTransaction>("transactions"),
     getAll<IdbBudget>("budgets"),
     getAll<IdbBudgetPeriod>("budgetPeriods"),
     getAll<IdbRule>("rules"),
     getAll<IdbNormalizationRule>("normalizationRules"),
+    getAll<IdbStatement>("statements"),
     getMeta(),
   ]);
 
@@ -79,6 +27,7 @@ export async function exportToJson(): Promise<string> {
   const output = {
     version: meta.version,
     exportedAt: new Date().toISOString(),
+    // groupId is not stored locally; empty string for format compatibility
     groupId: "",
     groupName: meta.groupName,
     transactions: transactions.map((t) => ({
@@ -131,6 +80,7 @@ export async function exportToJson(): Promise<string> {
       account: nullToEmpty(r.account),
       priority: r.priority,
     })),
+    statements,
   };
 
   return JSON.stringify(output, null, 2) + "\n";

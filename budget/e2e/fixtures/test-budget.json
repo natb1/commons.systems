@@ -46,5 +46,6 @@
   "rules": [
     {"id": "r-1", "type": "categorization", "pattern": "KROGER", "target": "Food:Groceries", "priority": 1, "institution": "", "account": ""}
   ],
-  "normalizationRules": []
+  "normalizationRules": [],
+  "statements": []
 }

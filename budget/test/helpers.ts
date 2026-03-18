@@ -101,6 +101,7 @@ export function makeParsedData(overrides: Partial<ParsedData> = {}): ParsedData 
         priority: 1,
       },
     ],
+    statements: [],
     meta: {
       key: "upload",
       groupName: "household",

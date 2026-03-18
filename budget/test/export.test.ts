@@ -93,6 +93,17 @@ const idbNormalizationRules = [
   },
 ];
 
+const idbStatements = [
+  {
+    id: "s-1",
+    statementId: "stmt-1",
+    institution: "pnc",
+    account: "5111",
+    balance: 1234.56,
+    period: "2025-06",
+  },
+];
+
 const meta = {
   key: "upload" as const,
   groupName: "household",
@@ -113,6 +124,8 @@ function setupMocks() {
         return Promise.resolve(idbRules);
       case "normalizationRules":
         return Promise.resolve(idbNormalizationRules);
+      case "statements":
+        return Promise.resolve(idbStatements);
       default:
         return Promise.resolve([]);
     }
@@ -141,6 +154,7 @@ describe("exportToJson", () => {
     expect(output.budgetPeriods).toHaveLength(1);
     expect(output.rules).toHaveLength(1);
     expect(output.normalizationRules).toHaveLength(1);
+    expect(output.statements).toHaveLength(1);
 
     const txn = output.transactions[0];
     expect(txn.id).toBe("txn-001");
@@ -211,13 +225,6 @@ describe("exportToJson", () => {
 
     // Transaction with null statementId
     mockGetAll.mockImplementation((storeName: string) => {
-      if (storeName === "transactions") {
-        return Promise.resolve([{ ...idbTransactions[0], statementId: null }]);
-      }
-      return setupMocks(), mockGetAll(storeName);
-    });
-    setupMocks();
-    mockGetAll.mockImplementation((storeName: string) => {
       switch (storeName) {
         case "transactions":
           return Promise.resolve([{ ...idbTransactions[0], statementId: null }]);
@@ -229,6 +236,8 @@ describe("exportToJson", () => {
           return Promise.resolve(idbRules);
         case "normalizationRules":
           return Promise.resolve(idbNormalizationRules);
+        case "statements":
+          return Promise.resolve(idbStatements);
         default:
           return Promise.resolve([]);
       }
@@ -320,6 +329,10 @@ describe("exportToJson", () => {
     // Normalization rules
     expect(data.normalizationRules).toHaveLength(1);
     expect(data.normalizationRules[0]).toEqual(idbNormalizationRules[0]);
+
+    // Statements
+    expect(data.statements).toHaveLength(1);
+    expect(data.statements[0]).toEqual(idbStatements[0]);
 
     // Meta
     expect(data.meta.groupName).toBe("household");

@@ -14,7 +14,7 @@ import type {
   Rollover,
   RuleType,
 } from "./firestore.js";
-import type { ParsedData } from "./idb.js";
+import type { ParsedData, IdbStatement } from "./idb.js";
 
 export class UploadValidationError extends Error {
   constructor(message: string) {
@@ -33,6 +33,7 @@ interface RawOutput {
   budgetPeriods: RawBudgetPeriod[];
   rules: RawRule[];
   normalizationRules: RawNormalizationRule[];
+  statements: RawStatement[];
 }
 
 interface RawTransaction {
@@ -90,12 +91,22 @@ interface RawNormalizationRule {
   priority: number;
 }
 
+interface RawStatement {
+  id: string;
+  statementId: string;
+  institution: string;
+  account: string;
+  balance: number;
+  period: string;
+}
+
 export interface ParsedUpload {
   transactions: Transaction[];
   budgets: Budget[];
   budgetPeriods: BudgetPeriod[];
   rules: Rule[];
   normalizationRules: NormalizationRule[];
+  statements: IdbStatement[];
   groupName: string;
   version: number;
   exportedAt: string;
@@ -221,12 +232,24 @@ export function parseUploadedJson(text: string): ParsedUpload {
     }),
   );
 
+  const statements: IdbStatement[] = (raw.statements ?? []).map(
+    (s: RawStatement, i: number) => ({
+      id: requireId(s.id, "statement", i),
+      statementId: s.statementId ?? "",
+      institution: s.institution ?? "",
+      account: s.account ?? "",
+      balance: s.balance ?? 0,
+      period: s.period ?? "",
+    }),
+  );
+
   return {
     transactions,
     budgets,
     budgetPeriods,
     rules,
     normalizationRules,
+    statements,
     groupName: raw.groupName,
     version: raw.version,
     exportedAt: raw.exportedAt,
@@ -286,6 +309,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       account: r.account,
       priority: r.priority,
     })),
+    statements: parsed.statements,
     meta: {
       key: "upload",
       groupName: parsed.groupName,

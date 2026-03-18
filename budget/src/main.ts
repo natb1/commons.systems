@@ -44,7 +44,7 @@ authContainer.appendChild(uploadContainer);
 const uploadInput = uploadContainer.querySelector(".upload-input") as HTMLInputElement;
 const uploadLabel = uploadContainer.querySelector(".upload-label") as HTMLLabelElement;
 
-// Group name + clear button (shown when local data is loaded)
+// Group name, export button, and clear button (shown when local data is loaded)
 const localInfoContainer = document.createElement("div");
 localInfoContainer.className = "nav-local-info";
 localInfoContainer.hidden = true;
@@ -61,7 +61,7 @@ errorEl.className = "upload-error";
 errorEl.hidden = true;
 authContainer.appendChild(errorEl);
 
-function showUploadError(message: string): void {
+function showNavError(message: string): void {
   errorEl.textContent = message;
   errorEl.hidden = false;
 }
@@ -179,12 +179,12 @@ async function handleFileUpload(file: File): Promise<void> {
     transition({ source: "local", groupName: parsed.groupName });
   } catch (error) {
     if (error instanceof UploadValidationError) {
-      showUploadError(error.message);
+      showNavError(error.message);
       return;
     }
     if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     console.error("Upload failed:", error);
-    showUploadError("Upload failed. Please try again.");
+    showNavError("Upload failed. Please try again.");
   }
 }
 
@@ -225,7 +225,7 @@ exportButton.addEventListener("click", async () => {
   } catch (error) {
     if (error instanceof TypeError || error instanceof ReferenceError) throw error;
     console.error("Export failed:", error);
-    showUploadError("Export failed. Please try again.");
+    showNavError("Export failed. Please try again.");
   }
 });
 
@@ -236,7 +236,7 @@ clearButton.addEventListener("click", async () => {
     transition({ source: "seed" });
   } catch (error) {
     console.error("Failed to clear data:", error);
-    showUploadError("Failed to clear data. Try closing other tabs or refreshing the page.");
+    showNavError("Failed to clear data. Try closing other tabs or refreshing the page.");
   }
 });
 
@@ -253,6 +253,6 @@ async function initialize(): Promise<void> {
 initialize().catch((error) => {
   if (error instanceof TypeError || error instanceof ReferenceError) throw error;
   console.error("Initialization error:", error);
-  showUploadError("Could not load saved data. You may need to re-upload your file.");
+  showNavError("Could not load saved data. You may need to re-upload your file.");
   transition({ source: "seed" });
 });
