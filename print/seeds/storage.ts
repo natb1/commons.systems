@@ -250,12 +250,12 @@ const storageSeed: StorageSeedItem[] = [
   },
   {
     path: "print/prod/media/phaedrus-david-horan-translation-7-nov-25.pdf",
-    content: makePdf(1),
+    content: readFileSync(join(__dirname, "pdf-fixtures/phaedrus-1p.pdf")),
     metadata: publicMeta,
   },
   {
     path: "print/prod/media/republic-i-to-x-david-horan-translation-22-nov-25.pdf",
-    content: makePdf(3),
+    content: readFileSync(join(__dirname, "pdf-fixtures/republic-3p.pdf")),
     metadata: publicMeta,
   },
   {
