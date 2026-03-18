@@ -19,6 +19,7 @@
     "./pages/admin": "./src/pages/admin.ts",
     "./og-meta": "./src/og-meta.ts",
     "./prerender": "./src/prerender.ts",
+    "./feed": "./src/feed.ts",
     "./components/info-panel": "./src/components/info-panel.ts",
     "./blog.css": "./blog.css"
   },
