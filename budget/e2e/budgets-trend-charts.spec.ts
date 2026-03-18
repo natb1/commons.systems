@@ -43,16 +43,23 @@ test.describe("budgets trend charts", () => {
     const trendScroll = page.locator("#budgets-trend-chart .chart-scroll-wrapper");
     await expect(trendScroll).toBeVisible({ timeout: 10000 });
 
-    const initialScrollLeft = await trendScroll.evaluate((el) => el.scrollLeft);
-
     const barScroll = page.locator("#budgets-chart .chart-scroll-wrapper");
-    await barScroll.evaluate((el) => el.scrollTo({ left: 0 }));
 
-    // Allow scroll sync event to propagate
+    // Scroll bar chart to middle so there is room to scroll in either direction
+    await barScroll.evaluate((el) => el.scrollTo({ left: Math.floor(el.scrollWidth / 2) }));
     await page.waitForTimeout(300);
 
-    const newScrollLeft = await trendScroll.evaluate((el) => el.scrollLeft);
-    expect(newScrollLeft).not.toBe(initialScrollLeft);
+    // Now scroll bar chart to the start
+    await barScroll.evaluate((el) => {
+      el.scrollLeft = 0;
+      el.dispatchEvent(new Event("scroll"));
+    });
+
+    // Allow scroll sync event to propagate
+    await page.waitForTimeout(500);
+
+    const trendScrollLeft = await trendScroll.evaluate((el) => el.scrollLeft);
+    expect(trendScrollLeft).toBe(0);
   });
 
   test("metrics section contains 12-Week Avg Weekly Spending", async ({ page }) => {
