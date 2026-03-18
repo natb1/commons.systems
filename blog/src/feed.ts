@@ -14,6 +14,7 @@ export interface FeedConfig extends FeedXmlConfig {
   distDir: string;
 }
 
+/** Returns RSS XML string from seed data. Pure function used by the Vite dev plugin. */
 export function buildFeedXml(config: FeedXmlConfig): string {
   const { title, siteUrl, seed, postLinkPrefix } = config;
 
@@ -52,6 +53,7 @@ export function buildFeedXml(config: FeedXmlConfig): string {
   return generateRssXml(posts, { title, siteUrl, feedUrl, postLinkPrefix });
 }
 
+/** Builds RSS XML and writes feed.xml to distDir. Called by prerender scripts. */
 export function generateFeedXml(config: FeedConfig): void {
   const xml = buildFeedXml(config);
   writeFileSync(join(config.distDir, "feed.xml"), xml);
