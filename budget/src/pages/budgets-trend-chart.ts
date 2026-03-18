@@ -1,7 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import type { AggregatePoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
-import { getThemeFg } from "./chart-util.js";
+import { getThemeFg, assembleChartLayout } from "./chart-util.js";
 
 export interface TrendChartOptions {
   data: AggregatePoint[];
@@ -47,13 +47,13 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   const weekCount = weeks.length;
 
   // Build series data: one dot per series per week
-  const weekIndexMap = new Map<string, number>();
-  weekLabels.forEach((label, i) => weekIndexMap.set(label, i));
+  const weekIndexMap = new Map<number, number>();
+  data.forEach((d, i) => weekIndexMap.set(d.weekMs, i));
 
   const lineData: LineDatum[] = [];
   for (const d of data) {
-    const weekIndex = weekIndexMap.get(d.weekLabel);
-    if (weekIndex === undefined) throw new Error(`Unknown week label: ${d.weekLabel}`);
+    const weekIndex = weekIndexMap.get(d.weekMs);
+    if (weekIndex === undefined) throw new Error(`Unknown weekMs: ${d.weekMs}`);
     lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_INCOME, value: d.avg12Income });
     lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_12W_SPENDING, value: d.avg12Spending });
     lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_3W_SPENDING, value: d.avg3Spending });
@@ -84,7 +84,7 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
     marks: [Plot.ruleY([0])],
   });
 
-  // Scrollable chart body with dot marks (lines added via overlay below)
+  // Scrollable chart body: faceted dots with pointer tooltips (lines drawn via overlay SVG below)
   const seriesOrder: SeriesName[] = [SERIES_INCOME, SERIES_12W_SPENDING, SERIES_3W_SPENDING];
   const chartSvg = Plot.plot({
     width: chartWidth,
@@ -99,7 +99,10 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
       label: null,
       padding: 0.15,
       domain: weekLabels.map((_, i) => i),
-      tickFormat: (i: number) => weekLabels[i] ?? "",
+      tickFormat: (i: number) => {
+        if (i < 0 || i >= weekLabels.length) throw new Error(`tickFormat index ${i} out of bounds [0, ${weekLabels.length})`);
+        return weekLabels[i];
+      },
     },
     marks: [
       ...seriesOrder.map(series =>
@@ -146,7 +149,7 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   const dotsBySeriesIndex = new Map<number, { cx: number; cy: number }[]>();
   let idx = 0;
   for (let sIdx = 0; sIdx < seriesOrder.length; sIdx++) {
-    const count = lineData.filter(d => d.series === seriesOrder[sIdx]).length;
+    const count = weekCount;
     const points: { cx: number; cy: number }[] = [];
     for (let i = 0; i < count; i++) {
       const dot = dots[idx++];
@@ -160,7 +163,11 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
         const transform = el.getAttribute("transform");
         if (transform) {
           const match = transform.match(/translate\(([^,)]+)/);
-          if (match) cx += parseFloat(match[1]);
+          if (match) {
+            const dx = parseFloat(match[1]);
+            if (Number.isNaN(dx)) throw new Error(`Non-numeric translate value in transform: ${transform}`);
+            cx += dx;
+          }
         }
         el = el.parentElement;
       }
@@ -182,21 +189,9 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
     overlaySvg.appendChild(path);
   }
 
-  const layout = document.createElement("div");
-  layout.className = "chart-layout";
-
-  const axisDiv = document.createElement("div");
-  axisDiv.className = "chart-y-axis";
-  axisDiv.appendChild(axisSvg);
-
-  const wrapper = document.createElement("div");
-  wrapper.className = "chart-scroll-wrapper";
+  const { layout, wrapper } = assembleChartLayout(axisSvg, chartSvg);
   wrapper.style.position = "relative";
-  wrapper.appendChild(chartSvg);
   wrapper.appendChild(overlaySvg);
-
-  layout.appendChild(axisDiv);
-  layout.appendChild(wrapper);
 
   const legend = document.createElement("div");
   legend.className = "trend-legend";

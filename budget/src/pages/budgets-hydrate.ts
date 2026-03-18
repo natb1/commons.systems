@@ -8,8 +8,7 @@ import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderAggregateTrendChart } from "./budgets-trend-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
 import { computePanelWidth } from "./chart-util.js";
-import type { AggregatePoint } from "../balance.js";
-import type { PerBudgetPoint } from "../balance.js";
+import type { AggregatePoint, PerBudgetPoint } from "../balance.js";
 import type { SerializedBudget } from "./budgets.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
@@ -125,6 +124,7 @@ function getAllScrollWrappers(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".chart-scroll-wrapper"));
 }
 
+// Reentrance guard: prevents scroll-sync handlers from triggering each other in a feedback loop
 let scrollSyncing = false;
 let scrollAbort: AbortController | null = null;
 function attachScrollSync(): void {
@@ -134,11 +134,14 @@ function attachScrollSync(): void {
     w.addEventListener("scroll", () => {
       if (scrollSyncing) return;
       scrollSyncing = true;
-      const ratio = w.scrollWidth > 0 ? w.scrollLeft / w.scrollWidth : 0;
-      for (const other of getAllScrollWrappers()) {
-        if (other !== w) other.scrollLeft = ratio * other.scrollWidth;
+      try {
+        const ratio = w.scrollWidth > 0 ? w.scrollLeft / w.scrollWidth : 0;
+        for (const other of getAllScrollWrappers()) {
+          if (other !== w) other.scrollLeft = ratio * other.scrollWidth;
+        }
+      } finally {
+        scrollSyncing = false;
       }
-      scrollSyncing = false;
     }, { signal: scrollAbort.signal });
   }
 }
@@ -164,15 +167,15 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   if (!areaElOrNull) throw new DataIntegrityError("budgets-area-chart container not found in page markup");
   const areaEl: HTMLElement = areaElOrNull;
 
-  const aggregateTrend = trendEl.dataset.aggregateTrend
-    ? deserializeAggregateTrend(trendEl.dataset.aggregateTrend)
-    : [];
-  const perBudgetTrend = areaEl.dataset.perBudgetTrend
-    ? deserializePerBudgetTrend(areaEl.dataset.perBudgetTrend)
-    : [];
+  const aggregateRaw = trendEl.dataset.aggregateTrend;
+  if (aggregateRaw === undefined) throw new DataIntegrityError("budgets-trend-chart missing required data-aggregate-trend attribute");
+  const aggregateTrend = deserializeAggregateTrend(aggregateRaw);
+
+  const perBudgetRaw = areaEl.dataset.perBudgetTrend;
+  if (perBudgetRaw === undefined) throw new DataIntegrityError("budgets-area-chart missing required data-per-budget-trend attribute");
+  const perBudgetTrend = deserializePerBudgetTrend(perBudgetRaw);
 
   // Match the bar chart's per-week column width so scroll sync aligns weeks.
-  // Must stay in sync with computePanelWidth in chart-util.ts.
   const panelWidth = computePanelWidth(budgets.length);
 
   function render(): void {

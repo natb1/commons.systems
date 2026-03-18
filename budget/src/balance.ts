@@ -1,5 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
 import type { Budget, BudgetId, BudgetPeriod, Rollover, Transaction, TransactionId } from "./firestore.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 const INCOME_WEEKS = 12;
@@ -191,18 +192,18 @@ export function computeAllBudgetBalances(
 }
 
 export interface AggregatePoint {
-  weekLabel: string;
-  weekMs: number;
-  avg12Income: number;
-  avg12Spending: number;
-  avg3Spending: number;
+  readonly weekLabel: string;
+  readonly weekMs: number;
+  readonly avg12Income: number;
+  readonly avg12Spending: number;
+  readonly avg3Spending: number;
 }
 
 export interface PerBudgetPoint {
-  weekLabel: string;
-  weekMs: number;
-  budget: string;
-  avg3Spending: number;
+  readonly weekLabel: string;
+  readonly weekMs: number;
+  readonly budget: string;
+  readonly avg3Spending: number;
 }
 
 /** Compute trailing rolling average. For indices with fewer than `windowSize` prior values, averages over available values. */
@@ -224,6 +225,16 @@ function toSundayEntry(d: Date): { label: string; ms: number } {
   return { label, ms: sun.getTime() };
 }
 
+/** Build ordered unique week entries from period start dates, sorted chronologically. */
+function weekEntriesFromPeriods(periods: BudgetPeriod[]): [number, string][] {
+  const weekMap = new Map<number, string>();
+  for (const p of periods) {
+    const entry = toSundayEntry(p.periodStart.toDate());
+    if (!weekMap.has(entry.ms)) weekMap.set(entry.ms, entry.label);
+  }
+  return [...weekMap.entries()].sort((a, b) => a[0] - b[0]);
+}
+
 /**
  * Compute aggregate trend data: rolling averages of income and spending per week.
  * Weeks are derived from budget periods. Income is computed from transactions.
@@ -232,16 +243,10 @@ export function computeAggregateTrend(
   periods: BudgetPeriod[],
   transactions: Transaction[],
 ): AggregatePoint[] {
-  // Build ordered unique weeks from periods
-  const weekMap = new Map<number, string>();
-  for (const p of periods) {
-    const entry = toSundayEntry(p.periodStart.toDate());
-    if (!weekMap.has(entry.ms)) weekMap.set(entry.ms, entry.label);
-  }
-  const weeks = [...weekMap.entries()].sort((a, b) => a[0] - b[0]);
+  const weeks = weekEntriesFromPeriods(periods);
   if (weeks.length === 0) return [];
 
-  // Weekly spending: sum of all period totals per week
+  // Weekly spending: sum of all period totals per week (single pass)
   const weeklySpending = new Map<number, number>();
   for (const p of periods) {
     const entry = toSundayEntry(p.periodStart.toDate());
@@ -286,12 +291,7 @@ export function computePerBudgetTrend(
   periods: BudgetPeriod[],
   transactions: Transaction[],
 ): PerBudgetPoint[] {
-  // Build ordered unique weeks from periods
-  const weekMap = new Map<number, string>();
-  for (const p of periods) {
-    const entry = toSundayEntry(p.periodStart.toDate());
-    if (!weekMap.has(entry.ms)) weekMap.set(entry.ms, entry.label);
-  }
+  const weekMap = new Map(weekEntriesFromPeriods(periods));
 
   // Also include weeks from unbudgeted transactions
   const unbudgetedTxns = transactions.filter(
@@ -318,7 +318,8 @@ export function computePerBudgetTrend(
 
   for (const p of periods) {
     const entry = toSundayEntry(p.periodStart.toDate());
-    const name = budgetIdToName.get(p.budgetId) ?? p.budgetId;
+    const name = budgetIdToName.get(p.budgetId);
+    if (name === undefined) throw new DataIntegrityError(`Budget period references unknown budget ID "${p.budgetId}"`);
     if (!perBudgetWeekly.has(name)) perBudgetWeekly.set(name, new Map());
     const m = perBudgetWeekly.get(name)!;
     m.set(entry.ms, (m.get(entry.ms) ?? 0) + p.total);
@@ -354,15 +355,17 @@ export function computePerBudgetTrend(
  * Uses the same week set as the bar chart (from budget periods).
  */
 export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
+  const weeks = weekEntriesFromPeriods(periods);
+  if (weeks.length === 0) return 0;
+
   const weekTotals = new Map<number, number>();
   for (const p of periods) {
     const entry = toSundayEntry(p.periodStart.toDate());
     weekTotals.set(entry.ms, (weekTotals.get(entry.ms) ?? 0) + p.total);
   }
-  if (weekTotals.size === 0) return 0;
-  const sorted = [...weekTotals.entries()].sort((a, b) => a[0] - b[0]);
-  const trailing = sorted.slice(-12);
-  return trailing.reduce((sum, [, total]) => sum + total, 0) / trailing.length;
+
+  const trailing = weeks.slice(-12);
+  return trailing.reduce((sum, [ms]) => sum + (weekTotals.get(ms) ?? 0), 0) / trailing.length;
 }
 
 /** Return the start of the next Monday 00:00 UTC from a millisecond timestamp. A Monday input advances to the following Monday. */

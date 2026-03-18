@@ -100,7 +100,7 @@ function renderMetrics(averageWeeklyIncome: number, totalWeeklyBudget: number, a
     </div>`;
 }
 
-function serializeTrendData(data: readonly unknown[]): string {
+function serializeTrendData(data: readonly AggregatePoint[] | readonly PerBudgetPoint[]): string {
   return escapeHtml(JSON.stringify(data));
 }
 

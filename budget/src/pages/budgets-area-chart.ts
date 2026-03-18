@@ -2,7 +2,7 @@ import * as Plot from "@observablehq/plot";
 import { schemeTableau10 } from "d3-scale-chromatic";
 import type { PerBudgetPoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
-import { getThemeFg } from "./chart-util.js";
+import { getThemeFg, assembleChartLayout } from "./chart-util.js";
 
 export interface AreaChartOptions {
   data: PerBudgetPoint[];
@@ -34,19 +34,17 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   const weekLabels = weeks.map(w => w.label);
   const weekCount = weeks.length;
 
-  // Build stacked area data with numeric x for continuous stacking
-  const weekIndexMap = new Map<string, number>();
-  weekLabels.forEach((label, i) => weekIndexMap.set(label, i));
+  const weekIndexMap = new Map<number, number>();
+  weekEntries.forEach(([ms], i) => weekIndexMap.set(ms, i));
 
-  // Identify budgets, putting "Other" last
   const budgetNames = [...new Set(data.map(d => d.budget))];
   const sortedBudgets = budgetNames.filter(n => n !== "Other").sort();
   if (budgetNames.includes("Other")) sortedBudgets.push("Other");
 
   const areaData: AreaDatum[] = [];
   for (const d of data) {
-    const weekIndex = weekIndexMap.get(d.weekLabel);
-    if (weekIndex === undefined) throw new Error(`Unknown week label: ${d.weekLabel}`);
+    const weekIndex = weekIndexMap.get(d.weekMs);
+    if (weekIndex === undefined) throw new Error(`Unknown weekMs: ${d.weekMs}`);
     areaData.push({
       weekIndex,
       week: d.weekLabel,
@@ -109,7 +107,10 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
       tickRotate: -45,
       domain: [0, weekCount - 1],
       ticks: weekLabels.map((_, i) => i),
-      tickFormat: (i: number) => weekLabels[i] ?? "",
+      tickFormat: (i: number) => {
+        if (i < 0 || i >= weekLabels.length) throw new Error(`tickFormat index ${i} out of bounds [0, ${weekLabels.length})`);
+        return weekLabels[i];
+      },
     },
     y: { label: null, axis: null, grid: true, domain: yDomain },
     color: {
@@ -159,19 +160,7 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   chartSvg.style.width = `${chartWidth}px`;
   chartSvg.style.minWidth = `${chartWidth}px`;
 
-  const layout = document.createElement("div");
-  layout.className = "chart-layout";
-
-  const axisDiv = document.createElement("div");
-  axisDiv.className = "chart-y-axis";
-  axisDiv.appendChild(axisSvg);
-
-  const wrapper = document.createElement("div");
-  wrapper.className = "chart-scroll-wrapper";
-  wrapper.appendChild(chartSvg);
-
-  layout.appendChild(axisDiv);
-  layout.appendChild(wrapper);
+  const { layout, wrapper } = assembleChartLayout(axisSvg, chartSvg);
 
   const legend = document.createElement("div");
   legend.className = "area-legend";
