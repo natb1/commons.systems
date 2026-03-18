@@ -6,6 +6,7 @@ import { renderBudgetChart, type ChartResult } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderAggregateTrendChart } from "./budgets-trend-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
+import { computePanelWidth } from "./chart-util.js";
 import type { AggregatePoint } from "../balance.js";
 import type { PerBudgetPoint } from "../balance.js";
 import type { SerializedBudget } from "./budgets.js";
@@ -124,7 +125,10 @@ function getAllScrollWrappers(): HTMLElement[] {
 }
 
 let scrollSyncing = false;
+let scrollAbort: AbortController | null = null;
 function attachScrollSync(): void {
+  if (scrollAbort) scrollAbort.abort();
+  scrollAbort = new AbortController();
   for (const w of getAllScrollWrappers()) {
     w.addEventListener("scroll", () => {
       if (scrollSyncing) return;
@@ -134,7 +138,7 @@ function attachScrollSync(): void {
         if (other !== w) other.scrollLeft = ratio * other.scrollWidth;
       }
       scrollSyncing = false;
-    });
+    }, { signal: scrollAbort.signal });
   }
 }
 
@@ -152,29 +156,33 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   if (!pieElOrNull) throw new DataIntegrityError("budgets-pie container not found in page markup");
   const pieEl: HTMLElement = pieElOrNull;
 
-  const trendEl = document.getElementById("budgets-trend-chart");
-  const areaEl = document.getElementById("budgets-area-chart");
+  const trendElOrNull = document.getElementById("budgets-trend-chart");
+  if (!trendElOrNull) throw new DataIntegrityError("budgets-trend-chart container not found in page markup");
+  const trendEl: HTMLElement = trendElOrNull;
+  const areaElOrNull = document.getElementById("budgets-area-chart");
+  if (!areaElOrNull) throw new DataIntegrityError("budgets-area-chart container not found in page markup");
+  const areaEl: HTMLElement = areaElOrNull;
 
-  // Deserialize trend data
-  const aggregateTrend = trendEl?.dataset.aggregateTrend
+  const aggregateTrend = trendEl.dataset.aggregateTrend
     ? deserializeAggregateTrend(trendEl.dataset.aggregateTrend)
     : [];
-  const perBudgetTrend = areaEl?.dataset.perBudgetTrend
+  const perBudgetTrend = areaEl.dataset.perBudgetTrend
     ? deserializePerBudgetTrend(areaEl.dataset.perBudgetTrend)
     : [];
 
-  // Compute panelWidth from bar chart logic for pixel alignment
-  const panelWidth = Math.max(budgets.length * 60 + 40, 120);
+  // Match the bar chart's per-week column width so scroll sync aligns weeks.
+  // Must stay in sync with computePanelWidth in chart-util.ts.
+  const panelWidth = computePanelWidth(budgets.length);
 
   function render(): void {
     chartResult = renderBudgetChart(container, { budgets, periods });
     renderBudgetPieChart(pieEl, { budgets, periods, windowWeeks: 12 });
 
     const containerWidth = container.clientWidth || 640;
-    if (trendEl && aggregateTrend.length > 0) {
+    if (aggregateTrend.length > 0) {
       renderAggregateTrendChart(trendEl, { data: aggregateTrend, containerWidth, panelWidth });
     }
-    if (areaEl && perBudgetTrend.length > 0) {
+    if (perBudgetTrend.length > 0) {
       renderPerBudgetAreaChart(areaEl, { data: perBudgetTrend, containerWidth, panelWidth });
     }
   }
@@ -193,7 +201,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
       const weeks = chartResult.weeks;
       const selectedMs = new Date(datePicker.value + "T00:00:00").getTime();
-      // Find nearest period start date
+      // Find nearest week entry
       let nearestIdx = 0;
       let nearestDist = Infinity;
       for (let i = 0; i < weeks.length; i++) {
@@ -220,7 +228,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   const observer = new ResizeObserver(() => {
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      // Capture scroll ratio from any wrapper
+      // Capture scroll ratio from first wrapper (all are synced)
       const wrappers = getAllScrollWrappers();
       const scrollRatio = wrappers.length > 0 && wrappers[0].scrollWidth > 0
         ? wrappers[0].scrollLeft / wrappers[0].scrollWidth
@@ -237,7 +245,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
         setTimeout(() => { throw error; }, 0);
         return;
       }
-      // Re-attach scroll sync and restore scroll position on new wrappers
+      // render() replaces DOM, destroying old listeners
       attachScrollSync();
       for (const w of getAllScrollWrappers()) {
         w.scrollLeft = scrollRatio * w.scrollWidth;

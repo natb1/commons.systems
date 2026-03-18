@@ -2,6 +2,7 @@ import * as Plot from "@observablehq/plot";
 import { schemeTableau10 } from "d3-scale-chromatic";
 import type { PerBudgetPoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
+import { getThemeFg } from "./chart-util.js";
 
 export interface AreaChartOptions {
   data: PerBudgetPoint[];
@@ -16,12 +17,6 @@ interface AreaDatum {
   value: number;
 }
 
-function getThemeFg(container: HTMLElement): string {
-  const fg = getComputedStyle(container).getPropertyValue("--fg").trim();
-  if (!fg) throw new Error("Missing required CSS custom property --fg");
-  return fg;
-}
-
 export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaChartOptions): ChartResult {
   const { data, containerWidth, panelWidth } = options;
 
@@ -30,7 +25,6 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
     return { weeks: [] };
   }
 
-  // Extract ordered unique weeks
   const weekSet = new Map<number, string>();
   for (const d of data) {
     if (!weekSet.has(d.weekMs)) weekSet.set(d.weekMs, d.weekLabel);
@@ -51,8 +45,10 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
 
   const areaData: AreaDatum[] = [];
   for (const d of data) {
+    const weekIndex = weekIndexMap.get(d.weekLabel);
+    if (weekIndex === undefined) throw new Error(`Unknown week label: ${d.weekLabel}`);
     areaData.push({
-      weekIndex: weekIndexMap.get(d.weekLabel) ?? 0,
+      weekIndex,
       week: d.weekLabel,
       budget: d.budget,
       value: d.avg3Spending,
@@ -83,7 +79,6 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   for (const total of weekTotals.values()) yMax = Math.max(yMax, total);
   const yDomain: [number, number] = [0, yMax * 1.1 || 1];
 
-  // Fixed Y-axis
   const axisSvg = Plot.plot({
     width: axisWidth,
     height,
@@ -101,7 +96,7 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   areaData.sort((a, b) => (budgetOrder.get(a.budget) ?? 0) - (budgetOrder.get(b.budget) ?? 0)
     || a.weekIndex - b.weekIndex);
 
-  // Scrollable chart body with stacked lines
+  // Scrollable chart body with stacked areas
   const chartSvg = Plot.plot({
     width: chartWidth,
     height,
@@ -164,7 +159,6 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   chartSvg.style.width = `${chartWidth}px`;
   chartSvg.style.minWidth = `${chartWidth}px`;
 
-  // Build layout
   const layout = document.createElement("div");
   layout.className = "chart-layout";
 
@@ -179,7 +173,6 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   layout.appendChild(axisDiv);
   layout.appendChild(wrapper);
 
-  // Legend
   const legend = document.createElement("div");
   legend.className = "area-legend";
   for (let i = 0; i < sortedBudgets.length; i++) {

@@ -1,6 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import type { Budget, BudgetId, BudgetPeriod } from "../firestore.js";
 import { applyRollover, computePeriodBalances, type PeriodBalance } from "../balance.js";
+import { getThemeFg, computePanelWidth } from "./chart-util.js";
 
 export interface ChartOptions {
   budgets: Budget[];
@@ -81,12 +82,6 @@ function buildChartData(
   return { data, weeks };
 }
 
-function getThemeFg(container: HTMLElement): string {
-  const fg = getComputedStyle(container).getPropertyValue("--fg").trim();
-  if (!fg) throw new Error("Missing required CSS custom property --fg");
-  return fg;
-}
-
 export function renderBudgetChart(container: HTMLElement, options: ChartOptions): ChartResult {
   const { budgets, periods } = options;
   const balanceMap = computePeriodBalances(budgets, periods);
@@ -98,7 +93,7 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
     return { weeks: [] };
   }
   const weekCount = weeks.length;
-  const panelWidth = Math.max(budgets.length * 60 + 40, 120);
+  const panelWidth = computePanelWidth(budgets.length);
   const axisWidth = 50;
   const marginRight = 20;
   const chartWidth = Math.max(weekCount * panelWidth + marginRight, (container.clientWidth || 640) - axisWidth);

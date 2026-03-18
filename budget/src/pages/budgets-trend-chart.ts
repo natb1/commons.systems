@@ -1,6 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import type { AggregatePoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
+import { getThemeFg } from "./chart-util.js";
 
 export interface TrendChartOptions {
   data: AggregatePoint[];
@@ -8,33 +9,30 @@ export interface TrendChartOptions {
   panelWidth: number;
 }
 
-interface LineDatum {
-  week: string;
-  series: string;
-  value: number;
-}
-
 const SERIES_INCOME = "12-Week Avg Income";
 const SERIES_12W_SPENDING = "12-Week Avg Spending";
 const SERIES_3W_SPENDING = "3-Week Avg Spending";
 
-const seriesColors: Record<string, string> = {
+type SeriesName = typeof SERIES_INCOME | typeof SERIES_12W_SPENDING | typeof SERIES_3W_SPENDING;
+
+interface LineDatum {
+  weekIndex: number;
+  weekLabel: string;
+  series: SeriesName;
+  value: number;
+}
+
+const seriesColors: Record<SeriesName, string> = {
   [SERIES_INCOME]: "#66bb6a",
   [SERIES_12W_SPENDING]: "#42a5f5",
   [SERIES_3W_SPENDING]: "#ef5350",
 };
 
-const seriesDash: Record<string, string | undefined> = {
+const seriesDash: Record<SeriesName, string | undefined> = {
   [SERIES_INCOME]: "4,3",
   [SERIES_12W_SPENDING]: undefined,
   [SERIES_3W_SPENDING]: undefined,
 };
-
-function getThemeFg(container: HTMLElement): string {
-  const fg = getComputedStyle(container).getPropertyValue("--fg").trim();
-  if (!fg) throw new Error("Missing required CSS custom property --fg");
-  return fg;
-}
 
 export function renderAggregateTrendChart(container: HTMLElement, options: TrendChartOptions): ChartResult {
   const { data, containerWidth, panelWidth } = options;
@@ -48,12 +46,17 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   const weekLabels = weeks.map(w => w.label);
   const weekCount = weeks.length;
 
-  // Build line data: one point per series per week, using a constant x within each facet panel
+  // Build series data: one dot per series per week
+  const weekIndexMap = new Map<string, number>();
+  weekLabels.forEach((label, i) => weekIndexMap.set(label, i));
+
   const lineData: LineDatum[] = [];
   for (const d of data) {
-    lineData.push({ week: d.weekLabel, series: SERIES_INCOME, value: d.avg12Income });
-    lineData.push({ week: d.weekLabel, series: SERIES_12W_SPENDING, value: d.avg12Spending });
-    lineData.push({ week: d.weekLabel, series: SERIES_3W_SPENDING, value: d.avg3Spending });
+    const weekIndex = weekIndexMap.get(d.weekLabel);
+    if (weekIndex === undefined) throw new Error(`Unknown week label: ${d.weekLabel}`);
+    lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_INCOME, value: d.avg12Income });
+    lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_12W_SPENDING, value: d.avg12Spending });
+    lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_3W_SPENDING, value: d.avg3Spending });
   }
 
   const axisWidth = 50;
@@ -69,7 +72,6 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   for (const d of lineData) yMax = Math.max(yMax, d.value);
   const yDomain: [number, number] = [0, yMax * 1.1 || 1];
 
-  // Fixed Y-axis
   const axisSvg = Plot.plot({
     width: axisWidth,
     height,
@@ -82,8 +84,8 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
     marks: [Plot.ruleY([0])],
   });
 
-  // Scrollable chart body with lines
-  const seriesOrder = [SERIES_INCOME, SERIES_12W_SPENDING, SERIES_3W_SPENDING];
+  // Scrollable chart body with dot marks (lines added via overlay below)
+  const seriesOrder: SeriesName[] = [SERIES_INCOME, SERIES_12W_SPENDING, SERIES_3W_SPENDING];
   const chartSvg = Plot.plot({
     width: chartWidth,
     height,
@@ -93,13 +95,18 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
     style: sharedStyle,
     x: { axis: null, domain: [0, 1] },
     y: { label: null, axis: null, grid: true, domain: yDomain },
-    fx: { label: null, padding: 0.15, domain: weekLabels },
+    fx: {
+      label: null,
+      padding: 0.15,
+      domain: weekLabels.map((_, i) => i),
+      tickFormat: (i: number) => weekLabels[i] ?? "",
+    },
     marks: [
       ...seriesOrder.map(series =>
         Plot.dot(
           lineData.filter(d => d.series === series),
           {
-            fx: "week",
+            fx: "weekIndex",
             x: () => 0.5,
             y: "value",
             fill: seriesColors[series],
@@ -108,11 +115,11 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
         ),
       ),
       Plot.tip(lineData, Plot.pointer({
-        fx: "week",
+        fx: "weekIndex",
         x: () => 0.5,
         y: "value",
         title: (d: LineDatum) =>
-          `${d.series}\nWeek: ${d.week}\n$${d.value.toFixed(2)}`,
+          `${d.series}\nWeek: ${d.weekLabel}\n$${d.value.toFixed(2)}`,
       })),
     ],
   });
@@ -120,7 +127,9 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   chartSvg.style.width = `${chartWidth}px`;
   chartSvg.style.minWidth = `${chartWidth}px`;
 
-  // Connect dots with lines across facet panels using an overlay SVG
+  // Plot facets isolate each week's coordinate space, so dots in different
+  // panels can't be connected with a single Plot.line mark. An overlay SVG
+  // reads the rendered dot positions and draws paths across panels.
   const overlaySvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   overlaySvg.setAttribute("width", String(chartWidth));
   overlaySvg.setAttribute("height", String(height));
@@ -129,33 +138,35 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   overlaySvg.style.left = "0";
   overlaySvg.style.pointerEvents = "none";
 
-  // Get dot positions from the rendered chart
+  // Read dot positions from the rendered chart, accumulating parent transforms
   const dots = chartSvg.querySelectorAll("circle");
+  if (dots.length !== lineData.length) {
+    throw new Error(`Expected ${lineData.length} dots but found ${dots.length}`);
+  }
   const dotsBySeriesIndex = new Map<number, { cx: number; cy: number }[]>();
   let idx = 0;
-  for (const series of seriesOrder) {
-    const count = lineData.filter(d => d.series === series).length;
+  for (let sIdx = 0; sIdx < seriesOrder.length; sIdx++) {
+    const count = lineData.filter(d => d.series === seriesOrder[sIdx]).length;
     const points: { cx: number; cy: number }[] = [];
     for (let i = 0; i < count; i++) {
       const dot = dots[idx++];
-      if (dot) {
-        // Get the actual position by traversing parent transforms
-        let cx = parseFloat(dot.getAttribute("cx") ?? "0");
-        const cy = parseFloat(dot.getAttribute("cy") ?? "0");
-        // Walk up parent <g> elements to accumulate transforms
-        let el: Element | null = dot.parentElement;
-        while (el && el !== chartSvg) {
-          const transform = el.getAttribute("transform");
-          if (transform) {
-            const match = transform.match(/translate\(([^,)]+)/);
-            if (match) cx += parseFloat(match[1]);
-          }
-          el = el.parentElement;
+      const cxAttr = dot.getAttribute("cx");
+      const cyAttr = dot.getAttribute("cy");
+      if (cxAttr === null || cyAttr === null) throw new Error(`Dot ${idx - 1} missing cx/cy attributes`);
+      let cx = parseFloat(cxAttr);
+      const cy = parseFloat(cyAttr);
+      let el: Element | null = dot.parentElement;
+      while (el && el !== chartSvg) {
+        const transform = el.getAttribute("transform");
+        if (transform) {
+          const match = transform.match(/translate\(([^,)]+)/);
+          if (match) cx += parseFloat(match[1]);
         }
-        points.push({ cx, cy });
+        el = el.parentElement;
       }
+      points.push({ cx, cy });
     }
-    dotsBySeriesIndex.set(seriesOrder.indexOf(series), points);
+    dotsBySeriesIndex.set(sIdx, points);
   }
 
   for (const [sIdx, points] of dotsBySeriesIndex) {
@@ -171,7 +182,6 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
     overlaySvg.appendChild(path);
   }
 
-  // Build layout
   const layout = document.createElement("div");
   layout.className = "chart-layout";
 
@@ -188,7 +198,6 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   layout.appendChild(axisDiv);
   layout.appendChild(wrapper);
 
-  // Legend
   const legend = document.createElement("div");
   legend.className = "trend-legend";
   for (const series of seriesOrder) {

@@ -229,7 +229,6 @@ function toSundayEntry(d: Date): { label: string; ms: number } {
  * Weeks are derived from budget periods. Income is computed from transactions.
  */
 export function computeAggregateTrend(
-  _budgets: Budget[],
   periods: BudgetPeriod[],
   transactions: Transaction[],
 ): AggregatePoint[] {
@@ -279,7 +278,7 @@ export function computeAggregateTrend(
 }
 
 /**
- * Compute per-budget 3-week rolling average spending.
+ * Compute per-budget 3-week rolling average of non-income spending.
  * Includes an "Other" series for transactions with no budget assignment.
  */
 export function computePerBudgetTrend(
@@ -351,7 +350,7 @@ export function computePerBudgetTrend(
 }
 
 /**
- * Compute average weekly spending over the trailing 12 weeks.
+ * Compute average weekly spending over the trailing 12 weeks (or all available weeks if fewer than 12 exist).
  * Uses the same week set as the bar chart (from budget periods).
  */
 export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {

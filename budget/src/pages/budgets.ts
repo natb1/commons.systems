@@ -1,23 +1,8 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { getBudgets, getBudgetPeriods, getTransactions, type Budget, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
-import { computeAverageWeeklyIncome, computeAverageWeeklySpending, computeAggregateTrend, computePerBudgetTrend } from "../balance.js";
+import { computeAverageWeeklyIncome, computeAverageWeeklySpending, computeAggregateTrend, computePerBudgetTrend, type AggregatePoint, type PerBudgetPoint } from "../balance.js";
 import { formatCurrency } from "../format.js";
-
-export interface SerializedAggregatePoint {
-  readonly weekLabel: string;
-  readonly weekMs: number;
-  readonly avg12Income: number;
-  readonly avg12Spending: number;
-  readonly avg3Spending: number;
-}
-
-export interface SerializedPerBudgetPoint {
-  readonly weekLabel: string;
-  readonly weekMs: number;
-  readonly budget: string;
-  readonly avg3Spending: number;
-}
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
   { value: "none", label: "None" },
@@ -115,11 +100,7 @@ function renderMetrics(averageWeeklyIncome: number, totalWeeklyBudget: number, a
     </div>`;
 }
 
-function serializeAggregateTrend(data: SerializedAggregatePoint[]): string {
-  return escapeHtml(JSON.stringify(data));
-}
-
-function serializePerBudgetTrend(data: SerializedPerBudgetPoint[]): string {
+function serializeTrendData(data: readonly unknown[]): string {
   return escapeHtml(JSON.stringify(data));
 }
 
@@ -127,14 +108,14 @@ function renderChartContainer(
   budgets: Budget[],
   periods: BudgetPeriod[],
   metricsHtml: string,
-  aggregateTrend: SerializedAggregatePoint[],
-  perBudgetTrend: SerializedPerBudgetPoint[],
+  aggregateTrend: AggregatePoint[],
+  perBudgetTrend: PerBudgetPoint[],
 ): string {
   return `<div id="budgets-chart-controls">
       <label>Jump to: <input type="date" id="chart-date-picker"></label>
     </div>
-    <div id="budgets-trend-chart" data-aggregate-trend="${serializeAggregateTrend(aggregateTrend)}"></div>
-    <div id="budgets-area-chart" data-per-budget-trend="${serializePerBudgetTrend(perBudgetTrend)}"></div>
+    <div id="budgets-trend-chart" data-aggregate-trend="${serializeTrendData(aggregateTrend)}"></div>
+    <div id="budgets-area-chart" data-per-budget-trend="${serializeTrendData(perBudgetTrend)}"></div>
     <div id="budgets-chart" data-budgets="${serializeBudgets(budgets)}" data-periods="${serializePeriods(periods)}"></div>
     <div class="below-bar-chart-row">
       ${metricsHtml}
@@ -161,7 +142,7 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
     const totalWeeklyBudget = budgets.reduce((s, b) => s + b.weeklyAllowance, 0);
     const averageWeeklySpending = computeAverageWeeklySpending(periods);
     const metricsHtml = renderMetrics(averageWeeklyIncome, totalWeeklyBudget, averageWeeklySpending);
-    const aggregateTrend = computeAggregateTrend(budgets, periods, transactions);
+    const aggregateTrend = computeAggregateTrend(periods, transactions);
     const perBudgetTrend = computePerBudgetTrend(budgets, periods, transactions);
     chartHtml = renderChartContainer(budgets, periods, metricsHtml, aggregateTrend, perBudgetTrend);
     tableHtml = renderBudgetTable(budgets, authorized);

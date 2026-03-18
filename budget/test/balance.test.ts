@@ -726,21 +726,17 @@ describe("computeRollingAverage", () => {
 
 describe("computeAggregateTrend", () => {
   it("returns empty array for no periods", () => {
-    const result = computeAggregateTrend([], [], []);
+    const result = computeAggregateTrend([], []);
     expect(result).toEqual([]);
   });
 
   it("correct aggregation across multiple budgets per week", () => {
-    const budgets = [
-      makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 }),
-      makeBudget({ id: "fun", name: "Fun", weeklyAllowance: 50 }),
-    ];
     // Both periods start on the same Monday -> same Sunday week
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
       makePeriod({ id: "fun-w1", budgetId: "fun", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 30 }),
     ];
-    const result = computeAggregateTrend(budgets, periods, []);
+    const result = computeAggregateTrend(periods, []);
     expect(result).toHaveLength(1);
     // Spending = 80 + 30 = 110, single point so avg12 and avg3 are both 110
     expect(result[0].avg12Spending).toBe(110);
@@ -749,7 +745,6 @@ describe("computeAggregateTrend", () => {
   });
 
   it("income averages computed correctly", () => {
-    const budgets = [makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 })];
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
       makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 60 }),
@@ -758,7 +753,7 @@ describe("computeAggregateTrend", () => {
       makeTxn({ id: "inc-1", category: "Income", amount: 1200, timestamp: ts("2025-01-07"), budget: null }),
       makeTxn({ id: "inc-2", category: "Income", amount: 600, timestamp: ts("2025-01-14"), budget: null }),
     ];
-    const result = computeAggregateTrend(budgets, periods, txns);
+    const result = computeAggregateTrend(periods, txns);
     expect(result).toHaveLength(2);
     // Week 1 income: 1200, avg12=[1200] -> 1200
     expect(result[0].avg12Income).toBe(1200);
