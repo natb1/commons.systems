@@ -26,9 +26,17 @@ Before executing each step, update the issue body state with `wiggum_step` and `
 .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":8,"step_label":"QA Review Loop","phase":"qa","active_skills":["ref-memory-management","ref-pr-workflow","ref-qa","ref-wiggum-loop"],"wiggum_step":1,"wiggum_step_label":"Execute Next Step"}'
 ```
 
+**Plan mode boundary rule:** Steps that exit plan mode (Steps 0 and 3) must advance `wiggum_step` to the next step *before* the exit. Plan mode exits are context-clearing boundaries — if context clears before the next step writes its own state, the session resumes at the stale `wiggum_step` value and re-executes the current step.
+
 ## Step 0. Initialize
 
 Enter plan mode. Write a complete new plan from scratch — do not edit or patch any existing plan file. The plan must include all instruction sets: next step, evaluation, termination, and progress report (if provided).
+
+Before exiting plan mode, update issue state to advance `wiggum_step` to 1:
+
+```bash
+.claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{ ... "wiggum_step":1,"wiggum_step_label":"Execute Next Step"}'
+```
 
 ## Step 1. Execute Next Step
 
@@ -58,6 +66,12 @@ Enter plan mode. Plan must include:
 - Commit instructions (commit after work is done)
 
 Execute plan.
+
+Before returning to Step 0, update issue state to set `wiggum_step` to 0:
+
+```bash
+.claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{ ... "wiggum_step":0,"wiggum_step_label":"Initialize"}'
+```
 
 Return to Step 0. (Step 0, not Step 1: each iteration requires a fresh plan for the next execution cycle.)
 
