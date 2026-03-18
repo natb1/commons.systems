@@ -3,16 +3,19 @@ import { join } from "node:path";
 import { generateRssXml, type RssPost } from "@commons-systems/rssutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
-export interface FeedConfig {
+export interface FeedXmlConfig {
   title: string;
   siteUrl: string;
-  distDir: string;
   seed: Pick<SeedSpec, "collections">;
   postLinkPrefix?: string;
 }
 
-export function generateFeedXml(config: FeedConfig): void {
-  const { title, siteUrl, distDir, seed, postLinkPrefix } = config;
+export interface FeedConfig extends FeedXmlConfig {
+  distDir: string;
+}
+
+export function buildFeedXml(config: FeedXmlConfig): string {
+  const { title, siteUrl, seed, postLinkPrefix } = config;
 
   const postsCollection = seed.collections.find((c) => c.name === "posts");
   if (!postsCollection) {
@@ -46,8 +49,11 @@ export function generateFeedXml(config: FeedConfig): void {
   });
 
   const feedUrl = `${siteUrl}/feed.xml`;
-  const xml = generateRssXml(posts, { title, siteUrl, feedUrl, postLinkPrefix });
+  return generateRssXml(posts, { title, siteUrl, feedUrl, postLinkPrefix });
+}
 
-  writeFileSync(join(distDir, "feed.xml"), xml);
+export function generateFeedXml(config: FeedConfig): void {
+  const xml = buildFeedXml(config);
+  writeFileSync(join(config.distDir, "feed.xml"), xml);
   console.log("Generated: /feed.xml");
 }

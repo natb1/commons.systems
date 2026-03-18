@@ -20,6 +20,7 @@
     "./og-meta": "./src/og-meta.ts",
     "./prerender": "./src/prerender.ts",
     "./feed": "./src/feed.ts",
+    "./vite-plugin-feed-xml": "./src/vite-plugin-feed-xml.ts",
     "./components/info-panel": "./src/components/info-panel.ts",
     "./blog.css": "./blog.css"
   },
