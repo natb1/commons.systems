@@ -235,7 +235,7 @@ export function initViewer(
     canvasWrap.appendChild(rightEl);
 
     spreadToggleBtn.setAttribute("aria-pressed", "true");
-    try { localStorage.setItem("spread-mode", "true"); } catch {}
+    try { localStorage.setItem("spread-mode", "true"); } catch { /* storage unavailable */ }
 
     // ResizeObserver for spread re-render
     spreadResizeObserver = new ResizeObserver(() => {
@@ -263,7 +263,7 @@ export function initViewer(
     canvasWrap.classList.remove("zoomed");
 
     spreadToggleBtn.setAttribute("aria-pressed", "false");
-    try { localStorage.setItem("spread-mode", "false"); } catch {}
+    try { localStorage.setItem("spread-mode", "false"); } catch { /* storage unavailable */ }
 
     if (spreadResizeObserver) {
       spreadResizeObserver.disconnect();
@@ -414,7 +414,7 @@ export function initViewer(
       spreadToggleBtn.addEventListener("click", handleSpreadToggle);
       // Restore spread preference
       let preferSpread = false;
-      try { preferSpread = localStorage.getItem("spread-mode") === "true"; } catch {}
+      try { preferSpread = localStorage.getItem("spread-mode") === "true"; } catch { /* storage unavailable */ }
       if (preferSpread) {
         enterSpreadMode(renderer.currentPage);
         await renderSpread();
