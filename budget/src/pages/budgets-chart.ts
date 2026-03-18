@@ -7,10 +7,14 @@ export interface ChartOptions {
   periods: BudgetPeriod[];
 }
 
+export interface WeekEntry {
+  readonly label: string;
+  readonly ms: number;
+}
+
 export interface ChartResult {
-  weekLabels: string[];
-  /** Period start timestamps in ms, sorted chronologically, one per unique week. */
-  periodStartMs: number[];
+  /** Week entries sorted chronologically, one per unique week. */
+  readonly weeks: readonly WeekEntry[];
 }
 
 interface BarDatum {
@@ -23,7 +27,8 @@ interface BarDatum {
 
 function formatWeek(ts: { toDate(): Date }): string {
   const d = ts.toDate();
-  // Roll back to the preceding Sunday (week start) so labels stay consistent
+  if (isNaN(d.getTime())) throw new Error("formatWeek received an invalid Date from timestamp");
+  // Normalize to the Sunday of the same week so labels stay consistent
   // regardless of which weekday the period happens to begin on.
   const sun = new Date(d);
   sun.setDate(sun.getDate() - sun.getDay());
@@ -45,10 +50,8 @@ function allWeekEntries(balanceMap: Map<BudgetId, PeriodBalance[]>): { label: st
 function buildChartData(
   budgets: Budget[],
   balanceMap: Map<BudgetId, PeriodBalance[]>,
-): { data: BarDatum[]; weekLabels: string[]; periodStartMs: number[] } {
-  const weekEntries = allWeekEntries(balanceMap);
-  const weekLabels = weekEntries.map(e => e.label);
-  const periodStartMs = weekEntries.map(e => e.ms);
+): { data: BarDatum[]; weeks: WeekEntry[] } {
+  const weeks = allWeekEntries(balanceMap);
   const data: BarDatum[] = [];
 
   for (const budget of budgets) {
@@ -58,7 +61,7 @@ function buildChartData(
 
     // Walk all weeks: fill missing periods (no period record for this budget at this timestamp) with zero-spend rollover entries
     let accumulated = 0;
-    for (const entry of weekEntries) {
+    for (const entry of weeks) {
       const pb = byMs.get(entry.ms);
       const spent = pb ? pb.spent : 0;
       const balance = pb
@@ -75,7 +78,7 @@ function buildChartData(
     }
   }
 
-  return { data, weekLabels, periodStartMs };
+  return { data, weeks };
 }
 
 function getThemeFg(container: HTMLElement): string {
@@ -87,13 +90,14 @@ function getThemeFg(container: HTMLElement): string {
 export function renderBudgetChart(container: HTMLElement, options: ChartOptions): ChartResult {
   const { budgets, periods } = options;
   const balanceMap = computePeriodBalances(budgets, periods);
-  const { data, weekLabels, periodStartMs } = buildChartData(budgets, balanceMap);
+  const { data, weeks } = buildChartData(budgets, balanceMap);
+  const weekLabels = weeks.map(w => w.label);
 
   if (data.length === 0) {
     container.textContent = "No budget period data to chart.";
-    return { weekLabels: [], periodStartMs: [] };
+    return { weeks: [] };
   }
-  const weekCount = weekLabels.length;
+  const weekCount = weeks.length;
   const panelWidth = Math.max(budgets.length * 60 + 40, 120);
   const axisWidth = 50;
   const marginRight = 20;
@@ -193,5 +197,5 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
 
   wrapper.scrollLeft = wrapper.scrollWidth;
 
-  return { weekLabels, periodStartMs };
+  return { weeks };
 }
