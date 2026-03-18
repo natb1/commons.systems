@@ -37,6 +37,7 @@ type RuleSeedData = Omit<Rule, "id" | "groupId"> & { memberEmails: string[]; gro
 
 type NormalizationRuleSeedData = Omit<NormalizationRule, "id"> & { memberEmails: string[] };
 
+/** Seed statements use plain string for statementId (not branded), require groupId (non-nullable), and add memberEmails for security rules. */
 type StatementSeedData = Omit<Statement, "id" | "statementId" | "groupId"> & { statementId: string; groupId: string; memberEmails: string[] };
 
 const budgetDocs: { id: string; data: BudgetSeedData }[] = [

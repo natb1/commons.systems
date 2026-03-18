@@ -23,7 +23,7 @@ function buildAccountRows(transactions: Transaction[], statements: Statement[]):
     }
   }
 
-  // Find latest statement per (institution, account) by comparing period strings (YYYY-MM, lexicographically ordered)
+  // Find latest statement per (institution, account) by comparing period strings (YYYY-MM format, zero-padded, so lexicographic order equals chronological order)
   const latestStatements = new Map<string, Statement>();
   for (const stmt of statements) {
     const key = `${stmt.institution}\0${stmt.account}`;
