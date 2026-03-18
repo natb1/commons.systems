@@ -254,6 +254,27 @@ describe("renderBudgets", () => {
     expect(html).toContain("$350.00");
   });
 
+  it("renders 12-Week Avg Weekly Spending metric", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([
+        budget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 100 }),
+      ]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 80,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain("12-Week Avg Weekly Spending");
+  });
+
   it("metrics section absent on fetch error", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockRejectedValue(new Error("connection failed")),

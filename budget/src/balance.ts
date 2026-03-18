@@ -1,7 +1,9 @@
 import type { Timestamp } from "firebase/firestore";
 import type { Budget, BudgetId, BudgetPeriod, Rollover, Transaction, TransactionId } from "./firestore.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+export const UNBUDGETED_SERIES = "Other";
 const INCOME_WEEKS = 12;
 
 export function computeNetAmount(amount: number, reimbursement: number): number {
@@ -17,6 +19,16 @@ interface TimestampedTransaction extends Transaction {
 
 function netAmount(t: Transaction): number {
   return computeNetAmount(t.amount, t.reimbursement);
+}
+
+/** Filter to timestamped income transactions, excluding non-primary normalized duplicates. */
+function filterIncomeTransactions(transactions: Transaction[]): TimestampedTransaction[] {
+  return transactions.filter(
+    (t): t is TimestampedTransaction =>
+      t.category.startsWith("Income")
+      && t.timestamp !== null
+      && (t.normalizedId === null || t.normalizedPrimary),
+  );
 }
 
 function compareByTimestampThenId(a: TimestampedTransaction, b: TimestampedTransaction): number {
@@ -190,6 +202,176 @@ export function computeAllBudgetBalances(
   return result;
 }
 
+export interface AggregatePoint {
+  readonly weekLabel: string;
+  readonly weekMs: number;
+  readonly avg12Income: number;
+  readonly avg12Spending: number;
+  readonly avg3Spending: number;
+}
+
+export interface PerBudgetPoint {
+  readonly weekLabel: string;
+  readonly weekMs: number;
+  readonly budget: string;
+  readonly avg3Spending: number;
+}
+
+/** Compute trailing rolling average over a window of `windowSize` values including the current index. For indices with fewer than `windowSize` preceding values, averages over available values. */
+export function computeRollingAverage(values: number[], windowSize: number): number[] {
+  if (windowSize < 1) throw new RangeError(`windowSize must be >= 1, got ${windowSize}`);
+  const result: number[] = [];
+  let sum = 0;
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i];
+    if (i >= windowSize) sum -= values[i - windowSize];
+    const count = Math.min(i + 1, windowSize);
+    result.push(sum / count);
+  }
+  return result;
+}
+
+/** Normalize a Date to the Sunday of the same week, returning "M/D" label and ms timestamp. */
+export function toSundayEntry(d: Date): { label: string; ms: number } {
+  if (isNaN(d.getTime())) throw new DataIntegrityError("toSundayEntry received an invalid Date");
+  const sun = new Date(d);
+  sun.setDate(sun.getDate() - sun.getDay());
+  const label = `${sun.getMonth() + 1}/${sun.getDate()}`;
+  return { label, ms: sun.getTime() };
+}
+
+/** Build ordered unique week entries and sum totals per week. Returns weeks sorted chronologically. */
+function indexPeriodsByWeek(periods: BudgetPeriod[]): {
+  weeks: [number, string][];
+  weeklySpending: Map<number, number>;
+} {
+  const weekLabels = new Map<number, string>();
+  const weeklySpending = new Map<number, number>();
+  for (const p of periods) {
+    const entry = toSundayEntry(p.periodStart.toDate());
+    if (!weekLabels.has(entry.ms)) weekLabels.set(entry.ms, entry.label);
+    weeklySpending.set(entry.ms, (weeklySpending.get(entry.ms) ?? 0) + p.total);
+  }
+  const weeks: [number, string][] = [...weekLabels.entries()].sort((a, b) => a[0] - b[0]);
+  return { weeks, weeklySpending };
+}
+
+/**
+ * Compute aggregate trend data: rolling averages of income and spending per week.
+ * Weeks are derived from budget periods. Income is computed from transactions.
+ */
+export function computeAggregateTrend(
+  periods: BudgetPeriod[],
+  transactions: Transaction[],
+): AggregatePoint[] {
+  const { weeks, weeklySpending } = indexPeriodsByWeek(periods);
+  if (weeks.length === 0) return [];
+
+  // Weekly income: sum income transactions per week
+  const incomeTxns = filterIncomeTransactions(transactions);
+  const weeklyIncome = new Map<number, number>();
+  for (const t of incomeTxns) {
+    const entry = toSundayEntry(t.timestamp.toDate());
+    weeklyIncome.set(entry.ms, (weeklyIncome.get(entry.ms) ?? 0) + computeNetAmount(t.amount, t.reimbursement));
+  }
+
+  const spendingValues = weeks.map(([ms]) => weeklySpending.get(ms) ?? 0);
+  const incomeValues = weeks.map(([ms]) => weeklyIncome.get(ms) ?? 0);
+
+  const avg12Spending = computeRollingAverage(spendingValues, 12);
+  const avg3Spending = computeRollingAverage(spendingValues, 3);
+  const avg12Income = computeRollingAverage(incomeValues, 12);
+
+  return weeks.map(([ms, label], i) => ({
+    weekLabel: label,
+    weekMs: ms,
+    avg12Income: avg12Income[i],
+    avg12Spending: avg12Spending[i],
+    avg3Spending: avg3Spending[i],
+  }));
+}
+
+/**
+ * Compute per-budget 3-week rolling average of non-income spending.
+ * Includes an "Other" series when qualifying unbudgeted transactions exist.
+ */
+export function computePerBudgetTrend(
+  budgets: Budget[],
+  periods: BudgetPeriod[],
+  transactions: Transaction[],
+): PerBudgetPoint[] {
+  const { weeks: periodsWeeks } = indexPeriodsByWeek(periods);
+  const weekMap = new Map(periodsWeeks);
+
+  // Also include weeks from unbudgeted transactions
+  const unbudgetedTxns = transactions.filter(
+    (t): t is Transaction & { timestamp: Timestamp } =>
+      t.budget === null
+      && t.timestamp !== null
+      && (t.normalizedId === null || t.normalizedPrimary)
+      && !t.category.startsWith("Income"),
+  );
+  for (const t of unbudgetedTxns) {
+    const entry = toSundayEntry(t.timestamp.toDate());
+    if (!weekMap.has(entry.ms)) weekMap.set(entry.ms, entry.label);
+  }
+
+  const weeks = [...weekMap.entries()].sort((a, b) => a[0] - b[0]);
+  if (weeks.length === 0) return [];
+
+  const budgetIdToName = new Map<string, string>();
+  for (const b of budgets) budgetIdToName.set(b.id, b.name);
+
+  // Per-budget weekly spending from periods
+  const perBudgetWeekly = new Map<string, Map<number, number>>();
+  for (const b of budgets) perBudgetWeekly.set(b.name, new Map());
+
+  for (const p of periods) {
+    const entry = toSundayEntry(p.periodStart.toDate());
+    const name = budgetIdToName.get(p.budgetId);
+    if (name === undefined) throw new DataIntegrityError(`Budget period references unknown budget ID "${p.budgetId}"`);
+    if (!perBudgetWeekly.has(name)) perBudgetWeekly.set(name, new Map());
+    const m = perBudgetWeekly.get(name)!;
+    m.set(entry.ms, (m.get(entry.ms) ?? 0) + p.total);
+  }
+
+  // "Other" spending from unbudgeted transactions
+  const otherWeekly = new Map<number, number>();
+  for (const t of unbudgetedTxns) {
+    const entry = toSundayEntry(t.timestamp.toDate());
+    otherWeekly.set(entry.ms, (otherWeekly.get(entry.ms) ?? 0) + computeNetAmount(t.amount, t.reimbursement));
+  }
+  if (otherWeekly.size > 0) perBudgetWeekly.set(UNBUDGETED_SERIES, otherWeekly);
+
+  const result: PerBudgetPoint[] = [];
+  for (const [budgetName, weeklyMap] of perBudgetWeekly) {
+    const values = weeks.map(([ms]) => weeklyMap.get(ms) ?? 0);
+    const avg3 = computeRollingAverage(values, 3);
+    for (let i = 0; i < weeks.length; i++) {
+      result.push({
+        weekLabel: weeks[i][1],
+        weekMs: weeks[i][0],
+        budget: budgetName,
+        avg3Spending: avg3[i],
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Compute average weekly spending over the trailing 12 weeks (or all available weeks if fewer than 12 exist).
+ * Uses the same week set as the bar chart (from budget periods).
+ */
+export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
+  const { weeks, weeklySpending } = indexPeriodsByWeek(periods);
+  if (weeks.length === 0) return 0;
+
+  const trailing = weeks.slice(-12);
+  return trailing.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / trailing.length;
+}
+
 /** Return the start of the next Monday 00:00 UTC from a millisecond timestamp. A Monday input advances to the following Monday. */
 function endOfWeekMs(timestampMs: number): number {
   const d = new Date(timestampMs);
@@ -212,12 +394,7 @@ function endOfWeekMs(timestampMs: number): number {
  * positive and negative income conventions produce a positive result.
  */
 export function computeAverageWeeklyIncome(transactions: Transaction[]): number {
-  const incomeTxns = transactions.filter(
-    (t): t is Transaction & { timestamp: Timestamp } =>
-      t.category.startsWith("Income")
-      && t.timestamp !== null
-      && (t.normalizedId === null || t.normalizedPrimary),
-  );
+  const incomeTxns = filterIncomeTransactions(transactions);
 
   if (incomeTxns.length === 0) return 0;
 
