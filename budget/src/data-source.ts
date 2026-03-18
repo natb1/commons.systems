@@ -22,7 +22,7 @@ import {
   getNormalizationRules as fsGetNormalizationRules,
 } from "./firestore.js";
 import { getAll, get, put, deleteRecord } from "./idb.js";
-import type { IdbTransaction, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule } from "./idb.js";
+import type { IdbTransaction, IdbStatement, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule } from "./idb.js";
 
 export interface DataSource {
   getTransactions(): Promise<Transaction[]>;
