@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyIncome } from "../src/balance";
+import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyIncome, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending } from "../src/balance";
 import type { Budget, BudgetPeriod, Transaction } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -703,5 +703,151 @@ describe("computeAverageWeeklyIncome", () => {
       makeTxn({ id: "latest2", category: "Income", amount: 1200, timestamp: ts("2025-03-12T12:00:00Z") }),
     ];
     expect(computeAverageWeeklyIncome(txnsWithExcluded)).toBe(100);
+  });
+});
+
+describe("computeRollingAverage", () => {
+  it("window=3 with enough data returns correct averages", () => {
+    const values = [10, 20, 30, 40, 50];
+    const result = computeRollingAverage(values, 3);
+    // i=0: avg([10]) = 10
+    // i=1: avg([10,20]) = 15
+    // i=2: avg([10,20,30]) = 20
+    // i=3: avg([20,30,40]) = 30
+    // i=4: avg([30,40,50]) = 40
+    expect(result).toEqual([10, 15, 20, 30, 40]);
+  });
+
+  it("short data (fewer points than window) averages available data", () => {
+    const values = [6, 12];
+    const result = computeRollingAverage(values, 5);
+    // i=0: avg([6]) = 6
+    // i=1: avg([6,12]) = 9
+    expect(result).toEqual([6, 9]);
+  });
+
+  it("single value returns that value", () => {
+    const result = computeRollingAverage([42], 3);
+    expect(result).toEqual([42]);
+  });
+});
+
+describe("computeAggregateTrend", () => {
+  it("returns empty array for no periods", () => {
+    const result = computeAggregateTrend([], []);
+    expect(result).toEqual([]);
+  });
+
+  it("correct aggregation across multiple budgets per week", () => {
+    // Both periods start on the same Monday -> same Sunday week
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
+      makePeriod({ id: "fun-w1", budgetId: "fun", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 30 }),
+    ];
+    const result = computeAggregateTrend(periods, []);
+    expect(result).toHaveLength(1);
+    // Spending = 80 + 30 = 110, single point so avg12 and avg3 are both 110
+    expect(result[0].avg12Spending).toBe(110);
+    expect(result[0].avg3Spending).toBe(110);
+    expect(result[0].avg12Income).toBe(0);
+  });
+
+  it("income averages computed correctly", () => {
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+      makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 60 }),
+    ];
+    const txns = [
+      makeTxn({ id: "inc-1", category: "Income", amount: 1200, timestamp: ts("2025-01-07"), budget: null }),
+      makeTxn({ id: "inc-2", category: "Income", amount: 600, timestamp: ts("2025-01-14"), budget: null }),
+    ];
+    const result = computeAggregateTrend(periods, txns);
+    expect(result).toHaveLength(2);
+    // Week 1 income: 1200, avg12=[1200] -> 1200
+    expect(result[0].avg12Income).toBe(1200);
+    // Week 2 income: 600, avg12=[1200,600] -> 900
+    expect(result[1].avg12Income).toBe(900);
+  });
+});
+
+describe("computePerBudgetTrend", () => {
+  it("returns empty array for no periods", () => {
+    const result = computePerBudgetTrend([], [], []);
+    expect(result).toEqual([]);
+  });
+
+  it("each budget gets separate series", () => {
+    const budgets = [
+      makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 }),
+      makeBudget({ id: "fun", name: "Fun", weeklyAllowance: 50 }),
+    ];
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
+      makePeriod({ id: "fun-w1", budgetId: "fun", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 30 }),
+    ];
+    const result = computePerBudgetTrend(budgets, periods, []);
+    const budgetNames = [...new Set(result.map(r => r.budget))];
+    expect(budgetNames).toContain("Food");
+    expect(budgetNames).toContain("Fun");
+    // Each budget has 1 week point
+    const foodPoints = result.filter(r => r.budget === "Food");
+    const funPoints = result.filter(r => r.budget === "Fun");
+    expect(foodPoints).toHaveLength(1);
+    expect(funPoints).toHaveLength(1);
+    expect(foodPoints[0].avg3Spending).toBe(80);
+    expect(funPoints[0].avg3Spending).toBe(30);
+  });
+
+  it("'Other' series from null-budget transactions", () => {
+    const budgets = [makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 })];
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+    ];
+    const txns = [
+      makeTxn({ id: "unbudgeted-1", amount: 25, budget: null, category: "Misc", timestamp: ts("2025-01-07") }),
+    ];
+    const result = computePerBudgetTrend(budgets, periods, txns);
+    const otherPoints = result.filter(r => r.budget === "Other");
+    expect(otherPoints.length).toBeGreaterThan(0);
+    expect(otherPoints[0].avg3Spending).toBe(25);
+  });
+});
+
+describe("computeAverageWeeklySpending", () => {
+  it("returns 0 for no periods", () => {
+    expect(computeAverageWeeklySpending([])).toBe(0);
+  });
+
+  it("averages weekly totals over trailing 12 weeks", () => {
+    // Create 14 weeks of periods; only trailing 12 should be used
+    const periods: ReturnType<typeof makePeriod>[] = [];
+    for (let i = 0; i < 14; i++) {
+      const start = new Date("2025-01-06");
+      start.setDate(start.getDate() + i * 7);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 7);
+      periods.push(
+        makePeriod({
+          id: `food-w${i}`,
+          budgetId: "food",
+          periodStart: ts(start.toISOString()),
+          periodEnd: ts(end.toISOString()),
+          total: i < 2 ? 999 : 100, // first 2 weeks have large totals that should be excluded
+        }),
+      );
+    }
+    const result = computeAverageWeeklySpending(periods);
+    // Trailing 12 weeks (indices 2-13) all have total=100
+    expect(result).toBe(100);
+  });
+
+  it("fewer than 12 weeks averages over available weeks", () => {
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
+      makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 120 }),
+    ];
+    const result = computeAverageWeeklySpending(periods);
+    // 2 weeks: (80 + 120) / 2 = 100
+    expect(result).toBe(100);
   });
 });

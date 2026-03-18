@@ -1,6 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import type { Budget, BudgetId, BudgetPeriod } from "../firestore.js";
-import { applyRollover, computePeriodBalances, type PeriodBalance } from "../balance.js";
+import { applyRollover, computePeriodBalances, toSundayEntry, type PeriodBalance } from "../balance.js";
+import { getThemeFg, computePanelWidth, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
 export interface ChartOptions {
   budgets: Budget[];
@@ -25,23 +26,13 @@ interface BarDatum {
   balance: number;
 }
 
-function formatWeek(ts: { toDate(): Date }): string {
-  const d = ts.toDate();
-  if (isNaN(d.getTime())) throw new Error("formatWeek received an invalid Date from timestamp");
-  // Normalize to the Sunday of the same week so labels stay consistent
-  // regardless of which weekday the period happens to begin on.
-  const sun = new Date(d);
-  sun.setDate(sun.getDate() - sun.getDay());
-  return `${sun.getMonth() + 1}/${sun.getDate()}`;
-}
-
 /** Collect ordered unique week entries across all budgets, deduplicating by timestamp. */
 function allWeekEntries(balanceMap: Map<BudgetId, PeriodBalance[]>): { label: string; ms: number }[] {
   const seen = new Map<number, string>();
   for (const balances of balanceMap.values()) {
     for (const pb of balances) {
-      const ms = pb.periodStart.toMillis();
-      if (!seen.has(ms)) seen.set(ms, formatWeek(pb.periodStart));
+      const entry = toSundayEntry(pb.periodStart.toDate());
+      if (!seen.has(entry.ms)) seen.set(entry.ms, entry.label);
     }
   }
   return [...seen.entries()].sort((a, b) => a[0] - b[0]).map(([ms, label]) => ({ label, ms }));
@@ -57,7 +48,10 @@ function buildChartData(
   for (const budget of budgets) {
     const balances = balanceMap.get(budget.id) ?? [];
     const byMs = new Map<number, PeriodBalance>();
-    for (const pb of balances) byMs.set(pb.periodStart.toMillis(), pb);
+    for (const pb of balances) {
+      const key = toSundayEntry(pb.periodStart.toDate()).ms;
+      byMs.set(key, pb);
+    }
 
     // Walk all weeks: fill missing periods (no period record for this budget at this timestamp) with zero-spend rollover entries
     let accumulated = 0;
@@ -81,12 +75,6 @@ function buildChartData(
   return { data, weeks };
 }
 
-function getThemeFg(container: HTMLElement): string {
-  const fg = getComputedStyle(container).getPropertyValue("--fg").trim();
-  if (!fg) throw new Error("Missing required CSS custom property --fg");
-  return fg;
-}
-
 export function renderBudgetChart(container: HTMLElement, options: ChartOptions): ChartResult {
   const { budgets, periods } = options;
   const balanceMap = computePeriodBalances(budgets, periods);
@@ -98,12 +86,10 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
     return { weeks: [] };
   }
   const weekCount = weeks.length;
-  const panelWidth = Math.max(budgets.length * 60 + 40, 120);
-  const axisWidth = 50;
-  const marginRight = 20;
-  const chartWidth = Math.max(weekCount * panelWidth + marginRight, (container.clientWidth || 640) - axisWidth);
+  const panelWidth = computePanelWidth(budgets.length);
+  const containerWidth = container.clientWidth || 640;
+  const chartWidth = computeChartWidth(weekCount, panelWidth, containerWidth);
   const height = 300;
-  const marginBottom = 50;
 
   const fg = getThemeFg(container);
 
@@ -118,26 +104,15 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
 
   const sharedStyle = { background: "transparent", color: fg };
 
-  // Fixed Y-axis (stays visible while scrolling)
-  const axisSvg = Plot.plot({
-    width: axisWidth,
-    height,
-    marginBottom,
-    marginLeft: axisWidth - 1,
-    marginRight: 0,
-    style: sharedStyle,
-    x: { axis: null, domain: [0, 1] },
-    y: { label: "$", grid: false, domain: yDomain },
-    marks: [Plot.ruleY([0])],
-  });
+  const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
 
   // Scrollable chart body (no Y-axis)
   const chartSvg = Plot.plot({
     width: chartWidth,
     height,
-    marginBottom,
+    marginBottom: MARGIN_BOTTOM,
     marginLeft: 0,
-    marginRight,
+    marginRight: MARGIN_RIGHT,
     style: sharedStyle,
     x: { label: null, tickRotate: -45, padding: 0.1 },
     y: { label: null, axis: null, grid: true, domain: yDomain },
@@ -180,19 +155,7 @@ export function renderBudgetChart(container: HTMLElement, options: ChartOptions)
   chartSvg.style.width = `${chartWidth}px`;
   chartSvg.style.minWidth = `${chartWidth}px`;
 
-  const layout = document.createElement("div");
-  layout.className = "chart-layout";
-
-  const axisDiv = document.createElement("div");
-  axisDiv.className = "chart-y-axis";
-  axisDiv.appendChild(axisSvg);
-
-  const wrapper = document.createElement("div");
-  wrapper.className = "chart-scroll-wrapper";
-  wrapper.appendChild(chartSvg);
-
-  layout.appendChild(axisDiv);
-  layout.appendChild(wrapper);
+  const { layout, wrapper } = assembleChartLayout(axisSvg, chartSvg);
   container.replaceChildren(layout);
 
   wrapper.scrollLeft = wrapper.scrollWidth;
