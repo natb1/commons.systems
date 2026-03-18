@@ -20,8 +20,8 @@ function applyZoom(container: HTMLElement, img: HTMLImageElement, level: number,
 
 export function createImageArchiveRenderer(_onError?: (err: unknown) => void): ContentRenderer {
   // _onError accepted for factory signature consistency with createPdfRenderer. Unlike createPdfRenderer,
-  // this renderer has no background re-render path, so the callback is never invoked;
-  // all errors surface as thrown exceptions from the renderer's methods.
+  // this renderer's ResizeObserver only resets zoom state (no re-rendering), so the callback is never
+  // invoked; all errors surface as thrown exceptions from the renderer's methods.
   let fileData: Uint8Array[] = [];
   let objectUrlCache: (string | null)[] = [];
   let imgEl: HTMLImageElement | null = null;
@@ -34,20 +34,24 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   let destroyed = false;
   let _onZoomChange: (() => void) | undefined;
   let _zoomLevel = 0; // 0 = fit-to-view, 1+ = zoomed (scale = ZOOM_FACTOR ** level, relative to fitted size)
-  // Fit-to-view display size, captured on first zoomIn as zoom scale base. Zero until first zoom; guarded in zoomIn.
+  // Fit-to-view display size, captured on first zoomIn as zoom scale base. Zero until first zoom; zoomIn bails out if either dimension is zero.
   let _fittedWidth = 0;
   let _fittedHeight = 0;
 
-  function resetZoomState(): void {
-    if (!containerEl || !imgEl || _zoomLevel === 0) return;
-    _zoomLevel = 0;
+  function clearZoomLayout(): void {
     _fittedWidth = 0;
     _fittedHeight = 0;
-    applyZoom(containerEl, imgEl, 0, 0, 0);
+    applyZoom(containerEl!, imgEl!, 0, 0, 0);
     if (scrollParent) {
       scrollParent.scrollTop = 0;
       scrollParent.scrollLeft = 0;
     }
+  }
+
+  function resetZoomState(): void {
+    if (!containerEl || !imgEl || _zoomLevel === 0) return;
+    _zoomLevel = 0;
+    clearZoomLayout();
     _onZoomChange?.();
   }
 
@@ -156,14 +160,10 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       if (!containerEl || !imgEl) throw new Error("zoomOut called on uninitialized or destroyed renderer");
       if (_zoomLevel <= 0) return;
       _zoomLevel--;
-      applyZoom(containerEl, imgEl, _zoomLevel, _fittedWidth, _fittedHeight);
       if (_zoomLevel === 0) {
-        _fittedWidth = 0;
-        _fittedHeight = 0;
-        if (scrollParent) {
-          scrollParent.scrollTop = 0;
-          scrollParent.scrollLeft = 0;
-        }
+        clearZoomLayout();
+      } else {
+        applyZoom(containerEl, imgEl, _zoomLevel, _fittedWidth, _fittedHeight);
       }
     },
 

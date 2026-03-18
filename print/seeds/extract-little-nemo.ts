@@ -25,6 +25,10 @@ if (!cbzPath || !outPath) {
 }
 
 const count = parseInt(countArg ?? "5", 10);
+if (Number.isNaN(count) || count < 1) {
+  console.error(`Invalid page count: ${countArg}`);
+  process.exit(1);
+}
 
 const tmp = mkdtempSync(join(tmpdir(), "cbz-extract-"));
 try {
