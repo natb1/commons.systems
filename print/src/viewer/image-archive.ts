@@ -165,7 +165,7 @@ export function createImageArchiveRenderer(onError?: (err: unknown) => void, sto
       }
 
       const imageEntries = Object.keys(entries)
-        .filter((path) => IMAGE_EXT.test(path))
+        .filter((path) => IMAGE_EXT.test(path) && !path.startsWith("__MACOSX/"))
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
         .map((path) => entries[path]!);
 
