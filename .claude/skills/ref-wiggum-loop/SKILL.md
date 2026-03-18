@@ -26,7 +26,7 @@ Before executing each step, update the issue body state with `wiggum_step` and `
 .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":8,"step_label":"QA Review Loop","phase":"qa","active_skills":["ref-memory-management","ref-pr-workflow","ref-qa","ref-wiggum-loop"],"wiggum_step":1,"wiggum_step_label":"Execute Next Step"}'
 ```
 
-**Plan mode boundary rule:** Steps 0 and 3 must advance `wiggum_step` to the next step *before* exiting plan mode. Plan mode exits are context-clearing boundaries — if context clears before the next step writes its own state, the session resumes at the stale `wiggum_step` value and re-executes the current step. This means Steps 0 and 3 perform two state writes: one on entry (per the general rule) and one before exiting plan mode (per this rule).
+**Plan mode boundary rule:** Steps 0 and 3 must update `wiggum_step` to the target step *before* exiting plan mode. Plan mode exits are context-clearing boundaries — if context clears before the next step writes its own state, the session resumes at the stale `wiggum_step` value and re-executes the current step. This means Steps 0 and 3 perform two state writes: one on entry (per the general rule) and one before exiting plan mode (per this rule).
 
 ## Step 0. Initialize
 
@@ -38,7 +38,7 @@ Before exiting plan mode, update issue state to advance `wiggum_step` to 1:
 .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{ ... "wiggum_step":1,"wiggum_step_label":"Execute Next Step"}'
 ```
 
-(Replace `...` with all existing state fields per State Persistence above.) If the state write fails, do not exit plan mode — report the error and retry.
+(Replace `...` with all existing state fields per State Persistence above.) If the state write fails, do not exit plan mode — report the error and retry up to 3 times. If all retries fail, report the failure to the user and halt.
 
 ## Step 1. Execute Next Step
 
@@ -73,7 +73,7 @@ Before exiting plan mode, update issue state to set `wiggum_step` to 0:
 .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{ ... "wiggum_step":0,"wiggum_step_label":"Initialize"}'
 ```
 
-(Replace `...` with all existing state fields per State Persistence above.) If the state write fails, do not exit plan mode — report the error and retry.
+(Replace `...` with all existing state fields per State Persistence above.) If the state write fails, do not exit plan mode — report the error and retry up to 3 times. If all retries fail, report the failure to the user and halt.
 
 Execute plan.
 
@@ -88,7 +88,7 @@ Return to Step 0. (Step 0, not Step 1: each iteration requires a fresh plan for 
 
 Execute plan, then continue with remaining termination instructions (summary, PR comment, state update).
 
-Step 4 does not advance `wiggum_step` — it is terminal. The caller omits `wiggum_step` and `wiggum_step_label` from the next state write.
+Step 4 does not update `wiggum_step` — it is terminal. When the caller writes its next state after the loop completes, it omits `wiggum_step` and `wiggum_step_label`.
 
 **If termination instructions are reporting-only** (no code changes), execute them directly.
 
