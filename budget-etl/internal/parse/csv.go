@@ -11,7 +11,7 @@ import (
 // parseCSV parses a PNC-format CSV file.
 // PNC CSV format:
 //
-//	Line 1: account metadata (account number, dates, balances) — skipped
+//	Line 1: account metadata [acctNumber, fromDate, toDate, balance, available] — balance extracted
 //	Lines 2+: positional data rows with 6 fields:
 //	  [0] Date, [1] Amount, [2] Description, [3] (empty), [4] TransactionID, [5] Type
 //
@@ -35,6 +35,18 @@ func parseCSV(path string) (ParseResult, error) {
 
 	if len(records) < 2 {
 		return ParseResult{}, fmt.Errorf("%s: CSV file has no data rows", path)
+	}
+
+	// Extract balance from metadata line (line 1) if available.
+	// PNC CSV metadata format: [acctNumber, fromDate, toDate, balance, available]
+	var balance int64
+	meta := records[0]
+	if len(meta) >= 5 && meta[3] != "" {
+		b, err := parseCents(meta[3])
+		if err != nil {
+			return ParseResult{}, fmt.Errorf("%s: parsing balance %q from metadata: %w", path, meta[3], err)
+		}
+		balance = b
 	}
 
 	var txns []Transaction
@@ -81,5 +93,5 @@ func parseCSV(path string) (ParseResult, error) {
 		})
 	}
 
-	return ParseResult{Transactions: txns}, nil
+	return ParseResult{Transactions: txns, Balance: balance}, nil
 }
