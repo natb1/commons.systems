@@ -3,6 +3,8 @@ import { updateBudget, type Budget, type BudgetId, type BudgetPeriod, type Budge
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showInputError, handleSaveError } from "./hydrate-util.js";
 import { renderBudgetChart, type ChartResult } from "./budgets-chart.js";
+import { renderBudgetPieChart } from "./budgets-pie-chart.js";
+import type { SerializedBudget } from "./budgets.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
   const row = el.closest(".budget-row");
@@ -71,8 +73,8 @@ export function hydrateBudgetTable(container: HTMLElement): void {
 }
 
 function deserializeBudgets(raw: string): Budget[] {
-  let parsed: Array<{ id: string; name: string; weeklyAllowance: number; rollover: string }>;
-  try { parsed = JSON.parse(raw); } catch { throw new DataIntegrityError("Invalid budget chart data"); }
+  let parsed: Array<Omit<SerializedBudget, "rollover"> & { rollover: string }>;
+  try { parsed = JSON.parse(raw); } catch (e) { throw new DataIntegrityError(`Invalid budget chart data: ${e instanceof Error ? e.message : e}`); }
   return parsed.map(b => {
     if (b.rollover !== "none" && b.rollover !== "debt" && b.rollover !== "balance")
       throw new DataIntegrityError(`Invalid rollover value: ${b.rollover}`);
@@ -88,7 +90,7 @@ function deserializeBudgets(raw: string): Budget[] {
 
 function deserializePeriods(raw: string): BudgetPeriod[] {
   let parsed: SerializedBudgetPeriod[];
-  try { parsed = JSON.parse(raw); } catch { throw new DataIntegrityError("Invalid budget period chart data"); }
+  try { parsed = JSON.parse(raw); } catch (e) { throw new DataIntegrityError(`Invalid budget period chart data: ${e instanceof Error ? e.message : e}`); }
   return parsed.map(p => ({
     id: p.id as BudgetPeriodId,
     budgetId: p.budgetId as BudgetId,
@@ -111,8 +113,13 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   const periods = deserializePeriods(periodsRaw);
   let chartResult: ChartResult = { weekLabels: [], periodStartMs: [] };
 
+  const pieElOrNull = document.getElementById("budgets-pie");
+  if (!pieElOrNull) throw new DataIntegrityError("budgets-pie container not found in page markup");
+  const pieEl: HTMLElement = pieElOrNull;
+
   function render(): void {
     chartResult = renderBudgetChart(container, { budgets, periods });
+    renderBudgetPieChart(pieEl, { budgets, periods, windowWeeks: 12 });
   }
 
   render();
@@ -157,7 +164,18 @@ export function hydrateBudgetChart(container: HTMLElement): void {
       const scrollRatio = wrapper instanceof HTMLElement && wrapper.scrollWidth > 0
         ? wrapper.scrollLeft / wrapper.scrollWidth
         : 1;
-      render();
+      try {
+        render();
+      } catch (error) {
+        if (error instanceof TypeError || error instanceof ReferenceError
+            || error instanceof RangeError || error instanceof DataIntegrityError) {
+          setTimeout(() => { throw error; }, 0);
+          return;
+        }
+        console.error("Chart re-render failed on resize:", error);
+        setTimeout(() => { throw error; }, 0);
+        return;
+      }
       const newWrapper = container.querySelector(".chart-scroll-wrapper");
       if (newWrapper instanceof HTMLElement) {
         newWrapper.scrollLeft = scrollRatio * newWrapper.scrollWidth;
