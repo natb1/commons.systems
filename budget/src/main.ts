@@ -17,6 +17,7 @@ import { parseUploadedJson, toParsedData, UploadValidationError } from "./upload
 import { storeParsedData, clearAll, getMeta } from "./idb.js";
 import { FirestoreSeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
 import { setActiveDataSource } from "./active-data-source.js";
+import { exportToJson } from "./export.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -47,10 +48,11 @@ const uploadLabel = uploadContainer.querySelector(".upload-label") as HTMLLabelE
 const localInfoContainer = document.createElement("div");
 localInfoContainer.className = "nav-local-info";
 localInfoContainer.hidden = true;
-localInfoContainer.innerHTML = `<span class="local-group-name"></span><button class="clear-data">Clear data</button>`;
+localInfoContainer.innerHTML = `<span class="local-group-name"></span><button class="export-data">Export</button><button class="clear-data">Clear data</button>`;
 authContainer.appendChild(localInfoContainer);
 
 const groupNameSpan = localInfoContainer.querySelector(".local-group-name") as HTMLSpanElement;
+const exportButton = localInfoContainer.querySelector(".export-data") as HTMLButtonElement;
 const clearButton = localInfoContainer.querySelector(".clear-data") as HTMLButtonElement;
 
 // Error display
@@ -202,6 +204,28 @@ uploadLabel.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") {
     e.preventDefault();
     uploadInput.click();
+  }
+});
+
+// Export handler
+exportButton.addEventListener("click", async () => {
+  try {
+    const json = await exportToJson();
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const date = new Date().toISOString().slice(0, 10);
+    const groupName = state.source === "local" ? state.groupName : "budget";
+    a.download = `budget-${groupName}-${date}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+    console.error("Export failed:", error);
+    showUploadError("Export failed. Please try again.");
   }
 });
 
