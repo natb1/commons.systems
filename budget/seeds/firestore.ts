@@ -37,7 +37,7 @@ type RuleSeedData = Omit<Rule, "id" | "groupId"> & { memberEmails: string[]; gro
 
 type NormalizationRuleSeedData = Omit<NormalizationRule, "id"> & { memberEmails: string[] };
 
-type StatementSeedData = Omit<Statement, "id"> & { memberEmails: string[] };
+type StatementSeedData = Omit<Statement, "id" | "statementId" | "groupId"> & { statementId: string; groupId: string; memberEmails: string[] };
 
 const budgetDocs: { id: string; data: BudgetSeedData }[] = [
   {
@@ -550,72 +550,72 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
   {
     id: "stmt-checking-2025-01",
     data: {
-      statementId: "Example Bank-Checking-2025-01" as any,
+      statementId: "Example Bank-Checking-2025-01",
       institution: "Example Bank",
       account: "Checking",
       balance: 3742.15,
       period: "2025-01",
-      groupId: "household" as any,
+      groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
   },
   {
     id: "stmt-checking-2025-02",
     data: {
-      statementId: "Example Bank-Checking-2025-02" as any,
+      statementId: "Example Bank-Checking-2025-02",
       institution: "Example Bank",
       account: "Checking",
       balance: 3825.50,
       period: "2025-02",
-      groupId: "household" as any,
+      groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
   },
   {
     id: "stmt-cc-2025-01",
     data: {
-      statementId: "Example Bank-Credit Card-2025-01" as any,
+      statementId: "Example Bank-Credit Card-2025-01",
       institution: "Example Bank",
       account: "Credit Card",
       balance: -312.50,
       period: "2025-01",
-      groupId: "household" as any,
+      groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
   },
   {
     id: "stmt-cc-2025-02",
     data: {
-      statementId: "Example Bank-Credit Card-2025-02" as any,
+      statementId: "Example Bank-Credit Card-2025-02",
       institution: "Example Bank",
       account: "Credit Card",
       balance: -285.00,
       period: "2025-02",
-      groupId: "household" as any,
+      groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
   },
   {
     id: "stmt-savings-2025-01",
     data: {
-      statementId: "Example Credit Union-Savings-2025-01" as any,
+      statementId: "Example Credit Union-Savings-2025-01",
       institution: "Example Credit Union",
       account: "Savings",
       balance: 945.00,
       period: "2025-01",
-      groupId: "household" as any,
+      groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
   },
   {
     id: "stmt-savings-2025-02",
     data: {
-      statementId: "Example Credit Union-Savings-2025-02" as any,
+      statementId: "Example Credit Union-Savings-2025-02",
       institution: "Example Credit Union",
       account: "Savings",
       balance: 980.00,
       period: "2025-02",
-      groupId: "household" as any,
+      groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
   },

@@ -135,6 +135,20 @@ function requireId(value: unknown, entity: string, index: number): string {
   return value;
 }
 
+function requireString(value: unknown, entity: string, index: number, field: string): string {
+  if (typeof value !== "string" || value === "") {
+    throw new UploadValidationError(`${entity}[${index}].${field} is missing or empty`);
+  }
+  return value;
+}
+
+function requireFiniteNumber(value: unknown, entity: string, index: number, field: string): number {
+  if (typeof value !== "number" || !isFinite(value)) {
+    throw new UploadValidationError(`${entity}[${index}].${field} must be a finite number`);
+  }
+  return value;
+}
+
 function requireRuleType(value: string): RuleType {
   if (value === "categorization" || value === "budget_assignment") return value;
   throw new UploadValidationError(`Invalid rule type: "${value}"`);
@@ -236,11 +250,11 @@ export function parseUploadedJson(text: string): ParsedUpload {
   const statements: Statement[] = (raw.statements ?? []).map(
     (s: RawStatement, i: number) => ({
       id: requireId(s.id, "statement", i),
-      statementId: (s.statementId ?? "") as StatementId,
-      institution: s.institution ?? "",
-      account: s.account ?? "",
-      balance: s.balance ?? 0,
-      period: s.period ?? "",
+      statementId: requireId(s.statementId, "statement.statementId", i) as StatementId,
+      institution: requireString(s.institution, "statement", i, "institution"),
+      account: requireString(s.account, "statement", i, "account"),
+      balance: requireFiniteNumber(s.balance, "statement", i, "balance"),
+      period: requireString(s.period, "statement", i, "period"),
       groupId: null as GroupId | null,
     }),
   );

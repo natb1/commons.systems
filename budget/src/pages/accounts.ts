@@ -23,7 +23,7 @@ function buildAccountRows(transactions: Transaction[], statements: Statement[]):
     }
   }
 
-  // Find latest statement per (institution, account) by period
+  // Find latest statement per (institution, account) by comparing period strings (YYYY-MM, lexicographically ordered)
   const latestStatements = new Map<string, Statement>();
   for (const stmt of statements) {
     const key = `${stmt.institution}\0${stmt.account}`;
@@ -89,8 +89,10 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
   let tableHtml: string;
   try {
     const [transactions, statements] = await Promise.all([
-      dataSource.getTransactions(),
-      dataSource.getStatements(),
+      dataSource.getTransactions()
+        .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
+      dataSource.getStatements()
+        .catch((e) => { console.error("Failed to load statements:", e); throw e; }),
     ]);
     const rows = buildAccountRows(transactions, statements);
     tableHtml = renderAccountsTable(rows);
