@@ -28,11 +28,16 @@ vi.mock("../../src/viewer/pdf.js", () => ({
 }));
 
 vi.mock("../../src/viewer/image-archive.js", () => ({
-  createImageArchiveRenderer: vi.fn().mockReturnValue({}),
+  createImageArchiveRenderer: vi.fn().mockReturnValue({}),  // accepts (onError, storagePath?)
 }));
 
 vi.mock("../../src/viewer/epub.js", () => ({
   createEpubRenderer: vi.fn().mockReturnValue({}),
+}));
+
+vi.mock("../../src/media-cache.js", () => ({
+  getFile: vi.fn().mockResolvedValue(null),
+  putFile: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { renderView, afterRenderView, cleanupView } from "../../src/pages/view";
@@ -228,14 +233,12 @@ describe("renderView", () => {
       expect(initViewer).toHaveBeenCalledWith(
         outlet,
         expect.any(Function),
-        "https://example.com/download",
+        expect.any(Function),
         "item-1",
         "user-123",
       );
 
-      const factory = (initViewer as ReturnType<typeof vi.fn>).mock.calls.find(
-        (call: unknown[]) => call[2] === "https://example.com/download",
-      )![1] as (onError: (err: unknown) => void) => unknown;
+      const factory = (initViewer as ReturnType<typeof vi.fn>).mock.calls[0][1] as (onError: (err: unknown) => void) => unknown;
       factory(() => {});
 
       expect(createEpubRenderer).toHaveBeenCalled();

@@ -67,7 +67,7 @@ function saveLocalPosition(mediaId: string, position: string): void {
 export function initViewer(
   outlet: HTMLElement,
   createRenderer: (onError: (err: unknown) => void) => ContentRenderer,
-  url: string,
+  resolveSource: () => Promise<string | ArrayBuffer>,
   mediaId: string,
   uid: string | null,
 ): () => void {
@@ -212,7 +212,8 @@ export function initViewer(
       savedPosition = loadLocalPosition(mediaId);
     }
     lastSavedPosition = savedPosition;
-    await renderer.init(canvasWrap, url, savedPosition ?? undefined);
+    const source = await resolveSource();
+    await renderer.init(canvasWrap, source, savedPosition ?? undefined);
     // Sync to actual start page: parsePositionPage may have clamped savedPosition to 1 if out of range.
     // Without this sync, lastSavedPosition would differ from renderer.position, triggering a spurious write on first navigation.
     lastSavedPosition = renderer.position;

@@ -53,6 +53,13 @@ vi.mock("unzipit", () => ({
   HTTPRangeReader: vi.fn(),
 }));
 
+vi.mock("../../src/media-cache.js", () => ({
+  getChunk: vi.fn().mockResolvedValue(null),
+  putChunk: vi.fn().mockResolvedValue(undefined),
+  getFile: vi.fn().mockResolvedValue(null),
+  putFile: vi.fn().mockResolvedValue(undefined),
+}));
+
 function mockEntries(files: Record<string, Uint8Array>) {
   const result = makeMockEntries(files);
   mockUnzip.mockResolvedValue(result as unknown as ZipInfo);
@@ -69,7 +76,8 @@ function makeContainer(): HTMLElement {
   return document.createElement("div");
 }
 
-import { createImageArchiveRenderer } from "../../src/viewer/image-archive.js";
+import { createImageArchiveRenderer, CachedRangeReader } from "../../src/viewer/image-archive.js";
+import { getChunk, putChunk, getFile, putFile } from "../../src/media-cache";
 
 describe("createImageArchiveRenderer", () => {
   beforeEach(() => {
@@ -734,5 +742,73 @@ describe("createImageArchiveRenderer", () => {
     // Trigger the ResizeObserver callback — should not throw
     for (const cb of resizeObserverCallbacks) cb();
     expect(renderer.isZoomed).toBe(false);
+  });
+
+  it("uses CachedRangeReader when storagePath is provided", async () => {
+    mockEntries({ "image-001.png": new Uint8Array([1]) });
+    const { HTTPRangeReader } = await import("unzipit");
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer(undefined, "some/storage/path");
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    // CachedRangeReader wraps HTTPRangeReader, so HTTPRangeReader is still constructed
+    expect(HTTPRangeReader).toHaveBeenCalledWith("https://example.com/archive.zip");
+    // unzip receives a CachedRangeReader (not an HTTPRangeReader mock directly)
+    const readerArg = mockUnzip.mock.calls[0]![0];
+    expect(readerArg).toBeInstanceOf(CachedRangeReader);
+  });
+
+  it("uses regular HTTPRangeReader when storagePath is not provided", async () => {
+    mockEntries({ "image-001.png": new Uint8Array([1]) });
+    vi.mocked(getChunk).mockClear();
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    expect(getChunk).not.toHaveBeenCalled();
+  });
+
+  it("fallback with storagePath checks getFile cache first", async () => {
+    const cachedBuffer = new ArrayBuffer(8);
+    const fallbackEntries = makeMockEntries({ "image-001.png": new Uint8Array([1]) });
+    mockUnzip
+      .mockRejectedValueOnce(new Error("Range not supported"))
+      .mockResolvedValueOnce(fallbackEntries as unknown as ZipInfo);
+    vi.mocked(getFile).mockResolvedValueOnce(cachedBuffer);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer(undefined, "some/storage/path");
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    expect(getFile).toHaveBeenCalledWith("some/storage/path");
+    expect(renderer.pageCount).toBe(1);
+    expect(mockUnzip).toHaveBeenLastCalledWith(cachedBuffer);
+  });
+
+  it("fallback with storagePath calls putFile after fetch when not in cache", async () => {
+    const fallbackEntries = makeMockEntries({ "image-001.png": new Uint8Array([1]) });
+    mockUnzip
+      .mockRejectedValueOnce(new Error("Range not supported"))
+      .mockResolvedValueOnce(fallbackEntries as unknown as ZipInfo);
+    vi.mocked(getFile).mockResolvedValueOnce(null);
+
+    const mockArrayBuffer = new ArrayBuffer(8);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: vi.fn().mockResolvedValue(mockArrayBuffer),
+    }));
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer(undefined, "some/storage/path");
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    expect(getFile).toHaveBeenCalledWith("some/storage/path");
+    expect(fetch).toHaveBeenCalledWith("https://example.com/archive.zip");
+    expect(putFile).toHaveBeenCalledWith("some/storage/path", mockArrayBuffer);
+    expect(renderer.pageCount).toBe(1);
+
+    restoreGlobalStubs();
   });
 });
