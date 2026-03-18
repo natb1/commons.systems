@@ -1,4 +1,5 @@
-import { updateRule, deleteRule, createRule, updateNormalizationRule, deleteNormalizationRule, createNormalizationRule, getGroupMembers, type RuleType, type Rule, type GroupId, type RuleId } from "../firestore.js";
+import { type RuleType, type Rule, type RuleId } from "../firestore.js";
+import { getActiveDataSource } from "../active-data-source.js";
 import { renderRow, renderNormalizationRow } from "./rules.js";
 import { removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, handleActionError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
@@ -18,13 +19,12 @@ export function hydrateRulesTable(container: HTMLElement): void {
   const accountOptions = parseJsonArray(container.dataset.accountOptions);
 
   const filterSelect = document.getElementById("rule-type-filter") as HTMLSelectElement | null;
-  if (filterSelect) {
+  if (!filterSelect) throw new Error("#rule-type-filter select not found");
+  container.dataset.activeFilter = filterSelect.value;
+  filterSelect.addEventListener("change", () => {
     container.dataset.activeFilter = filterSelect.value;
-    filterSelect.addEventListener("change", () => {
-      container.dataset.activeFilter = filterSelect.value;
-      removeDropdown();
-    });
-  }
+    removeDropdown();
+  });
 
   type FilterType = RuleType | "normalization";
 
@@ -86,35 +86,36 @@ export function hydrateRulesTable(container: HTMLElement): void {
     if (target.value === target.defaultValue) return;
 
     try {
+      const ds = getActiveDataSource();
       if (isNormalizationRow(target)) {
         if (target.classList.contains("edit-pattern")) {
-          await updateNormalizationRule(ruleId, { pattern: target.value });
+          await ds.updateNormalizationRule(ruleId, { pattern: target.value });
         } else if (target.classList.contains("edit-canonical")) {
-          await updateNormalizationRule(ruleId, { canonicalDescription: target.value });
+          await ds.updateNormalizationRule(ruleId, { canonicalDescription: target.value });
         } else if (target.classList.contains("edit-priority")) {
           const priority = Number(target.value);
           if (!Number.isFinite(priority)) { showInputError(target, "Priority must be a number"); return; }
-          await updateNormalizationRule(ruleId, { priority });
+          await ds.updateNormalizationRule(ruleId, { priority });
         } else if (target.classList.contains("edit-date-window")) {
           const days = Number(target.value);
           if (!Number.isFinite(days) || days < 0) { showInputError(target, "Date window must be a non-negative number"); return; }
-          await updateNormalizationRule(ruleId, { dateWindowDays: days });
+          await ds.updateNormalizationRule(ruleId, { dateWindowDays: days });
         } else {
           return;
         }
       } else {
         if (target.classList.contains("edit-pattern")) {
-          await updateRule(ruleId, { pattern: target.value });
+          await ds.updateRule(ruleId, { pattern: target.value });
         } else if (target.classList.contains("edit-target")) {
-          await updateRule(ruleId, { target: target.value });
+          await ds.updateRule(ruleId, { target: target.value });
         } else if (target.classList.contains("edit-priority")) {
           const priority = Number(target.value);
           if (!Number.isFinite(priority)) { showInputError(target, "Priority must be a number"); return; }
-          await updateRule(ruleId, { priority });
+          await ds.updateRule(ruleId, { priority });
         } else if (target.classList.contains("edit-institution")) {
-          await updateRule(ruleId, { institution: target.value || null });
+          await ds.updateRule(ruleId, { institution: target.value || null });
         } else if (target.classList.contains("edit-account")) {
-          await updateRule(ruleId, { account: target.value || null });
+          await ds.updateRule(ruleId, { account: target.value || null });
         } else {
           return;
         }
@@ -133,10 +134,11 @@ export function hydrateRulesTable(container: HTMLElement): void {
       const ruleId = rowRuleId(target);
       if (!ruleId) return;
       try {
+        const ds = getActiveDataSource();
         if (isNormalizationRow(target)) {
-          await deleteNormalizationRule(ruleId);
+          await ds.deleteNormalizationRule(ruleId);
         } else {
-          await deleteRule(ruleId);
+          await ds.deleteRule(ruleId);
         }
         const row = target.closest(".rule-row");
         if (row) row.remove();
@@ -146,11 +148,9 @@ export function hydrateRulesTable(container: HTMLElement): void {
     }
 
     if (target.id === "add-rule") {
-      const groupId = target.dataset.groupId as GroupId | undefined;
-      if (!groupId) { console.error("add-rule button missing data-group-id"); return; }
       try {
+        const ds = getActiveDataSource();
         const filterType = activeFilterType();
-        const memberEmails = await getGroupMembers(groupId);
 
         let rowHtml: string;
         if (filterType === "normalization") {
@@ -163,8 +163,8 @@ export function hydrateRulesTable(container: HTMLElement): void {
             institution: null as string | null,
             account: null as string | null,
           };
-          const newId = await createNormalizationRule(groupId, memberEmails, defaultFields);
-          rowHtml = renderNormalizationRow({ id: newId, groupId, ...defaultFields }, true);
+          const newId = await ds.createNormalizationRule(defaultFields);
+          rowHtml = renderNormalizationRow({ id: newId, groupId: null, ...defaultFields }, true);
         } else {
           const ruleType = filterType;
           const defaultFields = {
@@ -175,8 +175,8 @@ export function hydrateRulesTable(container: HTMLElement): void {
             institution: null,
             account: null,
           };
-          const newId = await createRule(groupId, memberEmails, defaultFields);
-          const newRule: Rule = { id: newId, groupId, ...defaultFields };
+          const newId = await ds.createRule(defaultFields);
+          const newRule: Rule = { id: newId, groupId: null, ...defaultFields };
           rowHtml = renderRow(newRule, true);
         }
         const wrapper = document.createElement("div");

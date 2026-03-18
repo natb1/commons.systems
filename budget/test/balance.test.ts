@@ -608,6 +608,14 @@ describe("computeAverageWeeklyIncome", () => {
     expect(computeAverageWeeklyIncome(txns)).toBe(100);
   });
 
+  it("negative income amounts (credit convention) produce positive result", () => {
+    // Uploaded bank data uses negative amounts for credits (money received)
+    const txns = [
+      makeTxn({ id: "t1", category: "Income", amount: -1200, timestamp: ts("2025-03-10T12:00:00Z") }),
+    ];
+    expect(computeAverageWeeklyIncome(txns)).toBe(100);
+  });
+
   it("multiple income txns within window are summed then divided by 12", () => {
     // Two txns in the same week
     const txns = [

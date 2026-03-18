@@ -1,14 +1,14 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-vi.mock("../../src/firestore.js", () => ({
+const mockDataSource = {
   updateBudget: vi.fn(),
+};
+vi.mock("../../src/active-data-source.js", () => ({
+  getActiveDataSource: () => mockDataSource,
 }));
 
 import { hydrateBudgetTable } from "../../src/pages/budgets-hydrate";
-import { updateBudget } from "../../src/firestore";
-
-const mockUpdateBudget = vi.mocked(updateBudget);
 
 function flush(): Promise<void> {
   return new Promise(r => setTimeout(r, 0));
@@ -41,7 +41,7 @@ describe("hydrateBudgetTable", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
-    mockUpdateBudget.mockResolvedValue(undefined);
+    mockDataSource.updateBudget.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -55,7 +55,7 @@ describe("hydrateBudgetTable", () => {
     input.value = "Food & Dining";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateBudget).toHaveBeenCalledWith("food", { name: "Food & Dining" });
+    expect(mockDataSource.updateBudget).toHaveBeenCalledWith("food", { name: "Food & Dining" });
   });
 
   it("saves allowance field on blur", async () => {
@@ -65,7 +65,7 @@ describe("hydrateBudgetTable", () => {
     input.value = "200";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateBudget).toHaveBeenCalledWith("food", { weeklyAllowance: 200 });
+    expect(mockDataSource.updateBudget).toHaveBeenCalledWith("food", { weeklyAllowance: 200 });
   });
 
   it("saves rollover on change", async () => {
@@ -75,7 +75,7 @@ describe("hydrateBudgetTable", () => {
     select.value = "debt";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await flush();
-    expect(mockUpdateBudget).toHaveBeenCalledWith("food", { rollover: "debt" });
+    expect(mockDataSource.updateBudget).toHaveBeenCalledWith("food", { rollover: "debt" });
   });
 
   it("updates selected attribute on rollover save", async () => {
@@ -98,7 +98,7 @@ describe("hydrateBudgetTable", () => {
     input.value = "";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateBudget).not.toHaveBeenCalled();
+    expect(mockDataSource.updateBudget).not.toHaveBeenCalled();
     expect(input.classList.contains("save-error")).toBe(true);
     expect(input.title).toContain("Budget name cannot be empty");
   });
@@ -110,7 +110,7 @@ describe("hydrateBudgetTable", () => {
     input.value = "-5";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateBudget).not.toHaveBeenCalled();
+    expect(mockDataSource.updateBudget).not.toHaveBeenCalled();
     expect(input.classList.contains("save-error")).toBe(true);
     expect(input.title).toContain("non-negative");
   });
@@ -121,7 +121,7 @@ describe("hydrateBudgetTable", () => {
     const input = container.querySelector(".edit-name") as HTMLInputElement;
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateBudget).not.toHaveBeenCalled();
+    expect(mockDataSource.updateBudget).not.toHaveBeenCalled();
   });
 
   it("skips save when rollover value unchanged", async () => {
@@ -130,11 +130,11 @@ describe("hydrateBudgetTable", () => {
     const select = container.querySelector(".edit-rollover") as HTMLSelectElement;
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await flush();
-    expect(mockUpdateBudget).not.toHaveBeenCalled();
+    expect(mockDataSource.updateBudget).not.toHaveBeenCalled();
   });
 
   it("reverts input on save failure and shows error", async () => {
-    mockUpdateBudget.mockRejectedValue(new Error("network error"));
+    mockDataSource.updateBudget.mockRejectedValue(new Error("network error"));
     const container = createContainer("food");
     hydrateBudgetTable(container);
     const input = container.querySelector(".edit-name") as HTMLInputElement;
@@ -147,7 +147,7 @@ describe("hydrateBudgetTable", () => {
   });
 
   it("reverts select on save failure", async () => {
-    mockUpdateBudget.mockRejectedValue(new Error("network error"));
+    mockDataSource.updateBudget.mockRejectedValue(new Error("network error"));
     const container = createContainer("food");
     hydrateBudgetTable(container);
     const select = container.querySelector(".edit-rollover") as HTMLSelectElement;
@@ -177,13 +177,13 @@ describe("hydrateBudgetTable", () => {
     input.value = "changed";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockUpdateBudget).not.toHaveBeenCalled();
+    expect(mockDataSource.updateBudget).not.toHaveBeenCalled();
   });
 
   it("shows permission-denied error on save failure", async () => {
     const error = new Error("permission denied");
     (error as any).code = "permission-denied";
-    mockUpdateBudget.mockRejectedValue(error);
+    mockDataSource.updateBudget.mockRejectedValue(error);
     const container = createContainer("food");
     hydrateBudgetTable(container);
     const input = container.querySelector(".edit-name") as HTMLInputElement;
@@ -194,7 +194,7 @@ describe("hydrateBudgetTable", () => {
   });
 
   it("shows range error on save failure", async () => {
-    mockUpdateBudget.mockRejectedValue(new RangeError("out of range"));
+    mockDataSource.updateBudget.mockRejectedValue(new RangeError("out of range"));
     const container = createContainer("food");
     hydrateBudgetTable(container);
     const input = container.querySelector(".edit-allowance") as HTMLInputElement;
