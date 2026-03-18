@@ -51,7 +51,7 @@ Detect input mode from `$INPUT`:
   - Closed siblings: summary only (`title,number,state`)
 
   > See `ref-memory-management` Issue Context Loading for the authoritative list of content types. This skill extends the base field set with `labels, assignees, projectItems` for evaluation.
-  > See `ref-github-issues` for sub-issue, parent, and dependency API syntax.
+  > See `ref-github-issues` for write operations (add/remove sub-issues and dependencies) and the critical distinction between database IDs and GraphQL node IDs.
 
 - Otherwise → **description mode**: treat `$INPUT` as the issue body text. Prompt user for a title if not provided.
 

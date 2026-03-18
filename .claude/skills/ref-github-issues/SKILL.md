@@ -18,7 +18,9 @@ GitHub has two ID formats. The REST API for sub-issues and dependencies requires
 
 **Always resolve database IDs with `gh api`, not `gh issue view --json id`.**
 
-Use `--input` with a JSON heredoc to send integer values. The `-f` flag always sends strings, and `-F` requires careful quoting. `--input` with inline JSON is the most reliable approach.
+Use `--input` with inline JSON to send request bodies. This avoids confusion between `-f` (string params) and `-F` (typed params).
+
+`{owner}` and `{repo}` placeholders are auto-populated by `gh api` from the current repository.
 
 ## Sub-Issues
 
@@ -39,7 +41,7 @@ gh api -X POST "/repos/{owner}/{repo}/issues/36/sub_issues" \
   --input - <<< "{\"sub_issue_id\": $SUB_DB_ID}"
 ```
 
-**Remove sub-issue:**
+**Remove sub-issue (#42 is no longer a sub-issue of #36):**
 ```bash
 SUB_DB_ID=$(gh api "/repos/{owner}/{repo}/issues/42" --jq '.id')
 gh api -X DELETE "/repos/{owner}/{repo}/issues/36/sub_issues" \
@@ -65,11 +67,9 @@ gh api -X POST "/repos/{owner}/{repo}/issues/36/dependencies/blocked_by" \
   --input - <<< "{\"issue_id\": $BLOCKER_DB_ID}"
 ```
 
-**Remove dependency:**
+**Remove dependency (issue #36 is no longer blocked by #42):**
 ```bash
 BLOCKER_DB_ID=$(gh api "/repos/{owner}/{repo}/issues/42" --jq '.id')
 gh api -X DELETE "/repos/{owner}/{repo}/issues/36/dependencies/blocked_by" \
   --input - <<< "{\"issue_id\": $BLOCKER_DB_ID}"
 ```
-
-`{owner}` and `{repo}` placeholders are auto-populated by `gh api` from the current repository.
