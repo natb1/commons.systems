@@ -482,6 +482,69 @@ describe("createImageArchiveRenderer", () => {
     expect(result.entries["image-002.png"]!.blob).toHaveBeenCalledTimes(1);
   });
 
+  it("calls _onError when prefetch fails", async () => {
+    const onError = vi.fn();
+    const entries = makeMockEntries({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    const prefetchError = new Error("blob failed");
+    entries.entries["image-002.png"]!.blob = vi.fn().mockRejectedValue(prefetchError);
+    mockUnzip.mockResolvedValue(entries as unknown as ZipInfo);
+
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer(onError);
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    // Wait for prefetch error to propagate
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(prefetchError));
+  });
+
+  it("logs warning when prefetch fails without _onError", async () => {
+    const entries = makeMockEntries({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    const prefetchError = new Error("blob failed");
+    entries.entries["image-002.png"]!.blob = vi.fn().mockRejectedValue(prefetchError);
+    mockUnzip.mockResolvedValue(entries as unknown as ZipInfo);
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer();
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    await vi.waitFor(() => expect(warnSpy).toHaveBeenCalledWith(
+      "Image prefetch failed for page", 2, prefetchError,
+    ));
+    warnSpy.mockRestore();
+  });
+
+  it("retries after a failed blob fetch (poisoned cache cleared)", async () => {
+    const entries = makeMockEntries({
+      "image-001.png": new Uint8Array([1]),
+      "image-002.png": new Uint8Array([2]),
+    });
+    const prefetchError = new Error("blob failed");
+    entries.entries["image-002.png"]!.blob = vi.fn()
+      .mockRejectedValueOnce(prefetchError)
+      .mockResolvedValueOnce(new Blob([new Uint8Array([2])]));
+    mockUnzip.mockResolvedValue(entries as unknown as ZipInfo);
+
+    const onError = vi.fn();
+    const container = makeContainer();
+    const renderer = createImageArchiveRenderer(onError);
+    await renderer.init(container, "https://example.com/archive.zip");
+
+    // Wait for prefetch error
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(prefetchError));
+
+    // Navigate to page 2 — should retry since cache was cleared
+    await renderer.goToPage(2);
+    expect(entries.entries["image-002.png"]!.blob).toHaveBeenCalledTimes(2);
+    expect(renderer.currentPage).toBe(2);
+  });
+
   it("zoomIn() adds zoomed class to container", async () => {
     const { container, renderer } = await initZoomableRenderer();
     renderer.zoomIn!();

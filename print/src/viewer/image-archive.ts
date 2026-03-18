@@ -19,12 +19,16 @@ function applyZoom(container: HTMLElement, img: HTMLImageElement, level: number,
   }
 }
 
+type PageSlot = {
+  entry: ZipEntry;
+  urlPromise: Promise<string> | null;
+  resolvedUrl: string | null;
+};
+
 export function createImageArchiveRenderer(_onError?: (err: unknown) => void): ContentRenderer {
   // _onError used for background prefetch errors that cannot propagate as exceptions.
   // Synchronous operations (zoom, resize) and awaited operations (init, goToPage) throw directly.
-  let sortedEntries: ZipEntry[] = [];
-  let objectUrlPromises: (Promise<string> | null)[] = [];
-  let objectUrlCache: (string | null)[] = [];
+  let pages: PageSlot[] = [];
   let imgEl: HTMLImageElement | null = null;
   let containerEl: HTMLElement | null = null;
   let scrollParent: HTMLElement | null = null;
@@ -57,20 +61,29 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
   }
 
   async function getObjectUrl(index: number): Promise<string> {
-    if (!objectUrlPromises[index]) {
-      objectUrlPromises[index] = sortedEntries[index]!.blob()
+    if (!pages[index]!.urlPromise) {
+      pages[index]!.urlPromise = pages[index]!.entry.blob()
         .then(blob => {
           const url = URL.createObjectURL(blob);
-          objectUrlCache[index] = url;
+          pages[index]!.resolvedUrl = url;
           return url;
+        })
+        .catch(err => {
+          pages[index]!.urlPromise = null;
+          throw err;
         });
     }
-    return objectUrlPromises[index]!;
+    return pages[index]!.urlPromise!;
   }
 
+  // Prefetches the page at the given 0-based index. Callers pass the 1-based
+  // current page number, which equals the 0-based index of the next page.
   function prefetchPage(index: number): void {
-    if (index < 0 || index >= _pageCount || objectUrlPromises[index] || destroyed) return;
-    void getObjectUrl(index).catch((err) => { _onError?.(err); });
+    if (index < 0 || index >= _pageCount || pages[index]!.urlPromise || destroyed) return;
+    void getObjectUrl(index).catch((err) => {
+      if (_onError) _onError(err);
+      else console.warn("Image prefetch failed for page", index + 1, err);
+    });
   }
 
   return {
@@ -83,7 +96,15 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
         console.warn("Range-based archive loading failed, falling back to full download:", err);
         const res = await fetch(url);
         if (!res.ok) throw new Error(`Failed to fetch archive: ${res.status}`);
-        ({ entries } = await unzip(await res.arrayBuffer()));
+        const buf = await res.arrayBuffer();
+        try {
+          ({ entries } = await unzip(buf));
+        } catch (unzipErr) {
+          throw new Error(
+            `Failed to decompress archive from ${url} (${buf.byteLength} bytes)`,
+            { cause: unzipErr },
+          );
+        }
       }
 
       const imageEntries = Object.keys(entries)
@@ -93,15 +114,11 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
 
       if (imageEntries.length === 0) throw new Error("No images found in archive");
 
-      sortedEntries = imageEntries;
-      objectUrlPromises = new Array(sortedEntries.length).fill(null);
-      objectUrlCache = new Array(sortedEntries.length).fill(null);
-      _pageCount = sortedEntries.length;
+      pages = imageEntries.map(entry => ({ entry, urlPromise: null, resolvedUrl: null }));
+      _pageCount = pages.length;
 
       if (destroyed) {
-        sortedEntries = [];
-        objectUrlPromises = [];
-        objectUrlCache = [];
+        pages = [];
         return;
       }
 
@@ -199,12 +216,10 @@ export function createImageArchiveRenderer(_onError?: (err: unknown) => void): C
       destroyed = true;
       resizeObserver?.disconnect();
       resizeObserver = null;
-      for (const url of objectUrlCache) {
-        if (url) URL.revokeObjectURL(url);
+      for (const page of pages) {
+        if (page.resolvedUrl) URL.revokeObjectURL(page.resolvedUrl);
       }
-      sortedEntries = [];
-      objectUrlPromises = [];
-      objectUrlCache = [];
+      pages = [];
       if (imgEl) {
         imgEl.remove();
         imgEl = null;
