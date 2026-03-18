@@ -6,6 +6,41 @@ import (
 	"time"
 )
 
+func TestStatementDocID(t *testing.T) {
+	tests := []string{
+		"pnc-5111-2025-07",
+		"capital_one-4549-2025-05",
+		"pnc-5111-2025-10",
+	}
+
+	for _, id := range tests {
+		t.Run(id, func(t *testing.T) {
+			docID := StatementDocID(id)
+
+			if len(docID) != 20 {
+				t.Errorf("len = %d, want 20", len(docID))
+			}
+			for _, c := range docID {
+				if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+					t.Errorf("non-hex character %c in doc ID %q", c, docID)
+				}
+			}
+
+			// Deterministic
+			if docID != StatementDocID(id) {
+				t.Error("not deterministic")
+			}
+		})
+	}
+
+	// No collision between different statement IDs
+	a := StatementDocID("pnc-5111-2025-07")
+	b := StatementDocID("capital_one-4549-2025-05")
+	if a == b {
+		t.Errorf("different statements produced same doc ID: %q", a)
+	}
+}
+
 func TestTransactionDocID(t *testing.T) {
 	tests := []struct {
 		statementID   string

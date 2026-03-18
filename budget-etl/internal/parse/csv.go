@@ -37,6 +37,18 @@ func parseCSV(path string) (ParseResult, error) {
 		return ParseResult{}, fmt.Errorf("%s: CSV file has no data rows", path)
 	}
 
+	// Extract balance from metadata line (line 1) if available.
+	// PNC CSV metadata format: [acctNumber, fromDate, toDate, balance, available]
+	var balance int64
+	meta := records[0]
+	if len(meta) >= 5 && meta[3] != "" {
+		b, err := parseCents(meta[3])
+		if err != nil {
+			return ParseResult{}, fmt.Errorf("%s: parsing balance %q from metadata: %w", path, meta[3], err)
+		}
+		balance = b
+	}
+
 	var txns []Transaction
 	idCounts := make(map[string]int)
 	for i, row := range records[1:] {
@@ -81,5 +93,5 @@ func parseCSV(path string) (ParseResult, error) {
 		})
 	}
 
-	return ParseResult{Transactions: txns}, nil
+	return ParseResult{Transactions: txns, Balance: balance}, nil
 }

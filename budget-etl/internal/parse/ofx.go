@@ -12,10 +12,16 @@ import (
 // Intermediate wrapper elements (STMTTRNRS>STMTRS, CCSTMTTRNRS>CCSTMTRS)
 // are traversed via nested XML path tags.
 
+type ofxLedgerBal struct {
+	BalAmt string `xml:"BALAMT"`
+}
+
 type ofxDoc struct {
 	XMLName  xml.Name     `xml:"OFX"`
 	BankTxns []ofxStmtTrn `xml:"BANKMSGSRSV1>STMTTRNRS>STMTRS>BANKTRANLIST>STMTTRN"`
 	CCTxns   []ofxStmtTrn `xml:"CREDITCARDMSGSRSV1>CCSTMTTRNRS>CCSTMTRS>BANKTRANLIST>STMTTRN"`
+	BankBal  *ofxLedgerBal `xml:"BANKMSGSRSV1>STMTTRNRS>STMTRS>LEDGERBAL"`
+	CCBal    *ofxLedgerBal `xml:"CREDITCARDMSGSRSV1>CCSTMTTRNRS>CCSTMTRS>LEDGERBAL"`
 	InvMsgs  *struct{}    `xml:"INVSTMTMSGSRSV1"`
 }
 
@@ -72,5 +78,18 @@ func parseOFX(path string) (ParseResult, error) {
 		txns = append(txns, t)
 	}
 
-	return ParseResult{Transactions: txns}, nil
+	var balance int64
+	bal := doc.BankBal
+	if bal == nil {
+		bal = doc.CCBal
+	}
+	if bal != nil {
+		b, err := parseCents(bal.BalAmt)
+		if err != nil {
+			return ParseResult{}, fmt.Errorf("%s: parsing LEDGERBAL BALAMT %q: %w", path, bal.BalAmt, err)
+		}
+		balance = b
+	}
+
+	return ParseResult{Transactions: txns, Balance: balance}, nil
 }

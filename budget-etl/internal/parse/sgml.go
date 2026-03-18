@@ -24,7 +24,18 @@ func parseSGML(path string) (ParseResult, error) {
 		return ParseResult{Skipped: true, SkipReason: "investment account (INVSTMTMSGSRSV1)"}, nil
 	}
 
-	return parseSGMLTransactions(text, path)
+	result, err := parseSGMLTransactions(text, path)
+	if err != nil {
+		return ParseResult{}, err
+	}
+
+	balance, err := parseSGMLBalance(text)
+	if err != nil {
+		return ParseResult{}, fmt.Errorf("%s: %w", path, err)
+	}
+	result.Balance = balance
+
+	return result, nil
 }
 
 func parseSGMLTransactions(text, path string) (ParseResult, error) {
@@ -82,6 +93,24 @@ func parseSGMLBlock(block string) (Transaction, error) {
 		Name:     sgmlTagValue(block, "NAME"),
 		Memo:     sgmlTagValue(block, "MEMO"),
 	})
+}
+
+// parseSGMLBalance extracts the ledger balance from a LEDGERBAL block.
+// Returns 0 if no LEDGERBAL block is found.
+func parseSGMLBalance(text string) (int64, error) {
+	idx := strings.Index(text, "<LEDGERBAL>")
+	if idx < 0 {
+		return 0, nil
+	}
+	balAmt := sgmlTagValue(text[idx:], "BALAMT")
+	if balAmt == "" {
+		return 0, nil
+	}
+	cents, err := parseCents(balAmt)
+	if err != nil {
+		return 0, fmt.Errorf("parsing LEDGERBAL BALAMT %q: %w", balAmt, err)
+	}
+	return cents, nil
 }
 
 // sgmlTagValue extracts the value following <TAG> in SGML content.

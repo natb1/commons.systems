@@ -321,7 +321,7 @@ func writeCSVFixture(t *testing.T, path string, rows [][6]string) {
 		t.Fatalf("creating fixture dir: %v", err)
 	}
 	var lines []string
-	lines = append(lines, "ACCT_NUMBER,FROM_DATE,TO_DATE,BALANCE,AVAILABLE")
+	lines = append(lines, "0000000000,2025/01/01,2025/01/31,100.00,50.00")
 	for _, r := range rows {
 		lines = append(lines, strings.Join(r[:], ","))
 	}
@@ -473,6 +473,24 @@ func TestRunMerge(t *testing.T) {
 	// Rules preserved in output (including transaction-specific)
 	if len(out.Rules) != 4 {
 		t.Errorf("expected 4 rules in output, got %d", len(out.Rules))
+	}
+
+	// Statements: one from dir (test_bank-1234-2025-01) with balance from CSV metadata
+	if len(out.Statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(out.Statements))
+	}
+	stmt := out.Statements[0]
+	if stmt.StatementID != "test_bank-1234-2025-01" {
+		t.Errorf("statement.statementId = %q, want %q", stmt.StatementID, "test_bank-1234-2025-01")
+	}
+	if stmt.Balance != 100.00 {
+		t.Errorf("statement.balance = %v, want 100.00", stmt.Balance)
+	}
+	if stmt.Institution != "test_bank" {
+		t.Errorf("statement.institution = %q, want %q", stmt.Institution, "test_bank")
+	}
+	if stmt.Period != "2025-01" {
+		t.Errorf("statement.period = %q, want %q", stmt.Period, "2025-01")
 	}
 }
 

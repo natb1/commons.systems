@@ -40,6 +40,11 @@ func TestParseOFX(t *testing.T) {
 		}
 	})
 
+	// Balance: LEDGERBAL BALAMT=-1234.56 → -123456 cents (raw signed, no inversion)
+	if result.Balance != -123456 {
+		t.Errorf("Balance = %d, want %d", result.Balance, -123456)
+	}
+
 	// Second: CREDIT, TRNAMT=50.00 → budget amount = -5000 cents (income)
 	t.Run("credit", func(t *testing.T) {
 		txn := txns[1]

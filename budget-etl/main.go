@@ -126,8 +126,9 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 
 	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
-	// Build all TransactionData across all files
+	// Build all TransactionData and StatementData across all files
 	allTxns := make([]store.TransactionData, 0, totalTxns)
+	allStmts := make([]store.StatementData, 0, len(parsed))
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
 			allTxns = append(allTxns, store.TransactionData{
@@ -140,6 +141,13 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 				TransactionID: t.TransactionID,
 			})
 		}
+		allStmts = append(allStmts, store.StatementData{
+			StatementID: pf.sf.StatementID(),
+			Institution: pf.sf.Institution,
+			Account:     pf.sf.Account,
+			Balance:     pf.result.Balance,
+			Period:      pf.sf.Period,
+		})
 	}
 
 	if dryRun {
@@ -148,7 +156,7 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 	}
 
 	if outputPath != "" {
-		return runOutputJSON(allTxns, groupName, outputPath)
+		return runOutputJSON(allTxns, allStmts, groupName, outputPath)
 	}
 
 	// Resolve project ID
@@ -210,13 +218,13 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 	// Apply budget assignment rules
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
 
-	return runFirestore(ctx, client, groupInfo, allTxns, parsed)
+	return runFirestore(ctx, client, groupInfo, allTxns, allStmts, parsed)
 }
 
-// runOutputJSON writes parsed transactions as a JSON file without applying
-// rules. Category, budget, and normalization fields are left empty. Use
-// --input to apply rules in a subsequent pass.
-func runOutputJSON(allTxns []store.TransactionData, groupName string, outputPath string) error {
+// runOutputJSON writes parsed transactions and statements as a JSON file
+// without applying rules. Category, budget, and normalization fields are
+// left empty. Use --input to apply rules in a subsequent pass.
+func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementData, groupName string, outputPath string) error {
 	exportTxns := make([]export.Transaction, len(allTxns))
 	for i, txn := range allTxns {
 		exportTxns[i] = export.Transaction{
@@ -233,11 +241,14 @@ func runOutputJSON(allTxns []store.TransactionData, groupName string, outputPath
 		}
 	}
 
+	exportStmts := buildExportStatements(allStmts)
+
 	out := export.Output{
 		Version:            1,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
 		GroupName:          groupName,
 		Transactions:       exportTxns,
+		Statements:         exportStmts,
 		Budgets:            []export.Budget{},
 		BudgetPeriods:      []export.BudgetPeriod{},
 		Rules:              []export.Rule{},
@@ -247,7 +258,7 @@ func runOutputJSON(allTxns []store.TransactionData, groupName string, outputPath
 	if err := export.WriteFile(outputPath, out); err != nil {
 		return fmt.Errorf("writing output file: %w", err)
 	}
-	log.Printf("wrote %d transactions to %s", len(exportTxns), outputPath)
+	log.Printf("wrote %d transactions, %d statements to %s", len(exportTxns), len(exportStmts), outputPath)
 	return nil
 }
 
@@ -330,6 +341,7 @@ func runInputJSON(inputPath, outputPath string) error {
 		GroupID:             input.GroupID,
 		GroupName:           input.GroupName,
 		Transactions:       exportTxns,
+		Statements:         input.Statements,
 		Budgets:            input.Budgets,
 		BudgetPeriods:      budgetPeriods,
 		Rules:              input.Rules,
@@ -612,6 +624,18 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 	}
 	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
+	// Build statements from dir-parsed files
+	dirStmts := make([]store.StatementData, 0, len(parsed))
+	for _, pf := range parsed {
+		dirStmts = append(dirStmts, store.StatementData{
+			StatementID: pf.sf.StatementID(),
+			Institution: pf.sf.Institution,
+			Account:     pf.sf.Account,
+			Balance:     pf.result.Balance,
+			Period:      pf.sf.Period,
+		})
+	}
+
 	// Build input lookup by doc ID
 	inputByID := make(map[string]export.Transaction, len(input.Transactions))
 	for _, t := range input.Transactions {
@@ -704,12 +728,16 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 	exportTxns := buildExportTxns(allTxns, allDocIDs, normMap, editsMap)
 	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
 
+	// Merge statements: dir overrides by statementID, retain input-only
+	exportStmts := mergeStatements(dirStmts, input.Statements)
+
 	return writeOutputAndLog(outputPath, export.Output{
 		Version:            input.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
 		GroupID:             input.GroupID,
 		GroupName:           groupName,
 		Transactions:       exportTxns,
+		Statements:         exportStmts,
 		Budgets:            input.Budgets,
 		BudgetPeriods:      budgetPeriods,
 		Rules:              input.Rules,
@@ -717,13 +745,41 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 	})
 }
 
-func runFirestore(ctx context.Context, client *store.Client, groupInfo store.GroupInfo, allTxns []store.TransactionData, parsed []parsedFile) error {
+// mergeStatements merges dir-parsed statements with input statements.
+// Dir statements override input by statementID; input-only statements are retained.
+func mergeStatements(dirStmts []store.StatementData, inputStmts []export.Statement) []export.Statement {
+	dirExport := buildExportStatements(dirStmts)
+
+	dirByStmtID := make(map[string]bool, len(dirExport))
+	for _, s := range dirExport {
+		dirByStmtID[s.StatementID] = true
+	}
+
+	result := append([]export.Statement{}, dirExport...)
+	for _, s := range inputStmts {
+		if !dirByStmtID[s.StatementID] {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+func runFirestore(ctx context.Context, client *store.Client, groupInfo store.GroupInfo, allTxns []store.TransactionData, allStmts []store.StatementData, parsed []parsedFile) error {
 	// Upsert all transactions
 	result, err := client.UpsertTransactions(ctx, groupInfo, allTxns)
 	if err != nil {
 		return fmt.Errorf("upserting transactions: %w", err)
 	}
 	log.Printf("upsert: %d created, %d updated across %d statements", result.Created, result.Updated, len(parsed))
+
+	// Upsert statements with group info
+	for i := range allStmts {
+		allStmts[i].GroupID = groupInfo.ID
+		allStmts[i].MemberEmails = groupInfo.MemberEmails
+	}
+	if err := client.UpsertStatements(ctx, allStmts); err != nil {
+		return fmt.Errorf("upserting statements: %w", err)
+	}
 
 	// Apply normalization (auto + rules, post-upsert, pre-recalculation)
 	type normRulesResult struct {
@@ -889,6 +945,22 @@ func readFirebaseRC() (string, error) {
 	}
 }
 
+// buildExportStatements converts store.StatementData to export.Statement.
+func buildExportStatements(stmts []store.StatementData) []export.Statement {
+	out := make([]export.Statement, len(stmts))
+	for i, s := range stmts {
+		out[i] = export.Statement{
+			ID:          store.StatementDocID(s.StatementID),
+			StatementID: s.StatementID,
+			Institution: s.Institution,
+			Account:     s.Account,
+			Balance:     store.DollarAmount(s.Balance),
+			Period:      s.Period,
+		}
+	}
+	return out
+}
+
 func printSummary(parsed []parsedFile, totalTxns, skipped int) {
 	fmt.Println("\n=== Dry Run Summary ===")
 	fmt.Printf("Total transactions: %d\n", totalTxns)
@@ -896,6 +968,10 @@ func printSummary(parsed []parsedFile, totalTxns, skipped int) {
 	fmt.Printf("Skipped files:     %d\n\n", skipped)
 
 	for _, pf := range parsed {
-		fmt.Printf("  %-40s %4d transactions\n", pf.sf.StatementID(), len(pf.result.Transactions))
+		balStr := ""
+		if pf.result.Balance != 0 {
+			balStr = fmt.Sprintf("  balance: $%.2f", store.DollarAmount(pf.result.Balance))
+		}
+		fmt.Printf("  %-40s %4d transactions%s\n", pf.sf.StatementID(), len(pf.result.Transactions), balStr)
 	}
 }
