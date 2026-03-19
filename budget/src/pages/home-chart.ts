@@ -9,6 +9,7 @@ export interface SerializedChartTransaction {
   amount: number;
   reimbursement: number;
   timestampMs: number | null;
+  hasBudget: boolean;
 }
 
 export interface CategoryNode {
@@ -73,6 +74,7 @@ export function filterByWeeks(
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
   mode: ChartMode = "spending",
+  unbudgetedOnly = false,
 ): CategoryNode {
   const root: CategoryNode = { name: "All", fullPath: "", value: 0, count: 0, children: [] };
 
@@ -83,6 +85,7 @@ export function buildCategoryTree(
     if (net <= 0) continue;
     if (mode === "spending" && isIncome) continue;
     if (mode === "income" && !isIncome) continue;
+    if (unbudgetedOnly && t.hasBudget) continue;
     let node = root;
     let path = "";
     for (const part of parts) {
@@ -210,6 +213,7 @@ function assertChartTransactions(data: unknown): asserts data is SerializedChart
     if (typeof rec.amount !== "number") throw new Error("Chart transaction missing amount number");
     if (typeof rec.reimbursement !== "number") throw new Error("Chart transaction missing reimbursement number");
     if (rec.timestampMs !== null && typeof rec.timestampMs !== "number") throw new Error("Chart transaction timestampMs must be number or null");
+    if (typeof rec.hasBudget !== "boolean") throw new Error("Chart transaction missing hasBudget boolean");
   }
 }
 
@@ -236,6 +240,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   let currentNumWeeks = 12;
   let currentEndWeekIdx = weeks.length - 1;
   let currentMode: ChartMode = "spending";
+  let currentUnbudgetedOnly = false;
 
   const controlsDiv = document.getElementById("sankey-controls");
   if (!controlsDiv) throw new Error("sankey-controls element not found");
@@ -243,7 +248,9 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   const endSlider = controlsDiv.querySelector("#sankey-end-week") as HTMLInputElement | null;
   const endLabel = controlsDiv.querySelector("#sankey-end-label") as HTMLElement | null;
   const modeRadios = controlsDiv.querySelectorAll<HTMLInputElement>('input[name="sankey-mode"]');
-  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0) {
+  const unbudgetedToggle = controlsDiv.querySelector("#unbudgeted-toggle") as HTMLElement | null;
+  const unbudgetedCheckbox = controlsDiv.querySelector("#sankey-unbudgeted") as HTMLInputElement | null;
+  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox) {
     throw new Error("sankey control elements missing");
   }
 
@@ -259,7 +266,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     if (containerWidth === 0) return;
 
     const filtered = filterByWeeks(allTxns, weeks, currentNumWeeks, currentEndWeekIdx);
-    const rootData = buildCategoryTree(filtered, currentMode);
+    const rootData = buildCategoryTree(filtered, currentMode, currentUnbudgetedOnly);
 
     if (rootData.value === 0) {
       container.textContent = currentMode === "income"
@@ -384,7 +391,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
           } else {
             collapsedPaths.add(node.data.fullPath);
           }
-          safeRender();
+          update();
         });
       }
       nodeG.appendChild(rect);
@@ -422,7 +429,29 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     }
   }
 
-  safeRender();
+  function filterTable(): void {
+    const rows = document.querySelectorAll<HTMLElement>("#transactions-table .txn-row");
+    for (const row of rows) {
+      const category = row.dataset.category ?? "";
+      const isIncome = category.startsWith("Income");
+      const hasBudget = row.dataset.hasBudget === "true";
+
+      let visible: boolean;
+      if (currentMode === "income") {
+        visible = isIncome;
+      } else {
+        visible = !isIncome && (!currentUnbudgetedOnly || !hasBudget);
+      }
+      row.style.display = visible ? "" : "none";
+    }
+  }
+
+  function update(): void {
+    safeRender();
+    filterTable();
+  }
+
+  update();
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   function debounced(fn: () => void, ms: number): void {
@@ -434,7 +463,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     const v = parseInt(weeksInput.value, 10);
     if (Number.isFinite(v) && v >= 1) {
       currentNumWeeks = v;
-      debounced(safeRender, 100);
+      debounced(update, 100);
     }
   });
 
@@ -443,7 +472,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     if (Number.isFinite(v) && v >= 0 && v < weeks.length) {
       currentEndWeekIdx = v;
       endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
-      debounced(safeRender, 100);
+      debounced(update, 100);
     }
   });
 
@@ -454,15 +483,27 @@ export function hydrateCategorySankey(container: HTMLElement): void {
         if (mode !== "spending" && mode !== "income") throw new Error(`Invalid chart mode: ${mode}`);
         currentMode = mode;
         collapsedPaths.clear();
-        safeRender();
+        if (mode === "income") {
+          currentUnbudgetedOnly = false;
+          unbudgetedCheckbox.checked = false;
+          unbudgetedToggle.hidden = true;
+        } else {
+          unbudgetedToggle.hidden = false;
+        }
+        update();
       }
     });
+  });
+
+  unbudgetedCheckbox.addEventListener("change", () => {
+    currentUnbudgetedOnly = unbudgetedCheckbox.checked;
+    update();
   });
 
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   const observer = new ResizeObserver(() => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(safeRender, 150);
+    resizeTimer = setTimeout(update, 150);
   });
   observer.observe(container);
 }

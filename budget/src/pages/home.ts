@@ -31,6 +31,8 @@ interface RowParts {
   budgetIdAttr: string;
   timestampAttr: string;
   reimbursementAttr: string;
+  categoryAttr: string;
+  hasBudgetAttr: string;
   detailDl: string;
 }
 
@@ -63,6 +65,8 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
   const budgetIdAttr = editable && txn.budget ? ` data-budget-id="${escapeHtml(txn.budget)}"` : "";
   const timestampAttr = editable && txn.timestamp ? ` data-timestamp="${txn.timestamp.toMillis()}"` : "";
   const reimbursementAttr = editable ? ` data-reimbursement="${txn.reimbursement}"` : "";
+  const categoryAttr = ` data-category="${escapeHtml(txn.category)}"`;
+  const hasBudgetAttr = ` data-has-budget="${txn.budget !== null}"`;
   const detailDl = `<dl>
         <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
         <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
@@ -73,7 +77,7 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
       </dl>`;
-  return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, detailDl };
+  return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, categoryAttr, hasBudgetAttr, detailDl };
 }
 
 interface RenderRowOptions {
@@ -88,7 +92,7 @@ function renderRow(opts: RenderRowOptions): string {
   const { txn, groupName, editable, budgetIdToName, balance } = opts;
   const p = buildRowParts(txn, editable, budgetIdToName, balance, groupName);
 
-  return `<details class="expand-row txn-row"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}>
+  return `<details class="expand-row txn-row"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.hasBudgetAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(txn.description)}</span>
@@ -126,7 +130,7 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
     </div>`
   ).join("\n");
 
-  return `<details class="expand-row txn-row normalized-group"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}>
+  return `<details class="expand-row txn-row normalized-group"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.hasBudgetAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(description)}</span>
@@ -153,6 +157,7 @@ function serializeChartTransactions(transactions: Transaction[]): SerializedChar
       amount: t.amount,
       reimbursement: t.reimbursement,
       timestampMs: t.timestamp ? t.timestamp.toMillis() : null,
+      hasBudget: t.budget !== null,
     }));
 }
 
@@ -164,6 +169,7 @@ function renderCategorySankey(transactions: Transaction[]): string {
         <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
         <label><input type="radio" name="sankey-mode" value="income"> Income</label>
       </fieldset>
+      <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
       <label>Weeks: <input type="number" id="sankey-weeks" value="12" min="1" max="104"></label>
       <label>Ending week: <input type="range" id="sankey-end-week"> <span id="sankey-end-label"></span></label>
     </div>

@@ -7,6 +7,13 @@ test.describe("transactions", () => {
     await expect(page.locator("#transactions-error")).toHaveCount(0);
   });
 
+  test("unbudgeted toggle present @smoke", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#unbudgeted-toggle")).toBeVisible();
+    await expect(page.locator("#sankey-unbudgeted")).not.toBeChecked();
+  });
+
   test("seed transactions visible sorted by date descending", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
@@ -70,5 +77,81 @@ test.describe("transactions", () => {
     const nodes = page.locator("#category-sankey svg .sankey-node");
     await expect(nodes.first()).toBeVisible();
     expect(await nodes.count()).toBeGreaterThan(0);
+  });
+
+  test("unbudgeted toggle visible in spending mode", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#unbudgeted-toggle")).toBeVisible();
+  });
+
+  test("unbudgeted toggle hidden in income mode", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await page.locator('input[name="sankey-mode"][value="income"]').check();
+    await expect(page.locator("#unbudgeted-toggle")).toBeHidden();
+  });
+
+  test("unbudgeted toggle filters table rows", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    const visibleRows = page.locator('.txn-row:not([style*="display: none"])');
+    const countBefore = await visibleRows.count();
+    expect(countBefore).toBeGreaterThan(0);
+    await page.locator("#sankey-unbudgeted").check();
+    const countAfter = await visibleRows.count();
+    expect(countAfter).toBeLessThan(countBefore);
+    expect(countAfter).toBeGreaterThan(0);
+  });
+
+  test("unbudgeted toggle filters chart", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    const nodes = page.locator("#category-sankey svg .sankey-node");
+    await expect(nodes.first()).toBeVisible();
+    const nodesBefore = await nodes.count();
+    await page.locator("#sankey-unbudgeted").check();
+    await page.waitForTimeout(500);
+    const nodesAfter = await page.locator("#category-sankey svg .sankey-node").count();
+    expect(nodesAfter).not.toEqual(nodesBefore);
+  });
+
+  test("switching to income hides toggle and resets it", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await page.locator("#sankey-unbudgeted").check();
+    await expect(page.locator("#sankey-unbudgeted")).toBeChecked();
+    await page.locator('input[name="sankey-mode"][value="income"]').check();
+    await expect(page.locator("#unbudgeted-toggle")).toBeHidden();
+    await expect(page.locator("#sankey-unbudgeted")).not.toBeChecked();
+    await page.locator('input[name="sankey-mode"][value="spending"]').check();
+    await expect(page.locator("#unbudgeted-toggle")).toBeVisible();
+    await expect(page.locator("#sankey-unbudgeted")).not.toBeChecked();
+  });
+
+  test("spending mode hides income rows in table", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    const visibleRows = page.locator('.txn-row:not([style*="display: none"])');
+    const count = await visibleRows.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      const category = await visibleRows.nth(i).getAttribute("data-category");
+      expect(category).not.toMatch(/^Income/);
+    }
+  });
+
+  test("income mode shows only income rows", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await page.locator('input[name="sankey-mode"][value="income"]').check();
+    const visibleRows = page.locator('.txn-row:not([style*="display: none"])');
+    await expect(visibleRows.first()).toBeVisible();
+    const count = await visibleRows.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      const category = await visibleRows.nth(i).getAttribute("data-category");
+      expect(category).toMatch(/^Income/);
+    }
   });
 });

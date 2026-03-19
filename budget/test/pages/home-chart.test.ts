@@ -31,6 +31,7 @@ function txn(overrides: Partial<SerializedChartTransaction> = {}): SerializedCha
     amount: 50,
     reimbursement: 0,
     timestampMs: MON_JAN_06 + 86400000, // Tuesday Jan 7
+    hasBudget: false,
     ...overrides,
   };
 }
@@ -43,6 +44,7 @@ function makeContainer(txns?: SerializedChartTransaction[]): HTMLElement {
       <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
       <label><input type="radio" name="sankey-mode" value="income"> Income</label>
     </fieldset>
+    <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
     <input id="sankey-weeks" type="number" value="12">
     <input id="sankey-end-week" type="range">
     <span id="sankey-end-label"></span>
@@ -204,6 +206,35 @@ describe("buildCategoryTree", () => {
       txn({ category: "Food", amount: 50 }),
     ], "income");
     expect(root.value).toBe(0);
+    expect(root.children).toHaveLength(0);
+  });
+
+  it("unbudgetedOnly=true excludes budgeted transactions", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50, hasBudget: true }),
+      txn({ category: "Transport", amount: 30, hasBudget: false }),
+    ], "spending", true);
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0].name).toBe("Transport");
+    expect(root.value).toBe(30);
+  });
+
+  it("unbudgetedOnly=false includes all transactions", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50, hasBudget: true }),
+      txn({ category: "Transport", amount: 30, hasBudget: false }),
+    ], "spending", false);
+    expect(root.children).toHaveLength(2);
+    expect(root.value).toBe(80);
+  });
+
+  it("unbudgetedOnly=true with all budgeted transactions returns empty tree", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50, hasBudget: true }),
+      txn({ category: "Transport", amount: 30, hasBudget: true }),
+    ], "spending", true);
+    expect(root.value).toBe(0);
+    expect(root.count).toBe(0);
     expect(root.children).toHaveLength(0);
   });
 });
