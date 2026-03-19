@@ -19,6 +19,7 @@ import { storeParsedData, clearAll, getMeta } from "./idb.js";
 import { FirestoreSeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
 import { setActiveDataSource } from "./active-data-source.js";
 import { exportToJson } from "./export.js";
+import { isEncrypted, decrypt, encrypt } from "./crypto.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -170,11 +171,43 @@ const observer = new MutationObserver(() => {
 });
 observer.observe(app, { childList: true, subtree: true });
 
+function promptPassword(message: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "password-dialog";
+    dialog.innerHTML = `<form method="dialog"><p>${message}</p><input type="password" class="password-input" autocomplete="off"><div class="password-actions"><button type="submit" class="password-submit">Submit</button><button type="button" class="password-cancel">Cancel</button></div></form>`;
+    document.body.appendChild(dialog);
+    const input = dialog.querySelector(".password-input") as HTMLInputElement;
+    dialog.querySelector(".password-cancel")!.addEventListener("click", () => {
+      dialog.close();
+      dialog.remove();
+      resolve(null);
+    });
+    dialog.querySelector("form")!.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const value = input.value;
+      dialog.close();
+      dialog.remove();
+      resolve(value);
+    });
+    dialog.showModal();
+    input.focus();
+  });
+}
+
 // File upload handler
 async function handleFileUpload(file: File): Promise<void> {
   clearNavError();
   try {
-    const text = await file.text();
+    const buffer = await file.arrayBuffer();
+    let text: string;
+    if (isEncrypted(buffer)) {
+      const pw = await promptPassword("Enter password to decrypt");
+      if (pw === null) return;
+      text = await decrypt(buffer, pw);
+    } else {
+      text = new TextDecoder().decode(buffer);
+    }
     const parsed = parseUploadedJson(text);
     const data = toParsedData(parsed);
     await storeParsedData(data);
@@ -217,7 +250,15 @@ uploadLabel.addEventListener("keydown", (e) => {
 exportButton.addEventListener("click", async () => {
   try {
     const json = await exportToJson();
-    const blob = new Blob([json], { type: "application/json" });
+    const pw = await promptPassword("Enter password to encrypt (leave empty for plaintext)");
+    if (pw === null) return;
+    let blob: Blob;
+    if (pw !== "") {
+      const encrypted = await encrypt(json, pw);
+      blob = new Blob([encrypted], { type: "application/octet-stream" });
+    } else {
+      blob = new Blob([json], { type: "application/json" });
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

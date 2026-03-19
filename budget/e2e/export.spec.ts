@@ -23,8 +23,10 @@ test.describe("export", () => {
     await uploadFixture(page);
     await expect(page.locator(".export-data")).toBeVisible({ timeout: 10000 });
 
-    const downloadPromise = page.waitForEvent("download");
     await page.locator(".export-data").click();
+    await expect(page.locator(".password-input")).toBeVisible({ timeout: 5000 });
+    const downloadPromise = page.waitForEvent("download");
+    await page.locator(".password-submit").click();
     const download = await downloadPromise;
 
     const today = new Date().toISOString().slice(0, 10);
@@ -45,8 +47,10 @@ test.describe("export", () => {
     ).toBe("round-trip edit");
 
     // Export data
-    const downloadPromise = page.waitForEvent("download");
     await page.locator(".export-data").click();
+    await expect(page.locator(".password-input")).toBeVisible({ timeout: 5000 });
+    const downloadPromise = page.waitForEvent("download");
+    await page.locator(".password-submit").click();
     const download = await downloadPromise;
 
     // Read the exported content
@@ -74,5 +78,38 @@ test.describe("export", () => {
 
     await expect(page.locator("#transactions-table")).toBeVisible({ timeout: 10000 });
     await expect(page.locator(".edit-note").first()).toHaveValue("round-trip edit");
+  });
+
+  test("export with password produces encrypted file", async ({ page }) => {
+    await uploadFixture(page);
+    await expect(page.locator(".export-data")).toBeVisible({ timeout: 10000 });
+
+    await page.locator(".export-data").click();
+    await expect(page.locator(".password-input")).toBeVisible({ timeout: 5000 });
+    await page.locator(".password-input").fill("exportpass");
+    const downloadPromise = page.waitForEvent("download");
+    await page.locator(".password-submit").click();
+    const download = await downloadPromise;
+
+    const content = await (await download.createReadStream()).toArray();
+    const buf = Buffer.concat(content);
+    expect(buf.subarray(0, 4).toString()).toBe("BENC");
+  });
+
+  test("export without password produces plaintext JSON", async ({ page }) => {
+    await uploadFixture(page);
+    await expect(page.locator(".export-data")).toBeVisible({ timeout: 10000 });
+
+    await page.locator(".export-data").click();
+    await expect(page.locator(".password-input")).toBeVisible({ timeout: 5000 });
+    const downloadPromise = page.waitForEvent("download");
+    await page.locator(".password-submit").click();
+    const download = await downloadPromise;
+
+    const content = await (await download.createReadStream()).toArray();
+    const text = Buffer.concat(content).toString();
+    const parsed = JSON.parse(text);
+    expect(parsed.version).toBe(1);
+    expect(parsed.groupName).toBe("Test Household");
   });
 });
