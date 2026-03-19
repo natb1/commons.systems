@@ -1,7 +1,13 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import {
+  initializeAppCheck,
+  ReCaptchaEnterpriseProvider,
+  getToken,
+} from "firebase/app-check";
 import type { FirebaseApp } from "firebase/app";
 import type { Firestore } from "firebase/firestore";
+import type { AppCheck } from "firebase/app-check";
 import type { FirebaseStorage } from "firebase/storage";
 import { firebaseConfig } from "./config.js";
 import {
@@ -51,31 +57,55 @@ export interface StorageModule {
   ) => void;
 }
 
+export interface AppContextOptions {
+  recaptchaSiteKey: string;
+  storageModule?: StorageModule;
+}
+
+let appCheckInstance: AppCheck | null = null;
+
 /**
- * Initialize a Firebase app with Firestore, analytics, and optional Storage.
+ * Returns a function that fetches an AppCheck token and returns it as an
+ * `X-Firebase-AppCheck` header, or `undefined` when AppCheck is not initialized.
+ */
+export function getAppCheckToken():
+  | (() => Promise<Record<string, string>>)
+  | undefined {
+  if (!appCheckInstance) return undefined;
+  const instance = appCheckInstance;
+  return async () => {
+    const { token } = await getToken(instance);
+    return { "X-Firebase-AppCheck": token };
+  };
+}
+
+/**
+ * Initialize a Firebase app with Firestore, analytics, optional AppCheck, and optional Storage.
  *
  * Env vars:
  * - `VITE_FIRESTORE_NAMESPACE` — required in dev/preview (throws if missing); defaults to `{appName}/prod` in production
  * - `VITE_FIRESTORE_EMULATOR_HOST` — connects Firestore emulator when set (hostname:port)
  * - `VITE_GA_MEASUREMENT_ID` — activates page-view tracking when set; returns a no-op tracker otherwise
  * - `VITE_STORAGE_EMULATOR_HOST` — connects Storage emulator when set and `storageModule` is provided (hostname:port)
+ * - `VITE_APP_CHECK_DEBUG_TOKEN` — sets `self.FIREBASE_APPCHECK_DEBUG_TOKEN` for debug environments
  *
- * Pass the `firebase/storage` module to include Storage in the context. Accepting it as a parameter
+ * Pass `options.storageModule` (`firebase/storage`) to include Storage in the context. Accepting it as a parameter
  * keeps `firebase/storage` out of non-storage app bundles without requiring a dynamic import.
  */
 export function createAppContext(
   appName: string,
   appId: string,
-  storageModule: StorageModule,
+  options: AppContextOptions & { storageModule: StorageModule },
 ): AppContextWithStorage;
 export function createAppContext(
   appName: string,
   appId: string,
+  options?: AppContextOptions,
 ): AppContextBase;
 export function createAppContext(
   appName: string,
   appId: string,
-  storageModule?: StorageModule,
+  options?: AppContextOptions,
 ): AppContextBase | AppContextWithStorage {
   const app = initializeApp({
     ...firebaseConfig,
@@ -85,9 +115,22 @@ export function createAppContext(
     }),
   });
 
+  const firestoreEmulatorHost = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST;
+
+  if (options?.recaptchaSiteKey && !firestoreEmulatorHost) {
+    const debugToken = import.meta.env.VITE_APP_CHECK_DEBUG_TOKEN;
+    if (debugToken) {
+      (self as Record<string, unknown>).FIREBASE_APPCHECK_DEBUG_TOKEN =
+        debugToken;
+    }
+    appCheckInstance = initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(options.recaptchaSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+  }
+
   const db = getFirestore(app);
 
-  const firestoreEmulatorHost = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST;
   if (firestoreEmulatorHost) {
     const { hostname, port } = parseEmulatorHost(
       "VITE_FIRESTORE_EMULATOR_HOST",
@@ -107,8 +150,8 @@ export function createAppContext(
 
   const trackPageView = initAnalyticsSafe(app);
 
-  if (storageModule) {
-    const storage = storageModule.getStorage(app);
+  if (options?.storageModule) {
+    const storage = options.storageModule.getStorage(app);
 
     const storageEmulatorHost = import.meta.env.VITE_STORAGE_EMULATOR_HOST;
     if (storageEmulatorHost) {
@@ -116,7 +159,7 @@ export function createAppContext(
         "VITE_STORAGE_EMULATOR_HOST",
         storageEmulatorHost,
       );
-      storageModule.connectStorageEmulator(storage, hostname, port);
+      options.storageModule.connectStorageEmulator(storage, hostname, port);
     }
 
     // Storage paths always use prod — media binaries are not duplicated per preview branch.

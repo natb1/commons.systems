@@ -180,4 +180,25 @@ describe("AtomStrategy", () => {
 
     expect(result?.publishedAt).toBe("2026-03-01T00:00:00Z");
   });
+
+  it("passes fetchHeaders result as fetch headers", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(ATOM_FEED),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const fetchHeaders = vi.fn().mockResolvedValue({
+      "X-Firebase-AppCheck": "test-token",
+    });
+
+    const strategy = new AtomStrategy("https://example.com/feed", undefined, fetchHeaders);
+    await strategy.fetchLatestPost();
+
+    expect(fetchHeaders).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      { headers: { "X-Firebase-AppCheck": "test-token" } },
+    );
+  });
 });

@@ -50,4 +50,7 @@ export async function handleFeedProxy(req: Request, res: Response) {
   res.send(body);
 }
 
-export const feedProxy = onRequest({ cors: true }, handleFeedProxy);
+export const feedProxy = onRequest(
+  { cors: true, enforceAppCheck: true },
+  handleFeedProxy,
+);

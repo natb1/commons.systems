@@ -6,12 +6,15 @@ import {
 import { AtomStrategy } from "@commons-systems/blog/blog-roll/atom-strategy";
 import { FallbackStrategy } from "@commons-systems/blog/blog-roll/fallback-strategy";
 import { FEED_REGISTRY } from "@commons-systems/blog/blog-roll/feed-registry";
+import { getAppCheckToken } from "@commons-systems/firebaseutil/app-context";
 import buildTimeFeeds from "virtual:blog-roll-feeds";
+
+const fetchHeaders = getAppCheckToken();
 
 export const BLOG_ROLL_CONFIG: BlogRollConfig[] = FEED_REGISTRY.map((feed) => ({
   entry: { id: feed.id, name: feed.name, url: feed.homeUrl },
   strategy: new FallbackStrategy(
-    new AtomStrategy(feed.feedUrl),
+    new AtomStrategy(feed.feedUrl, undefined, fetchHeaders),
     buildTimeFeeds[feed.id] ?? null,
   ),
 }));

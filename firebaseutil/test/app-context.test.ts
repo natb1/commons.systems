@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockApp = { name: "test-app" };
 const mockDb = { type: "firestore" };
 const mockStorage = { type: "storage" };
+const mockAppCheck = { type: "app-check" };
 const mockTrackPageView = vi.fn();
 
 vi.mock("firebase/app", () => ({
@@ -19,6 +20,12 @@ vi.mock("firebase/storage", () => ({
   connectStorageEmulator: vi.fn(),
 }));
 
+vi.mock("firebase/app-check", () => ({
+  initializeAppCheck: vi.fn(() => mockAppCheck),
+  ReCaptchaEnterpriseProvider: vi.fn(),
+  getToken: vi.fn(() => Promise.resolve({ token: "test-token" })),
+}));
+
 vi.mock("@commons-systems/firestoreutil/namespace", () => ({
   validateNamespace: vi.fn((ns: string) => ns),
 }));
@@ -33,13 +40,14 @@ vi.mock("../src/config.js", () => ({
 
 async function loadModule() {
   const mod = await import("../src/app-context.js");
-  return mod.createAppContext;
+  return { createAppContext: mod.createAppContext, getAppCheckToken: mod.getAppCheckToken };
 }
 
 async function loadMocks() {
   const { initializeApp } = await import("firebase/app");
   const { connectFirestoreEmulator } = await import("firebase/firestore");
   const { connectStorageEmulator } = await import("firebase/storage");
+  const { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken } = await import("firebase/app-check");
   const { validateNamespace } = await import(
     "@commons-systems/firestoreutil/namespace"
   );
@@ -48,6 +56,9 @@ async function loadMocks() {
     connectFirestoreEmulator:
       connectFirestoreEmulator as ReturnType<typeof vi.fn>,
     connectStorageEmulator: connectStorageEmulator as ReturnType<typeof vi.fn>,
+    initializeAppCheck: initializeAppCheck as ReturnType<typeof vi.fn>,
+    ReCaptchaEnterpriseProvider: ReCaptchaEnterpriseProvider as ReturnType<typeof vi.fn>,
+    getToken: getToken as ReturnType<typeof vi.fn>,
     validateNamespace: validateNamespace as ReturnType<typeof vi.fn>,
   };
 }
@@ -55,12 +66,14 @@ async function loadMocks() {
 describe("createAppContext", () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.clearAllMocks();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     vi.stubEnv("MODE", "production");
   });
 
   it("returns correct shape without storage option", async () => {
-    const createAppContext = await loadModule();
+    const { createAppContext } = await loadModule();
     const ctx = createAppContext("myapp", "app-id-123");
 
     expect(ctx).toHaveProperty("app", mockApp);
@@ -72,13 +85,13 @@ describe("createAppContext", () => {
   });
 
   it("returns correct shape with storage module", async () => {
-    const createAppContext = await loadModule();
+    const { createAppContext } = await loadModule();
     const { getStorage, connectStorageEmulator } = await import(
       "firebase/storage"
     );
     const ctx = createAppContext("myapp", "app-id-123", {
-      getStorage,
-      connectStorageEmulator,
+      recaptchaSiteKey: "test-key",
+      storageModule: { getStorage, connectStorageEmulator },
     });
 
     expect(ctx).toHaveProperty("app", mockApp);
@@ -91,7 +104,7 @@ describe("createAppContext", () => {
 
   it("throws in non-production mode when VITE_FIRESTORE_NAMESPACE is missing", async () => {
     vi.stubEnv("MODE", "development");
-    const createAppContext = await loadModule();
+    const { createAppContext } = await loadModule();
 
     expect(() => createAppContext("myapp", "app-id-123")).toThrow(
       "VITE_FIRESTORE_NAMESPACE is required in dev/preview mode",
@@ -99,7 +112,7 @@ describe("createAppContext", () => {
   });
 
   it("defaults namespace to {appName}/prod in production mode when env var not set", async () => {
-    const createAppContext = await loadModule();
+    const { createAppContext } = await loadModule();
     const ctx = createAppContext("myapp", "app-id-123");
 
     expect(ctx.NAMESPACE).toBe("myapp/prod");
@@ -107,7 +120,7 @@ describe("createAppContext", () => {
 
   it("uses VITE_FIRESTORE_NAMESPACE when set", async () => {
     vi.stubEnv("VITE_FIRESTORE_NAMESPACE", "myapp/preview-pr-42");
-    const createAppContext = await loadModule();
+    const { createAppContext } = await loadModule();
     const ctx = createAppContext("myapp", "app-id-123");
 
     expect(ctx.NAMESPACE).toBe("myapp/preview-pr-42");
@@ -115,7 +128,7 @@ describe("createAppContext", () => {
 
   it("connects Firestore emulator when VITE_FIRESTORE_EMULATOR_HOST is set", async () => {
     vi.stubEnv("VITE_FIRESTORE_EMULATOR_HOST", "localhost:8080");
-    const createAppContext = await loadModule();
+    const { createAppContext } = await loadModule();
     const mocks = await loadMocks();
 
     createAppContext("myapp", "app-id-123");
@@ -129,15 +142,15 @@ describe("createAppContext", () => {
 
   it("connects Storage emulator when VITE_STORAGE_EMULATOR_HOST is set and storage module provided", async () => {
     vi.stubEnv("VITE_STORAGE_EMULATOR_HOST", "localhost:9199");
-    const createAppContext = await loadModule();
+    const { createAppContext } = await loadModule();
     const mocks = await loadMocks();
     const { getStorage, connectStorageEmulator } = await import(
       "firebase/storage"
     );
 
     createAppContext("myapp", "app-id-123", {
-      getStorage,
-      connectStorageEmulator,
+      recaptchaSiteKey: "test-key",
+      storageModule: { getStorage, connectStorageEmulator },
     });
 
     expect(mocks.connectStorageEmulator).toHaveBeenCalledWith(
@@ -149,7 +162,7 @@ describe("createAppContext", () => {
 
   it("throws on invalid emulator port", async () => {
     vi.stubEnv("VITE_FIRESTORE_EMULATOR_HOST", "localhost");
-    const createAppContext = await loadModule();
+    const { createAppContext } = await loadModule();
 
     expect(() => createAppContext("myapp", "app-id-123")).toThrow(
       'Invalid emulator port in VITE_FIRESTORE_EMULATOR_HOST: "localhost"',
@@ -158,7 +171,7 @@ describe("createAppContext", () => {
 
   it("passes measurementId when VITE_GA_MEASUREMENT_ID is set", async () => {
     vi.stubEnv("VITE_GA_MEASUREMENT_ID", "G-TESTID");
-    const createAppContext = await loadModule();
+    const { createAppContext } = await loadModule();
     const mocks = await loadMocks();
 
     createAppContext("myapp", "app-id-123");
@@ -170,11 +183,76 @@ describe("createAppContext", () => {
 
   it("calls validateNamespace with the resolved namespace", async () => {
     vi.stubEnv("VITE_FIRESTORE_NAMESPACE", "myapp/staging");
-    const createAppContext = await loadModule();
+    const { createAppContext } = await loadModule();
     const mocks = await loadMocks();
 
     createAppContext("myapp", "app-id-123");
 
     expect(mocks.validateNamespace).toHaveBeenCalledWith("myapp/staging");
+  });
+
+  it("initializes AppCheck with ReCaptchaEnterpriseProvider when recaptchaSiteKey provided", async () => {
+    const { createAppContext } = await loadModule();
+    const mocks = await loadMocks();
+
+    createAppContext("myapp", "app-id-123", { recaptchaSiteKey: "test-site-key" });
+
+    expect(mocks.ReCaptchaEnterpriseProvider).toHaveBeenCalledWith("test-site-key");
+    expect(mocks.initializeAppCheck).toHaveBeenCalledWith(
+      mockApp,
+      expect.objectContaining({
+        provider: expect.any(Object),
+        isTokenAutoRefreshEnabled: true,
+      }),
+    );
+  });
+
+  it("sets FIREBASE_APPCHECK_DEBUG_TOKEN when VITE_APP_CHECK_DEBUG_TOKEN is set", async () => {
+    vi.stubEnv("VITE_APP_CHECK_DEBUG_TOKEN", "debug-token-123");
+    vi.stubGlobal("self", globalThis);
+    const { createAppContext } = await loadModule();
+
+    createAppContext("myapp", "app-id-123", { recaptchaSiteKey: "test-key" });
+
+    expect((globalThis as any).FIREBASE_APPCHECK_DEBUG_TOKEN).toBe("debug-token-123");
+    delete (globalThis as any).FIREBASE_APPCHECK_DEBUG_TOKEN;
+  });
+
+  it("skips AppCheck when emulator host is set", async () => {
+    vi.stubEnv("VITE_FIRESTORE_EMULATOR_HOST", "localhost:8080");
+    const { createAppContext } = await loadModule();
+    const mocks = await loadMocks();
+
+    createAppContext("myapp", "app-id-123", { recaptchaSiteKey: "test-key" });
+
+    expect(mocks.initializeAppCheck).not.toHaveBeenCalled();
+  });
+
+  it("skips AppCheck when no options provided", async () => {
+    const { createAppContext } = await loadModule();
+    const mocks = await loadMocks();
+
+    createAppContext("myapp", "app-id-123");
+
+    expect(mocks.initializeAppCheck).not.toHaveBeenCalled();
+  });
+
+  it("getAppCheckToken returns undefined when AppCheck not initialized", async () => {
+    const { createAppContext, getAppCheckToken } = await loadModule();
+
+    createAppContext("myapp", "app-id-123");
+
+    expect(getAppCheckToken()).toBeUndefined();
+  });
+
+  it("getAppCheckToken returns header function when AppCheck initialized", async () => {
+    const { createAppContext, getAppCheckToken } = await loadModule();
+
+    createAppContext("myapp", "app-id-123", { recaptchaSiteKey: "test-key" });
+
+    const headerFn = getAppCheckToken();
+    expect(headerFn).toBeTypeOf("function");
+    const headers = await headerFn!();
+    expect(headers).toEqual({ "X-Firebase-AppCheck": "test-token" });
   });
 });
