@@ -12,6 +12,7 @@ function getAdminApp() {
 }
 
 async function verifyAppCheck(req: Request): Promise<boolean> {
+  if (process.env.FUNCTIONS_EMULATOR === "true") return true;
   const token = req.header("X-Firebase-AppCheck");
   if (!token) return false;
   try {
