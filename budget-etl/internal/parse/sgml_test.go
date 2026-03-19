@@ -22,9 +22,9 @@ func TestParseSGML(t *testing.T) {
 		t.Fatalf("expected 2 transactions, got %d", len(txns))
 	}
 
-	// Balance: LEDGERBAL BALAMT=8500.00 → 543210 cents
-	if result.Balance != 543210 {
-		t.Errorf("Balance = %d, want %d", result.Balance, 543210)
+	// Balance: LEDGERBAL BALAMT=8500.00 → 850000 cents
+	if result.Balance != 850000 {
+		t.Errorf("Balance = %d, want %d", result.Balance, 850000)
 	}
 
 	// First: DEBIT, TRNAMT=-81.71 → budget amount = +8171 cents
@@ -46,7 +46,7 @@ func TestParseSGML(t *testing.T) {
 		}
 	})
 
-	// Second: CREDIT, TRNAMT=3000.00 → budget amount = -300183 cents
+	// Second: CREDIT, TRNAMT=3000.00 → budget amount = -300000 cents
 	t.Run("credit", func(t *testing.T) {
 		txn := txns[1]
 		if txn.TransactionID != "1234567890202510101" {

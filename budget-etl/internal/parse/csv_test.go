@@ -17,9 +17,9 @@ func TestParseCSV(t *testing.T) {
 		t.Fatal("expected non-skipped result")
 	}
 
-	// Balance: metadata line has "15000.00" → 1429614 cents
-	if result.Balance != 1429614 {
-		t.Errorf("Balance = %d, want %d", result.Balance, 1429614)
+	// Balance: metadata line has "15000.00" → 1500000 cents
+	if result.Balance != 1500000 {
+		t.Errorf("Balance = %d, want %d", result.Balance, 1500000)
 	}
 
 	txns := result.Transactions
