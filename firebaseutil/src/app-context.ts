@@ -120,7 +120,7 @@ export function createAppContext(
   if (options?.recaptchaSiteKey && !firestoreEmulatorHost) {
     const debugToken = import.meta.env.VITE_APP_CHECK_DEBUG_TOKEN;
     if (debugToken) {
-      (self as Record<string, unknown>).FIREBASE_APPCHECK_DEBUG_TOKEN =
+      (self as unknown as Record<string, unknown>).FIREBASE_APPCHECK_DEBUG_TOKEN =
         debugToken;
     }
     appCheckInstance = initializeAppCheck(app, {

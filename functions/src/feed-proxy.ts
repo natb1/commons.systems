@@ -1,10 +1,33 @@
 import { onRequest } from "firebase-functions/v2/https";
-import type { Request } from "firebase-functions/v2/https";
+import type { Request, HttpsFunction } from "firebase-functions/v2/https";
 import type { Response } from "express";
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getAppCheck } from "firebase-admin/app-check";
 import { ALLOWED_FEED_URLS } from "./allowed-feed-urls.generated.js";
 export { ALLOWED_FEED_URLS };
 
+function getAdminApp() {
+  const apps = getApps();
+  return apps.length > 0 ? apps[0] : initializeApp();
+}
+
+async function verifyAppCheck(req: Request): Promise<boolean> {
+  const token = req.header("X-Firebase-AppCheck");
+  if (!token) return false;
+  try {
+    await getAppCheck(getAdminApp()).verifyToken(token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function handleFeedProxy(req: Request, res: Response) {
+  if (!(await verifyAppCheck(req))) {
+    res.status(401).send("Unauthorized: invalid or missing AppCheck token");
+    return;
+  }
+
   const url = req.query.url;
   if (typeof url !== "string" || !url) {
     res.status(400).send("Missing required query parameter: url");
@@ -50,7 +73,7 @@ export async function handleFeedProxy(req: Request, res: Response) {
   res.send(body);
 }
 
-export const feedProxy = onRequest(
-  { cors: true, enforceAppCheck: true },
+export const feedProxy: HttpsFunction = onRequest(
+  { cors: true },
   handleFeedProxy,
 );
