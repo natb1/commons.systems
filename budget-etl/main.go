@@ -30,9 +30,10 @@ func main() {
 	outputPath := flag.String("output", "", "Write JSON file instead of Firestore")
 	firestoreFlag := flag.Bool("firestore", false, "Write to Firestore (required when --output is not set)")
 	inputPath := flag.String("input", "", "Read rules/budgets/transactions from existing JSON file")
+	password := flag.String("password", "", "Encrypt/decrypt the JSON file with this password")
 
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--env <env>] [--dry-run]")
+		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--password <pass>] [--env <env>] [--dry-run]")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -41,20 +42,24 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Error: --input and --firestore are mutually exclusive")
 		os.Exit(1)
 	}
+	if *password != "" && *firestoreFlag {
+		fmt.Fprintln(os.Stderr, "Error: --password and --firestore are mutually exclusive")
+		os.Exit(1)
+	}
 	if *inputPath != "" && *outputPath == "" {
 		fmt.Fprintln(os.Stderr, "Error: --input requires --output")
 		os.Exit(1)
 	}
 
 	if *inputPath != "" && *dir != "" {
-		if err := runMerge(*inputPath, *dir, *group, *outputPath); err != nil {
+		if err := runMerge(*inputPath, *dir, *group, *outputPath, *password); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if *inputPath != "" {
-		if err := runInputJSON(*inputPath, *outputPath); err != nil {
+		if err := runInputJSON(*inputPath, *outputPath, *password); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -74,7 +79,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(*dir, *group, *env, *projectID, *dryRun, *outputPath, *firestoreFlag); err != nil {
+	if err := run(*dir, *group, *env, *projectID, *dryRun, *outputPath, *firestoreFlag, *password); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -85,7 +90,7 @@ type parsedFile struct {
 	result parse.ParseResult
 }
 
-func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, firestoreMode bool) error {
+func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, firestoreMode bool, password string) error {
 	// Discover statement files
 	files, err := parse.DiscoverFiles(dir)
 	if err != nil {
@@ -149,7 +154,7 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 	}
 
 	if outputPath != "" {
-		return runOutputJSON(allTxns, allStmts, groupName, outputPath)
+		return runOutputJSON(allTxns, allStmts, groupName, outputPath, password)
 	}
 
 	// Resolve project ID
@@ -217,7 +222,7 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 // runOutputJSON writes parsed transactions and statements as a JSON file
 // without applying rules. Category, budget, and normalization fields are
 // left empty. Use --input to apply rules in a subsequent pass.
-func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementData, groupName string, outputPath string) error {
+func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementData, groupName string, outputPath string, password string) error {
 	exportTxns := make([]export.Transaction, len(allTxns))
 	for i, txn := range allTxns {
 		exportTxns[i] = export.Transaction{
@@ -248,7 +253,7 @@ func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementDa
 		NormalizationRules: []export.NormalizationRule{},
 	}
 
-	if err := export.WriteFile(outputPath, out); err != nil {
+	if err := export.WriteFile(outputPath, out, password); err != nil {
 		return fmt.Errorf("writing output file: %w", err)
 	}
 	log.Printf("wrote %d transactions, %d statements to %s", len(exportTxns), len(exportStmts), outputPath)
@@ -261,8 +266,8 @@ func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementDa
 // not carried forward — the conversion to TransactionData starts with empty
 // fields, then transaction-specific rules pre-populate before general rules
 // fill the rest. This ensures rule changes take effect on every run.
-func runInputJSON(inputPath, outputPath string) error {
-	input, err := export.ReadFile(inputPath)
+func runInputJSON(inputPath, outputPath, password string) error {
+	input, err := export.ReadFile(inputPath, password)
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
 	}
@@ -339,7 +344,7 @@ func runInputJSON(inputPath, outputPath string) error {
 		BudgetPeriods:      budgetPeriods,
 		Rules:              input.Rules,
 		NormalizationRules: input.NormalizationRules,
-	})
+	}, password)
 }
 
 // splitRules separates transaction-specific rules (with TransactionID) from general rules.
@@ -533,8 +538,8 @@ func computeExportPeriods(exportTxns []export.Transaction, allTxns []store.Trans
 }
 
 // writeOutputAndLog writes the export output to a file and logs a summary.
-func writeOutputAndLog(outputPath string, out export.Output) error {
-	if err := export.WriteFile(outputPath, out); err != nil {
+func writeOutputAndLog(outputPath string, out export.Output, password string) error {
+	if err := export.WriteFile(outputPath, out, password); err != nil {
 		return fmt.Errorf("writing output: %w", err)
 	}
 
@@ -561,9 +566,9 @@ func writeOutputAndLog(outputPath string, out export.Output) error {
 // from input are preserved. Transaction-specific rules pre-populate category/budget,
 // then general rules fill in the rest. Normalization rules are applied and budget
 // periods are computed for the merged result. The output is written to --output.
-func runMerge(inputPath, dir, groupName, outputPath string) error {
+func runMerge(inputPath, dir, groupName, outputPath, password string) error {
 	// Read input JSON
-	input, err := export.ReadFile(inputPath)
+	input, err := export.ReadFile(inputPath, password)
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
 	}
@@ -726,7 +731,7 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 		BudgetPeriods:      budgetPeriods,
 		Rules:              input.Rules,
 		NormalizationRules: input.NormalizationRules,
-	})
+	}, password)
 }
 
 // mergeStatements merges dir-parsed statements with input statements.

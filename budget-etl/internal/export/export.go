@@ -1,12 +1,92 @@
 package export
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
+
+	"golang.org/x/crypto/pbkdf2"
 )
+
+const (
+	saltLen         = 16
+	ivLen           = 12
+	keyLen          = 32
+	pbkdf2Iterations = 600000
+	headerLen       = 4 + saltLen + ivLen // magic + salt + IV = 32
+)
+
+var magicBytes = [4]byte{'B', 'E', 'N', 'C'}
+
+// IsEncrypted checks whether data starts with the BENC magic bytes.
+func IsEncrypted(data []byte) bool {
+	return len(data) >= 4 && data[0] == 'B' && data[1] == 'E' && data[2] == 'N' && data[3] == 'C'
+}
+
+func deriveKey(password string, salt []byte) []byte {
+	return pbkdf2.Key([]byte(password), salt, pbkdf2Iterations, keyLen, sha256.New)
+}
+
+func encryptJSON(plaintext []byte, password string) ([]byte, error) {
+	salt := make([]byte, saltLen)
+	if _, err := rand.Read(salt); err != nil {
+		return nil, fmt.Errorf("generating salt: %w", err)
+	}
+	iv := make([]byte, ivLen)
+	if _, err := rand.Read(iv); err != nil {
+		return nil, fmt.Errorf("generating IV: %w", err)
+	}
+
+	key := deriveKey(password, salt)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("creating cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("creating GCM: %w", err)
+	}
+
+	ciphertext := gcm.Seal(nil, iv, plaintext, nil)
+
+	out := make([]byte, 0, headerLen+len(ciphertext))
+	out = append(out, magicBytes[:]...)
+	out = append(out, salt...)
+	out = append(out, iv...)
+	out = append(out, ciphertext...)
+	return out, nil
+}
+
+func decryptJSON(data []byte, password string) ([]byte, error) {
+	if len(data) < headerLen {
+		return nil, fmt.Errorf("file too short to be encrypted")
+	}
+	salt := data[4 : 4+saltLen]
+	iv := data[4+saltLen : headerLen]
+	ciphertext := data[headerLen:]
+
+	key := deriveKey(password, salt)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("creating cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("creating GCM: %w", err)
+	}
+
+	plaintext, err := gcm.Open(nil, iv, ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("decryption failed: wrong password or corrupted file")
+	}
+	return plaintext, nil
+}
 
 // Output is the top-level JSON structure written by budget-etl --output.
 type Output struct {
@@ -99,13 +179,28 @@ func FormatTimestamp(t time.Time) string {
 }
 
 // ReadFile reads and unmarshals a JSON file into an Output struct.
-// Returns an error if the file is missing, contains invalid JSON, or
-// is missing required fields (version, groupName, transactions).
-func ReadFile(path string) (Output, error) {
+// If password is non-empty, the file is decrypted first. If the file is
+// encrypted but no password is provided, an error is returned.
+func ReadFile(path, password string) (Output, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Output{}, fmt.Errorf("reading %s: %w", path, err)
 	}
+
+	encrypted := IsEncrypted(data)
+	if encrypted && password == "" {
+		return Output{}, fmt.Errorf("file is encrypted; use --password")
+	}
+	if !encrypted && password != "" {
+		return Output{}, fmt.Errorf("file is not encrypted but --password was provided")
+	}
+	if encrypted {
+		data, err = decryptJSON(data, password)
+		if err != nil {
+			return Output{}, err
+		}
+	}
+
 	var out Output
 	if err := json.Unmarshal(data, &out); err != nil {
 		return Output{}, fmt.Errorf("parsing %s: %w", path, err)
@@ -123,13 +218,20 @@ func ReadFile(path string) (Output, error) {
 }
 
 // WriteFile marshals data as indented JSON and writes it atomically to path
-// via a temp file and rename.
-func WriteFile(path string, data Output) error {
+// via a temp file and rename. If password is non-empty, the output is encrypted.
+func WriteFile(path string, data Output, password string) error {
 	b, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling JSON: %w", err)
 	}
 	b = append(b, '\n')
+
+	if password != "" {
+		b, err = encryptJSON(b, password)
+		if err != nil {
+			return fmt.Errorf("encrypting: %w", err)
+		}
+	}
 
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".budget-etl-*.json")

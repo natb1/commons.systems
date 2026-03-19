@@ -122,7 +122,7 @@ func TestWriteFileRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "budget.json")
 
-	if err := WriteFile(path, out); err != nil {
+	if err := WriteFile(path, out, ""); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -273,11 +273,11 @@ func TestReadFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "budget.json")
 
-	if err := WriteFile(path, original); err != nil {
+	if err := WriteFile(path, original, ""); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	got, err := ReadFile(path)
+	got, err := ReadFile(path, "")
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestReadFile(t *testing.T) {
 }
 
 func TestReadFileNotFound(t *testing.T) {
-	_, err := ReadFile("/nonexistent/path.json")
+	_, err := ReadFile("/nonexistent/path.json", "")
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -321,7 +321,7 @@ func TestReadFileInvalidJSON(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{invalid"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := ReadFile(path)
+	_, err := ReadFile(path, "")
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
@@ -345,7 +345,7 @@ func TestReadFileValidation(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tt.content), 0644); err != nil {
 				t.Fatal(err)
 			}
-			_, err := ReadFile(path)
+			_, err := ReadFile(path, "")
 			if err == nil {
 				t.Fatalf("expected validation error for %s", tt.name)
 			}
@@ -503,8 +503,193 @@ func TestWriteFileAtomicity(t *testing.T) {
 	path := filepath.Join(dir, "subdir", "budget.json")
 
 	// Writing to nonexistent subdirectory should fail (not create it)
-	err := WriteFile(path, Output{Version: 1})
+	err := WriteFile(path, Output{Version: 1}, "")
 	if err == nil {
 		t.Fatal("expected error writing to nonexistent directory")
+	}
+}
+
+func TestEncryptDecryptRoundTrip(t *testing.T) {
+	original := Output{
+		Version:    1,
+		ExportedAt: FormatTimestamp(time.Date(2025, 6, 15, 10, 30, 0, 0, time.UTC)),
+		GroupName:  "household",
+		Transactions: []Transaction{
+			{
+				ID:          "txn-001",
+				Institution: "bankone",
+				Account:     "1234",
+				Description: "KROGER #1234",
+				Amount:      52.30,
+				Timestamp:   "2025-06-10T00:00:00Z",
+				StatementID: "bankone-1234-2025-06",
+				Category:    "Food:Groceries",
+			},
+		},
+		Budgets:            []Budget{},
+		BudgetPeriods:      []BudgetPeriod{},
+		Rules:              []Rule{},
+		NormalizationRules: []NormalizationRule{},
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "encrypted.json")
+
+	if err := WriteFile(path, original, "hunter2"); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got, err := ReadFile(path, "hunter2")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	if got.Version != original.Version {
+		t.Errorf("version = %d, want %d", got.Version, original.Version)
+	}
+	if got.GroupName != original.GroupName {
+		t.Errorf("groupName = %q, want %q", got.GroupName, original.GroupName)
+	}
+	if len(got.Transactions) != 1 {
+		t.Fatalf("transactions = %d, want 1", len(got.Transactions))
+	}
+	if got.Transactions[0].ID != "txn-001" {
+		t.Errorf("txn[0].id = %q, want txn-001", got.Transactions[0].ID)
+	}
+	if got.Transactions[0].Amount != 52.30 {
+		t.Errorf("txn[0].amount = %v, want 52.30", got.Transactions[0].Amount)
+	}
+}
+
+func TestEncryptedWrongPassword(t *testing.T) {
+	original := Output{
+		Version:            1,
+		GroupName:          "test",
+		Transactions:       []Transaction{{ID: "t1", Institution: "x", Account: "1", Description: "X", Amount: 1, Timestamp: "2025-01-01T00:00:00Z", StatementID: "x-1-2025-01", Category: "C"}},
+		Budgets:            []Budget{},
+		BudgetPeriods:      []BudgetPeriod{},
+		Rules:              []Rule{},
+		NormalizationRules: []NormalizationRule{},
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "encrypted.json")
+
+	if err := WriteFile(path, original, "passwordA"); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := ReadFile(path, "passwordB")
+	if err == nil {
+		t.Fatal("expected error when reading with wrong password")
+	}
+	if !strings.Contains(err.Error(), "wrong password") {
+		t.Errorf("error = %q, want it to contain 'wrong password'", err.Error())
+	}
+}
+
+func TestPlaintextBackwardCompat(t *testing.T) {
+	original := Output{
+		Version:            1,
+		GroupName:          "compat-test",
+		Transactions:       []Transaction{{ID: "t1", Institution: "x", Account: "1", Description: "X", Amount: 1, Timestamp: "2025-01-01T00:00:00Z", StatementID: "x-1-2025-01", Category: "C"}},
+		Budgets:            []Budget{},
+		BudgetPeriods:      []BudgetPeriod{},
+		Rules:              []Rule{},
+		NormalizationRules: []NormalizationRule{},
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "plaintext.json")
+
+	if err := WriteFile(path, original, ""); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got, err := ReadFile(path, "")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	if got.GroupName != "compat-test" {
+		t.Errorf("groupName = %q, want compat-test", got.GroupName)
+	}
+	if len(got.Transactions) != 1 {
+		t.Errorf("transactions = %d, want 1", len(got.Transactions))
+	}
+}
+
+func TestIsEncrypted(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		want bool
+	}{
+		{"BENC magic", []byte{'B', 'E', 'N', 'C', 0x00, 0x01}, true},
+		{"plaintext JSON", []byte(`{"version":1}`), false},
+		{"empty", []byte{}, false},
+		{"too short", []byte{'B', 'E', 'N'}, false},
+		{"wrong magic", []byte{'X', 'E', 'N', 'C'}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsEncrypted(tt.data); got != tt.want {
+				t.Errorf("IsEncrypted(%v) = %v, want %v", tt.data, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEncryptedFileNoPassword(t *testing.T) {
+	original := Output{
+		Version:            1,
+		GroupName:          "test",
+		Transactions:       []Transaction{{ID: "t1", Institution: "x", Account: "1", Description: "X", Amount: 1, Timestamp: "2025-01-01T00:00:00Z", StatementID: "x-1-2025-01", Category: "C"}},
+		Budgets:            []Budget{},
+		BudgetPeriods:      []BudgetPeriod{},
+		Rules:              []Rule{},
+		NormalizationRules: []NormalizationRule{},
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "encrypted.json")
+
+	if err := WriteFile(path, original, "secret"); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := ReadFile(path, "")
+	if err == nil {
+		t.Fatal("expected error reading encrypted file without password")
+	}
+	if !strings.Contains(err.Error(), "file is encrypted; use --password") {
+		t.Errorf("error = %q, want it to contain 'file is encrypted; use --password'", err.Error())
+	}
+}
+
+func TestPlaintextFileWithPassword(t *testing.T) {
+	original := Output{
+		Version:            1,
+		GroupName:          "test",
+		Transactions:       []Transaction{{ID: "t1", Institution: "x", Account: "1", Description: "X", Amount: 1, Timestamp: "2025-01-01T00:00:00Z", StatementID: "x-1-2025-01", Category: "C"}},
+		Budgets:            []Budget{},
+		BudgetPeriods:      []BudgetPeriod{},
+		Rules:              []Rule{},
+		NormalizationRules: []NormalizationRule{},
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "plaintext.json")
+
+	if err := WriteFile(path, original, ""); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := ReadFile(path, "unexpected-password")
+	if err == nil {
+		t.Fatal("expected error reading plaintext file with password")
+	}
+	if !strings.Contains(err.Error(), "file is not encrypted") {
+		t.Errorf("error = %q, want it to contain 'file is not encrypted'", err.Error())
 	}
 }
