@@ -35,6 +35,38 @@
       "normalizedId": null,
       "normalizedPrimary": true,
       "normalizedDescription": null
+    },
+    {
+      "id": "txn-inc-1",
+      "institution": "bankone",
+      "account": "1234",
+      "description": "EMPLOYER DIRECT DEP",
+      "amount": -2400,
+      "timestamp": "2025-06-10T00:00:00Z",
+      "statementId": "stmt-1",
+      "category": "Income:Salary",
+      "budget": null,
+      "note": "",
+      "reimbursement": 0,
+      "normalizedId": null,
+      "normalizedPrimary": true,
+      "normalizedDescription": null
+    },
+    {
+      "id": "txn-inc-2",
+      "institution": "bankone",
+      "account": "1234",
+      "description": "FREELANCE PAYMENT",
+      "amount": -500,
+      "timestamp": "2025-06-11T00:00:00Z",
+      "statementId": "stmt-1",
+      "category": "Income:Freelance",
+      "budget": null,
+      "note": "",
+      "reimbursement": 0,
+      "normalizedId": null,
+      "normalizedPrimary": true,
+      "normalizedDescription": null
     }
   ],
   "budgets": [

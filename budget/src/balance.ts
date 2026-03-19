@@ -272,7 +272,7 @@ export function computeAggregateTrend(
   const weeklyIncome = new Map<number, number>();
   for (const t of incomeTxns) {
     const entry = toSundayEntry(t.timestamp.toDate());
-    weeklyIncome.set(entry.ms, (weeklyIncome.get(entry.ms) ?? 0) + computeNetAmount(t.amount, t.reimbursement));
+    weeklyIncome.set(entry.ms, (weeklyIncome.get(entry.ms) ?? 0) + Math.abs(computeNetAmount(t.amount, t.reimbursement)));
   }
 
   const spendingValues = weeks.map(([ms]) => weeklySpending.get(ms) ?? 0);

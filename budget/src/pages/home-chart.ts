@@ -79,10 +79,11 @@ export function buildCategoryTree(
   for (const t of txns) {
     const parts = t.category.split(":");
     const isIncome = parts[0] === "Income";
-    const net = computeNetAmount(t.amount, t.reimbursement);
-    if (net <= 0) continue;
+    const raw = computeNetAmount(t.amount, t.reimbursement);
     if (mode === "spending" && isIncome) continue;
     if (mode === "income" && !isIncome) continue;
+    const net = mode === "income" ? Math.abs(raw) : raw;
+    if (net <= 0) continue;
     let node = root;
     let path = "";
     for (const part of parts) {
