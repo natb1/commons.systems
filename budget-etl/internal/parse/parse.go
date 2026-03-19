@@ -26,8 +26,9 @@ type ParseError struct {
 func (e *ParseError) Error() string { return fmt.Sprintf("%s: %v", e.Path, e.Err) }
 func (e *ParseError) Unwrap() error { return e.Err }
 
-// StatementFile identifies a statement file and the metadata extracted from its directory path.
-// Expected directory layout: {institution}/{account}/{period}/{file}
+// StatementFile identifies a statement file and the metadata extracted from its path.
+// Period is derived from either the period directory name (4-level layout) or the
+// filename stem (3-level layout). See [DiscoverFiles] for accepted layouts.
 type StatementFile struct {
 	Path        string
 	Institution string
@@ -79,11 +80,15 @@ func DiscoverFiles(dir string) ([]StatementFile, error) {
 			})
 		case 3:
 			// institution/account/file (no period directory)
+			stem := filenameStem(parts[2])
+			if stem == "" {
+				return fmt.Errorf("cannot derive period from filename %q: empty stem after removing extension", parts[2])
+			}
 			files = append(files, StatementFile{
 				Path:        path,
 				Institution: parts[0],
 				Account:     parts[1],
-				Period:      filenameStem(parts[2]),
+				Period:      stem,
 			})
 		default:
 			return fmt.Errorf("unexpected path depth for %s: expected institution/account/[period/]file, got %d components", rel, len(parts))

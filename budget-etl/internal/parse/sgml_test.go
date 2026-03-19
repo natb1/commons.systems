@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseSGML(t *testing.T) {
-	path := filepath.Join("testdata", "pnc.qfx")
+	path := filepath.Join("testdata", "bankone.qfx")
 	result, err := parseSGML(path)
 	if err != nil {
 		t.Fatalf("parseSGML: %v", err)
@@ -30,8 +30,8 @@ func TestParseSGML(t *testing.T) {
 	// First: DEBIT, TRNAMT=-81.71 → budget amount = +8171 cents
 	t.Run("debit", func(t *testing.T) {
 		txn := txns[0]
-		if txn.TransactionID != "5306485111202510172" {
-			t.Errorf("TransactionID = %q, want %q", txn.TransactionID, "5306485111202510172")
+		if txn.TransactionID != "1234567890202510172" {
+			t.Errorf("TransactionID = %q, want %q", txn.TransactionID, "1234567890202510172")
 		}
 		// Date-only parsing: 20251017120000 → 2025-10-17
 		wantDate, _ := time.Parse("20060102", "20251017")
@@ -41,19 +41,19 @@ func TestParseSGML(t *testing.T) {
 		if txn.Amount != 8171 {
 			t.Errorf("Amount = %d, want %d", txn.Amount, 8171)
 		}
-		if txn.Description != "Debit Card Purchase Wholefds Ihbh #10638" {
-			t.Errorf("Description = %q, want %q", txn.Description, "Debit Card Purchase Wholefds Ihbh #10638")
+		if txn.Description != "Debit Card Purchase Grocery Store #456" {
+			t.Errorf("Description = %q, want %q", txn.Description, "Debit Card Purchase Grocery Store #456")
 		}
 	})
 
 	// Second: CREDIT, TRNAMT=3001.83 → budget amount = -300183 cents
 	t.Run("credit", func(t *testing.T) {
 		txn := txns[1]
-		if txn.TransactionID != "5306485111202510101" {
-			t.Errorf("TransactionID = %q, want %q", txn.TransactionID, "5306485111202510101")
+		if txn.TransactionID != "1234567890202510101" {
+			t.Errorf("TransactionID = %q, want %q", txn.TransactionID, "1234567890202510101")
 		}
-		if txn.Amount != -300183 {
-			t.Errorf("Amount = %d, want %d", txn.Amount, -300183)
+		if txn.Amount != -300000 {
+			t.Errorf("Amount = %d, want %d", txn.Amount, -300000)
 		}
 	})
 }
