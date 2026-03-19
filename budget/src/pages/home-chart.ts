@@ -79,7 +79,8 @@ export function buildCategoryTree(
   for (const t of txns) {
     const parts = t.category.split(":");
     const isIncome = parts[0] === "Income";
-    const net = computeNetAmount(t.amount, t.reimbursement);
+    const raw = computeNetAmount(t.amount, t.reimbursement);
+    const net = isIncome ? -raw : raw;
     if (net <= 0) continue;
     if (mode === "spending" && isIncome) continue;
     if (mode === "income" && !isIncome) continue;
