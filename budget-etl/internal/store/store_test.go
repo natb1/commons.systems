@@ -8,9 +8,9 @@ import (
 
 func TestStatementDocID(t *testing.T) {
 	tests := []string{
-		"pnc-5111-2025-07",
-		"capital_one-4549-2025-05",
-		"pnc-5111-2025-10",
+		"bankone-1234-2025-07",
+		"banktwo-5678-2025-05",
+		"bankone-1234-2025-10",
 	}
 
 	for _, id := range tests {
@@ -34,8 +34,8 @@ func TestStatementDocID(t *testing.T) {
 	}
 
 	// No collision between different statement IDs
-	a := StatementDocID("pnc-5111-2025-07")
-	b := StatementDocID("capital_one-4549-2025-05")
+	a := StatementDocID("bankone-1234-2025-07")
+	b := StatementDocID("banktwo-5678-2025-05")
 	if a == b {
 		t.Errorf("different statements produced same doc ID: %q", a)
 	}
@@ -46,9 +46,9 @@ func TestTransactionDocID(t *testing.T) {
 		statementID   string
 		transactionID string
 	}{
-		{"pnc-5111-2025-07", "MACEX03922"},
-		{"capital_one-4549-2025-05", "202505221122069"},
-		{"pnc-5111-2025-10", "5306485111202510172"},
+		{"bankone-1234-2025-07", "ATM0055566"},
+		{"banktwo-5678-2025-05", "202505221122069"},
+		{"bankone-1234-2025-10", "1234567890202510172"},
 	}
 
 	for _, tt := range tests {

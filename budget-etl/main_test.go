@@ -313,7 +313,7 @@ func TestApplyTransactionRulesSkippedByGeneral(t *testing.T) {
 	}
 }
 
-// writeCSVFixture writes a minimal PNC-format CSV statement file to path.
+// writeCSVFixture writes a minimal bank statement CSV file to path.
 // Each entry is [date, amount, description, "", txnID, type].
 func writeCSVFixture(t *testing.T, path string, rows [][6]string) {
 	t.Helper()

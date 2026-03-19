@@ -19,43 +19,43 @@ func TestMatch(t *testing.T) {
 		{
 			name: "case-insensitive substring match",
 			rule: Rule{Pattern: "coffee"},
-			desc: "STARBUCKS COFFEE #1234", institution: "PNC", account: "Checking",
+			desc: "STARBUCKS COFFEE #1234", institution: "BankOne", account: "Checking",
 			want: true,
 		},
 		{
 			name: "no match",
 			rule: Rule{Pattern: "pizza"},
-			desc: "STARBUCKS COFFEE #1234", institution: "PNC", account: "Checking",
+			desc: "STARBUCKS COFFEE #1234", institution: "BankOne", account: "Checking",
 			want: false,
 		},
 		{
 			name: "institution filter matches",
-			rule: Rule{Pattern: "coffee", Institution: "PNC"},
-			desc: "STARBUCKS COFFEE", institution: "PNC", account: "Checking",
+			rule: Rule{Pattern: "coffee", Institution: "BankOne"},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
 			want: true,
 		},
 		{
 			name: "institution filter rejects",
 			rule: Rule{Pattern: "coffee", Institution: "Chase"},
-			desc: "STARBUCKS COFFEE", institution: "PNC", account: "Checking",
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
 			want: false,
 		},
 		{
 			name: "account filter matches",
 			rule: Rule{Pattern: "coffee", Account: "checking"},
-			desc: "STARBUCKS COFFEE", institution: "PNC", account: "Checking",
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
 			want: true,
 		},
 		{
 			name: "account filter rejects",
 			rule: Rule{Pattern: "coffee", Account: "Savings"},
-			desc: "STARBUCKS COFFEE", institution: "PNC", account: "Checking",
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
 			want: false,
 		},
 		{
 			name: "both filters match",
-			rule: Rule{Pattern: "coffee", Institution: "pnc", Account: "checking"},
-			desc: "STARBUCKS COFFEE", institution: "PNC", account: "Checking",
+			rule: Rule{Pattern: "coffee", Institution: "bankone", Account: "checking"},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
 			want: true,
 		},
 		{
@@ -209,7 +209,7 @@ func TestNormalizationRuleMatch(t *testing.T) {
 		{
 			name: "institution filter rejects",
 			rule: NormalizationRule{Pattern: "netflix", Institution: "Chase"},
-			txn:  store.NormTxn{Description: "NETFLIX.COM", Institution: "PNC"},
+			txn:  store.NormTxn{Description: "NETFLIX.COM", Institution: "BankOne"},
 			want: false,
 		},
 		{

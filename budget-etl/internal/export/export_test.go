@@ -22,9 +22,9 @@ func TestWriteFileRoundTrip(t *testing.T) {
 		Statements: []Statement{
 			{
 				ID:          "stmt-doc-001",
-				StatementID: "pnc-5111-2025-06",
-				Institution: "pnc",
-				Account:     "5111",
+				StatementID: "bankone-1234-2025-06",
+				Institution: "bankone",
+				Account:     "1234",
 				Balance:     1429.61,
 				Period:      "2025-06",
 			},
@@ -32,12 +32,12 @@ func TestWriteFileRoundTrip(t *testing.T) {
 		Transactions: []Transaction{
 			{
 				ID:                    "txn-001",
-				Institution:           "pnc",
-				Account:               "5111",
+				Institution:           "bankone",
+				Account:               "1234",
 				Description:           "KROGER #1234",
 				Amount:                52.30,
 				Timestamp:             FormatTimestamp(time.Date(2025, 6, 10, 0, 0, 0, 0, time.UTC)),
-				StatementID:           "pnc-5111-2025-06",
+				StatementID:           "bankone-1234-2025-06",
 				Category:              "Food:Groceries",
 				Budget:                &budget,
 				Note:                  "",
@@ -48,12 +48,12 @@ func TestWriteFileRoundTrip(t *testing.T) {
 			},
 			{
 				ID:                    "txn-002",
-				Institution:           "capital_one",
-				Account:               "4549",
+				Institution:           "banktwo",
+				Account:               "5678",
 				Description:           "RESTAURANT XYZ",
 				Amount:                25.00,
 				Timestamp:             FormatTimestamp(time.Date(2025, 6, 11, 0, 0, 0, 0, time.UTC)),
-				StatementID:           "capital_one-4549-2025-06",
+				StatementID:           "banktwo-5678-2025-06",
 				Category:              "Food:Dining",
 				Budget:                nil,
 				Note:                  "work lunch",
@@ -100,8 +100,8 @@ func TestWriteFileRoundTrip(t *testing.T) {
 				Pattern:       "",
 				Target:        "Food:Dining",
 				Priority:      20,
-				Institution:   "capital_one",
-				Account:       "4549",
+				Institution:   "banktwo",
+				Account:       "5678",
 				TransactionID: "txn-002",
 			},
 		},
@@ -112,7 +112,7 @@ func TestWriteFileRoundTrip(t *testing.T) {
 				PatternType:          "contains",
 				CanonicalDescription: "GROCERY STORE",
 				DateWindowDays:       3,
-				Institution:          "pnc",
+				Institution:          "bankone",
 				Account:              "",
 				Priority:             5,
 			},
@@ -157,8 +157,8 @@ func TestWriteFileRoundTrip(t *testing.T) {
 	if got.Statements[0].Balance != 1429.61 {
 		t.Errorf("statement[0].balance = %v, want 1429.61", got.Statements[0].Balance)
 	}
-	if got.Statements[0].StatementID != "pnc-5111-2025-06" {
-		t.Errorf("statement[0].statementId = %q, want pnc-5111-2025-06", got.Statements[0].StatementID)
+	if got.Statements[0].StatementID != "bankone-1234-2025-06" {
+		t.Errorf("statement[0].statementId = %q, want bankone-1234-2025-06", got.Statements[0].StatementID)
 	}
 
 	// Verify transactions
@@ -245,12 +245,12 @@ func TestReadFile(t *testing.T) {
 		Transactions: []Transaction{
 			{
 				ID:                    "txn-001",
-				Institution:           "pnc",
-				Account:               "5111",
+				Institution:           "bankone",
+				Account:               "1234",
 				Description:           "KROGER #1234",
 				Amount:                52.30,
 				Timestamp:             "2025-06-10T00:00:00Z",
-				StatementID:           "pnc-5111-2025-06",
+				StatementID:           "bankone-1234-2025-06",
 				Category:              "Food:Groceries",
 				Budget:                &budget,
 				NormalizedID:          &normID,
@@ -266,7 +266,7 @@ func TestReadFile(t *testing.T) {
 			{ID: "r1", Type: "categorization", Pattern: "KROGER", Target: "Food:Groceries", Priority: 10},
 		},
 		NormalizationRules: []NormalizationRule{
-			{ID: "nr1", Pattern: "KROGER", PatternType: "substring", CanonicalDescription: "GROCERY STORE", DateWindowDays: 0, Institution: "pnc", Priority: 10},
+			{ID: "nr1", Pattern: "KROGER", PatternType: "substring", CanonicalDescription: "GROCERY STORE", DateWindowDays: 0, Institution: "bankone", Priority: 10},
 		},
 	}
 
@@ -440,8 +440,8 @@ func TestRuleTransactionIDRoundTrip(t *testing.T) {
 		Pattern:       "SPECIFIC CHARGE",
 		Target:        "Food:Dining",
 		Priority:      10,
-		Institution:   "pnc",
-		Account:       "5111",
+		Institution:   "bankone",
+		Account:       "1234",
 		TransactionID: "abc123",
 	}
 
