@@ -75,6 +75,7 @@ export function buildCategoryTree(
   txns: SerializedChartTransaction[],
   mode: ChartMode = "spending",
   unbudgetedOnly = false,
+  showCardPayment = true,
 ): CategoryNode {
   const root: CategoryNode = { name: "All", fullPath: "", value: 0, count: 0, children: [] };
 
@@ -86,6 +87,7 @@ export function buildCategoryTree(
     if (mode === "spending" && isIncome) continue;
     if (mode === "income" && !isIncome) continue;
     if (unbudgetedOnly && t.hasBudget) continue;
+    if (!showCardPayment && mode === "spending" && (t.category === "Transfer:CardPayment" || t.category.startsWith("Transfer:CardPayment:"))) continue;
     let node = root;
     let path = "";
     for (const part of parts) {
@@ -241,6 +243,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   let currentEndWeekIdx = weeks.length - 1;
   let currentMode: ChartMode = "spending";
   let currentUnbudgetedOnly = false;
+  let currentShowCardPayment = false;
 
   const controlsDiv = document.getElementById("sankey-controls");
   if (!controlsDiv) throw new Error("sankey-controls element not found");
@@ -250,7 +253,9 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   const modeRadios = controlsDiv.querySelectorAll<HTMLInputElement>('input[name="sankey-mode"]');
   const unbudgetedToggle = controlsDiv.querySelector("#unbudgeted-toggle") as HTMLElement | null;
   const unbudgetedCheckbox = controlsDiv.querySelector("#sankey-unbudgeted") as HTMLInputElement | null;
-  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox) {
+  const cardPaymentToggle = controlsDiv.querySelector("#card-payment-toggle") as HTMLElement | null;
+  const cardPaymentCheckbox = controlsDiv.querySelector("#sankey-card-payment") as HTMLInputElement | null;
+  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox) {
     throw new Error("sankey control elements missing");
   }
 
@@ -266,7 +271,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     if (containerWidth === 0) return;
 
     const filtered = filterByWeeks(allTxns, weeks, currentNumWeeks, currentEndWeekIdx);
-    const rootData = buildCategoryTree(filtered, currentMode, currentUnbudgetedOnly);
+    const rootData = buildCategoryTree(filtered, currentMode, currentUnbudgetedOnly, currentShowCardPayment);
 
     if (rootData.value === 0) {
       container.textContent = currentMode === "income"
@@ -436,11 +441,13 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       const isIncome = category.startsWith("Income");
       const hasBudget = row.dataset.hasBudget === "true";
 
+      const isCardPayment = category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
+
       let visible: boolean;
       if (currentMode === "income") {
         visible = isIncome;
       } else {
-        visible = !isIncome && (!currentUnbudgetedOnly || !hasBudget);
+        visible = !isIncome && (!currentUnbudgetedOnly || !hasBudget) && (currentShowCardPayment || !isCardPayment);
       }
       row.style.display = visible ? "" : "none";
     }
@@ -487,8 +494,12 @@ export function hydrateCategorySankey(container: HTMLElement): void {
           currentUnbudgetedOnly = false;
           unbudgetedCheckbox.checked = false;
           unbudgetedToggle.hidden = true;
+          currentShowCardPayment = false;
+          cardPaymentCheckbox.checked = false;
+          cardPaymentToggle.hidden = true;
         } else {
           unbudgetedToggle.hidden = false;
+          cardPaymentToggle.hidden = false;
         }
         update();
       }
@@ -497,6 +508,11 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
   unbudgetedCheckbox.addEventListener("change", () => {
     currentUnbudgetedOnly = unbudgetedCheckbox.checked;
+    update();
+  });
+
+  cardPaymentCheckbox.addEventListener("change", () => {
+    currentShowCardPayment = cardPaymentCheckbox.checked;
     update();
   });
 

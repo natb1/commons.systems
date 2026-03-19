@@ -14,14 +14,21 @@ test.describe("transactions", () => {
     await expect(page.locator("#sankey-unbudgeted")).not.toBeChecked();
   });
 
+  test("card payment toggle present @smoke", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#card-payment-toggle")).toBeVisible();
+    await expect(page.locator("#sankey-card-payment")).not.toBeChecked();
+  });
+
   test("seed transactions visible sorted by date descending", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(112);
+    await expect(rows).toHaveCount(115);
     await expect(rows.nth(0)).toContainText("Travel Bookshop");
     await expect(rows.nth(1)).toContainText("Electric Company");
-    await expect(rows.nth(111)).toContainText("Restaurant");
+    await expect(rows.nth(114)).toContainText("Restaurant");
   });
 
   test("seed transactions are read-only", async ({ page }) => {
@@ -153,5 +160,59 @@ test.describe("transactions", () => {
       const category = await visibleRows.nth(i).getAttribute("data-category");
       expect(category).toMatch(/^Income/);
     }
+  });
+
+  test("card payment toggle visible in spending mode", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#card-payment-toggle")).toBeVisible();
+  });
+
+  test("card payment toggle hidden in income mode", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await page.locator('input[name="sankey-mode"][value="income"]').check();
+    await expect(page.locator("#card-payment-toggle")).toBeHidden();
+  });
+
+  test("card payment toggle default hides Transfer:CardPayment rows", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    const visibleRows = page.locator('.txn-row:not([style*="display: none"])');
+    const count = await visibleRows.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      const category = await visibleRows.nth(i).getAttribute("data-category");
+      expect(category).not.toMatch(/^Transfer:CardPayment/);
+    }
+  });
+
+  test("checking card payment toggle shows Transfer:CardPayment rows", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await page.locator("#sankey-card-payment").check();
+    const visibleRows = page.locator('.txn-row:not([style*="display: none"])');
+    const count = await visibleRows.count();
+    let cardPaymentCount = 0;
+    for (let i = 0; i < count; i++) {
+      const category = await visibleRows.nth(i).getAttribute("data-category");
+      if (category?.startsWith("Transfer:CardPayment")) {
+        cardPaymentCount++;
+      }
+    }
+    expect(cardPaymentCount).toBeGreaterThan(0);
+  });
+
+  test("switching to income hides and resets card payment toggle", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await page.locator("#sankey-card-payment").check();
+    await expect(page.locator("#sankey-card-payment")).toBeChecked();
+    await page.locator('input[name="sankey-mode"][value="income"]').check();
+    await expect(page.locator("#card-payment-toggle")).toBeHidden();
+    await expect(page.locator("#sankey-card-payment")).not.toBeChecked();
+    await page.locator('input[name="sankey-mode"][value="spending"]').check();
+    await expect(page.locator("#card-payment-toggle")).toBeVisible();
+    await expect(page.locator("#sankey-card-payment")).not.toBeChecked();
   });
 });

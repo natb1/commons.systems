@@ -170,6 +170,7 @@ function renderCategorySankey(transactions: Transaction[]): string {
         <label><input type="radio" name="sankey-mode" value="income"> Income</label>
       </fieldset>
       <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
+      <label id="card-payment-toggle"><input type="checkbox" id="sankey-card-payment"> Show card payments</label>
       <label>Weeks: <input type="number" id="sankey-weeks" value="12" min="1" max="104"></label>
       <label>Ending week: <input type="range" id="sankey-end-week"> <span id="sankey-end-label"></span></label>
     </div>

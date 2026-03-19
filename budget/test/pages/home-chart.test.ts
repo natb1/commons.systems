@@ -45,6 +45,7 @@ function makeContainer(txns?: SerializedChartTransaction[]): HTMLElement {
       <label><input type="radio" name="sankey-mode" value="income"> Income</label>
     </fieldset>
     <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
+    <label id="card-payment-toggle"><input type="checkbox" id="sankey-card-payment"> Show card payments</label>
     <input id="sankey-weeks" type="number" value="12">
     <input id="sankey-end-week" type="range">
     <span id="sankey-end-label"></span>
@@ -236,6 +237,45 @@ describe("buildCategoryTree", () => {
     expect(root.value).toBe(0);
     expect(root.count).toBe(0);
     expect(root.children).toHaveLength(0);
+  });
+
+  it("showCardPayment=false excludes Transfer:CardPayment", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Transfer:CardPayment", amount: 200 }),
+    ], "spending", false, false);
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0].name).toBe("Food");
+    expect(root.value).toBe(50);
+  });
+
+  it("showCardPayment=true includes Transfer:CardPayment", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Transfer:CardPayment", amount: 200 }),
+    ], "spending", false, true);
+    expect(root.children).toHaveLength(2);
+    expect(root.value).toBe(250);
+  });
+
+  it("showCardPayment=false excludes Transfer:CardPayment subcategories", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Transfer:CardPayment:Amex", amount: 300 }),
+    ], "spending", false, false);
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0].name).toBe("Food");
+    expect(root.value).toBe(50);
+  });
+
+  it("showCardPayment=false does not affect income mode", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Income:Salary", amount: 2400 }),
+      txn({ category: "Transfer:CardPayment", amount: 200 }),
+    ], "income", false, false);
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0].name).toBe("Income");
+    expect(root.value).toBe(2400);
   });
 });
 
