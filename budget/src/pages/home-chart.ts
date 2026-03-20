@@ -2,7 +2,7 @@ import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
 import { computeNetAmount, MS_PER_WEEK } from "../balance.js";
 import { formatCurrency } from "../format.js";
 
-export type ChartMode = "spending" | "income";
+export type ChartMode = "spending" | "credits";
 
 function isCardPaymentCategory(category: string): boolean {
   return category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
@@ -70,16 +70,15 @@ export function filterByWeeks(
 /**
  * Build a category tree from transactions.
  *
- * Filters transactions by mode (spending excludes Income-prefixed categories,
- * income includes only Income-prefixed categories). In spending mode, excludes
- * transactions with zero or negative net amounts. In income mode, applies
- * Math.abs() so both positive and negative income conventions produce positive
- * chart values (only zero-net-amount transactions are excluded). Builds a
- * hierarchy from colon-separated category
- * paths. Rolls up values and counts from leaves to parents, then sorts
- * children by value descending, name ascending.
- * When showCardPayment is false in spending mode, Transfer:CardPayment
- * categories (and subcategories) are excluded.
+ * Filters transactions by mode (spending includes positive net-amount
+ * transactions; credits includes only negative net-amount transactions, shown
+ * as positive values). In spending mode, excludes transactions with zero or
+ * negative net amounts. In credits mode, excludes transactions with zero or
+ * positive net amounts and negates the value so chart values are positive.
+ * Builds a hierarchy from colon-separated category paths. Rolls up values and
+ * counts from leaves to parents, then sorts children by value descending, name
+ * ascending. When showCardPayment is false in spending mode,
+ * Transfer:CardPayment categories (and subcategories) are excluded.
  */
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
@@ -91,14 +90,15 @@ export function buildCategoryTree(
 
   for (const t of txns) {
     const parts = t.category.split(":");
-    const isIncome = parts[0] === "Income";
     const raw = computeNetAmount(t.amount, t.reimbursement);
-    if (mode === "spending" && isIncome) continue;
-    if (mode === "income" && !isIncome) continue;
     if (unbudgetedOnly && t.hasBudget) continue;
-    if (!showCardPayment && mode === "spending" && isCardPaymentCategory(t.category)) continue;
-    const net = mode === "income" ? Math.abs(raw) : raw;
-    if (net <= 0) continue;
+    if (mode === "spending") {
+      if (!showCardPayment && isCardPaymentCategory(t.category)) continue;
+      if (raw <= 0) continue;
+    } else { // "credits"
+      if (raw >= 0) continue;
+    }
+    const net = mode === "credits" ? -raw : raw;
     let node = root;
     let path = "";
     for (const part of parts) {
@@ -295,8 +295,8 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     divideTreeValues(rootData, currentNumWeeks);
 
     if (rootData.value === 0) {
-      container.textContent = currentMode === "income"
-        ? "No income in selected window."
+      container.textContent = currentMode === "credits"
+        ? "No credits in selected window."
         : "No spending in selected window.";
       return;
     }
@@ -455,16 +455,16 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     const rows = document.querySelectorAll<HTMLElement>("#transactions-table .txn-row");
     for (const row of rows) {
       const category = row.dataset.category ?? "";
-      const isIncome = category.startsWith("Income");
       const hasBudget = row.dataset.hasBudget === "true";
-
+      const netAmount = parseFloat(row.dataset.netAmount ?? "0");
+      const isCredit = netAmount < 0;
       const isCardPayment = isCardPaymentCategory(category);
 
       let visible: boolean;
-      if (currentMode === "income") {
-        visible = isIncome;
+      if (currentMode === "credits") {
+        visible = isCredit;
       } else {
-        visible = !isIncome && (!currentUnbudgetedOnly || !hasBudget) && (currentShowCardPayment || !isCardPayment);
+        visible = !isCredit && (!currentUnbudgetedOnly || !hasBudget) && (currentShowCardPayment || !isCardPayment);
       }
       row.style.display = visible ? "" : "none";
     }
@@ -504,10 +504,10 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     radio.addEventListener("change", () => {
       if (radio.checked) {
         const mode = radio.value;
-        if (mode !== "spending" && mode !== "income") throw new Error(`Invalid chart mode: ${mode}`);
+        if (mode !== "spending" && mode !== "credits") throw new Error(`Invalid chart mode: ${mode}`);
         currentMode = mode;
         collapsedPaths.clear();
-        if (mode === "income") {
+        if (mode === "credits") {
           currentUnbudgetedOnly = false;
           unbudgetedCheckbox.checked = false;
           unbudgetedToggle.hidden = true;

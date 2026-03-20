@@ -2,7 +2,7 @@ import type { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Transaction, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
-import { computeAllBudgetBalances } from "../balance.js";
+import { computeAllBudgetBalances, computeNetAmount } from "../balance.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { uniqueSorted } from "./hydrate-util.js";
 import type { SerializedChartTransaction } from "./home-chart.js";
@@ -33,6 +33,7 @@ interface RowParts {
   reimbursementAttr: string;
   categoryAttr: string;
   hasBudgetAttr: string;
+  netAmountAttr: string;
   detailDl: string;
 }
 
@@ -67,6 +68,7 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
   const reimbursementAttr = editable ? ` data-reimbursement="${txn.reimbursement}"` : "";
   const categoryAttr = ` data-category="${escapeHtml(txn.category)}"`;
   const hasBudgetAttr = ` data-has-budget="${txn.budget !== null}"`;
+  const netAmountAttr = ` data-net-amount="${computeNetAmount(txn.amount, txn.reimbursement)}"`;
   const detailDl = `<dl>
         <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
         <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
@@ -77,7 +79,7 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
       </dl>`;
-  return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, categoryAttr, hasBudgetAttr, detailDl };
+  return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, categoryAttr, hasBudgetAttr, netAmountAttr, detailDl };
 }
 
 interface RenderRowOptions {
@@ -92,7 +94,7 @@ function renderRow(opts: RenderRowOptions): string {
   const { txn, groupName, editable, budgetIdToName, balance } = opts;
   const p = buildRowParts(txn, editable, budgetIdToName, balance, groupName);
 
-  return `<details class="expand-row txn-row"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.hasBudgetAttr}>
+  return `<details class="expand-row txn-row"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.hasBudgetAttr}${p.netAmountAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(txn.description)}</span>
@@ -130,7 +132,7 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
     </div>`
   ).join("\n");
 
-  return `<details class="expand-row txn-row normalized-group"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.hasBudgetAttr}>
+  return `<details class="expand-row txn-row normalized-group"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.hasBudgetAttr}${p.netAmountAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(description)}</span>
@@ -167,7 +169,7 @@ function renderCategorySankey(transactions: Transaction[]): string {
   return `<div id="sankey-controls">
       <fieldset id="sankey-mode">
         <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
-        <label><input type="radio" name="sankey-mode" value="income"> Income</label>
+        <label><input type="radio" name="sankey-mode" value="credits"> Credits</label>
       </fieldset>
       <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
       <label id="card-payment-toggle"><input type="checkbox" id="sankey-card-payment"> Show card payments</label>

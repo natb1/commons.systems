@@ -15,6 +15,7 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("../../src/balance.js", () => ({
   computeAllBudgetBalances: vi.fn(),
+  computeNetAmount: (amount: number, reimbursement: number) => amount * (1 - reimbursement / 100),
 }));
 
 import { renderHome } from "../../src/pages/home";

@@ -43,7 +43,7 @@ function makeContainer(txns?: SerializedChartTransaction[]): HTMLElement {
   controlsDiv.innerHTML = `
     <fieldset id="sankey-mode">
       <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
-      <label><input type="radio" name="sankey-mode" value="income"> Income</label>
+      <label><input type="radio" name="sankey-mode" value="credits"> Credits</label>
     </fieldset>
     <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
     <label id="card-payment-toggle"><input type="checkbox" id="sankey-card-payment"> Show card payments</label>
@@ -180,12 +180,12 @@ describe("buildCategoryTree", () => {
     expect(names1).toEqual(["A", "M", "Z"]); // equal values → alphabetical
   });
 
-  it("income mode includes only Income-prefixed categories", () => {
+  it("credits mode includes negative net-amount transactions", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Food", amount: 50 }),
       txn({ category: "Income:Freelance", amount: -500 }),
-    ], "income");
+    ], "credits");
     expect(root.children).toHaveLength(1);
     const income = root.children[0];
     expect(income.name).toBe("Income");
@@ -193,7 +193,7 @@ describe("buildCategoryTree", () => {
     expect(income.value).toBe(2900);
   });
 
-  it("spending mode excludes Income-prefixed categories", () => {
+  it("spending mode excludes negative net-amount transactions", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Food", amount: 50 }),
@@ -203,19 +203,24 @@ describe("buildCategoryTree", () => {
     expect(root.value).toBe(50);
   });
 
-  it("positive income amount is included via Math.abs", () => {
+  it("positive Income:Salary amount appears in spending, not credits", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: 2400 }),
-    ], "income");
-    expect(root.value).toBe(2400);
-    expect(root.children).toHaveLength(1);
-    expect(root.children[0].name).toBe("Income");
+    ], "credits");
+    expect(root.value).toBe(0);
+    expect(root.children).toHaveLength(0);
+
+    const spendingRoot = buildCategoryTree([
+      txn({ category: "Income:Salary", amount: 2400 }),
+    ], "spending");
+    expect(spendingRoot.value).toBe(2400);
+    expect(spendingRoot.children[0].name).toBe("Income");
   });
 
-  it("income mode with no income returns empty tree", () => {
+  it("credits mode with no credits returns empty tree", () => {
     const root = buildCategoryTree([
       txn({ category: "Food", amount: 50 }),
-    ], "income");
+    ], "credits");
     expect(root.value).toBe(0);
     expect(root.children).toHaveLength(0);
   });
@@ -278,21 +283,21 @@ describe("buildCategoryTree", () => {
     expect(root.value).toBe(50);
   });
 
-  it("showCardPayment=false does not affect income mode", () => {
+  it("showCardPayment=false does not affect credits mode", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Transfer:CardPayment", amount: 200 }),
-    ], "income", false, false);
+    ], "credits", false, false);
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Income");
     expect(root.value).toBe(2400);
   });
 
-  it("income mode: negative amounts produce positive tree values", () => {
+  it("credits mode: negative amounts produce positive tree values", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Income:Freelance", amount: -500 }),
-    ], "income");
+    ], "credits");
     expect(root.value).toBe(2900);
     const income = root.children.find(c => c.name === "Income");
     expect(income).toBeDefined();
@@ -303,7 +308,7 @@ describe("buildCategoryTree", () => {
     expect(freelance!.value).toBe(500);
   });
 
-  it("income mode: negative amounts excluded in spending mode", () => {
+  it("credits mode: negative amounts excluded in spending mode", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Income:Freelance", amount: -500 }),
@@ -314,12 +319,18 @@ describe("buildCategoryTree", () => {
     expect(root.children[0].value).toBe(50);
   });
 
-  it("income mode: mixed positive and negative income amounts", () => {
-    const root = buildCategoryTree([
+  it("credits mode: Income:Salary positive goes to spending, Income:Freelance negative goes to credits", () => {
+    const creditsRoot = buildCategoryTree([
       txn({ category: "Income:Salary", amount: 2400 }),
       txn({ category: "Income:Freelance", amount: -500 }),
-    ], "income");
-    expect(root.value).toBe(2900);
+    ], "credits");
+    expect(creditsRoot.value).toBe(500);
+
+    const spendingRoot = buildCategoryTree([
+      txn({ category: "Income:Salary", amount: 2400 }),
+      txn({ category: "Income:Freelance", amount: -500 }),
+    ], "spending");
+    expect(spendingRoot.value).toBe(2400);
   });
 });
 
@@ -474,16 +485,17 @@ describe("hydrateCategorySankey", () => {
     const table = document.createElement("div");
     table.id = "transactions-table";
     const rows = [
-      { category: "Food", hasBudget: "true" },
-      { category: "Transport", hasBudget: "false" },
-      { category: "Transfer:CardPayment", hasBudget: "false" },
-      { category: "Income:Salary", hasBudget: "false" },
+      { category: "Food", hasBudget: "true", netAmount: "50" },
+      { category: "Transport", hasBudget: "false", netAmount: "30" },
+      { category: "Transfer:CardPayment", hasBudget: "false", netAmount: "200" },
+      { category: "Income:Salary", hasBudget: "false", netAmount: "-2400" },
     ];
     for (const r of rows) {
       const row = document.createElement("div");
       row.className = "txn-row";
       row.dataset.category = r.category;
       row.dataset.hasBudget = r.hasBudget;
+      row.dataset.netAmount = r.netAmount;
       table.appendChild(row);
     }
     document.body.appendChild(table);
@@ -518,5 +530,59 @@ describe("hydrateCategorySankey", () => {
     cardPaymentCheckbox.checked = true;
     cardPaymentCheckbox.dispatchEvent(new Event("change"));
     expect(txnRows[2].style.display).toBe(""); // CardPayment now visible
+  });
+
+  it("Travel:Reimbursement with negative amount appears in credits mode", () => {
+    const table = document.createElement("div");
+    table.id = "transactions-table";
+    const row = document.createElement("div");
+    row.className = "txn-row";
+    row.dataset.category = "Travel:Reimbursement";
+    row.dataset.hasBudget = "false";
+    row.dataset.netAmount = "-22.99";
+    table.appendChild(row);
+    document.body.appendChild(table);
+
+    const container = makeContainer([
+      txn({ category: "Travel:Reimbursement", amount: -22.99 }),
+    ]);
+    hydrateCategorySankey(container);
+
+    const txnRows = table.querySelectorAll<HTMLElement>(".txn-row");
+    // Default spending mode: negative-amount row hidden
+    expect(txnRows[0].style.display).toBe("none");
+
+    // Switch to credits mode
+    const creditsRadio = document.querySelector<HTMLInputElement>('input[name="sankey-mode"][value="credits"]')!;
+    creditsRadio.checked = true;
+    creditsRadio.dispatchEvent(new Event("change"));
+    expect(txnRows[0].style.display).toBe(""); // now visible in credits mode
+  });
+
+  it("credits mode excludes positive non-Income transactions", () => {
+    const table = document.createElement("div");
+    table.id = "transactions-table";
+    const row = document.createElement("div");
+    row.className = "txn-row";
+    row.dataset.category = "Food";
+    row.dataset.hasBudget = "false";
+    row.dataset.netAmount = "50";
+    table.appendChild(row);
+    document.body.appendChild(table);
+
+    const container = makeContainer([
+      txn({ category: "Food", amount: 50 }),
+    ]);
+    hydrateCategorySankey(container);
+
+    const txnRows = table.querySelectorAll<HTMLElement>(".txn-row");
+    // Default spending mode: Food visible
+    expect(txnRows[0].style.display).toBe("");
+
+    // Switch to credits mode
+    const creditsRadio = document.querySelector<HTMLInputElement>('input[name="sankey-mode"][value="credits"]')!;
+    creditsRadio.checked = true;
+    creditsRadio.dispatchEvent(new Event("change"));
+    expect(txnRows[0].style.display).toBe("none"); // hidden in credits mode
   });
 });
