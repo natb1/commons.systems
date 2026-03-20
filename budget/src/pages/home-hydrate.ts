@@ -5,7 +5,7 @@ import { computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
-import { renderTransactionRows, compareByTimestampDesc } from "./home.js";
+import { renderTransactionRows, compareByTimestampDesc, SCROLL_BATCH_WEEKS } from "./home.js";
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
@@ -262,8 +262,11 @@ export function hydrateTransactionTable(container: HTMLElement): void {
   const sentinel = container.querySelector("#scroll-sentinel") as HTMLElement | null;
   if (!sentinel) return;
 
-  const groupName = container.dataset.groupName ?? "";
-  const editable = container.dataset.editable === "true";
+  const groupName = container.dataset.groupName;
+  if (groupName === undefined) throw new DataIntegrityError("transactions-table missing data-group-name attribute");
+  const editableRaw = container.dataset.editable;
+  if (editableRaw === undefined) throw new DataIntegrityError("transactions-table missing data-editable attribute");
+  const editable = editableRaw === "true";
 
   const budgetIdToName = new Map<string, string>();
   for (const [name, id] of Object.entries(budgetNameToId)) {
@@ -288,7 +291,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       if (!raw) throw new DataIntegrityError("scroll-sentinel missing data-next-before");
       const beforeMs = Number(raw);
       if (!Number.isFinite(beforeMs)) throw new DataIntegrityError(`Invalid data-next-before: "${raw}"`);
-      const sinceMs = weekStart(beforeMs - 12 * MS_PER_WEEK);
+      const sinceMs = weekStart(beforeMs - SCROLL_BATCH_WEEKS * MS_PER_WEEK);
 
       const transactions = await getActiveDataSource().getTransactions({
         since: Timestamp.fromMillis(sinceMs),

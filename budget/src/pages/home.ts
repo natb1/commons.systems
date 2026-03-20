@@ -4,6 +4,9 @@ import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./re
 import { type Transaction, type TransactionId, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAllBudgetBalances, computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import type { TransactionQuery } from "../data-source.js";
+
+/** Number of weeks loaded per scroll batch (initial load and each subsequent fetch). */
+export const SCROLL_BATCH_WEEKS = 12;
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { uniqueSorted } from "./hydrate-util.js";
 import type { SerializedChartTransaction } from "./home-chart.js";
@@ -297,7 +300,7 @@ function renderTransactionTable(
 export async function renderHome(options: RenderPageOptions): Promise<string> {
   const { authorized, groupName, dataSource } = options;
 
-  const sinceMs = weekStart(Date.now() - 12 * MS_PER_WEEK);
+  const sinceMs = weekStart(Date.now() - SCROLL_BATCH_WEEKS * MS_PER_WEEK);
   const txnQuery: TransactionQuery = { since: Timestamp.fromMillis(sinceMs) };
 
   let tableHtml: string;

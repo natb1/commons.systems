@@ -68,13 +68,18 @@ export function filterByWeeks(
  * transactions whose category exactly matches the filter or starts with
  * categoryFilter + ":" (subcategories) are included.
  */
+export interface CategoryTreeOptions {
+  mode?: ChartMode;
+  unbudgetedOnly?: boolean;
+  showCardPayment?: boolean;
+  categoryFilter?: string;
+}
+
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
-  mode: ChartMode = "spending",
-  unbudgetedOnly = false,
-  showCardPayment = false,
-  categoryFilter = "",
+  opts: CategoryTreeOptions = {},
 ): CategoryNode {
+  const { mode = "spending", unbudgetedOnly = false, showCardPayment = false, categoryFilter = "" } = opts;
   const root: CategoryNode = { name: "All", fullPath: "", value: 0, count: 0, children: [] };
 
   for (const t of txns) {
@@ -268,11 +273,10 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   const unbudgetedCheckbox = controlsDiv.querySelector("#sankey-unbudgeted") as HTMLInputElement | null;
   const cardPaymentToggle = controlsDiv.querySelector("#card-payment-toggle") as HTMLElement | null;
   const cardPaymentCheckbox = controlsDiv.querySelector("#sankey-card-payment") as HTMLInputElement | null;
-  const categoryFilterInputRaw = controlsDiv.querySelector("#sankey-category-filter") as HTMLInputElement | null;
-  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox || !categoryFilterInputRaw) {
+  const categoryFilterInput = controlsDiv.querySelector("#sankey-category-filter") as HTMLInputElement | null;
+  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox || !categoryFilterInput) {
     throw new Error("sankey control elements missing");
   }
-  const categoryFilterInput: HTMLInputElement = categoryFilterInputRaw;
 
   const categoryOptions = parseJsonArray(controlsDiv.dataset.categoryOptions);
 
@@ -288,7 +292,12 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     if (containerWidth === 0) return;
 
     const filtered = filterByWeeks(allTxns, weeks, currentNumWeeks, currentEndWeekIdx);
-    const rootData = buildCategoryTree(filtered, currentMode, currentUnbudgetedOnly, currentShowCardPayment, currentCategoryFilter);
+    const rootData = buildCategoryTree(filtered, {
+      mode: currentMode,
+      unbudgetedOnly: currentUnbudgetedOnly,
+      showCardPayment: currentShowCardPayment,
+      categoryFilter: currentCategoryFilter,
+    });
     divideTreeValues(rootData, currentNumWeeks);
 
     if (rootData.value === 0) {
