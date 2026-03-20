@@ -160,7 +160,8 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 			})
 		}
 	}
-	allStmts := buildStatementData(parsed)
+	maxDates := maxTransactionDates(allTxns)
+	allStmts := buildStatementData(parsed, maxDates)
 
 	if dryRun {
 		printSummary(parsed, totalTxns, skipped)
@@ -347,13 +348,25 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	exportTxns := buildExportTxns(allTxns, txnDocIDs, normMap, editsMap)
 	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
 
+	// Recompute lastTransactionDate on statements from all transactions
+	maxDates := maxTransactionDates(allTxns)
+	updatedStmts := make([]export.Statement, len(inp.Statements))
+	for i, s := range inp.Statements {
+		updatedStmts[i] = s
+		key := s.Institution + "\x00" + s.Account
+		if t, ok := maxDates[key]; ok {
+			v := export.FormatTimestamp(*t)
+			updatedStmts[i].LastTransactionDate = &v
+		}
+	}
+
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
 		GroupID:             inp.GroupID,
 		GroupName:           inp.GroupName,
 		Transactions:       exportTxns,
-		Statements:         inp.Statements,
+		Statements:         updatedStmts,
 		Budgets:            inp.Budgets,
 		BudgetPeriods:      budgetPeriods,
 		Rules:              inp.Rules,
@@ -636,8 +649,8 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	}
 	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
-	// Build statements from dir-parsed files
-	dirStmts := buildStatementData(parsed)
+	// Build statements from dir-parsed files (maxDates computed later after merge)
+	dirStmts := buildStatementData(parsed, nil)
 
 	// Build input lookup by doc ID
 	inputByID := make(map[string]export.Transaction, len(inp.Transactions))
@@ -732,7 +745,8 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
 
 	// Merge statements: dir overrides by statementID, retain input-only
-	exportStmts := mergeStatements(dirStmts, inp.Statements)
+	maxDates := maxTransactionDates(allTxns)
+	exportStmts := mergeStatements(dirStmts, inp.Statements, maxDates)
 
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
@@ -750,7 +764,13 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 
 // mergeStatements merges dir-parsed statements with input statements.
 // Dir statements override input by statementID; input-only statements are retained.
-func mergeStatements(dirStmts []store.StatementData, inputStmts []export.Statement) []export.Statement {
+// maxDates updates LastTransactionDate on all statements (dir and input-only).
+func mergeStatements(dirStmts []store.StatementData, inputStmts []export.Statement, maxDates map[string]*time.Time) []export.Statement {
+	// Apply maxDates to dir statements before export conversion
+	for i := range dirStmts {
+		key := dirStmts[i].Institution + "\x00" + dirStmts[i].Account
+		dirStmts[i].LastTransactionDate = maxDates[key]
+	}
 	dirExport := buildExportStatements(dirStmts)
 
 	dirByStmtID := make(map[string]bool, len(dirExport))
@@ -761,6 +781,12 @@ func mergeStatements(dirStmts []store.StatementData, inputStmts []export.Stateme
 	result := append([]export.Statement{}, dirExport...)
 	for _, s := range inputStmts {
 		if !dirByStmtID[s.StatementID] {
+			// Update input-only statement's LastTransactionDate from merged transactions
+			key := s.Institution + "\x00" + s.Account
+			if t, ok := maxDates[key]; ok {
+				v := export.FormatTimestamp(*t)
+				s.LastTransactionDate = &v
+			}
 			result = append(result, s)
 		}
 	}
@@ -948,16 +974,32 @@ func readFirebaseRC() (string, error) {
 	}
 }
 
+// maxTransactionDates computes the maximum timestamp per (institution, account)
+// from a slice of transactions. Keys use "\x00" as separator.
+func maxTransactionDates(txns []store.TransactionData) map[string]*time.Time {
+	m := make(map[string]*time.Time)
+	for _, txn := range txns {
+		key := txn.Institution + "\x00" + txn.Account
+		if existing, ok := m[key]; !ok || txn.Timestamp.After(*existing) {
+			t := txn.Timestamp
+			m[key] = &t
+		}
+	}
+	return m
+}
+
 // buildStatementData converts parsed files to store.StatementData.
-func buildStatementData(parsed []parsedFile) []store.StatementData {
+func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []store.StatementData {
 	out := make([]store.StatementData, len(parsed))
 	for i, pf := range parsed {
+		key := pf.sf.Institution + "\x00" + pf.sf.Account
 		out[i] = store.StatementData{
-			StatementID: pf.sf.StatementID(),
-			Institution: pf.sf.Institution,
-			Account:     pf.sf.Account,
-			Balance:     pf.result.Balance,
-			Period:      pf.sf.Period,
+			StatementID:         pf.sf.StatementID(),
+			Institution:         pf.sf.Institution,
+			Account:             pf.sf.Account,
+			Balance:             pf.result.Balance,
+			Period:              pf.sf.Period,
+			LastTransactionDate: maxDates[key],
 		}
 	}
 	return out
@@ -967,13 +1009,19 @@ func buildStatementData(parsed []parsedFile) []store.StatementData {
 func buildExportStatements(stmts []store.StatementData) []export.Statement {
 	out := make([]export.Statement, len(stmts))
 	for i, s := range stmts {
+		var ltd *string
+		if s.LastTransactionDate != nil {
+			v := export.FormatTimestamp(*s.LastTransactionDate)
+			ltd = &v
+		}
 		out[i] = export.Statement{
-			ID:          store.StatementDocID(s.StatementID),
-			StatementID: s.StatementID,
-			Institution: s.Institution,
-			Account:     s.Account,
-			Balance:     store.DollarAmount(s.Balance),
-			Period:      s.Period,
+			ID:                  store.StatementDocID(s.StatementID),
+			StatementID:         s.StatementID,
+			Institution:         s.Institution,
+			Account:             s.Account,
+			Balance:             store.DollarAmount(s.Balance),
+			Period:              s.Period,
+			LastTransactionDate: ltd,
 		}
 	}
 	return out

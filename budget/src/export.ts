@@ -80,7 +80,15 @@ export async function exportToJson(): Promise<string> {
       account: nullToEmpty(r.account),
       priority: r.priority,
     })),
-    statements,
+    statements: statements.map((s) => ({
+      id: s.id,
+      statementId: s.statementId,
+      institution: s.institution,
+      account: s.account,
+      balance: s.balance,
+      period: s.period,
+      lastTransactionDate: msToIso(s.lastTransactionDateMs) || null,
+    })),
   };
 
   return JSON.stringify(output, null, 2) + "\n";
