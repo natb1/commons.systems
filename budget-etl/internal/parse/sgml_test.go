@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseSGML(t *testing.T) {
-	path := filepath.Join("testdata", "pnc.qfx")
+	path := filepath.Join("testdata", "bankone.qfx")
 	result, err := parseSGML(path)
 	if err != nil {
 		t.Fatalf("parseSGML: %v", err)
@@ -52,8 +52,8 @@ func TestParseSGML(t *testing.T) {
 		if txn.TransactionID != "1234567890202510101" {
 			t.Errorf("TransactionID = %q, want %q", txn.TransactionID, "1234567890202510101")
 		}
-		if txn.Amount != -300183 {
-			t.Errorf("Amount = %d, want %d", txn.Amount, -300183)
+		if txn.Amount != -300000 {
+			t.Errorf("Amount = %d, want %d", txn.Amount, -300000)
 		}
 	})
 }

@@ -178,9 +178,9 @@ describe("buildCategoryTree", () => {
 
   it("income mode includes only Income-prefixed categories", () => {
     const root = buildCategoryTree([
-      txn({ category: "Income:Salary", amount: 2400 }),
+      txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Food", amount: 50 }),
-      txn({ category: "Income:Freelance", amount: 500 }),
+      txn({ category: "Income:Freelance", amount: -500 }),
     ], "income");
     expect(root.children).toHaveLength(1);
     const income = root.children[0];
@@ -191,12 +191,20 @@ describe("buildCategoryTree", () => {
 
   it("spending mode excludes Income-prefixed categories", () => {
     const root = buildCategoryTree([
-      txn({ category: "Income:Salary", amount: 2400 }),
+      txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Food", amount: 50 }),
     ], "spending");
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Food");
     expect(root.value).toBe(50);
+  });
+
+  it("positive income amount is excluded as edge case", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Income:Salary", amount: 2400 }),
+    ], "income");
+    expect(root.value).toBe(0);
+    expect(root.children).toHaveLength(0);
   });
 
   it("income mode with no income returns empty tree", () => {

@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseOFX(t *testing.T) {
-	path := filepath.Join("testdata", "capital_one.ofx")
+	path := filepath.Join("testdata", "banktwo.ofx")
 	result, err := parseOFX(path)
 	if err != nil {
 		t.Fatalf("parseOFX: %v", err)

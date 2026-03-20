@@ -10,8 +10,8 @@ func TestDiscoverFiles(t *testing.T) {
 	// Create a temp directory with the expected structure
 	tmp := t.TempDir()
 	dirs := []string{
-		"pnc/5111/2025-07",
-		"capital_one/4549/2025-05",
+		"bankone/1234/2025-07",
+		"banktwo/5678/2025-05",
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(filepath.Join(tmp, d), 0o755); err != nil {
@@ -19,10 +19,11 @@ func TestDiscoverFiles(t *testing.T) {
 		}
 	}
 
-	// Create test files
+	// Create test files (4-level and 3-level layouts)
 	testFiles := map[string]string{
-		"pnc/5111/2025-07/datafile.csv":                         "csv data",
-		"capital_one/4549/2025-05/transaction_download.ofx":      "ofx data",
+		"bankone/1234/2025-07/datafile.csv":                    "csv data",
+		"banktwo/5678/2025-05/transaction_download.ofx": "ofx data",
+		"bankone/1234/2025-08.csv":                             "csv data",
 	}
 	for path, content := range testFiles {
 		if err := os.WriteFile(filepath.Join(tmp, path), []byte(content), 0o644); err != nil {
@@ -31,7 +32,7 @@ func TestDiscoverFiles(t *testing.T) {
 	}
 
 	// Also create a .DS_Store that should be skipped
-	if err := os.WriteFile(filepath.Join(tmp, "pnc/.DS_Store"), []byte("junk"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "bankone/.DS_Store"), []byte("junk"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -39,8 +40,8 @@ func TestDiscoverFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DiscoverFiles: %v", err)
 	}
-	if len(files) != 2 {
-		t.Fatalf("expected 2 files, got %d", len(files))
+	if len(files) != 3 {
+		t.Fatalf("expected 3 files, got %d", len(files))
 	}
 
 	// Build a map by institution+account+period for order-independent checks
@@ -51,13 +52,20 @@ func TestDiscoverFiles(t *testing.T) {
 	}
 
 	if sf, ok := found[key{"bankone", "1234", "2025-07"}]; !ok {
-		t.Error("missing pnc/5111/2025-07")
+		t.Error("missing bankone/1234/2025-07")
 	} else if sf.StatementID() != "bankone-1234-2025-07" {
 		t.Errorf("StatementID = %q, want %q", sf.StatementID(), "bankone-1234-2025-07")
 	}
 
 	if _, ok := found[key{"banktwo", "5678", "2025-05"}]; !ok {
-		t.Error("missing capital_one/4549/2025-05")
+		t.Error("missing banktwo/5678/2025-05")
+	}
+
+	// 3-level layout: period from filename stem
+	if sf, ok := found[key{"bankone", "1234", "2025-08"}]; !ok {
+		t.Error("missing bankone/1234/2025-08 (3-level layout)")
+	} else if sf.StatementID() != "bankone-1234-2025-08" {
+		t.Errorf("StatementID = %q, want %q", sf.StatementID(), "bankone-1234-2025-08")
 	}
 }
 
@@ -67,9 +75,9 @@ func TestDetectFormat(t *testing.T) {
 		file string
 		want format
 	}{
-		{"CSV", filepath.Join("testdata", "pnc.csv"), formatCSV},
-		{"OFX", filepath.Join("testdata", "capital_one.ofx"), formatOFX},
-		{"SGML", filepath.Join("testdata", "pnc.qfx"), formatSGML},
+		{"CSV", filepath.Join("testdata", "bankone.csv"), formatCSV},
+		{"OFX", filepath.Join("testdata", "banktwo.ofx"), formatOFX},
+		{"SGML", filepath.Join("testdata", "bankone.qfx"), formatSGML},
 	}
 
 	for _, tt := range tests {
@@ -92,9 +100,9 @@ func TestParseFile_Dispatch(t *testing.T) {
 		wantCount int
 		wantSkip  bool
 	}{
-		{"CSV", filepath.Join("testdata", "pnc.csv"), 4, false},
-		{"OFX", filepath.Join("testdata", "capital_one.ofx"), 2, false},
-		{"SGML", filepath.Join("testdata", "pnc.qfx"), 2, false},
+		{"CSV", filepath.Join("testdata", "bankone.csv"), 4, false},
+		{"OFX", filepath.Join("testdata", "banktwo.ofx"), 2, false},
+		{"SGML", filepath.Join("testdata", "bankone.qfx"), 2, false},
 		{"Investment", filepath.Join("testdata", "investment.qfx"), 0, true},
 	}
 

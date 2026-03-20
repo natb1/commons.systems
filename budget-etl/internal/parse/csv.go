@@ -9,7 +9,7 @@ import (
 )
 
 // parseCSV parses a bank statement CSV file.
-// Bank CSV format:
+// Expected CSV format:
 //
 //	Line 1: account metadata [acctNumber, fromDate, toDate, balance, available] — balance extracted
 //	Lines 2+: positional data rows with 6 fields:
@@ -25,8 +25,8 @@ func parseCSV(path string) (ParseResult, error) {
 	defer f.Close()
 
 	reader := csv.NewReader(f)
-	// Bank CSV has variable field counts: the metadata line has 5 fields,
-	// data lines have 6. Disable field count checking.
+	// The metadata line has 5 fields, data lines have 6.
+	// Disable field count checking for this variable-width format.
 	reader.FieldsPerRecord = -1
 	records, err := reader.ReadAll()
 	if err != nil {
@@ -38,7 +38,7 @@ func parseCSV(path string) (ParseResult, error) {
 	}
 
 	// Extract balance from metadata line (line 1) if available.
-	// Bank CSV metadata format: [acctNumber, fromDate, toDate, balance, available]
+	// Metadata format: [acctNumber, fromDate, toDate, balance, available]
 	var balance int64
 	meta := records[0]
 	if len(meta) >= 5 && meta[3] != "" {
