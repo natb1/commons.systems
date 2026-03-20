@@ -97,6 +97,7 @@ export interface IdbStatement {
   account: string;
   balance: number;
   period: string;
+  lastTransactionDateMs: number | null;
 }
 
 export interface ParsedData {

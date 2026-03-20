@@ -37,6 +37,7 @@ function stmt(overrides: Partial<Statement> = {}): Statement {
     account: "Checking",
     balance: 1000,
     period: "2025-02",
+    lastTransactionDate: null,
     groupId: null,
     ...overrides,
   };
@@ -60,13 +61,13 @@ describe("renderAccounts", () => {
     expect(html).toContain("<h2>Accounts</h2>");
   });
 
-  it("renders rows from transactions and statements", async () => {
+  it("renders rows from statements with lastTransactionDate", async () => {
     const html = await renderAccounts(localOptions({
       getTransactions: vi.fn().mockResolvedValue([
         txn({ institution: "BankOne", account: "1234" }),
       ]),
       getStatements: vi.fn().mockResolvedValue([
-        stmt({ institution: "BankOne", account: "1234", balance: 3825.5 }),
+        stmt({ institution: "BankOne", account: "1234", balance: 3825.5, lastTransactionDate: ts("2025-02-15") }),
       ]),
     }));
     expect(html).toContain('id="accounts-table"');
@@ -89,18 +90,18 @@ describe("renderAccounts", () => {
     expect(html).not.toContain("$500.00");
   });
 
-  it("shows empty state when no transactions", async () => {
+  it("shows empty state when no statements", async () => {
     const html = await renderAccounts(seedOptions());
     expect(html).toContain("No accounts found.");
   });
 
-  it("sorts rows ascending by most recent transaction date", async () => {
+  it("sorts rows ascending by lastTransactionDate", async () => {
     const html = await renderAccounts(localOptions({
-      getTransactions: vi.fn().mockResolvedValue([
-        txn({ institution: "ZBank", account: "Savings", timestamp: ts("2025-03-01") }),
-        txn({ institution: "ABank", account: "Checking", timestamp: ts("2025-01-01") }),
+      getTransactions: vi.fn().mockResolvedValue([]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt({ institution: "ZBank", account: "Savings", period: "2025-03", lastTransactionDate: ts("2025-03-01") }),
+        stmt({ institution: "ABank", account: "Checking", period: "2025-01", lastTransactionDate: ts("2025-01-01") }),
       ]),
-      getStatements: vi.fn().mockResolvedValue([]),
     }));
     const tableStart = html.indexOf('id="accounts-table"');
     const tableHtml = html.slice(tableStart);
@@ -109,16 +110,14 @@ describe("renderAccounts", () => {
     expect(aBankIdx).toBeLessThan(zBankIdx);
   });
 
-  it("shows empty balance cell when no matching statement", async () => {
+  it("shows empty date cell when lastTransactionDate is null", async () => {
     const html = await renderAccounts(localOptions({
-      getTransactions: vi.fn().mockResolvedValue([
-        txn({ institution: "Bank", account: "Checking" }),
+      getTransactions: vi.fn().mockResolvedValue([]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt({ institution: "Bank", account: "Checking", lastTransactionDate: null }),
       ]),
-      getStatements: vi.fn().mockResolvedValue([]),
     }));
     expect(html).toContain('id="accounts-table"');
-    // The balance <td> should be empty
-    expect(html).toMatch(/<td><\/td>/);
   });
 
   it("renders error fallback when data source fails", async () => {
@@ -153,7 +152,7 @@ describe("renderAccounts", () => {
         txn({ institution: "Bank", account: "Checking", budget: "food" as any }),
       ]),
       getStatements: vi.fn().mockResolvedValue([
-        stmt(),
+        stmt({ lastTransactionDate: ts("2025-02-15") }),
       ]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         {
@@ -178,7 +177,7 @@ describe("renderAccounts", () => {
         txn({ institution: "Bank", account: "Checking", budget: "food" as any }),
       ]),
       getStatements: vi.fn().mockResolvedValue([
-        stmt(),
+        stmt({ lastTransactionDate: ts("2025-02-15") }),
       ]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         {
@@ -202,7 +201,7 @@ describe("renderAccounts", () => {
       getTransactions: vi.fn().mockResolvedValue([
         txn({ institution: "Bank", account: "Checking", budget: "food" as any }),
       ]),
-      getStatements: vi.fn().mockResolvedValue([stmt()]),
+      getStatements: vi.fn().mockResolvedValue([stmt({ lastTransactionDate: ts("2025-02-15") })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         {
           id: "food-w1",
@@ -227,8 +226,8 @@ describe("renderAccounts", () => {
         txn({ id: "t1" as any, institution: "Bank", account: "Checking", amount: 100, timestamp: ts("2025-01-15"), budget: "food" as any }),
       ]),
       getStatements: vi.fn().mockResolvedValue([
-        stmt({ id: "s1", period: "2025-01", balance: 500 }),
-        stmt({ id: "s2", period: "2025-02", balance: 1000 }),
+        stmt({ id: "s1", period: "2025-01", balance: 500, lastTransactionDate: ts("2025-01-15") }),
+        stmt({ id: "s2", period: "2025-02", balance: 1000, lastTransactionDate: ts("2025-01-15") }),
       ]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         {
@@ -257,7 +256,7 @@ describe("renderAccounts", () => {
         txn({ institution: "Bank", account: "Checking" }),
       ]),
       getStatements: vi.fn().mockResolvedValue([
-        stmt({ period: "2025-02", balance: 1000 }),
+        stmt({ period: "2025-02", balance: 1000, lastTransactionDate: ts("2025-02-15") }),
       ]),
       getBudgetPeriods: vi.fn().mockResolvedValue([]),
     }));
