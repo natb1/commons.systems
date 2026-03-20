@@ -375,6 +375,16 @@ const seedTransactionDocs = [
   // vacation-2025-02-17: 45, 1, {Books:45}
   txn("seed-v17", "vacation", "Travel Bookshop", 45, "Travel:Books", "2025-02-21"),
 
+  // --- Unbudgeted spending: miscellaneous expenses with no budget assignment ---
+  txn("seed-u01", null, "Parking Meter", 8, "Transportation:Parking", "2025-01-14"),
+  txn("seed-u02", null, "Dry Cleaner", 22, "Services:Laundry", "2025-02-06"),
+  txn("seed-u03", null, "Pharmacy", 15.50, "Health:Pharmacy", "2025-02-18"),
+
+  // --- Transfer:CardPayment: credit card payments (double-counted in spending) ---
+  txn("seed-cp01", null, "Card Payment - Visa", 500, "Transfer:CardPayment", "2025-01-10"),
+  txn("seed-cp02", null, "Card Payment - Mastercard", 285, "Transfer:CardPayment", "2025-02-10"),
+  txn("seed-cp03", null, "Card Payment - Amex", 150, "Transfer:CardPayment:Amex", "2025-02-15"),
+
   // --- Income: biweekly paycheck + occasional freelance ---
   // These have no budget assignment; category starts with "Income" for the metrics section.
   // Biweekly paycheck (every other Friday, $2400)

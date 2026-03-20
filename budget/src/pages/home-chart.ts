@@ -4,12 +4,17 @@ import { formatCurrency } from "../format.js";
 
 export type ChartMode = "spending" | "income";
 
+function isCardPaymentCategory(category: string): boolean {
+  return category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
+}
+
 export interface SerializedChartTransaction {
   category: string;
-  /** Cents. Positive = spending/debit, negative = income/credit (either sign valid for income). */
+  /** Dollars. Positive = spending/debit, negative = income/credit (either sign valid for income). */
   amount: number;
   reimbursement: number;
   timestampMs: number | null;
+  hasBudget: boolean;
 }
 
 export interface CategoryNode {
@@ -73,10 +78,14 @@ export function filterByWeeks(
  * hierarchy from colon-separated category
  * paths. Rolls up values and counts from leaves to parents, then sorts
  * children by value descending, name ascending.
+ * When showCardPayment is false in spending mode, Transfer:CardPayment
+ * categories (and subcategories) are excluded.
  */
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
   mode: ChartMode = "spending",
+  unbudgetedOnly = false,
+  showCardPayment = false,
 ): CategoryNode {
   const root: CategoryNode = { name: "All", fullPath: "", value: 0, count: 0, children: [] };
 
@@ -86,6 +95,8 @@ export function buildCategoryTree(
     const raw = computeNetAmount(t.amount, t.reimbursement);
     if (mode === "spending" && isIncome) continue;
     if (mode === "income" && !isIncome) continue;
+    if (unbudgetedOnly && t.hasBudget) continue;
+    if (!showCardPayment && mode === "spending" && isCardPaymentCategory(t.category)) continue;
     const net = mode === "income" ? Math.abs(raw) : raw;
     if (net <= 0) continue;
     let node = root;
@@ -122,6 +133,15 @@ export function buildCategoryTree(
   return root;
 }
 
+/** Divide all values in a category tree by a divisor (for per-week averages). */
+export function divideTreeValues(node: CategoryNode, divisor: number): void {
+  if (divisor <= 0 || !Number.isFinite(divisor)) {
+    throw new RangeError(`divideTreeValues: divisor must be a positive finite number, got ${divisor}`);
+  }
+  node.value /= divisor;
+  for (const c of node.children) divideTreeValues(c, divisor);
+}
+
 const CATEGORY_COLORS = [
   "#4e79a7", "#f28e2b", "#e15759", "#76b7b2",
   "#59a14f", "#edc948", "#b07aa1", "#ff9da7",
@@ -148,7 +168,7 @@ function formatDate(ms: number): string {
 
 function tooltipText(data: CategoryNode, rootValue: number): string {
   const pct = rootValue > 0 ? ((data.value / rootValue) * 100).toFixed(1) : "0.0";
-  return `${data.fullPath}\n${formatCurrency(data.value)} (${pct}%)\n${data.count} transactions`;
+  return `${data.fullPath}\n${formatCurrency(data.value)}/wk (${pct}%)\n${data.count} transactions`;
 }
 
 function nodeHeight(value: number, rootValue: number, treeHeight: number): number {
@@ -215,6 +235,7 @@ function assertChartTransactions(data: unknown): asserts data is SerializedChart
     if (typeof rec.amount !== "number") throw new Error("Chart transaction missing amount number");
     if (typeof rec.reimbursement !== "number") throw new Error("Chart transaction missing reimbursement number");
     if (rec.timestampMs !== null && typeof rec.timestampMs !== "number") throw new Error("Chart transaction timestampMs must be number or null");
+    if (typeof rec.hasBudget !== "boolean") throw new Error("Chart transaction missing hasBudget boolean");
   }
 }
 
@@ -241,6 +262,8 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   let currentNumWeeks = 12;
   let currentEndWeekIdx = weeks.length - 1;
   let currentMode: ChartMode = "spending";
+  let currentUnbudgetedOnly = false;
+  let currentShowCardPayment = false;
 
   const controlsDiv = document.getElementById("sankey-controls");
   if (!controlsDiv) throw new Error("sankey-controls element not found");
@@ -248,7 +271,11 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   const endSlider = controlsDiv.querySelector("#sankey-end-week") as HTMLInputElement | null;
   const endLabel = controlsDiv.querySelector("#sankey-end-label") as HTMLElement | null;
   const modeRadios = controlsDiv.querySelectorAll<HTMLInputElement>('input[name="sankey-mode"]');
-  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0) {
+  const unbudgetedToggle = controlsDiv.querySelector("#unbudgeted-toggle") as HTMLElement | null;
+  const unbudgetedCheckbox = controlsDiv.querySelector("#sankey-unbudgeted") as HTMLInputElement | null;
+  const cardPaymentToggle = controlsDiv.querySelector("#card-payment-toggle") as HTMLElement | null;
+  const cardPaymentCheckbox = controlsDiv.querySelector("#sankey-card-payment") as HTMLInputElement | null;
+  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox) {
     throw new Error("sankey control elements missing");
   }
 
@@ -264,7 +291,8 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     if (containerWidth === 0) return;
 
     const filtered = filterByWeeks(allTxns, weeks, currentNumWeeks, currentEndWeekIdx);
-    const rootData = buildCategoryTree(filtered, currentMode);
+    const rootData = buildCategoryTree(filtered, currentMode, currentUnbudgetedOnly, currentShowCardPayment);
+    divideTreeValues(rootData, currentNumWeeks);
 
     if (rootData.value === 0) {
       container.textContent = currentMode === "income"
@@ -389,7 +417,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
           } else {
             collapsedPaths.add(node.data.fullPath);
           }
-          safeRender();
+          update();
         });
       }
       nodeG.appendChild(rect);
@@ -400,7 +428,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
         text.setAttribute("y", String(h / 2));
         text.setAttribute("dy", "0.35em");
         text.setAttribute("fill", fg);
-        text.textContent = `${node.data.name} ${formatCurrency(node.data.value)}`;
+        text.textContent = `${node.data.name} ${formatCurrency(node.data.value)}/wk`;
         nodeG.appendChild(text);
       }
 
@@ -423,7 +451,31 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     }
   }
 
-  safeRender();
+  function filterTable(): void {
+    const rows = document.querySelectorAll<HTMLElement>("#transactions-table .txn-row");
+    for (const row of rows) {
+      const category = row.dataset.category ?? "";
+      const isIncome = category.startsWith("Income");
+      const hasBudget = row.dataset.hasBudget === "true";
+
+      const isCardPayment = isCardPaymentCategory(category);
+
+      let visible: boolean;
+      if (currentMode === "income") {
+        visible = isIncome;
+      } else {
+        visible = !isIncome && (!currentUnbudgetedOnly || !hasBudget) && (currentShowCardPayment || !isCardPayment);
+      }
+      row.style.display = visible ? "" : "none";
+    }
+  }
+
+  function update(): void {
+    safeRender();
+    filterTable();
+  }
+
+  update();
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   function debounced(fn: () => void, ms: number): void {
@@ -435,7 +487,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     const v = parseInt(weeksInput.value, 10);
     if (Number.isFinite(v) && v >= 1) {
       currentNumWeeks = v;
-      debounced(safeRender, 100);
+      debounced(update, 100);
     }
   });
 
@@ -444,7 +496,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     if (Number.isFinite(v) && v >= 0 && v < weeks.length) {
       currentEndWeekIdx = v;
       endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
-      debounced(safeRender, 100);
+      debounced(update, 100);
     }
   });
 
@@ -455,15 +507,36 @@ export function hydrateCategorySankey(container: HTMLElement): void {
         if (mode !== "spending" && mode !== "income") throw new Error(`Invalid chart mode: ${mode}`);
         currentMode = mode;
         collapsedPaths.clear();
-        safeRender();
+        if (mode === "income") {
+          currentUnbudgetedOnly = false;
+          unbudgetedCheckbox.checked = false;
+          unbudgetedToggle.hidden = true;
+          currentShowCardPayment = false;
+          cardPaymentCheckbox.checked = false;
+          cardPaymentToggle.hidden = true;
+        } else {
+          unbudgetedToggle.hidden = false;
+          cardPaymentToggle.hidden = false;
+        }
+        update();
       }
     });
+  });
+
+  unbudgetedCheckbox.addEventListener("change", () => {
+    currentUnbudgetedOnly = unbudgetedCheckbox.checked;
+    update();
+  });
+
+  cardPaymentCheckbox.addEventListener("change", () => {
+    currentShowCardPayment = cardPaymentCheckbox.checked;
+    update();
   });
 
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   const observer = new ResizeObserver(() => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(safeRender, 150);
+    resizeTimer = setTimeout(update, 150);
   });
   observer.observe(container);
 }

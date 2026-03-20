@@ -244,6 +244,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         } else {
           delete row.dataset.budgetId;
         }
+        row.dataset.hasBudget = newBudgetId ? "true" : "false";
 
         clearBalanceDisplay(row);
       } else {
