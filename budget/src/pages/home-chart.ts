@@ -533,7 +533,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
           unbudgetedToggle.hidden = true;
           currentShowCardPayment = false;
           cardPaymentCheckbox.checked = false;
-          cardPaymentToggle.hidden = false;
+          cardPaymentToggle.hidden = true;
         } else {
           unbudgetedToggle.hidden = false;
           cardPaymentToggle.hidden = false;

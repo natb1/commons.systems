@@ -386,19 +386,19 @@ const seedTransactionDocs = [
   txn("seed-cp03", null, "Card Payment - Amex", 150, "Transfer:CardPayment:Amex", "2025-02-15"),
 
   // --- Income: biweekly paycheck + occasional freelance ---
-  // These have no budget assignment; category starts with "Income" for the metrics section.
+  // These have no budget assignment. Negative amounts represent credits (money in).
   // Biweekly paycheck (every other Friday, $2400)
-  txn("seed-i01", null, "Payroll Deposit", 2400, "Income:Salary", "2024-10-11"),
-  txn("seed-i02", null, "Payroll Deposit", 2400, "Income:Salary", "2024-10-25"),
-  txn("seed-i03", null, "Payroll Deposit", 2400, "Income:Salary", "2024-11-08"),
-  txn("seed-i04", null, "Payroll Deposit", 2400, "Income:Salary", "2024-11-22"),
-  txn("seed-i05", null, "Payroll Deposit", 2400, "Income:Salary", "2024-12-06"),
-  txn("seed-i06", null, "Payroll Deposit", 2400, "Income:Salary", "2024-12-20"),
-  txn("seed-i07", null, "Payroll Deposit", 2400, "Income:Salary", "2025-01-03"),
-  txn("seed-i08", null, "Freelance Payment", 500, "Income:Freelance", "2025-01-10"),
-  txn("seed-i09", null, "Payroll Deposit", 2400, "Income:Salary", "2025-01-17"),
-  txn("seed-i10", null, "Payroll Deposit", 2400, "Income:Salary", "2025-01-31"),
-  txn("seed-i11", null, "Payroll Deposit", 2400, "Income:Salary", "2025-02-14"),
+  txn("seed-i01", null, "Payroll Deposit", -2400, "Income:Salary", "2024-10-11"),
+  txn("seed-i02", null, "Payroll Deposit", -2400, "Income:Salary", "2024-10-25"),
+  txn("seed-i03", null, "Payroll Deposit", -2400, "Income:Salary", "2024-11-08"),
+  txn("seed-i04", null, "Payroll Deposit", -2400, "Income:Salary", "2024-11-22"),
+  txn("seed-i05", null, "Payroll Deposit", -2400, "Income:Salary", "2024-12-06"),
+  txn("seed-i06", null, "Payroll Deposit", -2400, "Income:Salary", "2024-12-20"),
+  txn("seed-i07", null, "Payroll Deposit", -2400, "Income:Salary", "2025-01-03"),
+  txn("seed-i08", null, "Freelance Payment", -500, "Income:Freelance", "2025-01-10"),
+  txn("seed-i09", null, "Payroll Deposit", -2400, "Income:Salary", "2025-01-17"),
+  txn("seed-i10", null, "Payroll Deposit", -2400, "Income:Salary", "2025-01-31"),
+  txn("seed-i11", null, "Payroll Deposit", -2400, "Income:Salary", "2025-02-14"),
 
   // Normalized CAFE NERO pair — in food-2025-01-20 period (primary counts toward period total)
   {
