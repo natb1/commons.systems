@@ -4,6 +4,16 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 export const UNBUDGETED_SERIES = "Other";
+
+/** Return the Monday 00:00 UTC for the week containing `ms`. */
+export function weekStart(ms: number): number {
+  const d = new Date(ms);
+  const day = d.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setUTCDate(d.getUTCDate() + diff);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.getTime();
+}
 const CREDIT_WEEKS = 12;
 
 export function computeNetAmount(amount: number, reimbursement: number): number {

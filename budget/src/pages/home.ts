@@ -1,8 +1,9 @@
-import type { Timestamp } from "firebase/firestore";
+import { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Transaction, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
-import { computeAllBudgetBalances, computeNetAmount } from "../balance.js";
+import { computeAllBudgetBalances, computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
+import type { TransactionQuery } from "../data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { uniqueSorted } from "./hydrate-util.js";
 import type { SerializedChartTransaction } from "./home-chart.js";
@@ -20,7 +21,7 @@ function formatCategory(category: string): string {
   return category.split(":").map(escapeHtml).join(" &gt; ");
 }
 
-interface RowParts {
+export interface RowParts {
   txnIdAttr: string;
   noteCell: string;
   categoryCell: string;
@@ -37,7 +38,7 @@ interface RowParts {
   detailDl: string;
 }
 
-function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<string, string>, balance: number | null, groupName: string): RowParts {
+export function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<string, string>, balance: number | null, groupName: string): RowParts {
   const txnIdAttr = editable ? ` data-txn-id="${escapeHtml(txn.id)}"` : "";
   const noteCell = editable
     ? `<input type="text" class="edit-note" value="${escapeHtml(txn.note)}" aria-label="Note">`
@@ -82,7 +83,7 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
   return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, categoryAttr, hasBudgetAttr, netAmountAttr, detailDl };
 }
 
-interface RenderRowOptions {
+export interface RenderRowOptions {
   txn: Transaction;
   groupName: string;
   editable: boolean;
@@ -90,7 +91,7 @@ interface RenderRowOptions {
   balance: number | null;
 }
 
-function renderRow(opts: RenderRowOptions): string {
+export function renderRow(opts: RenderRowOptions): string {
   const { txn, groupName, editable, budgetIdToName, balance } = opts;
   const p = buildRowParts(txn, editable, budgetIdToName, balance, groupName);
 
@@ -109,7 +110,7 @@ function renderRow(opts: RenderRowOptions): string {
   </details>`;
 }
 
-interface RenderGroupOptions {
+export interface RenderGroupOptions {
   primary: Transaction;
   members: Transaction[];
   groupName: string;
@@ -118,7 +119,7 @@ interface RenderGroupOptions {
   balance: number | null;
 }
 
-function renderNormalizedGroup(opts: RenderGroupOptions): string {
+export function renderNormalizedGroup(opts: RenderGroupOptions): string {
   const { primary, members, groupName, editable, budgetIdToName, balance } = opts;
   const description = primary.normalizedDescription ?? primary.description;
   const p = buildRowParts(primary, editable, budgetIdToName, balance, groupName);
@@ -181,7 +182,7 @@ function renderCategorySankey(transactions: Transaction[]): string {
     <div id="category-sankey"><script type="application/json" id="sankey-data">${json}</script></div>`;
 }
 
-function compareByTimestampDesc(a: Transaction, b: Transaction): number {
+export function compareByTimestampDesc(a: Transaction, b: Transaction): number {
   if (!a.timestamp && !b.timestamp) return 0;
   if (!a.timestamp) return 1;
   if (!b.timestamp) return -1;
@@ -194,6 +195,7 @@ function renderTransactionTable(
   groupName: string,
   budgets: Budget[],
   budgetPeriods: BudgetPeriod[],
+  sinceMs: number | null,
 ): string {
   if (transactions.length === 0) {
     return "<p>No transactions found.</p>";
@@ -242,7 +244,7 @@ function renderTransactionTable(
     })
     .join("\n");
 
-  let dataAttrs = "";
+  let dataAttrs = ` data-group-name="${escapeHtml(groupName)}" data-editable="${authorized}"`;
   if (authorized) {
     const budgetNames = budgets.map(b => b.name).sort();
     const budgetOpts = escapeHtml(JSON.stringify(budgetNames));
@@ -265,13 +267,17 @@ function renderTransactionTable(
       categoryBreakdown: p.categoryBreakdown,
     }));
     const periodsAttr = escapeHtml(JSON.stringify(periodsData));
-    dataAttrs = [
+    dataAttrs += [
       ` data-budget-options="${budgetOpts}"`,
       ` data-budget-map="${budgetMapAttr}"`,
       ` data-category-options="${categoryOpts}"`,
       ` data-budget-periods="${periodsAttr}"`,
     ].join("");
   }
+
+  const sentinel = sinceMs !== null
+    ? `\n      <div id="scroll-sentinel" data-next-before="${sinceMs}" aria-hidden="true"></div>`
+    : "";
 
   return `<div id="transactions-table"${dataAttrs}>
       <div class="txn-header">
@@ -280,18 +286,21 @@ function renderTransactionTable(
         <span>Category</span>
         <span class="amount">Amount</span>
       </div>
-      ${rows}
+      ${rows}${sentinel}
     </div>`;
 }
 
 export async function renderHome(options: RenderPageOptions): Promise<string> {
   const { authorized, groupName, dataSource } = options;
 
+  const sinceMs = weekStart(Date.now() - 12 * MS_PER_WEEK);
+  const txnQuery: TransactionQuery = { since: Timestamp.fromMillis(sinceMs) };
+
   let tableHtml: string;
   let chartHtml = "";
   try {
     const [transactions, budgets, budgetPeriods] = await Promise.all([
-      dataSource.getTransactions()
+      dataSource.getTransactions(txnQuery)
         .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
       dataSource.getBudgets()
         .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
@@ -306,7 +315,7 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
       console.error("Chart serialization failed:", chartError);
       chartHtml = `<p class="chart-error">Chart unavailable.</p>`;
     }
-    tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets, budgetPeriods);
+    tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets, budgetPeriods, sinceMs);
   } catch (error) {
     tableHtml = renderLoadError(error, "transactions-error");
   }

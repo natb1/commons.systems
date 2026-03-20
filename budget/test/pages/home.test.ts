@@ -10,13 +10,18 @@ vi.mock("firebase/firestore", () => ({
     toDate() { return this._date; }
     toMillis() { return this._date.getTime(); }
     static fromDate(d: Date) { return new Timestamp(d); }
+    static fromMillis(ms: number) { return new Timestamp(new Date(ms)); }
   },
 }));
 
-vi.mock("../../src/balance.js", () => ({
-  computeAllBudgetBalances: vi.fn(),
-  computeNetAmount: (amount: number, reimbursement: number) => amount * (1 - reimbursement / 100),
-}));
+vi.mock("../../src/balance.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/balance")>();
+  return {
+    ...actual,
+    computeAllBudgetBalances: vi.fn(),
+    computeNetAmount: (amount: number, reimbursement: number) => amount * (1 - reimbursement / 100),
+  };
+});
 
 import { renderHome } from "../../src/pages/home";
 import type { Transaction, BudgetPeriod } from "../../src/firestore";

@@ -1,5 +1,5 @@
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
-import { computeNetAmount, MS_PER_WEEK } from "../balance.js";
+import { computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { parseJsonArray } from "./hydrate-util.js";
@@ -25,16 +25,6 @@ export interface CategoryNode {
   value: number;
   count: number;
   children: CategoryNode[];
-}
-
-/** Return the Monday 00:00 UTC for the week containing `ms`. */
-function weekStart(ms: number): number {
-  const d = new Date(ms);
-  const day = d.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + diff);
-  d.setUTCHours(0, 0, 0, 0);
-  return d.getTime();
 }
 
 /** Compute sorted distinct week-start timestamps from transactions. */

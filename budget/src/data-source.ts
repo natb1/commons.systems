@@ -24,8 +24,13 @@ import {
 import { getAll, get, put, deleteRecord } from "./idb.js";
 import type { IdbTransaction, IdbStatement, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule } from "./idb.js";
 
+export interface TransactionQuery {
+  since?: Timestamp;
+  before?: Timestamp;
+}
+
 export interface DataSource {
-  getTransactions(): Promise<Transaction[]>;
+  getTransactions(query?: TransactionQuery): Promise<Transaction[]>;
   getStatements(): Promise<Statement[]>;
   getBudgets(): Promise<Budget[]>;
   getBudgetPeriods(): Promise<BudgetPeriod[]>;
@@ -55,7 +60,7 @@ export interface DataSource {
 }
 
 export class FirestoreSeedDataSource implements DataSource {
-  async getTransactions(): Promise<Transaction[]> {
+  async getTransactions(_query?: TransactionQuery): Promise<Transaction[]> {
     return fsGetTransactions(null);
   }
   async getStatements(): Promise<Statement[]> {
@@ -197,9 +202,23 @@ async function updateRecord<T extends { id: string }>(
 }
 
 export class IdbDataSource implements DataSource {
-  async getTransactions(): Promise<Transaction[]> {
+  async getTransactions(query?: TransactionQuery): Promise<Transaction[]> {
     const rows = await getAll<IdbTransaction>("transactions");
-    return rows.map(toTransaction);
+    const sinceMs = query?.since?.toMillis();
+    const beforeMs = query?.before?.toMillis();
+    const filtered = rows.filter(row => {
+      if (sinceMs !== undefined) {
+        if (row.timestampMs === null) return false;
+        if (row.timestampMs < sinceMs) return false;
+      }
+      if (beforeMs !== undefined) {
+        if (row.timestampMs !== null && row.timestampMs >= beforeMs) return false;
+        // Include nulls only when since is absent (final batch)
+        if (row.timestampMs === null && sinceMs !== undefined) return false;
+      }
+      return true;
+    });
+    return filtered.map(toTransaction);
   }
 
   async getStatements(): Promise<Statement[]> {
