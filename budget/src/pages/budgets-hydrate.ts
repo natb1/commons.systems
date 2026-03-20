@@ -5,10 +5,9 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showInputError, handleSaveError } from "./hydrate-util.js";
 import { renderBudgetChart, type ChartResult } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
-import { renderAggregateTrendChart } from "./budgets-trend-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
 import { computePanelWidth } from "./chart-util.js";
-import type { AggregatePoint, PerBudgetPoint } from "../balance.js";
+import type { PerBudgetPoint } from "../balance.js";
 import type { SerializedBudget } from "./budgets.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
@@ -114,20 +113,6 @@ function deserializeJSON(raw: string, label: string): unknown {
   }
 }
 
-function deserializeAggregateTrend(raw: string): AggregatePoint[] {
-  const parsed = deserializeJSON(raw, "aggregate trend data");
-  if (!Array.isArray(parsed)) throw new DataIntegrityError("Aggregate trend data is not an array");
-  for (let i = 0; i < parsed.length; i++) {
-    const el = parsed[i];
-    if (typeof el.weekLabel !== "string" || typeof el.weekMs !== "number"
-      || typeof el.avg12Income !== "number" || typeof el.avg12Spending !== "number"
-      || typeof el.avg3Spending !== "number") {
-      throw new DataIntegrityError(`Aggregate trend element ${i} missing or invalid fields: expected weekLabel(string), weekMs(number), avg12Income(number), avg12Spending(number), avg3Spending(number)`);
-    }
-  }
-  return parsed as AggregatePoint[];
-}
-
 function deserializePerBudgetTrend(raw: string): PerBudgetPoint[] {
   const parsed = deserializeJSON(raw, "per-budget trend data");
   if (!Array.isArray(parsed)) throw new DataIntegrityError("Per-budget trend data is not an array");
@@ -182,16 +167,9 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   if (!pieElOrNull) throw new DataIntegrityError("budgets-pie container not found in page markup");
   const pieEl: HTMLElement = pieElOrNull;
 
-  const trendElOrNull = document.getElementById("budgets-trend-chart");
-  if (!trendElOrNull) throw new DataIntegrityError("budgets-trend-chart container not found in page markup");
-  const trendEl: HTMLElement = trendElOrNull;
   const areaElOrNull = document.getElementById("budgets-area-chart");
   if (!areaElOrNull) throw new DataIntegrityError("budgets-area-chart container not found in page markup");
   const areaEl: HTMLElement = areaElOrNull;
-
-  const aggregateRaw = trendEl.dataset.aggregateTrend;
-  if (aggregateRaw === undefined) throw new DataIntegrityError("budgets-trend-chart missing required data-aggregate-trend attribute");
-  const aggregateTrend = deserializeAggregateTrend(aggregateRaw);
 
   const perBudgetRaw = areaEl.dataset.perBudgetTrend;
   if (perBudgetRaw === undefined) throw new DataIntegrityError("budgets-area-chart missing required data-per-budget-trend attribute");
@@ -205,7 +183,6 @@ export function hydrateBudgetChart(container: HTMLElement): void {
     renderBudgetPieChart(pieEl, { budgets, periods, windowWeeks: 12 });
 
     const containerWidth = container.clientWidth || 640;
-    renderAggregateTrendChart(trendEl, { data: aggregateTrend, containerWidth, panelWidth });
     renderPerBudgetAreaChart(areaEl, { data: perBudgetTrend, containerWidth, panelWidth });
   }
 
@@ -264,7 +241,6 @@ export function hydrateBudgetChart(container: HTMLElement): void {
       } catch (error) {
         const msg = "Chart rendering failed on resize. Try refreshing the page.";
         container.textContent = msg;
-        trendEl.textContent = msg;
         areaEl.textContent = msg;
         setTimeout(() => { throw error; }, 0);
         return;

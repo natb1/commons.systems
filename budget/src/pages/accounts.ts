@@ -2,6 +2,7 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import type { Transaction, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
+import { computeAggregateTrend, computeNetWorth, type AggregatePoint, type NetWorthPoint, type BalanceDivergence } from "../balance.js";
 
 interface AccountRow {
   institution: string;
@@ -83,19 +84,59 @@ function renderAccountsTable(rows: AccountRow[]): string {
   </table>`;
 }
 
+function serializeData(data: readonly AggregatePoint[] | readonly NetWorthPoint[]): string {
+  return escapeHtml(JSON.stringify(data));
+}
+
+function serializeDivergences(divergences: readonly BalanceDivergence[]): string {
+  return escapeHtml(JSON.stringify(divergences));
+}
+
+function renderDivergenceWarning(divergences: BalanceDivergence[]): string {
+  if (divergences.length === 0) return "";
+  const rows = divergences.map(d =>
+    `<li>${escapeHtml(d.institution)} ${escapeHtml(d.account)} (${escapeHtml(d.period)}): statement ${escapeHtml(formatCurrency(d.expected))}, derived ${escapeHtml(formatCurrency(d.derived))}</li>`
+  ).join("\n");
+  return `<div id="balance-divergence-warning" class="divergence-warning">
+    <p>Balance verification found discrepancies between statement balances and transaction-derived balances:</p>
+    <ul>${rows}</ul>
+  </div>`;
+}
+
+function renderChartContainers(
+  aggregateTrend: AggregatePoint[],
+  netWorthPoints: NetWorthPoint[],
+  divergences: BalanceDivergence[],
+): string {
+  return `${renderDivergenceWarning(divergences)}
+    <div id="accounts-chart-controls">
+      <label>Jump to: <input type="date" id="accounts-date-picker"></label>
+    </div>
+    <div id="accounts-trend-chart" data-aggregate-trend="${serializeData(aggregateTrend)}"></div>
+    <div id="accounts-net-worth-chart" data-net-worth="${serializeData(netWorthPoints)}" data-divergences="${serializeDivergences(divergences)}"></div>`;
+}
+
 export async function renderAccounts(options: RenderPageOptions): Promise<string> {
   const { dataSource } = options;
 
   let tableHtml: string;
+  let chartHtml = "";
   try {
-    const [transactions, statements] = await Promise.all([
+    const [transactions, statements, periods] = await Promise.all([
       dataSource.getTransactions()
         .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
       dataSource.getStatements()
         .catch((e) => { console.error("Failed to load statements:", e); throw e; }),
+      dataSource.getBudgetPeriods()
+        .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
     ]);
     const rows = buildAccountRows(transactions, statements);
     tableHtml = renderAccountsTable(rows);
+
+    const aggregateTrend = computeAggregateTrend(periods, transactions);
+    const trendWeeks = aggregateTrend.map(p => ({ label: p.weekLabel, ms: p.weekMs }));
+    const { points: netWorthPoints, divergences } = computeNetWorth(transactions, statements, trendWeeks);
+    chartHtml = renderChartContainers(aggregateTrend, netWorthPoints, divergences);
   } catch (error) {
     tableHtml = renderLoadError(error, "accounts-error");
   }
@@ -103,6 +144,7 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
   return `
     <h2>Accounts</h2>
     ${renderPageNotices(options, "accounts")}
+    ${chartHtml}
     ${tableHtml}
   `;
 }

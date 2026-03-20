@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyIncome, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending } from "../src/balance";
+import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyIncome, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth } from "../src/balance";
+import type { Statement } from "../src/firestore";
 import type { Budget, BudgetPeriod, Transaction } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -849,5 +850,169 @@ describe("computeAverageWeeklySpending", () => {
     const result = computeAverageWeeklySpending(periods);
     // 2 weeks: (80 + 120) / 2 = 100
     expect(result).toBe(100);
+  });
+});
+
+describe("computeAggregateTrend avg12NetIncome", () => {
+  it("avg12NetIncome equals avg12Income minus avg12Spending", () => {
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
+    ];
+    const txns = [
+      makeTxn({ id: "inc-1", category: "Income", amount: 1200, timestamp: ts("2025-01-07"), budget: null }),
+    ];
+    const result = computeAggregateTrend(periods, txns);
+    expect(result).toHaveLength(1);
+    expect(result[0].avg12NetIncome).toBeCloseTo(result[0].avg12Income - result[0].avg12Spending, 10);
+  });
+});
+
+function makeStmt(overrides: Partial<Statement> = {}): Statement {
+  return {
+    id: "stmt-1",
+    statementId: "Bank-Checking-2025-01" as any,
+    institution: "Bank",
+    account: "Checking",
+    balance: 1000,
+    period: "2025-01",
+    groupId: null,
+    ...overrides,
+  };
+}
+
+describe("computeNetWorth", () => {
+  const weeks = [
+    { label: "1/5", ms: new Date("2025-01-05").getTime() },
+    { label: "1/12", ms: new Date("2025-01-12").getTime() },
+    { label: "1/19", ms: new Date("2025-01-19").getTime() },
+  ];
+
+  it("returns empty when no weeks", () => {
+    const result = computeNetWorth([], [makeStmt()], []);
+    expect(result.points).toEqual([]);
+    expect(result.divergences).toEqual([]);
+  });
+
+  it("returns empty when no statements", () => {
+    const result = computeNetWorth([], [], weeks);
+    expect(result.points).toEqual([]);
+    expect(result.divergences).toEqual([]);
+  });
+
+  it("single account with no transactions: constant balance at all weeks", () => {
+    const result = computeNetWorth([], [makeStmt({ balance: 500, period: "2025-01" })], weeks);
+    expect(result.points).toHaveLength(3);
+    for (const p of result.points) {
+      expect(p.netWorth).toBe(500);
+    }
+    expect(result.divergences).toEqual([]);
+  });
+
+  it("spending transaction reduces balance at later weeks", () => {
+    // Anchor: end of Jan (2025-02-01), balance=1000
+    // Transaction: Jan 10 (before anchor), amount=200 (spending)
+    // Week Jan 5: before txn, balance = 1000 + 200 = 1200 (adding back the spending)
+    // Week Jan 12: after txn, balance = 1000 + 0 = 1000 (spending is between week and anchor)
+    // Wait, let me think again...
+    // cumSumBefore(anchor=2025-02-01) = 200 (txn on Jan 10 is before Feb 1)
+    // cumSumBefore(week Jan 5) = 0 (txn on Jan 10 is after Jan 5)
+    // balance at Jan 5 = 1000 - (0 - 200) = 1200
+    // cumSumBefore(week Jan 12) = 200 (txn on Jan 10 is before Jan 12)
+    // balance at Jan 12 = 1000 - (200 - 200) = 1000
+    // cumSumBefore(week Jan 19) = 200
+    // balance at Jan 19 = 1000 - (200 - 200) = 1000
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 200, timestamp: ts("2025-01-10"), budget: null }),
+    ];
+    const result = computeNetWorth(txns, [makeStmt({ balance: 1000, period: "2025-01" })], weeks);
+    expect(result.points[0].netWorth).toBe(1200); // Jan 5: before spending
+    expect(result.points[1].netWorth).toBe(1000); // Jan 12: after spending
+    expect(result.points[2].netWorth).toBe(1000); // Jan 19: no more txns
+  });
+
+  it("sums multiple account balances for net worth", () => {
+    const stmts = [
+      makeStmt({ id: "s1", institution: "Bank", account: "Checking", balance: 5000, period: "2025-01" }),
+      makeStmt({ id: "s2", institution: "CC", account: "Visa", balance: -1500, period: "2025-01" }),
+    ];
+    const result = computeNetWorth([], stmts, weeks);
+    for (const p of result.points) {
+      expect(p.netWorth).toBe(3500); // 5000 - 1500
+    }
+  });
+
+  it("detects divergence when derived balance differs from statement", () => {
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2024-12", balance: 800 }),
+    ];
+    // No transactions between Dec and Jan, so derived Dec balance = 1000
+    // But statement says 800 → divergence of 200
+    const result = computeNetWorth([], stmts, weeks);
+    expect(result.divergences).toHaveLength(1);
+    expect(result.divergences[0].period).toBe("2024-12");
+    expect(result.divergences[0].expected).toBe(800);
+    expect(result.divergences[0].derived).toBe(1000);
+  });
+
+  it("no divergence when transaction accounts for balance change", () => {
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 900 }),
+      makeStmt({ id: "s2", period: "2024-12", balance: 1000 }),
+    ];
+    // Transaction of 100 (spending) on Dec 15 explains the 100 drop
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 100, timestamp: ts("2024-12-15"), budget: null }),
+    ];
+    // Anchor: 2025-01 (2025-02-01), balance=900
+    // cumSumBefore(2025-02-01) = 100
+    // cumSumBefore(2025-01-01 for 2024-12) = 100
+    // derived = 900 - (100 - 100) = 900. Statement says 1000. Still divergent!
+    // Wait, that's wrong. Let me recalculate:
+    // anchorMs = periodToAnchorMs("2025-01") = 2025-02-01
+    // stmtMs = periodToAnchorMs("2024-12") = 2025-01-01
+    // cumSumBefore(2025-01-01) = 100 (txn on 2024-12-15 < 2025-01-01)
+    // anchorCum = cumSumBefore(2025-02-01) = 100 (same txn, still < 2025-02-01)
+    // derived = 900 - (100 - 100) = 900. But statement says 1000.
+    // The issue is that the txn REDUCED balance by 100 between Dec and Jan.
+    // If Dec balance was 1000 and spending of 100 happened, Jan balance should be 900. That checks out!
+    // But derived balance AT Dec statement date = 900 - (cumBefore(Jan1) - cumBefore(Feb1))
+    // = 900 - (100 - 100) = 900. The formula gives 900 at Jan 1, not 1000.
+    // Hmm, let me re-think. The anchor is at Feb 1 with balance 900.
+    // Going backward to Jan 1: balance = 900 + txns_between(Jan1, Feb1)
+    // txns between Jan 1 and Feb 1: none (the txn is on Dec 15, before Jan 1)
+    // So balance at Jan 1 = 900. But statement says 1000.
+    // That means the txn on Dec 15 reduced balance from 1000 → 900 by Jan.
+    // At Dec 31: balance_before_statement = 1000 - 100 = 900 (after spending)
+    // Wait that doesn't work either. The statement at end of Dec shows 1000.
+    // If spending of 100 happened on Dec 15, the Dec statement should be 900 not 1000.
+    // Unless the spending happened AFTER the Dec statement date.
+    // The Dec statement date is approx Jan 1 (periodToAnchorMs("2024-12") = 2025-01-01).
+    // The txn is on Dec 15 which is BEFORE Jan 1.
+    // So cumSumBefore(Jan1) includes the txn = 100.
+    // derived balance at Dec stmt = 900 - (100 - 100) = 900 ≠ 1000.
+    // So there IS a divergence. The scenario doesn't work for "no divergence".
+    // Let me fix: put the txn AFTER the Dec statement but before the Jan statement.
+    const txnsFixed = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 100, timestamp: ts("2025-01-15"), budget: null }),
+    ];
+    // anchorMs = 2025-02-01, balance = 900
+    // cumSumBefore(2025-02-01) = 100 (txn on Jan 15 < Feb 1)
+    // cumSumBefore(2025-01-01 for Dec stmt) = 0 (txn on Jan 15 >= Jan 1)
+    // derived at Dec = 900 - (0 - 100) = 900 + 100 = 1000. Matches!
+    const result = computeNetWorth(txnsFixed, stmts, weeks);
+    expect(result.divergences).toHaveLength(0);
+  });
+
+  it("excludes non-primary normalized transactions", () => {
+    const txns = [
+      makeTxn({ id: "t-primary", institution: "Bank", account: "Checking", amount: 50,
+        timestamp: ts("2025-01-10"), budget: null, normalizedId: "norm-1", normalizedPrimary: true }),
+      makeTxn({ id: "t-secondary", institution: "Bank", account: "Checking", amount: 50,
+        timestamp: ts("2025-01-10"), budget: null, normalizedId: "norm-1", normalizedPrimary: false }),
+    ];
+    const result = computeNetWorth(txns, [makeStmt({ balance: 1000, period: "2025-01" })], weeks);
+    // Only primary counted: balance at Jan 5 = 1000 + 50 = 1050
+    expect(result.points[0].netWorth).toBe(1050);
   });
 });

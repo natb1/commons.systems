@@ -12,8 +12,9 @@ export interface TrendChartOptions {
 const SERIES_INCOME = "12-Week Avg Income";
 const SERIES_12W_SPENDING = "12-Week Avg Spending";
 const SERIES_3W_SPENDING = "3-Week Avg Spending";
+const SERIES_NET_INCOME = "12-Week Avg Net Income";
 
-type SeriesName = typeof SERIES_INCOME | typeof SERIES_12W_SPENDING | typeof SERIES_3W_SPENDING;
+type SeriesName = typeof SERIES_INCOME | typeof SERIES_12W_SPENDING | typeof SERIES_3W_SPENDING | typeof SERIES_NET_INCOME;
 
 interface LineDatum {
   weekIndex: number;
@@ -26,12 +27,14 @@ const seriesColors: Record<SeriesName, string> = {
   [SERIES_INCOME]: "#66bb6a",
   [SERIES_12W_SPENDING]: "#42a5f5",
   [SERIES_3W_SPENDING]: "#ef5350",
+  [SERIES_NET_INCOME]: "#ab47bc",
 };
 
 const seriesDash: Record<SeriesName, string | undefined> = {
   [SERIES_INCOME]: "4,3",
   [SERIES_12W_SPENDING]: undefined,
   [SERIES_3W_SPENDING]: undefined,
+  [SERIES_NET_INCOME]: "8,4",
 };
 
 export function renderAggregateTrendChart(container: HTMLElement, options: TrendChartOptions): ChartResult {
@@ -56,6 +59,7 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
     lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_INCOME, value: d.avg12Income });
     lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_12W_SPENDING, value: d.avg12Spending });
     lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_3W_SPENDING, value: d.avg3Spending });
+    lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_NET_INCOME, value: d.avg12NetIncome });
   }
 
   const chartWidth = computeChartWidth(weekCount, panelWidth, containerWidth);
@@ -65,13 +69,17 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   const sharedStyle = { background: "transparent", color: fg };
 
   let yMax = 0;
-  for (const d of lineData) yMax = Math.max(yMax, d.value);
-  const yDomain: [number, number] = [0, yMax * 1.1 || 1];
+  let yMin = 0;
+  for (const d of lineData) {
+    yMax = Math.max(yMax, d.value);
+    yMin = Math.min(yMin, d.value);
+  }
+  const yDomain: [number, number] = [yMin < 0 ? yMin * 1.1 : 0, yMax * 1.1 || 1];
 
   const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
 
   // Chart body with faceted dots; line paths drawn by overlaySvg
-  const seriesOrder: SeriesName[] = [SERIES_INCOME, SERIES_12W_SPENDING, SERIES_3W_SPENDING];
+  const seriesOrder: SeriesName[] = [SERIES_INCOME, SERIES_12W_SPENDING, SERIES_3W_SPENDING, SERIES_NET_INCOME];
   const chartSvg = Plot.plot({
     width: chartWidth,
     height,
