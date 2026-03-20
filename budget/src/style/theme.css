@@ -99,11 +99,13 @@
 
 /* --- Budget chart --- */
 
-#budgets-chart-controls { margin-bottom: 0.5rem; }
+#budgets-chart-controls,
+#accounts-chart-controls { margin-bottom: 0.5rem; }
 #budgets-chart { width: 100%; margin-bottom: 1rem; }
 #budgets-chart [aria-label="tip"] text,
-#budgets-trend-chart [aria-label="tip"] text,
-#budgets-area-chart [aria-label="tip"] text { fill: #222; }
+#budgets-area-chart [aria-label="tip"] text,
+#accounts-trend-chart [aria-label="tip"] text,
+#accounts-net-worth-chart [aria-label="tip"] text { fill: #222; }
 .chart-layout {
   display: flex;
   align-items: stretch;
@@ -119,7 +121,8 @@
   overflow-y: hidden;
 }
 .chart-scroll-wrapper svg { height: auto; display: block; }
-#chart-date-picker {
+#chart-date-picker,
+#accounts-date-picker {
   background: var(--surface);
   color: var(--fg);
   border: 1px solid var(--border);
@@ -129,8 +132,9 @@
 
 /* --- Trend charts --- */
 
-#budgets-trend-chart,
-#budgets-area-chart {
+#budgets-area-chart,
+#accounts-trend-chart,
+#accounts-net-worth-chart {
   width: 100%;
   margin-bottom: 0.5rem;
 }
@@ -370,6 +374,20 @@
   border: 1px solid var(--border);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
+}
+
+.divergence-warning {
+  background: color-mix(in srgb, var(--error, #c00) 15%, transparent);
+  border: 1px solid var(--error, #c00);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+.divergence-warning ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.5rem;
 }
 
 .save-error {

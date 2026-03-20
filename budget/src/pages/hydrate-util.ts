@@ -1,5 +1,6 @@
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showDropdown } from "@commons-systems/style/components/autocomplete";
+import type { ChartResult } from "./budgets-chart.js";
 
 const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
@@ -106,6 +107,109 @@ export function addAutocompleteListeners(
     const options = getOptionsForInput(e.target);
     if (options.length > 0) showDropdown(e.target, options);
   });
+}
+
+export function deserializeJSON(raw: string, label: string): unknown {
+  try { return JSON.parse(raw); } catch (e) {
+    throw new DataIntegrityError(`Invalid ${label}: ${e instanceof Error ? e.message : e}`);
+  }
+}
+
+export function toISODate(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+export function attachScrollSync(getWrappers: () => HTMLElement[]): { abort: AbortController } {
+  const abort = new AbortController();
+  let syncing = false;
+  const wrappers = getWrappers();
+  for (const w of wrappers) {
+    w.addEventListener("scroll", () => {
+      if (syncing) return;
+      syncing = true;
+      try {
+        const ratio = w.scrollWidth > 0 ? w.scrollLeft / w.scrollWidth : 0;
+        for (const other of wrappers) {
+          if (other !== w) other.scrollLeft = ratio * other.scrollWidth;
+        }
+      } finally {
+        syncing = false;
+      }
+    }, { signal: abort.signal });
+  }
+  return { abort };
+}
+
+export function wireChartDatePicker(
+  pickerId: string,
+  getChartResult: () => ChartResult,
+  getWrappers: () => HTMLElement[],
+): void {
+  const initialResult = getChartResult();
+  const datePicker = document.getElementById(pickerId) as HTMLInputElement | null;
+  if (!datePicker || initialResult.weeks.length === 0) return;
+
+  datePicker.min = toISODate(initialResult.weeks[0].ms);
+  datePicker.max = toISODate(initialResult.weeks[initialResult.weeks.length - 1].ms);
+
+  datePicker.addEventListener("change", () => {
+    if (!datePicker.value) return;
+    const weeks = getChartResult().weeks;
+    const selectedMs = new Date(datePicker.value + "T00:00:00Z").getTime();
+    let nearestIdx = 0;
+    let nearestDist = Infinity;
+    for (let i = 0; i < weeks.length; i++) {
+      const dist = Math.abs(weeks[i].ms - selectedMs);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestIdx = i;
+      }
+    }
+    const weekCount = weeks.length;
+    for (const wrapper of getWrappers()) {
+      const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
+      const left = weekCount <= 1 ? 0 : Math.round((nearestIdx / (weekCount - 1)) * scrollMax);
+      wrapper.scrollTo({ left: Math.max(0, left - wrapper.clientWidth / 2), behavior: "smooth" });
+    }
+  });
+}
+
+export function wireChartResize(
+  container: HTMLElement,
+  render: () => void,
+  getWrappers: () => HTMLElement[],
+  errorEls: HTMLElement[],
+  reattachScrollSync: () => void,
+): void {
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+  const observer = new ResizeObserver(() => {
+    if (!container.isConnected) {
+      observer.disconnect();
+      return;
+    }
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const wrappers = getWrappers();
+      const scrollRatio = wrappers.length > 0 && wrappers[0].scrollWidth > 0
+        ? wrappers[0].scrollLeft / wrappers[0].scrollWidth
+        : 1;
+      try {
+        render();
+      } catch (error) {
+        const msg = "Chart rendering failed on resize. Try refreshing the page.";
+        for (const el of errorEls) el.textContent = msg;
+        console.error("Chart render failed during resize:", error);
+        setTimeout(() => { throw error; }, 0);
+        return;
+      }
+      reattachScrollSync();
+      for (const w of getWrappers()) {
+        w.scrollLeft = scrollRatio * w.scrollWidth;
+      }
+    }, 150);
+  });
+  observer.observe(container);
 }
 
 export function uniqueSorted(values: (string | null)[]): string[] {

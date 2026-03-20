@@ -146,4 +146,121 @@ describe("renderAccounts", () => {
     expect(html).toContain('id="seed-data-notice"');
     expect(html).toContain("Load a data file to see your accounts");
   });
+
+  it("renders trend chart container with aggregate data", async () => {
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ institution: "Bank", account: "Checking", budget: "food" as any }),
+      ]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt(),
+      ]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: ts("2025-02-10"),
+          periodEnd: ts("2025-02-17"),
+          total: 50,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('id="accounts-trend-chart"');
+    expect(html).toContain("data-aggregate-trend");
+  });
+
+  it("renders net worth chart container", async () => {
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ institution: "Bank", account: "Checking", budget: "food" as any }),
+      ]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt(),
+      ]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: ts("2025-02-10"),
+          periodEnd: ts("2025-02-17"),
+          total: 50,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('id="accounts-net-worth-chart"');
+    expect(html).toContain("data-net-worth");
+  });
+
+  it("renders date picker for chart navigation", async () => {
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ institution: "Bank", account: "Checking", budget: "food" as any }),
+      ]),
+      getStatements: vi.fn().mockResolvedValue([stmt()]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: ts("2025-02-10"),
+          periodEnd: ts("2025-02-17"),
+          total: 50,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('id="accounts-date-picker"');
+  });
+
+  it("shows divergence warning when balances diverge", async () => {
+    // Two statements for same account: anchor at 2025-02, verify at 2025-01
+    // Transaction between them causes divergence
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ id: "t1" as any, institution: "Bank", account: "Checking", amount: 100, timestamp: ts("2025-01-15"), budget: "food" as any }),
+      ]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt({ id: "s1", period: "2025-01", balance: 500 }),
+        stmt({ id: "s2", period: "2025-02", balance: 1000 }),
+      ]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: ts("2025-01-13"),
+          periodEnd: ts("2025-01-20"),
+          total: 100,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    // Anchor at 2025-02 (balance=1000), derive 2025-01:
+    // cumSumBefore(2025-02-01) = 100, cumSumBefore(2025-03-01) = 100
+    // anchorCum = cumSumBefore(2025-03-01) = 100
+    // derived = 1000 - (cumSumBefore(2025-02-01) - 100) = 1000 - 0 = 1000
+    // But statement says 500 → divergence
+    expect(html).toContain('id="balance-divergence-warning"');
+  });
+
+  it("no divergence warning when balances are consistent", async () => {
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ institution: "Bank", account: "Checking" }),
+      ]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt({ period: "2025-02", balance: 1000 }),
+      ]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([]),
+    }));
+    expect(html).not.toContain('id="balance-divergence-warning"');
+  });
 });

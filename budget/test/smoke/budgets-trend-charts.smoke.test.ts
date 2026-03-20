@@ -10,16 +10,6 @@ function seedOptions(dsOverrides = {}) {
 }
 
 describe("budgets trend charts smoke", () => {
-  it("trend chart container exists on the page", async () => {
-    const html = await renderBudgets(seedOptions({
-      getBudgets: vi.fn().mockResolvedValue([makeBudget()]),
-      getBudgetPeriods: vi.fn().mockResolvedValue([
-        makePeriod({ id: "food-w1", budgetId: "food", total: 80 }),
-      ]),
-    }));
-    expect(html).toContain('id="budgets-trend-chart"');
-  });
-
   it("area chart container exists on the page", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([makeBudget()]),
@@ -30,15 +20,25 @@ describe("budgets trend charts smoke", () => {
     expect(html).toContain('id="budgets-area-chart"');
   });
 
-  it("trend chart has aggregate and per-budget data attributes", async () => {
+  it("area chart has per-budget data attribute", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([makeBudget()]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         makePeriod({ id: "food-w1", budgetId: "food", total: 80 }),
       ]),
     }));
-    expect(html).toContain("data-aggregate-trend");
     expect(html).toContain("data-per-budget-trend");
+  });
+
+  it("trend chart no longer appears on budgets page", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([makeBudget()]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        makePeriod({ id: "food-w1", budgetId: "food", total: 80 }),
+      ]),
+    }));
+    expect(html).not.toContain('id="budgets-trend-chart"');
+    expect(html).not.toContain("data-aggregate-trend");
   });
 
   it("renders without errors with standard test data", async () => {

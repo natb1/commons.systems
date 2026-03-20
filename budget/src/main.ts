@@ -12,6 +12,7 @@ import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { hydrateCategorySankey } from "./pages/home-chart.js";
 import { hydrateBudgetTable, hydrateBudgetChart } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
+import { hydrateAccountsCharts } from "./pages/accounts-hydrate.js";
 import { trackPageView } from "./firebase.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { parseUploadedJson, toParsedData, UploadValidationError } from "./upload.js";
@@ -169,6 +170,7 @@ const observer = new MutationObserver(() => {
   hydrateTable("#budgets-chart", hydrateBudgetChart);
   hydrateTable("#budgets-table", hydrateBudgetTable);
   hydrateTable("#rules-table", hydrateRulesTable);
+  hydrateTable("#accounts-trend-chart", hydrateAccountsCharts, "Chart rendering");
 });
 observer.observe(app, { childList: true, subtree: true });
 
