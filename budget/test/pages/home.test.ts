@@ -538,6 +538,30 @@ describe("renderHome", () => {
     expect(html).toContain('id="category-filter-label"');
   });
 
+  it("calls getTransactions with a since query param", async () => {
+    const mockGetTxns = vi.fn().mockResolvedValue([txn()]);
+    await renderHome(seedOptions({ getTransactions: mockGetTxns }));
+    expect(mockGetTxns).toHaveBeenCalledWith(
+      expect.objectContaining({ since: expect.anything() }),
+    );
+  });
+
+  it("renders scroll sentinel with data-next-before attribute", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([txn()]),
+    }));
+    expect(html).toContain('id="scroll-sentinel"');
+    expect(html).toMatch(/data-next-before="\d+"/);
+  });
+
+  it("renders data-group-name and data-editable on transactions table", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([txn()]),
+    }));
+    expect(html).toMatch(/id="transactions-table"[^>]*data-group-name="/);
+    expect(html).toMatch(/id="transactions-table"[^>]*data-editable="/);
+  });
+
   it("renders data-category-options on sankey controls div", async () => {
     const html = await renderHome(seedOptions({
       getTransactions: vi.fn().mockResolvedValue([
