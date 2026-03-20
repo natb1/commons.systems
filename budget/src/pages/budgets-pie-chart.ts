@@ -4,16 +4,27 @@ import { schemeTableau10 } from "d3-scale-chromatic";
 import type { Budget } from "../firestore.js";
 import { formatCurrency } from "../format.js";
 
+const NOT_BUDGETED_LABEL = "Not Budgeted";
+const NOT_BUDGETED_COLOR = "#ccc";
+
 interface Slice {
   readonly name: string;
+  /** Weekly amount: the budget's weeklyAllowance, or the unbudgeted income remainder. Always > 0. */
   readonly total: number;
 }
 
 export interface AllocationResult {
-  readonly slices: Slice[];
+  readonly slices: readonly Slice[];
+  /** Amount by which total weekly budgets exceed averageWeeklyIncome; 0 when budgets fit within income. */
   readonly overage: number;
 }
 
+/**
+ * Splits income into allocation slices. Three regimes:
+ * - Under-budget: slices include a "Not Budgeted" remainder, overage is 0
+ * - Exact match: no remainder slice, overage is 0
+ * - Over-budget: no remainder slice, overage is the excess amount
+ */
 export function buildAllocationSlices(budgets: Budget[], averageWeeklyIncome: number): AllocationResult {
   const slices: Slice[] = [];
   let totalBudgeted = 0;
@@ -25,7 +36,7 @@ export function buildAllocationSlices(budgets: Budget[], averageWeeklyIncome: nu
   }
   const overage = Math.max(0, totalBudgeted - averageWeeklyIncome);
   if (totalBudgeted < averageWeeklyIncome) {
-    slices.push({ name: "Not Budgeted", total: averageWeeklyIncome - totalBudgeted });
+    slices.push({ name: NOT_BUDGETED_LABEL, total: averageWeeklyIncome - totalBudgeted });
   }
   return { slices, overage };
 }
@@ -43,15 +54,10 @@ export function renderBudgetPieChart(
 
   const { slices, overage } = buildAllocationSlices(options.budgets, options.averageWeeklyIncome);
 
-  if (slices.length === 0) {
-    const msg = document.createElement("p");
-    msg.textContent = "No income data";
-    container.replaceChildren(msg);
-    return;
-  }
-
   const chartTotal = slices.reduce((s, d) => s + d.total, 0);
   const color = scaleOrdinal<string>().domain(slices.map(s => s.name)).range(schemeTableau10);
+  const sliceColor = (name: string): string =>
+    name === NOT_BUDGETED_LABEL ? NOT_BUDGETED_COLOR : color(name);
 
   const size = Math.min(300, container.clientWidth || 300);
   const outerRadius = size / 2;
@@ -78,14 +84,14 @@ export function renderBudgetPieChart(
     const d = arcGen(a);
     if (d === null) throw new Error(`arc generator returned null for budget "${a.data.name}"`);
     path.setAttribute("d", d);
-    path.setAttribute("fill", a.data.name === "Not Budgeted" ? "#ccc" : color(a.data.name));
+    path.setAttribute("fill", sliceColor(a.data.name));
     const title = document.createElementNS(ns, "title");
     title.textContent = `${a.data.name}: ${formatCurrency(a.data.total)} (${pcts[i]}%)`;
     path.appendChild(title);
     svg.appendChild(path);
   }
 
-  // Income in the donut hole
+  // Show averageWeeklyIncome (not chartTotal) so the donut hole reflects actual income
   const text = document.createElementNS(ns, "text");
   text.setAttribute("text-anchor", "middle");
   text.setAttribute("dominant-baseline", "central");
@@ -104,7 +110,7 @@ export function renderBudgetPieChart(
 
     const swatch = document.createElement("span");
     swatch.className = "pie-legend-swatch";
-    swatch.style.backgroundColor = a.data.name === "Not Budgeted" ? "#ccc" : color(a.data.name);
+    swatch.style.backgroundColor = sliceColor(a.data.name);
 
     const label = document.createElement("span");
     label.textContent = `${a.data.name} (${pcts[i]}%)`;
@@ -119,15 +125,12 @@ export function renderBudgetPieChart(
   wrapper.appendChild(svg);
   wrapper.appendChild(legend);
 
-  const children: (HTMLElement | SVGElement)[] = [];
-
   if (overage > 0) {
     const warning = document.createElement("p");
     warning.className = "pie-overage-warning";
     warning.textContent = `Budgets exceed income by ${formatCurrency(overage)}/week`;
-    children.push(warning);
+    container.replaceChildren(warning, wrapper);
+  } else {
+    container.replaceChildren(wrapper);
   }
-
-  children.push(wrapper);
-  container.replaceChildren(...children);
 }

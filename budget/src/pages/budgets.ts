@@ -120,7 +120,7 @@ function renderChartContainer(
     <div id="budgets-chart" data-budgets="${serializeBudgets(budgets)}" data-periods="${serializePeriods(periods)}"></div>
     <div class="below-bar-chart-row">
       ${metricsHtml}
-      <div id="budgets-pie" data-average-weekly-income="${averageWeeklyIncome}"></div>
+      <div id="budgets-pie" data-average-weekly-income="${escapeHtml(String(averageWeeklyIncome))}"></div>
     </div>`;
 }
 
