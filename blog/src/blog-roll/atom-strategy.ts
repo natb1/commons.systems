@@ -23,7 +23,7 @@ export class AtomStrategy implements BlogRollStrategy {
       }
       return result;
     } catch (err) {
-      // ReferenceError indicates a bug (undefined variable), not a recoverable feed failure
+      // ReferenceError (undefined variable) and TypeError (null property access) indicate bugs, not recoverable feed failures
       if (err instanceof ReferenceError || err instanceof TypeError) throw err;
       console.warn(`Feed proxy error for ${this.feedUrl}:`, err);
       return null;

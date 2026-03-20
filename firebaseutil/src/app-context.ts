@@ -71,7 +71,7 @@ export interface AppContextOptions {
  * - `VITE_FIRESTORE_EMULATOR_HOST` — connects Firestore emulator when set (hostname:port)
  * - `VITE_GA_MEASUREMENT_ID` — activates page-view tracking when set; returns a no-op tracker otherwise
  * - `VITE_STORAGE_EMULATOR_HOST` — connects Storage emulator when set and `storageModule` is provided (hostname:port)
- * - `VITE_APP_CHECK_DEBUG_TOKEN` — enables AppCheck in non-browser environments (CI, local dev)
+ * - `VITE_APP_CHECK_DEBUG_TOKEN` — allows AppCheck to work in non-browser environments (CI, local dev)
  *   by setting `self.FIREBASE_APPCHECK_DEBUG_TOKEN`; requires `recaptchaSiteKey` and no emulator
  *
  * Pass `options.storageModule` (`firebase/storage`) to include Storage in the context. Accepting it as a parameter
@@ -123,9 +123,10 @@ export function createAppContext(
           isTokenAutoRefreshEnabled: true,
         });
       } catch (err) {
+        if (err instanceof TypeError || err instanceof ReferenceError) throw err;
         // Ad-blockers and CSP policies can block reCAPTCHA scripts, causing initializeAppCheck
         // to throw. Graceful degradation is intentional: the app loads without AppCheck, and
-        // server-side enforcement (feed-proxy) rejects unauthenticated requests with 401.
+        // server-side enforcement rejects requests without valid AppCheck tokens with 401.
         console.error("AppCheck initialization failed:", err);
       }
     }
@@ -133,11 +134,12 @@ export function createAppContext(
 
   const resolvedAppCheck = appCheck;
   const getAppCheckHeaders = resolvedAppCheck
-    ? async () => {
+    ? async (): Promise<Record<string, string>> => {
         try {
           const { token } = await getToken(resolvedAppCheck);
-          return { "X-Firebase-AppCheck": token } as Record<string, string>;
+          return { "X-Firebase-AppCheck": token };
         } catch (err) {
+          if (err instanceof TypeError || err instanceof ReferenceError) throw err;
           console.error("AppCheck token acquisition failed:", err);
           return {};
         }
