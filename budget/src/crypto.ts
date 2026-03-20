@@ -66,9 +66,10 @@ async function decryptDirect(data: ArrayBuffer, password: string): Promise<strin
   return new TextDecoder().decode(plaintext);
 }
 
-// Worker delegation: PBKDF2 with 600k iterations takes 200-500ms, so
-// encrypt/decrypt run in a Web Worker to avoid blocking the main thread.
-// Falls back to direct crypto.subtle in environments without Workers (tests).
+// Worker delegation: PBKDF2 with 600k iterations is computationally expensive
+// (hundreds of ms on typical 2025 hardware), so encrypt/decrypt run in a Web
+// Worker to avoid blocking the main thread. Falls back to direct crypto.subtle
+// in environments without Workers (e.g., unit tests, Node.js).
 
 let worker: Worker | null = null;
 let msgId = 0;
@@ -82,7 +83,7 @@ function getWorker(): Worker | null {
     worker.onmessage = (e: MessageEvent) => {
       const { id, type, data, message, isValidation } = e.data;
       const p = pending.get(id);
-      if (!p) return;
+      if (!p) { console.error(`crypto worker: response for unknown id ${id}`); return; }
       pending.delete(id);
       if (type === "result") {
         p.resolve(data);
@@ -93,8 +94,16 @@ function getWorker(): Worker | null {
         p.reject(err);
       }
     };
+    worker.onerror = (e: ErrorEvent) => {
+      for (const [, p] of pending) {
+        p.reject(new Error(e.message || "Worker error"));
+      }
+      pending.clear();
+      worker = null;
+    };
     return worker;
-  } catch {
+  } catch (err) {
+    console.error("Failed to create crypto worker, falling back to main thread:", err);
     return null;
   }
 }
@@ -125,7 +134,7 @@ export async function decrypt(data: ArrayBuffer, password: string): Promise<stri
     throw new UploadValidationError("File is not in BENC encrypted format.");
   }
   if (data.byteLength < HEADER_LEN) {
-    throw new UploadValidationError("File too short to be encrypted.");
+    throw new UploadValidationError("Encrypted file is truncated (header incomplete).");
   }
   if (getWorker()) {
     return postToWorker({ type: "decrypt", data, password }) as Promise<string>;

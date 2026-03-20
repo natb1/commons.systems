@@ -31,6 +31,7 @@ export type AppState =
   | { source: "local"; groupName: string };
 
 let state: AppState = { source: "seed" };
+let importPassword: string | null = null;
 
 navEl.links = [{ href: "/", label: "budgets" }, { href: "/transactions", label: "transactions" }, { href: "/accounts", label: "accounts" }, { href: "/rules", label: "rules" }];
 navEl.showAuth = false;
@@ -238,6 +239,7 @@ async function handleFileUpload(file: File): Promise<void> {
       const pw = await promptPassword("Enter password to decrypt");
       if (pw === null) return;
       text = await decrypt(buffer, pw);
+      importPassword = pw;
     } else {
       text = new TextDecoder().decode(buffer);
     }
@@ -282,11 +284,9 @@ uploadLabel.addEventListener("keydown", (e) => {
 exportButton.addEventListener("click", async () => {
   try {
     const json = await exportToJson();
-    const pw = await promptPassword("Enter password to encrypt (leave empty for plaintext)");
-    if (pw === null) return;
     let blob: Blob;
-    if (pw !== "") {
-      const encrypted = await encrypt(json, pw);
+    if (importPassword) {
+      const encrypted = await encrypt(json, importPassword);
       blob = new Blob([encrypted], { type: "application/octet-stream" });
     } else {
       blob = new Blob([json], { type: "application/json" });
@@ -311,6 +311,7 @@ exportButton.addEventListener("click", async () => {
 clearButton.addEventListener("click", async () => {
   try {
     await clearAll();
+    importPassword = null;
     transition({ source: "seed" });
   } catch (error) {
     if (error instanceof TypeError || error instanceof ReferenceError) throw error;

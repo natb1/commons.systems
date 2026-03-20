@@ -26,16 +26,11 @@ export function encryptBuffer(plaintext: Buffer, password: string): Buffer {
   return Buffer.concat([Buffer.from("BENC"), salt, iv, encrypted, tag]);
 }
 
-// Clicks Export, fills the password dialog (empty string = no password), and
-// returns the resulting Download.
-export async function triggerExportDownload(page: Page, password = ""): Promise<Download> {
-  await page.locator(".export-data").click();
-  await expect(page.locator(".password-input")).toBeVisible({ timeout: 5000 });
-  if (password) {
-    await page.locator(".password-input").fill(password);
-  }
+// Clicks Export and returns the resulting Download. Export reuses the import
+// password automatically (encrypted if imported encrypted, plaintext otherwise).
+export async function triggerExportDownload(page: Page): Promise<Download> {
   const downloadPromise = page.waitForEvent("download");
-  await page.locator(".password-submit").click();
+  await page.locator(".export-data").click();
   return downloadPromise;
 }
 

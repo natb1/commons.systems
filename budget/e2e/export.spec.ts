@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { uploadFixture, triggerExportDownload } from "./helpers";
+import { uploadFixture, uploadEncryptedFixture, triggerExportDownload } from "./helpers";
 
 test.describe("export", () => {
   test.beforeEach(async ({ page }) => {
@@ -72,18 +72,22 @@ test.describe("export", () => {
     await expect(page.locator(".edit-note").first()).toHaveValue("round-trip edit");
   });
 
-  test("export with password produces encrypted file", async ({ page }) => {
-    await uploadFixture(page);
+  test("export after encrypted upload produces encrypted file", async ({ page }) => {
+    await uploadEncryptedFixture(page, "exportpass");
+    await expect(page.locator(".password-input")).toBeVisible({ timeout: 5000 });
+    await page.locator(".password-input").fill("exportpass");
+    await page.locator(".password-submit").click();
+    await expect(page.locator("#transactions-table")).toBeVisible({ timeout: 10000 });
     await expect(page.locator(".export-data")).toBeVisible({ timeout: 10000 });
 
-    const download = await triggerExportDownload(page, "exportpass");
+    const download = await triggerExportDownload(page);
 
     const content = await (await download.createReadStream()).toArray();
     const buf = Buffer.concat(content);
     expect(buf.subarray(0, 4).toString()).toBe("BENC");
   });
 
-  test("export without password produces plaintext JSON", async ({ page }) => {
+  test("export after plaintext upload produces plaintext JSON", async ({ page }) => {
     await uploadFixture(page);
     await expect(page.locator(".export-data")).toBeVisible({ timeout: 10000 });
 

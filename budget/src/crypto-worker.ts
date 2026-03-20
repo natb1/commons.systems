@@ -1,5 +1,5 @@
 // Handles encrypt/decrypt in a Web Worker to avoid blocking the main thread.
-// PBKDF2 with 600k iterations takes 200-500ms.
+// PBKDF2 with 600k iterations is computationally expensive.
 
 const MAGIC = new Uint8Array([0x42, 0x45, 0x4e, 0x43]); // "BENC"
 const SALT_LEN = 16;
@@ -62,10 +62,12 @@ self.onmessage = async (e: MessageEvent) => {
   try {
     if (type === "encrypt") {
       const result = await doEncrypt(e.data.plaintext, password);
-      self.postMessage({ id, type: "result", data: result }, [result]);
+      self.postMessage({ id, type: "result", data: result }, { transfer: [result] });
     } else if (type === "decrypt") {
       const result = await doDecrypt(e.data.data, password);
       self.postMessage({ id, type: "result", data: result });
+    } else {
+      self.postMessage({ id, type: "error", message: `Unknown message type: ${type}`, isValidation: false });
     }
   } catch (err) {
     const isOperation = err instanceof Error && err.name === "OperationError";
