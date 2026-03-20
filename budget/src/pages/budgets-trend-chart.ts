@@ -12,8 +12,9 @@ export interface TrendChartOptions {
 const SERIES_CREDITS = "12-Week Avg Credits";
 const SERIES_12W_SPENDING = "12-Week Avg Spending";
 const SERIES_3W_SPENDING = "3-Week Avg Spending";
+const SERIES_NET_CREDITS = "12-Week Avg Net Credits";
 
-type SeriesName = typeof SERIES_CREDITS | typeof SERIES_12W_SPENDING | typeof SERIES_3W_SPENDING;
+type SeriesName = typeof SERIES_CREDITS | typeof SERIES_12W_SPENDING | typeof SERIES_3W_SPENDING | typeof SERIES_NET_CREDITS;
 
 interface LineDatum {
   weekIndex: number;
@@ -26,12 +27,14 @@ const seriesColors: Record<SeriesName, string> = {
   [SERIES_CREDITS]: "#66bb6a",
   [SERIES_12W_SPENDING]: "#42a5f5",
   [SERIES_3W_SPENDING]: "#ef5350",
+  [SERIES_NET_CREDITS]: "#ab47bc",
 };
 
 const seriesDash: Record<SeriesName, string | undefined> = {
   [SERIES_CREDITS]: "4,3",
   [SERIES_12W_SPENDING]: undefined,
   [SERIES_3W_SPENDING]: undefined,
+  [SERIES_NET_CREDITS]: "8,4",
 };
 
 export function renderAggregateTrendChart(container: HTMLElement, options: TrendChartOptions): ChartResult {
@@ -56,6 +59,7 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
     lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_CREDITS, value: d.avg12Credits });
     lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_12W_SPENDING, value: d.avg12Spending });
     lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_3W_SPENDING, value: d.avg3Spending });
+    lineData.push({ weekIndex, weekLabel: d.weekLabel, series: SERIES_NET_CREDITS, value: d.avg12NetCredits });
   }
 
   const chartWidth = computeChartWidth(weekCount, panelWidth, containerWidth);
@@ -76,7 +80,7 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
 
   // Chart body with faceted dots; line paths drawn by overlaySvg
-  const seriesOrder: SeriesName[] = [SERIES_CREDITS, SERIES_12W_SPENDING, SERIES_3W_SPENDING];
+  const seriesOrder: SeriesName[] = [SERIES_CREDITS, SERIES_12W_SPENDING, SERIES_3W_SPENDING, SERIES_NET_CREDITS];
   const chartSvg = Plot.plot({
     width: chartWidth,
     height,

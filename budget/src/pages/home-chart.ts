@@ -459,22 +459,15 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     container.replaceChildren(svg);
   }
 
-  function safeRender(): void {
-    try {
-      render();
-    } catch (error) {
-      container.textContent = "Chart rendering failed. Try refreshing the page.";
-      setTimeout(() => { throw error; }, 0);
-    }
-  }
-
   function filterTable(): void {
     const rows = document.querySelectorAll<HTMLElement>("#transactions-table .txn-row");
     for (const row of rows) {
       const category = row.dataset.category ?? "";
       const hasBudget = row.dataset.hasBudget === "true";
       const isCardPayment = isCardPaymentCategory(category);
-      const netAmount = parseFloat(row.dataset.netAmount ?? "0");
+      const rawNetAmount = row.dataset.netAmount;
+      if (rawNetAmount === undefined) throw new Error(`Transaction row missing data-net-amount`);
+      const netAmount = parseFloat(rawNetAmount);
       const isCredit = netAmount < 0;
 
       let visible: boolean;
@@ -491,8 +484,13 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   }
 
   function update(): void {
-    safeRender();
-    filterTable();
+    try {
+      render();
+      filterTable();
+    } catch (error) {
+      container.textContent = "Chart rendering failed. Try refreshing the page.";
+      setTimeout(() => { throw error; }, 0);
+    }
   }
 
   update();

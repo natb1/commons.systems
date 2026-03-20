@@ -656,16 +656,17 @@ describe("hydrateCategorySankey", () => {
     const table = document.createElement("div");
     table.id = "transactions-table";
     const rows = [
-      { category: "Food", hasBudget: "false" },
-      { category: "Food:Groceries", hasBudget: "false" },
-      { category: "Food:Dining", hasBudget: "false" },
-      { category: "Travel", hasBudget: "false" },
+      { category: "Food", hasBudget: "false", netAmount: "50" },
+      { category: "Food:Groceries", hasBudget: "false", netAmount: "30" },
+      { category: "Food:Dining", hasBudget: "false", netAmount: "20" },
+      { category: "Travel", hasBudget: "false", netAmount: "40" },
     ];
     for (const r of rows) {
       const row = document.createElement("div");
       row.className = "txn-row";
       row.dataset.category = r.category;
       row.dataset.hasBudget = r.hasBudget;
+      row.dataset.netAmount = r.netAmount;
       table.appendChild(row);
     }
     document.body.appendChild(table);

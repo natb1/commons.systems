@@ -3,22 +3,19 @@ import { timestampMockFactory, makeContainer } from "../helpers";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
-import { renderAggregateTrendChart } from "../../src/pages/budgets-trend-chart";
-import type { AggregatePoint } from "../../src/balance";
+import { renderNetWorthChart } from "../../src/pages/accounts-net-worth-chart";
+import type { NetWorthPoint } from "../../src/balance";
 
-function makePoint(overrides: Partial<AggregatePoint> = {}): AggregatePoint {
+function makePoint(overrides: Partial<NetWorthPoint> = {}): NetWorthPoint {
   return {
     weekLabel: "1/5",
     weekMs: new Date("2025-01-05").getTime(),
-    avg12Credits: 500,
-    avg12Spending: 300,
-    avg3Spending: 280,
-    avg12NetCredits: 200,
+    netWorth: 5000,
     ...overrides,
   };
 }
 
-describe("renderAggregateTrendChart", () => {
+describe("renderNetWorthChart", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -29,7 +26,7 @@ describe("renderAggregateTrendChart", () => {
       makePoint({ weekLabel: "1/5", weekMs: new Date("2025-01-05").getTime() }),
       makePoint({ weekLabel: "1/12", weekMs: new Date("2025-01-12").getTime() }),
     ];
-    const result = renderAggregateTrendChart(container, { data, containerWidth: 640, panelWidth: 60 });
+    const result = renderNetWorthChart(container, { data, containerWidth: 640, pointWidth: 40 });
     expect(container.querySelector(".chart-layout")).not.toBeNull();
     expect(container.querySelector(".chart-y-axis svg")).not.toBeNull();
     expect(container.querySelector(".chart-scroll-wrapper svg")).not.toBeNull();
@@ -38,24 +35,20 @@ describe("renderAggregateTrendChart", () => {
 
   it("shows empty message when data is empty", () => {
     const container = makeContainer();
-    const result = renderAggregateTrendChart(container, { data: [], containerWidth: 640, panelWidth: 60 });
-    expect(container.textContent).toBe("No trend data to chart.");
+    const result = renderNetWorthChart(container, { data: [], containerWidth: 640, pointWidth: 40 });
+    expect(container.textContent).toBe("No net worth data to chart.");
     expect(container.querySelector("svg")).toBeNull();
     expect(result.weeks).toEqual([]);
   });
 
-  it("renders legend with 4 items including net income", () => {
+  it("renders legend with Liquid Net Worth", () => {
     const container = makeContainer();
     const data = [makePoint()];
-    renderAggregateTrendChart(container, { data, containerWidth: 640, panelWidth: 60 });
+    renderNetWorthChart(container, { data, containerWidth: 640, pointWidth: 40 });
     const legend = container.querySelector(".trend-legend");
     expect(legend).not.toBeNull();
     const items = legend!.querySelectorAll(".trend-legend-item");
-    expect(items).toHaveLength(4);
-    const labels = [...items].map(el => el.textContent);
-    expect(labels).toContain("12-Week Avg Credits");
-    expect(labels).toContain("12-Week Avg Spending");
-    expect(labels).toContain("3-Week Avg Spending");
-    expect(labels).toContain("12-Week Avg Net Credits");
+    expect(items).toHaveLength(1);
+    expect(items[0].textContent).toBe("Liquid Net Worth");
   });
 });

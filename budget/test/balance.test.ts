@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending } from "../src/balance";
-import type { Budget, BudgetPeriod, Transaction } from "../src/firestore";
+import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth } from "../src/balance";
+import type { Budget, BudgetPeriod, Statement, Transaction } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
   const d = new Date(dateStr);
@@ -885,5 +885,150 @@ describe("computeAverageWeeklySpending", () => {
     const result = computeAverageWeeklySpending(periods);
     // 2 weeks: (80 + 120) / 2 = 100
     expect(result).toBe(100);
+  });
+});
+
+describe("computeAggregateTrend avg12NetCredits", () => {
+  it("avg12NetCredits equals avg12Credits minus avg12Spending", () => {
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
+    ];
+    const txns = [
+      makeTxn({ id: "inc-1", category: "Income", amount: -1200, timestamp: ts("2025-01-07"), budget: null }),
+    ];
+    const result = computeAggregateTrend(periods, txns);
+    expect(result).toHaveLength(1);
+    expect(result[0].avg12NetCredits).toBeCloseTo(result[0].avg12Credits - result[0].avg12Spending, 10);
+  });
+});
+
+function makeStmt(overrides: Partial<Statement> = {}): Statement {
+  return {
+    id: "stmt-1",
+    statementId: "Bank-Checking-2025-01" as any,
+    institution: "Bank",
+    account: "Checking",
+    balance: 1000,
+    period: "2025-01",
+    groupId: null,
+    ...overrides,
+  };
+}
+
+describe("computeNetWorth", () => {
+  const weeks = [
+    { label: "1/5", ms: new Date("2025-01-05").getTime() },
+    { label: "1/12", ms: new Date("2025-01-12").getTime() },
+    { label: "1/19", ms: new Date("2025-01-19").getTime() },
+  ];
+
+  it("returns empty when no weeks", () => {
+    const result = computeNetWorth([], [makeStmt()], []);
+    expect(result.points).toEqual([]);
+    expect(result.divergences).toEqual([]);
+  });
+
+  it("returns empty when no statements", () => {
+    const result = computeNetWorth([], [], weeks);
+    expect(result.points).toEqual([]);
+    expect(result.divergences).toEqual([]);
+  });
+
+  it("single account with no transactions: constant balance at all weeks", () => {
+    const result = computeNetWorth([], [makeStmt({ balance: 500, period: "2025-01" })], weeks);
+    expect(result.points).toHaveLength(3);
+    for (const p of result.points) {
+      expect(p.netWorth).toBe(500);
+    }
+    expect(result.divergences).toEqual([]);
+  });
+
+  it("spending transaction reduces balance at later weeks", () => {
+    // Anchor: 2025-01 → anchorMs=2025-02-01, balance=1000, anchorCum=200
+    // Jan 5: cumSumBefore=0, balance = 1000 - (0-200) = 1200
+    // Jan 12: cumSumBefore=200, balance = 1000 - (200-200) = 1000
+    // Jan 19: cumSumBefore=200, balance = 1000 - (200-200) = 1000
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 200, timestamp: ts("2025-01-10"), budget: null }),
+    ];
+    const result = computeNetWorth(txns, [makeStmt({ balance: 1000, period: "2025-01" })], weeks);
+    expect(result.points[0].netWorth).toBe(1200); // Jan 5: before spending
+    expect(result.points[1].netWorth).toBe(1000); // Jan 12: after spending
+    expect(result.points[2].netWorth).toBe(1000); // Jan 19: no more txns
+  });
+
+  it("sums multiple account balances for net worth", () => {
+    const stmts = [
+      makeStmt({ id: "s1", institution: "Bank", account: "Checking", balance: 5000, period: "2025-01" }),
+      makeStmt({ id: "s2", institution: "CC", account: "Visa", balance: -1500, period: "2025-01" }),
+    ];
+    const result = computeNetWorth([], stmts, weeks);
+    for (const p of result.points) {
+      expect(p.netWorth).toBe(3500); // 5000 - 1500
+    }
+  });
+
+  it("detects divergence when derived balance differs from statement", () => {
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2024-12", balance: 800 }),
+    ];
+    // No transactions between Dec and Jan, so derived Dec balance = 1000
+    // But statement says 800 → divergence of 200
+    const result = computeNetWorth([], stmts, weeks);
+    expect(result.divergences).toHaveLength(1);
+    expect(result.divergences[0].period).toBe("2024-12");
+    expect(result.divergences[0].expected).toBe(800);
+    expect(result.divergences[0].derived).toBe(1000);
+  });
+
+  it("no divergence when transaction accounts for balance change", () => {
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 900 }),
+      makeStmt({ id: "s2", period: "2024-12", balance: 1000 }),
+    ];
+    // Spending of 100 between Dec and Jan statements explains the 100 drop.
+    // Txn must be after Dec anchor (Jan 1) and before Jan anchor (Feb 1).
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 100, timestamp: ts("2025-01-15"), budget: null }),
+    ];
+    const result = computeNetWorth(txns, stmts, weeks);
+    expect(result.divergences).toHaveLength(0);
+  });
+
+  it("excludes non-primary normalized transactions", () => {
+    const txns = [
+      makeTxn({ id: "t-primary", institution: "Bank", account: "Checking", amount: 50,
+        timestamp: ts("2025-01-10"), budget: null, normalizedId: "norm-1", normalizedPrimary: true }),
+      makeTxn({ id: "t-secondary", institution: "Bank", account: "Checking", amount: 50,
+        timestamp: ts("2025-01-10"), budget: null, normalizedId: "norm-1", normalizedPrimary: false }),
+    ];
+    const result = computeNetWorth(txns, [makeStmt({ balance: 1000, period: "2025-01" })], weeks);
+    // Only primary counted: balance at Jan 5 = 1000 + 50 = 1050
+    expect(result.points[0].netWorth).toBe(1050);
+  });
+
+  it("skips statements with non-YYYY-MM periods", () => {
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", period: "accountActivityExport(3)", balance: 500, institution: "Bank2", account: "Other" }),
+    ];
+    const result = computeNetWorth([], stmts, weeks);
+    // Bank2/Other statement is skipped — only Bank/Checking contributes
+    expect(result.points).toHaveLength(3);
+    for (const p of result.points) {
+      expect(p.netWorth).toBe(1000);
+    }
+    expect(result.divergences).toEqual([]);
+  });
+
+  it("returns empty when all statements have invalid periods", () => {
+    const stmts = [
+      makeStmt({ id: "s1", period: "activity(1)", balance: 500 }),
+      makeStmt({ id: "s2", period: "2026-03-19_transaction_download", balance: 300 }),
+    ];
+    const result = computeNetWorth([], stmts, weeks);
+    expect(result.points).toEqual([]);
+    expect(result.divergences).toEqual([]);
   });
 });

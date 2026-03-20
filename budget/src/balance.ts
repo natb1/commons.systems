@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { Budget, BudgetId, BudgetPeriod, Rollover, Transaction, TransactionId } from "./firestore.js";
+import type { Budget, BudgetId, BudgetPeriod, Rollover, Statement, Transaction, TransactionId } from "./firestore.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -213,6 +213,8 @@ export interface AggregatePoint {
   readonly avg12Credits: number;
   readonly avg12Spending: number;
   readonly avg3Spending: number;
+  /** Equals `avg12Credits - avg12Spending`. */
+  readonly avg12NetCredits: number;
 }
 
 export interface PerBudgetPoint {
@@ -240,8 +242,8 @@ export function computeRollingAverage(values: number[], windowSize: number): num
 export function toSundayEntry(d: Date): { label: string; ms: number } {
   if (isNaN(d.getTime())) throw new DataIntegrityError("toSundayEntry received an invalid Date");
   const sun = new Date(d);
-  sun.setDate(sun.getDate() - sun.getDay());
-  const label = `${sun.getMonth() + 1}/${sun.getDate()}`;
+  sun.setUTCDate(sun.getUTCDate() - sun.getUTCDay());
+  const label = `${sun.getUTCMonth() + 1}/${sun.getUTCDate()}`;
   return { label, ms: sun.getTime() };
 }
 
@@ -293,6 +295,7 @@ export function computeAggregateTrend(
     avg12Credits: avg12Credits[i],
     avg12Spending: avg12Spending[i],
     avg3Spending: avg3Spending[i],
+    avg12NetCredits: avg12Credits[i] - avg12Spending[i],
   }));
 }
 
@@ -419,4 +422,156 @@ export function computeAverageWeeklyCredits(transactions: Transaction[]): number
   }
 
   return sum / INCOME_WEEKS;
+}
+
+export interface NetWorthPoint {
+  readonly weekLabel: string;
+  readonly weekMs: number;
+  readonly netWorth: number;
+}
+
+export interface BalanceDivergence {
+  readonly institution: string;
+  readonly account: string;
+  readonly period: string;
+  readonly expected: number;
+  readonly derived: number;
+}
+
+export interface NetWorthResult {
+  readonly points: NetWorthPoint[];
+  readonly divergences: BalanceDivergence[];
+}
+
+/** Return true when the period string matches YYYY-MM format (the only format periodToAnchorMs can convert). */
+function isValidPeriod(period: string): boolean {
+  return /^\d{4}-\d{2}$/.test(period);
+}
+
+/** Convert statement period "YYYY-MM" to first-of-next-month UTC timestamp (anchor boundary). */
+function periodToAnchorMs(period: string): number {
+  const [yearStr, monthStr] = period.split("-");
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  if (isNaN(year) || isNaN(month)) throw new DataIntegrityError(`Invalid statement period: ${period}`);
+  // Date.UTC with 1-based month gives first of next month (month param is 0-based)
+  return Date.UTC(year, month, 1);
+}
+
+/**
+ * Compute weekly liquid net worth from transactions and statement balances.
+ *
+ * For each account, anchors at the latest statement balance and uses cumulative
+ * transaction sums relative to the anchor to derive balance at each week boundary. Net worth at each week
+ * is the sum of all account balances.
+ *
+ * Transaction sign convention: positive = spending (reduces balance), negative = income (increases balance).
+ * Statement balance: raw signed from bank (positive = asset, negative = liability).
+ */
+export function computeNetWorth(
+  transactions: Transaction[],
+  statements: Statement[],
+  weeks: readonly { label: string; ms: number }[],
+): NetWorthResult {
+  // Only statements with YYYY-MM periods can be converted to timestamps for balance derivation.
+  // Non-YYYY-MM periods (e.g. bank export filenames like "accountActivityExport(3)") are skipped.
+  const validStatements = statements.filter(s => isValidPeriod(s.period));
+  if (weeks.length === 0 || validStatements.length === 0) return { points: [], divergences: [] };
+
+  type AccountKey = string;
+  const key = (inst: string, acct: string): AccountKey => `${inst}\0${acct}`;
+
+  // Group statements by account, keep latest per account
+  const latestStmts = new Map<AccountKey, Statement>();
+  const allStmts = new Map<AccountKey, Statement[]>();
+  for (const s of validStatements) {
+    const k = key(s.institution, s.account);
+    if (!allStmts.has(k)) allStmts.set(k, []);
+    allStmts.get(k)!.push(s);
+    const existing = latestStmts.get(k);
+    if (!existing || s.period > existing.period) {
+      latestStmts.set(k, s);
+    }
+  }
+
+  // Group non-duplicate timestamped transactions by account
+  const accountTxns = new Map<AccountKey, TimestampedTransaction[]>();
+  for (const t of transactions) {
+    if (t.timestamp === null) continue;
+    if (t.normalizedId !== null && !t.normalizedPrimary) continue;
+    const k = key(t.institution, t.account);
+    if (!accountTxns.has(k)) accountTxns.set(k, []);
+    accountTxns.get(k)!.push(t as TimestampedTransaction);
+  }
+
+  // For each account, compute balance at each week and verify against statements
+  const accountWeekBalances = new Map<AccountKey, number[]>();
+  const divergences: BalanceDivergence[] = [];
+
+  for (const [k, anchor] of latestStmts) {
+    const anchorMs = periodToAnchorMs(anchor.period);
+    const anchorBalance = anchor.balance;
+
+    const txns = accountTxns.get(k) ?? [];
+    txns.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+
+    // Cache transaction timestamps and net amounts for cumSumBefore lookups
+    const txnTimes = txns.map(t => t.timestamp.toMillis());
+    const txnNets = txns.map(t => computeNetAmount(t.amount, t.reimbursement));
+
+    // cumSumBefore: cumulative net amount for txns before timestamp T. Uses sorted txnTimes with early break. Retained for non-sequential lookups (divergence verification) where the advancing pointer cannot be used.
+    function cumSumBefore(T: number): number {
+      let sum = 0;
+      for (let i = 0; i < txnTimes.length; i++) {
+        if (txnTimes[i] >= T) break;
+        sum += txnNets[i];
+      }
+      return sum;
+    }
+
+    const anchorCum = cumSumBefore(anchorMs);
+
+    // Compute balance at each week using an advancing pointer (weeks are sorted chronologically)
+    const balances: number[] = [];
+    let txnPtr = 0;
+    let runningCum = 0;
+    for (const week of weeks) {
+      while (txnPtr < txnTimes.length && txnTimes[txnPtr] < week.ms) {
+        runningCum += txnNets[txnPtr];
+        txnPtr++;
+      }
+      balances.push(anchorBalance - (runningCum - anchorCum));
+    }
+    accountWeekBalances.set(k, balances);
+
+    // Verify against non-anchor statements (unordered access, use cumSumBefore)
+    const stmts = allStmts.get(k) ?? [];
+    for (const stmt of stmts) {
+      if (stmt.period === anchor.period) continue;
+      const stmtMs = periodToAnchorMs(stmt.period);
+      const stmtCum = cumSumBefore(stmtMs);
+      const derived = anchorBalance - (stmtCum - anchorCum);
+      if (Math.abs(derived - stmt.balance) > 0.01) {
+        const [inst, acct] = k.split("\0");
+        divergences.push({
+          institution: inst,
+          account: acct,
+          period: stmt.period,
+          expected: stmt.balance,
+          derived,
+        });
+      }
+    }
+  }
+
+  // Sum all account balances per week
+  const points: NetWorthPoint[] = weeks.map((week, i) => {
+    let netWorth = 0;
+    for (const balances of accountWeekBalances.values()) {
+      netWorth += balances[i];
+    }
+    return { weekLabel: week.label, weekMs: week.ms, netWorth };
+  });
+
+  return { points, divergences };
 }
