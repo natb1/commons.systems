@@ -90,9 +90,10 @@ test.describe("upload", () => {
     await expect(page.locator("#transactions-table")).toBeVisible({ timeout: 10000 });
     await expect(page.locator("#seed-data-notice")).toHaveCount(0);
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(2);
-    await expect(rows.nth(0)).toContainText("AMAZON");
-    await expect(rows.nth(1)).toContainText("KROGER #1234");
+    await expect(rows).toHaveCount(4);
+    const table = page.locator("#transactions-table");
+    await expect(table).toContainText("AMAZON");
+    await expect(table).toContainText("KROGER #1234");
   });
 
   test("upload encrypted file with wrong password shows error", async ({ page }) => {

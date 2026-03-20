@@ -2,12 +2,15 @@ package export
 
 import (
 	"encoding/json"
+	"flag"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+var generateGolden = flag.Bool("generate-golden", false, "generate golden file for cross-implementation interop testing")
 
 func TestWriteFileRoundTrip(t *testing.T) {
 	budget := "groceries"
@@ -674,4 +677,66 @@ func TestPlaintextFileWithPassword(t *testing.T) {
 	if !strings.Contains(err.Error(), "file is not encrypted") {
 		t.Errorf("error = %q, want it to contain 'file is not encrypted'", err.Error())
 	}
+}
+
+// TestWriteGoldenFile generates a BENC-encrypted golden file for cross-implementation
+// interop testing (Go encrypts → TypeScript decrypts). Skipped unless -generate-golden
+// flag is set. Run manually:
+//
+//	go test -run TestWriteGoldenFile -args -generate-golden
+func TestWriteGoldenFile(t *testing.T) {
+	if !*generateGolden {
+		t.Skip("skipped unless -generate-golden flag is set")
+	}
+
+	plaintext := Output{
+		Version:            1,
+		GroupName:          "golden",
+		Transactions:       []Transaction{},
+		Budgets:            []Budget{},
+		BudgetPeriods:      []BudgetPeriod{},
+		Rules:              []Rule{},
+		NormalizationRules: []NormalizationRule{},
+	}
+
+	plaintextJSON, err := json.MarshalIndent(plaintext, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	plaintextJSON = append(plaintextJSON, '\n')
+
+	encrypted, err := encryptJSON(plaintextJSON, "interop-test")
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+
+	// Verify round-trip in Go before writing
+	decrypted, err := decryptJSON(encrypted, "interop-test")
+	if err != nil {
+		t.Fatalf("decrypt round-trip: %v", err)
+	}
+	var roundTrip Output
+	if err := json.Unmarshal(decrypted, &roundTrip); err != nil {
+		t.Fatalf("unmarshal round-trip: %v", err)
+	}
+	if roundTrip.GroupName != "golden" {
+		t.Fatalf("round-trip groupName = %q, want golden", roundTrip.GroupName)
+	}
+
+	fixtureDir := filepath.Join("..", "..", "..", "budget", "test", "fixtures")
+	if err := os.MkdirAll(fixtureDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	goldenPath := filepath.Join(fixtureDir, "golden.benc")
+	if err := os.WriteFile(goldenPath, encrypted, 0644); err != nil {
+		t.Fatalf("write golden.benc: %v", err)
+	}
+	t.Logf("wrote %s (%d bytes)", goldenPath, len(encrypted))
+
+	plaintextPath := filepath.Join(fixtureDir, "golden-plaintext.json")
+	if err := os.WriteFile(plaintextPath, plaintextJSON, 0644); err != nil {
+		t.Fatalf("write golden-plaintext.json: %v", err)
+	}
+	t.Logf("wrote %s (%d bytes)", plaintextPath, len(plaintextJSON))
 }

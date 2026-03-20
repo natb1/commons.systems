@@ -1,7 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 
 import { isEncrypted, encrypt, decrypt } from "../src/crypto.js";
 import { UploadValidationError } from "../src/upload.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe("encrypt/decrypt", () => {
   it("round-trips a string through encrypt then decrypt", async () => {
@@ -46,6 +51,21 @@ describe("isEncrypted", () => {
   it("returns false for data shorter than 4 bytes", () => {
     const short = new Uint8Array([0x42, 0x45]).buffer;
     expect(isEncrypted(short)).toBe(false);
+  });
+});
+
+describe("Go interop", () => {
+  it("decrypts a golden file encrypted by Go", async () => {
+    const goldenPath = path.join(__dirname, "fixtures", "golden.benc");
+    const plaintextPath = path.join(__dirname, "fixtures", "golden-plaintext.json");
+    const goldenBuf = fs.readFileSync(goldenPath);
+    const expectedPlaintext = fs.readFileSync(plaintextPath, "utf-8");
+    // Buffer.buffer may have a non-zero byteOffset; copy to a clean ArrayBuffer
+    const goldenAB = goldenBuf.buffer.slice(goldenBuf.byteOffset, goldenBuf.byteOffset + goldenBuf.byteLength);
+
+    expect(isEncrypted(goldenAB)).toBe(true);
+    const decrypted = await decrypt(goldenAB, "interop-test");
+    expect(JSON.parse(decrypted)).toEqual(JSON.parse(expectedPlaintext));
   });
 });
 
