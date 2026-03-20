@@ -3,8 +3,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { fileURLToPath } from "url";
 import type { Download, Page } from "@playwright/test";
-import { expect } from "@playwright/test";
-import { SALT_LEN, IV_LEN, PBKDF2_ITERATIONS, KEY_LEN } from "../src/crypto.js";
+import { SALT_LEN, IV_LEN, PBKDF2_ITERATIONS, KEY_LEN } from "../src/crypto-core.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const fixturePath = path.join(__dirname, "fixtures", "test-budget.json");
@@ -14,7 +13,7 @@ export async function uploadFixture(page: Page): Promise<void> {
   await fileInput.setInputFiles(fixturePath);
 }
 
-// Encrypts using the same BENC format as budget-etl (Go) and src/crypto.ts (Web Crypto).
+// Encrypts using the same BENC format as budget-etl (Go) and src/crypto-core.ts (Web Crypto).
 // Uses Node.js crypto for Playwright e2e.
 export function encryptBuffer(plaintext: Buffer, password: string): Buffer {
   const salt = crypto.randomBytes(SALT_LEN);

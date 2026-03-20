@@ -31,7 +31,7 @@ func main() {
 	outputPath := flag.String("output", "", "Write JSON file instead of Firestore")
 	firestoreFlag := flag.Bool("firestore", false, "Write to Firestore (required when --output is not set)")
 	inputPath := flag.String("input", "", "Read rules/budgets/transactions from existing JSON file")
-	keychainFlag := flag.String("keychain", "", "Keychain account name for encrypt/decrypt password")
+	keychainFlag := flag.String("keychain", "", "macOS Keychain account name for encrypt/decrypt password")
 
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--keychain <name>] [--env <env>] [--dry-run]")

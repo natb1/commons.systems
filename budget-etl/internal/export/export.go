@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 )
 
-// BENC encrypted file format (shared with budget/src/crypto.ts and budget/e2e/helpers.ts):
+// BENC encrypted file format (shared with budget/src/crypto-core.ts):
 //   [magic 4B "BENC"][salt 16B][IV 12B][AES-256-GCM ciphertext + 16B auth tag]
 // Key derivation: PBKDF2-HMAC-SHA256, 600k iterations, 256-bit key.
 const (

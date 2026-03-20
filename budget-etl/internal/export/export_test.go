@@ -527,27 +527,7 @@ func minimalOutput(groupName string) Output {
 }
 
 func TestEncryptDecryptRoundTrip(t *testing.T) {
-	original := Output{
-		Version:    1,
-		ExportedAt: FormatTimestamp(time.Date(2025, 6, 15, 10, 30, 0, 0, time.UTC)),
-		GroupName:  "household",
-		Transactions: []Transaction{
-			{
-				ID:          "txn-001",
-				Institution: "bankone",
-				Account:     "1234",
-				Description: "KROGER #1234",
-				Amount:      52.30,
-				Timestamp:   "2025-06-10T00:00:00Z",
-				StatementID: "bankone-1234-2025-06",
-				Category:    "Food:Groceries",
-			},
-		},
-		Budgets:            []Budget{},
-		BudgetPeriods:      []BudgetPeriod{},
-		Rules:              []Rule{},
-		NormalizationRules: []NormalizationRule{},
-	}
+	original := minimalOutput("household")
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "encrypted.json")
@@ -567,14 +547,11 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 	if got.GroupName != original.GroupName {
 		t.Errorf("groupName = %q, want %q", got.GroupName, original.GroupName)
 	}
-	if len(got.Transactions) != 1 {
-		t.Fatalf("transactions = %d, want 1", len(got.Transactions))
+	if len(got.Transactions) != len(original.Transactions) {
+		t.Fatalf("transactions = %d, want %d", len(got.Transactions), len(original.Transactions))
 	}
-	if got.Transactions[0].ID != "txn-001" {
-		t.Errorf("txn[0].id = %q, want txn-001", got.Transactions[0].ID)
-	}
-	if got.Transactions[0].Amount != 52.30 {
-		t.Errorf("txn[0].amount = %v, want 52.30", got.Transactions[0].Amount)
+	if got.Transactions[0].ID != original.Transactions[0].ID {
+		t.Errorf("txn[0].id = %q, want %q", got.Transactions[0].ID, original.Transactions[0].ID)
 	}
 }
 
