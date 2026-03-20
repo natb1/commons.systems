@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
+	"github.com/natb1/commons.systems/budget-etl/internal/keychain"
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
 	"github.com/natb1/commons.systems/budget-etl/internal/store"
@@ -30,9 +31,10 @@ func main() {
 	outputPath := flag.String("output", "", "Write JSON file instead of Firestore")
 	firestoreFlag := flag.Bool("firestore", false, "Write to Firestore (required when --output is not set)")
 	inputPath := flag.String("input", "", "Read rules/budgets/transactions from existing JSON file")
+	keychainFlag := flag.String("keychain", "", "macOS Keychain account name for encrypt/decrypt password")
 
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--env <env>] [--dry-run]")
+		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--keychain <name>] [--env <env>] [--dry-run]")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -46,15 +48,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Resolve password early so keychain errors fail fast before file I/O
+	var password string
+	if *keychainFlag != "" {
+		pw, err := keychain.Get(*keychainFlag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		password = pw
+		log.Printf("retrieved password from keychain (account: %s)", *keychainFlag)
+	}
+
 	if *inputPath != "" && *dir != "" {
-		if err := runMerge(*inputPath, *dir, *group, *outputPath); err != nil {
+		if err := runMerge(fileOpts{path: *inputPath, password: password}, *dir, *group, fileOpts{path: *outputPath, password: password}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if *inputPath != "" {
-		if err := runInputJSON(*inputPath, *outputPath); err != nil {
+		if err := runInputJSON(fileOpts{path: *inputPath, password: password}, fileOpts{path: *outputPath, password: password}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -74,10 +88,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(*dir, *group, *env, *projectID, *dryRun, *outputPath, *firestoreFlag); err != nil {
+	if err := run(*dir, *group, *env, *projectID, *dryRun, fileOpts{path: *outputPath, password: password}, *firestoreFlag); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+type fileOpts struct {
+	path     string
+	password string
 }
 
 type parsedFile struct {
@@ -85,7 +104,7 @@ type parsedFile struct {
 	result parse.ParseResult
 }
 
-func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, firestoreMode bool) error {
+func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, firestoreMode bool) error {
 	// Discover statement files
 	files, err := parse.DiscoverFiles(dir)
 	if err != nil {
@@ -148,8 +167,8 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 		return nil
 	}
 
-	if outputPath != "" {
-		return runOutputJSON(allTxns, allStmts, groupName, outputPath)
+	if output.path != "" {
+		return runOutputJSON(allTxns, allStmts, groupName, output)
 	}
 
 	// Resolve project ID
@@ -217,7 +236,7 @@ func run(dir, groupName, env, projectID string, dryRun bool, outputPath string, 
 // runOutputJSON writes parsed transactions and statements as a JSON file
 // without applying rules. Category, budget, and normalization fields are
 // left empty. Use --input to apply rules in a subsequent pass.
-func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementData, groupName string, outputPath string) error {
+func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementData, groupName string, output fileOpts) error {
 	exportTxns := make([]export.Transaction, len(allTxns))
 	for i, txn := range allTxns {
 		exportTxns[i] = export.Transaction{
@@ -248,10 +267,10 @@ func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementDa
 		NormalizationRules: []export.NormalizationRule{},
 	}
 
-	if err := export.WriteFile(outputPath, out); err != nil {
+	if err := export.WriteFile(output.path, out, output.password); err != nil {
 		return fmt.Errorf("writing output file: %w", err)
 	}
-	log.Printf("wrote %d transactions, %d statements to %s", len(exportTxns), len(exportStmts), outputPath)
+	log.Printf("wrote %d transactions, %d statements to %s", len(exportTxns), len(exportStmts), output.path)
 	return nil
 }
 
@@ -261,27 +280,27 @@ func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementDa
 // not carried forward — the conversion to TransactionData starts with empty
 // fields, then transaction-specific rules pre-populate before general rules
 // fill the rest. This ensures rule changes take effect on every run.
-func runInputJSON(inputPath, outputPath string) error {
-	input, err := export.ReadFile(inputPath)
+func runInputJSON(input fileOpts, output fileOpts) error {
+	inp, err := export.ReadFile(input.path, input.password)
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
 	}
-	if input.Version != 1 {
-		return fmt.Errorf("unsupported input version %d (expected 1)", input.Version)
+	if inp.Version != 1 {
+		return fmt.Errorf("unsupported input version %d (expected 1)", inp.Version)
 	}
 	log.Printf("read %d transactions, %d rules, %d normalization rules, %d budgets from %s",
-		len(input.Transactions), len(input.Rules), len(input.NormalizationRules), len(input.Budgets), inputPath)
+		len(inp.Transactions), len(inp.Rules), len(inp.NormalizationRules), len(inp.Budgets), input.path)
 
 	// Split rules into transaction-specific and general
-	txnRules, generalExportRules := splitRules(input.Rules)
+	txnRules, generalExportRules := splitRules(inp.Rules)
 
 	// Convert general export rules to rules.Rule
 	ruleSet := convertExportRules(generalExportRules)
 
 	// Convert transactions to store.TransactionData for categorization/budget assignment
-	allTxns := make([]store.TransactionData, len(input.Transactions))
-	txnDocIDs := make([]string, len(input.Transactions))
-	for i, t := range input.Transactions {
+	allTxns := make([]store.TransactionData, len(inp.Transactions))
+	txnDocIDs := make([]string, len(inp.Transactions))
+	for i, t := range inp.Transactions {
 		ts, err := time.Parse(time.RFC3339, t.Timestamp)
 		if err != nil {
 			return fmt.Errorf("transaction %s: invalid timestamp %q: %w", t.ID, t.Timestamp, err)
@@ -313,14 +332,14 @@ func runInputJSON(inputPath, outputPath string) error {
 
 	// Apply normalization
 	normTxns := buildNormTxns(allTxns, txnDocIDs)
-	normMap, err := applyNormToMap(normTxns, convertNormRules(input.NormalizationRules))
+	normMap, err := applyNormToMap(normTxns, convertNormRules(inp.NormalizationRules))
 	if err != nil {
 		return fmt.Errorf("normalization: %w", err)
 	}
 
 	// Build edits map from input transactions
-	editsMap := make(map[string]txnEdits, len(input.Transactions))
-	for _, t := range input.Transactions {
+	editsMap := make(map[string]txnEdits, len(inp.Transactions))
+	for _, t := range inp.Transactions {
 		editsMap[t.ID] = txnEdits{note: t.Note, reimbursement: t.Reimbursement}
 	}
 
@@ -328,17 +347,17 @@ func runInputJSON(inputPath, outputPath string) error {
 	exportTxns := buildExportTxns(allTxns, txnDocIDs, normMap, editsMap)
 	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
 
-	return writeOutputAndLog(outputPath, export.Output{
-		Version:            input.Version,
+	return writeOutputAndLog(output, export.Output{
+		Version:            inp.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
-		GroupID:             input.GroupID,
-		GroupName:           input.GroupName,
+		GroupID:             inp.GroupID,
+		GroupName:           inp.GroupName,
 		Transactions:       exportTxns,
-		Statements:         input.Statements,
-		Budgets:            input.Budgets,
+		Statements:         inp.Statements,
+		Budgets:            inp.Budgets,
 		BudgetPeriods:      budgetPeriods,
-		Rules:              input.Rules,
-		NormalizationRules: input.NormalizationRules,
+		Rules:              inp.Rules,
+		NormalizationRules: inp.NormalizationRules,
 	})
 }
 
@@ -533,8 +552,8 @@ func computeExportPeriods(exportTxns []export.Transaction, allTxns []store.Trans
 }
 
 // writeOutputAndLog writes the export output to a file and logs a summary.
-func writeOutputAndLog(outputPath string, out export.Output) error {
-	if err := export.WriteFile(outputPath, out); err != nil {
+func writeOutputAndLog(output fileOpts, out export.Output) error {
+	if err := export.WriteFile(output.path, out, output.password); err != nil {
 		return fmt.Errorf("writing output: %w", err)
 	}
 
@@ -551,7 +570,7 @@ func writeOutputAndLog(outputPath string, out export.Output) error {
 		}
 	}
 	log.Printf("wrote %d transactions (%d categorized, %d budgeted, %d non-primary normalized), %d budget periods to %s",
-		len(out.Transactions), categorized, budgeted, normalized, len(out.BudgetPeriods), outputPath)
+		len(out.Transactions), categorized, budgeted, normalized, len(out.BudgetPeriods), output.path)
 	return nil
 }
 
@@ -561,19 +580,19 @@ func writeOutputAndLog(outputPath string, out export.Output) error {
 // from input are preserved. Transaction-specific rules pre-populate category/budget,
 // then general rules fill in the rest. Normalization rules are applied and budget
 // periods are computed for the merged result. The output is written to --output.
-func runMerge(inputPath, dir, groupName, outputPath string) error {
+func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	// Read input JSON
-	input, err := export.ReadFile(inputPath)
+	inp, err := export.ReadFile(input.path, input.password)
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
 	}
-	if input.Version != 1 {
-		return fmt.Errorf("unsupported input version %d (expected 1)", input.Version)
+	if inp.Version != 1 {
+		return fmt.Errorf("unsupported input version %d (expected 1)", inp.Version)
 	}
 
 	// Resolve group name: flag overrides input file
 	if groupName == "" {
-		groupName = input.GroupName
+		groupName = inp.GroupName
 	}
 	if groupName == "" {
 		return fmt.Errorf("--group is required when input file has no groupName")
@@ -621,8 +640,8 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 	dirStmts := buildStatementData(parsed)
 
 	// Build input lookup by doc ID
-	inputByID := make(map[string]export.Transaction, len(input.Transactions))
-	for _, t := range input.Transactions {
+	inputByID := make(map[string]export.Transaction, len(inp.Transactions))
+	for _, t := range inp.Transactions {
 		inputByID[t.ID] = t
 	}
 
@@ -661,7 +680,7 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 	}
 
 	// Append input-only transactions (not in dir)
-	for _, t := range input.Transactions {
+	for _, t := range inp.Transactions {
 		if dirDocIDs[t.ID] {
 			continue
 		}
@@ -689,7 +708,7 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 		len(dirDocIDs), len(allTxns)-len(dirDocIDs), len(allTxns))
 
 	// Split rules and apply
-	txnRules, generalExportRules := splitRules(input.Rules)
+	txnRules, generalExportRules := splitRules(inp.Rules)
 	ruleSet := convertExportRules(generalExportRules)
 
 	if err := applyTransactionRules(allTxns, allDocIDs, txnRules); err != nil {
@@ -703,7 +722,7 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 
 	// Apply normalization
 	normTxns := buildNormTxns(allTxns, allDocIDs)
-	normMap, err := applyNormToMap(normTxns, convertNormRules(input.NormalizationRules))
+	normMap, err := applyNormToMap(normTxns, convertNormRules(inp.NormalizationRules))
 	if err != nil {
 		return fmt.Errorf("normalization: %w", err)
 	}
@@ -713,19 +732,19 @@ func runMerge(inputPath, dir, groupName, outputPath string) error {
 	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
 
 	// Merge statements: dir overrides by statementID, retain input-only
-	exportStmts := mergeStatements(dirStmts, input.Statements)
+	exportStmts := mergeStatements(dirStmts, inp.Statements)
 
-	return writeOutputAndLog(outputPath, export.Output{
-		Version:            input.Version,
+	return writeOutputAndLog(output, export.Output{
+		Version:            inp.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
-		GroupID:             input.GroupID,
+		GroupID:             inp.GroupID,
 		GroupName:           groupName,
 		Transactions:       exportTxns,
 		Statements:         exportStmts,
-		Budgets:            input.Budgets,
+		Budgets:            inp.Budgets,
 		BudgetPeriods:      budgetPeriods,
-		Rules:              input.Rules,
-		NormalizationRules: input.NormalizationRules,
+		Rules:              inp.Rules,
+		NormalizationRules: inp.NormalizationRules,
 	})
 }
 

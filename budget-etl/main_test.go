@@ -392,14 +392,14 @@ func TestRunMerge(t *testing.T) {
 	}
 
 	inputPath := filepath.Join(tmp, "input.json")
-	if err := export.WriteFile(inputPath, inputJSON); err != nil {
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
 		t.Fatalf("writing input JSON: %v", err)
 	}
 
 	outputPath := filepath.Join(tmp, "output.json")
 	statementsDir := filepath.Join(tmp, "statements")
 
-	if err := runMerge(inputPath, statementsDir, "", outputPath); err != nil {
+	if err := runMerge(fileOpts{path: inputPath}, statementsDir, "", fileOpts{path: outputPath}); err != nil {
 		t.Fatalf("runMerge: %v", err)
 	}
 
@@ -526,12 +526,12 @@ func TestRunMergeGroupNameOverride(t *testing.T) {
 	}
 
 	inputPath := filepath.Join(tmp, "input.json")
-	if err := export.WriteFile(inputPath, inputJSON); err != nil {
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
 		t.Fatalf("writing input: %v", err)
 	}
 
 	outputPath := filepath.Join(tmp, "output.json")
-	if err := runMerge(inputPath, filepath.Join(tmp, "statements"), "override-group", outputPath); err != nil {
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "override-group", fileOpts{path: outputPath}); err != nil {
 		t.Fatalf("runMerge: %v", err)
 	}
 
