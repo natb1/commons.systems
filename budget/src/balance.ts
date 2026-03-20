@@ -27,7 +27,7 @@ interface TimestampedTransaction extends Transaction {
   readonly timestamp: Timestamp;
 }
 
-function isCardPaymentCategory(category: string): boolean {
+export function isCardPaymentCategory(category: string): boolean {
   return category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
 }
 
@@ -248,7 +248,7 @@ export function computeRollingAverage(values: number[], windowSize: number): num
   return result;
 }
 
-/** Normalize a Date to the Sunday of the same week, returning "M/D" label and ms timestamp. */
+/** Normalize a Date to the Sunday (UTC) of its Mon–Sun week, returning "M/D" label and ms timestamp. */
 export function toSundayEntry(d: Date): { label: string; ms: number } {
   if (isNaN(d.getTime())) throw new DataIntegrityError("toSundayEntry received an invalid Date");
   const sun = new Date(d);

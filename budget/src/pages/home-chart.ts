@@ -1,14 +1,10 @@
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
-import { computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
+import { computeNetAmount, MS_PER_WEEK, weekStart, isCardPaymentCategory } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { parseJsonArray } from "./hydrate-util.js";
 
 export type ChartMode = "spending" | "credits";
-
-function isCardPaymentCategory(category: string): boolean {
-  return category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
-}
 
 export interface SerializedChartTransaction {
   category: string;
@@ -228,9 +224,9 @@ function assertChartTransactions(data: unknown): asserts data is SerializedChart
     if (typeof item !== "object" || item === null) throw new Error("Invalid chart transaction entry");
     const rec = item as Record<string, unknown>;
     if (typeof rec.category !== "string") throw new Error("Chart transaction missing category string");
-    if (typeof rec.amount !== "number") throw new Error("Chart transaction missing amount number");
-    if (typeof rec.reimbursement !== "number") throw new Error("Chart transaction missing reimbursement number");
-    if (rec.timestampMs !== null && typeof rec.timestampMs !== "number") throw new Error("Chart transaction timestampMs must be number or null");
+    if (typeof rec.amount !== "number" || !Number.isFinite(rec.amount)) throw new Error("Chart transaction amount must be finite number");
+    if (typeof rec.reimbursement !== "number" || !Number.isFinite(rec.reimbursement)) throw new Error("Chart transaction reimbursement must be finite number");
+    if (rec.timestampMs !== null && (typeof rec.timestampMs !== "number" || !Number.isFinite(rec.timestampMs))) throw new Error("Chart transaction timestampMs must be finite number or null");
     if (typeof rec.hasBudget !== "boolean") throw new Error("Chart transaction missing hasBudget boolean");
   }
 }

@@ -265,7 +265,6 @@ export function hydrateTransactionTable(container: HTMLElement): void {
   const groupName = container.dataset.groupName ?? "";
   const editable = container.dataset.editable === "true";
 
-  // Reverse budgetNameToId to get budgetIdToName
   const budgetIdToName = new Map<string, string>();
   for (const [name, id] of Object.entries(budgetNameToId)) {
     budgetIdToName.set(id, name);
@@ -291,7 +290,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         seenGroups.add(txn.normalizedId);
         const members = normalizedGroups.get(txn.normalizedId)!;
         const primary = members.find(t => t.normalizedPrimary);
-        if (!primary) return renderRow({ txn, groupName, editable, budgetIdToName, balance: null });
+        if (!primary) throw new DataIntegrityError(`Normalized group ${txn.normalizedId} has no primary transaction`);
         return renderNormalizedGroup({ primary, members, groupName, editable, budgetIdToName, balance: null });
       })
       .join("\n");
@@ -308,7 +307,10 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     sentinel.insertAdjacentElement("beforebegin", loadingDiv);
 
     try {
-      const beforeMs = Number(sentinel.dataset.nextBefore);
+      const raw = sentinel.dataset.nextBefore;
+      if (!raw) throw new DataIntegrityError("scroll-sentinel missing data-next-before");
+      const beforeMs = Number(raw);
+      if (!Number.isFinite(beforeMs)) throw new DataIntegrityError(`Invalid data-next-before: "${raw}"`);
       const sinceMs = weekStart(beforeMs - 12 * MS_PER_WEEK);
 
       const transactions = await getActiveDataSource().getTransactions({
@@ -336,7 +338,18 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         observer.disconnect();
       }
     } catch (error) {
+      if (error instanceof TypeError || error instanceof ReferenceError) {
+        setTimeout(() => { throw error; }, 0);
+        return;
+      }
       console.error("Failed to load older transactions:", error);
+      const errorMsg = error instanceof DataIntegrityError
+        ? "Data error — please re-upload your file."
+        : "Failed to load older transactions.";
+      sentinel.insertAdjacentHTML("beforebegin",
+        `<div class="scroll-error">${errorMsg}</div>`);
+      sentinel.remove();
+      observer.disconnect();
     } finally {
       loadingDiv.remove();
       loading = false;
