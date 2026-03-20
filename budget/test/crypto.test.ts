@@ -14,6 +14,12 @@ describe("encrypt/decrypt", () => {
     expect(decrypted).toBe(original);
   });
 
+  it("throws when encrypting with empty password", async () => {
+    await expect(encrypt("data", "")).rejects.toThrow(
+      "Password must not be empty",
+    );
+  });
+
   it("throws UploadValidationError when decrypting with wrong password", async () => {
     const encrypted = await encrypt("secret data", "correct-password");
 
@@ -59,7 +65,7 @@ describe("decrypt non-encrypted data", () => {
       UploadValidationError,
     );
     await expect(decrypt(short, "password")).rejects.toThrow(
-      "File too short to be encrypted",
+      "File is not in BENC encrypted format",
     );
   });
 });

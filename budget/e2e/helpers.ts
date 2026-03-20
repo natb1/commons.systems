@@ -2,7 +2,8 @@ import path from "path";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { fileURLToPath } from "url";
-import type { Page } from "@playwright/test";
+import type { Download, Page } from "@playwright/test";
+import { expect } from "@playwright/test";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const fixturePath = path.join(__dirname, "fixtures", "test-budget.json");
@@ -22,6 +23,19 @@ export function encryptBuffer(plaintext: Buffer, password: string): Buffer {
   const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([Buffer.from("BENC"), salt, iv, encrypted, tag]);
+}
+
+// Clicks Export, fills the password dialog (empty string = no password), and
+// returns the resulting Download.
+export async function triggerExportDownload(page: Page, password = ""): Promise<Download> {
+  await page.locator(".export-data").click();
+  await expect(page.locator(".password-input")).toBeVisible({ timeout: 5000 });
+  if (password) {
+    await page.locator(".password-input").fill(password);
+  }
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator(".password-submit").click();
+  return downloadPromise;
 }
 
 export async function uploadEncryptedFixture(page: Page, password: string): Promise<void> {

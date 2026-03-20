@@ -39,6 +39,7 @@ func deriveKey(password string, salt []byte) []byte {
 func newGCM(password string, salt []byte) (cipher.AEAD, error) {
 	key := deriveKey(password, salt)
 	block, err := aes.NewCipher(key)
+	clear(key)
 	if err != nil {
 		return nil, fmt.Errorf("creating cipher: %w", err)
 	}
@@ -50,6 +51,9 @@ func newGCM(password string, salt []byte) (cipher.AEAD, error) {
 }
 
 func encryptJSON(plaintext []byte, password string) ([]byte, error) {
+	if password == "" {
+		return nil, fmt.Errorf("password must not be empty for encryption")
+	}
 	salt := make([]byte, saltLen)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, fmt.Errorf("generating salt: %w", err)
@@ -74,6 +78,7 @@ func encryptJSON(plaintext []byte, password string) ([]byte, error) {
 	return out, nil
 }
 
+// decryptJSON decrypts BENC-formatted data. Caller must verify magic bytes via IsEncrypted before calling.
 func decryptJSON(data []byte, password string) ([]byte, error) {
 	if len(data) < headerLen {
 		return nil, fmt.Errorf("file too short to be encrypted")
@@ -188,6 +193,8 @@ func FormatTimestamp(t time.Time) string {
 // If password is non-empty, the file is decrypted first. Encryption
 // state must match strictly: an encrypted file without a password, or
 // a plaintext file with a password, both return an error.
+// Returns an error if the file is missing, contains invalid JSON, or
+// is missing required fields (version, groupName, transactions).
 func ReadFile(path, password string) (Output, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

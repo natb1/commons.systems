@@ -229,7 +229,6 @@ function promptPassword(message: string): Promise<string | null> {
   });
 }
 
-// File upload handler
 async function handleFileUpload(file: File): Promise<void> {
   clearNavError();
   try {
@@ -280,7 +279,6 @@ uploadLabel.addEventListener("keydown", (e) => {
   }
 });
 
-// Export handler
 exportButton.addEventListener("click", async () => {
   try {
     const json = await exportToJson();
@@ -310,7 +308,6 @@ exportButton.addEventListener("click", async () => {
   }
 });
 
-// Clear data handler
 clearButton.addEventListener("click", async () => {
   try {
     await clearAll();

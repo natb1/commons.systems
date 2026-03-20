@@ -52,6 +52,9 @@ export async function encrypt(plaintext: string, password: string): Promise<Arra
 }
 
 export async function decrypt(data: ArrayBuffer, password: string): Promise<string> {
+  if (!isEncrypted(data)) {
+    throw new UploadValidationError("File is not in BENC encrypted format.");
+  }
   if (data.byteLength < HEADER_LEN) {
     throw new UploadValidationError("File too short to be encrypted.");
   }
@@ -69,7 +72,15 @@ export async function decrypt(data: ArrayBuffer, password: string): Promise<stri
     );
     return new TextDecoder().decode(plaintext);
   } catch (err) {
+    // TypeError/ReferenceError indicate programming bugs — don't mask them
+    // as validation errors.
     if (err instanceof TypeError || err instanceof ReferenceError) throw err;
-    throw new UploadValidationError("Wrong password or corrupted file.");
+    // AES-GCM decryption failure (OperationError) means wrong password or
+    // corrupted data. Check by name because Node.js crypto.subtle throws
+    // an OperationError that may not be a DOMException instance.
+    if (err instanceof Error && err.name === "OperationError") {
+      throw new UploadValidationError("Wrong password or corrupted file.");
+    }
+    throw err;
   }
 }

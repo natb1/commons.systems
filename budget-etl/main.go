@@ -48,7 +48,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Resolve password from keychain
+	// Resolve password early so keychain errors fail fast before file I/O
 	var password string
 	if *keychainFlag != "" {
 		pw, err := keychain.Get(*keychainFlag)
