@@ -34,6 +34,7 @@
       "Bash(gh run view:*)",
       "Bash(gh api /repos/*/issues/*:*)",
       "Bash(gh api repos/*/issues/*:*)",
+      "Bash(go test:*)",
       "Bash(.claude/skills/ref-pr-workflow/scripts/detect-changes.sh:*)",
       "Bash(.claude/skills/ref-pr-workflow/scripts/get-changed-apps.sh:*)",
       "Bash(.claude/skills/ref-pr-workflow/scripts/issue-blocking:*)",
