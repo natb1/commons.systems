@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, connectFirestoreEmulator } from "firebase/firestore";
 import {
   initializeAppCheck,
   ReCaptchaEnterpriseProvider,
@@ -146,7 +146,14 @@ export function createAppContext(
       }
     : undefined;
 
-  const db = getFirestore(app);
+  // Persistent local cache (IndexedDB) is skipped for the emulator — it destroys
+  // Playwright's execution context during navigation, breaking acceptance tests.
+  // The emulator itself tolerates persistence, but there is no benefit when data
+  // resets between emulator sessions.
+  const firestoreSettings = firestoreEmulatorHost
+    ? {}
+    : { localCache: persistentLocalCache({}) };
+  const db = initializeFirestore(app, firestoreSettings);
 
   if (firestoreEmulatorHost) {
     const { hostname, port } = parseEmulatorHost(

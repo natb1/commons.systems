@@ -107,11 +107,20 @@ describe("AtomStrategy", () => {
     expect(result).toBeNull();
   });
 
-  it("re-throws TypeError from proxy fetch", async () => {
+  it("returns null when fetch throws TypeError (network failure)", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
     const strategy = new AtomStrategy("https://example.com/feed");
-    await expect(strategy.fetchLatestPost()).rejects.toThrow(TypeError);
+    const result = await strategy.fetchLatestPost();
+
+    expect(result).toBeNull();
+  });
+
+  it("re-throws ReferenceError (indicates a bug)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new ReferenceError("x is not defined")));
+
+    const strategy = new AtomStrategy("https://example.com/feed");
+    await expect(strategy.fetchLatestPost()).rejects.toThrow(ReferenceError);
   });
 
   it("returns null for unparseable XML", async () => {

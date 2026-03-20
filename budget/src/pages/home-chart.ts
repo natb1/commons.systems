@@ -1,5 +1,5 @@
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
-import { computeNetAmount, MS_PER_WEEK, weekStart, isCardPaymentCategory } from "../balance.js";
+import { computeNetAmount, isCardPaymentCategory, MS_PER_WEEK, weekStart } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { parseJsonArray } from "./hydrate-util.js";
