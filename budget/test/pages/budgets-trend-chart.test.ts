@@ -10,7 +10,7 @@ function makePoint(overrides: Partial<AggregatePoint> = {}): AggregatePoint {
   return {
     weekLabel: "1/5",
     weekMs: new Date("2025-01-05").getTime(),
-    avg12Income: 500,
+    avg12Credits: 500,
     avg12Spending: 300,
     avg3Spending: 280,
     ...overrides,
@@ -52,7 +52,7 @@ describe("renderAggregateTrendChart", () => {
     const items = legend!.querySelectorAll(".trend-legend-item");
     expect(items).toHaveLength(3);
     const labels = [...items].map(el => el.textContent);
-    expect(labels).toContain("12-Week Avg Income");
+    expect(labels).toContain("12-Week Avg Credits");
     expect(labels).toContain("12-Week Avg Spending");
     expect(labels).toContain("3-Week Avg Spending");
   });

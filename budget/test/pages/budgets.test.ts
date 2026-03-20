@@ -211,9 +211,9 @@ describe("renderBudgets", () => {
       ]),
       getTransactions: vi.fn().mockResolvedValue([
         txn({
-          id: "inc-1" as Transaction["id"],
-          category: "Income",
-          amount: 1200,
+          id: "credit-1" as Transaction["id"],
+          category: "Travel:Reimbursement",
+          amount: -1200,
           timestamp: Timestamp.fromDate(new Date("2026-03-01")),
           normalizedId: null,
           normalizedPrimary: true,

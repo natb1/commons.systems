@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Budget, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
-import { computeAverageWeeklyIncome, computeAverageWeeklySpending, computeAggregateTrend, computePerBudgetTrend, type AggregatePoint, type PerBudgetPoint } from "../balance.js";
+import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeAggregateTrend, computePerBudgetTrend, type AggregatePoint, type PerBudgetPoint } from "../balance.js";
 import { formatCurrency } from "../format.js";
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
@@ -81,12 +81,12 @@ function serializePeriods(periods: BudgetPeriod[]): string {
   return escapeHtml(JSON.stringify(data));
 }
 
-function renderMetrics(averageWeeklyIncome: number, totalWeeklyBudget: number, averageWeeklySpending: number): string {
+function renderMetrics(averageWeeklyCredits: number, totalWeeklyBudget: number, averageWeeklySpending: number): string {
   return `<div id="budget-metrics" class="budget-metrics">
       <dl>
         <div class="metric">
-          <dt>12-Week Avg Weekly Income</dt>
-          <dd>${formatCurrency(averageWeeklyIncome)}</dd>
+          <dt>12-Week Avg Weekly Credits</dt>
+          <dd>${formatCurrency(averageWeeklyCredits)}</dd>
         </div>
         <div class="metric">
           <dt>Total Weekly Budget</dt>
@@ -137,10 +137,10 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
       dataSource.getTransactions()
         .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
     ]);
-    const averageWeeklyIncome = computeAverageWeeklyIncome(transactions);
+    const averageWeeklyCredits = computeAverageWeeklyCredits(transactions);
     const totalWeeklyBudget = budgets.reduce((s, b) => s + b.weeklyAllowance, 0);
     const averageWeeklySpending = computeAverageWeeklySpending(periods);
-    const metricsHtml = renderMetrics(averageWeeklyIncome, totalWeeklyBudget, averageWeeklySpending);
+    const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
     const aggregateTrend = computeAggregateTrend(periods, transactions);
     const perBudgetTrend = computePerBudgetTrend(budgets, periods, transactions);
     chartHtml = renderChartContainer(budgets, periods, metricsHtml, aggregateTrend, perBudgetTrend);
