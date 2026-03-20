@@ -20,11 +20,11 @@ function showError(el: HTMLElement, title: string): void {
  * Revert an input/select to its last-saved value, show a visual error indicator,
  * and auto-clear after 30 seconds.
  */
-export function showInputError(el: HTMLInputElement | HTMLSelectElement, title = "Save failed \u2014 value reverted"): void {
+export function showInputError(el: HTMLElement, title = "Save failed \u2014 value reverted"): void {
   if (el instanceof HTMLSelectElement) {
     const saved = el.querySelector("option[selected]") as HTMLOptionElement | null;
     if (saved) el.value = saved.value;
-  } else {
+  } else if (el instanceof HTMLInputElement) {
     el.value = el.defaultValue;
   }
   showError(el, title);
@@ -34,7 +34,7 @@ export function showInputError(el: HTMLInputElement | HTMLSelectElement, title =
  * Classify a save error and show the appropriate input error. Programmer errors
  * (TypeError, ReferenceError) are rethrown asynchronously to surface in devtools.
  */
-export function handleSaveError(el: HTMLInputElement | HTMLSelectElement, error: unknown, entity: string): void {
+export function handleSaveError(el: HTMLElement, error: unknown, entity: string): void {
   if (error instanceof TypeError || error instanceof ReferenceError) {
     setTimeout(() => { throw error; }, 0);
     return;
