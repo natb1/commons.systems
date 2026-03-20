@@ -60,10 +60,23 @@ export interface DataSource {
 }
 
 export class FirestoreSeedDataSource implements DataSource {
-  // Seed data ignores query filters — all transactions are returned for demo display.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async getTransactions(_query?: TransactionQuery): Promise<Transaction[]> {
-    return fsGetTransactions(null);
+  async getTransactions(query?: TransactionQuery): Promise<Transaction[]> {
+    const all = await fsGetTransactions(null);
+    if (!query) return all;
+    const sinceMs = query.since?.toMillis();
+    const beforeMs = query.before?.toMillis();
+    return all.filter(txn => {
+      const ms = txn.timestamp?.toMillis() ?? null;
+      if (sinceMs !== undefined) {
+        if (ms === null) return false;
+        if (ms < sinceMs) return false;
+      }
+      if (beforeMs !== undefined) {
+        if (ms !== null && ms >= beforeMs) return false;
+        if (ms === null && sinceMs !== undefined) return false;
+      }
+      return true;
+    });
   }
   async getStatements(): Promise<Statement[]> {
     return fsGetStatements(null);
@@ -215,7 +228,7 @@ export class IdbDataSource implements DataSource {
       }
       if (beforeMs !== undefined) {
         if (row.timestampMs !== null && row.timestampMs >= beforeMs) return false;
-        // Include nulls only when since is absent (final batch)
+        // Exclude null-timestamp rows when since is present (already caught by since check above for non-before queries)
         if (row.timestampMs === null && sinceMs !== undefined) return false;
       }
       return true;

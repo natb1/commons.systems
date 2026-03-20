@@ -1,7 +1,7 @@
 import { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { type Transaction, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
+import { type Transaction, type TransactionId, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAllBudgetBalances, computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import type { TransactionQuery } from "../data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
@@ -21,7 +21,7 @@ function formatCategory(category: string): string {
   return category.split(":").map(escapeHtml).join(" &gt; ");
 }
 
-export interface RowParts {
+interface RowParts {
   txnIdAttr: string;
   noteCell: string;
   categoryCell: string;
@@ -38,7 +38,7 @@ export interface RowParts {
   detailDl: string;
 }
 
-export function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<string, string>, balance: number | null, groupName: string): RowParts {
+function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<string, string>, balance: number | null, groupName: string): RowParts {
   const txnIdAttr = editable ? ` data-txn-id="${escapeHtml(txn.id)}"` : "";
   const noteCell = editable
     ? `<input type="text" class="edit-note" value="${escapeHtml(txn.note)}" aria-label="Note">`
@@ -83,7 +83,7 @@ export function buildRowParts(txn: Transaction, editable: boolean, budgetIdToNam
   return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, categoryAttr, hasBudgetAttr, netAmountAttr, detailDl };
 }
 
-export interface RenderRowOptions {
+interface RenderRowOptions {
   txn: Transaction;
   groupName: string;
   editable: boolean;
@@ -91,7 +91,7 @@ export interface RenderRowOptions {
   balance: number | null;
 }
 
-export function renderRow(opts: RenderRowOptions): string {
+function renderRow(opts: RenderRowOptions): string {
   const { txn, groupName, editable, budgetIdToName, balance } = opts;
   const p = buildRowParts(txn, editable, budgetIdToName, balance, groupName);
 
@@ -110,7 +110,7 @@ export function renderRow(opts: RenderRowOptions): string {
   </details>`;
 }
 
-export interface RenderGroupOptions {
+interface RenderGroupOptions {
   primary: Transaction;
   members: Transaction[];
   groupName: string;
@@ -119,7 +119,7 @@ export interface RenderGroupOptions {
   balance: number | null;
 }
 
-export function renderNormalizedGroup(opts: RenderGroupOptions): string {
+function renderNormalizedGroup(opts: RenderGroupOptions): string {
   const { primary, members, groupName, editable, budgetIdToName, balance } = opts;
   const description = primary.normalizedDescription ?? primary.description;
   const p = buildRowParts(primary, editable, budgetIdToName, balance, groupName);
@@ -182,6 +182,44 @@ function renderCategorySankey(transactions: Transaction[]): string {
     <div id="category-sankey"><script type="application/json" id="sankey-data">${json}</script></div>`;
 }
 
+/**
+ * Render a list of transactions as HTML row strings, grouping normalized transactions.
+ * `getBalance` returns the budget balance for a transaction ID, or null if unavailable.
+ */
+export function renderTransactionRows(
+  transactions: Transaction[],
+  groupName: string,
+  editable: boolean,
+  budgetIdToName: Map<string, string>,
+  getBalance: (id: string) => number | null = () => null,
+): string {
+  const normalizedGroups = new Map<string, Transaction[]>();
+  for (const txn of transactions) {
+    if (txn.normalizedId !== null) {
+      const group = normalizedGroups.get(txn.normalizedId);
+      if (group) group.push(txn);
+      else normalizedGroups.set(txn.normalizedId, [txn]);
+    }
+  }
+
+  const seenGroups = new Set<string>();
+  return transactions
+    .flatMap((txn) => {
+      if (txn.normalizedId === null) {
+        return renderRow({ txn, groupName, editable, budgetIdToName, balance: getBalance(txn.id) });
+      }
+      if (seenGroups.has(txn.normalizedId)) return [];
+      seenGroups.add(txn.normalizedId);
+      const members = normalizedGroups.get(txn.normalizedId)!;
+      const primary = members.find(t => t.normalizedPrimary);
+      if (!primary) {
+        throw new DataIntegrityError(`Normalized group ${txn.normalizedId} has no primary transaction`);
+      }
+      return renderNormalizedGroup({ primary, members, groupName, editable, budgetIdToName, balance: getBalance(primary.id) });
+    })
+    .join("\n");
+}
+
 export function compareByTimestampDesc(a: Transaction, b: Transaction): number {
   if (!a.timestamp && !b.timestamp) return 0;
   if (!a.timestamp) return 1;
@@ -204,45 +242,10 @@ function renderTransactionTable(
   const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
   const balances = computeAllBudgetBalances(transactions, budgets, budgetPeriods);
 
-  // Group normalized transactions by normalizedId
-  const normalizedGroups = new Map<string, Transaction[]>();
-  for (const txn of transactions) {
-    if (txn.normalizedId !== null) {
-      const group = normalizedGroups.get(txn.normalizedId);
-      if (group) group.push(txn);
-      else normalizedGroups.set(txn.normalizedId, [txn]);
-    }
-  }
-
-  const seenGroups = new Set<string>();
-  const rows = transactions
-    .flatMap((txn) => {
-      if (txn.normalizedId === null) {
-        return renderRow({
-          txn,
-          groupName,
-          editable: authorized,
-          budgetIdToName,
-          balance: balances.get(txn.id) ?? null,
-        });
-      }
-      if (seenGroups.has(txn.normalizedId)) return [];
-      seenGroups.add(txn.normalizedId);
-      const members = normalizedGroups.get(txn.normalizedId)!;
-      const primary = members.find(t => t.normalizedPrimary);
-      if (!primary) {
-        throw new DataIntegrityError(`Normalized group ${txn.normalizedId} has no primary transaction`);
-      }
-      return renderNormalizedGroup({
-        primary,
-        members,
-        groupName,
-        editable: authorized,
-        budgetIdToName,
-        balance: balances.get(primary.id) ?? null,
-      });
-    })
-    .join("\n");
+  const rows = renderTransactionRows(
+    transactions, groupName, authorized, budgetIdToName,
+    (id) => balances.get(id as TransactionId) ?? null,
+  );
 
   // Budget map is always needed for scroll hydration (rendering budget names on appended rows)
   const budgetNameToId: Record<string, string> = {};

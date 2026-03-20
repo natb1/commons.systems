@@ -14,6 +14,7 @@ export function weekStart(ms: number): number {
   d.setUTCHours(0, 0, 0, 0);
   return d.getTime();
 }
+
 const CREDIT_WEEKS = 12;
 
 export function computeNetAmount(amount: number, reimbursement: number): number {

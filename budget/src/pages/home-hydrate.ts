@@ -1,11 +1,11 @@
 import { Timestamp } from "firebase/firestore";
-import { type SerializedBudgetPeriod, type TransactionId, type BudgetId, type Transaction } from "../firestore.js";
+import { type SerializedBudgetPeriod, type TransactionId, type BudgetId } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
-import { renderRow, renderNormalizedGroup, compareByTimestampDesc } from "./home.js";
+import { renderTransactionRows, compareByTimestampDesc } from "./home.js";
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
@@ -270,36 +270,13 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     budgetIdToName.set(id, name);
   }
 
-  function renderBatchRows(transactions: Transaction[]): string {
-    const normalizedGroups = new Map<string, Transaction[]>();
-    for (const txn of transactions) {
-      if (txn.normalizedId !== null) {
-        const group = normalizedGroups.get(txn.normalizedId);
-        if (group) group.push(txn);
-        else normalizedGroups.set(txn.normalizedId, [txn]);
-      }
-    }
-
-    const seenGroups = new Set<string>();
-    return transactions
-      .flatMap((txn) => {
-        if (txn.normalizedId === null) {
-          return renderRow({ txn, groupName, editable, budgetIdToName, balance: null });
-        }
-        if (seenGroups.has(txn.normalizedId)) return [];
-        seenGroups.add(txn.normalizedId);
-        const members = normalizedGroups.get(txn.normalizedId)!;
-        const primary = members.find(t => t.normalizedPrimary);
-        if (!primary) throw new DataIntegrityError(`Normalized group ${txn.normalizedId} has no primary transaction`);
-        return renderNormalizedGroup({ primary, members, groupName, editable, budgetIdToName, balance: null });
-      })
-      .join("\n");
-  }
-
   let loading = false;
   const observer = new IntersectionObserver(async (entries) => {
     if (!entries[0].isIntersecting || loading) return;
     loading = true;
+
+    const prevError = sentinel.previousElementSibling;
+    if (prevError?.classList.contains("scroll-error")) prevError.remove();
 
     const loadingDiv = document.createElement("div");
     loadingDiv.className = "scroll-loading";
@@ -320,18 +297,18 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       transactions.sort(compareByTimestampDesc);
 
       if (transactions.length > 0) {
-        const html = renderBatchRows(transactions);
+        const html = renderTransactionRows(transactions, groupName, editable, budgetIdToName);
         sentinel.insertAdjacentHTML("beforebegin", html);
         sentinel.dataset.nextBefore = String(sinceMs);
       } else {
-        // Final load: no since, catch null-timestamp and very old transactions
+        // Final batch: omit since to include null-timestamp transactions and any older than the earliest window boundary
         const finalBatch = await getActiveDataSource().getTransactions({
           before: Timestamp.fromMillis(beforeMs),
         });
         finalBatch.sort(compareByTimestampDesc);
 
         if (finalBatch.length > 0) {
-          const html = renderBatchRows(finalBatch);
+          const html = renderTransactionRows(finalBatch, groupName, editable, budgetIdToName);
           sentinel.insertAdjacentHTML("beforebegin", html);
         }
         sentinel.remove();
@@ -343,13 +320,15 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         return;
       }
       console.error("Failed to load older transactions:", error);
-      const errorMsg = error instanceof DataIntegrityError
-        ? "Data error — please re-upload your file."
-        : "Failed to load older transactions.";
-      sentinel.insertAdjacentHTML("beforebegin",
-        `<div class="scroll-error">${errorMsg}</div>`);
-      sentinel.remove();
-      observer.disconnect();
+      if (error instanceof DataIntegrityError) {
+        sentinel.insertAdjacentHTML("beforebegin",
+          `<div class="scroll-error">Data error — please re-upload your file.</div>`);
+        sentinel.remove();
+        observer.disconnect();
+      } else {
+        sentinel.insertAdjacentHTML("beforebegin",
+          `<div class="scroll-error">Failed to load older transactions. Scroll down to retry.</div>`);
+      }
     } finally {
       loadingDiv.remove();
       loading = false;
