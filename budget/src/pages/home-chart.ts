@@ -2,6 +2,7 @@ import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
 import { computeNetAmount, MS_PER_WEEK } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
+import { parseJsonArray } from "./hydrate-util.js";
 
 export type ChartMode = "spending" | "income";
 
@@ -81,6 +82,9 @@ export function filterByWeeks(
  * children by value descending, name ascending.
  * When showCardPayment is false in spending mode, Transfer:CardPayment
  * categories (and subcategories) are excluded.
+ * When categoryFilter is non-empty, only transactions whose category exactly
+ * matches the filter or starts with categoryFilter + ":" (subcategories) are
+ * included.
  */
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
@@ -285,8 +289,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   }
   const categoryFilterInput: HTMLInputElement = categoryFilterInputRaw;
 
-  const categoryOptionsAttr = controlsDiv.getAttribute("data-category-options");
-  const categoryOptions: string[] = categoryOptionsAttr ? JSON.parse(categoryOptionsAttr) : [];
+  const categoryOptions = parseJsonArray(controlsDiv.dataset.categoryOptions);
 
   endSlider.min = "0";
   endSlider.max = String(weeks.length - 1);

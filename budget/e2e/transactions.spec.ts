@@ -281,8 +281,8 @@ test.describe("transactions", () => {
     expect(countBefore).toBeGreaterThan(0);
     const nodeText = page.locator("#category-sankey svg .sankey-node text").first();
     await expect(nodeText).toBeVisible();
-    // dispatchEvent directly -- Playwright's click() on SVG text is unreliable
-    // because the parent <svg> or overlapping elements intercept pointer events.
+    // dispatchEvent directly -- Playwright's click() on SVG <text> elements
+    // has unreliable hit-testing.
     await nodeText.dispatchEvent("click");
     const filterInput = page.locator("#sankey-category-filter");
     await expect(filterInput).not.toHaveValue("");
