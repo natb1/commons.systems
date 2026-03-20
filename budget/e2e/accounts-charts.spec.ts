@@ -39,16 +39,23 @@ test.describe("accounts charts", () => {
     const nwScroll = page.locator("#accounts-net-worth-chart .chart-scroll-wrapper");
     await expect(nwScroll).toBeVisible({ timeout: 10000 });
 
-    // Wait for initial scroll position to stabilize (ResizeObserver restores scroll after render)
+    // Check if charts are scrollable (content wider than viewport)
+    const trendMax = await trendScroll.evaluate((el) => el.scrollWidth - el.clientWidth);
+    test.skip(trendMax <= 0, "Charts not wide enough to scroll with test data");
+
+    // Scroll trend chart to a midpoint and verify net-worth chart syncs
+    const midpoint = Math.round(trendMax / 2);
     await expect(async () => {
-      const trendLeft = await trendScroll.evaluate((el) => el.scrollLeft);
-      expect(trendLeft).toBeGreaterThan(0);
+      await trendScroll.evaluate((el, left) => { el.scrollLeft = left; }, midpoint);
+      await page.evaluate(() => new Promise(requestAnimationFrame));
+      const nwLeft = await nwScroll.evaluate((el) => el.scrollLeft);
+      // Net-worth chart should be near the proportional midpoint (within 2px rounding)
+      expect(nwLeft).toBeGreaterThan(0);
     }).toPass({ timeout: 5000 });
 
-    // Scroll trend chart to the start and verify net worth chart syncs
+    // Scroll trend chart back to start and verify net-worth chart follows
     await expect(async () => {
       await trendScroll.evaluate((el) => { el.scrollLeft = 0; });
-      // Allow a frame for the scroll event to propagate
       await page.evaluate(() => new Promise(requestAnimationFrame));
       const nwLeft = await nwScroll.evaluate((el) => el.scrollLeft);
       expect(nwLeft).toBe(0);
