@@ -49,7 +49,7 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
       weekIndex,
       weekLabel: d.weekLabel,
       budget: d.budget,
-      value: d.avg3Spending,
+      value: Math.max(0, d.avg3Spending),
     });
   }
 
@@ -60,7 +60,7 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   );
 
   const chartWidth = computeChartWidth(weekCount, panelWidth, containerWidth);
-  const height = 200;
+  const height = 400;
 
   const fg = getThemeFg(container);
   const sharedStyle = { background: "transparent", color: fg };
@@ -97,7 +97,7 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
     x: {
       label: null,
       tickRotate: -45,
-      domain: [0, weekCount - 1],
+      domain: [-0.5, weekCount - 0.5],
       ticks: weekLabels.map((_, i) => i),
       tickFormat: (i: number) => {
         if (i < 0 || i >= weekLabels.length) throw new Error(`tickFormat index ${i} out of bounds [0, ${weekLabels.length})`);
