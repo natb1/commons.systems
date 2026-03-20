@@ -81,6 +81,8 @@ test.describe("home page infinite scroll", () => {
       await page.goto("/transactions");
       await expect(page.locator("#seed-data-notice")).toBeVisible({ timeout: 15000 });
       await uploadScrollFixture(page);
+      // Wait for upload to process: seed notice disappears and new table renders
+      await expect(page.locator("#seed-data-notice")).toHaveCount(0, { timeout: 15000 });
       await waitForTable(page);
     });
 

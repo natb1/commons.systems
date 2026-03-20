@@ -8,9 +8,30 @@ import { SALT_LEN, IV_LEN, PBKDF2_ITERATIONS, KEY_LEN } from "../src/crypto-core
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const fixturePath = path.join(__dirname, "fixtures", "test-budget.json");
 
+/**
+ * Reads the static fixture and rewrites transaction/budget-period timestamps
+ * to fall within the most recent 12-week window so they appear in the
+ * initial home page render.
+ */
 export async function uploadFixture(page: Page): Promise<void> {
+  const raw = JSON.parse(fs.readFileSync(fixturePath, "utf-8"));
+  const recentDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 1 week ago
+  const isoRecent = recentDate.toISOString();
+  for (const txn of raw.transactions) {
+    txn.timestamp = isoRecent;
+  }
+  for (const bp of raw.budgetPeriods ?? []) {
+    const start = new Date(recentDate);
+    start.setDate(start.getDate() - 7);
+    bp.periodStart = start.toISOString();
+    bp.periodEnd = isoRecent;
+  }
   const fileInput = page.locator(".upload-input");
-  await fileInput.setInputFiles(fixturePath);
+  await fileInput.setInputFiles({
+    name: "test-budget.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(raw)),
+  });
 }
 
 // Encrypts using the same BENC format as budget-etl (Go) and src/crypto-core.ts (Web Crypto).
@@ -34,7 +55,19 @@ export async function triggerExportDownload(page: Page): Promise<Download> {
 }
 
 export async function uploadEncryptedFixture(page: Page, password: string): Promise<void> {
-  const plaintext = fs.readFileSync(fixturePath);
+  const raw = JSON.parse(fs.readFileSync(fixturePath, "utf-8"));
+  const recentDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const isoRecent = recentDate.toISOString();
+  for (const txn of raw.transactions) {
+    txn.timestamp = isoRecent;
+  }
+  for (const bp of raw.budgetPeriods ?? []) {
+    const start = new Date(recentDate);
+    start.setDate(start.getDate() - 7);
+    bp.periodStart = start.toISOString();
+    bp.periodEnd = isoRecent;
+  }
+  const plaintext = Buffer.from(JSON.stringify(raw));
   const encrypted = encryptBuffer(plaintext, password);
   const fileInput = page.locator(".upload-input");
   await fileInput.setInputFiles({

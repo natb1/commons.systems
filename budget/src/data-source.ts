@@ -60,6 +60,8 @@ export interface DataSource {
 }
 
 export class FirestoreSeedDataSource implements DataSource {
+  // Seed data ignores query filters — all transactions are returned for demo display.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async getTransactions(_query?: TransactionQuery): Promise<Transaction[]> {
     return fsGetTransactions(null);
   }
