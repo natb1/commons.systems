@@ -11,6 +11,7 @@ function getAdminApp() {
   return apps.length > 0 ? apps[0] : initializeApp();
 }
 
+/** Verify the AppCheck token in the request. Returns true in the emulator (no token verification). */
 async function verifyAppCheck(req: Request): Promise<boolean> {
   if (process.env.FUNCTIONS_EMULATOR === "true") return true;
   const token = req.header("X-Firebase-AppCheck");
@@ -18,7 +19,8 @@ async function verifyAppCheck(req: Request): Promise<boolean> {
   try {
     await getAppCheck(getAdminApp()).verifyToken(token);
     return true;
-  } catch {
+  } catch (err) {
+    console.error("AppCheck verification failed:", err);
     return false;
   }
 }

@@ -40,7 +40,7 @@ vi.mock("../src/config.js", () => ({
 
 async function loadModule() {
   const mod = await import("../src/app-context.js");
-  return { createAppContext: mod.createAppContext, getAppCheckToken: mod.getAppCheckToken };
+  return { createAppContext: mod.createAppContext };
 }
 
 async function loadMocks() {
@@ -237,22 +237,63 @@ describe("createAppContext", () => {
     expect(mocks.initializeAppCheck).not.toHaveBeenCalled();
   });
 
-  it("getAppCheckToken returns undefined when AppCheck not initialized", async () => {
-    const { createAppContext, getAppCheckToken } = await loadModule();
+  it("getAppCheckHeaders is undefined when AppCheck not initialized", async () => {
+    const { createAppContext } = await loadModule();
 
-    createAppContext("myapp", "app-id-123");
+    const ctx = createAppContext("myapp", "app-id-123");
 
-    expect(getAppCheckToken()).toBeUndefined();
+    expect(ctx.getAppCheckHeaders).toBeUndefined();
   });
 
-  it("getAppCheckToken returns header function when AppCheck initialized", async () => {
-    const { createAppContext, getAppCheckToken } = await loadModule();
+  it("getAppCheckHeaders returns header function when AppCheck initialized", async () => {
+    const { createAppContext } = await loadModule();
 
-    createAppContext("myapp", "app-id-123", { recaptchaSiteKey: "test-key" });
+    const ctx = createAppContext("myapp", "app-id-123", { recaptchaSiteKey: "test-key" });
 
-    const headerFn = getAppCheckToken();
-    expect(headerFn).toBeTypeOf("function");
-    const headers = await headerFn!();
+    expect(ctx.getAppCheckHeaders).toBeTypeOf("function");
+    const headers = await ctx.getAppCheckHeaders!();
     expect(headers).toEqual({ "X-Firebase-AppCheck": "test-token" });
+  });
+
+  it("throws when recaptchaSiteKey is empty string", async () => {
+    const { createAppContext } = await loadModule();
+
+    expect(() =>
+      createAppContext("myapp", "app-id-123", { recaptchaSiteKey: "" }),
+    ).toThrow("recaptchaSiteKey must not be empty");
+  });
+
+  it("catches initializeAppCheck failure and returns undefined getAppCheckHeaders", async () => {
+    const { createAppContext } = await loadModule();
+    const mocks = await loadMocks();
+    mocks.initializeAppCheck.mockImplementation(() => {
+      throw new Error("blocked by ad blocker");
+    });
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const ctx = createAppContext("myapp", "app-id-123", { recaptchaSiteKey: "test-key" });
+
+    expect(ctx.getAppCheckHeaders).toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "AppCheck initialization failed:",
+      expect.any(Error),
+    );
+    consoleSpy.mockRestore();
+  });
+
+  it("includes getAppCheckHeaders in storage context", async () => {
+    const { createAppContext } = await loadModule();
+    const mocks = await loadMocks();
+    mocks.initializeAppCheck.mockReturnValue(mockAppCheck);
+    const { getStorage, connectStorageEmulator } = await import(
+      "firebase/storage"
+    );
+
+    const ctx = createAppContext("myapp", "app-id-123", {
+      recaptchaSiteKey: "test-key",
+      storageModule: { getStorage, connectStorageEmulator },
+    });
+
+    expect(ctx.getAppCheckHeaders).toBeTypeOf("function");
   });
 });

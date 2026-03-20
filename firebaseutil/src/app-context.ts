@@ -21,6 +21,7 @@ export interface AppContextBase {
   db: Firestore;
   NAMESPACE: Namespace;
   trackPageView: (path: string) => void;
+  getAppCheckHeaders?: () => Promise<Record<string, string>>;
 }
 
 export interface AppContextWithStorage extends AppContextBase {
@@ -58,36 +59,19 @@ export interface StorageModule {
 }
 
 export interface AppContextOptions {
-  recaptchaSiteKey: string;
+  recaptchaSiteKey?: string;
   storageModule?: StorageModule;
 }
 
-let appCheckInstance: AppCheck | null = null;
-
 /**
- * Returns a function that fetches an AppCheck token and returns it as an
- * `X-Firebase-AppCheck` header, or `undefined` when AppCheck is not initialized.
- */
-export function getAppCheckToken():
-  | (() => Promise<Record<string, string>>)
-  | undefined {
-  if (!appCheckInstance) return undefined;
-  const instance = appCheckInstance;
-  return async () => {
-    const { token } = await getToken(instance);
-    return { "X-Firebase-AppCheck": token };
-  };
-}
-
-/**
- * Initialize a Firebase app with Firestore, analytics, optional AppCheck, and optional Storage.
+ * Create a Firebase app context with Firestore, analytics, optional AppCheck, and optional Storage.
  *
  * Env vars:
  * - `VITE_FIRESTORE_NAMESPACE` — required in dev/preview (throws if missing); defaults to `{appName}/prod` in production
  * - `VITE_FIRESTORE_EMULATOR_HOST` — connects Firestore emulator when set (hostname:port)
  * - `VITE_GA_MEASUREMENT_ID` — activates page-view tracking when set; returns a no-op tracker otherwise
  * - `VITE_STORAGE_EMULATOR_HOST` — connects Storage emulator when set and `storageModule` is provided (hostname:port)
- * - `VITE_APP_CHECK_DEBUG_TOKEN` — sets `self.FIREBASE_APPCHECK_DEBUG_TOKEN` for debug environments
+ * - `VITE_APP_CHECK_DEBUG_TOKEN` — sets `self.FIREBASE_APPCHECK_DEBUG_TOKEN` when AppCheck is active (requires `recaptchaSiteKey` and no emulator)
  *
  * Pass `options.storageModule` (`firebase/storage`) to include Storage in the context. Accepting it as a parameter
  * keeps `firebase/storage` out of non-storage app bundles without requiring a dynamic import.
@@ -117,17 +101,38 @@ export function createAppContext(
 
   const firestoreEmulatorHost = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST;
 
-  if (options?.recaptchaSiteKey && !firestoreEmulatorHost) {
-    const debugToken = import.meta.env.VITE_APP_CHECK_DEBUG_TOKEN;
-    if (debugToken) {
-      (self as unknown as Record<string, unknown>).FIREBASE_APPCHECK_DEBUG_TOKEN =
-        debugToken;
+  let appCheck: AppCheck | undefined;
+  if (options?.recaptchaSiteKey !== undefined) {
+    if (options.recaptchaSiteKey === "") {
+      throw new Error(
+        "recaptchaSiteKey must not be empty — configure it in Firebase Console > App Check",
+      );
     }
-    appCheckInstance = initializeAppCheck(app, {
-      provider: new ReCaptchaEnterpriseProvider(options.recaptchaSiteKey),
-      isTokenAutoRefreshEnabled: true,
-    });
+    // AppCheck is skipped when running against the Firestore emulator — the emulator
+    // does not verify tokens, and the client has no reCAPTCHA provider in that context.
+    if (!firestoreEmulatorHost) {
+      const debugToken = import.meta.env.VITE_APP_CHECK_DEBUG_TOKEN;
+      if (debugToken) {
+        (self as unknown as Record<string, unknown>).FIREBASE_APPCHECK_DEBUG_TOKEN =
+          debugToken;
+      }
+      try {
+        appCheck = initializeAppCheck(app, {
+          provider: new ReCaptchaEnterpriseProvider(options.recaptchaSiteKey),
+          isTokenAutoRefreshEnabled: true,
+        });
+      } catch (err) {
+        console.error("AppCheck initialization failed:", err);
+      }
+    }
   }
+
+  const getAppCheckHeaders = appCheck
+    ? async () => {
+        const { token } = await getToken(appCheck!);
+        return { "X-Firebase-AppCheck": token };
+      }
+    : undefined;
 
   const db = getFirestore(app);
 
@@ -165,8 +170,8 @@ export function createAppContext(
     // Storage paths always use prod — media binaries are not duplicated per preview branch.
     const STORAGE_NAMESPACE = validateNamespace(`${appName}/prod`);
 
-    return { app, db, NAMESPACE, trackPageView, storage, STORAGE_NAMESPACE };
+    return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, storage, STORAGE_NAMESPACE };
   }
 
-  return { app, db, NAMESPACE, trackPageView };
+  return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders };
 }
