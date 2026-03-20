@@ -170,7 +170,7 @@ function renderCategorySankey(transactions: Transaction[]): string {
   return `<div id="sankey-controls" data-category-options="${categoryOpts}">
       <fieldset id="sankey-mode">
         <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
-        <label><input type="radio" name="sankey-mode" value="credits"> Credits</label>
+        <label><input type="radio" name="sankey-mode" value="income"> Income</label>
       </fieldset>
       <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
       <label id="card-payment-toggle"><input type="checkbox" id="sankey-card-payment"> Show card payments</label>

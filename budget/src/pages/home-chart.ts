@@ -4,7 +4,7 @@ import { formatCurrency } from "../format.js";
 import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { parseJsonArray } from "./hydrate-util.js";
 
-export type ChartMode = "spending" | "credits";
+export type ChartMode = "spending" | "income";
 
 function isCardPaymentCategory(category: string): boolean {
   return category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
@@ -69,21 +69,23 @@ export function filterByWeeks(
   });
 }
 
+function isIncomeCategory(category: string): boolean {
+  return category === "Income" || category.startsWith("Income:");
+}
+
 /**
  * Build a category tree from transactions.
  *
- * Filters transactions by mode (spending includes positive net-amount
- * transactions; credits includes only negative net-amount transactions, shown
- * as positive values). In spending mode, excludes transactions with zero or
- * negative net amounts. In credits mode, excludes transactions with zero or
- * positive net amounts and negates the value so chart values are positive.
- * Builds a hierarchy from colon-separated category paths. Rolls up values and
- * counts from leaves to parents, then sorts children by value descending, name
- * ascending. When showCardPayment is false in spending mode,
- * Transfer:CardPayment categories (and subcategories) are excluded.
- * When categoryFilter is non-empty, only transactions whose category exactly
- * matches the filter or starts with categoryFilter + ":" (subcategories) are
- * included.
+ * Filters transactions by mode. In spending mode, includes transactions with
+ * positive net amounts whose category does not start with "Income". In income
+ * mode, includes only transactions whose category starts with "Income",
+ * regardless of amount sign. Builds a hierarchy from colon-separated category
+ * paths. Rolls up values and counts from leaves to parents, then sorts
+ * children by value descending, name ascending. When showCardPayment is false
+ * in spending mode, Transfer:CardPayment categories (and subcategories) are
+ * excluded. When categoryFilter is non-empty, only transactions whose category
+ * exactly matches the filter or starts with categoryFilter + ":" (subcategories)
+ * are included.
  */
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
@@ -101,11 +103,12 @@ export function buildCategoryTree(
     if (mode === "spending") {
       if (!showCardPayment && isCardPaymentCategory(t.category)) continue;
       if (raw <= 0) continue;
-    } else { // "credits"
-      if (raw >= 0) continue;
+      if (isIncomeCategory(t.category)) continue;
+    } else { // "income"
+      if (!isIncomeCategory(t.category)) continue;
     }
     if (categoryFilter && t.category !== categoryFilter && !t.category.startsWith(categoryFilter + ":")) continue;
-    const net = mode === "credits" ? -raw : raw;
+    const net = Math.abs(raw);
     let node = root;
     let path = "";
     for (const part of parts) {
@@ -307,8 +310,8 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     divideTreeValues(rootData, currentNumWeeks);
 
     if (rootData.value === 0) {
-      container.textContent = currentMode === "credits"
-        ? "No credits in selected window."
+      container.textContent = currentMode === "income"
+        ? "No income in selected window."
         : "No spending in selected window.";
       return;
     }
@@ -475,15 +478,14 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     for (const row of rows) {
       const category = row.dataset.category ?? "";
       const hasBudget = row.dataset.hasBudget === "true";
-      const netAmount = parseFloat(row.dataset.netAmount ?? "0");
-      const isCredit = netAmount < 0;
       const isCardPayment = isCardPaymentCategory(category);
+      const isIncome = isIncomeCategory(category);
 
       let visible: boolean;
-      if (currentMode === "credits") {
-        visible = isCredit;
+      if (currentMode === "income") {
+        visible = isIncome;
       } else {
-        visible = !isCredit && (!currentUnbudgetedOnly || !hasBudget) && (currentShowCardPayment || !isCardPayment);
+        visible = !isIncome && (!currentUnbudgetedOnly || !hasBudget) && (currentShowCardPayment || !isCardPayment);
       }
       if (visible && currentCategoryFilter) {
         visible = category === currentCategoryFilter || category.startsWith(currentCategoryFilter + ":");
@@ -526,10 +528,10 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     radio.addEventListener("change", () => {
       if (radio.checked) {
         const mode = radio.value;
-        if (mode !== "spending" && mode !== "credits") throw new Error(`Invalid chart mode: ${mode}`);
+        if (mode !== "spending" && mode !== "income") throw new Error(`Invalid chart mode: ${mode}`);
         currentMode = mode;
         collapsedPaths.clear();
-        if (mode === "credits") {
+        if (mode === "income") {
           currentUnbudgetedOnly = false;
           unbudgetedCheckbox.checked = false;
           unbudgetedToggle.hidden = true;
