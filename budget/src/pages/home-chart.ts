@@ -10,7 +10,7 @@ function isCardPaymentCategory(category: string): boolean {
 
 export interface SerializedChartTransaction {
   category: string;
-  /** Dollars. Positive = spending/debit, negative = income/credit. */
+  /** Dollars. Positive = spending/debit, negative = income/credit (either sign valid for income). */
   amount: number;
   reimbursement: number;
   timestampMs: number | null;
@@ -71,13 +71,13 @@ export function filterByWeeks(
  * Build a category tree from transactions.
  *
  * Filters transactions by mode (spending excludes Income-prefixed categories,
- * income includes only Income-prefixed categories). For spending, positive net
- * amounts pass through; for income, the sign is flipped (income amounts are
- * negative in source data) so they become positive for display. Transactions
- * with non-positive net amounts (after reimbursement and sign normalization)
- * are excluded. Builds a hierarchy
- * from colon-separated category paths. Rolls up values and counts from leaves
- * to parents, then sorts children by value descending, name ascending.
+ * income includes only Income-prefixed categories). In spending mode, excludes
+ * transactions with zero or negative net amounts. In income mode, applies
+ * Math.abs() so both positive and negative income conventions produce positive
+ * chart values (only zero-net-amount transactions are excluded). Builds a
+ * hierarchy from colon-separated category
+ * paths. Rolls up values and counts from leaves to parents, then sorts
+ * children by value descending, name ascending.
  * When showCardPayment is false in spending mode, Transfer:CardPayment
  * categories (and subcategories) are excluded.
  */
@@ -93,13 +93,12 @@ export function buildCategoryTree(
     const parts = t.category.split(":");
     const isIncome = parts[0] === "Income";
     const raw = computeNetAmount(t.amount, t.reimbursement);
-    // Income amounts are negative in source data; negate to get positive display value
-    const net = isIncome ? -raw : raw;
-    if (net <= 0) continue;
     if (mode === "spending" && isIncome) continue;
     if (mode === "income" && !isIncome) continue;
     if (unbudgetedOnly && t.hasBudget) continue;
     if (!showCardPayment && mode === "spending" && isCardPaymentCategory(t.category)) continue;
+    const net = mode === "income" ? Math.abs(raw) : raw;
+    if (net <= 0) continue;
     let node = root;
     let path = "";
     for (const part of parts) {
@@ -448,11 +447,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       render();
     } catch (error) {
       container.textContent = "Chart rendering failed. Try refreshing the page.";
-      if (error instanceof TypeError || error instanceof ReferenceError) {
-        setTimeout(() => { throw error; }, 0);
-        return;
-      }
-      console.error("Chart render error:", error);
+      setTimeout(() => { throw error; }, 0);
     }
   }
 

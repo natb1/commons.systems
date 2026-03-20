@@ -203,12 +203,13 @@ describe("buildCategoryTree", () => {
     expect(root.value).toBe(50);
   });
 
-  it("positive income amount is excluded as edge case", () => {
+  it("positive income amount is included via Math.abs", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: 2400 }),
     ], "income");
-    expect(root.value).toBe(0);
-    expect(root.children).toHaveLength(0);
+    expect(root.value).toBe(2400);
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0].name).toBe("Income");
   });
 
   it("income mode with no income returns empty tree", () => {
@@ -285,6 +286,40 @@ describe("buildCategoryTree", () => {
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Income");
     expect(root.value).toBe(2400);
+  });
+
+  it("income mode: negative amounts produce positive tree values", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Income:Salary", amount: -2400 }),
+      txn({ category: "Income:Freelance", amount: -500 }),
+    ], "income");
+    expect(root.value).toBe(2900);
+    const income = root.children.find(c => c.name === "Income");
+    expect(income).toBeDefined();
+    expect(income!.value).toBe(2900);
+    const salary = income!.children.find(c => c.name === "Salary");
+    const freelance = income!.children.find(c => c.name === "Freelance");
+    expect(salary!.value).toBe(2400);
+    expect(freelance!.value).toBe(500);
+  });
+
+  it("income mode: negative amounts excluded in spending mode", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Income:Salary", amount: -2400 }),
+      txn({ category: "Income:Freelance", amount: -500 }),
+      txn({ category: "Food", amount: 50 }),
+    ], "spending");
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0].name).toBe("Food");
+    expect(root.children[0].value).toBe(50);
+  });
+
+  it("income mode: mixed positive and negative income amounts", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Income:Salary", amount: 2400 }),
+      txn({ category: "Income:Freelance", amount: -500 }),
+    ], "income");
+    expect(root.value).toBe(2900);
   });
 });
 
