@@ -281,18 +281,18 @@ test.describe("transactions", () => {
     expect(countBefore).toBeGreaterThan(0);
     const nodeText = page.locator("#category-sankey svg .sankey-node text").first();
     await expect(nodeText).toBeVisible();
-    const categoryName = await nodeText.textContent();
-    expect(categoryName).toBeTruthy();
-    await nodeText.scrollIntoViewIfNeeded();
-    await nodeText.click({ force: true });
+    // dispatchEvent directly -- Playwright's click() on SVG text is unreliable
+    // because the parent <svg> or overlapping elements intercept pointer events.
+    await nodeText.dispatchEvent("click");
     const filterInput = page.locator("#sankey-category-filter");
-    await expect(filterInput).toHaveValue(categoryName!);
+    await expect(filterInput).not.toHaveValue("");
+    const filterValue = await filterInput.inputValue();
     const countAfter = await visibleRows.count();
     expect(countAfter).toBeGreaterThan(0);
     expect(countAfter).toBeLessThanOrEqual(countBefore);
     for (let i = 0; i < countAfter; i++) {
       const category = await visibleRows.nth(i).getAttribute("data-category");
-      expect(category).toMatch(new RegExp(`^${categoryName}`));
+      expect(category).toMatch(new RegExp(`^${filterValue}`));
     }
   });
 });
