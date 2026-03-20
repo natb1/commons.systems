@@ -35,4 +35,14 @@ describe("budgets pie chart smoke", () => {
     }));
     expect(html).toContain('id="budgets-pie"');
   });
+
+  it("pie chart container has data-average-weekly-income attribute", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([makeBudget()]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        makePeriod({ id: "food-w1", budgetId: "food", total: 80 }),
+      ]),
+    }));
+    expect(html).toContain("data-average-weekly-income=");
+  });
 });

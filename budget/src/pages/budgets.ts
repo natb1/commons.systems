@@ -110,6 +110,7 @@ function renderChartContainer(
   metricsHtml: string,
   aggregateTrend: AggregatePoint[],
   perBudgetTrend: PerBudgetPoint[],
+  averageWeeklyIncome: number,
 ): string {
   return `<div id="budgets-chart-controls">
       <label>Jump to: <input type="date" id="chart-date-picker"></label>
@@ -119,7 +120,7 @@ function renderChartContainer(
     <div id="budgets-chart" data-budgets="${serializeBudgets(budgets)}" data-periods="${serializePeriods(periods)}"></div>
     <div class="below-bar-chart-row">
       ${metricsHtml}
-      <div id="budgets-pie"></div>
+      <div id="budgets-pie" data-average-weekly-income="${averageWeeklyIncome}"></div>
     </div>`;
 }
 
@@ -143,7 +144,7 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
     const metricsHtml = renderMetrics(averageWeeklyIncome, totalWeeklyBudget, averageWeeklySpending);
     const aggregateTrend = computeAggregateTrend(periods, transactions);
     const perBudgetTrend = computePerBudgetTrend(budgets, periods, transactions);
-    chartHtml = renderChartContainer(budgets, periods, metricsHtml, aggregateTrend, perBudgetTrend);
+    chartHtml = renderChartContainer(budgets, periods, metricsHtml, aggregateTrend, perBudgetTrend, averageWeeklyIncome);
     tableHtml = renderBudgetTable(budgets, authorized);
   } catch (error) {
     tableHtml = renderLoadError(error, "budgets-error");
