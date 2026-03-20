@@ -79,6 +79,22 @@ export function hydrateAccountsCharts(container: HTMLElement): void {
 
   render();
   reattachScrollSync();
-  wireChartDatePicker("accounts-date-picker", () => chartResult, getAccountsScrollWrappers);
+
+  const allWeeks = chartResult.weeks;
+  wireChartDatePicker("accounts-date-picker", allWeeks, (anchorMs) => {
+    const weeks = chartResult.weeks;
+    let nearestIdx = 0;
+    let nearestDist = Infinity;
+    for (let i = 0; i < weeks.length; i++) {
+      const dist = Math.abs(weeks[i].ms - anchorMs);
+      if (dist < nearestDist) { nearestDist = dist; nearestIdx = i; }
+    }
+    const weekCount = weeks.length;
+    for (const wrapper of getAccountsScrollWrappers()) {
+      const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
+      const left = weekCount <= 1 ? 0 : Math.round((nearestIdx / (weekCount - 1)) * scrollMax);
+      wrapper.scrollTo({ left: Math.max(0, left - wrapper.clientWidth / 2), behavior: "smooth" });
+    }
+  });
   wireChartResize(container, render, getAccountsScrollWrappers, [trendEl, nwEl], reattachScrollSync);
 }

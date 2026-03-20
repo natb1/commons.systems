@@ -35,7 +35,20 @@ export function getThemeFg(container: HTMLElement): string {
 }
 
 export function computePanelWidth(budgetCount: number): number {
-  return Math.max(budgetCount * 60 + 40, 120);
+  return Math.max(budgetCount * 30 + 30, 80);
+}
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const WINDOW_WEEKS = 12;
+
+/** Filter week-ms timestamps to those within a 12-week window ending at anchorMs (inclusive). */
+export function filterToWindow(weekTimestamps: readonly number[], anchorMs: number): Set<number> {
+  const cutoff = anchorMs - WINDOW_WEEKS * WEEK_MS;
+  const result = new Set<number>();
+  for (const ms of weekTimestamps) {
+    if (ms > cutoff && ms <= anchorMs) result.add(ms);
+  }
+  return result;
 }
 
 /** Assemble the standard chart-layout DOM: fixed y-axis + horizontally scrollable chart body. */

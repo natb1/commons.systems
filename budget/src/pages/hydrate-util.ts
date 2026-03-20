@@ -1,6 +1,6 @@
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showDropdown } from "@commons-systems/style/components/autocomplete";
-import type { ChartResult } from "./budgets-chart.js";
+
 
 const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
@@ -141,37 +141,36 @@ export function attachScrollSync(getWrappers: () => HTMLElement[]): { abort: Abo
   return { abort };
 }
 
+/** Find the week timestamp nearest to a target ms value. */
+function findNearestWeekMs(weeks: readonly { ms: number }[], targetMs: number): number {
+  let nearestMs = weeks[0].ms;
+  let nearestDist = Infinity;
+  for (const w of weeks) {
+    const dist = Math.abs(w.ms - targetMs);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearestMs = w.ms;
+    }
+  }
+  return nearestMs;
+}
+
 export function wireChartDatePicker(
   pickerId: string,
-  getChartResult: () => ChartResult,
-  getWrappers: () => HTMLElement[],
+  allWeeks: readonly { label: string; ms: number }[],
+  onAnchorChange: (anchorMs: number) => void,
 ): void {
-  const initialResult = getChartResult();
   const datePicker = document.getElementById(pickerId) as HTMLInputElement | null;
-  if (!datePicker || initialResult.weeks.length === 0) return;
+  if (!datePicker || allWeeks.length === 0) return;
 
-  datePicker.min = toISODate(initialResult.weeks[0].ms);
-  datePicker.max = toISODate(initialResult.weeks[initialResult.weeks.length - 1].ms);
+  datePicker.min = toISODate(allWeeks[0].ms);
+  datePicker.max = toISODate(allWeeks[allWeeks.length - 1].ms);
 
   datePicker.addEventListener("change", () => {
     if (!datePicker.value) return;
-    const weeks = getChartResult().weeks;
     const selectedMs = new Date(datePicker.value + "T00:00:00Z").getTime();
-    let nearestIdx = 0;
-    let nearestDist = Infinity;
-    for (let i = 0; i < weeks.length; i++) {
-      const dist = Math.abs(weeks[i].ms - selectedMs);
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearestIdx = i;
-      }
-    }
-    const weekCount = weeks.length;
-    for (const wrapper of getWrappers()) {
-      const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
-      const left = weekCount <= 1 ? 0 : Math.round((nearestIdx / (weekCount - 1)) * scrollMax);
-      wrapper.scrollTo({ left: Math.max(0, left - wrapper.clientWidth / 2), behavior: "smooth" });
-    }
+    const anchorMs = findNearestWeekMs(allWeeks, selectedMs);
+    onAnchorChange(anchorMs);
   });
 }
 
