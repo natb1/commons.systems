@@ -470,13 +470,14 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       if (rawNetAmount === undefined) throw new Error(`Transaction row missing data-net-amount`);
       const netAmount = parseFloat(rawNetAmount);
       if (!Number.isFinite(netAmount)) throw new Error(`Transaction row has invalid data-net-amount: "${rawNetAmount}"`);
+      const isSpending = netAmount > 0;
       const isCredit = netAmount < 0;
 
       let visible: boolean;
       if (currentMode === "credits") {
         visible = isCredit && (currentShowCardPayment || !isCardPayment);
       } else {
-        visible = !isCredit && (!currentUnbudgetedOnly || !hasBudget) && (currentShowCardPayment || !isCardPayment);
+        visible = isSpending && (!currentUnbudgetedOnly || !hasBudget) && (currentShowCardPayment || !isCardPayment);
       }
       if (visible && currentCategoryFilter) {
         visible = category === currentCategoryFilter || category.startsWith(currentCategoryFilter + ":");
