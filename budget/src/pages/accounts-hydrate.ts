@@ -74,10 +74,12 @@ function attachScrollSync(): void {
 }
 
 export function hydrateAccountsCharts(container: HTMLElement): void {
-  const trendEl = document.getElementById("accounts-trend-chart");
-  if (!trendEl) throw new DataIntegrityError("accounts-trend-chart container not found");
-  const nwEl = document.getElementById("accounts-net-worth-chart");
-  if (!nwEl) throw new DataIntegrityError("accounts-net-worth-chart container not found");
+  const trendElOrNull = document.getElementById("accounts-trend-chart");
+  if (!trendElOrNull) throw new DataIntegrityError("accounts-trend-chart container not found");
+  const trendEl: HTMLElement = trendElOrNull;
+  const nwElOrNull = document.getElementById("accounts-net-worth-chart");
+  if (!nwElOrNull) throw new DataIntegrityError("accounts-net-worth-chart container not found");
+  const nwEl: HTMLElement = nwElOrNull;
 
   const aggregateRaw = trendEl.dataset.aggregateTrend;
   if (aggregateRaw === undefined) throw new DataIntegrityError("accounts-trend-chart missing data-aggregate-trend");
