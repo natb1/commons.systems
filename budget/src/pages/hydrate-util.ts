@@ -156,7 +156,7 @@ export function wireChartDatePicker(
   datePicker.addEventListener("change", () => {
     if (!datePicker.value) return;
     const weeks = getChartResult().weeks;
-    const selectedMs = new Date(datePicker.value + "T00:00:00").getTime();
+    const selectedMs = new Date(datePicker.value + "T00:00:00Z").getTime();
     let nearestIdx = 0;
     let nearestDist = Infinity;
     for (let i = 0; i < weeks.length; i++) {
@@ -167,7 +167,6 @@ export function wireChartDatePicker(
       }
     }
     const weekCount = weeks.length;
-    if (weekCount === 0) return;
     for (const wrapper of getWrappers()) {
       const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
       const left = weekCount <= 1 ? 0 : Math.round((nearestIdx / (weekCount - 1)) * scrollMax);

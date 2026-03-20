@@ -393,9 +393,8 @@ function endOfWeekMs(timestampMs: number): number {
  * Monday after the latest income transaction. Income transactions are identified
  * by categories starting with "Income". Non-primary normalized duplicates and
  * null-timestamp transactions are excluded. Returns 0 when no qualifying income
- * transactions exist. Amounts are absolute-valued before summing, so both
- * Income amounts are negative (credit convention); absolute-valued before
- * summing to produce a positive result.
+ * transactions exist. Income amounts are negative (credit convention);
+ * absolute-valued before summing to produce a positive result.
  */
 export function computeAverageWeeklyIncome(transactions: Transaction[]): number {
   const incomeTxns = filterIncomeTransactions(transactions);
@@ -459,8 +458,8 @@ function periodToAnchorMs(period: string): number {
 /**
  * Compute weekly liquid net worth from transactions and statement balances.
  *
- * For each account, anchors at the latest statement balance and walks transactions
- * forward/backward to derive balance at each week boundary. Net worth at each week
+ * For each account, anchors at the latest statement balance and uses cumulative
+ * transaction sums relative to the anchor to derive balance at each week boundary. Net worth at each week
  * is the sum of all account balances.
  *
  * Transaction sign convention: positive = spending (reduces balance), negative = income (increases balance).

@@ -26,7 +26,7 @@ describe("renderNetWorthChart", () => {
       makePoint({ weekLabel: "1/5", weekMs: new Date("2025-01-05").getTime() }),
       makePoint({ weekLabel: "1/12", weekMs: new Date("2025-01-12").getTime() }),
     ];
-    const result = renderNetWorthChart(container, { data, containerWidth: 640, panelWidth: 40 });
+    const result = renderNetWorthChart(container, { data, containerWidth: 640, pointWidth: 40 });
     expect(container.querySelector(".chart-layout")).not.toBeNull();
     expect(container.querySelector(".chart-y-axis svg")).not.toBeNull();
     expect(container.querySelector(".chart-scroll-wrapper svg")).not.toBeNull();
@@ -35,7 +35,7 @@ describe("renderNetWorthChart", () => {
 
   it("shows empty message when data is empty", () => {
     const container = makeContainer();
-    const result = renderNetWorthChart(container, { data: [], containerWidth: 640, panelWidth: 40 });
+    const result = renderNetWorthChart(container, { data: [], containerWidth: 640, pointWidth: 40 });
     expect(container.textContent).toBe("No net worth data to chart.");
     expect(container.querySelector("svg")).toBeNull();
     expect(result.weeks).toEqual([]);
@@ -44,7 +44,7 @@ describe("renderNetWorthChart", () => {
   it("renders legend with Liquid Net Worth", () => {
     const container = makeContainer();
     const data = [makePoint()];
-    renderNetWorthChart(container, { data, containerWidth: 640, panelWidth: 40 });
+    renderNetWorthChart(container, { data, containerWidth: 640, pointWidth: 40 });
     const legend = container.querySelector(".trend-legend");
     expect(legend).not.toBeNull();
     const items = legend!.querySelectorAll(".trend-legend-item");
