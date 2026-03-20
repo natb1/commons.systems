@@ -108,6 +108,110 @@ export function addAutocompleteListeners(
   });
 }
 
+export function deserializeJSON(raw: string, label: string): unknown {
+  try { return JSON.parse(raw); } catch (e) {
+    throw new DataIntegrityError(`Invalid ${label}: ${e instanceof Error ? e.message : e}`);
+  }
+}
+
+export function toISODate(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+import type { ChartResult } from "./budgets-chart.js";
+
+export function attachScrollSync(getWrappers: () => HTMLElement[]): { abort: AbortController; syncing: { value: boolean } } {
+  const abort = new AbortController();
+  const syncing = { value: false };
+  const wrappers = getWrappers();
+  for (const w of wrappers) {
+    w.addEventListener("scroll", () => {
+      if (syncing.value) return;
+      syncing.value = true;
+      try {
+        const ratio = w.scrollWidth > 0 ? w.scrollLeft / w.scrollWidth : 0;
+        for (const other of wrappers) {
+          if (other !== w) other.scrollLeft = ratio * other.scrollWidth;
+        }
+      } finally {
+        syncing.value = false;
+      }
+    }, { signal: abort.signal });
+  }
+  return { abort, syncing };
+}
+
+export function wireChartDatePicker(
+  pickerId: string,
+  chartResult: ChartResult,
+  getWrappers: () => HTMLElement[],
+): void {
+  const datePicker = document.getElementById(pickerId) as HTMLInputElement | null;
+  if (!datePicker || chartResult.weeks.length === 0) return;
+
+  datePicker.min = toISODate(chartResult.weeks[0].ms);
+  datePicker.max = toISODate(chartResult.weeks[chartResult.weeks.length - 1].ms);
+
+  datePicker.addEventListener("change", () => {
+    if (!datePicker.value) return;
+    const weeks = chartResult.weeks;
+    const selectedMs = new Date(datePicker.value + "T00:00:00").getTime();
+    let nearestIdx = 0;
+    let nearestDist = Infinity;
+    for (let i = 0; i < weeks.length; i++) {
+      const dist = Math.abs(weeks[i].ms - selectedMs);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestIdx = i;
+      }
+    }
+    const weekCount = weeks.length;
+    if (weekCount === 0) return;
+    for (const wrapper of getWrappers()) {
+      const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
+      const left = weekCount <= 1 ? 0 : Math.round((nearestIdx / (weekCount - 1)) * scrollMax);
+      wrapper.scrollTo({ left: Math.max(0, left - wrapper.clientWidth / 2), behavior: "smooth" });
+    }
+  });
+}
+
+export function wireChartResize(
+  container: HTMLElement,
+  render: () => void,
+  getWrappers: () => HTMLElement[],
+  errorEls: HTMLElement[],
+  reattachScrollSync: () => void,
+): void {
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+  const observer = new ResizeObserver(() => {
+    if (!container.isConnected) {
+      observer.disconnect();
+      return;
+    }
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const wrappers = getWrappers();
+      const scrollRatio = wrappers.length > 0 && wrappers[0].scrollWidth > 0
+        ? wrappers[0].scrollLeft / wrappers[0].scrollWidth
+        : 1;
+      try {
+        render();
+      } catch (error) {
+        const msg = "Chart rendering failed on resize. Try refreshing the page.";
+        for (const el of errorEls) el.textContent = msg;
+        setTimeout(() => { throw error; }, 0);
+        return;
+      }
+      reattachScrollSync();
+      for (const w of getWrappers()) {
+        w.scrollLeft = scrollRatio * w.scrollWidth;
+      }
+    }, 150);
+  });
+  observer.observe(container);
+}
+
 export function uniqueSorted(values: (string | null)[]): string[] {
   return [...new Set(values.filter((v): v is string => v != null))].sort();
 }

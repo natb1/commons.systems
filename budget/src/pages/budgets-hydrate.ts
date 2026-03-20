@@ -2,7 +2,7 @@ import { Timestamp } from "firebase/firestore";
 import { type Budget, type BudgetId, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { showInputError, handleSaveError } from "./hydrate-util.js";
+import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize } from "./hydrate-util.js";
 import { renderBudgetChart, type ChartResult } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
@@ -107,12 +107,6 @@ function deserializePeriods(raw: string): BudgetPeriod[] {
   }));
 }
 
-function deserializeJSON(raw: string, label: string): unknown {
-  try { return JSON.parse(raw); } catch (e) {
-    throw new DataIntegrityError(`Invalid ${label}: ${e instanceof Error ? e.message : e}`);
-  }
-}
-
 function deserializePerBudgetTrend(raw: string): PerBudgetPoint[] {
   const parsed = deserializeJSON(raw, "per-budget trend data");
   if (!Array.isArray(parsed)) throw new DataIntegrityError("Per-budget trend data is not an array");
@@ -130,27 +124,11 @@ function getAllScrollWrappers(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".chart-scroll-wrapper"));
 }
 
-// Reentrance guard: prevents scroll-sync handlers from triggering each other in a feedback loop
-let scrollSyncing = false;
 let scrollAbort: AbortController | null = null;
-function attachScrollSync(): void {
+function reattachScrollSync(): void {
   if (scrollAbort) scrollAbort.abort();
-  scrollAbort = new AbortController();
-  const wrappers = getAllScrollWrappers();
-  for (const w of wrappers) {
-    w.addEventListener("scroll", () => {
-      if (scrollSyncing) return;
-      scrollSyncing = true;
-      try {
-        const ratio = w.scrollWidth > 0 ? w.scrollLeft / w.scrollWidth : 0;
-        for (const other of wrappers) {
-          if (other !== w) other.scrollLeft = ratio * other.scrollWidth;
-        }
-      } finally {
-        scrollSyncing = false;
-      }
-    }, { signal: scrollAbort.signal });
-  }
+  const result = attachScrollSync(getAllScrollWrappers);
+  scrollAbort = result.abort;
 }
 
 export function hydrateBudgetChart(container: HTMLElement): void {
@@ -187,75 +165,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   }
 
   render();
-  attachScrollSync();
-
-  // Configure date picker min/max from period date range
-  const datePicker = document.getElementById("chart-date-picker") as HTMLInputElement | null;
-  if (datePicker && chartResult.weeks.length > 0) {
-    datePicker.min = toISODate(chartResult.weeks[0].ms);
-    datePicker.max = toISODate(chartResult.weeks[chartResult.weeks.length - 1].ms);
-
-    datePicker.addEventListener("change", () => {
-      if (!datePicker.value) return;
-
-      const weeks = chartResult.weeks;
-      const selectedMs = new Date(datePicker.value + "T00:00:00").getTime();
-      // Find nearest week entry
-      let nearestIdx = 0;
-      let nearestDist = Infinity;
-      for (let i = 0; i < weeks.length; i++) {
-        const dist = Math.abs(weeks[i].ms - selectedMs);
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          nearestIdx = i;
-        }
-      }
-
-      const weekCount = chartResult.weeks.length;
-      if (weekCount === 0) return;
-
-      // Scroll all wrappers to the selected week
-      for (const wrapper of getAllScrollWrappers()) {
-        const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
-        const left = weekCount <= 1 ? 0 : Math.round((nearestIdx / (weekCount - 1)) * scrollMax);
-        wrapper.scrollTo({ left: Math.max(0, left - wrapper.clientWidth / 2), behavior: "smooth" });
-      }
-    });
-  }
-
-  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-  const observer = new ResizeObserver(() => {
-    if (!container.isConnected) {
-      observer.disconnect();
-      return;
-    }
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      // Capture scroll ratio from first wrapper (all are synced)
-      const wrappers = getAllScrollWrappers();
-      const scrollRatio = wrappers.length > 0 && wrappers[0].scrollWidth > 0
-        ? wrappers[0].scrollLeft / wrappers[0].scrollWidth
-        : 1;
-      try {
-        render();
-      } catch (error) {
-        const msg = "Chart rendering failed on resize. Try refreshing the page.";
-        container.textContent = msg;
-        areaEl.textContent = msg;
-        setTimeout(() => { throw error; }, 0);
-        return;
-      }
-      // render() replaces DOM, destroying old listeners
-      attachScrollSync();
-      for (const w of getAllScrollWrappers()) {
-        w.scrollLeft = scrollRatio * w.scrollWidth;
-      }
-    }, 150);
-  });
-  observer.observe(container);
-}
-
-function toISODate(ms: number): string {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  reattachScrollSync();
+  wireChartDatePicker("chart-date-picker", chartResult, getAllScrollWrappers);
+  wireChartResize(container, render, getAllScrollWrappers, [container, areaEl], reattachScrollSync);
 }

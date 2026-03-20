@@ -88,10 +88,6 @@ function serializeData(data: readonly AggregatePoint[] | readonly NetWorthPoint[
   return escapeHtml(JSON.stringify(data));
 }
 
-function serializeDivergences(divergences: readonly BalanceDivergence[]): string {
-  return escapeHtml(JSON.stringify(divergences));
-}
-
 function renderDivergenceWarning(divergences: BalanceDivergence[]): string {
   if (divergences.length === 0) return "";
   const rows = divergences.map(d =>
@@ -113,7 +109,7 @@ function renderChartContainers(
       <label>Jump to: <input type="date" id="accounts-date-picker"></label>
     </div>
     <div id="accounts-trend-chart" data-aggregate-trend="${serializeData(aggregateTrend)}"></div>
-    <div id="accounts-net-worth-chart" data-net-worth="${serializeData(netWorthPoints)}" data-divergences="${serializeDivergences(divergences)}"></div>`;
+    <div id="accounts-net-worth-chart" data-net-worth="${serializeData(netWorthPoints)}"></div>`;
 }
 
 export async function renderAccounts(options: RenderPageOptions): Promise<string> {
@@ -133,10 +129,14 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
     const rows = buildAccountRows(transactions, statements);
     tableHtml = renderAccountsTable(rows);
 
-    const aggregateTrend = computeAggregateTrend(periods, transactions);
-    const trendWeeks = aggregateTrend.map(p => ({ label: p.weekLabel, ms: p.weekMs }));
-    const { points: netWorthPoints, divergences } = computeNetWorth(transactions, statements, trendWeeks);
-    chartHtml = renderChartContainers(aggregateTrend, netWorthPoints, divergences);
+    try {
+      const aggregateTrend = computeAggregateTrend(periods, transactions);
+      const trendWeeks = aggregateTrend.map(p => ({ label: p.weekLabel, ms: p.weekMs }));
+      const { points: netWorthPoints, divergences } = computeNetWorth(transactions, statements, trendWeeks);
+      chartHtml = renderChartContainers(aggregateTrend, netWorthPoints, divergences);
+    } catch (chartError) {
+      chartHtml = renderLoadError(chartError, "chart-error");
+    }
   } catch (error) {
     tableHtml = renderLoadError(error, "accounts-error");
   }

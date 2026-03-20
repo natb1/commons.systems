@@ -269,7 +269,7 @@ export function computeAggregateTrend(
   if (weeks.length === 0) return [];
 
   // Weekly income: sum income transactions per week.
-  // Math.abs: income may be negative (credit convention) or positive; normalize to positive.
+  // Math.abs: income amounts are negative (credit convention); abs converts to positive magnitude for display.
   const incomeTxns = filterIncomeTransactions(transactions);
   const weeklyIncome = new Map<number, number>();
   for (const t of incomeTxns) {
@@ -445,7 +445,7 @@ function isValidPeriod(period: string): boolean {
   return /^\d{4}-\d{2}$/.test(period);
 }
 
-/** Convert statement period "YYYY-MM" to approximate end-of-month timestamp (first of next month, UTC). */
+/** Convert statement period "YYYY-MM" to end-of-month timestamp (first of next month, UTC). */
 function periodToAnchorMs(period: string): number {
   const [yearStr, monthStr] = period.split("-");
   const year = parseInt(yearStr, 10);
@@ -512,10 +512,11 @@ export function computeNetWorth(
     const txns = accountTxns.get(k) ?? [];
     txns.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
 
-    // Precompute: cumulative net amount for txns with timestamp < T
+    // Cache transaction timestamps and net amounts for cumSumBefore lookups
     const txnTimes = txns.map(t => t.timestamp.toMillis());
     const txnNets = txns.map(t => computeNetAmount(t.amount, t.reimbursement));
 
+    // cumSumBefore: cumulative net amount for txns with timestamp < T (linear scan, used for unordered access)
     function cumSumBefore(T: number): number {
       let sum = 0;
       for (let i = 0; i < txnTimes.length; i++) {
@@ -527,15 +528,20 @@ export function computeNetWorth(
 
     const anchorCum = cumSumBefore(anchorMs);
 
-    // Compute balance at each week
+    // Compute balance at each week using an advancing pointer (weeks are sorted chronologically)
     const balances: number[] = [];
+    let txnPtr = 0;
+    let runningCum = 0;
     for (const week of weeks) {
-      const weekCum = cumSumBefore(week.ms);
-      balances.push(anchorBalance - (weekCum - anchorCum));
+      while (txnPtr < txnTimes.length && txnTimes[txnPtr] < week.ms) {
+        runningCum += txnNets[txnPtr];
+        txnPtr++;
+      }
+      balances.push(anchorBalance - (runningCum - anchorCum));
     }
     accountWeekBalances.set(k, balances);
 
-    // Verify against non-anchor statements
+    // Verify against non-anchor statements (unordered access, use cumSumBefore)
     const stmts = allStmts.get(k) ?? [];
     for (const stmt of stmts) {
       if (stmt.period === anchor.period) continue;

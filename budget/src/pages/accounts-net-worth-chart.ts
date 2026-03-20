@@ -6,7 +6,7 @@ import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeCh
 export interface NetWorthChartOptions {
   readonly data: NetWorthPoint[];
   readonly containerWidth: number;
-  readonly panelWidth: number;
+  readonly pointWidth: number;
 }
 
 const SERIES_NET_WORTH = "Liquid Net Worth";
@@ -18,7 +18,7 @@ interface LineDatum {
 }
 
 export function renderNetWorthChart(container: HTMLElement, options: NetWorthChartOptions): ChartResult {
-  const { data, containerWidth, panelWidth } = options;
+  const { data, containerWidth, pointWidth } = options;
 
   if (data.length === 0) {
     container.textContent = "No net worth data to chart.";
@@ -35,7 +35,7 @@ export function renderNetWorthChart(container: HTMLElement, options: NetWorthCha
     value: d.netWorth,
   }));
 
-  const chartWidth = computeChartWidth(weekCount, panelWidth, containerWidth);
+  const chartWidth = computeChartWidth(weekCount, pointWidth, containerWidth);
   const height = 200;
 
   const fg = getThemeFg(container);

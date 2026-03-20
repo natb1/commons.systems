@@ -1,16 +1,11 @@
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { renderAggregateTrendChart } from "./budgets-trend-chart.js";
 import { renderNetWorthChart } from "./accounts-net-worth-chart.js";
+import { deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize } from "./hydrate-util.js";
 import type { AggregatePoint, NetWorthPoint } from "../balance.js";
 import type { ChartResult } from "./budgets-chart.js";
 
-const ACCOUNTS_PANEL_WIDTH = 40;
-
-function deserializeJSON(raw: string, label: string): unknown {
-  try { return JSON.parse(raw); } catch (e) {
-    throw new DataIntegrityError(`Invalid ${label}: ${e instanceof Error ? e.message : e}`);
-  }
-}
+const ACCOUNTS_POINT_WIDTH = 40;
 
 function deserializeAggregateTrend(raw: string): AggregatePoint[] {
   const parsed = deserializeJSON(raw, "aggregate trend data");
@@ -51,26 +46,11 @@ function getAccountsScrollWrappers(): HTMLElement[] {
   return wrappers;
 }
 
-let scrollSyncing = false;
 let scrollAbort: AbortController | null = null;
-function attachScrollSync(): void {
+function reattachScrollSync(): void {
   if (scrollAbort) scrollAbort.abort();
-  scrollAbort = new AbortController();
-  const wrappers = getAccountsScrollWrappers();
-  for (const w of wrappers) {
-    w.addEventListener("scroll", () => {
-      if (scrollSyncing) return;
-      scrollSyncing = true;
-      try {
-        const ratio = w.scrollWidth > 0 ? w.scrollLeft / w.scrollWidth : 0;
-        for (const other of wrappers) {
-          if (other !== w) other.scrollLeft = ratio * other.scrollWidth;
-        }
-      } finally {
-        scrollSyncing = false;
-      }
-    }, { signal: scrollAbort.signal });
-  }
+  const result = attachScrollSync(getAccountsScrollWrappers);
+  scrollAbort = result.abort;
 }
 
 export function hydrateAccountsCharts(container: HTMLElement): void {
@@ -93,73 +73,12 @@ export function hydrateAccountsCharts(container: HTMLElement): void {
 
   function render(): void {
     const containerWidth = container.clientWidth || 640;
-    chartResult = renderAggregateTrendChart(trendEl, { data: aggregateTrend, containerWidth, panelWidth: ACCOUNTS_PANEL_WIDTH });
-    renderNetWorthChart(nwEl, { data: netWorthData, containerWidth, panelWidth: ACCOUNTS_PANEL_WIDTH });
+    chartResult = renderAggregateTrendChart(trendEl, { data: aggregateTrend, containerWidth, panelWidth: ACCOUNTS_POINT_WIDTH });
+    renderNetWorthChart(nwEl, { data: netWorthData, containerWidth, pointWidth: ACCOUNTS_POINT_WIDTH });
   }
 
   render();
-  attachScrollSync();
-
-  // Date picker
-  const datePicker = document.getElementById("accounts-date-picker") as HTMLInputElement | null;
-  if (datePicker && chartResult.weeks.length > 0) {
-    datePicker.min = toISODate(chartResult.weeks[0].ms);
-    datePicker.max = toISODate(chartResult.weeks[chartResult.weeks.length - 1].ms);
-
-    datePicker.addEventListener("change", () => {
-      if (!datePicker.value) return;
-      const weeks = chartResult.weeks;
-      const selectedMs = new Date(datePicker.value + "T00:00:00").getTime();
-      let nearestIdx = 0;
-      let nearestDist = Infinity;
-      for (let i = 0; i < weeks.length; i++) {
-        const dist = Math.abs(weeks[i].ms - selectedMs);
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          nearestIdx = i;
-        }
-      }
-      const weekCount = weeks.length;
-      if (weekCount === 0) return;
-      for (const wrapper of getAccountsScrollWrappers()) {
-        const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
-        const left = weekCount <= 1 ? 0 : Math.round((nearestIdx / (weekCount - 1)) * scrollMax);
-        wrapper.scrollTo({ left: Math.max(0, left - wrapper.clientWidth / 2), behavior: "smooth" });
-      }
-    });
-  }
-
-  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-  const observer = new ResizeObserver(() => {
-    if (!container.isConnected) {
-      observer.disconnect();
-      return;
-    }
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      const wrappers = getAccountsScrollWrappers();
-      const scrollRatio = wrappers.length > 0 && wrappers[0].scrollWidth > 0
-        ? wrappers[0].scrollLeft / wrappers[0].scrollWidth
-        : 1;
-      try {
-        render();
-      } catch (error) {
-        const msg = "Chart rendering failed on resize. Try refreshing the page.";
-        trendEl.textContent = msg;
-        nwEl.textContent = msg;
-        setTimeout(() => { throw error; }, 0);
-        return;
-      }
-      attachScrollSync();
-      for (const w of getAccountsScrollWrappers()) {
-        w.scrollLeft = scrollRatio * w.scrollWidth;
-      }
-    }, 150);
-  });
-  observer.observe(container);
-}
-
-function toISODate(ms: number): string {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  reattachScrollSync();
+  wireChartDatePicker("accounts-date-picker", chartResult, getAccountsScrollWrappers);
+  wireChartResize(container, render, getAccountsScrollWrappers, [trendEl, nwEl], reattachScrollSync);
 }

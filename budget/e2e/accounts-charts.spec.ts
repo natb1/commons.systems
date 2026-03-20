@@ -49,7 +49,7 @@ test.describe("accounts charts", () => {
       await trendScroll.evaluate((el, left) => { el.scrollLeft = left; }, midpoint);
       await page.evaluate(() => new Promise(requestAnimationFrame));
       const nwLeft = await nwScroll.evaluate((el) => el.scrollLeft);
-      // Net-worth chart should be near the proportional midpoint (within 2px rounding)
+      // Net-worth chart should have scrolled away from zero
       expect(nwLeft).toBeGreaterThan(0);
     }).toPass({ timeout: 5000 });
 
