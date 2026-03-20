@@ -219,6 +219,7 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 			Priority:    rd.Priority,
 			Institution: rd.Institution,
 			Account:     rd.Account,
+			Category:    rd.Category,
 		}
 	}
 
@@ -388,6 +389,7 @@ func convertExportRules(exportRules []export.Rule) []rules.Rule {
 			Priority:    r.Priority,
 			Institution: r.Institution,
 			Account:     r.Account,
+			Category:    r.Category,
 		}
 	}
 	return ruleSet

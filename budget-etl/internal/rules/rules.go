@@ -19,6 +19,7 @@ type Rule struct {
 	Priority    int    // lower number = higher priority
 	Institution string // optional: restrict to this institution
 	Account     string // optional: restrict to this account
+	Category    string // optional: restrict to transactions whose category starts with this prefix (case-insensitive)
 }
 
 // matchFields checks whether a pattern/institution/account filter matches the
@@ -102,6 +103,9 @@ func ApplyBudgetAssignment(txns []store.TransactionData, rules []Rule) {
 			continue
 		}
 		for _, r := range budgetRules {
+			if r.Category != "" && !strings.HasPrefix(strings.ToLower(txns[i].Category), strings.ToLower(r.Category)) {
+				continue
+			}
 			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account) {
 				txns[i].Budget = r.Target
 				break

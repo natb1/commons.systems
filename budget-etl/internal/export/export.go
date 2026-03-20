@@ -180,6 +180,7 @@ type Rule struct {
 	Priority      int    `json:"priority"`
 	Institution   string `json:"institution"`
 	Account       string `json:"account"`
+	Category      string `json:"category,omitempty"`
 	TransactionID string `json:"transactionId,omitempty"`
 }
 
