@@ -394,6 +394,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       path.setAttribute("d", d);
       path.setAttribute("fill", categoryColor(topIdx, target.depth));
       path.setAttribute("class", "sankey-link");
+      path.style.pointerEvents = "none";
 
       const title = document.createElementNS(SVG_NS, "title");
       title.textContent = tooltipText(target.data, rootData.value);
