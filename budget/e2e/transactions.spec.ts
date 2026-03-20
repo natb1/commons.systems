@@ -118,9 +118,10 @@ test.describe("transactions", () => {
     await expect(nodes.first()).toBeVisible();
     const nodesBefore = await nodes.count();
     await page.locator("#sankey-unbudgeted").check();
-    await page.waitForTimeout(500);
-    const nodesAfter = await page.locator("#category-sankey svg .sankey-node").count();
-    expect(nodesAfter).not.toEqual(nodesBefore);
+    await expect(async () => {
+      const count = await page.locator("#category-sankey svg .sankey-node").count();
+      expect(count).not.toEqual(nodesBefore);
+    }).toPass({ timeout: 5000 });
   });
 
   test("switching to income hides toggle and resets it", async ({ page }) => {

@@ -309,6 +309,11 @@ describe("divideTreeValues", () => {
     divideTreeValues(root, 1);
     expect(root.value).toBe(50);
   });
+
+  it("zero divisor throws RangeError", () => {
+    const root = buildCategoryTree([txn({ category: "Food", amount: 50 })]);
+    expect(() => divideTreeValues(root, 0)).toThrow(RangeError);
+  });
 });
 
 describe("filterByWeeks", () => {
@@ -427,5 +432,56 @@ describe("hydrateCategorySankey", () => {
     const links = container.querySelectorAll(".sankey-link");
     expect(nodes.length).toBeGreaterThan(0);
     expect(links.length).toBeGreaterThan(0);
+  });
+
+  it("filterTable hides rows based on unbudgeted and card payment toggles", () => {
+    // Create transaction table before hydrating so filterTable finds rows
+    const table = document.createElement("div");
+    table.id = "transactions-table";
+    const rows = [
+      { category: "Food", hasBudget: "true" },
+      { category: "Transport", hasBudget: "false" },
+      { category: "Transfer:CardPayment", hasBudget: "false" },
+      { category: "Income:Salary", hasBudget: "false" },
+    ];
+    for (const r of rows) {
+      const row = document.createElement("div");
+      row.className = "txn-row";
+      row.dataset.category = r.category;
+      row.dataset.hasBudget = r.hasBudget;
+      table.appendChild(row);
+    }
+    document.body.appendChild(table);
+
+    const container = makeContainer([
+      txn({ category: "Food", amount: 50, hasBudget: true }),
+      txn({ category: "Transport", amount: 30, hasBudget: false }),
+      txn({ category: "Transfer:CardPayment", amount: 200, hasBudget: false }),
+      txn({ category: "Income:Salary", amount: -2400, hasBudget: false }),
+    ]);
+    hydrateCategorySankey(container);
+
+    const txnRows = table.querySelectorAll<HTMLElement>(".txn-row");
+
+    // Default spending mode: income hidden, card payment hidden (default unchecked)
+    expect(txnRows[0].style.display).toBe(""); // Food visible
+    expect(txnRows[1].style.display).toBe(""); // Transport visible
+    expect(txnRows[2].style.display).toBe("none"); // CardPayment hidden
+    expect(txnRows[3].style.display).toBe("none"); // Income hidden
+
+    // Check unbudgeted toggle — budgeted Food should hide
+    const unbudgetedCheckbox = document.querySelector("#sankey-unbudgeted") as HTMLInputElement;
+    unbudgetedCheckbox.checked = true;
+    unbudgetedCheckbox.dispatchEvent(new Event("change"));
+    expect(txnRows[0].style.display).toBe("none"); // Food budgeted, now hidden
+    expect(txnRows[1].style.display).toBe(""); // Transport unbudgeted, visible
+
+    // Uncheck unbudgeted, check card payment toggle
+    unbudgetedCheckbox.checked = false;
+    unbudgetedCheckbox.dispatchEvent(new Event("change"));
+    const cardPaymentCheckbox = document.querySelector("#sankey-card-payment") as HTMLInputElement;
+    cardPaymentCheckbox.checked = true;
+    cardPaymentCheckbox.dispatchEvent(new Event("change"));
+    expect(txnRows[2].style.display).toBe(""); // CardPayment now visible
   });
 });

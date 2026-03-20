@@ -4,9 +4,13 @@ import { formatCurrency } from "../format.js";
 
 export type ChartMode = "spending" | "income";
 
+function isCardPaymentCategory(category: string): boolean {
+  return category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
+}
+
 export interface SerializedChartTransaction {
   category: string;
-  /** Cents. Positive = spending/debit, negative = income/credit. */
+  /** Dollars. Positive = spending/debit, negative = income/credit. */
   amount: number;
   reimbursement: number;
   timestampMs: number | null;
@@ -74,12 +78,14 @@ export function filterByWeeks(
  * are excluded. Builds a hierarchy
  * from colon-separated category paths. Rolls up values and counts from leaves
  * to parents, then sorts children by value descending, name ascending.
+ * When showCardPayment is false in spending mode, Transfer:CardPayment
+ * categories (and subcategories) are excluded.
  */
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
   mode: ChartMode = "spending",
   unbudgetedOnly = false,
-  showCardPayment = true,
+  showCardPayment = false,
 ): CategoryNode {
   const root: CategoryNode = { name: "All", fullPath: "", value: 0, count: 0, children: [] };
 
@@ -93,7 +99,7 @@ export function buildCategoryTree(
     if (mode === "spending" && isIncome) continue;
     if (mode === "income" && !isIncome) continue;
     if (unbudgetedOnly && t.hasBudget) continue;
-    if (!showCardPayment && mode === "spending" && (t.category === "Transfer:CardPayment" || t.category.startsWith("Transfer:CardPayment:"))) continue;
+    if (!showCardPayment && mode === "spending" && isCardPaymentCategory(t.category)) continue;
     let node = root;
     let path = "";
     for (const part of parts) {
@@ -130,6 +136,9 @@ export function buildCategoryTree(
 
 /** Divide all values in a category tree by a divisor (for per-week averages). */
 export function divideTreeValues(node: CategoryNode, divisor: number): void {
+  if (divisor <= 0 || !Number.isFinite(divisor)) {
+    throw new RangeError(`divideTreeValues: divisor must be a positive finite number, got ${divisor}`);
+  }
   node.value /= divisor;
   for (const c of node.children) divideTreeValues(c, divisor);
 }
@@ -454,7 +463,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       const isIncome = category.startsWith("Income");
       const hasBudget = row.dataset.hasBudget === "true";
 
-      const isCardPayment = category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
+      const isCardPayment = isCardPaymentCategory(category);
 
       let visible: boolean;
       if (currentMode === "income") {
