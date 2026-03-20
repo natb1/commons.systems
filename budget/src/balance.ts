@@ -439,29 +439,31 @@ export interface DerivedAccountBalance {
   readonly periods: DerivedPeriodBalance[];
 }
 
-/** Generate all YYYY-MM periods from start through end (inclusive). */
-function generatePeriodRange(start: string, end: string): string[] {
-  const periods: string[] = [];
-  const [startYear, startMonth] = start.split("-").map(Number);
-  const [endYear, endMonth] = end.split("-").map(Number);
-  let year = startYear;
-  let month = startMonth;
-  while (year < endYear || (year === endYear && month <= endMonth)) {
-    periods.push(`${year}-${String(month).padStart(2, "0")}`);
-    month++;
-    if (month > 12) { month = 1; year++; }
+/**
+ * Return the effective timestamp for a statement's balance snapshot.
+ * If balanceDate is present (from OFX DTASOF), use midnight UTC on that date.
+ * Otherwise fall back to first-of-next-month from the YYYY-MM period.
+ */
+function statementEffectiveMs(s: Statement): number {
+  if (s.balanceDate) {
+    return Date.parse(s.balanceDate + "T00:00:00Z");
   }
-  return periods;
+  return periodToAnchorMs(s.period);
 }
 
 /**
  * Compute derived balances per account by anchoring on the earliest statement
- * and computing forward through each period using primary transaction sums.
+ * and computing forward through each consecutive statement window using
+ * primary transaction sums.
  *
  * derived(0) = earliest statement ending balance
- * derived(N) = derived(N-1) - sum(primary_transactions_in_period_N)
+ * derived(N) = derived(N-1) - sum(transactions in window (effectiveMs(N-1), effectiveMs(N)])
  *
- * CardPayment transfers and non-primary normalized transactions are excluded.
+ * Windows are defined by each statement's effective date (balanceDate if present,
+ * else first-of-next-month from the period). This aligns with OFX LEDGERBAL DTASOF
+ * dates, which may fall mid-month.
+ *
+ * Non-primary normalized transactions are excluded.
  */
 export function computeDerivedBalances(
   transactions: Transaction[],
@@ -481,53 +483,62 @@ export function computeDerivedBalances(
     stmtsByAccount.get(k)!.push(s);
   }
 
-  // Group primary transactions by account and period
-  const txnsByAccountPeriod = new Map<string, number>();
+  // Build sorted list of timestamped primary transactions per account
+  const txnsByAccount = new Map<AccountKey, { ms: number; net: number }[]>();
   for (const t of transactions) {
     if (t.timestamp === null) continue;
     if (t.normalizedId !== null && !t.normalizedPrimary) continue;
-    if (isCardPaymentCategory(t.category)) continue;
     const k = key(t.institution, t.account);
-    const d = t.timestamp.toDate();
-    const period = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    const mapKey = `${k}\0${period}`;
-    txnsByAccountPeriod.set(mapKey, (txnsByAccountPeriod.get(mapKey) ?? 0) + computeNetAmount(t.amount, t.reimbursement));
+    if (!txnsByAccount.has(k)) txnsByAccount.set(k, []);
+    txnsByAccount.get(k)!.push({
+      ms: t.timestamp.toMillis(),
+      net: computeNetAmount(t.amount, t.reimbursement),
+    });
+  }
+  for (const txns of txnsByAccount.values()) {
+    txns.sort((a, b) => a.ms - b.ms);
   }
 
   const results: DerivedAccountBalance[] = [];
 
   for (const [k, stmts] of stmtsByAccount) {
-    // Sort by period to find earliest and latest
-    stmts.sort((a, b) => a.period < b.period ? -1 : a.period > b.period ? 1 : 0);
-    const earliest = stmts[0];
-    const latest = stmts[stmts.length - 1];
+    // Sort by effectiveMs
+    stmts.sort((a, b) => statementEffectiveMs(a) - statementEffectiveMs(b));
 
-    // Build statement lookup by period
-    const stmtByPeriod = new Map<string, Statement>();
-    for (const s of stmts) stmtByPeriod.set(s.period, s);
-
-    // Generate all periods from earliest through latest
-    const allPeriods = generatePeriodRange(earliest.period, latest.period);
-
+    const txns = txnsByAccount.get(k) ?? [];
     const periodBalances: DerivedPeriodBalance[] = [];
-    let derivedBalance = earliest.balance;
+    let derivedBalance = stmts[0].balance;
 
-    for (let i = 0; i < allPeriods.length; i++) {
-      const period = allPeriods[i];
+    // Anchor period
+    periodBalances.push({
+      period: stmts[0].period,
+      derivedBalance,
+      statementBalance: stmts[0].balance,
+      discrepancy: 0,
+    });
 
-      if (i > 0) {
-        // Subtract transaction sums for this period
-        const txnSum = txnsByAccountPeriod.get(`${k}\0${period}`) ?? 0;
-        derivedBalance = derivedBalance - txnSum;
+    for (let i = 1; i < stmts.length; i++) {
+      const prevMs = statementEffectiveMs(stmts[i - 1]);
+      const currMs = statementEffectiveMs(stmts[i]);
+
+      // Sum transactions in window (prevMs, currMs]
+      let windowSum = 0;
+      for (const txn of txns) {
+        if (txn.ms <= prevMs) continue;
+        if (txn.ms > currMs) break;
+        windowSum += txn.net;
       }
 
-      const stmt = stmtByPeriod.get(period);
-      const statementBalance = stmt ? stmt.balance : null;
-      const discrepancy = statementBalance !== null
-        ? Math.round((derivedBalance - statementBalance) * 100) / 100
-        : null;
+      derivedBalance = derivedBalance - windowSum;
+      const statementBalance = stmts[i].balance;
+      const discrepancy = Math.round((derivedBalance - statementBalance) * 100) / 100;
 
-      periodBalances.push({ period, derivedBalance, statementBalance, discrepancy });
+      periodBalances.push({
+        period: stmts[i].period,
+        derivedBalance,
+        statementBalance,
+        discrepancy,
+      });
     }
 
     const [inst, acct] = k.split("\0");
@@ -622,7 +633,7 @@ export function computeNetWorth(
   const divergences: BalanceDivergence[] = [];
 
   for (const [k, anchor] of latestStmts) {
-    const anchorMs = periodToAnchorMs(anchor.period);
+    const anchorMs = statementEffectiveMs(anchor);
     const anchorBalance = anchor.balance;
 
     const txns = accountTxns.get(k) ?? [];
@@ -661,7 +672,7 @@ export function computeNetWorth(
     const stmts = allStmts.get(k) ?? [];
     for (const stmt of stmts) {
       if (stmt.period === anchor.period) continue;
-      const stmtMs = periodToAnchorMs(stmt.period);
+      const stmtMs = statementEffectiveMs(stmt);
       const stmtCum = cumSumBefore(stmtMs);
       const derived = anchorBalance - (stmtCum - anchorCum);
       if (Math.abs(derived - stmt.balance) > 0.01) {

@@ -99,6 +99,7 @@ interface RawStatement {
   account: string;
   balance: number;
   period: string;
+  balanceDate?: string;
 }
 
 export interface ParsedUpload {
@@ -255,6 +256,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
       account: requireString(s.account, "statement", i, "account"),
       balance: requireFiniteNumber(s.balance, "statement", i, "balance"),
       period: requireString(s.period, "statement", i, "period"),
+      balanceDate: s.balanceDate || null,
       groupId: null as GroupId | null,
     }),
   );
@@ -332,6 +334,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       account: s.account,
       balance: s.balance,
       period: s.period,
+      balanceDate: s.balanceDate,
     })),
     meta: {
       key: "upload",

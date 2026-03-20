@@ -123,6 +123,7 @@ type Statement struct {
 	Account     string  `json:"account"`
 	Balance     float64 `json:"balance"`
 	Period      string  `json:"period"`
+	BalanceDate string  `json:"balanceDate"`
 }
 
 // Transaction is a single transaction in the JSON output.

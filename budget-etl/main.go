@@ -958,6 +958,7 @@ func buildStatementData(parsed []parsedFile) []store.StatementData {
 			Account:     pf.sf.Account,
 			Balance:     pf.result.Balance,
 			Period:      pf.sf.Period,
+			BalanceDate: pf.result.BalanceDate,
 		}
 	}
 	return out
@@ -967,6 +968,10 @@ func buildStatementData(parsed []parsedFile) []store.StatementData {
 func buildExportStatements(stmts []store.StatementData) []export.Statement {
 	out := make([]export.Statement, len(stmts))
 	for i, s := range stmts {
+		balanceDate := ""
+		if !s.BalanceDate.IsZero() {
+			balanceDate = s.BalanceDate.Format("2006-01-02")
+		}
 		out[i] = export.Statement{
 			ID:          store.StatementDocID(s.StatementID),
 			StatementID: s.StatementID,
@@ -974,6 +979,7 @@ func buildExportStatements(stmts []store.StatementData) []export.Statement {
 			Account:     s.Account,
 			Balance:     store.DollarAmount(s.Balance),
 			Period:      s.Period,
+			BalanceDate: balanceDate,
 		}
 	}
 	return out

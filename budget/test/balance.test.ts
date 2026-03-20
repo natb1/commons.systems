@@ -952,6 +952,7 @@ function makeStmt(overrides: Partial<Statement> = {}): Statement {
     account: "Checking",
     balance: 1000,
     period: "2025-01",
+    balanceDate: null,
     groupId: null,
     ...overrides,
   };
@@ -1150,18 +1151,18 @@ describe("computeDerivedBalances", () => {
     expect(result[0].periods[1].discrepancy).toBe(0);
   });
 
-  it("CardPayment transactions excluded", () => {
+  it("CardPayment transactions included (they affect individual account balances)", () => {
     const stmts = [
       makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
-      makeStmt({ id: "s2", period: "2025-02", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-02", balance: 200 }),
     ];
     const txns = [
       makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 500, timestamp: ts("2025-02-10"), budget: null, category: "Transfer:CardPayment" }),
       makeTxn({ id: "t2", institution: "Bank", account: "Checking", amount: 300, timestamp: ts("2025-02-10"), budget: null, category: "Transfer:CardPayment:Visa" }),
     ];
     const result = computeDerivedBalances(txns, stmts);
-    // CardPayment excluded, so derived stays at 1000
-    expect(result[0].periods[1].derivedBalance).toBe(1000);
+    // CardPayment included: 1000 - 500 - 300 = 200
+    expect(result[0].periods[1].derivedBalance).toBe(200);
     expect(result[0].periods[1].discrepancy).toBe(0);
   });
 
@@ -1180,8 +1181,9 @@ describe("computeDerivedBalances", () => {
     expect(result[0].periods[1].discrepancy).toBe(0);
   });
 
-  it("gap periods get null statementBalance and null discrepancy", () => {
-    // Statements for 2025-01 and 2025-03 but not 2025-02
+  it("non-consecutive statement periods: transactions windowed by effective date", () => {
+    // Statements for 2025-01 and 2025-03 (no 2025-02 statement).
+    // Transactions in both Feb and Mar are all in the window (Jan anchor, Mar stmt).
     const stmts = [
       makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
       makeStmt({ id: "s2", period: "2025-03", balance: 800 }),
@@ -1191,21 +1193,16 @@ describe("computeDerivedBalances", () => {
       makeTxn({ id: "t2", institution: "Bank", account: "Checking", amount: 100, timestamp: ts("2025-03-10"), budget: null, category: "Food" }),
     ];
     const result = computeDerivedBalances(txns, stmts);
-    expect(result[0].periods).toHaveLength(3); // 2025-01, 2025-02, 2025-03
+    // Only 2 periods (one per actual statement, no gap periods)
+    expect(result[0].periods).toHaveLength(2);
 
     // 2025-01: anchor
     expect(result[0].periods[0]).toEqual({ period: "2025-01", derivedBalance: 1000, statementBalance: 1000, discrepancy: 0 });
 
-    // 2025-02: gap — no statement
-    expect(result[0].periods[1].period).toBe("2025-02");
-    expect(result[0].periods[1].derivedBalance).toBe(900); // 1000 - 100
-    expect(result[0].periods[1].statementBalance).toBeNull();
-    expect(result[0].periods[1].discrepancy).toBeNull();
-
-    // 2025-03: statement present
-    expect(result[0].periods[2].derivedBalance).toBe(800); // 900 - 100
-    expect(result[0].periods[2].statementBalance).toBe(800);
-    expect(result[0].periods[2].discrepancy).toBe(0);
+    // 2025-03: all transactions between Jan and Mar anchor dates
+    expect(result[0].periods[1].derivedBalance).toBe(800); // 1000 - 100 - 100
+    expect(result[0].periods[1].statementBalance).toBe(800);
+    expect(result[0].periods[1].discrepancy).toBe(0);
   });
 
   it("no valid statements returns empty result", () => {
@@ -1231,6 +1228,57 @@ describe("computeDerivedBalances", () => {
     const result = computeDerivedBalances(txns, stmts);
     // Null-timestamp txn excluded, so derived stays at 1000
     expect(result[0].periods[1].derivedBalance).toBe(1000);
+    expect(result[0].periods[1].discrepancy).toBe(0);
+  });
+
+  it("mid-month balanceDate: transactions windowed correctly", () => {
+    // Two statements with mid-month balance dates (OFX DTASOF).
+    // Stmt 1: balanceDate 2025-01-15, Stmt 2: balanceDate 2025-02-14.
+    // Transaction on 2025-01-20 is in the window (Jan 15, Feb 14].
+    // Transaction on 2025-01-10 is NOT in the window (at or before Jan 15).
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000, balanceDate: "2025-01-15" }),
+      makeStmt({ id: "s2", period: "2025-02", balance: 800, balanceDate: "2025-02-14" }),
+    ];
+    const txns = [
+      makeTxn({ id: "t-before", institution: "Bank", account: "Checking", amount: 50, timestamp: ts("2025-01-10"), budget: null, category: "Food" }),
+      makeTxn({ id: "t-after", institution: "Bank", account: "Checking", amount: 200, timestamp: ts("2025-01-20"), budget: null, category: "Food" }),
+    ];
+    const result = computeDerivedBalances(txns, stmts);
+    // Only t-after is in the window: derived = 1000 - 200 = 800
+    expect(result[0].periods[1].derivedBalance).toBe(800);
+    expect(result[0].periods[1].discrepancy).toBe(0);
+  });
+
+  it("transaction on exact boundary date is included in window", () => {
+    // Transaction timestamp exactly on the balance date boundary.
+    // Window is (prevEffective, currEffective]. Transaction at currEffective should be included.
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000, balanceDate: "2025-01-15" }),
+      makeStmt({ id: "s2", period: "2025-02", balance: 850, balanceDate: "2025-02-15" }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 150, timestamp: ts("2025-02-15"), budget: null, category: "Food" }),
+    ];
+    const result = computeDerivedBalances(txns, stmts);
+    // Transaction at Feb 15 midnight UTC is at the boundary; included in (Jan 15, Feb 15] window
+    expect(result[0].periods[1].derivedBalance).toBe(850);
+    expect(result[0].periods[1].discrepancy).toBe(0);
+  });
+
+  it("fallback: statements without balanceDate use period-based boundaries", () => {
+    // Same as "single account, two periods" test but explicitly verifying null balanceDate fallback.
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000, balanceDate: null }),
+      makeStmt({ id: "s2", period: "2025-02", balance: 800, balanceDate: null }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 200, reimbursement: 0, timestamp: ts("2025-02-10"), budget: null, category: "Groceries" }),
+    ];
+    const result = computeDerivedBalances(txns, stmts);
+    // periodToAnchorMs("2025-01") = Feb 1, periodToAnchorMs("2025-02") = Mar 1
+    // Window (Feb 1, Mar 1]: t1 at Feb 10 is included → derived = 1000 - 200 = 800
+    expect(result[0].periods[1].derivedBalance).toBe(800);
     expect(result[0].periods[1].discrepancy).toBe(0);
   });
 });

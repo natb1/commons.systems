@@ -149,7 +149,8 @@ func detectFormat(path string) (format, error) {
 // along with a flag indicating if the file was skipped (e.g., investment accounts).
 type ParseResult struct {
 	Transactions []Transaction
-	Balance      int64 // cents; 0 if absent. Raw signed value from statement.
+	Balance      int64     // cents; 0 if absent. Raw signed value from statement.
+	BalanceDate  time.Time // LEDGERBAL DTASOF; zero if absent or not in OFX/SGML format.
 	Skipped      bool
 	SkipReason   string
 }

@@ -166,6 +166,7 @@ function toStatement(row: IdbStatement): Statement {
     account: row.account,
     balance: row.balance,
     period: row.period,
+    balanceDate: row.balanceDate ?? null,
     groupId: null as GroupId | null,
   };
 }
