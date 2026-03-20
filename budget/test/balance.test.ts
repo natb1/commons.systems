@@ -753,6 +753,18 @@ describe("computeAggregateTrend", () => {
     expect(result[0].avg12Income).toBe(0);
   });
 
+  it("negative income amounts produce positive avg12Income values", () => {
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+    ];
+    const txns = [
+      makeTxn({ id: "inc-1", category: "Income", amount: -1200, timestamp: ts("2025-01-07"), budget: null }),
+    ];
+    const result = computeAggregateTrend(periods, txns);
+    expect(result).toHaveLength(1);
+    expect(result[0].avg12Income).toBe(1200);
+  });
+
   it("income averages computed correctly", () => {
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),

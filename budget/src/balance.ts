@@ -268,13 +268,13 @@ export function computeAggregateTrend(
   const { weeks, weeklySpending } = indexPeriodsByWeek(periods);
   if (weeks.length === 0) return [];
 
-  // Weekly income: sum income transactions per week
+  // Weekly income: sum income transactions per week.
+  // Math.abs: income may be negative (credit convention) or positive; normalize to positive.
   const incomeTxns = filterIncomeTransactions(transactions);
   const weeklyIncome = new Map<number, number>();
   for (const t of incomeTxns) {
     const entry = toSundayEntry(t.timestamp.toDate());
-    // Income amounts are negative; accumulate as-is so the trend chart plots income below zero
-    weeklyIncome.set(entry.ms, (weeklyIncome.get(entry.ms) ?? 0) + computeNetAmount(t.amount, t.reimbursement));
+    weeklyIncome.set(entry.ms, (weeklyIncome.get(entry.ms) ?? 0) + Math.abs(computeNetAmount(t.amount, t.reimbursement)));
   }
 
   const spendingValues = weeks.map(([ms]) => weeklySpending.get(ms) ?? 0);

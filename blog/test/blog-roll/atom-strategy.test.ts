@@ -98,13 +98,20 @@ describe("AtomStrategy", () => {
     expect(result).toBeNull();
   });
 
-  it("returns null when proxy fetch throws", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Network error")));
+  it("returns null when proxy fetch throws a recoverable error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network error")));
 
     const strategy = new AtomStrategy("https://example.com/feed");
     const result = await strategy.fetchLatestPost();
 
     expect(result).toBeNull();
+  });
+
+  it("re-throws TypeError from proxy fetch", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    const strategy = new AtomStrategy("https://example.com/feed");
+    await expect(strategy.fetchLatestPost()).rejects.toThrow(TypeError);
   });
 
   it("returns null for unparseable XML", async () => {
@@ -179,5 +186,26 @@ describe("AtomStrategy", () => {
     const result = await strategy.fetchLatestPost();
 
     expect(result?.publishedAt).toBe("2026-03-01T00:00:00Z");
+  });
+
+  it("passes fetchHeaders result as fetch headers", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(ATOM_FEED),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const fetchHeaders = vi.fn().mockResolvedValue({
+      "X-Firebase-AppCheck": "test-token",
+    });
+
+    const strategy = new AtomStrategy("https://example.com/feed", undefined, fetchHeaders);
+    await strategy.fetchLatestPost();
+
+    expect(fetchHeaders).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      { headers: { "X-Firebase-AppCheck": "test-token" } },
+    );
   });
 });

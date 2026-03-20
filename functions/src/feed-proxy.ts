@@ -1,10 +1,37 @@
 import { onRequest } from "firebase-functions/v2/https";
-import type { Request } from "firebase-functions/v2/https";
+import type { Request, HttpsFunction } from "firebase-functions/v2/https";
 import type { Response } from "express";
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getAppCheck } from "firebase-admin/app-check";
 import { ALLOWED_FEED_URLS } from "./allowed-feed-urls.generated.js";
 export { ALLOWED_FEED_URLS };
 
+const adminApp = getApps().length > 0 ? getApps()[0] : initializeApp();
+
+/** Verify the AppCheck token in the request. Always returns true in the emulator
+ *  because the emulator does not issue or verify AppCheck tokens. */
+async function verifyAppCheck(req: Request): Promise<boolean> {
+  if (process.env.FUNCTIONS_EMULATOR === "true") return true;
+  const token = req.header("X-Firebase-AppCheck");
+  if (!token) return false;
+  try {
+    await getAppCheck(adminApp).verifyToken(token);
+    return true;
+  } catch (err) {
+    if (err instanceof Error && "code" in err && String((err as Record<string, unknown>).code).startsWith("app-check/")) {
+      console.error("AppCheck token invalid:", err);
+      return false;
+    }
+    throw err;
+  }
+}
+
 export async function handleFeedProxy(req: Request, res: Response) {
+  if (!(await verifyAppCheck(req))) {
+    res.status(401).send("Unauthorized: invalid or missing AppCheck token");
+    return;
+  }
+
   const url = req.query.url;
   if (typeof url !== "string" || !url) {
     res.status(400).send("Missing required query parameter: url");
@@ -50,4 +77,7 @@ export async function handleFeedProxy(req: Request, res: Response) {
   res.send(body);
 }
 
-export const feedProxy = onRequest({ cors: true }, handleFeedProxy);
+export const feedProxy: HttpsFunction = onRequest(
+  { cors: true },
+  handleFeedProxy,
+);

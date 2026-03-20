@@ -51,11 +51,12 @@ test.describe("budgets trend charts", () => {
       expect(barLeft).toBeGreaterThan(0);
     }).toPass({ timeout: 5000 });
 
-    // Scroll bar chart to the start
-    await barScroll.evaluate((el) => { el.scrollLeft = 0; });
-
-    // Verify trend chart synced to start (poll to allow event propagation)
+    // Scroll bar chart to the start and verify trend chart syncs.
+    // Retry both scroll and check: ResizeObserver may restore old position between attempts.
     await expect(async () => {
+      await barScroll.evaluate((el) => { el.scrollLeft = 0; });
+      // Allow a frame for the scroll event to propagate
+      await page.evaluate(() => new Promise(requestAnimationFrame));
       const trendLeft = await trendScroll.evaluate((el) => el.scrollLeft);
       expect(trendLeft).toBe(0);
     }).toPass({ timeout: 5000 });

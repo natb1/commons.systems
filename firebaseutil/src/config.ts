@@ -11,3 +11,6 @@ export const firebaseConfig = {
       : "commons-systems.firebaseapp.com",
   storageBucket: "commons-systems.firebasestorage.app",
 } satisfies FirebaseOptions;
+
+/** reCAPTCHA Enterprise site key for Firebase AppCheck (shared across all apps in this project). */
+export const RECAPTCHA_SITE_KEY = "6Lfv044sAAAAADtxsrFCfRFer_t7GLf1lG5vmyqN";
