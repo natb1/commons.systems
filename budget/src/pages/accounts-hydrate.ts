@@ -13,8 +13,8 @@ function deserializeAggregateTrend(raw: string): AggregatePoint[] {
   for (let i = 0; i < parsed.length; i++) {
     const el = parsed[i];
     if (typeof el.weekLabel !== "string" || typeof el.weekMs !== "number"
-      || typeof el.avg12Income !== "number" || typeof el.avg12Spending !== "number"
-      || typeof el.avg3Spending !== "number" || typeof el.avg12NetIncome !== "number") {
+      || typeof el.avg12Credits !== "number" || typeof el.avg12Spending !== "number"
+      || typeof el.avg3Spending !== "number" || typeof el.avg12NetCredits !== "number") {
       throw new DataIntegrityError(`Aggregate trend element ${i} missing or invalid fields`);
     }
   }

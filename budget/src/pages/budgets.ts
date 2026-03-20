@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Budget, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
-import { computeAverageWeeklyIncome, computeAverageWeeklySpending, computePerBudgetTrend, type PerBudgetPoint } from "../balance.js";
+import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computePerBudgetTrend, type PerBudgetPoint } from "../balance.js";
 import { formatCurrency } from "../format.js";
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
@@ -81,12 +81,12 @@ function serializePeriods(periods: BudgetPeriod[]): string {
   return escapeHtml(JSON.stringify(data));
 }
 
-function renderMetrics(averageWeeklyIncome: number, totalWeeklyBudget: number, averageWeeklySpending: number): string {
+function renderMetrics(averageWeeklyCredits: number, totalWeeklyBudget: number, averageWeeklySpending: number): string {
   return `<div id="budget-metrics" class="budget-metrics">
       <dl>
         <div class="metric">
-          <dt>12-Week Avg Weekly Income</dt>
-          <dd>${formatCurrency(averageWeeklyIncome)}</dd>
+          <dt>12-Week Avg Weekly Credits</dt>
+          <dd>${formatCurrency(averageWeeklyCredits)}</dd>
         </div>
         <div class="metric">
           <dt>Total Weekly Budget</dt>
@@ -109,7 +109,7 @@ function renderChartContainer(
   periods: BudgetPeriod[],
   metricsHtml: string,
   perBudgetTrend: PerBudgetPoint[],
-  averageWeeklyIncome: number,
+  averageWeeklyCredits: number,
 ): string {
   return `<div id="budgets-chart-controls">
       <label>Jump to: <input type="date" id="chart-date-picker"></label>
@@ -118,7 +118,7 @@ function renderChartContainer(
     <div id="budgets-chart" data-budgets="${serializeBudgets(budgets)}" data-periods="${serializePeriods(periods)}"></div>
     <div class="below-bar-chart-row">
       ${metricsHtml}
-      <div id="budgets-pie" data-average-weekly-income="${escapeHtml(String(averageWeeklyIncome))}"></div>
+      <div id="budgets-pie" data-average-weekly-credits="${escapeHtml(String(averageWeeklyCredits))}"></div>
     </div>`;
 }
 
@@ -136,12 +136,12 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
       dataSource.getTransactions()
         .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
     ]);
-    const averageWeeklyIncome = computeAverageWeeklyIncome(transactions);
+    const averageWeeklyCredits = computeAverageWeeklyCredits(transactions);
     const totalWeeklyBudget = budgets.reduce((s, b) => s + b.weeklyAllowance, 0);
     const averageWeeklySpending = computeAverageWeeklySpending(periods);
-    const metricsHtml = renderMetrics(averageWeeklyIncome, totalWeeklyBudget, averageWeeklySpending);
+    const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
     const perBudgetTrend = computePerBudgetTrend(budgets, periods, transactions);
-    chartHtml = renderChartContainer(budgets, periods, metricsHtml, perBudgetTrend, averageWeeklyIncome);
+    chartHtml = renderChartContainer(budgets, periods, metricsHtml, perBudgetTrend, averageWeeklyCredits);
     tableHtml = renderBudgetTable(budgets, authorized);
   } catch (error) {
     tableHtml = renderLoadError(error, "budgets-error");

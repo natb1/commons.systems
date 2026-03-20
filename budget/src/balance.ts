@@ -4,7 +4,7 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 export const UNBUDGETED_SERIES = "Other";
-const INCOME_WEEKS = 12;
+const CREDIT_WEEKS = 12;
 
 export function computeNetAmount(amount: number, reimbursement: number): number {
   if (reimbursement < 0 || reimbursement > 100) {
@@ -17,17 +17,22 @@ interface TimestampedTransaction extends Transaction {
   readonly timestamp: Timestamp;
 }
 
+function isCardPaymentCategory(category: string): boolean {
+  return category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
+}
+
 function netAmount(t: Transaction): number {
   return computeNetAmount(t.amount, t.reimbursement);
 }
 
-/** Filter to timestamped income transactions, excluding non-primary normalized duplicates. */
-function filterIncomeTransactions(transactions: Transaction[]): TimestampedTransaction[] {
+/** Filter to timestamped credit transactions (negative net amount), excluding non-primary normalized duplicates. */
+function filterCreditTransactions(transactions: Transaction[]): TimestampedTransaction[] {
   return transactions.filter(
     (t): t is TimestampedTransaction =>
-      t.category.startsWith("Income")
+      computeNetAmount(t.amount, t.reimbursement) < 0
       && t.timestamp !== null
-      && (t.normalizedId === null || t.normalizedPrimary),
+      && (t.normalizedId === null || t.normalizedPrimary)
+      && !isCardPaymentCategory(t.category),
   );
 }
 
@@ -205,11 +210,11 @@ export function computeAllBudgetBalances(
 export interface AggregatePoint {
   readonly weekLabel: string;
   readonly weekMs: number;
-  readonly avg12Income: number;
+  readonly avg12Credits: number;
   readonly avg12Spending: number;
   readonly avg3Spending: number;
-  /** Equals `avg12Income - avg12Spending`. */
-  readonly avg12NetIncome: number;
+  /** Equals `avg12Credits - avg12Spending`. */
+  readonly avg12NetCredits: number;
 }
 
 export interface PerBudgetPoint {
@@ -259,8 +264,8 @@ function indexPeriodsByWeek(periods: BudgetPeriod[]): {
 }
 
 /**
- * Compute aggregate trend data: rolling averages of income and spending per week.
- * Weeks are derived from budget periods. Income is computed from transactions.
+ * Compute aggregate trend data: rolling averages of credits and spending per week.
+ * Weeks are derived from budget periods. Credits are transactions with negative net amounts.
  */
 export function computeAggregateTrend(
   periods: BudgetPeriod[],
@@ -269,34 +274,33 @@ export function computeAggregateTrend(
   const { weeks, weeklySpending } = indexPeriodsByWeek(periods);
   if (weeks.length === 0) return [];
 
-  // Weekly income: sum income transactions per week.
-  // Math.abs: income amounts are negative (credit convention); abs converts to positive magnitude for display.
-  const incomeTxns = filterIncomeTransactions(transactions);
-  const weeklyIncome = new Map<number, number>();
-  for (const t of incomeTxns) {
+  // Weekly credits: sum credit transactions (negative net) per week, negated to positive.
+  const creditTxns = filterCreditTransactions(transactions);
+  const weeklyCredits = new Map<number, number>();
+  for (const t of creditTxns) {
     const entry = toSundayEntry(t.timestamp.toDate());
-    weeklyIncome.set(entry.ms, (weeklyIncome.get(entry.ms) ?? 0) + Math.abs(computeNetAmount(t.amount, t.reimbursement)));
+    weeklyCredits.set(entry.ms, (weeklyCredits.get(entry.ms) ?? 0) + (-netAmount(t)));
   }
 
   const spendingValues = weeks.map(([ms]) => weeklySpending.get(ms) ?? 0);
-  const incomeValues = weeks.map(([ms]) => weeklyIncome.get(ms) ?? 0);
+  const creditValues = weeks.map(([ms]) => weeklyCredits.get(ms) ?? 0);
 
   const avg12Spending = computeRollingAverage(spendingValues, 12);
   const avg3Spending = computeRollingAverage(spendingValues, 3);
-  const avg12Income = computeRollingAverage(incomeValues, 12);
+  const avg12Credits = computeRollingAverage(creditValues, 12);
 
   return weeks.map(([ms, label], i) => ({
     weekLabel: label,
     weekMs: ms,
-    avg12Income: avg12Income[i],
+    avg12Credits: avg12Credits[i],
     avg12Spending: avg12Spending[i],
     avg3Spending: avg3Spending[i],
-    avg12NetIncome: avg12Income[i] - avg12Spending[i],
+    avg12NetCredits: avg12Credits[i] - avg12Spending[i],
   }));
 }
 
 /**
- * Compute per-budget 3-week rolling average of non-income spending.
+ * Compute per-budget 3-week rolling average of non-credit spending.
  * Includes an "Other" series when qualifying unbudgeted transactions exist.
  */
 export function computePerBudgetTrend(
@@ -313,7 +317,7 @@ export function computePerBudgetTrend(
       t.budget === null
       && t.timestamp !== null
       && (t.normalizedId === null || t.normalizedPrimary)
-      && !t.category.startsWith("Income"),
+      && computeNetAmount(t.amount, t.reimbursement) > 0,
   );
   for (const t of unbudgetedTxns) {
     const entry = toSundayEntry(t.timestamp.toDate());
@@ -390,36 +394,36 @@ function endOfWeekMs(timestampMs: number): number {
 }
 
 /**
- * Compute average weekly income over the trailing 12-week window ending at the
- * Monday after the latest income transaction. Income transactions are identified
- * by categories starting with "Income". Non-primary normalized duplicates and
- * null-timestamp transactions are excluded. Returns 0 when no qualifying income
- * transactions exist. Income amounts are negative (credit convention);
- * absolute-valued before summing to produce a positive result.
+ * Compute average weekly credits over the trailing 12-week window ending at the
+ * Monday after the latest credit transaction. Credit transactions are identified
+ * by negative net amount. Transfer:CardPayment transactions are excluded even
+ * when negative, to avoid double-counting card payment flows. Non-primary
+ * normalized duplicates and null-timestamp transactions are excluded. Returns 0
+ * when no qualifying credit transactions exist. Values are negated before
+ * summing to produce positive display amounts.
  */
-export function computeAverageWeeklyIncome(transactions: Transaction[]): number {
-  const incomeTxns = filterIncomeTransactions(transactions);
+export function computeAverageWeeklyCredits(transactions: Transaction[]): number {
+  const creditTxns = filterCreditTransactions(transactions);
 
-  if (incomeTxns.length === 0) return 0;
+  if (creditTxns.length === 0) return 0;
 
   let latestMs = -Infinity;
-  for (const t of incomeTxns) {
+  for (const t of creditTxns) {
     const ms = t.timestamp.toMillis();
     if (ms > latestMs) latestMs = ms;
   }
   const windowEnd = endOfWeekMs(latestMs);
-  const windowStart = windowEnd - INCOME_WEEKS * MS_PER_WEEK;
+  const windowStart = windowEnd - CREDIT_WEEKS * MS_PER_WEEK;
 
   let sum = 0;
-  for (const t of incomeTxns) {
+  for (const t of creditTxns) {
     const ms = t.timestamp.toMillis();
     if (ms >= windowStart && ms < windowEnd) {
-      // Income amounts are negative; use abs to get positive magnitude for display
-      sum += Math.abs(computeNetAmount(t.amount, t.reimbursement));
+      sum += -netAmount(t);
     }
   }
 
-  return sum / INCOME_WEEKS;
+  return sum / CREDIT_WEEKS;
 }
 
 export interface NetWorthPoint {
@@ -463,7 +467,7 @@ function periodToAnchorMs(period: string): number {
  * transaction sums relative to the anchor to derive balance at each week boundary. Net worth at each week
  * is the sum of all account balances.
  *
- * Transaction sign convention: positive = spending (reduces balance), negative = income (increases balance).
+ * Transaction sign convention: positive = spending (reduces balance), negative = credit (increases balance).
  * Statement balance: raw signed from bank (positive = asset, negative = liability).
  */
 export function computeNetWorth(

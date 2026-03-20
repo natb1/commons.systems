@@ -96,11 +96,11 @@ describe("renderBudgetPieChart", () => {
       makeBudget({ id: "fun" as any, name: "Fun", weeklyAllowance: 250 }),
     ];
 
-    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 1000 });
+    renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 1000 });
 
     const svg = container.querySelector("svg");
     expect(svg).not.toBeNull();
-    expect(svg!.getAttribute("aria-label")).toBe("Income allocation pie chart");
+    expect(svg!.getAttribute("aria-label")).toBe("Credits allocation pie chart");
 
     const paths = svg!.querySelectorAll("path");
     expect(paths).toHaveLength(3);
@@ -120,9 +120,9 @@ describe("renderBudgetPieChart", () => {
       makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100 }),
     ];
 
-    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 0 });
+    renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 0 });
 
-    expect(container.textContent).toBe("No income data");
+    expect(container.textContent).toBe("No credits data");
     expect(container.querySelector("svg")).toBeNull();
   });
 
@@ -133,11 +133,11 @@ describe("renderBudgetPieChart", () => {
       makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 500 }),
     ];
 
-    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 800 });
+    renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 800 });
 
     const warning = container.querySelector(".pie-overage-warning");
     expect(warning).not.toBeNull();
-    expect(warning!.textContent).toContain("Budgets exceed income by");
+    expect(warning!.textContent).toContain("Budgets exceed credits by");
     expect(warning!.textContent).toContain("/week");
   });
 
@@ -147,7 +147,7 @@ describe("renderBudgetPieChart", () => {
       makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100 }),
     ];
 
-    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 500 });
+    renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 500 });
 
     const warning = container.querySelector(".pie-overage-warning");
     expect(warning).toBeNull();
@@ -159,7 +159,7 @@ describe("renderBudgetPieChart", () => {
       makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 200 }),
     ];
 
-    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 500 });
+    renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 500 });
 
     const legendText = container.querySelector(".pie-legend")!.textContent || "";
     expect(legendText).toContain("Not Budgeted");
@@ -180,7 +180,7 @@ describe("renderBudgetPieChart", () => {
       makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 100 }),
     ];
 
-    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 750 });
+    renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 750 });
 
     const svg = container.querySelector("svg")!;
     const text = svg.querySelector("text");
@@ -198,7 +198,7 @@ describe("renderBudgetPieChart", () => {
       makeBudget({ id: "fun" as any, name: "Fun", weeklyAllowance: 334 }),
     ];
 
-    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 1000 });
+    renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 1000 });
 
     const legendItems = container.querySelectorAll(".pie-legend-item");
     let totalPct = 0;

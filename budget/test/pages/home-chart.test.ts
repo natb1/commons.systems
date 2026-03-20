@@ -43,7 +43,7 @@ function makeContainer(txns?: SerializedChartTransaction[]): HTMLElement {
   controlsDiv.innerHTML = `
     <fieldset id="sankey-mode">
       <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
-      <label><input type="radio" name="sankey-mode" value="income"> Income</label>
+      <label><input type="radio" name="sankey-mode" value="credits"> Credits</label>
     </fieldset>
     <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
     <label id="card-payment-toggle"><input type="checkbox" id="sankey-card-payment"> Show card payments</label>
@@ -181,20 +181,21 @@ describe("buildCategoryTree", () => {
     expect(names1).toEqual(["A", "M", "Z"]); // equal values → alphabetical
   });
 
-  it("income mode includes only Income-prefixed categories", () => {
+  it("credits mode includes negative-amount transactions", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Food", amount: 50 }),
-      txn({ category: "Income:Freelance", amount: -500 }),
-    ], "income");
-    expect(root.children).toHaveLength(1);
-    const income = root.children[0];
-    expect(income.name).toBe("Income");
-    expect(income.children).toHaveLength(2);
-    expect(income.value).toBe(2900);
+      txn({ category: "Travel:Reimbursement", amount: -22.99 }),
+    ], "credits");
+    expect(root.children).toHaveLength(2);
+    const income = root.children.find(c => c.name === "Income");
+    const travel = root.children.find(c => c.name === "Travel");
+    expect(income).toBeDefined();
+    expect(travel).toBeDefined();
+    expect(root.value).toBeCloseTo(2422.99);
   });
 
-  it("spending mode excludes Income-prefixed categories", () => {
+  it("spending mode excludes negative-amount transactions", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Food", amount: 50 }),
@@ -204,19 +205,24 @@ describe("buildCategoryTree", () => {
     expect(root.value).toBe(50);
   });
 
-  it("positive income amount is included via Math.abs", () => {
-    const root = buildCategoryTree([
+  it("credits mode excludes positive amounts; spending mode includes them", () => {
+    const creditsRoot = buildCategoryTree([
       txn({ category: "Income:Salary", amount: 2400 }),
-    ], "income");
-    expect(root.value).toBe(2400);
-    expect(root.children).toHaveLength(1);
-    expect(root.children[0].name).toBe("Income");
+    ], "credits");
+    expect(creditsRoot.value).toBe(0);
+    expect(creditsRoot.children).toHaveLength(0);
+
+    const spendingRoot = buildCategoryTree([
+      txn({ category: "Income:Salary", amount: 2400 }),
+    ], "spending");
+    expect(spendingRoot.value).toBe(2400);
+    expect(spendingRoot.children[0].name).toBe("Income");
   });
 
-  it("income mode with no income returns empty tree", () => {
+  it("credits mode with no negative-amount transactions returns empty tree", () => {
     const root = buildCategoryTree([
       txn({ category: "Food", amount: 50 }),
-    ], "income");
+    ], "credits");
     expect(root.value).toBe(0);
     expect(root.children).toHaveLength(0);
   });
@@ -279,21 +285,31 @@ describe("buildCategoryTree", () => {
     expect(root.value).toBe(50);
   });
 
-  it("showCardPayment=false does not affect income mode", () => {
-    const root = buildCategoryTree([
-      txn({ category: "Income:Salary", amount: -2400 }),
-      txn({ category: "Transfer:CardPayment", amount: 200 }),
-    ], "income", false, false);
-    expect(root.children).toHaveLength(1);
-    expect(root.children[0].name).toBe("Income");
-    expect(root.value).toBe(2400);
+  it("credits mode: showCardPayment=false excludes Transfer:CardPayment credits", () => {
+    const txns: SerializedChartTransaction[] = [
+      txn({ category: "Transfer:CardPayment", amount: -200 }),
+      txn({ category: "Travel:Reimbursement", amount: -50 }),
+    ];
+    const tree = buildCategoryTree(txns, "credits", false, false);
+    expect(tree.value).toBeCloseTo(50);
+    expect(tree.children.some(c => c.name === "Transfer")).toBe(false);
   });
 
-  it("income mode: negative amounts produce positive tree values", () => {
+  it("credits mode: showCardPayment=true includes Transfer:CardPayment credits", () => {
+    const txns: SerializedChartTransaction[] = [
+      txn({ category: "Transfer:CardPayment", amount: -200 }),
+      txn({ category: "Travel:Reimbursement", amount: -50 }),
+    ];
+    const tree = buildCategoryTree(txns, "credits", false, true);
+    expect(tree.value).toBeCloseTo(250);
+    expect(tree.children.some(c => c.name === "Transfer")).toBe(true);
+  });
+
+  it("credits mode: negative amounts produce positive tree values", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Income:Freelance", amount: -500 }),
-    ], "income");
+    ], "credits");
     expect(root.value).toBe(2900);
     const income = root.children.find(c => c.name === "Income");
     expect(income).toBeDefined();
@@ -304,7 +320,7 @@ describe("buildCategoryTree", () => {
     expect(freelance!.value).toBe(500);
   });
 
-  it("income mode: negative amounts excluded in spending mode", () => {
+  it("spending mode excludes negative-amount transactions regardless of category", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Income:Freelance", amount: -500 }),
@@ -315,12 +331,18 @@ describe("buildCategoryTree", () => {
     expect(root.children[0].value).toBe(50);
   });
 
-  it("income mode: mixed positive and negative income amounts", () => {
-    const root = buildCategoryTree([
+  it("credits and spending split by sign: Income:Salary positive→spending, Income:Freelance negative→credits", () => {
+    const creditsRoot = buildCategoryTree([
       txn({ category: "Income:Salary", amount: 2400 }),
       txn({ category: "Income:Freelance", amount: -500 }),
-    ], "income");
-    expect(root.value).toBe(2900);
+    ], "credits");
+    expect(creditsRoot.value).toBe(500);
+
+    const spendingRoot = buildCategoryTree([
+      txn({ category: "Income:Salary", amount: 2400 }),
+      txn({ category: "Income:Freelance", amount: -500 }),
+    ], "spending");
+    expect(spendingRoot.value).toBe(2400);
   });
 });
 
@@ -520,16 +542,17 @@ describe("hydrateCategorySankey", () => {
     const table = document.createElement("div");
     table.id = "transactions-table";
     const rows = [
-      { category: "Food", hasBudget: "true" },
-      { category: "Transport", hasBudget: "false" },
-      { category: "Transfer:CardPayment", hasBudget: "false" },
-      { category: "Income:Salary", hasBudget: "false" },
+      { category: "Food", hasBudget: "true", netAmount: "50" },
+      { category: "Transport", hasBudget: "false", netAmount: "30" },
+      { category: "Transfer:CardPayment", hasBudget: "false", netAmount: "200" },
+      { category: "Income:Salary", hasBudget: "false", netAmount: "-2400" },
     ];
     for (const r of rows) {
       const row = document.createElement("div");
       row.className = "txn-row";
       row.dataset.category = r.category;
       row.dataset.hasBudget = r.hasBudget;
+      row.dataset.netAmount = r.netAmount;
       table.appendChild(row);
     }
     document.body.appendChild(table);
@@ -544,11 +567,11 @@ describe("hydrateCategorySankey", () => {
 
     const txnRows = table.querySelectorAll<HTMLElement>(".txn-row");
 
-    // Default spending mode: income hidden, card payment hidden (default unchecked)
-    expect(txnRows[0].style.display).toBe(""); // Food visible
-    expect(txnRows[1].style.display).toBe(""); // Transport visible
-    expect(txnRows[2].style.display).toBe("none"); // CardPayment hidden
-    expect(txnRows[3].style.display).toBe("none"); // Income hidden
+    // Default spending mode: negative-amount rows hidden, card payment hidden (default unchecked)
+    expect(txnRows[0].style.display).toBe(""); // Food visible (positive)
+    expect(txnRows[1].style.display).toBe(""); // Transport visible (positive)
+    expect(txnRows[2].style.display).toBe("none"); // CardPayment hidden (card payment toggle off)
+    expect(txnRows[3].style.display).toBe("none"); // Income:Salary hidden (negative amount → credit)
 
     // Check unbudgeted toggle — budgeted Food should hide
     const unbudgetedCheckbox = document.querySelector("#sankey-unbudgeted") as HTMLInputElement;
@@ -566,20 +589,119 @@ describe("hydrateCategorySankey", () => {
     expect(txnRows[2].style.display).toBe(""); // CardPayment now visible
   });
 
-  it("filterTable hides rows not matching category filter", () => {
+  it("Travel:Reimbursement (negative amount) hidden in spending, visible in credits mode", () => {
+    const table = document.createElement("div");
+    table.id = "transactions-table";
+    const row = document.createElement("div");
+    row.className = "txn-row";
+    row.dataset.category = "Travel:Reimbursement";
+    row.dataset.hasBudget = "false";
+    row.dataset.netAmount = "-22.99";
+    table.appendChild(row);
+    document.body.appendChild(table);
+
+    const container = makeContainer([
+      txn({ category: "Travel:Reimbursement", amount: -22.99 }),
+    ]);
+    hydrateCategorySankey(container);
+
+    const txnRows = table.querySelectorAll<HTMLElement>(".txn-row");
+    // Default spending mode: Travel:Reimbursement is hidden (negative amount = credit)
+    expect(txnRows[0].style.display).toBe("none");
+
+    // Switch to credits mode — negative amount → visible
+    const creditsRadio = document.querySelector<HTMLInputElement>('input[name="sankey-mode"][value="credits"]')!;
+    creditsRadio.checked = true;
+    creditsRadio.dispatchEvent(new Event("change"));
+    expect(txnRows[0].style.display).toBe(""); // negative amount → visible in credits mode
+  });
+
+  it("credits mode shows negative-amount rows, hides positive-amount rows", () => {
     const table = document.createElement("div");
     table.id = "transactions-table";
     const rows = [
-      { category: "Food", hasBudget: "false" },
-      { category: "Food:Groceries", hasBudget: "false" },
-      { category: "Food:Dining", hasBudget: "false" },
-      { category: "Travel", hasBudget: "false" },
+      { category: "Food", hasBudget: "false", netAmount: "50" },
+      { category: "Income:Salary", hasBudget: "false", netAmount: "-2400" },
     ];
     for (const r of rows) {
       const row = document.createElement("div");
       row.className = "txn-row";
       row.dataset.category = r.category;
       row.dataset.hasBudget = r.hasBudget;
+      row.dataset.netAmount = r.netAmount;
+      table.appendChild(row);
+    }
+    document.body.appendChild(table);
+
+    const container = makeContainer([
+      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Income:Salary", amount: -2400 }),
+    ]);
+    hydrateCategorySankey(container);
+
+    const txnRows = table.querySelectorAll<HTMLElement>(".txn-row");
+    // Default spending mode: Food visible (positive), Income:Salary hidden (negative)
+    expect(txnRows[0].style.display).toBe(""); // Food visible
+    expect(txnRows[1].style.display).toBe("none"); // Income:Salary hidden (negative)
+
+    // Switch to credits mode
+    const creditsRadio = document.querySelector<HTMLInputElement>('input[name="sankey-mode"][value="credits"]')!;
+    creditsRadio.checked = true;
+    creditsRadio.dispatchEvent(new Event("change"));
+    expect(txnRows[0].style.display).toBe("none"); // Food hidden (positive, not a credit)
+    expect(txnRows[1].style.display).toBe(""); // Income:Salary visible (negative = credit)
+  });
+
+  it("filterTable in credits mode hides card payment rows when card payment toggle is off", () => {
+    const table = document.createElement("div");
+    table.id = "transactions-table";
+    const rows = [
+      { category: "Income:Salary", hasBudget: "false", netAmount: "-2400" },
+      { category: "Transfer:CardPayment", hasBudget: "false", netAmount: "-150" },
+    ];
+    for (const r of rows) {
+      const row = document.createElement("div");
+      row.className = "txn-row";
+      row.dataset.category = r.category;
+      row.dataset.hasBudget = r.hasBudget;
+      row.dataset.netAmount = r.netAmount;
+      table.appendChild(row);
+    }
+    document.body.appendChild(table);
+
+    const container = makeContainer([
+      txn({ category: "Income:Salary", amount: -2400 }),
+      txn({ category: "Transfer:CardPayment", amount: -150 }),
+    ]);
+    hydrateCategorySankey(container);
+
+    const txnRows = table.querySelectorAll<HTMLElement>(".txn-row");
+
+    // Switch to credits mode
+    const creditsRadio = document.querySelector<HTMLInputElement>('input[name="sankey-mode"][value="credits"]')!;
+    creditsRadio.checked = true;
+    creditsRadio.dispatchEvent(new Event("change"));
+
+    // Card payment toggle defaults off in credits mode — card payment row hidden even though negative
+    expect(txnRows[0].style.display).toBe(""); // Income:Salary visible (negative = credit)
+    expect(txnRows[1].style.display).toBe("none"); // Transfer:CardPayment hidden (card payment toggle off)
+  });
+
+  it("filterTable hides rows not matching category filter", () => {
+    const table = document.createElement("div");
+    table.id = "transactions-table";
+    const rows = [
+      { category: "Food", hasBudget: "false", netAmount: "50" },
+      { category: "Food:Groceries", hasBudget: "false", netAmount: "30" },
+      { category: "Food:Dining", hasBudget: "false", netAmount: "20" },
+      { category: "Travel", hasBudget: "false", netAmount: "40" },
+    ];
+    for (const r of rows) {
+      const row = document.createElement("div");
+      row.className = "txn-row";
+      row.dataset.category = r.category;
+      row.dataset.hasBudget = r.hasBudget;
+      row.dataset.netAmount = r.netAmount;
       table.appendChild(row);
     }
     document.body.appendChild(table);
