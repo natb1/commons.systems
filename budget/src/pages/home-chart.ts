@@ -279,10 +279,11 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   const unbudgetedCheckbox = controlsDiv.querySelector("#sankey-unbudgeted") as HTMLInputElement | null;
   const cardPaymentToggle = controlsDiv.querySelector("#card-payment-toggle") as HTMLElement | null;
   const cardPaymentCheckbox = controlsDiv.querySelector("#sankey-card-payment") as HTMLInputElement | null;
-  const categoryFilterInput = controlsDiv.querySelector("#sankey-category-filter") as HTMLInputElement | null;
-  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox || !categoryFilterInput) {
+  const categoryFilterInputRaw = controlsDiv.querySelector("#sankey-category-filter") as HTMLInputElement | null;
+  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox || !categoryFilterInputRaw) {
     throw new Error("sankey control elements missing");
   }
+  const categoryFilterInput: HTMLInputElement = categoryFilterInputRaw;
 
   const categoryOptionsAttr = controlsDiv.getAttribute("data-category-options");
   const categoryOptions: string[] = categoryOptionsAttr ? JSON.parse(categoryOptionsAttr) : [];
