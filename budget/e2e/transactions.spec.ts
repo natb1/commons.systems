@@ -283,7 +283,8 @@ test.describe("transactions", () => {
     await expect(nodeText).toBeVisible();
     const categoryName = await nodeText.textContent();
     expect(categoryName).toBeTruthy();
-    await nodeText.click();
+    await nodeText.scrollIntoViewIfNeeded();
+    await nodeText.click({ force: true });
     const filterInput = page.locator("#sankey-category-filter");
     await expect(filterInput).toHaveValue(categoryName!);
     const countAfter = await visibleRows.count();
