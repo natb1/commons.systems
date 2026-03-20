@@ -64,7 +64,7 @@ export interface AppContextOptions {
 }
 
 /**
- * Create a Firebase app context with Firestore, analytics, optional AppCheck, and optional Storage.
+ * Create a Firebase app context with Firestore (with offline persistence), analytics, optional AppCheck, and optional Storage.
  *
  * Env vars:
  * - `VITE_FIRESTORE_NAMESPACE` — required in dev/preview (throws if missing); defaults to `{appName}/prod` in production
@@ -146,6 +146,8 @@ export function createAppContext(
       }
     : undefined;
 
+  // Persistent local cache (IndexedDB) is skipped for the emulator — it destroys
+  // Playwright's execution context during navigation, breaking acceptance tests.
   const db = initializeFirestore(app, {
     ...(firestoreEmulatorHost ? {} : { localCache: persistentLocalCache({}) }),
   });
