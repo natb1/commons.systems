@@ -1027,4 +1027,28 @@ describe("computeNetWorth", () => {
     // Only primary counted: balance at Jan 5 = 1000 + 50 = 1050
     expect(result.points[0].netWorth).toBe(1050);
   });
+
+  it("skips statements with non-YYYY-MM periods", () => {
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", period: "accountActivityExport(3)", balance: 500, institution: "Bank2", account: "Other" }),
+    ];
+    const result = computeNetWorth([], stmts, weeks);
+    // Bank2/Other statement is skipped — only Bank/Checking contributes
+    expect(result.points).toHaveLength(3);
+    for (const p of result.points) {
+      expect(p.netWorth).toBe(1000);
+    }
+    expect(result.divergences).toEqual([]);
+  });
+
+  it("returns empty when all statements have invalid periods", () => {
+    const stmts = [
+      makeStmt({ id: "s1", period: "activity(1)", balance: 500 }),
+      makeStmt({ id: "s2", period: "2026-03-19_transaction_download", balance: 300 }),
+    ];
+    const result = computeNetWorth([], stmts, weeks);
+    expect(result.points).toEqual([]);
+    expect(result.divergences).toEqual([]);
+  });
 });

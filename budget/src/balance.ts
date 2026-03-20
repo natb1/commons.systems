@@ -440,6 +440,11 @@ export interface NetWorthResult {
   readonly divergences: BalanceDivergence[];
 }
 
+/** Return true when the period string matches YYYY-MM format (the only format periodToAnchorMs can convert). */
+function isValidPeriod(period: string): boolean {
+  return /^\d{4}-\d{2}$/.test(period);
+}
+
 /** Convert statement period "YYYY-MM" to approximate end-of-month timestamp (first of next month, UTC). */
 function periodToAnchorMs(period: string): number {
   const [yearStr, monthStr] = period.split("-");
@@ -465,7 +470,10 @@ export function computeNetWorth(
   statements: Statement[],
   weeks: readonly { label: string; ms: number }[],
 ): NetWorthResult {
-  if (weeks.length === 0 || statements.length === 0) return { points: [], divergences: [] };
+  // Only statements with YYYY-MM periods can be converted to timestamps for balance derivation.
+  // Non-YYYY-MM periods (e.g. bank export filenames like "accountActivityExport(3)") are skipped.
+  const validStatements = statements.filter(s => isValidPeriod(s.period));
+  if (weeks.length === 0 || validStatements.length === 0) return { points: [], divergences: [] };
 
   type AccountKey = string;
   const key = (inst: string, acct: string): AccountKey => `${inst}\0${acct}`;
@@ -473,7 +481,7 @@ export function computeNetWorth(
   // Group statements by account, keep latest per account
   const latestStmts = new Map<AccountKey, Statement>();
   const allStmts = new Map<AccountKey, Statement[]>();
-  for (const s of statements) {
+  for (const s of validStatements) {
     const k = key(s.institution, s.account);
     if (!allStmts.has(k)) allStmts.set(k, []);
     allStmts.get(k)!.push(s);
