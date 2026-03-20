@@ -279,7 +279,7 @@ describe("buildCategoryTree", () => {
 
   it("showCardPayment=false does not affect income mode", () => {
     const root = buildCategoryTree([
-      txn({ category: "Income:Salary", amount: 2400 }),
+      txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Transfer:CardPayment", amount: 200 }),
     ], "income", false, false);
     expect(root.children).toHaveLength(1);
