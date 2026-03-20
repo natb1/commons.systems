@@ -144,7 +144,7 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
     const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
     const aggregateTrend = computeAggregateTrend(periods, transactions);
     const perBudgetTrend = computePerBudgetTrend(budgets, periods, transactions);
-    chartHtml = renderChartContainer(budgets, periods, metricsHtml, aggregateTrend, perBudgetTrend, averageWeeklyIncome);
+    chartHtml = renderChartContainer(budgets, periods, metricsHtml, aggregateTrend, perBudgetTrend);
     tableHtml = renderBudgetTable(budgets, authorized);
   } catch (error) {
     tableHtml = renderLoadError(error, "budgets-error");
