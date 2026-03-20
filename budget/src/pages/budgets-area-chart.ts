@@ -49,7 +49,7 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
       weekIndex,
       weekLabel: d.weekLabel,
       budget: d.budget,
-      value: d.avg3Spending,
+      value: Math.max(0, d.avg3Spending),
     });
   }
 
