@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
+	"github.com/natb1/commons.systems/budget-etl/internal/keychain"
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
 	"github.com/natb1/commons.systems/budget-etl/internal/store"
@@ -31,9 +32,10 @@ func main() {
 	firestoreFlag := flag.Bool("firestore", false, "Write to Firestore (required when --output is not set)")
 	inputPath := flag.String("input", "", "Read rules/budgets/transactions from existing JSON file")
 	password := flag.String("password", "", "Encrypt/decrypt the JSON file with this password")
+	keychainFlag := flag.Bool("keychain", false, "Store/retrieve password from macOS Keychain")
 
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--password <pass>] [--env <env>] [--dry-run]")
+		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--password <pass>] [--keychain] [--env <env>] [--dry-run]")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -49,6 +51,37 @@ func main() {
 	if *inputPath != "" && *outputPath == "" {
 		fmt.Fprintln(os.Stderr, "Error: --input requires --output")
 		os.Exit(1)
+	}
+
+	// Resolve password from keychain if --keychain is set
+	if *keychainFlag {
+		if *password == "" {
+			// Retrieve: use input filename as account
+			if *inputPath == "" {
+				fmt.Fprintln(os.Stderr, "Error: --keychain without --password requires --input")
+				os.Exit(1)
+			}
+			account := filepath.Base(*inputPath)
+			pw, err := keychain.Get(account)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			*password = pw
+			log.Printf("retrieved password from keychain (account: %s)", account)
+		} else {
+			// Store: use output filename as account
+			if *outputPath == "" {
+				fmt.Fprintln(os.Stderr, "Error: --keychain with --password requires --output")
+				os.Exit(1)
+			}
+			account := filepath.Base(*outputPath)
+			if err := keychain.Set(account, *password); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			log.Printf("stored password in keychain (account: %s)", account)
+		}
 	}
 
 	if *inputPath != "" && *dir != "" {
