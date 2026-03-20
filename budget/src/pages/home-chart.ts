@@ -66,9 +66,11 @@ export function filterByWeeks(
  *
  * Filters transactions by mode (spending excludes Income-prefixed categories,
  * income includes only Income-prefixed categories) and excludes transactions
- * with zero or negative net amounts (after reimbursement). Builds a hierarchy
- * from colon-separated category paths. Rolls up values and counts from leaves
- * to parents, then sorts children by value descending, name ascending.
+ * with zero or negative net amounts (after reimbursement). In income mode,
+ * applies Math.abs() so both positive and negative income conventions produce
+ * positive chart values. Builds a hierarchy from colon-separated category
+ * paths. Rolls up values and counts from leaves to parents, then sorts
+ * children by value descending, name ascending.
  */
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
@@ -415,11 +417,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       render();
     } catch (error) {
       container.textContent = "Chart rendering failed. Try refreshing the page.";
-      if (error instanceof TypeError || error instanceof ReferenceError) {
-        setTimeout(() => { throw error; }, 0);
-        return;
-      }
-      console.error("Chart render error:", error);
+      setTimeout(() => { throw error; }, 0);
     }
   }
 
