@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth } from "../src/balance";
+import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeDerivedBalances } from "../src/balance";
 import type { Budget, BudgetPeriod, Statement, Transaction } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -1072,5 +1072,165 @@ describe("computeNetWorth", () => {
     const result = computeNetWorth([], stmts, weeks);
     expect(result.points).toEqual([]);
     expect(result.divergences).toEqual([]);
+  });
+});
+
+describe("computeDerivedBalances", () => {
+  it("single account, two periods, consistent balances (no discrepancy)", () => {
+    // Statement anchor at 2025-01 with balance 1000.
+    // In 2025-02, one transaction of 200 spending.
+    // derived(2025-01) = 1000 (anchor), derived(2025-02) = 1000 - 200 = 800.
+    // Statement for 2025-02 says 800 → discrepancy = 0.
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-02", balance: 800 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 200, reimbursement: 0, timestamp: ts("2025-02-10"), budget: null, category: "Groceries" }),
+    ];
+    const result = computeDerivedBalances(txns, stmts);
+    expect(result).toHaveLength(1);
+    expect(result[0].institution).toBe("Bank");
+    expect(result[0].account).toBe("Checking");
+    expect(result[0].periods).toHaveLength(2);
+    expect(result[0].periods[0]).toEqual({ period: "2025-01", derivedBalance: 1000, statementBalance: 1000, discrepancy: 0 });
+    expect(result[0].periods[1]).toEqual({ period: "2025-02", derivedBalance: 800, statementBalance: 800, discrepancy: 0 });
+  });
+
+  it("single account, discrepancy between derived and statement", () => {
+    // Anchor at 2025-01 = 1000. No transactions in 2025-02.
+    // derived(2025-02) = 1000, but statement says 950 → discrepancy = 50.
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-02", balance: 950 }),
+    ];
+    const result = computeDerivedBalances([], stmts);
+    expect(result).toHaveLength(1);
+    expect(result[0].periods[1].derivedBalance).toBe(1000);
+    expect(result[0].periods[1].statementBalance).toBe(950);
+    expect(result[0].periods[1].discrepancy).toBe(50);
+  });
+
+  it("multiple accounts", () => {
+    const stmts = [
+      makeStmt({ id: "s1", institution: "Bank", account: "Checking", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", institution: "Bank", account: "Checking", period: "2025-02", balance: 900 }),
+      makeStmt({ id: "s3", institution: "CC", account: "Visa", period: "2025-01", balance: -500 }),
+      makeStmt({ id: "s4", institution: "CC", account: "Visa", period: "2025-02", balance: -600 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 100, timestamp: ts("2025-02-05"), budget: null, category: "Food" }),
+      makeTxn({ id: "t2", institution: "CC", account: "Visa", amount: 100, timestamp: ts("2025-02-05"), budget: null, category: "Food" }),
+    ];
+    const result = computeDerivedBalances(txns, stmts);
+    expect(result).toHaveLength(2);
+
+    const checking = result.find(r => r.account === "Checking")!;
+    expect(checking.periods[1].derivedBalance).toBe(900); // 1000 - 100
+    expect(checking.periods[1].discrepancy).toBe(0);
+
+    const visa = result.find(r => r.account === "Visa")!;
+    expect(visa.periods[1].derivedBalance).toBe(-600); // -500 - 100
+    expect(visa.periods[1].discrepancy).toBe(0);
+  });
+
+  it("non-primary normalized transactions excluded", () => {
+    // Only the primary normalized txn should count.
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-02", balance: 950 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t-primary", institution: "Bank", account: "Checking", amount: 50, timestamp: ts("2025-02-10"), budget: null, category: "Food", normalizedId: "norm-1", normalizedPrimary: true }),
+      makeTxn({ id: "t-secondary", institution: "Bank", account: "Checking", amount: 50, timestamp: ts("2025-02-10"), budget: null, category: "Food", normalizedId: "norm-1", normalizedPrimary: false }),
+    ];
+    const result = computeDerivedBalances(txns, stmts);
+    // Only primary counted: 1000 - 50 = 950
+    expect(result[0].periods[1].derivedBalance).toBe(950);
+    expect(result[0].periods[1].discrepancy).toBe(0);
+  });
+
+  it("CardPayment transactions excluded", () => {
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-02", balance: 1000 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 500, timestamp: ts("2025-02-10"), budget: null, category: "Transfer:CardPayment" }),
+      makeTxn({ id: "t2", institution: "Bank", account: "Checking", amount: 300, timestamp: ts("2025-02-10"), budget: null, category: "Transfer:CardPayment:Visa" }),
+    ];
+    const result = computeDerivedBalances(txns, stmts);
+    // CardPayment excluded, so derived stays at 1000
+    expect(result[0].periods[1].derivedBalance).toBe(1000);
+    expect(result[0].periods[1].discrepancy).toBe(0);
+  });
+
+  it("reimbursement applied correctly", () => {
+    // Transaction of 100 with 50% reimbursement → net 50
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-02", balance: 950 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 100, reimbursement: 50, timestamp: ts("2025-02-10"), budget: null, category: "Medical" }),
+    ];
+    const result = computeDerivedBalances(txns, stmts);
+    // net = 100 * (1 - 50/100) = 50; derived = 1000 - 50 = 950
+    expect(result[0].periods[1].derivedBalance).toBe(950);
+    expect(result[0].periods[1].discrepancy).toBe(0);
+  });
+
+  it("gap periods get null statementBalance and null discrepancy", () => {
+    // Statements for 2025-01 and 2025-03 but not 2025-02
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-03", balance: 800 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 100, timestamp: ts("2025-02-10"), budget: null, category: "Food" }),
+      makeTxn({ id: "t2", institution: "Bank", account: "Checking", amount: 100, timestamp: ts("2025-03-10"), budget: null, category: "Food" }),
+    ];
+    const result = computeDerivedBalances(txns, stmts);
+    expect(result[0].periods).toHaveLength(3); // 2025-01, 2025-02, 2025-03
+
+    // 2025-01: anchor
+    expect(result[0].periods[0]).toEqual({ period: "2025-01", derivedBalance: 1000, statementBalance: 1000, discrepancy: 0 });
+
+    // 2025-02: gap — no statement
+    expect(result[0].periods[1].period).toBe("2025-02");
+    expect(result[0].periods[1].derivedBalance).toBe(900); // 1000 - 100
+    expect(result[0].periods[1].statementBalance).toBeNull();
+    expect(result[0].periods[1].discrepancy).toBeNull();
+
+    // 2025-03: statement present
+    expect(result[0].periods[2].derivedBalance).toBe(800); // 900 - 100
+    expect(result[0].periods[2].statementBalance).toBe(800);
+    expect(result[0].periods[2].discrepancy).toBe(0);
+  });
+
+  it("no valid statements returns empty result", () => {
+    const stmts = [
+      makeStmt({ id: "s1", period: "accountActivityExport(3)", balance: 500 }),
+      makeStmt({ id: "s2", period: "2026-03-19_transaction_download", balance: 300 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 100, timestamp: ts("2025-02-10"), budget: null, category: "Food" }),
+    ];
+    const result = computeDerivedBalances(txns, stmts);
+    expect(result).toEqual([]);
+  });
+
+  it("transactions with null timestamps excluded", () => {
+    const stmts = [
+      makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-02", balance: 1000 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 200, timestamp: null, budget: null, category: "Food" }),
+    ];
+    const result = computeDerivedBalances(txns, stmts);
+    // Null-timestamp txn excluded, so derived stays at 1000
+    expect(result[0].periods[1].derivedBalance).toBe(1000);
+    expect(result[0].periods[1].discrepancy).toBe(0);
   });
 });

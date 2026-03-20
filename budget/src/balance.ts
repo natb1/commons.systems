@@ -426,6 +426,117 @@ export function computeAverageWeeklyCredits(transactions: Transaction[]): number
   return sum / CREDIT_WEEKS;
 }
 
+export interface DerivedPeriodBalance {
+  readonly period: string;
+  readonly derivedBalance: number;
+  readonly statementBalance: number | null;
+  readonly discrepancy: number | null;
+}
+
+export interface DerivedAccountBalance {
+  readonly institution: string;
+  readonly account: string;
+  readonly periods: DerivedPeriodBalance[];
+}
+
+/** Generate all YYYY-MM periods from start through end (inclusive). */
+function generatePeriodRange(start: string, end: string): string[] {
+  const periods: string[] = [];
+  const [startYear, startMonth] = start.split("-").map(Number);
+  const [endYear, endMonth] = end.split("-").map(Number);
+  let year = startYear;
+  let month = startMonth;
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    periods.push(`${year}-${String(month).padStart(2, "0")}`);
+    month++;
+    if (month > 12) { month = 1; year++; }
+  }
+  return periods;
+}
+
+/**
+ * Compute derived balances per account by anchoring on the earliest statement
+ * and computing forward through each period using primary transaction sums.
+ *
+ * derived(0) = earliest statement ending balance
+ * derived(N) = derived(N-1) - sum(primary_transactions_in_period_N)
+ *
+ * CardPayment transfers and non-primary normalized transactions are excluded.
+ */
+export function computeDerivedBalances(
+  transactions: Transaction[],
+  statements: Statement[],
+): DerivedAccountBalance[] {
+  const validStatements = statements.filter(s => isValidPeriod(s.period));
+  if (validStatements.length === 0) return [];
+
+  type AccountKey = string;
+  const key = (inst: string, acct: string): AccountKey => `${inst}\0${acct}`;
+
+  // Group statements by account
+  const stmtsByAccount = new Map<AccountKey, Statement[]>();
+  for (const s of validStatements) {
+    const k = key(s.institution, s.account);
+    if (!stmtsByAccount.has(k)) stmtsByAccount.set(k, []);
+    stmtsByAccount.get(k)!.push(s);
+  }
+
+  // Group primary transactions by account and period
+  const txnsByAccountPeriod = new Map<string, number>();
+  for (const t of transactions) {
+    if (t.timestamp === null) continue;
+    if (t.normalizedId !== null && !t.normalizedPrimary) continue;
+    if (isCardPaymentCategory(t.category)) continue;
+    const k = key(t.institution, t.account);
+    const d = t.timestamp.toDate();
+    const period = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    const mapKey = `${k}\0${period}`;
+    txnsByAccountPeriod.set(mapKey, (txnsByAccountPeriod.get(mapKey) ?? 0) + computeNetAmount(t.amount, t.reimbursement));
+  }
+
+  const results: DerivedAccountBalance[] = [];
+
+  for (const [k, stmts] of stmtsByAccount) {
+    // Sort by period to find earliest and latest
+    stmts.sort((a, b) => a.period < b.period ? -1 : a.period > b.period ? 1 : 0);
+    const earliest = stmts[0];
+    const latest = stmts[stmts.length - 1];
+
+    // Build statement lookup by period
+    const stmtByPeriod = new Map<string, Statement>();
+    for (const s of stmts) stmtByPeriod.set(s.period, s);
+
+    // Generate all periods from earliest through latest
+    const allPeriods = generatePeriodRange(earliest.period, latest.period);
+
+    const periodBalances: DerivedPeriodBalance[] = [];
+    let derivedBalance = earliest.balance;
+
+    for (let i = 0; i < allPeriods.length; i++) {
+      const period = allPeriods[i];
+
+      if (i > 0) {
+        // Subtract transaction sums for this period
+        const txnSum = txnsByAccountPeriod.get(`${k}\0${period}`) ?? 0;
+        derivedBalance = derivedBalance - txnSum;
+      }
+
+      const stmt = stmtByPeriod.get(period);
+      const statementBalance = stmt ? stmt.balance : null;
+      const discrepancy = statementBalance !== null
+        ? Math.round((derivedBalance - statementBalance) * 100) / 100
+        : null;
+
+      periodBalances.push({ period, derivedBalance, statementBalance, discrepancy });
+    }
+
+    const [inst, acct] = k.split("\0");
+    results.push({ institution: inst, account: acct, periods: periodBalances });
+  }
+
+  return results;
+}
+
 export interface NetWorthPoint {
   readonly weekLabel: string;
   readonly weekMs: number;

@@ -2,16 +2,22 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import type { Transaction, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
-import { computeAggregateTrend, computeNetWorth, type AggregatePoint, type NetWorthPoint, type BalanceDivergence } from "../balance.js";
+import { computeAggregateTrend, computeNetWorth, computeDerivedBalances, type AggregatePoint, type NetWorthPoint, type DerivedAccountBalance } from "../balance.js";
 
 interface AccountRow {
   institution: string;
   account: string;
   mostRecentTimestamp: number;
   balance: number | null;
+  derivedBalance: number | null;
+  hasDiscrepancy: boolean;
 }
 
-function buildAccountRows(transactions: Transaction[], statements: Statement[]): AccountRow[] {
+function buildAccountRows(
+  transactions: Transaction[],
+  statements: Statement[],
+  derivedBalances: DerivedAccountBalance[],
+): AccountRow[] {
   const accountMap = new Map<string, { institution: string; account: string; maxTs: number }>();
   for (const txn of transactions) {
     const key = `${txn.institution}\0${txn.account}`;
@@ -34,14 +40,24 @@ function buildAccountRows(transactions: Transaction[], statements: Statement[]):
     }
   }
 
+  // Index derived balances by account key
+  const derivedByAccount = new Map<string, DerivedAccountBalance>();
+  for (const db of derivedBalances) {
+    derivedByAccount.set(`${db.institution}\0${db.account}`, db);
+  }
+
   const rows: AccountRow[] = [];
   for (const [key, { institution, account, maxTs }] of accountMap) {
     const stmt = latestStatements.get(key);
+    const derived = derivedByAccount.get(key);
+    const latestDerivedPeriod = derived?.periods[derived.periods.length - 1];
     rows.push({
       institution,
       account,
       mostRecentTimestamp: maxTs,
       balance: stmt ? stmt.balance : null,
+      derivedBalance: latestDerivedPeriod ? latestDerivedPeriod.derivedBalance : null,
+      hasDiscrepancy: derived?.periods.some(p => p.discrepancy !== null && Math.abs(p.discrepancy) > 0.01) ?? false,
     });
   }
 
@@ -61,11 +77,14 @@ function renderAccountsTable(rows: AccountRow[]): string {
 
   const tableRows = rows.map((row) => {
     const balanceCell = row.balance !== null ? escapeHtml(formatCurrency(row.balance)) : "";
-    return `<tr>
+    const derivedCell = row.derivedBalance !== null ? escapeHtml(formatCurrency(row.derivedBalance)) : "";
+    const rowClass = row.hasDiscrepancy ? ' class="discrepancy"' : "";
+    return `<tr${rowClass}>
       <td>${escapeHtml(row.institution)}</td>
       <td>${escapeHtml(row.account)}</td>
       <td>${escapeHtml(formatDate(row.mostRecentTimestamp))}</td>
       <td>${balanceCell}</td>
+      <td>${derivedCell}</td>
     </tr>`;
   }).join("\n");
 
@@ -76,6 +95,7 @@ function renderAccountsTable(rows: AccountRow[]): string {
         <th>Account</th>
         <th>Most recent transaction</th>
         <th>Balance</th>
+        <th>Derived</th>
       </tr>
     </thead>
     <tbody>
@@ -88,10 +108,24 @@ function serializeData(data: readonly AggregatePoint[] | readonly NetWorthPoint[
   return escapeHtml(JSON.stringify(data));
 }
 
-function renderDivergenceWarning(divergences: BalanceDivergence[]): string {
-  if (divergences.length === 0) return "";
-  const rows = divergences.map(d =>
-    `<li>${escapeHtml(d.institution)} ${escapeHtml(d.account)} (${escapeHtml(d.period)}): statement ${escapeHtml(formatCurrency(d.expected))}, derived ${escapeHtml(formatCurrency(d.derived))}</li>`
+function renderDivergenceWarning(derivedBalances: DerivedAccountBalance[]): string {
+  const discrepancies: { institution: string; account: string; period: string; statementBalance: number; derivedBalance: number }[] = [];
+  for (const acct of derivedBalances) {
+    for (const p of acct.periods) {
+      if (p.discrepancy !== null && Math.abs(p.discrepancy) > 0.01) {
+        discrepancies.push({
+          institution: acct.institution,
+          account: acct.account,
+          period: p.period,
+          statementBalance: p.statementBalance!,
+          derivedBalance: p.derivedBalance,
+        });
+      }
+    }
+  }
+  if (discrepancies.length === 0) return "";
+  const rows = discrepancies.map(d =>
+    `<li>${escapeHtml(d.institution)} ${escapeHtml(d.account)} (${escapeHtml(d.period)}): statement ${escapeHtml(formatCurrency(d.statementBalance))}, derived ${escapeHtml(formatCurrency(d.derivedBalance))}</li>`
   ).join("\n");
   return `<div id="balance-divergence-warning" class="divergence-warning">
     <p>Balance verification found discrepancies between statement balances and transaction-derived balances:</p>
@@ -102,9 +136,9 @@ function renderDivergenceWarning(divergences: BalanceDivergence[]): string {
 function renderChartContainers(
   aggregateTrend: AggregatePoint[],
   netWorthPoints: NetWorthPoint[],
-  divergences: BalanceDivergence[],
+  derivedBalances: DerivedAccountBalance[],
 ): string {
-  return `${renderDivergenceWarning(divergences)}
+  return `${renderDivergenceWarning(derivedBalances)}
     <div id="accounts-chart-controls">
       <label>Jump to: <input type="date" id="accounts-date-picker"></label>
     </div>
@@ -126,14 +160,15 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
       dataSource.getBudgetPeriods()
         .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
     ]);
-    const rows = buildAccountRows(transactions, statements);
+    const derivedBalances = computeDerivedBalances(transactions, statements);
+    const rows = buildAccountRows(transactions, statements, derivedBalances);
     tableHtml = renderAccountsTable(rows);
 
     try {
       const aggregateTrend = computeAggregateTrend(periods, transactions);
       const trendWeeks = aggregateTrend.map(p => ({ label: p.weekLabel, ms: p.weekMs }));
-      const { points: netWorthPoints, divergences } = computeNetWorth(transactions, statements, trendWeeks);
-      chartHtml = renderChartContainers(aggregateTrend, netWorthPoints, divergences);
+      const { points: netWorthPoints } = computeNetWorth(transactions, statements, trendWeeks);
+      chartHtml = renderChartContainers(aggregateTrend, netWorthPoints, derivedBalances);
     } catch (chartError) {
       console.error("Failed to compute chart data:", chartError);
       chartHtml = renderLoadError(chartError, "chart-error");

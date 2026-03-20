@@ -70,6 +70,7 @@ describe("renderAccounts", () => {
       ]),
     }));
     expect(html).toContain('id="accounts-table"');
+    expect(html).toContain("<th>Derived</th>");
     expect(html).toContain("BankOne");
     expect(html).toContain("1234");
     expect(html).toContain("$3,825.50");
@@ -220,8 +221,9 @@ describe("renderAccounts", () => {
   });
 
   it("shows divergence warning when balances diverge", async () => {
-    // Two statements for same account: anchor at 2025-02, verify at 2025-01
-    // Transaction between them causes divergence
+    // computeDerivedBalances anchors on earliest statement and computes forward.
+    // Anchor: 2025-01 balance=500. Transaction (amount=100) is in Jan (anchor period, skipped).
+    // Derive 2025-02: 500 - txnSum(Feb)=0 → derived=500. Statement says 1000 → discrepancy.
     const html = await renderAccounts(localOptions({
       getTransactions: vi.fn().mockResolvedValue([
         txn({ id: "t1" as any, institution: "Bank", account: "Checking", amount: 100, timestamp: ts("2025-01-15"), budget: "food" as any }),
@@ -243,12 +245,37 @@ describe("renderAccounts", () => {
         },
       ]),
     }));
-    // Anchor at 2025-02 (balance=1000), derive 2025-01:
-    // cumSumBefore(2025-02-01) = 100, cumSumBefore(2025-03-01) = 100
-    // anchorCum = cumSumBefore(2025-03-01) = 100
-    // derived = 1000 - (cumSumBefore(2025-02-01) - 100) = 1000 - 0 = 1000
-    // But statement says 500 → divergence
     expect(html).toContain('id="balance-divergence-warning"');
+  });
+
+  it("shows derived balance in table when statements exist", async () => {
+    // Anchor: 2025-01 balance=500. Derive 2025-02: 500 - txnSum(Feb)=50 → 450.
+    // Table row shows latest derived period balance ($450.00).
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ institution: "Bank", account: "Checking", amount: 50, timestamp: ts("2025-02-15") }),
+      ]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt({ id: "s1", period: "2025-01", balance: 500 }),
+        stmt({ id: "s2", statementId: "Bank-Checking-2025-02" as any, period: "2025-02", balance: 750 }),
+      ]),
+    }));
+    expect(html).toContain("$450.00");
+  });
+
+  it("highlights row with discrepancy class when derived balance diverges", async () => {
+    // Anchor: 2025-01 balance=500. No transactions in Feb.
+    // Derive 2025-02: 500 - 0 = 500. Statement says 1000 → discrepancy.
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ institution: "Bank", account: "Checking", timestamp: ts("2025-02-15") }),
+      ]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt({ id: "s1", period: "2025-01", balance: 500 }),
+        stmt({ id: "s2", statementId: "Bank-Checking-2025-02" as any, period: "2025-02", balance: 1000 }),
+      ]),
+    }));
+    expect(html).toContain('class="discrepancy"');
   });
 
   it("no divergence warning when balances are consistent", async () => {
