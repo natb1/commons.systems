@@ -13,6 +13,7 @@ vi.mock("firebase/firestore", () => ({
 import type { SerializedChartTransaction, ChartMode } from "../../src/pages/home-chart";
 import {
   buildCategoryTree,
+  divideTreeValues,
   filterByWeeks,
   distinctWeeks,
   hydrateCategorySankey,
@@ -276,6 +277,29 @@ describe("buildCategoryTree", () => {
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Income");
     expect(root.value).toBe(2400);
+  });
+});
+
+describe("divideTreeValues", () => {
+  it("divides all node values by divisor", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food:Groceries", amount: 120 }),
+      txn({ category: "Food:Restaurants", amount: 60 }),
+      txn({ category: "Transport", amount: 24 }),
+    ]);
+    divideTreeValues(root, 12);
+    expect(root.value).toBe(204 / 12);
+    const food = root.children.find(c => c.name === "Food")!;
+    expect(food.value).toBe(180 / 12);
+    expect(food.children.find(c => c.name === "Groceries")!.value).toBe(10);
+    expect(food.children.find(c => c.name === "Restaurants")!.value).toBe(5);
+    expect(root.children.find(c => c.name === "Transport")!.value).toBe(2);
+  });
+
+  it("divisor of 1 leaves values unchanged", () => {
+    const root = buildCategoryTree([txn({ category: "Food", amount: 50 })]);
+    divideTreeValues(root, 1);
+    expect(root.value).toBe(50);
   });
 });
 

@@ -122,6 +122,12 @@ export function buildCategoryTree(
   return root;
 }
 
+/** Divide all values in a category tree by a divisor (for per-week averages). */
+export function divideTreeValues(node: CategoryNode, divisor: number): void {
+  node.value /= divisor;
+  for (const c of node.children) divideTreeValues(c, divisor);
+}
+
 const CATEGORY_COLORS = [
   "#4e79a7", "#f28e2b", "#e15759", "#76b7b2",
   "#59a14f", "#edc948", "#b07aa1", "#ff9da7",
@@ -148,7 +154,7 @@ function formatDate(ms: number): string {
 
 function tooltipText(data: CategoryNode, rootValue: number): string {
   const pct = rootValue > 0 ? ((data.value / rootValue) * 100).toFixed(1) : "0.0";
-  return `${data.fullPath}\n${formatCurrency(data.value)} (${pct}%)\n${data.count} transactions`;
+  return `${data.fullPath}\n${formatCurrency(data.value)}/wk (${pct}%)\n${data.count} transactions`;
 }
 
 function nodeHeight(value: number, rootValue: number, treeHeight: number): number {
@@ -272,6 +278,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
     const filtered = filterByWeeks(allTxns, weeks, currentNumWeeks, currentEndWeekIdx);
     const rootData = buildCategoryTree(filtered, currentMode, currentUnbudgetedOnly, currentShowCardPayment);
+    divideTreeValues(rootData, currentNumWeeks);
 
     if (rootData.value === 0) {
       container.textContent = currentMode === "income"
@@ -407,7 +414,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
         text.setAttribute("y", String(h / 2));
         text.setAttribute("dy", "0.35em");
         text.setAttribute("fill", fg);
-        text.textContent = `${node.data.name} ${formatCurrency(node.data.value)}`;
+        text.textContent = `${node.data.name} ${formatCurrency(node.data.value)}/wk`;
         nodeG.appendChild(text);
       }
 
