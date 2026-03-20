@@ -50,14 +50,13 @@ function buildAccountRows(
   for (const [key, { institution, account, maxTs }] of accountMap) {
     const stmt = latestStatements.get(key);
     const derived = derivedByAccount.get(key);
-    const latestDerivedPeriod = derived?.periods[derived.periods.length - 1];
     rows.push({
       institution,
       account,
       mostRecentTimestamp: maxTs,
       balance: stmt ? stmt.balance : null,
-      derivedBalance: latestDerivedPeriod ? latestDerivedPeriod.derivedBalance : null,
-      hasDiscrepancy: derived?.periods.some(p => p.discrepancy !== null && Math.abs(p.discrepancy) > 0.01) ?? false,
+      derivedBalance: derived ? derived.derivedBalance : null,
+      hasDiscrepancy: derived ? Math.abs(derived.discrepancy) > 0.01 : false,
     });
   }
 
@@ -109,23 +108,10 @@ function serializeData(data: readonly AggregatePoint[] | readonly NetWorthPoint[
 }
 
 function renderDivergenceWarning(derivedBalances: DerivedAccountBalance[]): string {
-  const discrepancies: { institution: string; account: string; period: string; statementBalance: number; derivedBalance: number }[] = [];
-  for (const acct of derivedBalances) {
-    for (const p of acct.periods) {
-      if (p.discrepancy !== null && Math.abs(p.discrepancy) > 0.01) {
-        discrepancies.push({
-          institution: acct.institution,
-          account: acct.account,
-          period: p.period,
-          statementBalance: p.statementBalance!,
-          derivedBalance: p.derivedBalance,
-        });
-      }
-    }
-  }
+  const discrepancies = derivedBalances.filter(d => Math.abs(d.discrepancy) > 0.01);
   if (discrepancies.length === 0) return "";
   const rows = discrepancies.map(d =>
-    `<li>${escapeHtml(d.institution)} ${escapeHtml(d.account)} (${escapeHtml(d.period)}): statement ${escapeHtml(formatCurrency(d.statementBalance))}, derived ${escapeHtml(formatCurrency(d.derivedBalance))}</li>`
+    `<li>${escapeHtml(d.institution)} ${escapeHtml(d.account)} (${escapeHtml(d.earliestPeriod)}\u2192${escapeHtml(d.latestPeriod)}): statement ${escapeHtml(formatCurrency(d.statementBalance))}, derived ${escapeHtml(formatCurrency(d.derivedBalance))}</li>`
   ).join("\n");
   return `<div id="balance-divergence-warning" class="divergence-warning">
     <p>Balance verification found discrepancies between statement balances and transaction-derived balances:</p>

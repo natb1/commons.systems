@@ -426,17 +426,14 @@ export function computeAverageWeeklyCredits(transactions: Transaction[]): number
   return sum / CREDIT_WEEKS;
 }
 
-export interface DerivedPeriodBalance {
-  readonly period: string;
-  readonly derivedBalance: number;
-  readonly statementBalance: number | null;
-  readonly discrepancy: number | null;
-}
-
 export interface DerivedAccountBalance {
   readonly institution: string;
   readonly account: string;
-  readonly periods: DerivedPeriodBalance[];
+  readonly earliestPeriod: string;
+  readonly latestPeriod: string;
+  readonly derivedBalance: number;
+  readonly statementBalance: number;
+  readonly discrepancy: number;
 }
 
 /**
@@ -452,16 +449,11 @@ function statementEffectiveMs(s: Statement): number {
 }
 
 /**
- * Compute derived balances per account by anchoring on the earliest statement
- * and computing forward through each consecutive statement window using
- * primary transaction sums.
+ * Compute one derived-balance discrepancy per account: earliest statement balance
+ * minus all primary transactions in the window vs latest statement balance.
  *
- * derived(0) = earliest statement ending balance
- * derived(N) = derived(N-1) - sum(transactions in window (effectiveMs(N-1), effectiveMs(N)])
- *
- * Windows are defined by each statement's effective date (balanceDate if present,
- * else first-of-next-month from the period). This aligns with OFX LEDGERBAL DTASOF
- * dates, which may fall mid-month.
+ * This single-span approach tolerates intermediate OFX noise (pending charges,
+ * missing card payments) that causes false positives in per-period checking.
  *
  * Non-primary normalized transactions are excluded.
  */
@@ -502,47 +494,38 @@ export function computeDerivedBalances(
   const results: DerivedAccountBalance[] = [];
 
   for (const [k, stmts] of stmtsByAccount) {
-    // Sort by effectiveMs
+    if (stmts.length < 2) continue;
+
+    // Sort by effectiveMs to find earliest and latest
     stmts.sort((a, b) => statementEffectiveMs(a) - statementEffectiveMs(b));
+    const earliest = stmts[0];
+    const latest = stmts[stmts.length - 1];
 
+    const earliestMs = statementEffectiveMs(earliest);
+    const latestMs = statementEffectiveMs(latest);
+
+    // Sum all primary transactions in (earliestMs, latestMs]
     const txns = txnsByAccount.get(k) ?? [];
-    const periodBalances: DerivedPeriodBalance[] = [];
-    let derivedBalance = stmts[0].balance;
-
-    // Anchor period
-    periodBalances.push({
-      period: stmts[0].period,
-      derivedBalance,
-      statementBalance: stmts[0].balance,
-      discrepancy: 0,
-    });
-
-    for (let i = 1; i < stmts.length; i++) {
-      const prevMs = statementEffectiveMs(stmts[i - 1]);
-      const currMs = statementEffectiveMs(stmts[i]);
-
-      // Sum transactions in window (prevMs, currMs]
-      let windowSum = 0;
-      for (const txn of txns) {
-        if (txn.ms <= prevMs) continue;
-        if (txn.ms > currMs) break;
-        windowSum += txn.net;
-      }
-
-      derivedBalance = derivedBalance - windowSum;
-      const statementBalance = stmts[i].balance;
-      const discrepancy = Math.round((derivedBalance - statementBalance) * 100) / 100;
-
-      periodBalances.push({
-        period: stmts[i].period,
-        derivedBalance,
-        statementBalance,
-        discrepancy,
-      });
+    let txnSum = 0;
+    for (const txn of txns) {
+      if (txn.ms <= earliestMs) continue;
+      if (txn.ms > latestMs) break;
+      txnSum += txn.net;
     }
 
+    const derivedBalance = earliest.balance - txnSum;
+    const discrepancy = Math.round((derivedBalance - latest.balance) * 100) / 100;
+
     const [inst, acct] = k.split("\0");
-    results.push({ institution: inst, account: acct, periods: periodBalances });
+    results.push({
+      institution: inst,
+      account: acct,
+      earliestPeriod: earliest.period,
+      latestPeriod: latest.period,
+      derivedBalance,
+      statementBalance: latest.balance,
+      discrepancy,
+    });
   }
 
   return results;
