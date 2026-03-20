@@ -15,7 +15,7 @@ export const KEY_LEN = 32;
 export async function deriveKey(
   subtleCrypto: SubtleCrypto,
   password: string,
-  salt: Uint8Array<ArrayBuffer>,
+  salt: Uint8Array,
 ): Promise<CryptoKey> {
   const keyMaterial = await subtleCrypto.importKey(
     "raw",
@@ -25,7 +25,7 @@ export async function deriveKey(
     ["deriveKey"],
   );
   return subtleCrypto.deriveKey(
-    { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    { name: "PBKDF2", salt: salt as Uint8Array<ArrayBuffer>, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
     keyMaterial,
     { name: "AES-GCM", length: 256 },
     false,
@@ -43,7 +43,7 @@ export async function encryptData(
   const iv = getRandomValues(new Uint8Array(IV_LEN));
   const key = await deriveKey(subtleCrypto, password, salt);
   const ciphertext = await subtleCrypto.encrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv as Uint8Array<ArrayBuffer> },
     key,
     new TextEncoder().encode(plaintext),
   );
