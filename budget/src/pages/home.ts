@@ -244,18 +244,20 @@ function renderTransactionTable(
     })
     .join("\n");
 
-  let dataAttrs = ` data-group-name="${escapeHtml(groupName)}" data-editable="${authorized}"`;
+  // Budget map is always needed for scroll hydration (rendering budget names on appended rows)
+  const budgetNameToId: Record<string, string> = {};
+  for (const b of budgets) {
+    if (budgetNameToId[b.name] !== undefined) {
+      throw new DataIntegrityError(`Duplicate budget name: ${b.name}`);
+    }
+    budgetNameToId[b.name] = b.id;
+  }
+  const budgetMapAttr = escapeHtml(JSON.stringify(budgetNameToId));
+
+  let dataAttrs = ` data-group-name="${escapeHtml(groupName)}" data-editable="${authorized}" data-budget-map="${budgetMapAttr}"`;
   if (authorized) {
     const budgetNames = budgets.map(b => b.name).sort();
     const budgetOpts = escapeHtml(JSON.stringify(budgetNames));
-    const budgetNameToId: Record<string, string> = {};
-    for (const b of budgets) {
-      if (budgetNameToId[b.name] !== undefined) {
-        throw new DataIntegrityError(`Duplicate budget name: ${b.name}`);
-      }
-      budgetNameToId[b.name] = b.id;
-    }
-    const budgetMapAttr = escapeHtml(JSON.stringify(budgetNameToId));
     const categoryOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))));
     const periodsData: SerializedBudgetPeriod[] = budgetPeriods.map((p) => ({
       id: p.id,
@@ -269,7 +271,6 @@ function renderTransactionTable(
     const periodsAttr = escapeHtml(JSON.stringify(periodsData));
     dataAttrs += [
       ` data-budget-options="${budgetOpts}"`,
-      ` data-budget-map="${budgetMapAttr}"`,
       ` data-category-options="${categoryOpts}"`,
       ` data-budget-periods="${periodsAttr}"`,
     ].join("");
