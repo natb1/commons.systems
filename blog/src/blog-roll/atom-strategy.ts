@@ -5,12 +5,14 @@ export class AtomStrategy implements BlogRollStrategy {
   constructor(
     private feedUrl: string,
     private proxyPath: string = "/api/feed-proxy",
+    private fetchHeaders?: () => Promise<Record<string, string>>,
   ) {}
 
   async fetchLatestPost(): Promise<LatestPost | null> {
     try {
       const proxyUrl = `${this.proxyPath}?url=${encodeURIComponent(this.feedUrl)}`;
-      const response = await fetch(proxyUrl);
+      const headers = await this.fetchHeaders?.();
+      const response = await fetch(proxyUrl, headers ? { headers } : undefined);
       if (!response.ok) {
         console.warn(`Feed proxy failed for ${this.feedUrl}: ${response.status}`);
         return null;
@@ -21,8 +23,8 @@ export class AtomStrategy implements BlogRollStrategy {
       }
       return result;
     } catch (err) {
-      // ReferenceError indicates a bug (undefined variable), not a recoverable feed failure
-      if (err instanceof ReferenceError) throw err;
+      // ReferenceError (undefined variable) and TypeError (null property access) indicate bugs, not recoverable feed failures
+      if (err instanceof ReferenceError || err instanceof TypeError) throw err;
       console.warn(`Feed proxy error for ${this.feedUrl}:`, err);
       return null;
     }

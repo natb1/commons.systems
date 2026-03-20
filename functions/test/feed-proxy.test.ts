@@ -1,4 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("firebase-admin/app", () => ({
+  getApps: () => [{}],
+  initializeApp: vi.fn(),
+}));
+
+const verifyTokenMock = vi.fn().mockResolvedValue({ appId: "test" });
+vi.mock("firebase-admin/app-check", () => ({
+  getAppCheck: () => ({ verifyToken: verifyTokenMock }),
+}));
+
 import { handleFeedProxy, ALLOWED_FEED_URLS } from "../src/feed-proxy";
 import { FEED_REGISTRY } from "../../blog/src/blog-roll/feed-registry";
 
@@ -23,13 +34,49 @@ function createMockRes() {
   return res;
 }
 
-function createMockReq(query: Record<string, string | undefined> = {}) {
-  return { query } as unknown as Parameters<typeof handleFeedProxy>[0];
+function createMockReq(
+  query: Record<string, string | undefined> = {},
+  headers: Record<string, string> = { "X-Firebase-AppCheck": "valid-token" },
+) {
+  return {
+    query,
+    header: (name: string) => headers[name],
+  } as unknown as Parameters<typeof handleFeedProxy>[0];
 }
 
 describe("handleFeedProxy", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    verifyTokenMock.mockResolvedValue({ appId: "test" });
+  });
+
+  it("returns 401 when AppCheck token is missing", async () => {
+    const res = createMockRes();
+    await handleFeedProxy(createMockReq({}, {}), res as never);
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toBe(
+      "Unauthorized: invalid or missing AppCheck token",
+    );
+  });
+
+  it("returns 401 when AppCheck token is invalid", async () => {
+    const err = new Error("invalid") as Error & { code: string };
+    err.code = "app-check/invalid-token";
+    verifyTokenMock.mockRejectedValue(err);
+    const res = createMockRes();
+    await handleFeedProxy(createMockReq({}), res as never);
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toBe(
+      "Unauthorized: invalid or missing AppCheck token",
+    );
+  });
+
+  it("throws on infrastructure error in verifyAppCheck", async () => {
+    verifyTokenMock.mockRejectedValue(new Error("network timeout"));
+    const res = createMockRes();
+    await expect(
+      handleFeedProxy(createMockReq({}), res as never),
+    ).rejects.toThrow("network timeout");
   });
 
   it("returns 400 when url query parameter is missing", async () => {
