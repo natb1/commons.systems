@@ -59,6 +59,18 @@ describe("renderPerBudgetAreaChart", () => {
     expect(labels).toContain("Housing");
   });
 
+  it("renders with 400px height", () => {
+    const container = makeContainer();
+    const data = [
+      makePerBudgetPoint({ weekLabel: "1/5", weekMs: new Date("2025-01-05").getTime(), budget: "Food" }),
+      makePerBudgetPoint({ weekLabel: "1/12", weekMs: new Date("2025-01-12").getTime(), budget: "Food" }),
+    ];
+    renderPerBudgetAreaChart(container, { data, containerWidth: 640, panelWidth: 60 });
+    const chartSvg = container.querySelector(".chart-scroll-wrapper svg") as SVGSVGElement;
+    expect(chartSvg).not.toBeNull();
+    expect(chartSvg.getAttribute("height")).toBe("400");
+  });
+
   it("'Other' area appears when present", () => {
     const container = makeContainer();
     const w1 = new Date("2025-01-05").getTime();
