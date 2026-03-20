@@ -144,6 +144,10 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   const pieElOrNull = document.getElementById("budgets-pie");
   if (!pieElOrNull) throw new DataIntegrityError("budgets-pie container not found in page markup");
   const pieEl: HTMLElement = pieElOrNull;
+  const incomeRaw = pieEl.dataset.averageWeeklyIncome;
+  if (incomeRaw === undefined) throw new DataIntegrityError("budgets-pie missing required data-average-weekly-income attribute");
+  const averageWeeklyIncome = Number(incomeRaw);
+  if (!Number.isFinite(averageWeeklyIncome)) throw new DataIntegrityError(`Invalid average weekly income value: ${incomeRaw}`);
 
   const areaElOrNull = document.getElementById("budgets-area-chart");
   if (!areaElOrNull) throw new DataIntegrityError("budgets-area-chart container not found in page markup");
@@ -158,7 +162,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
   function render(): void {
     chartResult = renderBudgetChart(container, { budgets, periods });
-    renderBudgetPieChart(pieEl, { budgets, periods, windowWeeks: 12 });
+    renderBudgetPieChart(pieEl, { budgets, averageWeeklyIncome });
 
     const containerWidth = container.clientWidth || 640;
     renderPerBudgetAreaChart(areaEl, { data: perBudgetTrend, containerWidth, panelWidth });
