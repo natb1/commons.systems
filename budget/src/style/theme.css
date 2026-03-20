@@ -89,6 +89,7 @@
 #sankey-controls input[type="range"] { flex: 1; max-width: 200px; }
 #sankey-mode { border: none; padding: 0; margin: 0; display: flex; gap: 0.5rem; }
 #sankey-mode label { cursor: pointer; white-space: nowrap; }
+#unbudgeted-toggle, #card-payment-toggle { white-space: nowrap; cursor: pointer; }
 #category-sankey { width: 100%; max-width: 1200px; margin: 0 auto 1rem; }
 #category-sankey svg { display: block; }
 .sankey-node rect { cursor: default; }

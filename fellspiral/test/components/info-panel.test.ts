@@ -1,6 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
 import path from "path";
+
+vi.mock("../../src/firebase", () => ({
+  getAppCheckHeaders: undefined,
+}));
+
 import { BLOG_ROLL_ENTRIES } from "../../src/blog-roll/config";
 
 describe("OPML/config sync", () => {
