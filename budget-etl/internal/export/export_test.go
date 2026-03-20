@@ -509,6 +509,20 @@ func TestWriteFileAtomicity(t *testing.T) {
 	}
 }
 
+// minimalOutput returns a valid Output with one transaction and the given groupName.
+// Reduces boilerplate in encryption tests that only need a round-trippable payload.
+func minimalOutput(groupName string) Output {
+	return Output{
+		Version:            1,
+		GroupName:          groupName,
+		Transactions:       []Transaction{{ID: "t1", Institution: "x", Account: "1", Description: "X", Amount: 1, Timestamp: "2025-01-01T00:00:00Z", StatementID: "x-1-2025-01", Category: "C"}},
+		Budgets:            []Budget{},
+		BudgetPeriods:      []BudgetPeriod{},
+		Rules:              []Rule{},
+		NormalizationRules: []NormalizationRule{},
+	}
+}
+
 func TestEncryptDecryptRoundTrip(t *testing.T) {
 	original := Output{
 		Version:    1,
@@ -562,15 +576,7 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 }
 
 func TestEncryptedWrongPassword(t *testing.T) {
-	original := Output{
-		Version:            1,
-		GroupName:          "test",
-		Transactions:       []Transaction{{ID: "t1", Institution: "x", Account: "1", Description: "X", Amount: 1, Timestamp: "2025-01-01T00:00:00Z", StatementID: "x-1-2025-01", Category: "C"}},
-		Budgets:            []Budget{},
-		BudgetPeriods:      []BudgetPeriod{},
-		Rules:              []Rule{},
-		NormalizationRules: []NormalizationRule{},
-	}
+	original := minimalOutput("test")
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "encrypted.json")
@@ -589,15 +595,7 @@ func TestEncryptedWrongPassword(t *testing.T) {
 }
 
 func TestPlaintextBackwardCompat(t *testing.T) {
-	original := Output{
-		Version:            1,
-		GroupName:          "compat-test",
-		Transactions:       []Transaction{{ID: "t1", Institution: "x", Account: "1", Description: "X", Amount: 1, Timestamp: "2025-01-01T00:00:00Z", StatementID: "x-1-2025-01", Category: "C"}},
-		Budgets:            []Budget{},
-		BudgetPeriods:      []BudgetPeriod{},
-		Rules:              []Rule{},
-		NormalizationRules: []NormalizationRule{},
-	}
+	original := minimalOutput("compat-test")
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "plaintext.json")
@@ -641,15 +639,7 @@ func TestIsEncrypted(t *testing.T) {
 }
 
 func TestEncryptedFileNoPassword(t *testing.T) {
-	original := Output{
-		Version:            1,
-		GroupName:          "test",
-		Transactions:       []Transaction{{ID: "t1", Institution: "x", Account: "1", Description: "X", Amount: 1, Timestamp: "2025-01-01T00:00:00Z", StatementID: "x-1-2025-01", Category: "C"}},
-		Budgets:            []Budget{},
-		BudgetPeriods:      []BudgetPeriod{},
-		Rules:              []Rule{},
-		NormalizationRules: []NormalizationRule{},
-	}
+	original := minimalOutput("test")
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "encrypted.json")
@@ -662,21 +652,13 @@ func TestEncryptedFileNoPassword(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error reading encrypted file without password")
 	}
-	if !strings.Contains(err.Error(), "file is encrypted; use --password") {
-		t.Errorf("error = %q, want it to contain 'file is encrypted; use --password'", err.Error())
+	if !strings.Contains(err.Error(), "file is encrypted but no password was provided") {
+		t.Errorf("error = %q, want it to contain 'file is encrypted but no password was provided'", err.Error())
 	}
 }
 
 func TestPlaintextFileWithPassword(t *testing.T) {
-	original := Output{
-		Version:            1,
-		GroupName:          "test",
-		Transactions:       []Transaction{{ID: "t1", Institution: "x", Account: "1", Description: "X", Amount: 1, Timestamp: "2025-01-01T00:00:00Z", StatementID: "x-1-2025-01", Category: "C"}},
-		Budgets:            []Budget{},
-		BudgetPeriods:      []BudgetPeriod{},
-		Rules:              []Rule{},
-		NormalizationRules: []NormalizationRule{},
-	}
+	original := minimalOutput("test")
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "plaintext.json")

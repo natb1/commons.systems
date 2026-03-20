@@ -12,6 +12,8 @@ export async function uploadFixture(page: Page): Promise<void> {
   await fileInput.setInputFiles(fixturePath);
 }
 
+// Encrypts using the same BENC format as budget-etl (Go) and src/crypto.ts (Web Crypto).
+// Uses Node.js crypto for Playwright e2e.
 export function encryptBuffer(plaintext: Buffer, password: string): Buffer {
   const salt = crypto.randomBytes(16);
   const iv = crypto.randomBytes(12);

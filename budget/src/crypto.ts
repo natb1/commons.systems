@@ -1,3 +1,6 @@
+// BENC encrypted file format (shared with budget-etl/internal/export/export.go and budget/e2e/helpers.ts):
+//   [magic 4B "BENC"][salt 16B][IV 12B][AES-256-GCM ciphertext + 16B auth tag]
+// Key derivation: PBKDF2-HMAC-SHA256, 600k iterations, 256-bit key.
 import { UploadValidationError } from "./upload.js";
 
 const MAGIC = new Uint8Array([0x42, 0x45, 0x4e, 0x43]); // "BENC"
@@ -9,7 +12,7 @@ const PBKDF2_ITERATIONS = 600000;
 export function isEncrypted(data: ArrayBuffer): boolean {
   if (data.byteLength < MAGIC.length) return false;
   const header = new Uint8Array(data, 0, MAGIC.length);
-  return header[0] === 0x42 && header[1] === 0x45 && header[2] === 0x4e && header[3] === 0x43;
+  return header.every((b, i) => b === MAGIC[i]);
 }
 
 async function deriveKey(password: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
@@ -30,6 +33,7 @@ async function deriveKey(password: string, salt: Uint8Array<ArrayBuffer>): Promi
 }
 
 export async function encrypt(plaintext: string, password: string): Promise<ArrayBuffer> {
+  if (!password) throw new Error("Password must not be empty for encryption.");
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LEN));
   const iv = crypto.getRandomValues(new Uint8Array(IV_LEN));
   const key = await deriveKey(password, salt);
@@ -64,7 +68,8 @@ export async function decrypt(data: ArrayBuffer, password: string): Promise<stri
       ciphertext,
     );
     return new TextDecoder().decode(plaintext);
-  } catch {
+  } catch (err) {
+    if (err instanceof TypeError || err instanceof ReferenceError) throw err;
     throw new UploadValidationError("Wrong password or corrupted file.");
   }
 }

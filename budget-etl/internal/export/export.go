@@ -14,23 +14,39 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 )
 
+// BENC encrypted file format (shared with budget/src/crypto.ts and budget/e2e/helpers.ts):
+//   [magic 4B "BENC"][salt 16B][IV 12B][AES-256-GCM ciphertext + 16B auth tag]
+// Key derivation: PBKDF2-HMAC-SHA256, 600k iterations, 256-bit key.
 const (
-	saltLen         = 16
-	ivLen           = 12
-	keyLen          = 32
+	saltLen          = 16
+	ivLen            = 12
+	keyLen           = 32
 	pbkdf2Iterations = 600000
-	headerLen       = 4 + saltLen + ivLen // magic + salt + IV = 32
+	headerLen        = 4 + saltLen + ivLen // magic + salt + IV = 32
 )
 
 var magicBytes = [4]byte{'B', 'E', 'N', 'C'}
 
 // IsEncrypted checks whether data starts with the BENC magic bytes.
 func IsEncrypted(data []byte) bool {
-	return len(data) >= 4 && data[0] == 'B' && data[1] == 'E' && data[2] == 'N' && data[3] == 'C'
+	return len(data) >= len(magicBytes) && [4]byte(data[:4]) == magicBytes
 }
 
 func deriveKey(password string, salt []byte) []byte {
 	return pbkdf2.Key([]byte(password), salt, pbkdf2Iterations, keyLen, sha256.New)
+}
+
+func newGCM(password string, salt []byte) (cipher.AEAD, error) {
+	key := deriveKey(password, salt)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("creating cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("creating GCM: %w", err)
+	}
+	return gcm, nil
 }
 
 func encryptJSON(plaintext []byte, password string) ([]byte, error) {
@@ -43,14 +59,9 @@ func encryptJSON(plaintext []byte, password string) ([]byte, error) {
 		return nil, fmt.Errorf("generating IV: %w", err)
 	}
 
-	key := deriveKey(password, salt)
-	block, err := aes.NewCipher(key)
+	gcm, err := newGCM(password, salt)
 	if err != nil {
-		return nil, fmt.Errorf("creating cipher: %w", err)
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("creating GCM: %w", err)
+		return nil, err
 	}
 
 	ciphertext := gcm.Seal(nil, iv, plaintext, nil)
@@ -71,19 +82,14 @@ func decryptJSON(data []byte, password string) ([]byte, error) {
 	iv := data[4+saltLen : headerLen]
 	ciphertext := data[headerLen:]
 
-	key := deriveKey(password, salt)
-	block, err := aes.NewCipher(key)
+	gcm, err := newGCM(password, salt)
 	if err != nil {
-		return nil, fmt.Errorf("creating cipher: %w", err)
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("creating GCM: %w", err)
+		return nil, err
 	}
 
 	plaintext, err := gcm.Open(nil, iv, ciphertext, nil)
 	if err != nil {
-		return nil, fmt.Errorf("decryption failed: wrong password or corrupted file")
+		return nil, fmt.Errorf("decryption failed (wrong password or corrupted file): %w", err)
 	}
 	return plaintext, nil
 }
@@ -179,8 +185,9 @@ func FormatTimestamp(t time.Time) string {
 }
 
 // ReadFile reads and unmarshals a JSON file into an Output struct.
-// If password is non-empty, the file is decrypted first. If the file is
-// encrypted but no password is provided, an error is returned.
+// If password is non-empty, the file is decrypted first. Encryption
+// state must match strictly: an encrypted file without a password, or
+// a plaintext file with a password, both return an error.
 func ReadFile(path, password string) (Output, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -189,10 +196,10 @@ func ReadFile(path, password string) (Output, error) {
 
 	encrypted := IsEncrypted(data)
 	if encrypted && password == "" {
-		return Output{}, fmt.Errorf("file is encrypted; use --password")
+		return Output{}, fmt.Errorf("file is encrypted but no password was provided")
 	}
 	if !encrypted && password != "" {
-		return Output{}, fmt.Errorf("file is not encrypted but --password was provided")
+		return Output{}, fmt.Errorf("file is not encrypted but a password was provided")
 	}
 	if encrypted {
 		data, err = decryptJSON(data, password)

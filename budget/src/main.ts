@@ -175,15 +175,49 @@ function promptPassword(message: string): Promise<string | null> {
   return new Promise((resolve) => {
     const dialog = document.createElement("dialog");
     dialog.className = "password-dialog";
-    dialog.innerHTML = `<form method="dialog"><p>${message}</p><input type="password" class="password-input" autocomplete="off"><div class="password-actions"><button type="submit" class="password-submit">Submit</button><button type="button" class="password-cancel">Cancel</button></div></form>`;
+
+    const form = document.createElement("form");
+    form.method = "dialog";
+
+    const p = document.createElement("p");
+    p.textContent = message;
+
+    const input = document.createElement("input");
+    input.type = "password";
+    input.className = "password-input";
+    input.autocomplete = "off";
+
+    const actions = document.createElement("div");
+    actions.className = "password-actions";
+
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "submit";
+    submitBtn.className = "password-submit";
+    submitBtn.textContent = "Submit";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "password-cancel";
+    cancelBtn.textContent = "Cancel";
+
+    actions.appendChild(submitBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(p);
+    form.appendChild(input);
+    form.appendChild(actions);
+    dialog.appendChild(form);
     document.body.appendChild(dialog);
-    const input = dialog.querySelector(".password-input") as HTMLInputElement;
-    dialog.querySelector(".password-cancel")!.addEventListener("click", () => {
+
+    cancelBtn.addEventListener("click", () => {
       dialog.close();
       dialog.remove();
       resolve(null);
     });
-    dialog.querySelector("form")!.addEventListener("submit", (e) => {
+    dialog.addEventListener("cancel", () => {
+      dialog.remove();
+      resolve(null);
+    });
+    form.addEventListener("submit", (e) => {
       e.preventDefault();
       const value = input.value;
       dialog.close();
