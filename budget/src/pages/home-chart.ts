@@ -1,14 +1,10 @@
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
-import { computeNetAmount, MS_PER_WEEK } from "../balance.js";
+import { computeNetAmount, isCardPaymentCategory, MS_PER_WEEK } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { parseJsonArray } from "./hydrate-util.js";
 
 export type ChartMode = "spending" | "credits";
-
-function isCardPaymentCategory(category: string): boolean {
-  return category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
-}
 
 export interface SerializedChartTransaction {
   category: string;
