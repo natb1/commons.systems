@@ -126,12 +126,13 @@ type WeeklyAggregate struct {
 
 // Statement is a statement-level record in the JSON output.
 type Statement struct {
-	ID          string  `json:"id"`
-	StatementID string  `json:"statementId"`
-	Institution string  `json:"institution"`
-	Account     string  `json:"account"`
-	Balance     float64 `json:"balance"`
-	Period      string  `json:"period"`
+	ID                  string  `json:"id"`
+	StatementID         string  `json:"statementId"`
+	Institution         string  `json:"institution"`
+	Account             string  `json:"account"`
+	Balance             float64 `json:"balance"`
+	Period              string  `json:"period"`
+	LastTransactionDate *string `json:"lastTransactionDate"`
 }
 
 // Transaction is a single transaction in the JSON output.

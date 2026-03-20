@@ -17,7 +17,7 @@ interface TimestampedTransaction extends Transaction {
   readonly timestamp: Timestamp;
 }
 
-function isCardPaymentCategory(category: string): boolean {
+export function isCardPaymentCategory(category: string): boolean {
   return category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
 }
 

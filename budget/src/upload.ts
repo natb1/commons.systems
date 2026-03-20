@@ -101,6 +101,7 @@ interface RawStatement {
   account: string;
   balance: number;
   period: string;
+  lastTransactionDate?: string | null;
 }
 
 interface RawWeeklyAggregate {
@@ -265,6 +266,9 @@ export function parseUploadedJson(text: string): ParsedUpload {
       account: requireString(s.account, "statement", i, "account"),
       balance: requireFiniteNumber(s.balance, "statement", i, "balance"),
       period: requireString(s.period, "statement", i, "period"),
+      lastTransactionDate: s.lastTransactionDate
+        ? parseTimestamp(s.lastTransactionDate, `statement[${i}].lastTransactionDate`)
+        : null,
       groupId: null as GroupId | null,
     }),
   );
@@ -353,6 +357,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       account: s.account,
       balance: s.balance,
       period: s.period,
+      lastTransactionDateMs: s.lastTransactionDate?.toMillis() ?? null,
     })),
     weeklyAggregates: parsed.weeklyAggregates.map((a) => ({
       id: a.id,

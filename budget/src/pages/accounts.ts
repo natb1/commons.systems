@@ -1,6 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import type { Transaction, Statement } from "../firestore.js";
+import type { Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
 import { computeAggregateTrend, computeNetWorth, type AggregatePoint, type NetWorthPoint, type BalanceDivergence } from "../balance.js";
 
@@ -8,22 +8,10 @@ interface AccountRow {
   institution: string;
   account: string;
   mostRecentTimestamp: number;
-  balance: number | null;
+  balance: number;
 }
 
-function buildAccountRows(transactions: Transaction[], statements: Statement[]): AccountRow[] {
-  const accountMap = new Map<string, { institution: string; account: string; maxTs: number }>();
-  for (const txn of transactions) {
-    const key = `${txn.institution}\0${txn.account}`;
-    const ts = txn.timestamp?.toMillis() ?? 0;
-    const existing = accountMap.get(key);
-    if (!existing) {
-      accountMap.set(key, { institution: txn.institution, account: txn.account, maxTs: ts });
-    } else if (ts > existing.maxTs) {
-      existing.maxTs = ts;
-    }
-  }
-
+function buildAccountRows(statements: Statement[]): AccountRow[] {
   // Find latest statement per (institution, account) by comparing period strings (YYYY-MM format, zero-padded, so lexicographic order equals chronological order)
   const latestStatements = new Map<string, Statement>();
   for (const stmt of statements) {
@@ -35,13 +23,12 @@ function buildAccountRows(transactions: Transaction[], statements: Statement[]):
   }
 
   const rows: AccountRow[] = [];
-  for (const [key, { institution, account, maxTs }] of accountMap) {
-    const stmt = latestStatements.get(key);
+  for (const [, stmt] of latestStatements) {
     rows.push({
-      institution,
-      account,
-      mostRecentTimestamp: maxTs,
-      balance: stmt ? stmt.balance : null,
+      institution: stmt.institution,
+      account: stmt.account,
+      mostRecentTimestamp: stmt.lastTransactionDate?.toMillis() ?? 0,
+      balance: stmt.balance,
     });
   }
 
@@ -60,7 +47,7 @@ function renderAccountsTable(rows: AccountRow[]): string {
   }
 
   const tableRows = rows.map((row) => {
-    const balanceCell = row.balance !== null ? escapeHtml(formatCurrency(row.balance)) : "";
+    const balanceCell = escapeHtml(formatCurrency(row.balance));
     return `<tr>
       <td>${escapeHtml(row.institution)}</td>
       <td>${escapeHtml(row.account)}</td>
@@ -126,7 +113,7 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
       dataSource.getBudgetPeriods()
         .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
     ]);
-    const rows = buildAccountRows(transactions, statements);
+    const rows = buildAccountRows(statements);
     tableHtml = renderAccountsTable(rows);
 
     try {

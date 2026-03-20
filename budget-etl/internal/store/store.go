@@ -85,13 +85,14 @@ func (c *Client) LookupGroup(ctx context.Context, email, groupName string) (Grou
 
 // StatementData holds the fields to write to a Firestore statement document.
 type StatementData struct {
-	StatementID  string
-	Institution  string
-	Account      string
-	Balance      int64 // cents; raw signed value from statement
-	Period       string
-	GroupID      string
-	MemberEmails []string
+	StatementID         string
+	Institution         string
+	Account             string
+	Balance             int64 // cents; raw signed value from statement
+	Period              string
+	GroupID             string
+	MemberEmails        []string
+	LastTransactionDate *time.Time // nil when not yet computed or no transactions exist for this account
 }
 
 // StatementDocID generates a deterministic document ID from a statement ID
@@ -120,13 +121,14 @@ func (c *Client) UpsertStatements(ctx context.Context, stmts []StatementData) er
 		for _, stmt := range stmts[i:end] {
 			ref := col.Doc(StatementDocID(stmt.StatementID))
 			batch.Set(ref, map[string]interface{}{
-				"statementId":  stmt.StatementID,
-				"institution":  stmt.Institution,
-				"account":      stmt.Account,
-				"balance":      DollarAmount(stmt.Balance),
-				"period":       stmt.Period,
-				"groupId":      stmt.GroupID,
-				"memberEmails": stmt.MemberEmails,
+				"statementId":         stmt.StatementID,
+				"institution":         stmt.Institution,
+				"account":             stmt.Account,
+				"balance":             DollarAmount(stmt.Balance),
+				"period":              stmt.Period,
+				"groupId":             stmt.GroupID,
+				"memberEmails":        stmt.MemberEmails,
+				"lastTransactionDate": stmt.LastTransactionDate,
 			})
 		}
 		if _, err := batch.Commit(ctx); err != nil {

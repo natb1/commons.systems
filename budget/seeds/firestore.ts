@@ -37,8 +37,8 @@ type RuleSeedData = Omit<Rule, "id" | "groupId"> & { memberEmails: string[]; gro
 
 type NormalizationRuleSeedData = Omit<NormalizationRule, "id"> & { memberEmails: string[] };
 
-/** Seed statements use plain string for statementId (not branded), require groupId (non-nullable), and add memberEmails for security rules. */
-type StatementSeedData = Omit<Statement, "id" | "statementId" | "groupId"> & { statementId: string; groupId: string; memberEmails: string[] };
+/** Seed statements use plain string for statementId (not branded), Date instead of Timestamp for lastTransactionDate, require groupId (non-nullable), and add memberEmails for security rules. */
+type StatementSeedData = Omit<Statement, "id" | "statementId" | "groupId" | "lastTransactionDate"> & { statementId: string; groupId: string; memberEmails: string[]; lastTransactionDate: Date | null };
 
 /** Seed weekly aggregates use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client WeeklyAggregate type) */
 type WeeklyAggregateSeedData = Omit<WeeklyAggregate, "id" | "weekStart" | "groupId"> & {
@@ -573,6 +573,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Checking",
       balance: 2286.00,
       period: "2025-01",
+      lastTransactionDate: new Date("2025-02-19"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
@@ -585,6 +586,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Checking",
       balance: 3825.50,
       period: "2025-02",
+      lastTransactionDate: new Date("2025-02-19"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
@@ -597,6 +599,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Credit Card",
       balance: 0,
       period: "2025-01",
+      lastTransactionDate: new Date("2025-02-20"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
@@ -609,6 +612,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Credit Card",
       balance: -285.00,
       period: "2025-02",
+      lastTransactionDate: new Date("2025-02-20"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
@@ -621,6 +625,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Savings",
       balance: 1210.00,
       period: "2025-01",
+      lastTransactionDate: new Date("2025-02-21"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
@@ -633,6 +638,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Savings",
       balance: 980.00,
       period: "2025-02",
+      lastTransactionDate: new Date("2025-02-21"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
