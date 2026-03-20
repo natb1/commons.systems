@@ -135,6 +135,7 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
       const { points: netWorthPoints, divergences } = computeNetWorth(transactions, statements, trendWeeks);
       chartHtml = renderChartContainers(aggregateTrend, netWorthPoints, divergences);
     } catch (chartError) {
+      console.error("Failed to compute chart data:", chartError);
       chartHtml = renderLoadError(chartError, "chart-error");
     }
   } catch (error) {

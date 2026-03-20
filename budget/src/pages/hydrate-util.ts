@@ -1,5 +1,6 @@
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showDropdown } from "@commons-systems/style/components/autocomplete";
+import type { ChartResult } from "./budgets-chart.js";
 
 const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
@@ -119,43 +120,42 @@ export function toISODate(ms: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
-import type { ChartResult } from "./budgets-chart.js";
-
-export function attachScrollSync(getWrappers: () => HTMLElement[]): { abort: AbortController; syncing: { value: boolean } } {
+export function attachScrollSync(getWrappers: () => HTMLElement[]): { abort: AbortController } {
   const abort = new AbortController();
-  const syncing = { value: false };
+  let syncing = false;
   const wrappers = getWrappers();
   for (const w of wrappers) {
     w.addEventListener("scroll", () => {
-      if (syncing.value) return;
-      syncing.value = true;
+      if (syncing) return;
+      syncing = true;
       try {
         const ratio = w.scrollWidth > 0 ? w.scrollLeft / w.scrollWidth : 0;
         for (const other of wrappers) {
           if (other !== w) other.scrollLeft = ratio * other.scrollWidth;
         }
       } finally {
-        syncing.value = false;
+        syncing = false;
       }
     }, { signal: abort.signal });
   }
-  return { abort, syncing };
+  return { abort };
 }
 
 export function wireChartDatePicker(
   pickerId: string,
-  chartResult: ChartResult,
+  getChartResult: () => ChartResult,
   getWrappers: () => HTMLElement[],
 ): void {
+  const initialResult = getChartResult();
   const datePicker = document.getElementById(pickerId) as HTMLInputElement | null;
-  if (!datePicker || chartResult.weeks.length === 0) return;
+  if (!datePicker || initialResult.weeks.length === 0) return;
 
-  datePicker.min = toISODate(chartResult.weeks[0].ms);
-  datePicker.max = toISODate(chartResult.weeks[chartResult.weeks.length - 1].ms);
+  datePicker.min = toISODate(initialResult.weeks[0].ms);
+  datePicker.max = toISODate(initialResult.weeks[initialResult.weeks.length - 1].ms);
 
   datePicker.addEventListener("change", () => {
     if (!datePicker.value) return;
-    const weeks = chartResult.weeks;
+    const weeks = getChartResult().weeks;
     const selectedMs = new Date(datePicker.value + "T00:00:00").getTime();
     let nearestIdx = 0;
     let nearestDist = Infinity;
@@ -200,6 +200,7 @@ export function wireChartResize(
       } catch (error) {
         const msg = "Chart rendering failed on resize. Try refreshing the page.";
         for (const el of errorEls) el.textContent = msg;
+        console.error("Chart render failed during resize:", error);
         setTimeout(() => { throw error; }, 0);
         return;
       }

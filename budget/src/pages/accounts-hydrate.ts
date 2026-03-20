@@ -79,6 +79,6 @@ export function hydrateAccountsCharts(container: HTMLElement): void {
 
   render();
   reattachScrollSync();
-  wireChartDatePicker("accounts-date-picker", chartResult, getAccountsScrollWrappers);
+  wireChartDatePicker("accounts-date-picker", () => chartResult, getAccountsScrollWrappers);
   wireChartResize(container, render, getAccountsScrollWrappers, [trendEl, nwEl], reattachScrollSync);
 }

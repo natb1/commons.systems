@@ -236,8 +236,8 @@ export function computeRollingAverage(values: number[], windowSize: number): num
 export function toSundayEntry(d: Date): { label: string; ms: number } {
   if (isNaN(d.getTime())) throw new DataIntegrityError("toSundayEntry received an invalid Date");
   const sun = new Date(d);
-  sun.setDate(sun.getDate() - sun.getDay());
-  const label = `${sun.getMonth() + 1}/${sun.getDate()}`;
+  sun.setUTCDate(sun.getUTCDate() - sun.getUTCDay());
+  const label = `${sun.getUTCMonth() + 1}/${sun.getUTCDate()}`;
   return { label, ms: sun.getTime() };
 }
 
@@ -394,7 +394,8 @@ function endOfWeekMs(timestampMs: number): number {
  * by categories starting with "Income". Non-primary normalized duplicates and
  * null-timestamp transactions are excluded. Returns 0 when no qualifying income
  * transactions exist. Amounts are absolute-valued before summing, so both
- * positive and negative income conventions produce a positive result.
+ * Income amounts are negative (credit convention); absolute-valued before
+ * summing to produce a positive result.
  */
 export function computeAverageWeeklyIncome(transactions: Transaction[]): number {
   const incomeTxns = filterIncomeTransactions(transactions);
@@ -516,7 +517,7 @@ export function computeNetWorth(
     const txnTimes = txns.map(t => t.timestamp.toMillis());
     const txnNets = txns.map(t => computeNetAmount(t.amount, t.reimbursement));
 
-    // cumSumBefore: cumulative net amount for txns with timestamp < T (linear scan, used for unordered access)
+    // cumSumBefore: cumulative net amount for txns before timestamp T. Uses sorted txnTimes with early break. Retained for non-sequential lookups (divergence verification) where the advancing pointer cannot be used.
     function cumSumBefore(T: number): number {
       let sum = 0;
       for (let i = 0; i < txnTimes.length; i++) {

@@ -166,6 +166,6 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
   render();
   reattachScrollSync();
-  wireChartDatePicker("chart-date-picker", chartResult, getAllScrollWrappers);
+  wireChartDatePicker("chart-date-picker", () => chartResult, getAllScrollWrappers);
   wireChartResize(container, render, getAllScrollWrappers, [container, areaEl], reattachScrollSync);
 }
