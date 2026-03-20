@@ -109,7 +109,8 @@ function getWorker(): Worker | null {
 }
 
 function postToWorker(msg: Record<string, unknown>): Promise<unknown> {
-  const w = getWorker()!;
+  const w = getWorker();
+  if (!w) throw new Error("crypto worker unavailable");
   const id = msgId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
@@ -130,11 +131,8 @@ export async function encrypt(plaintext: string, password: string): Promise<Arra
 }
 
 export async function decrypt(data: ArrayBuffer, password: string): Promise<string> {
-  if (!isEncrypted(data)) {
+  if (data.byteLength < HEADER_LEN || !isEncrypted(data)) {
     throw new UploadValidationError("File is not in BENC encrypted format.");
-  }
-  if (data.byteLength < HEADER_LEN) {
-    throw new UploadValidationError("Encrypted file is truncated (header incomplete).");
   }
   if (getWorker()) {
     return postToWorker({ type: "decrypt", data, password }) as Promise<string>;

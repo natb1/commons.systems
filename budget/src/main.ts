@@ -39,7 +39,7 @@ navEl.showAuth = false;
 // File upload UI
 const uploadContainer = document.createElement("div");
 uploadContainer.className = "nav-upload";
-uploadContainer.innerHTML = `<label class="upload-label" tabindex="0">Load data<input type="file" accept=".json" class="upload-input" hidden></label>`;
+uploadContainer.innerHTML = `<label class="upload-label" tabindex="0">Load data<input type="file" accept=".json,.benc" class="upload-input" hidden></label>`;
 const authContainer = navEl.querySelector(".nav-auth");
 if (!authContainer) throw new Error(".nav-auth container not found in nav element");
 authContainer.appendChild(uploadContainer);

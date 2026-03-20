@@ -213,7 +213,7 @@ func ReadFile(path, password string) (Output, error) {
 	if encrypted {
 		data, err = decryptJSON(data, password)
 		if err != nil {
-			return Output{}, err
+			return Output{}, fmt.Errorf("decrypting %s: %w", path, err)
 		}
 	}
 

@@ -13,7 +13,7 @@ const serviceName = "budget-etl"
 // (service "budget-etl"). Store passwords with:
 //
 //	security add-generic-password -s budget-etl -a <account> -w
-//	# -w prompts for password interactively
+//	# -w (without a following argument) prompts for the password interactively
 func Get(account string) (string, error) {
 	cmd := exec.Command("security", "find-generic-password",
 		"-s", serviceName, "-a", account, "-w")
