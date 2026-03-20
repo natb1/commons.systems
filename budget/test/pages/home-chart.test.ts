@@ -47,6 +47,7 @@ function makeContainer(txns?: SerializedChartTransaction[]): HTMLElement {
     </fieldset>
     <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
     <label id="card-payment-toggle"><input type="checkbox" id="sankey-card-payment"> Show card payments</label>
+    <label id="category-filter-label">Category: <input type="text" id="sankey-category-filter" data-autocomplete></label>
     <input id="sankey-weeks" type="number" value="12">
     <input id="sankey-end-week" type="range">
     <span id="sankey-end-label"></span>
@@ -334,6 +335,51 @@ describe("buildCategoryTree", () => {
   });
 });
 
+describe("buildCategoryTree with categoryFilter", () => {
+  it('filter "Food" includes "Food" and "Food:Groceries" but excludes "Travel"', () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Food:Groceries", amount: 30 }),
+      txn({ category: "Travel", amount: 20 }),
+    ], "spending", false, false, "Food");
+    expect(root.value).toBe(80);
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0].name).toBe("Food");
+  });
+
+  it('filter "Food:Groceries" includes only "Food:Groceries" not "Food" or "Food:Dining"', () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Food:Groceries", amount: 30 }),
+      txn({ category: "Food:Dining", amount: 20 }),
+    ], "spending", false, false, "Food:Groceries");
+    expect(root.value).toBe(30);
+    expect(root.children).toHaveLength(1);
+    const food = root.children[0];
+    expect(food.name).toBe("Food");
+    expect(food.children).toHaveLength(1);
+    expect(food.children[0].name).toBe("Groceries");
+  });
+
+  it("empty filter includes all transactions", () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Travel", amount: 20 }),
+    ], "spending", false, false, "");
+    expect(root.value).toBe(70);
+    expect(root.children).toHaveLength(2);
+  });
+
+  it('exact match works: category "Food" with filter "Food"', () => {
+    const root = buildCategoryTree([
+      txn({ category: "Food", amount: 50 }),
+    ], "spending", false, false, "Food");
+    expect(root.value).toBe(50);
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0].name).toBe("Food");
+  });
+});
+
 describe("divideTreeValues", () => {
   it("divides all node values by divisor", () => {
     const root = buildCategoryTree([
@@ -584,5 +630,51 @@ describe("hydrateCategorySankey", () => {
     creditsRadio.checked = true;
     creditsRadio.dispatchEvent(new Event("change"));
     expect(txnRows[0].style.display).toBe("none"); // hidden in credits mode
+  });
+
+  it("filterTable hides rows not matching category filter", () => {
+    const table = document.createElement("div");
+    table.id = "transactions-table";
+    const rows = [
+      { category: "Food", hasBudget: "false" },
+      { category: "Food:Groceries", hasBudget: "false" },
+      { category: "Food:Dining", hasBudget: "false" },
+      { category: "Travel", hasBudget: "false" },
+    ];
+    for (const r of rows) {
+      const row = document.createElement("div");
+      row.className = "txn-row";
+      row.dataset.category = r.category;
+      row.dataset.hasBudget = r.hasBudget;
+      table.appendChild(row);
+    }
+    document.body.appendChild(table);
+
+    const container = makeContainer([
+      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Food:Groceries", amount: 30 }),
+      txn({ category: "Food:Dining", amount: 20 }),
+      txn({ category: "Travel", amount: 40 }),
+    ]);
+    hydrateCategorySankey(container);
+
+    const txnRows = table.querySelectorAll<HTMLElement>(".txn-row");
+
+    // All spending rows visible by default (no category filter)
+    expect(txnRows[0].style.display).toBe(""); // Food
+    expect(txnRows[1].style.display).toBe(""); // Food:Groceries
+    expect(txnRows[2].style.display).toBe(""); // Food:Dining
+    expect(txnRows[3].style.display).toBe(""); // Travel
+
+    // Set category filter to "Food" and trigger blur
+    const categoryInput = document.querySelector("#sankey-category-filter") as HTMLInputElement;
+    categoryInput.value = "Food";
+    categoryInput.dispatchEvent(new Event("blur"));
+
+    // Food and Food:* visible, Travel hidden
+    expect(txnRows[0].style.display).toBe(""); // Food matches
+    expect(txnRows[1].style.display).toBe(""); // Food:Groceries matches prefix
+    expect(txnRows[2].style.display).toBe(""); // Food:Dining matches prefix
+    expect(txnRows[3].style.display).toBe("none"); // Travel hidden
   });
 });

@@ -224,14 +224,18 @@ describe("renderHome", () => {
     expect(html).toContain("Vacation");
   });
 
-  it("does not render autocomplete options for unauthorized users", async () => {
+  it("does not render autocomplete options on transactions table for unauthorized users", async () => {
     const html = await renderHome(seedOptions({
       getTransactions: vi.fn().mockResolvedValue([
         txn({ category: "Food", budget: "food" }),
       ]),
     }));
     expect(html).not.toContain("data-budget-options");
-    expect(html).not.toContain("data-category-options");
+    // data-category-options appears on sankey-controls for all users,
+    // but must not appear on the transactions table for unauthorized users
+    const tableMatch = html.match(/<div id="transactions-table"([^>]*)>/);
+    expect(tableMatch).not.toBeNull();
+    expect(tableMatch![1]).not.toContain("data-category-options");
   });
 
   it("renders category options as data attribute for authorized users", async () => {
@@ -519,6 +523,35 @@ describe("renderHome", () => {
     }));
     expect(html).toContain('id="unbudgeted-toggle"');
     expect(html).toContain('id="sankey-unbudgeted"');
+  });
+
+  it("renders category filter input in sankey controls", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([txn()]),
+    }));
+    expect(html).toContain('id="sankey-category-filter"');
+    expect(html).toContain('id="category-filter-label"');
+  });
+
+  it("renders data-category-options on sankey controls div", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ category: "Food:Groceries" }),
+        txn({
+          id: "txn-2", institution: "Bank B", account: "Savings",
+          description: "Flight", amount: 300, category: "Travel",
+          timestamp: mockTimestamp("2025-02-01"),
+        }),
+      ]),
+    }));
+    expect(html).toContain('data-category-options');
+    const match = html.match(/id="sankey-controls"[^>]*data-category-options="([^"]*)"/);
+    expect(match).not.toBeNull();
+    const decoded = match![1].replace(/&quot;/g, '"');
+    const options = JSON.parse(decoded);
+    expect(options).toContain("Food:Groceries");
+    expect(options).toContain("Travel");
+    expect(options).toEqual([...options].sort());
   });
 
   describe("normalized transaction groups", () => {

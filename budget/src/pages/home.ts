@@ -166,13 +166,15 @@ function serializeChartTransactions(transactions: Transaction[]): SerializedChar
 function renderCategorySankey(transactions: Transaction[]): string {
   const chartData = serializeChartTransactions(transactions);
   const json = JSON.stringify(chartData).replace(/</g, "\\u003c");
-  return `<div id="sankey-controls">
+  const categoryOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))));
+  return `<div id="sankey-controls" data-category-options="${categoryOpts}">
       <fieldset id="sankey-mode">
         <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
         <label><input type="radio" name="sankey-mode" value="credits"> Credits</label>
       </fieldset>
       <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
       <label id="card-payment-toggle"><input type="checkbox" id="sankey-card-payment"> Show card payments</label>
+      <label id="category-filter-label">Category: <input type="text" id="sankey-category-filter" data-autocomplete></label>
       <label>Weeks: <input type="number" id="sankey-weeks" value="12" min="1" max="104"></label>
       <label>Ending week: <input type="range" id="sankey-end-week"> <span id="sankey-end-label"></span></label>
     </div>
