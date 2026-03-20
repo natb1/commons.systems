@@ -10,8 +10,11 @@ vi.mock("firebase/app", () => ({
   initializeApp: vi.fn(() => mockApp),
 }));
 
+const mockLocalCache = { type: "persistent-local-cache" };
+
 vi.mock("firebase/firestore", () => ({
-  getFirestore: vi.fn(() => mockDb),
+  initializeFirestore: vi.fn(() => mockDb),
+  persistentLocalCache: vi.fn(() => mockLocalCache),
   connectFirestoreEmulator: vi.fn(),
 }));
 
@@ -45,7 +48,7 @@ async function loadModule() {
 
 async function loadMocks() {
   const { initializeApp } = await import("firebase/app");
-  const { connectFirestoreEmulator } = await import("firebase/firestore");
+  const { initializeFirestore, persistentLocalCache, connectFirestoreEmulator } = await import("firebase/firestore");
   const { connectStorageEmulator } = await import("firebase/storage");
   const { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken } = await import("firebase/app-check");
   const { validateNamespace } = await import(
@@ -53,6 +56,8 @@ async function loadMocks() {
   );
   return {
     initializeApp: initializeApp as ReturnType<typeof vi.fn>,
+    initializeFirestore: initializeFirestore as ReturnType<typeof vi.fn>,
+    persistentLocalCache: persistentLocalCache as ReturnType<typeof vi.fn>,
     connectFirestoreEmulator:
       connectFirestoreEmulator as ReturnType<typeof vi.fn>,
     connectStorageEmulator: connectStorageEmulator as ReturnType<typeof vi.fn>,
@@ -82,6 +87,18 @@ describe("createAppContext", () => {
     expect(ctx).toHaveProperty("trackPageView", mockTrackPageView);
     expect(ctx).not.toHaveProperty("storage");
     expect(ctx).not.toHaveProperty("STORAGE_NAMESPACE");
+  });
+
+  it("initializes Firestore with persistentLocalCache", async () => {
+    const { createAppContext } = await loadModule();
+    const mocks = await loadMocks();
+
+    createAppContext("myapp", "app-id-123");
+
+    expect(mocks.persistentLocalCache).toHaveBeenCalledWith({});
+    expect(mocks.initializeFirestore).toHaveBeenCalledWith(mockApp, {
+      localCache: mockLocalCache,
+    });
   });
 
   it("returns correct shape with storage module", async () => {

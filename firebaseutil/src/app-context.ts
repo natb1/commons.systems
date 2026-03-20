@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, connectFirestoreEmulator } from "firebase/firestore";
 import {
   initializeAppCheck,
   ReCaptchaEnterpriseProvider,
@@ -146,7 +146,9 @@ export function createAppContext(
       }
     : undefined;
 
-  const db = getFirestore(app);
+  const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({}),
+  });
 
   if (firestoreEmulatorHost) {
     const { hostname, port } = parseEmulatorHost(
