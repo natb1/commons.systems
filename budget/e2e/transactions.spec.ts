@@ -78,10 +78,10 @@ test.describe("transactions", () => {
     await expect(page.locator("#sankey-end-week")).toBeVisible();
   });
 
-  test("sankey chart renders income mode with negative amounts", async ({ page }) => {
+  test("sankey chart renders credits mode with negative amounts", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("#category-sankey svg")).toHaveCount(1, { timeout: 30000 });
-    await page.locator('#sankey-controls input[name="sankey-mode"][value="income"]').check();
+    await page.locator('#sankey-controls input[name="sankey-mode"][value="credits"]').check();
     await expect(page.locator("#category-sankey svg")).toHaveCount(1);
     await expect(page.locator("#category-sankey svg .sankey-node")).not.toHaveCount(0);
   });
@@ -100,10 +100,10 @@ test.describe("transactions", () => {
     await expect(page.locator("#unbudgeted-toggle")).toBeVisible();
   });
 
-  test("unbudgeted toggle hidden in income mode", async ({ page }) => {
+  test("unbudgeted toggle hidden in credits mode", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
-    await page.locator('input[name="sankey-mode"][value="income"]').check();
+    await page.locator('input[name="sankey-mode"][value="credits"]').check();
     await expect(page.locator("#unbudgeted-toggle")).toBeHidden();
   });
 
@@ -132,12 +132,12 @@ test.describe("transactions", () => {
     }).toPass({ timeout: 5000 });
   });
 
-  test("switching to income hides toggle and resets it", async ({ page }) => {
+  test("switching to credits hides toggle and resets it", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
     await page.locator("#sankey-unbudgeted").check();
     await expect(page.locator("#sankey-unbudgeted")).toBeChecked();
-    await page.locator('input[name="sankey-mode"][value="income"]').check();
+    await page.locator('input[name="sankey-mode"][value="credits"]').check();
     await expect(page.locator("#unbudgeted-toggle")).toBeHidden();
     await expect(page.locator("#sankey-unbudgeted")).not.toBeChecked();
     await page.locator('input[name="sankey-mode"][value="spending"]').check();
@@ -145,29 +145,29 @@ test.describe("transactions", () => {
     await expect(page.locator("#sankey-unbudgeted")).not.toBeChecked();
   });
 
-  test("spending mode hides income rows in table", async ({ page }) => {
+  test("spending mode hides negative-amount rows in table", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
     const visibleRows = page.locator('.txn-row:not([style*="display: none"])');
     const count = await visibleRows.count();
     expect(count).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {
-      const category = await visibleRows.nth(i).getAttribute("data-category");
-      expect(category).not.toMatch(/^Income/);
+      const netAmount = await visibleRows.nth(i).getAttribute("data-net-amount");
+      expect(parseFloat(netAmount ?? "0")).toBeGreaterThan(0);
     }
   });
 
-  test("income mode shows only income rows", async ({ page }) => {
+  test("credits mode shows only negative-amount rows", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
-    await page.locator('input[name="sankey-mode"][value="income"]').check();
+    await page.locator('input[name="sankey-mode"][value="credits"]').check();
     const visibleRows = page.locator('.txn-row:not([style*="display: none"])');
     await expect(visibleRows.first()).toBeVisible();
     const count = await visibleRows.count();
     expect(count).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {
-      const category = await visibleRows.nth(i).getAttribute("data-category");
-      expect(category).toMatch(/^Income/);
+      const netAmount = await visibleRows.nth(i).getAttribute("data-net-amount");
+      expect(parseFloat(netAmount ?? "0")).toBeLessThan(0);
     }
   });
 
@@ -177,10 +177,10 @@ test.describe("transactions", () => {
     await expect(page.locator("#card-payment-toggle")).toBeVisible();
   });
 
-  test("card payment toggle hidden in income mode", async ({ page }) => {
+  test("card payment toggle hidden in credits mode", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
-    await page.locator('input[name="sankey-mode"][value="income"]').check();
+    await page.locator('input[name="sankey-mode"][value="credits"]').check();
     await expect(page.locator("#card-payment-toggle")).toBeHidden();
   });
 
@@ -212,12 +212,12 @@ test.describe("transactions", () => {
     expect(cardPaymentCount).toBeGreaterThan(0);
   });
 
-  test("switching to income hides and resets card payment toggle", async ({ page }) => {
+  test("switching to credits hides and resets card payment toggle", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
     await page.locator("#sankey-card-payment").check();
     await expect(page.locator("#sankey-card-payment")).toBeChecked();
-    await page.locator('input[name="sankey-mode"][value="income"]').check();
+    await page.locator('input[name="sankey-mode"][value="credits"]').check();
     await expect(page.locator("#card-payment-toggle")).toBeHidden();
     await expect(page.locator("#sankey-card-payment")).not.toBeChecked();
     await page.locator('input[name="sankey-mode"][value="spending"]').check();
