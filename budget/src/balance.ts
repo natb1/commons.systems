@@ -272,6 +272,7 @@ export function computeAggregateTrend(
   const weeklyIncome = new Map<number, number>();
   for (const t of incomeTxns) {
     const entry = toSundayEntry(t.timestamp.toDate());
+    // Income amounts are negative; accumulate as-is so the trend chart plots income below zero
     weeklyIncome.set(entry.ms, (weeklyIncome.get(entry.ms) ?? 0) + computeNetAmount(t.amount, t.reimbursement));
   }
 
@@ -410,6 +411,7 @@ export function computeAverageWeeklyIncome(transactions: Transaction[]): number 
   for (const t of incomeTxns) {
     const ms = t.timestamp.toMillis();
     if (ms >= windowStart && ms < windowEnd) {
+      // Income amounts are negative; use abs to get positive magnitude for display
       sum += Math.abs(computeNetAmount(t.amount, t.reimbursement));
     }
   }

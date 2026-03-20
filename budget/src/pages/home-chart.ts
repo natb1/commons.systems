@@ -6,6 +6,7 @@ export type ChartMode = "spending" | "income";
 
 export interface SerializedChartTransaction {
   category: string;
+  /** Cents. Positive = spending/debit, negative = income/credit. */
   amount: number;
   reimbursement: number;
   timestampMs: number | null;
@@ -65,8 +66,11 @@ export function filterByWeeks(
  * Build a category tree from transactions.
  *
  * Filters transactions by mode (spending excludes Income-prefixed categories,
- * income includes only Income-prefixed categories) and excludes transactions
- * with zero or negative net amounts (after reimbursement). Builds a hierarchy
+ * income includes only Income-prefixed categories). For spending, positive net
+ * amounts pass through; for income, the sign is flipped (income amounts are
+ * negative in source data) so they become positive for display. Transactions
+ * with non-positive net amounts (after reimbursement and sign normalization)
+ * are excluded. Builds a hierarchy
  * from colon-separated category paths. Rolls up values and counts from leaves
  * to parents, then sorts children by value descending, name ascending.
  */
@@ -79,7 +83,9 @@ export function buildCategoryTree(
   for (const t of txns) {
     const parts = t.category.split(":");
     const isIncome = parts[0] === "Income";
-    const net = computeNetAmount(t.amount, t.reimbursement);
+    const raw = computeNetAmount(t.amount, t.reimbursement);
+    // Income amounts are negative in source data; negate to get positive display value
+    const net = isIncome ? -raw : raw;
     if (net <= 0) continue;
     if (mode === "spending" && isIncome) continue;
     if (mode === "income" && !isIncome) continue;
