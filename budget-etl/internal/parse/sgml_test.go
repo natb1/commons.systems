@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseSGML(t *testing.T) {
-	path := filepath.Join("testdata", "pnc.qfx")
+	path := filepath.Join("testdata", "bankone.qfx")
 	result, err := parseSGML(path)
 	if err != nil {
 		t.Fatalf("parseSGML: %v", err)

@@ -6,6 +6,7 @@ export type ChartMode = "spending" | "income";
 
 export interface SerializedChartTransaction {
   category: string;
+  /** Cents. Positive = spending/debit, negative = income/credit. */
   amount: number;
   reimbursement: number;
   timestampMs: number | null;

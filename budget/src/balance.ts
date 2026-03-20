@@ -410,6 +410,7 @@ export function computeAverageWeeklyIncome(transactions: Transaction[]): number 
   for (const t of incomeTxns) {
     const ms = t.timestamp.toMillis();
     if (ms >= windowStart && ms < windowEnd) {
+      // Income amounts are negative; use abs to get positive magnitude for display
       sum += Math.abs(computeNetAmount(t.amount, t.reimbursement));
     }
   }

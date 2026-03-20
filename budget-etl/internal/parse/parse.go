@@ -26,8 +26,9 @@ type ParseError struct {
 func (e *ParseError) Error() string { return fmt.Sprintf("%s: %v", e.Path, e.Err) }
 func (e *ParseError) Unwrap() error { return e.Err }
 
-// StatementFile identifies a statement file and the metadata extracted from its directory path.
-// Expected directory layout: {institution}/{account}/{period}/{file}
+// StatementFile identifies a statement file and the metadata extracted from its path.
+// Period is derived from either the period directory name (4-level layout) or the
+// filename stem (3-level layout). See [DiscoverFiles] for accepted layouts.
 type StatementFile struct {
 	Path        string
 	Institution string
@@ -40,9 +41,11 @@ func (sf StatementFile) StatementID() string {
 	return sf.Institution + "-" + sf.Account + "-" + sf.Period
 }
 
-// DiscoverFiles walks dir looking for files matching the expected
-// {institution}/{account}/{period}/{file} layout. It returns one StatementFile
-// per file found, skipping dot-prefixed directories and files (like .DS_Store).
+// DiscoverFiles walks dir looking for statement files. It accepts two layouts:
+//   - {institution}/{account}/{period}/{file} — period from directory name
+//   - {institution}/{account}/{file} — period from filename stem
+//
+// It returns one StatementFile per file found, skipping dot-prefixed entries.
 func DiscoverFiles(dir string) ([]StatementFile, error) {
 	dir = filepath.Clean(dir)
 	var files []StatementFile
@@ -66,22 +69,42 @@ func DiscoverFiles(dir string) ([]StatementFile, error) {
 			return err
 		}
 		parts := strings.Split(rel, string(filepath.Separator))
-		if len(parts) != 4 {
-			return fmt.Errorf("unexpected path depth for %s: expected institution/account/period/file, got %d components", rel, len(parts))
+		switch len(parts) {
+		case 4:
+			// institution/account/period/file
+			files = append(files, StatementFile{
+				Path:        path,
+				Institution: parts[0],
+				Account:     parts[1],
+				Period:      parts[2],
+			})
+		case 3:
+			// institution/account/file (no period directory)
+			stem := filenameStem(parts[2])
+			if stem == "" {
+				return fmt.Errorf("cannot derive period from filename %q: empty stem after removing extension", parts[2])
+			}
+			files = append(files, StatementFile{
+				Path:        path,
+				Institution: parts[0],
+				Account:     parts[1],
+				Period:      stem,
+			})
+		default:
+			return fmt.Errorf("unexpected path depth for %s: expected institution/account/[period/]file, got %d components", rel, len(parts))
 		}
-
-		files = append(files, StatementFile{
-			Path:        path,
-			Institution: parts[0],
-			Account:     parts[1],
-			Period:      parts[2],
-		})
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	return files, nil
+}
+
+// filenameStem returns the filename without its extension.
+func filenameStem(name string) string {
+	ext := filepath.Ext(name)
+	return strings.TrimSuffix(name, ext)
 }
 
 type format int
