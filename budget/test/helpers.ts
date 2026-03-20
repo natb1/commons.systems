@@ -27,6 +27,7 @@ export function makeBudget(overrides: Partial<Budget> = {}): Budget {
     name: "Food",
     weeklyAllowance: 150,
     rollover: "none",
+    overrides: [],
     groupId: null,
     ...overrides,
   };
@@ -122,6 +123,7 @@ export function createMockDataSource(overrides: Partial<DataSource> = {}): DataS
     getNormalizationRules: vi.fn().mockResolvedValue([]),
     updateTransaction: vi.fn(),
     updateBudget: vi.fn(),
+    updateBudgetOverrides: vi.fn(),
     adjustBudgetPeriodTotal: vi.fn(),
     createRule: vi.fn(),
     updateRule: vi.fn(),

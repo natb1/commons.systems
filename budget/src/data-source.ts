@@ -3,6 +3,7 @@ import type {
   Transaction,
   Statement,
   Budget,
+  BudgetOverride,
   BudgetPeriod,
   Rule,
   NormalizationRule,
@@ -39,6 +40,7 @@ export interface DataSource {
     id: BudgetId,
     fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
   ): Promise<void>;
+  updateBudgetOverrides(id: BudgetId, overrides: BudgetOverride[]): Promise<void>;
   adjustBudgetPeriodTotal(id: BudgetPeriodId, delta: number): Promise<void>;
   createRule(fields: Omit<Rule, "id" | "groupId">): Promise<RuleId>;
   updateRule(
@@ -77,6 +79,9 @@ export class FirestoreSeedDataSource implements DataSource {
     throw new Error("Seed data is read-only");
   }
   async updateBudget(): Promise<void> {
+    throw new Error("Seed data is read-only");
+  }
+  async updateBudgetOverrides(): Promise<void> {
     throw new Error("Seed data is read-only");
   }
   async adjustBudgetPeriodTotal(): Promise<void> {
@@ -128,6 +133,10 @@ function toBudget(row: IdbBudget): Budget {
     name: row.name,
     weeklyAllowance: row.weeklyAllowance,
     rollover: row.rollover,
+    overrides: (row.overrides ?? []).map(o => ({
+      date: Timestamp.fromMillis(o.dateMs),
+      balance: o.balance,
+    })),
     groupId: null as GroupId | null,
   };
 }
@@ -239,6 +248,15 @@ export class IdbDataSource implements DataSource {
     fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
   ): Promise<void> {
     await updateRecord<IdbBudget>("budgets", id, "Budget", fields);
+  }
+
+  async updateBudgetOverrides(id: BudgetId, overrides: BudgetOverride[]): Promise<void> {
+    const row = await get<IdbBudget>("budgets", id);
+    if (!row) throw new Error(`Budget ${id} not found`);
+    await put("budgets", {
+      ...row,
+      overrides: overrides.map(o => ({ dateMs: o.date.toMillis(), balance: o.balance })),
+    } as unknown as Record<string, unknown>);
   }
 
   async adjustBudgetPeriodTotal(id: BudgetPeriodId, delta: number): Promise<void> {

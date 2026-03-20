@@ -1,5 +1,5 @@
 import { Timestamp } from "firebase/firestore";
-import { type Budget, type BudgetId, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod } from "../firestore.js";
+import { type Budget, type BudgetId, type BudgetOverride, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize } from "./hydrate-util.js";
@@ -8,7 +8,7 @@ import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
 import { computePanelWidth } from "./chart-util.js";
 import type { PerBudgetPoint } from "../balance.js";
-import type { SerializedBudget } from "./budgets.js";
+import type { SerializedBudget, SerializedBudgetOverride } from "./budgets.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
   const row = el.closest(".budget-row");
@@ -77,7 +77,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
 }
 
 function deserializeBudgets(raw: string): Budget[] {
-  let parsed: Array<Omit<SerializedBudget, "rollover"> & { rollover: string }>;
+  let parsed: Array<Omit<SerializedBudget, "rollover" | "overrides"> & { rollover: string; overrides?: SerializedBudgetOverride[] }>;
   try { parsed = JSON.parse(raw); } catch (e) { throw new DataIntegrityError(`Invalid budget chart data: ${e instanceof Error ? e.message : e}`); }
   return parsed.map(b => {
     if (b.rollover !== "none" && b.rollover !== "debt" && b.rollover !== "balance")
@@ -87,6 +87,10 @@ function deserializeBudgets(raw: string): Budget[] {
       name: b.name,
       weeklyAllowance: b.weeklyAllowance,
       rollover: b.rollover,
+      overrides: (b.overrides ?? []).map(o => ({
+        date: Timestamp.fromMillis(o.dateMs),
+        balance: o.balance,
+      })),
       groupId: null,
     };
   });
@@ -172,4 +176,108 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   reattachScrollSync();
   wireChartDatePicker("chart-date-picker", () => chartResult, getAllScrollWrappers);
   wireChartResize(container, render, getAllScrollWrappers, [container, areaEl], reattachScrollSync);
+}
+
+function collectOverridesForBudget(container: HTMLElement, budgetId: string): BudgetOverride[] {
+  const rows = container.querySelectorAll<HTMLElement>(`.override-row[data-budget-id="${budgetId}"]`);
+  const overrides: BudgetOverride[] = [];
+  for (const row of rows) {
+    const dateInput = row.querySelector<HTMLInputElement>(".edit-override-date");
+    const balanceInput = row.querySelector<HTMLInputElement>(".edit-override-balance");
+    if (!dateInput || !balanceInput) continue;
+    const dateMs = new Date(dateInput.value + "T00:00:00Z").getTime();
+    if (isNaN(dateMs)) continue;
+    const balance = Number(balanceInput.value);
+    if (!Number.isFinite(balance)) continue;
+    overrides.push({ date: Timestamp.fromMillis(dateMs), balance });
+  }
+  overrides.sort((a, b) => a.date.toMillis() - b.date.toMillis());
+  return overrides;
+}
+
+export function hydrateOverridesTable(container: HTMLElement): void {
+  container.addEventListener("blur", async (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const row = target.closest(".override-row");
+    if (!(row instanceof HTMLElement)) return;
+    const budgetId = row.dataset.budgetId as BudgetId | undefined;
+    if (!budgetId) return;
+
+    if (target.value === target.defaultValue) return;
+
+    try {
+      const overrides = collectOverridesForBudget(container, budgetId);
+      await getActiveDataSource().updateBudgetOverrides(budgetId, overrides);
+      target.defaultValue = target.value;
+    } catch (error) {
+      handleSaveError(target, error, "override");
+    }
+  }, true);
+
+  container.addEventListener("click", async (e) => {
+    const target = e.target;
+
+    // Delete override
+    if (target instanceof HTMLButtonElement && target.classList.contains("delete-override")) {
+      const row = target.closest(".override-row");
+      if (!(row instanceof HTMLElement)) return;
+      const budgetId = row.dataset.budgetId as BudgetId | undefined;
+      if (!budgetId) return;
+      row.remove();
+      try {
+        const overrides = collectOverridesForBudget(container, budgetId);
+        await getActiveDataSource().updateBudgetOverrides(budgetId, overrides);
+      } catch (error) {
+        handleSaveError(target, error, "override");
+      }
+      return;
+    }
+
+    // Add override
+    if (target instanceof HTMLButtonElement && target.id === "add-override") {
+      const budgetsRaw = target.dataset.budgets;
+      if (!budgetsRaw) return;
+      const budgets = deserializeBudgets(budgetsRaw);
+      if (budgets.length === 0) return;
+
+      const firstBudget = budgets[0];
+      const today = new Date();
+      const dateStr = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
+
+      const newRow = document.createElement("div");
+      newRow.className = "override-row";
+      newRow.dataset.budgetId = firstBudget.id;
+      newRow.dataset.overrideIndex = "new";
+
+      const budgetOptions = budgets.map(b =>
+        `<option value="${b.id}">${b.name}</option>`
+      ).join("");
+
+      newRow.innerHTML = `
+        <span><select class="edit-override-budget" aria-label="Budget">${budgetOptions}</select></span>
+        <span><input type="date" class="edit-override-date" value="${dateStr}" aria-label="Override date"></span>
+        <span><input type="number" class="edit-override-balance" value="0" step="0.01" aria-label="Override balance"></span>
+        <span><button class="delete-override" aria-label="Delete override">Delete</button></span>
+      `;
+
+      target.before(newRow);
+
+      // Wire budget select change
+      const select = newRow.querySelector<HTMLSelectElement>(".edit-override-budget");
+      if (select) {
+        select.addEventListener("change", () => {
+          newRow.dataset.budgetId = select.value;
+        });
+      }
+
+      // Save immediately
+      try {
+        const overrides = collectOverridesForBudget(container, firstBudget.id);
+        await getActiveDataSource().updateBudgetOverrides(firstBudget.id as BudgetId, overrides);
+      } catch (error) {
+        handleSaveError(target, error, "override");
+      }
+    }
+  });
 }

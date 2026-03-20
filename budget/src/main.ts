@@ -10,7 +10,7 @@ import type { AppNavElement } from "@commons-systems/style/components/nav";
 import type { RenderPageOptions } from "./pages/render-options.js";
 import { hydrateTransactionTable } from "./pages/home-hydrate.js";
 import { hydrateCategorySankey } from "./pages/home-chart.js";
-import { hydrateBudgetTable, hydrateBudgetChart } from "./pages/budgets-hydrate.js";
+import { hydrateBudgetTable, hydrateBudgetChart, hydrateOverridesTable } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { hydrateAccountsCharts } from "./pages/accounts-hydrate.js";
 import { trackPageView } from "./firebase.js";
@@ -169,6 +169,7 @@ const observer = new MutationObserver(() => {
   hydrateTable("#transactions-table", hydrateTransactionTable);
   hydrateTable("#budgets-chart", hydrateBudgetChart);
   hydrateTable("#budgets-table", hydrateBudgetTable);
+  hydrateTable("#overrides-table", hydrateOverridesTable);
   hydrateTable("#rules-table", hydrateRulesTable);
   hydrateTable("#accounts-trend-chart", hydrateAccountsCharts, "Chart rendering");
 });

@@ -54,11 +54,17 @@ interface RawTransaction {
   normalizedDescription: string | null;
 }
 
+interface RawBudgetOverride {
+  date: string;
+  balance: number;
+}
+
 interface RawBudget {
   id: string;
   name: string;
   weeklyAllowance: number;
   rollover: string;
+  overrides?: RawBudgetOverride[];
 }
 
 interface RawBudgetPeriod {
@@ -208,6 +214,10 @@ export function parseUploadedJson(text: string): ParsedUpload {
     name: b.name,
     weeklyAllowance: b.weeklyAllowance ?? 0,
     rollover: requireRollover(b.rollover ?? "none"),
+    overrides: (b.overrides ?? []).map(o => ({
+      date: parseTimestamp(o.date, "budget.overrides.date"),
+      balance: o.balance,
+    })),
     groupId: null as GroupId | null,
   }));
 
@@ -296,6 +306,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       name: b.name,
       weeklyAllowance: b.weeklyAllowance,
       rollover: b.rollover,
+      overrides: b.overrides.map(o => ({ dateMs: o.date.toMillis(), balance: o.balance })),
     })),
     budgetPeriods: parsed.budgetPeriods.map((p) => ({
       id: p.id,

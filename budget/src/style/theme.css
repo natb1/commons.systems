@@ -82,6 +82,53 @@
   border-radius: 4px;
 }
 
+/* --- Override table --- */
+
+#overrides-table {
+  margin-top: 2rem;
+}
+
+#overrides-table h3 {
+  margin-bottom: 0.5rem;
+}
+
+.override-header,
+.override-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  align-items: center;
+}
+
+.override-header {
+  font-weight: bold;
+  border-bottom: 2px solid var(--border);
+}
+
+.override-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.override-row input,
+.override-row select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.override-row input[type="date"],
+.override-row select {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+#add-override {
+  margin-top: 0.5rem;
+}
+
 /* --- Category sankey tree --- */
 
 #sankey-controls { max-width: 1200px; margin: 0 auto 0.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }

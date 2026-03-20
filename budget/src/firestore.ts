@@ -23,11 +23,17 @@ export type { GroupId } from "@commons-systems/authutil/groups";
  */
 export type Rollover = "none" | "debt" | "balance";
 
+export interface BudgetOverride {
+  readonly date: Timestamp;
+  readonly balance: number;
+}
+
 export interface Budget {
   readonly id: BudgetId;
   readonly name: string;
   readonly weeklyAllowance: number;
   readonly rollover: Rollover;
+  readonly overrides: BudgetOverride[];
   readonly groupId: GroupId | null;
 }
 
@@ -129,6 +135,24 @@ function requireCategoryBreakdown(value: unknown): Record<string, number> {
       throw new DataIntegrityError(`categoryBreakdown[${key}] is not a finite number`);
     }
     result[key] = val;
+  }
+  return result;
+}
+
+function requireOverrides(value: unknown): BudgetOverride[] {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    throw new DataIntegrityError(`Expected array for overrides, got ${typeof value}`);
+  }
+  const result: BudgetOverride[] = [];
+  for (let i = 0; i < value.length; i++) {
+    const entry = value[i];
+    if (entry == null || typeof entry !== "object") {
+      throw new DataIntegrityError(`overrides[${i}] is not an object`);
+    }
+    const date = requireTimestamp(entry.date, `overrides[${i}].date`);
+    const balance = requireNumber(entry.balance, `overrides[${i}].balance`);
+    result.push({ date, balance });
   }
   return result;
 }
@@ -253,6 +277,7 @@ export async function getBudgets(groupId: GroupId | null, email?: string): Promi
       name,
       weeklyAllowance: requireNonNegativeNumber(data.weeklyAllowance, "weeklyAllowance"),
       rollover: requireRollover(data.rollover),
+      overrides: requireOverrides(data.overrides),
       groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     };
   });
@@ -354,6 +379,23 @@ export async function updateBudget(
   const path = nsCollectionPath(NAMESPACE, "budgets");
   const ref = doc(db, path, budgetId);
   await updateDoc(ref, fields);
+}
+
+export async function updateBudgetOverrides(
+  budgetId: BudgetId,
+  overrides: BudgetOverride[],
+): Promise<void> {
+  requireDocId(budgetId, "budget");
+  for (let i = 1; i < overrides.length; i++) {
+    if (overrides[i].date.toMillis() <= overrides[i - 1].date.toMillis()) {
+      throw new Error("Overrides must be sorted by date ascending");
+    }
+  }
+  const path = nsCollectionPath(NAMESPACE, "budgets");
+  const ref = doc(db, path, budgetId);
+  await updateDoc(ref, {
+    overrides: overrides.map(o => ({ date: o.date, balance: o.balance })),
+  });
 }
 
 // --- Rules ---

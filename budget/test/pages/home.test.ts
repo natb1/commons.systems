@@ -51,8 +51,8 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
 }
 
 const defaultBudgets = [
-  { id: "food", name: "Food", weeklyAllowance: 150, rollover: "none" as const, groupId: null },
-  { id: "vacation", name: "Vacation", weeklyAllowance: 100, rollover: "balance" as const, groupId: null },
+  { id: "food", name: "Food", weeklyAllowance: 150, rollover: "none" as const, overrides: [], groupId: null },
+  { id: "vacation", name: "Vacation", weeklyAllowance: 100, rollover: "balance" as const, overrides: [], groupId: null },
 ];
 
 const defaultPeriods: BudgetPeriod[] = [
@@ -207,8 +207,8 @@ describe("renderHome", () => {
   it("renders budget options as data attribute for authorized users", async () => {
     const html = await renderHome(localOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        { id: "food", name: "Food", weeklyAllowance: 150, rollover: "none", groupId: "household" },
-        { id: "vacation", name: "Vacation", weeklyAllowance: 100, rollover: "balance", groupId: "household" },
+        { id: "food", name: "Food", weeklyAllowance: 150, rollover: "none", overrides: [], groupId: "household" },
+        { id: "vacation", name: "Vacation", weeklyAllowance: 100, rollover: "balance", overrides: [], groupId: "household" },
       ]),
       getTransactions: vi.fn().mockResolvedValue([
         txn({ category: "Food", budget: "food", groupId: "household" }),
@@ -267,7 +267,7 @@ describe("renderHome", () => {
   it("throws DataIntegrityError when transaction references unknown budget ID", async () => {
     await expect(renderHome(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        { id: "food", name: "Food", weeklyAllowance: 150, rollover: "none", groupId: null },
+        { id: "food", name: "Food", weeklyAllowance: 150, rollover: "none", overrides: [], groupId: null },
       ]),
       getTransactions: vi.fn().mockResolvedValue([
         txn({ budget: "nonexistent-budget" }),
@@ -278,8 +278,8 @@ describe("renderHome", () => {
   it("throws DataIntegrityError for duplicate budget names", async () => {
     await expect(renderHome(localOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        { id: "food-1", name: "Food", weeklyAllowance: 150, rollover: "none", groupId: "household" },
-        { id: "food-2", name: "Food", weeklyAllowance: 200, rollover: "none", groupId: "household" },
+        { id: "food-1", name: "Food", weeklyAllowance: 150, rollover: "none", overrides: [], groupId: "household" },
+        { id: "food-2", name: "Food", weeklyAllowance: 200, rollover: "none", overrides: [], groupId: "household" },
       ]),
       getTransactions: vi.fn().mockResolvedValue([txn()]),
     }))).rejects.toThrow("Duplicate budget name: Food");
@@ -288,7 +288,7 @@ describe("renderHome", () => {
   it("renders budget name-to-ID map as data attribute for authorized users", async () => {
     const html = await renderHome(localOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        { id: "budget-food", name: "Food", weeklyAllowance: 150, rollover: "none", groupId: "household" },
+        { id: "budget-food", name: "Food", weeklyAllowance: 150, rollover: "none", overrides: [], groupId: "household" },
       ]),
       getTransactions: vi.fn().mockResolvedValue([
         txn({ budget: "budget-food", groupId: "household" }),

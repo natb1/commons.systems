@@ -1,6 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { type Budget, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
+import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computePerBudgetTrend, type PerBudgetPoint } from "../balance.js";
 import { formatCurrency } from "../format.js";
 
@@ -51,11 +51,17 @@ function renderBudgetTable(budgets: Budget[], authorized: boolean): string {
     </div>`;
 }
 
+export interface SerializedBudgetOverride {
+  readonly dateMs: number;
+  readonly balance: number;
+}
+
 export interface SerializedBudget {
   readonly id: string;
   readonly name: string;
   readonly weeklyAllowance: number;
   readonly rollover: Rollover;
+  readonly overrides: SerializedBudgetOverride[];
 }
 
 function serializeBudgets(budgets: Budget[]): string {
@@ -64,6 +70,7 @@ function serializeBudgets(budgets: Budget[]): string {
     name: b.name,
     weeklyAllowance: b.weeklyAllowance,
     rollover: b.rollover,
+    overrides: b.overrides.map(o => ({ dateMs: o.date.toMillis(), balance: o.balance })),
   }));
   return escapeHtml(JSON.stringify(data));
 }
@@ -122,10 +129,65 @@ function renderChartContainer(
     </div>`;
 }
 
+function formatDate(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function renderOverrideRow(
+  budgetId: string,
+  budgetName: string,
+  override: BudgetOverride,
+  index: number,
+  editable: boolean,
+): string {
+  const dis = editable ? "" : " disabled";
+  const dateStr = formatDate(override.date.toDate());
+  return `<div class="override-row" data-budget-id="${escapeHtml(budgetId)}" data-override-index="${index}">
+    <span>${escapeHtml(budgetName)}</span>
+    <span><input type="date" class="edit-override-date" value="${escapeHtml(dateStr)}" aria-label="Override date"${dis}></span>
+    <span><input type="number" class="edit-override-balance" value="${escapeHtml(String(override.balance))}" step="0.01" aria-label="Override balance"${dis}></span>
+    <span>${editable ? `<button class="delete-override" aria-label="Delete override">Delete</button>` : ""}</span>
+  </div>`;
+}
+
+function renderOverridesTable(budgets: Budget[], authorized: boolean): string {
+  const allOverrides: { budgetId: string; budgetName: string; override: BudgetOverride; index: number }[] = [];
+  for (const b of budgets) {
+    for (let i = 0; i < b.overrides.length; i++) {
+      allOverrides.push({ budgetId: b.id, budgetName: b.name, override: b.overrides[i], index: i });
+    }
+  }
+
+  const rows = allOverrides
+    .sort((a, b) => a.override.date.toMillis() - b.override.date.toMillis())
+    .map(o => renderOverrideRow(o.budgetId, o.budgetName, o.override, o.index, authorized))
+    .join("\n");
+
+  const addButton = authorized
+    ? `<button id="add-override" data-budgets="${serializeBudgets(budgets)}">Add Override</button>`
+    : "";
+
+  return `<div id="overrides-table">
+    <h3>Balance Overrides</h3>
+    <div class="override-header">
+      <span>Budget</span>
+      <span>Date</span>
+      <span>Balance</span>
+      <span></span>
+    </div>
+    ${rows}
+    ${addButton}
+  </div>`;
+}
+
 export async function renderBudgets(options: RenderPageOptions): Promise<string> {
   const { authorized, dataSource } = options;
 
   let tableHtml: string;
+  let overridesHtml = "";
   let chartHtml = "";
   try {
     const [budgets, periods, transactions] = await Promise.all([
@@ -143,6 +205,9 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
     const perBudgetTrend = computePerBudgetTrend(budgets, periods, transactions);
     chartHtml = renderChartContainer(budgets, periods, metricsHtml, perBudgetTrend, averageWeeklyCredits);
     tableHtml = renderBudgetTable(budgets, authorized);
+    if (budgets.length > 0) {
+      overridesHtml = renderOverridesTable(budgets, authorized);
+    }
   } catch (error) {
     tableHtml = renderLoadError(error, "budgets-error");
   }
@@ -152,5 +217,6 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
     ${renderPageNotices(options, "budgets")}
     ${chartHtml}
     ${tableHtml}
+    ${overridesHtml}
   `;
 }

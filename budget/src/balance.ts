@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { Budget, BudgetId, BudgetPeriod, Rollover, Statement, Transaction, TransactionId } from "./firestore.js";
+import type { Budget, BudgetId, BudgetOverride, BudgetPeriod, Rollover, Statement, Transaction, TransactionId } from "./firestore.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -61,6 +61,16 @@ export function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): B
     .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
 }
 
+/** Return the latest override with date <= beforeMs, or null. Assumes overrides are sorted by date ascending. */
+export function findLatestOverride(overrides: BudgetOverride[], beforeMs: number): BudgetOverride | null {
+  let result: BudgetOverride | null = null;
+  for (const o of overrides) {
+    if (o.date.toMillis() <= beforeMs) result = o;
+    else break;
+  }
+  return result;
+}
+
 // Exclude non-primary normalized transactions to avoid double-counting duplicates
 function transactionsForBudget(txns: Transaction[], budgetId: BudgetId): TimestampedTransaction[] {
   return txns
@@ -103,15 +113,50 @@ export function computeBudgetBalance(
 
   const targetPeriod = periods[targetPeriodIndex];
 
-  // Accumulate balance through prior periods
+  // Check for override that applies at or before the target period start
+  const targetStartMs = targetPeriod.periodStart.toMillis();
+  const override = findLatestOverride(budget.overrides, targetStartMs);
+
+  // Determine which period to start accumulating from
+  let startIdx = 0;
   let running = 0;
-  for (let i = 0; i < targetPeriodIndex; i++) {
-    running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
-    running -= periods[i].total;
+
+  if (override) {
+    const overrideMs = override.date.toMillis();
+    // Find the period containing the override date
+    const overridePeriodIdx = periods.findIndex(
+      (p) => p.periodStart.toMillis() <= overrideMs && overrideMs < p.periodEnd.toMillis(),
+    );
+    if (overridePeriodIdx !== -1 && overridePeriodIdx <= targetPeriodIndex) {
+      // Start from the override: set balance to override value, subtract the override period's total, then continue
+      startIdx = overridePeriodIdx + 1;
+      running = override.balance - periods[overridePeriodIdx].total;
+    }
   }
 
-  // Apply rollover entering the target period
-  running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
+  if (!override) {
+    // No override: accumulate through all prior periods
+    for (let i = 0; i < targetPeriodIndex; i++) {
+      running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
+      running -= periods[i].total;
+    }
+  } else if (startIdx <= targetPeriodIndex) {
+    // Override was in a prior period; continue accumulating from after override period
+    for (let i = startIdx; i < targetPeriodIndex; i++) {
+      running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
+      running -= periods[i].total;
+    }
+  }
+
+  // Apply rollover entering the target period (unless override is in this period)
+  if (override && periods.findIndex(
+    (p) => p.periodStart.toMillis() <= override.date.toMillis() && override.date.toMillis() < p.periodEnd.toMillis(),
+  ) === targetPeriodIndex) {
+    // Override is in the target period: running starts at override balance
+    running = override.balance;
+  } else {
+    running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
+  }
 
   // Walk same-period transactions up to and including the target transaction
   const periodStartMs = targetPeriod.periodStart.toMillis();
@@ -153,7 +198,20 @@ export function computePeriodBalances(
     const balances: PeriodBalance[] = [];
     let accumulated = 0;
     for (const period of sorted) {
-      const running = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
+      const periodStartMs = period.periodStart.toMillis();
+      const periodEndMs = period.periodEnd.toMillis();
+      const override = findLatestOverride(budget.overrides, periodStartMs);
+
+      let running: number;
+      if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
+        // Override is in this period: replaces rollover
+        running = override.balance;
+      } else if (override) {
+        // Override is in a prior period: apply normal rollover
+        running = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
+      } else {
+        running = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
+      }
       accumulated = running - period.total;
       balances.push({
         periodStart: period.periodStart,
@@ -184,8 +242,15 @@ export function computeAllBudgetBalances(
       const periodStartMs = period.periodStart.toMillis();
       const periodEndMs = period.periodEnd.toMillis();
 
-      accumulated = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
-      let running = accumulated;
+      const override = findLatestOverride(budget.overrides, periodStartMs);
+      let running: number;
+      if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
+        accumulated = override.balance;
+        running = accumulated;
+      } else {
+        accumulated = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
+        running = accumulated;
+      }
 
       // Walk transactions that fall within this period
       while (txnIdx < txns.length) {

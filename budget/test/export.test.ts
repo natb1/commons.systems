@@ -53,6 +53,7 @@ const idbBudgets = [
     name: "Groceries",
     weeklyAllowance: 100,
     rollover: "none",
+    overrides: [],
   },
 ];
 

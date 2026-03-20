@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth } from "../src/balance";
-import type { Budget, BudgetPeriod, Statement, Transaction } from "../src/firestore";
+import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, findLatestOverride } from "../src/balance";
+import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
   const d = new Date(dateStr);
@@ -26,6 +26,7 @@ function makeBudget(overrides: Partial<Budget> = {}): Budget {
     name: "Food",
     weeklyAllowance: 150,
     rollover: "none",
+    overrides: [],
     groupId: null,
     ...overrides,
   };
@@ -1072,5 +1073,181 @@ describe("computeNetWorth", () => {
     const result = computeNetWorth([], stmts, weeks);
     expect(result.points).toEqual([]);
     expect(result.divergences).toEqual([]);
+  });
+});
+
+// Shared setup for override tests:
+// Budget with weeklyAllowance=100, rollover="balance"
+// 3 consecutive weekly periods: w1 (Jan 6-13), w2 (Jan 13-20), w3 (Jan 20-27)
+// Override date of Jan 13 with balance=50 (in w2)
+
+function makeOverride(dateStr: string, balance: number): BudgetOverride {
+  return { date: ts(dateStr), balance };
+}
+
+describe("findLatestOverride", () => {
+  it("returns null for empty overrides", () => {
+    expect(findLatestOverride([], ts("2025-01-15").toMillis())).toBeNull();
+  });
+
+  it("returns null when all overrides are after beforeMs", () => {
+    const overrides = [makeOverride("2025-01-20", 50), makeOverride("2025-01-27", 75)];
+    expect(findLatestOverride(overrides, ts("2025-01-15").toMillis())).toBeNull();
+  });
+
+  it("returns the only override when it is before beforeMs", () => {
+    const overrides = [makeOverride("2025-01-13", 50)];
+    const result = findLatestOverride(overrides, ts("2025-01-15").toMillis());
+    expect(result).not.toBeNull();
+    expect(result!.balance).toBe(50);
+  });
+
+  it("returns the latest override before beforeMs when there are multiple", () => {
+    const overrides = [
+      makeOverride("2025-01-06", 30),
+      makeOverride("2025-01-13", 50),
+      makeOverride("2025-01-20", 80),
+    ];
+    // beforeMs is Jan 15 — Jan 6 and Jan 13 qualify, Jan 20 does not
+    const result = findLatestOverride(overrides, ts("2025-01-15").toMillis());
+    expect(result).not.toBeNull();
+    expect(result!.balance).toBe(50);
+    expect(result!.date.toMillis()).toBe(ts("2025-01-13").toMillis());
+  });
+
+  it("returns override exactly at the beforeMs boundary (inclusive)", () => {
+    const overrides = [makeOverride("2025-01-13", 50)];
+    const result = findLatestOverride(overrides, ts("2025-01-13").toMillis());
+    expect(result).not.toBeNull();
+    expect(result!.balance).toBe(50);
+  });
+});
+
+describe("computeBudgetBalance with overrides", () => {
+  const w1 = makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 40 });
+  const w2 = makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 });
+  const w3 = makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 25 });
+  const periods = [w1, w2, w3];
+
+  it("no override: existing behavior unchanged", () => {
+    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const txn = makeTxn({ id: "txn-1", amount: 30, timestamp: ts("2025-01-15") });
+    // w1: 0+100=100, -40(total)=60; w2: 60+100=160, -txn30=130
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(130);
+  });
+
+  it("single override in a prior period: balance starts from override", () => {
+    // Override at Jan 13 (start of w2) with balance=50 — override falls in w2
+    // but target txn is in w3, so override is "prior" to w3
+    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const txn = makeTxn({ id: "txn-1", amount: 25, timestamp: ts("2025-01-22") });
+    // Override in w2: running = 50 - w2.total(30) = 20
+    // w3: applyRollover(20, 100, "balance") = 120, -txn25 = 95
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(95);
+  });
+
+  it("override in the same period as the target transaction: replaces rollover", () => {
+    // Override at Jan 13 (w2), target txn also in w2
+    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const txn = makeTxn({ id: "txn-1", amount: 30, timestamp: ts("2025-01-15") });
+    // Override is in w2 (target period): running starts at 50, -txn30 = 20
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(20);
+  });
+
+  it("multiple overrides: latest one before the target period start is used", () => {
+    // Two overrides: Jan 6 (w1) and Jan 13 (w2). Target txn in w3.
+    // Latest override at or before start of w3 (Jan 20) is Jan 13.
+    const budget = makeBudget({
+      weeklyAllowance: 100,
+      rollover: "balance",
+      overrides: [makeOverride("2025-01-06", 20), makeOverride("2025-01-13", 50)],
+    });
+    const txn = makeTxn({ id: "txn-1", amount: 25, timestamp: ts("2025-01-22") });
+    // Override at Jan 13 (w2) is used: running = 50 - w2.total(30) = 20
+    // w3: 20+100=120, -txn25 = 95
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(95);
+  });
+
+  it("override after all transactions: no effect on earlier transactions", () => {
+    // Override at Jan 27 (after w3) — target txn is in w2
+    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-27", 999)] });
+    const txn = makeTxn({ id: "txn-1", amount: 30, timestamp: ts("2025-01-15") });
+    // No applicable override for w2 target period start (Jan 13): normal behavior
+    // w1: 0+100=100, -40=60; w2: 60+100=160, -txn30=130
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(130);
+  });
+});
+
+describe("computePeriodBalances with overrides", () => {
+  const w1 = makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 40 });
+  const w2 = makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 });
+  const w3 = makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 25 });
+
+  it("override in the first period: replaces initial balance", () => {
+    // Override at Jan 6 (start of w1) with balance=50
+    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-06", 50)] });
+    const result = computePeriodBalances([budget], [w1, w2, w3]);
+    const balances = result.get("food" as any)!;
+    expect(balances).toHaveLength(3);
+    // w1: override in period → running=50; accumulated = 50-40=10
+    expect(balances[0].runningBalance).toBe(10);
+    // w2: applyRollover(10, 100, "balance") = 110; 110-30=80
+    expect(balances[1].runningBalance).toBe(80);
+    // w3: applyRollover(80, 100, "balance") = 180; 180-25=155
+    expect(balances[2].runningBalance).toBe(155);
+  });
+
+  it("override in a middle period: resets accumulated balance", () => {
+    // Override at Jan 13 (start of w2) with balance=50
+    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const result = computePeriodBalances([budget], [w1, w2, w3]);
+    const balances = result.get("food" as any)!;
+    expect(balances).toHaveLength(3);
+    // w1: no override → applyRollover(0, 100, "balance") = 100; 100-40=60
+    expect(balances[0].runningBalance).toBe(60);
+    // w2: override in period (Jan 13 in [Jan13, Jan20)) → running=50; 50-30=20
+    expect(balances[1].runningBalance).toBe(20);
+    // w3: applyRollover(20, 100, "balance") = 120; 120-25=95
+    expect(balances[2].runningBalance).toBe(95);
+  });
+
+  it("rollover resumes normally after the override period", () => {
+    // Override only in w2; w3 should use normal rollover from w2's result
+    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const w4 = makePeriod({ id: "w4", budgetId: "food", periodStart: ts("2025-01-27"), periodEnd: ts("2025-02-03"), total: 10 });
+    const result = computePeriodBalances([budget], [w1, w2, w3, w4]);
+    const balances = result.get("food" as any)!;
+    expect(balances).toHaveLength(4);
+    // w2 ends at 20 (from test above); w3: 20+100=120, -25=95; w4: 95+100=195, -10=185
+    expect(balances[3].runningBalance).toBe(185);
+  });
+});
+
+describe("computeAllBudgetBalances with overrides", () => {
+  it("override applies and cross-checks against computeBudgetBalance", () => {
+    const w1 = makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 40 });
+    const w2 = makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 });
+    const w3 = makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 25 });
+    const periods = [w1, w2, w3];
+
+    // Override at Jan 13 (w2) with balance=50
+    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+
+    const txn1 = makeTxn({ id: "txn-w2", amount: 30, timestamp: ts("2025-01-15") });
+    const txn2 = makeTxn({ id: "txn-w3", amount: 25, timestamp: ts("2025-01-22") });
+    const allTxns = [txn1, txn2];
+
+    const batch = computeAllBudgetBalances(allTxns, [budget], periods);
+    const single1 = computeBudgetBalance(txn1, allTxns, budget, periods);
+    const single2 = computeBudgetBalance(txn2, allTxns, budget, periods);
+
+    expect(batch.get("txn-w2")).toBe(single1);
+    expect(batch.get("txn-w3")).toBe(single2);
+
+    // Verify concrete values:
+    // txn-w2 (w2, override in period): running=50, -30=20
+    expect(batch.get("txn-w2")).toBe(20);
+    // txn-w3 (w3, override prior): running=50-30(w2.total)=20, w3: 20+100=120, -25=95
+    expect(batch.get("txn-w3")).toBe(95);
   });
 });
