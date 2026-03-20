@@ -14,7 +14,7 @@ interface Slice {
 }
 
 export interface AllocationResult {
-  readonly slices: readonly Slice[];
+  readonly slices: Slice[];
   /** Amount by which total weekly budgets exceed averageWeeklyIncome; 0 when budgets fit within income. */
   readonly overage: number;
 }
