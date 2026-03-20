@@ -74,6 +74,7 @@
       "Bash(npx vite:*)",
       "Bash(npx vitest:*)",
       "Bash(ls:*)",
+      "Bash(lsof:*)",
       "Bash(head:*)",
       "Bash(tail:*)",
       "Bash(find:*)"
