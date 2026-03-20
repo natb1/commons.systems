@@ -64,6 +64,14 @@ test.describe("transactions", () => {
     await expect(page.locator("#sankey-end-week")).toBeVisible();
   });
 
+  test("sankey chart renders income mode with negative amounts", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey svg")).toHaveCount(1, { timeout: 30000 });
+    await page.locator('#sankey-controls input[name="sankey-mode"][value="income"]').check();
+    await expect(page.locator("#category-sankey svg")).toHaveCount(1);
+    await expect(page.locator("#category-sankey svg .sankey-node")).not.toHaveCount(0);
+  });
+
   test("sankey chart has node elements", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
