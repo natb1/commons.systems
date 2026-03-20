@@ -41,7 +41,7 @@ export function computePanelWidth(budgetCount: number): number {
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const WINDOW_WEEKS = 12;
 
-/** Filter week-ms timestamps to those within a 12-week window ending at anchorMs (inclusive). */
+/** Return the subset of weekTimestamps in (anchorMs - 12 weeks, anchorMs]. */
 export function filterToWindow(weekTimestamps: readonly number[], anchorMs: number): Set<number> {
   const cutoff = anchorMs - WINDOW_WEEKS * WEEK_MS;
   const result = new Set<number>();

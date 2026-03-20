@@ -1,7 +1,6 @@
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showDropdown } from "@commons-systems/style/components/autocomplete";
 
-
 const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
 /** Show a timed error indicator (save-error class + title) on an element. Auto-clears after 30 seconds. */
@@ -141,8 +140,9 @@ export function attachScrollSync(getWrappers: () => HTMLElement[]): { abort: Abo
   return { abort };
 }
 
-/** Find the week timestamp nearest to a target ms value. */
-function findNearestWeekMs(weeks: readonly { ms: number }[], targetMs: number): number {
+/** Find the week timestamp nearest to a target ms value. Weeks must be non-empty. */
+export function findNearestWeekMs(weeks: readonly { ms: number }[], targetMs: number): number {
+  if (weeks.length === 0) throw new Error("findNearestWeekMs: weeks must not be empty");
   let nearestMs = weeks[0].ms;
   let nearestDist = Infinity;
   for (const w of weeks) {

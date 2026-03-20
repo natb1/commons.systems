@@ -1,7 +1,7 @@
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { renderAggregateTrendChart } from "./budgets-trend-chart.js";
 import { renderNetWorthChart } from "./accounts-net-worth-chart.js";
-import { deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize } from "./hydrate-util.js";
+import { deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, findNearestWeekMs } from "./hydrate-util.js";
 import type { AggregatePoint, NetWorthPoint } from "../balance.js";
 import type { ChartResult } from "./budgets-chart.js";
 
@@ -83,12 +83,9 @@ export function hydrateAccountsCharts(container: HTMLElement): void {
   const allWeeks = chartResult.weeks;
   wireChartDatePicker("accounts-date-picker", allWeeks, (anchorMs) => {
     const weeks = chartResult.weeks;
-    let nearestIdx = 0;
-    let nearestDist = Infinity;
-    for (let i = 0; i < weeks.length; i++) {
-      const dist = Math.abs(weeks[i].ms - anchorMs);
-      if (dist < nearestDist) { nearestDist = dist; nearestIdx = i; }
-    }
+    if (weeks.length === 0) return;
+    const nearestMs = findNearestWeekMs(weeks, anchorMs);
+    const nearestIdx = weeks.findIndex(w => w.ms === nearestMs);
     const weekCount = weeks.length;
     for (const wrapper of getAccountsScrollWrappers()) {
       const scrollMax = wrapper.scrollWidth - wrapper.clientWidth;
