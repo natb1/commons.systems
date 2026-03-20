@@ -267,7 +267,8 @@ export function computeAggregateTrend(
   const { weeks, weeklySpending } = indexPeriodsByWeek(periods);
   if (weeks.length === 0) return [];
 
-  // Weekly income: sum income transactions per week
+  // Weekly income: sum income transactions per week.
+  // Math.abs: income may be negative (credit convention) or positive; normalize to positive.
   const incomeTxns = filterIncomeTransactions(transactions);
   const weeklyIncome = new Map<number, number>();
   for (const t of incomeTxns) {

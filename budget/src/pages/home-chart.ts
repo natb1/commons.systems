@@ -6,7 +6,7 @@ export type ChartMode = "spending" | "income";
 
 export interface SerializedChartTransaction {
   category: string;
-  /** Cents. Positive = spending/debit, negative = income/credit. */
+  /** Cents. Positive = spending/debit, negative = income/credit (either sign valid for income). */
   amount: number;
   reimbursement: number;
   timestampMs: number | null;
@@ -66,10 +66,11 @@ export function filterByWeeks(
  * Build a category tree from transactions.
  *
  * Filters transactions by mode (spending excludes Income-prefixed categories,
- * income includes only Income-prefixed categories) and excludes transactions
- * with zero or negative net amounts (after reimbursement). In income mode,
- * applies Math.abs() so both positive and negative income conventions produce
- * positive chart values. Builds a hierarchy from colon-separated category
+ * income includes only Income-prefixed categories). In spending mode, excludes
+ * transactions with zero or negative net amounts. In income mode, applies
+ * Math.abs() so both positive and negative income conventions produce positive
+ * chart values (only zero-net-amount transactions are excluded). Builds a
+ * hierarchy from colon-separated category
  * paths. Rolls up values and counts from leaves to parents, then sorts
  * children by value descending, name ascending.
  */
