@@ -17,6 +17,10 @@ interface TimestampedTransaction extends Transaction {
   readonly timestamp: Timestamp;
 }
 
+function isCardPaymentCategory(category: string): boolean {
+  return category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
+}
+
 function netAmount(t: Transaction): number {
   return computeNetAmount(t.amount, t.reimbursement);
 }
@@ -27,7 +31,8 @@ function filterCreditTransactions(transactions: Transaction[]): TimestampedTrans
     (t): t is TimestampedTransaction =>
       computeNetAmount(t.amount, t.reimbursement) < 0
       && t.timestamp !== null
-      && (t.normalizedId === null || t.normalizedPrimary),
+      && (t.normalizedId === null || t.normalizedPrimary)
+      && !isCardPaymentCategory(t.category),
   );
 }
 

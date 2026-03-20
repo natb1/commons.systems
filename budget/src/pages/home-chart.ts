@@ -77,8 +77,8 @@ export function filterByWeeks(
  * amounts (sign-flipped to positive for display). Builds a hierarchy from
  * colon-separated category paths. Rolls up values and counts from leaves to
  * parents, then sorts children by value descending, name ascending. When
- * showCardPayment is false in spending mode, Transfer:CardPayment categories
- * (and subcategories) are excluded. When categoryFilter is non-empty, only
+ * showCardPayment is false, Transfer:CardPayment categories (and subcategories)
+ * are excluded in both spending and credits modes. When categoryFilter is non-empty, only
  * transactions whose category exactly matches the filter or starts with
  * categoryFilter + ":" (subcategories) are included.
  */
@@ -99,6 +99,7 @@ export function buildCategoryTree(
       if (!showCardPayment && isCardPaymentCategory(t.category)) continue;
       if (raw <= 0) continue;
     } else { // "credits"
+      if (!showCardPayment && isCardPaymentCategory(t.category)) continue;
       if (raw >= 0) continue;
     }
     if (categoryFilter && t.category !== categoryFilter && !t.category.startsWith(categoryFilter + ":")) continue;
@@ -478,7 +479,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
       let visible: boolean;
       if (currentMode === "credits") {
-        visible = isCredit;
+        visible = isCredit && (currentShowCardPayment || !isCardPayment);
       } else {
         visible = !isCredit && (!currentUnbudgetedOnly || !hasBudget) && (currentShowCardPayment || !isCardPayment);
       }
@@ -532,7 +533,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
           unbudgetedToggle.hidden = true;
           currentShowCardPayment = false;
           cardPaymentCheckbox.checked = false;
-          cardPaymentToggle.hidden = true;
+          cardPaymentToggle.hidden = false;
         } else {
           unbudgetedToggle.hidden = false;
           cardPaymentToggle.hidden = false;

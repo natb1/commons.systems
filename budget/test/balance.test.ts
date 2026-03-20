@@ -697,6 +697,13 @@ describe("computeAverageWeeklyCredits", () => {
     ];
     expect(computeAverageWeeklyCredits(txnsWithExcluded)).toBe(100);
   });
+
+  it("excludes Transfer:CardPayment transactions", () => {
+    const creditTxn = makeTxn({ id: "credit-1", amount: -1200, category: "Travel:Reimbursement", timestamp: ts("2025-01-07"), budget: null });
+    const cardPaymentTxn = makeTxn({ id: "card-1", amount: -500, category: "Transfer:CardPayment", timestamp: ts("2025-01-07"), budget: null });
+    // Only credit-1 should count: 1200 over 12 weeks = 100
+    expect(computeAverageWeeklyCredits([creditTxn, cardPaymentTxn])).toBeCloseTo(100);
+  });
 });
 
 describe("computeRollingAverage", () => {
@@ -784,6 +791,18 @@ describe("computeAggregateTrend", () => {
     expect(result[0].avg12Credits).toBe(1200);
     // Week 2 credits: 600, avg12=[1200,600] -> 900
     expect(result[1].avg12Credits).toBe(900);
+  });
+
+  it("excludes Transfer:CardPayment from avg12Credits", () => {
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+    ];
+    const txns = [
+      makeTxn({ id: "credit-1", category: "Travel:Reimbursement", amount: -1200, timestamp: ts("2025-01-07"), budget: null }),
+      makeTxn({ id: "card-1", category: "Transfer:CardPayment", amount: -500, timestamp: ts("2025-01-07"), budget: null }),
+    ];
+    const result = computeAggregateTrend(periods, txns);
+    expect(result[0].avg12Credits).toBe(1200);
   });
 });
 

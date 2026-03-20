@@ -285,14 +285,24 @@ describe("buildCategoryTree", () => {
     expect(root.value).toBe(50);
   });
 
-  it("showCardPayment=false does not affect credits mode (CardPayment positive → excluded)", () => {
-    const root = buildCategoryTree([
-      txn({ category: "Income:Salary", amount: -2400 }),
-      txn({ category: "Transfer:CardPayment", amount: 200 }),
-    ], "credits", false, false);
-    expect(root.children).toHaveLength(1);
-    expect(root.children[0].name).toBe("Income");
-    expect(root.value).toBe(2400);
+  it("credits mode: showCardPayment=false excludes Transfer:CardPayment credits", () => {
+    const txns: SerializedChartTransaction[] = [
+      txn({ category: "Transfer:CardPayment", amount: -200 }),
+      txn({ category: "Travel:Reimbursement", amount: -50 }),
+    ];
+    const tree = buildCategoryTree(txns, "credits", false, false);
+    expect(tree.value).toBeCloseTo(50);
+    expect(tree.children.some(c => c.name === "Transfer")).toBe(false);
+  });
+
+  it("credits mode: showCardPayment=true includes Transfer:CardPayment credits", () => {
+    const txns: SerializedChartTransaction[] = [
+      txn({ category: "Transfer:CardPayment", amount: -200 }),
+      txn({ category: "Travel:Reimbursement", amount: -50 }),
+    ];
+    const tree = buildCategoryTree(txns, "credits", false, true);
+    expect(tree.value).toBeCloseTo(250);
+    expect(tree.children.some(c => c.name === "Transfer")).toBe(true);
   });
 
   it("credits mode: negative amounts produce positive tree values", () => {
