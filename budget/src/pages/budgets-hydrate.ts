@@ -181,10 +181,10 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   const pieElOrNull = document.getElementById("budgets-pie");
   if (!pieElOrNull) throw new DataIntegrityError("budgets-pie container not found in page markup");
   const pieEl: HTMLElement = pieElOrNull;
-  const incomeRaw = pieEl.dataset.averageWeeklyIncome;
-  if (incomeRaw === undefined) throw new DataIntegrityError("budgets-pie missing required data-average-weekly-income attribute");
-  const averageWeeklyIncome = Number(incomeRaw);
-  if (!Number.isFinite(averageWeeklyIncome)) throw new DataIntegrityError(`Invalid average weekly income value: ${incomeRaw}`);
+  const creditsRaw = pieEl.dataset.averageWeeklyCredits;
+  if (creditsRaw === undefined) throw new DataIntegrityError("budgets-pie missing required data-average-weekly-credits attribute");
+  const averageWeeklyCredits = Number(creditsRaw);
+  if (!Number.isFinite(averageWeeklyCredits)) throw new DataIntegrityError(`Invalid average weekly credits value: ${creditsRaw}`);
 
   const trendElOrNull = document.getElementById("budgets-trend-chart");
   if (!trendElOrNull) throw new DataIntegrityError("budgets-trend-chart container not found in page markup");
@@ -206,7 +206,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
   function render(): void {
     chartResult = renderBudgetChart(container, { budgets, periods });
-    renderBudgetPieChart(pieEl, { budgets, averageWeeklyIncome });
+    renderBudgetPieChart(pieEl, { budgets, averageWeeklyIncome: averageWeeklyCredits });
 
     const containerWidth = container.clientWidth || 640;
     renderAggregateTrendChart(trendEl, { data: aggregateTrend, containerWidth, panelWidth });
