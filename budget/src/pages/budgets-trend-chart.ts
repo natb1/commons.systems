@@ -64,9 +64,14 @@ export function renderAggregateTrendChart(container: HTMLElement, options: Trend
   const fg = getThemeFg(container);
   const sharedStyle = { background: "transparent", color: fg };
 
+  let yMin = 0;
   let yMax = 0;
-  for (const d of lineData) yMax = Math.max(yMax, d.value);
-  const yDomain: [number, number] = [0, yMax * 1.1 || 1];
+  for (const d of lineData) {
+    yMin = Math.min(yMin, d.value);
+    yMax = Math.max(yMax, d.value);
+  }
+  // Pad 10% beyond extremes; anchor at 0 when non-negative. Fallback to 1 prevents degenerate [0,0] domain.
+  const yDomain: [number, number] = [yMin === 0 ? 0 : yMin * 1.1, yMax * 1.1 || 1];
 
   const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
 
