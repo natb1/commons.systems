@@ -31,11 +31,10 @@ test.describe("budgets trend charts", () => {
   });
 
   test("bar chart shows at most 12 weeks of data", async ({ page }) => {
-    // fx facets render week labels as text elements inside the chart SVG
+    // Observable Plot renders fx-axis tick labels as <text> inside <g aria-label="fx-axis tick label">
     const barChartSvg = page.locator("#budgets-chart .chart-scroll-wrapper svg").first();
     await expect(barChartSvg).toBeVisible({ timeout: 10000 });
-    // Count unique fx facet group labels — each week produces an fx facet
-    const fxLabels = barChartSvg.locator("g[aria-label='fx axis'] g.tick");
+    const fxLabels = barChartSvg.locator("g[aria-label='fx-axis tick label'] text");
     const count = await fxLabels.count();
     expect(count).toBeGreaterThan(0);
     expect(count).toBeLessThanOrEqual(12);
