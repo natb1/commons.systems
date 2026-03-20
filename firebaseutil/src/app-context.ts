@@ -71,7 +71,8 @@ export interface AppContextOptions {
  * - `VITE_FIRESTORE_EMULATOR_HOST` — connects Firestore emulator when set (hostname:port)
  * - `VITE_GA_MEASUREMENT_ID` — activates page-view tracking when set; returns a no-op tracker otherwise
  * - `VITE_STORAGE_EMULATOR_HOST` — connects Storage emulator when set and `storageModule` is provided (hostname:port)
- * - `VITE_APP_CHECK_DEBUG_TOKEN` — sets `self.FIREBASE_APPCHECK_DEBUG_TOKEN` when AppCheck is active (requires `recaptchaSiteKey` and no emulator)
+ * - `VITE_APP_CHECK_DEBUG_TOKEN` — enables AppCheck in non-browser environments (CI, local dev)
+ *   by setting `self.FIREBASE_APPCHECK_DEBUG_TOKEN`; requires `recaptchaSiteKey` and no emulator
  *
  * Pass `options.storageModule` (`firebase/storage`) to include Storage in the context. Accepting it as a parameter
  * keeps `firebase/storage` out of non-storage app bundles without requiring a dynamic import.
@@ -109,7 +110,7 @@ export function createAppContext(
       );
     }
     // AppCheck is skipped when running against the Firestore emulator — the emulator
-    // does not verify tokens, and the client has no reCAPTCHA provider in that context.
+    // does not verify tokens, so AppCheck initialization is unnecessary.
     if (!firestoreEmulatorHost) {
       const debugToken = import.meta.env.VITE_APP_CHECK_DEBUG_TOKEN;
       if (debugToken) {
@@ -122,15 +123,24 @@ export function createAppContext(
           isTokenAutoRefreshEnabled: true,
         });
       } catch (err) {
+        // Ad-blockers and CSP policies can block reCAPTCHA scripts, causing initializeAppCheck
+        // to throw. Graceful degradation is intentional: the app loads without AppCheck, and
+        // server-side enforcement (feed-proxy) rejects unauthenticated requests with 401.
         console.error("AppCheck initialization failed:", err);
       }
     }
   }
 
-  const getAppCheckHeaders = appCheck
+  const resolvedAppCheck = appCheck;
+  const getAppCheckHeaders = resolvedAppCheck
     ? async () => {
-        const { token } = await getToken(appCheck!);
-        return { "X-Firebase-AppCheck": token };
+        try {
+          const { token } = await getToken(resolvedAppCheck);
+          return { "X-Firebase-AppCheck": token } as Record<string, string>;
+        } catch (err) {
+          console.error("AppCheck token acquisition failed:", err);
+          return {};
+        }
       }
     : undefined;
 

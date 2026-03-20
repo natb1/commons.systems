@@ -6,22 +6,23 @@ import { getAppCheck } from "firebase-admin/app-check";
 import { ALLOWED_FEED_URLS } from "./allowed-feed-urls.generated.js";
 export { ALLOWED_FEED_URLS };
 
-function getAdminApp() {
-  const apps = getApps();
-  return apps.length > 0 ? apps[0] : initializeApp();
-}
+const adminApp = getApps().length > 0 ? getApps()[0] : initializeApp();
 
-/** Verify the AppCheck token in the request. Returns true in the emulator (no token verification). */
+/** Verify the AppCheck token in the request. Always returns true in the emulator
+ *  because the emulator does not issue or verify AppCheck tokens. */
 async function verifyAppCheck(req: Request): Promise<boolean> {
   if (process.env.FUNCTIONS_EMULATOR === "true") return true;
   const token = req.header("X-Firebase-AppCheck");
   if (!token) return false;
   try {
-    await getAppCheck(getAdminApp()).verifyToken(token);
+    await getAppCheck(adminApp).verifyToken(token);
     return true;
   } catch (err) {
-    console.error("AppCheck verification failed:", err);
-    return false;
+    if (err instanceof Error && "code" in err && String((err as Record<string, unknown>).code).startsWith("app-check/")) {
+      console.error("AppCheck token invalid:", err);
+      return false;
+    }
+    throw err;
   }
 }
 

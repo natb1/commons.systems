@@ -281,6 +281,25 @@ describe("createAppContext", () => {
     consoleSpy.mockRestore();
   });
 
+  it("getAppCheckHeaders returns empty object when getToken fails", async () => {
+    const { createAppContext } = await loadModule();
+    const mocks = await loadMocks();
+    mocks.initializeAppCheck.mockReturnValue(mockAppCheck);
+    mocks.getToken.mockRejectedValue(new Error("reCAPTCHA challenge failed"));
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const ctx = createAppContext("myapp", "app-id-123", { recaptchaSiteKey: "test-key" });
+
+    expect(ctx.getAppCheckHeaders).toBeTypeOf("function");
+    const headers = await ctx.getAppCheckHeaders!();
+    expect(headers).toEqual({});
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "AppCheck token acquisition failed:",
+      expect.any(Error),
+    );
+    consoleSpy.mockRestore();
+  });
+
   it("includes getAppCheckHeaders in storage context", async () => {
     const { createAppContext } = await loadModule();
     const mocks = await loadMocks();

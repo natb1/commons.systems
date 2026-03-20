@@ -60,13 +60,23 @@ describe("handleFeedProxy", () => {
   });
 
   it("returns 401 when AppCheck token is invalid", async () => {
-    verifyTokenMock.mockRejectedValue(new Error("invalid"));
+    const err = new Error("invalid") as Error & { code: string };
+    err.code = "app-check/invalid-token";
+    verifyTokenMock.mockRejectedValue(err);
     const res = createMockRes();
     await handleFeedProxy(createMockReq({}), res as never);
     expect(res.statusCode).toBe(401);
     expect(res.body).toBe(
       "Unauthorized: invalid or missing AppCheck token",
     );
+  });
+
+  it("throws on infrastructure error in verifyAppCheck", async () => {
+    verifyTokenMock.mockRejectedValue(new Error("network timeout"));
+    const res = createMockRes();
+    await expect(
+      handleFeedProxy(createMockReq({}), res as never),
+    ).rejects.toThrow("network timeout");
   });
 
   it("returns 400 when url query parameter is missing", async () => {
