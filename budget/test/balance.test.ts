@@ -804,6 +804,18 @@ describe("computeAggregateTrend", () => {
     const result = computeAggregateTrend(periods, txns);
     expect(result[0].avg12Credits).toBe(1200);
   });
+
+  it("excludes Transfer:CardPayment subcategories (e.g. :Amex) from avg12Credits", () => {
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+    ];
+    const txns = [
+      makeTxn({ id: "credit-1", category: "Travel:Reimbursement", amount: -1200, timestamp: ts("2025-01-07"), budget: null }),
+      makeTxn({ id: "card-amex", category: "Transfer:CardPayment:Amex", amount: -150, timestamp: ts("2025-01-07"), budget: null }),
+    ];
+    const result = computeAggregateTrend(periods, txns);
+    expect(result[0].avg12Credits).toBe(1200);
+  });
 });
 
 describe("computePerBudgetTrend", () => {
@@ -846,6 +858,36 @@ describe("computePerBudgetTrend", () => {
     const otherPoints = result.filter(r => r.budget === "Other");
     expect(otherPoints.length).toBeGreaterThan(0);
     expect(otherPoints[0].avg3Spending).toBe(25);
+  });
+
+  it("excludes null-budget negative-amount transactions from 'Other' series", () => {
+    // Sign-based filter: negative net = credit, excluded from spending chart
+    const budgets = [makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 })];
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+    ];
+    const txns = [
+      makeTxn({ id: "reimbursement", amount: -25, budget: null, category: "Travel:Reimbursement", timestamp: ts("2025-01-07") }),
+    ];
+    const result = computePerBudgetTrend(budgets, periods, txns);
+    const otherPoints = result.filter(r => r.budget === "Other");
+    expect(otherPoints).toHaveLength(0);
+  });
+
+  it("includes null-budget positive-amount Income:Salary in 'Other' series (sign-based, not category-based)", () => {
+    // Under the old category-prefix filter, Income:Salary was excluded from Other.
+    // Under the new sign-based filter, a positive-amount Income:Salary counts as spending.
+    const budgets = [makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 })];
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+    ];
+    const txns = [
+      makeTxn({ id: "income-positive", amount: 100, budget: null, category: "Income:Salary", timestamp: ts("2025-01-07") }),
+    ];
+    const result = computePerBudgetTrend(budgets, periods, txns);
+    const otherPoints = result.filter(r => r.budget === "Other");
+    expect(otherPoints.length).toBeGreaterThan(0);
+    expect(otherPoints[0].avg3Spending).toBe(100);
   });
 });
 

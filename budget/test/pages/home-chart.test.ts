@@ -652,6 +652,41 @@ describe("hydrateCategorySankey", () => {
     expect(txnRows[1].style.display).toBe(""); // Income:Salary visible (negative = credit)
   });
 
+  it("filterTable in credits mode hides card payment rows when card payment toggle is off", () => {
+    const table = document.createElement("div");
+    table.id = "transactions-table";
+    const rows = [
+      { category: "Income:Salary", hasBudget: "false", netAmount: "-2400" },
+      { category: "Transfer:CardPayment", hasBudget: "false", netAmount: "-150" },
+    ];
+    for (const r of rows) {
+      const row = document.createElement("div");
+      row.className = "txn-row";
+      row.dataset.category = r.category;
+      row.dataset.hasBudget = r.hasBudget;
+      row.dataset.netAmount = r.netAmount;
+      table.appendChild(row);
+    }
+    document.body.appendChild(table);
+
+    const container = makeContainer([
+      txn({ category: "Income:Salary", amount: -2400 }),
+      txn({ category: "Transfer:CardPayment", amount: -150 }),
+    ]);
+    hydrateCategorySankey(container);
+
+    const txnRows = table.querySelectorAll<HTMLElement>(".txn-row");
+
+    // Switch to credits mode
+    const creditsRadio = document.querySelector<HTMLInputElement>('input[name="sankey-mode"][value="credits"]')!;
+    creditsRadio.checked = true;
+    creditsRadio.dispatchEvent(new Event("change"));
+
+    // Card payment toggle defaults off in credits mode — card payment row hidden even though negative
+    expect(txnRows[0].style.display).toBe(""); // Income:Salary visible (negative = credit)
+    expect(txnRows[1].style.display).toBe("none"); // Transfer:CardPayment hidden (card payment toggle off)
+  });
+
   it("filterTable hides rows not matching category filter", () => {
     const table = document.createElement("div");
     table.id = "transactions-table";

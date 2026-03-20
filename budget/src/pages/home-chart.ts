@@ -12,7 +12,7 @@ function isCardPaymentCategory(category: string): boolean {
 
 export interface SerializedChartTransaction {
   category: string;
-  /** Dollars. Positive = spending/debit, negative = income/credit. Income mode uses absolute value, so either sign convention works. */
+  /** Dollars. Positive = spending/debit, negative = credit. Credits mode sign-flips to positive for display. */
   amount: number;
   reimbursement: number;
   timestampMs: number | null;
@@ -95,12 +95,13 @@ export function buildCategoryTree(
     const parts = t.category.split(":");
     const raw = computeNetAmount(t.amount, t.reimbursement);
     if (unbudgetedOnly && t.hasBudget) continue;
+    if (!showCardPayment && isCardPaymentCategory(t.category)) continue;
     if (mode === "spending") {
-      if (!showCardPayment && isCardPaymentCategory(t.category)) continue;
       if (raw <= 0) continue;
-    } else { // "credits"
-      if (!showCardPayment && isCardPaymentCategory(t.category)) continue;
+    } else if (mode === "credits") {
       if (raw >= 0) continue;
+    } else {
+      throw new Error(`Unhandled chart mode: ${mode}`);
     }
     if (categoryFilter && t.category !== categoryFilter && !t.category.startsWith(categoryFilter + ":")) continue;
     const net = mode === "credits" ? -raw : raw;
@@ -468,6 +469,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       const rawNetAmount = row.dataset.netAmount;
       if (rawNetAmount === undefined) throw new Error(`Transaction row missing data-net-amount`);
       const netAmount = parseFloat(rawNetAmount);
+      if (!Number.isFinite(netAmount)) throw new Error(`Transaction row has invalid data-net-amount: "${rawNetAmount}"`);
       const isCredit = netAmount < 0;
 
       let visible: boolean;
@@ -486,9 +488,14 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   function update(): void {
     try {
       render();
-      filterTable();
     } catch (error) {
       container.textContent = "Chart rendering failed. Try refreshing the page.";
+      setTimeout(() => { throw error; }, 0);
+      return;
+    }
+    try {
+      filterTable();
+    } catch (error) {
       setTimeout(() => { throw error; }, 0);
     }
   }

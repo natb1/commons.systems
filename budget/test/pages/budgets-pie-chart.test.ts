@@ -100,7 +100,7 @@ describe("renderBudgetPieChart", () => {
 
     const svg = container.querySelector("svg");
     expect(svg).not.toBeNull();
-    expect(svg!.getAttribute("aria-label")).toBe("Income allocation pie chart");
+    expect(svg!.getAttribute("aria-label")).toBe("Credits allocation pie chart");
 
     const paths = svg!.querySelectorAll("path");
     expect(paths).toHaveLength(3);
@@ -122,7 +122,7 @@ describe("renderBudgetPieChart", () => {
 
     renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 0 });
 
-    expect(container.textContent).toBe("No income data");
+    expect(container.textContent).toBe("No credits data");
     expect(container.querySelector("svg")).toBeNull();
   });
 
@@ -137,7 +137,7 @@ describe("renderBudgetPieChart", () => {
 
     const warning = container.querySelector(".pie-overage-warning");
     expect(warning).not.toBeNull();
-    expect(warning!.textContent).toContain("Budgets exceed income by");
+    expect(warning!.textContent).toContain("Budgets exceed credits by");
     expect(warning!.textContent).toContain("/week");
   });
 
