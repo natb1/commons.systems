@@ -953,6 +953,7 @@ function makeStmt(overrides: Partial<Statement> = {}): Statement {
     balance: 1000,
     period: "2025-01",
     balanceDate: null,
+    lastTransactionDate: null,
     groupId: null,
     ...overrides,
   };

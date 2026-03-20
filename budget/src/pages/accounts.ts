@@ -18,15 +18,14 @@ function buildAccountRows(
   statements: Statement[],
   derivedBalances: DerivedAccountBalance[],
 ): AccountRow[] {
-  const accountMap = new Map<string, { institution: string; account: string; maxTs: number }>();
+  // Compute max transaction timestamp per account from transactions
+  const txnMaxTs = new Map<string, number>();
   for (const txn of transactions) {
     const key = `${txn.institution}\0${txn.account}`;
     const ts = txn.timestamp?.toMillis() ?? 0;
-    const existing = accountMap.get(key);
-    if (!existing) {
-      accountMap.set(key, { institution: txn.institution, account: txn.account, maxTs: ts });
-    } else if (ts > existing.maxTs) {
-      existing.maxTs = ts;
+    const existing = txnMaxTs.get(key);
+    if (existing === undefined || ts > existing) {
+      txnMaxTs.set(key, ts);
     }
   }
 
@@ -46,10 +45,16 @@ function buildAccountRows(
     derivedByAccount.set(`${db.institution}\0${db.account}`, db);
   }
 
+  // Collect all account keys from both transactions and statements
+  const allKeys = new Set<string>([...txnMaxTs.keys(), ...latestStatements.keys()]);
+
   const rows: AccountRow[] = [];
-  for (const [key, { institution, account, maxTs }] of accountMap) {
+  for (const key of allKeys) {
     const stmt = latestStatements.get(key);
     const derived = derivedByAccount.get(key);
+    const [institution, account] = key.split("\0");
+    // Use transaction max timestamp if available, otherwise fall back to statement lastTransactionDate
+    const maxTs = txnMaxTs.get(key) ?? stmt?.lastTransactionDate?.toMillis() ?? 0;
     rows.push({
       institution,
       account,

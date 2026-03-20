@@ -167,6 +167,9 @@ function toStatement(row: IdbStatement): Statement {
     balance: row.balance,
     period: row.period,
     balanceDate: row.balanceDate ?? null,
+    lastTransactionDate: row.lastTransactionDateMs != null
+      ? Timestamp.fromMillis(row.lastTransactionDateMs)
+      : null,
     groupId: null as GroupId | null,
   };
 }

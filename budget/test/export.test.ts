@@ -102,6 +102,7 @@ const idbStatements = [
     balance: 1234.56,
     period: "2025-06",
     balanceDate: null,
+    lastTransactionDateMs: Date.parse("2025-06-10T00:00:00.000Z"),
   },
 ];
 
