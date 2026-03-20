@@ -1,5 +1,6 @@
 // Handles encrypt/decrypt in a Web Worker to avoid blocking the main thread.
 // PBKDF2 with 600k iterations is computationally expensive.
+// Duplicates crypto logic from crypto.ts because Web Workers require self-contained modules.
 
 const MAGIC = new Uint8Array([0x42, 0x45, 0x4e, 0x43]); // "BENC"
 const SALT_LEN = 16;

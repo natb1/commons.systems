@@ -235,17 +235,18 @@ async function handleFileUpload(file: File): Promise<void> {
   try {
     const buffer = await file.arrayBuffer();
     let text: string;
+    let pw: string | null = null;
     if (isEncrypted(buffer)) {
-      const pw = await promptPassword("Enter password to decrypt");
+      pw = await promptPassword("Enter password to decrypt");
       if (pw === null) return;
       text = await decrypt(buffer, pw);
-      importPassword = pw;
     } else {
       text = new TextDecoder().decode(buffer);
     }
     const parsed = parseUploadedJson(text);
     const data = toParsedData(parsed);
     await storeParsedData(data);
+    importPassword = pw;
     transition({ source: "local", groupName: parsed.groupName });
   } catch (error) {
     if (error instanceof UploadValidationError) {

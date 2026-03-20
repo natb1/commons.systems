@@ -67,7 +67,7 @@ async function decryptDirect(data: ArrayBuffer, password: string): Promise<strin
 }
 
 // Worker delegation: PBKDF2 with 600k iterations is computationally expensive
-// (hundreds of ms on typical 2025 hardware), so encrypt/decrypt run in a Web
+// (hundreds of ms on typical desktop hardware), so encrypt/decrypt run in a Web
 // Worker to avoid blocking the main thread. Falls back to direct crypto.subtle
 // in environments without Workers (e.g., unit tests, Node.js).
 

@@ -78,7 +78,9 @@ func encryptJSON(plaintext []byte, password string) ([]byte, error) {
 	return out, nil
 }
 
-// decryptJSON decrypts BENC-formatted data. Caller must verify magic bytes via IsEncrypted before calling.
+// decryptJSON decrypts BENC-formatted data.
+// Caller must verify magic bytes via IsEncrypted before calling;
+// this function does not check the magic prefix.
 func decryptJSON(data []byte, password string) ([]byte, error) {
 	if len(data) < headerLen {
 		return nil, fmt.Errorf("file too short to be encrypted")

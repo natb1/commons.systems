@@ -513,7 +513,7 @@ func TestWriteFileAtomicity(t *testing.T) {
 }
 
 // minimalOutput returns a valid Output with one transaction and the given groupName.
-// Reduces boilerplate in encryption tests that only need a round-trippable payload.
+// Reduces boilerplate in tests that only need a round-trippable payload.
 func minimalOutput(groupName string) Output {
 	return Output{
 		Version:            1,
