@@ -387,7 +387,7 @@ const seedTransactionDocs = [
 
   // --- Income: biweekly paycheck + occasional freelance ---
   // These have no budget assignment; category starts with "Income" for the metrics section.
-  // Biweekly paycheck (every other Friday, $2400)
+  // Biweekly paycheck (every other Friday, -$2400 per credit convention)
   txn("seed-i01", null, "Payroll Deposit", -2400, "Income:Salary", "2024-10-11"),
   txn("seed-i02", null, "Payroll Deposit", -2400, "Income:Salary", "2024-10-25"),
   txn("seed-i03", null, "Payroll Deposit", -2400, "Income:Salary", "2024-11-08"),

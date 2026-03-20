@@ -208,6 +208,7 @@ export interface AggregatePoint {
   readonly avg12Income: number;
   readonly avg12Spending: number;
   readonly avg3Spending: number;
+  /** Equals `avg12Income - avg12Spending`. */
   readonly avg12NetIncome: number;
 }
 
@@ -445,7 +446,7 @@ function isValidPeriod(period: string): boolean {
   return /^\d{4}-\d{2}$/.test(period);
 }
 
-/** Convert statement period "YYYY-MM" to end-of-month timestamp (first of next month, UTC). */
+/** Convert statement period "YYYY-MM" to first-of-next-month UTC timestamp (anchor boundary). */
 function periodToAnchorMs(period: string): number {
   const [yearStr, monthStr] = period.split("-");
   const year = parseInt(yearStr, 10);
