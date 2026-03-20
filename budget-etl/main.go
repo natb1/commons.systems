@@ -265,6 +265,7 @@ func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementDa
 		BudgetPeriods:      []export.BudgetPeriod{},
 		Rules:              []export.Rule{},
 		NormalizationRules: []export.NormalizationRule{},
+		WeeklyAggregates:   []export.WeeklyAggregate{},
 	}
 
 	if err := export.WriteFile(output.path, out, output.password); err != nil {
@@ -346,6 +347,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	// Rebuild export transactions with categorization, budget, and normalization applied
 	exportTxns := buildExportTxns(allTxns, txnDocIDs, normMap, editsMap)
 	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
+	weeklyAggregates := computeExportWeeklyAggregates(exportTxns, allTxns)
 
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
@@ -358,6 +360,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		BudgetPeriods:      budgetPeriods,
 		Rules:              inp.Rules,
 		NormalizationRules: inp.NormalizationRules,
+		WeeklyAggregates:   weeklyAggregates,
 	})
 }
 
@@ -513,24 +516,7 @@ func buildExportTxns(allTxns []store.TransactionData, docIDs []string, normMap m
 // computeExportPeriods builds budget periods from export transactions and internal
 // transaction data. Returns sorted budget periods.
 func computeExportPeriods(exportTxns []export.Transaction, allTxns []store.TransactionData) []export.BudgetPeriod {
-	fullTxns := make([]store.FullTransaction, len(exportTxns))
-	for i, et := range exportTxns {
-		ft := store.FullTransaction{
-			ID:                et.ID,
-			Category:          allTxns[i].Category,
-			Amount:            store.DollarAmount(allTxns[i].Amount),
-			Reimbursement:     et.Reimbursement,
-			Timestamp:         allTxns[i].Timestamp,
-			NormalizedPrimary: et.NormalizedPrimary,
-		}
-		if allTxns[i].Budget != "" {
-			ft.Budget = allTxns[i].Budget
-		}
-		if et.NormalizedID != nil {
-			ft.NormalizedID = *et.NormalizedID
-		}
-		fullTxns[i] = ft
-	}
+	fullTxns := buildFullTransactions(exportTxns, allTxns)
 
 	periods := store.ComputePeriods(fullTxns)
 	sort.Slice(periods, func(i, j int) bool {
@@ -549,6 +535,51 @@ func computeExportPeriods(exportTxns []export.Transaction, allTxns []store.Trans
 		}
 	}
 	return budgetPeriods
+}
+
+// buildFullTransactions converts export transactions and internal transaction data
+// to store.FullTransaction for aggregation functions.
+func buildFullTransactions(exportTxns []export.Transaction, allTxns []store.TransactionData) []store.FullTransaction {
+	fullTxns := make([]store.FullTransaction, len(exportTxns))
+	for i, et := range exportTxns {
+		ft := store.FullTransaction{
+			ID:                et.ID,
+			Category:          allTxns[i].Category,
+			Amount:            store.DollarAmount(allTxns[i].Amount),
+			Reimbursement:     et.Reimbursement,
+			Timestamp:         allTxns[i].Timestamp,
+			NormalizedPrimary: et.NormalizedPrimary,
+		}
+		if allTxns[i].Budget != "" {
+			ft.Budget = allTxns[i].Budget
+		}
+		if et.NormalizedID != nil {
+			ft.NormalizedID = *et.NormalizedID
+		}
+		fullTxns[i] = ft
+	}
+	return fullTxns
+}
+
+// computeExportWeeklyAggregates computes weekly aggregates from export transactions
+// and internal transaction data. Returns sorted weekly aggregates.
+func computeExportWeeklyAggregates(exportTxns []export.Transaction, allTxns []store.TransactionData) []export.WeeklyAggregate {
+	fullTxns := buildFullTransactions(exportTxns, allTxns)
+
+	aggregates := store.ComputeWeeklyAggregates(fullTxns)
+	sort.Slice(aggregates, func(i, j int) bool {
+		return aggregates[i].WeekStart.Before(aggregates[j].WeekStart)
+	})
+	result := make([]export.WeeklyAggregate, len(aggregates))
+	for i, a := range aggregates {
+		result[i] = export.WeeklyAggregate{
+			ID:              a.WeekStart.Format("2006-01-02"),
+			WeekStart:       export.FormatTimestamp(a.WeekStart),
+			CreditTotal:     a.CreditTotal,
+			UnbudgetedTotal: a.UnbudgetedTotal,
+		}
+	}
+	return result
 }
 
 // writeOutputAndLog writes the export output to a file and logs a summary.
@@ -730,6 +761,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	// Build export transactions
 	exportTxns := buildExportTxns(allTxns, allDocIDs, normMap, editsMap)
 	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
+	weeklyAggregates := computeExportWeeklyAggregates(exportTxns, allTxns)
 
 	// Merge statements: dir overrides by statementID, retain input-only
 	exportStmts := mergeStatements(dirStmts, inp.Statements)
@@ -745,6 +777,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		BudgetPeriods:      budgetPeriods,
 		Rules:              inp.Rules,
 		NormalizationRules: inp.NormalizationRules,
+		WeeklyAggregates:   weeklyAggregates,
 	})
 }
 
@@ -879,6 +912,40 @@ func runFirestore(ctx context.Context, client *store.Client, groupInfo store.Gro
 		if err := client.UpdateNormalization(ctx, normUpdates); err != nil {
 			return fmt.Errorf("updating normalization: %w", err)
 		}
+	}
+
+	// Compute and upsert weekly aggregates from all transactions
+	fullTxnsForAgg := make([]store.FullTransaction, 0, len(allDocs))
+	for _, td := range allDocs {
+		ft := store.FullTransaction{
+			ID:                td.ID,
+			NormalizedPrimary: true,
+		}
+		ft.Budget, _ = td.Data["budget"].(string)
+		ft.Category, _ = td.Data["category"].(string)
+		if v, ok := td.Data["amount"].(float64); ok {
+			ft.Amount = v
+		}
+		switch v := td.Data["reimbursement"].(type) {
+		case float64:
+			ft.Reimbursement = v
+		case int64:
+			ft.Reimbursement = float64(v)
+		}
+		if v, ok := td.Data["timestamp"].(time.Time); ok {
+			ft.Timestamp = v
+		}
+		if nid, ok := td.Data["normalizedId"].(string); ok {
+			ft.NormalizedID = nid
+		}
+		if primary, ok := td.Data["normalizedPrimary"].(bool); ok {
+			ft.NormalizedPrimary = primary
+		}
+		fullTxnsForAgg = append(fullTxnsForAgg, ft)
+	}
+	weeklyAggs := store.ComputeWeeklyAggregates(fullTxnsForAgg)
+	if err := client.UpsertWeeklyAggregates(ctx, groupInfo, weeklyAggs); err != nil {
+		return fmt.Errorf("upserting weekly aggregates: %w", err)
 	}
 
 	// Recalculate affected budget periods

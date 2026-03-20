@@ -587,6 +587,98 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 	return nil
 }
 
+// WeeklyAggregateResult holds pre-computed weekly credit and unbudgeted spending totals.
+type WeeklyAggregateResult struct {
+	WeekStart       time.Time
+	CreditTotal     float64 // positive: sum of -(net amount) for credit transactions
+	UnbudgetedTotal float64 // positive: sum of net amount for unbudgeted spending
+}
+
+// isCardPaymentCategory returns true for Transfer:CardPayment and its subcategories.
+func isCardPaymentCategory(cat string) bool {
+	return cat == "Transfer:CardPayment" || len(cat) > len("Transfer:CardPayment:") && cat[:len("Transfer:CardPayment:")] == "Transfer:CardPayment:"
+}
+
+// ComputeWeeklyAggregates groups transactions into Monday-aligned weeks and computes
+// credit totals and unbudgeted spending totals per week.
+//
+// Credit filter: net < 0, not non-primary normalized, not Transfer:CardPayment* category.
+// Unbudgeted filter: Budget == "", net > 0, not non-primary normalized.
+func ComputeWeeklyAggregates(txns []FullTransaction) []WeeklyAggregateResult {
+	type weekData struct {
+		creditTotal     float64
+		unbudgetedTotal float64
+	}
+	weeks := make(map[time.Time]*weekData)
+
+	for _, txn := range txns {
+		if txn.NormalizedID != "" && !txn.NormalizedPrimary {
+			continue
+		}
+
+		net := txn.Amount * (1 - txn.Reimbursement/100)
+		ps := PeriodStart(txn.Timestamp)
+
+		wd, exists := weeks[ps]
+		if !exists {
+			wd = &weekData{}
+			weeks[ps] = wd
+		}
+
+		// Credit: negative net, not card payment
+		if net < 0 && !isCardPaymentCategory(txn.Category) {
+			wd.creditTotal += -net
+		}
+
+		// Unbudgeted spending: no budget, positive net
+		if txn.Budget == "" && net > 0 {
+			wd.unbudgetedTotal += net
+		}
+	}
+
+	result := make([]WeeklyAggregateResult, 0, len(weeks))
+	for weekStart, wd := range weeks {
+		result = append(result, WeeklyAggregateResult{
+			WeekStart:       weekStart,
+			CreditTotal:     math.Round(wd.creditTotal*100) / 100,
+			UnbudgetedTotal: math.Round(wd.unbudgetedTotal*100) / 100,
+		})
+	}
+	return result
+}
+
+// UpsertWeeklyAggregates writes weekly aggregate documents to Firestore in batches of 500.
+// Document ID format: "{groupId}-{YYYY-MM-DD}".
+func (c *Client) UpsertWeeklyAggregates(ctx context.Context, group GroupInfo, aggregates []WeeklyAggregateResult) error {
+	col := c.fs.Collection(fmt.Sprintf("budget/%s/weekly-aggregates", c.env))
+
+	const maxBatch = 500
+	for i := 0; i < len(aggregates); i += maxBatch {
+		end := i + maxBatch
+		if end > len(aggregates) {
+			end = len(aggregates)
+		}
+		batch := c.fs.Batch()
+		for _, agg := range aggregates[i:end] {
+			docID := fmt.Sprintf("%s-%s", group.ID, agg.WeekStart.Format("2006-01-02"))
+			ref := col.Doc(docID)
+			batch.Set(ref, map[string]interface{}{
+				"weekStart":       agg.WeekStart,
+				"creditTotal":     agg.CreditTotal,
+				"unbudgetedTotal": agg.UnbudgetedTotal,
+				"groupId":         group.ID,
+				"memberEmails":    group.MemberEmails,
+			})
+		}
+		if _, err := batch.Commit(ctx); err != nil {
+			return fmt.Errorf("committing weekly-aggregates batch: %w", err)
+		}
+	}
+
+	log.Printf("upserted %d weekly aggregates", len(aggregates))
+	return nil
+}
+
 // NormalizationRuleDoc holds a normalization rule document read from Firestore.
 type NormalizationRuleDoc struct {
 	ID                   string

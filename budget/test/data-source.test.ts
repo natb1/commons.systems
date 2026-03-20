@@ -146,6 +146,24 @@ describe("IdbDataSource", () => {
     expect(newRule!.pattern).toBe("TARGET");
   });
 
+  it("reads weekly aggregates from IDB", async () => {
+    await storeParsedData(makeParsedData({
+      weeklyAggregates: [{
+        id: "2025-01-06",
+        weekStartMs: 1736121600000, // 2025-01-06T00:00:00Z
+        creditTotal: 500,
+        unbudgetedTotal: 75.50,
+      }],
+    }));
+    const ds = new IdbDataSource();
+    const aggs = await ds.getWeeklyAggregates();
+    expect(aggs).toHaveLength(1);
+    expect(aggs[0].id).toBe("2025-01-06");
+    expect(aggs[0].weekStart.toMillis()).toBe(1736121600000);
+    expect(aggs[0].creditTotal).toBe(500);
+    expect(aggs[0].unbudgetedTotal).toBe(75.50);
+  });
+
   it("deleteRule removes from IDB", async () => {
     await storeParsedData(makeParsedData());
     const ds = new IdbDataSource();
