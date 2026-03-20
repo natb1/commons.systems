@@ -348,12 +348,12 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	exportTxns := buildExportTxns(allTxns, txnDocIDs, normMap, editsMap)
 	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
 
-	// Recompute lastTransactionDate on statements from all transactions
+	// Compute lastTransactionDate on statements from all transactions
 	maxDates := maxTransactionDates(allTxns)
 	updatedStmts := make([]export.Statement, len(inp.Statements))
 	for i, s := range inp.Statements {
 		updatedStmts[i] = s
-		key := s.Institution + "\x00" + s.Account
+		key := accountKey(s.Institution, s.Account)
 		if t, ok := maxDates[key]; ok {
 			v := export.FormatTimestamp(*t)
 			updatedStmts[i].LastTransactionDate = &v
@@ -764,11 +764,10 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 
 // mergeStatements merges dir-parsed statements with input statements.
 // Dir statements override input by statementID; input-only statements are retained.
-// maxDates updates LastTransactionDate on all statements (dir and input-only).
+// Uses maxDates to set LastTransactionDate on all statements (dir and input-only).
 func mergeStatements(dirStmts []store.StatementData, inputStmts []export.Statement, maxDates map[string]*time.Time) []export.Statement {
-	// Apply maxDates to dir statements before export conversion
 	for i := range dirStmts {
-		key := dirStmts[i].Institution + "\x00" + dirStmts[i].Account
+		key := accountKey(dirStmts[i].Institution, dirStmts[i].Account)
 		dirStmts[i].LastTransactionDate = maxDates[key]
 	}
 	dirExport := buildExportStatements(dirStmts)
@@ -782,7 +781,7 @@ func mergeStatements(dirStmts []store.StatementData, inputStmts []export.Stateme
 	for _, s := range inputStmts {
 		if !dirByStmtID[s.StatementID] {
 			// Update input-only statement's LastTransactionDate from merged transactions
-			key := s.Institution + "\x00" + s.Account
+			key := accountKey(s.Institution, s.Account)
 			if t, ok := maxDates[key]; ok {
 				v := export.FormatTimestamp(*t)
 				s.LastTransactionDate = &v
@@ -974,12 +973,17 @@ func readFirebaseRC() (string, error) {
 	}
 }
 
-// maxTransactionDates computes the maximum timestamp per (institution, account)
-// from a slice of transactions. Keys use "\x00" as separator.
+// accountKey returns a composite map key for an (institution, account) pair.
+func accountKey(institution, account string) string {
+	return institution + "\x00" + account
+}
+
+// maxTransactionDates computes the latest transaction date per (institution, account)
+// from a slice of transactions.
 func maxTransactionDates(txns []store.TransactionData) map[string]*time.Time {
 	m := make(map[string]*time.Time)
 	for _, txn := range txns {
-		key := txn.Institution + "\x00" + txn.Account
+		key := accountKey(txn.Institution, txn.Account)
 		if existing, ok := m[key]; !ok || txn.Timestamp.After(*existing) {
 			t := txn.Timestamp
 			m[key] = &t
@@ -992,7 +996,7 @@ func maxTransactionDates(txns []store.TransactionData) map[string]*time.Time {
 func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []store.StatementData {
 	out := make([]store.StatementData, len(parsed))
 	for i, pf := range parsed {
-		key := pf.sf.Institution + "\x00" + pf.sf.Account
+		key := accountKey(pf.sf.Institution, pf.sf.Account)
 		out[i] = store.StatementData{
 			StatementID:         pf.sf.StatementID(),
 			Institution:         pf.sf.Institution,

@@ -92,7 +92,7 @@ type StatementData struct {
 	Period              string
 	GroupID             string
 	MemberEmails        []string
-	LastTransactionDate *time.Time // nil when no transactions exist for this account
+	LastTransactionDate *time.Time // nil when not yet computed or no transactions exist for this account
 }
 
 // StatementDocID generates a deterministic document ID from a statement ID

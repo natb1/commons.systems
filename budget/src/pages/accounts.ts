@@ -8,7 +8,7 @@ interface AccountRow {
   institution: string;
   account: string;
   mostRecentTimestamp: number;
-  balance: number | null;
+  balance: number;
 }
 
 function buildAccountRows(statements: Statement[]): AccountRow[] {
@@ -47,7 +47,7 @@ function renderAccountsTable(rows: AccountRow[]): string {
   }
 
   const tableRows = rows.map((row) => {
-    const balanceCell = row.balance !== null ? escapeHtml(formatCurrency(row.balance)) : "";
+    const balanceCell = escapeHtml(formatCurrency(row.balance));
     return `<tr>
       <td>${escapeHtml(row.institution)}</td>
       <td>${escapeHtml(row.account)}</td>

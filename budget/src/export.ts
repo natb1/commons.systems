@@ -87,7 +87,9 @@ export async function exportToJson(): Promise<string> {
       account: s.account,
       balance: s.balance,
       period: s.period,
-      lastTransactionDate: msToIso(s.lastTransactionDateMs) || null,
+      lastTransactionDate: s.lastTransactionDateMs != null
+        ? msToIso(s.lastTransactionDateMs)
+        : null,
     })),
   };
 
