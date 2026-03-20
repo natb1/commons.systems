@@ -19,6 +19,7 @@ import { storeParsedData, clearAll, getMeta } from "./idb.js";
 import { FirestoreSeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
 import { setActiveDataSource } from "./active-data-source.js";
 import { exportToJson } from "./export.js";
+import { isEncrypted, decrypt, encrypt } from "./crypto.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -30,6 +31,7 @@ export type AppState =
   | { source: "local"; groupName: string };
 
 let state: AppState = { source: "seed" };
+let importPassword: string | null = null;
 
 navEl.links = [{ href: "/", label: "budgets" }, { href: "/transactions", label: "transactions" }, { href: "/accounts", label: "accounts" }, { href: "/rules", label: "rules" }];
 navEl.showAuth = false;
@@ -37,7 +39,7 @@ navEl.showAuth = false;
 // File upload UI
 const uploadContainer = document.createElement("div");
 uploadContainer.className = "nav-upload";
-uploadContainer.innerHTML = `<label class="upload-label" tabindex="0">Load data<input type="file" accept=".json" class="upload-input" hidden></label>`;
+uploadContainer.innerHTML = `<label class="upload-label" tabindex="0">Load data<input type="file" accept=".json,.benc" class="upload-input" hidden></label>`;
 const authContainer = navEl.querySelector(".nav-auth");
 if (!authContainer) throw new Error(".nav-auth container not found in nav element");
 authContainer.appendChild(uploadContainer);
@@ -170,14 +172,81 @@ const observer = new MutationObserver(() => {
 });
 observer.observe(app, { childList: true, subtree: true });
 
-// File upload handler
+function promptPassword(message: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "password-dialog";
+
+    const form = document.createElement("form");
+    form.method = "dialog";
+
+    const p = document.createElement("p");
+    p.textContent = message;
+
+    const input = document.createElement("input");
+    input.type = "password";
+    input.className = "password-input";
+    input.autocomplete = "off";
+
+    const actions = document.createElement("div");
+    actions.className = "password-actions";
+
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "submit";
+    submitBtn.className = "password-submit";
+    submitBtn.textContent = "Submit";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "password-cancel";
+    cancelBtn.textContent = "Cancel";
+
+    actions.appendChild(submitBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(p);
+    form.appendChild(input);
+    form.appendChild(actions);
+    dialog.appendChild(form);
+    document.body.appendChild(dialog);
+
+    cancelBtn.addEventListener("click", () => {
+      dialog.close();
+      dialog.remove();
+      resolve(null);
+    });
+    dialog.addEventListener("cancel", () => {
+      dialog.remove();
+      resolve(null);
+    });
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const value = input.value;
+      dialog.close();
+      dialog.remove();
+      resolve(value);
+    });
+    dialog.showModal();
+    input.focus();
+  });
+}
+
 async function handleFileUpload(file: File): Promise<void> {
   clearNavError();
   try {
-    const text = await file.text();
+    const buffer = await file.arrayBuffer();
+    let text: string;
+    let pw: string | null = null;
+    if (isEncrypted(buffer)) {
+      pw = await promptPassword("Enter password to decrypt");
+      if (pw === null) return;
+      text = await decrypt(buffer, pw);
+    } else {
+      text = new TextDecoder().decode(buffer);
+    }
     const parsed = parseUploadedJson(text);
     const data = toParsedData(parsed);
     await storeParsedData(data);
+    importPassword = pw;
     transition({ source: "local", groupName: parsed.groupName });
   } catch (error) {
     if (error instanceof UploadValidationError) {
@@ -213,11 +282,16 @@ uploadLabel.addEventListener("keydown", (e) => {
   }
 });
 
-// Export handler
 exportButton.addEventListener("click", async () => {
   try {
     const json = await exportToJson();
-    const blob = new Blob([json], { type: "application/json" });
+    let blob: Blob;
+    if (importPassword) {
+      const encrypted = await encrypt(json, importPassword);
+      blob = new Blob([encrypted], { type: "application/octet-stream" });
+    } else {
+      blob = new Blob([json], { type: "application/json" });
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -235,10 +309,10 @@ exportButton.addEventListener("click", async () => {
   }
 });
 
-// Clear data handler
 clearButton.addEventListener("click", async () => {
   try {
     await clearAll();
+    importPassword = null;
     transition({ source: "seed" });
   } catch (error) {
     if (error instanceof TypeError || error instanceof ReferenceError) throw error;

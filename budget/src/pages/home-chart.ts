@@ -12,7 +12,7 @@ function isCardPaymentCategory(category: string): boolean {
 
 export interface SerializedChartTransaction {
   category: string;
-  /** Dollars. Positive = spending/debit, negative = income/credit (either sign valid for income). */
+  /** Dollars. Positive = spending/debit, negative = income/credit. Income mode uses absolute value, so either sign convention works. */
   amount: number;
   reimbursement: number;
   timestampMs: number | null;

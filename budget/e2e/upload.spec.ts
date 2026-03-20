@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { uploadFixture } from "./helpers";
+import { uploadFixture, uploadEncryptedFixture } from "./helpers";
 
 test.describe("upload", () => {
   test.beforeEach(async ({ page }) => {
@@ -80,5 +80,28 @@ test.describe("upload", () => {
     });
     await expect(page.locator(".nav-error")).toBeVisible({ timeout: 5000 });
     await expect(page.locator(".nav-error")).toContainText("Unsupported version");
+  });
+
+  test("upload encrypted file with correct password shows transactions", async ({ page }) => {
+    await uploadEncryptedFixture(page, "testpass");
+    await expect(page.locator(".password-input")).toBeVisible({ timeout: 5000 });
+    await page.locator(".password-input").fill("testpass");
+    await page.locator(".password-submit").click();
+    await expect(page.locator("#transactions-table")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("#seed-data-notice")).toHaveCount(0);
+    const rows = page.locator("#transactions-table .txn-row");
+    await expect(rows).toHaveCount(4);
+    const table = page.locator("#transactions-table");
+    await expect(table).toContainText("AMAZON");
+    await expect(table).toContainText("KROGER #1234");
+  });
+
+  test("upload encrypted file with wrong password shows error", async ({ page }) => {
+    await uploadEncryptedFixture(page, "testpass");
+    await expect(page.locator(".password-input")).toBeVisible({ timeout: 5000 });
+    await page.locator(".password-input").fill("wrongpass");
+    await page.locator(".password-submit").click();
+    await expect(page.locator(".nav-error")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".nav-error")).toContainText("Wrong password");
   });
 });
