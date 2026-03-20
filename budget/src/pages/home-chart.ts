@@ -1,6 +1,8 @@
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
 import { computeNetAmount, MS_PER_WEEK } from "../balance.js";
 import { formatCurrency } from "../format.js";
+import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
+import { parseJsonArray } from "./hydrate-util.js";
 
 export type ChartMode = "spending" | "income";
 
@@ -80,12 +82,16 @@ export function filterByWeeks(
  * children by value descending, name ascending.
  * When showCardPayment is false in spending mode, Transfer:CardPayment
  * categories (and subcategories) are excluded.
+ * When categoryFilter is non-empty, only transactions whose category exactly
+ * matches the filter or starts with categoryFilter + ":" (subcategories) are
+ * included.
  */
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
   mode: ChartMode = "spending",
   unbudgetedOnly = false,
   showCardPayment = false,
+  categoryFilter = "",
 ): CategoryNode {
   const root: CategoryNode = { name: "All", fullPath: "", value: 0, count: 0, children: [] };
 
@@ -97,6 +103,7 @@ export function buildCategoryTree(
     if (mode === "income" && !isIncome) continue;
     if (unbudgetedOnly && t.hasBudget) continue;
     if (!showCardPayment && mode === "spending" && isCardPaymentCategory(t.category)) continue;
+    if (categoryFilter && t.category !== categoryFilter && !t.category.startsWith(categoryFilter + ":")) continue;
     const net = mode === "income" ? Math.abs(raw) : raw;
     if (net <= 0) continue;
     let node = root;
@@ -264,6 +271,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   let currentMode: ChartMode = "spending";
   let currentUnbudgetedOnly = false;
   let currentShowCardPayment = false;
+  let currentCategoryFilter = "";
 
   const controlsDiv = document.getElementById("sankey-controls");
   if (!controlsDiv) throw new Error("sankey-controls element not found");
@@ -275,9 +283,13 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   const unbudgetedCheckbox = controlsDiv.querySelector("#sankey-unbudgeted") as HTMLInputElement | null;
   const cardPaymentToggle = controlsDiv.querySelector("#card-payment-toggle") as HTMLElement | null;
   const cardPaymentCheckbox = controlsDiv.querySelector("#sankey-card-payment") as HTMLInputElement | null;
-  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox) {
+  const categoryFilterInputRaw = controlsDiv.querySelector("#sankey-category-filter") as HTMLInputElement | null;
+  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox || !categoryFilterInputRaw) {
     throw new Error("sankey control elements missing");
   }
+  const categoryFilterInput: HTMLInputElement = categoryFilterInputRaw;
+
+  const categoryOptions = parseJsonArray(controlsDiv.dataset.categoryOptions);
 
   endSlider.min = "0";
   endSlider.max = String(weeks.length - 1);
@@ -291,7 +303,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     if (containerWidth === 0) return;
 
     const filtered = filterByWeeks(allTxns, weeks, currentNumWeeks, currentEndWeekIdx);
-    const rootData = buildCategoryTree(filtered, currentMode, currentUnbudgetedOnly, currentShowCardPayment);
+    const rootData = buildCategoryTree(filtered, currentMode, currentUnbudgetedOnly, currentShowCardPayment, currentCategoryFilter);
     divideTreeValues(rootData, currentNumWeeks);
 
     if (rootData.value === 0) {
@@ -385,6 +397,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       path.setAttribute("d", d);
       path.setAttribute("fill", categoryColor(topIdx, target.depth));
       path.setAttribute("class", "sankey-link");
+      path.style.pointerEvents = "none";
 
       const title = document.createElementNS(SVG_NS, "title");
       title.textContent = tooltipText(target.data, rootData.value);
@@ -428,7 +441,13 @@ export function hydrateCategorySankey(container: HTMLElement): void {
         text.setAttribute("y", String(h / 2));
         text.setAttribute("dy", "0.35em");
         text.setAttribute("fill", fg);
+        text.style.cursor = "pointer";
         text.textContent = `${node.data.name} ${formatCurrency(node.data.value)}/wk`;
+        text.addEventListener("click", () => {
+          categoryFilterInput.value = node.data.fullPath;
+          currentCategoryFilter = node.data.fullPath;
+          update();
+        });
         nodeG.appendChild(text);
       }
 
@@ -465,6 +484,9 @@ export function hydrateCategorySankey(container: HTMLElement): void {
         visible = isIncome;
       } else {
         visible = !isIncome && (!currentUnbudgetedOnly || !hasBudget) && (currentShowCardPayment || !isCardPayment);
+      }
+      if (visible && currentCategoryFilter) {
+        visible = category === currentCategoryFilter || category.startsWith(currentCategoryFilter + ":");
       }
       row.style.display = visible ? "" : "none";
     }
@@ -530,6 +552,18 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
   cardPaymentCheckbox.addEventListener("change", () => {
     currentShowCardPayment = cardPaymentCheckbox.checked;
+    update();
+  });
+
+  registerAutocompleteListeners();
+  categoryFilterInput.addEventListener("focus", () => {
+    showDropdown(categoryFilterInput, categoryOptions, "");
+  });
+  categoryFilterInput.addEventListener("input", () => {
+    showDropdown(categoryFilterInput, categoryOptions);
+  });
+  categoryFilterInput.addEventListener("blur", () => {
+    currentCategoryFilter = categoryFilterInput.value;
     update();
   });
 

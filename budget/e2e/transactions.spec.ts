@@ -224,4 +224,75 @@ test.describe("transactions", () => {
     await expect(page.locator("#card-payment-toggle")).toBeVisible();
     await expect(page.locator("#sankey-card-payment")).not.toBeChecked();
   });
+
+  test("category filter input present @smoke", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#sankey-category-filter")).toBeVisible();
+  });
+
+  test("category filter input visible on transaction page", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#category-filter-label")).toBeVisible();
+    await expect(page.locator("#sankey-category-filter")).toBeVisible();
+  });
+
+  test("typing a category in the filter and blurring filters table rows", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    const visibleRows = page.locator('.txn-row:not([style*="display: none"])');
+    const countBefore = await visibleRows.count();
+    expect(countBefore).toBeGreaterThan(0);
+    const filterInput = page.locator("#sankey-category-filter");
+    await filterInput.fill("Food");
+    await filterInput.blur();
+    const countAfter = await visibleRows.count();
+    expect(countAfter).toBeGreaterThan(0);
+    expect(countAfter).toBeLessThan(countBefore);
+    for (let i = 0; i < countAfter; i++) {
+      const category = await visibleRows.nth(i).getAttribute("data-category");
+      expect(category).toMatch(/^Food/);
+    }
+  });
+
+  test("clearing the filter input and blurring restores all rows", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    const visibleRows = page.locator('.txn-row:not([style*="display: none"])');
+    const countBefore = await visibleRows.count();
+    expect(countBefore).toBeGreaterThan(0);
+    const filterInput = page.locator("#sankey-category-filter");
+    await filterInput.fill("Food");
+    await filterInput.blur();
+    const countFiltered = await visibleRows.count();
+    expect(countFiltered).toBeLessThan(countBefore);
+    await filterInput.fill("");
+    await filterInput.blur();
+    const countRestored = await visibleRows.count();
+    expect(countRestored).toEqual(countBefore);
+  });
+
+  test("clicking a Sankey node text label sets the category filter", async ({ page }) => {
+    await page.goto("/transactions");
+    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
+    const visibleRows = page.locator('.txn-row:not([style*="display: none"])');
+    const countBefore = await visibleRows.count();
+    expect(countBefore).toBeGreaterThan(0);
+    const nodeText = page.locator("#category-sankey svg .sankey-node text").first();
+    await expect(nodeText).toBeVisible();
+    // dispatchEvent directly -- Playwright's click() on SVG <text> elements
+    // has unreliable hit-testing.
+    await nodeText.dispatchEvent("click");
+    const filterInput = page.locator("#sankey-category-filter");
+    await expect(filterInput).not.toHaveValue("");
+    const filterValue = await filterInput.inputValue();
+    const countAfter = await visibleRows.count();
+    expect(countAfter).toBeGreaterThan(0);
+    expect(countAfter).toBeLessThanOrEqual(countBefore);
+    for (let i = 0; i < countAfter; i++) {
+      const category = await visibleRows.nth(i).getAttribute("data-category");
+      expect(category).toMatch(new RegExp(`^${filterValue}`));
+    }
+  });
 });
