@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { timestampMockFactory, ts, makeBudget, makePeriod, makeContainer } from "../helpers";
+import { timestampMockFactory, makeBudget, makeContainer } from "../helpers";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
-import { Timestamp } from "firebase/firestore";
-import { filterPeriodsToWindow, aggregateByBudget, renderBudgetPieChart } from "../../src/pages/budgets-pie-chart";
+import { buildAllocationSlices, renderBudgetPieChart } from "../../src/pages/budgets-pie-chart";
 
 const containers: HTMLElement[] = [];
 
@@ -14,98 +13,68 @@ function trackedContainer(): HTMLElement {
   return c;
 }
 
-describe("filterPeriodsToWindow", () => {
-  it("returns only the last windowWeeks weeks from 20 weeks of data", () => {
-    const periods = [];
-    const baseDate = new Date("2025-01-06");
-    for (let i = 0; i < 20; i++) {
-      const start = new Date(baseDate.getTime() + i * 7 * 24 * 60 * 60 * 1000);
-      const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
-      periods.push(makePeriod({
-        id: `food-w${i}`,
-        budgetId: "food",
-        periodStart: Timestamp.fromDate(start),
-        periodEnd: Timestamp.fromDate(end),
-        total: (i + 1) * 10,
-      }));
-    }
-
-    const result = filterPeriodsToWindow(periods, 12);
-    expect(result).toHaveLength(12);
-
-    const resultIds = result.map(p => (p as any).id);
-    for (let i = 8; i < 20; i++) {
-      expect(resultIds).toContain(`food-w${i}`);
-    }
-    for (let i = 0; i < 8; i++) {
-      expect(resultIds).not.toContain(`food-w${i}`);
-    }
-  });
-
-  it("returns all periods when fewer than windowWeeks exist", () => {
-    const periods = [
-      makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 10 }),
-      makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 20 }),
-    ];
-    const result = filterPeriodsToWindow(periods, 12);
-    expect(result).toHaveLength(2);
-  });
-});
-
-describe("aggregateByBudget", () => {
-  it("groups periods by budget and sums totals", () => {
+describe("buildAllocationSlices", () => {
+  it("produces 'Not Budgeted' slice for the difference when under-budget", () => {
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food" }),
-      makeBudget({ id: "transport" as any, name: "Transport" }),
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100 }),
+      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 50 }),
     ];
-    const periods = [
-      makePeriod({ id: "f1", budgetId: "food", total: 50 }),
-      makePeriod({ id: "f2", budgetId: "food", total: 30 }),
-      makePeriod({ id: "t1", budgetId: "transport", total: 25 }),
-    ];
-    const slices = aggregateByBudget(budgets, periods);
-    expect(slices).toHaveLength(2);
-    expect(slices).toEqual([
-      { name: "Food", total: 80 },
-      { name: "Transport", total: 25 },
+    const result = buildAllocationSlices(budgets, 200);
+    expect(result.slices).toEqual([
+      { name: "Food", total: 100 },
+      { name: "Transport", total: 50 },
+      { name: "Not Budgeted", total: 50 },
     ]);
+    expect(result.overage).toBe(0);
   });
 
-  it("filters out budgets with zero total spend", () => {
+  it("returns no 'Not Budgeted' slice and overage=0 on exact match", () => {
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food" }),
-      makeBudget({ id: "transport" as any, name: "Transport" }),
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 120 }),
+      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 80 }),
     ];
-    const periods = [
-      makePeriod({ id: "f1", budgetId: "food", total: 50 }),
-      makePeriod({ id: "t1", budgetId: "transport", total: 0 }),
-    ];
-    const slices = aggregateByBudget(budgets, periods);
-    expect(slices).toHaveLength(1);
-    expect(slices[0]).toEqual({ name: "Food", total: 50 });
+    const result = buildAllocationSlices(budgets, 200);
+    expect(result.slices).toEqual([
+      { name: "Food", total: 120 },
+      { name: "Transport", total: 80 },
+    ]);
+    expect(result.overage).toBe(0);
   });
 
-  it("returns empty array when all budgets have zero spend", () => {
-    const budgets = [makeBudget({ id: "food" as any, name: "Food" })];
-    const periods = [
-      makePeriod({ id: "f1", budgetId: "food", total: 0 }),
-    ];
-    const slices = aggregateByBudget(budgets, periods);
-    expect(slices).toHaveLength(0);
-  });
-
-  it("excludes budgets whose periods sum to a negative total", () => {
+  it("returns overage and no 'Not Budgeted' slice when over-budget", () => {
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food" }),
-      makeBudget({ id: "transport" as any, name: "Transport" }),
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 300 }),
+      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 200 }),
     ];
-    const periods = [
-      makePeriod({ id: "f1", budgetId: "food", total: 50 }),
-      makePeriod({ id: "t1", budgetId: "transport", total: -30 }),
+    const result = buildAllocationSlices(budgets, 400);
+    expect(result.slices).toEqual([
+      { name: "Food", total: 300 },
+      { name: "Transport", total: 200 },
+    ]);
+    expect(result.overage).toBe(100);
+  });
+
+  it("excludes budgets with weeklyAllowance=0", () => {
+    const budgets = [
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100 }),
+      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 0 }),
     ];
-    const slices = aggregateByBudget(budgets, periods);
-    expect(slices).toHaveLength(1);
-    expect(slices[0]).toEqual({ name: "Food", total: 50 });
+    const result = buildAllocationSlices(budgets, 200);
+    expect(result.slices).toEqual([
+      { name: "Food", total: 100 },
+      { name: "Not Budgeted", total: 100 },
+    ]);
+    expect(result.overage).toBe(0);
+  });
+
+  it("returns only Not Budgeted slice when all allowances are zero", () => {
+    const budgets = [
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 0 }),
+      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 0 }),
+    ];
+    const result = buildAllocationSlices(budgets, 200);
+    expect(result.slices).toEqual([{ name: "Not Budgeted", total: 200 }]);
+    expect(result.overage).toBe(0);
   });
 });
 
@@ -122,20 +91,16 @@ describe("renderBudgetPieChart", () => {
   it("renders SVG paths and legend items for multiple budgets", () => {
     const container = trackedContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food" }),
-      makeBudget({ id: "transport" as any, name: "Transport" }),
-      makeBudget({ id: "fun" as any, name: "Fun" }),
-    ];
-    const periods = [
-      makePeriod({ id: "f1", budgetId: "food", total: 100 }),
-      makePeriod({ id: "t1", budgetId: "transport", total: 60 }),
-      makePeriod({ id: "u1", budgetId: "fun", total: 40 }),
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 400 }),
+      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 350 }),
+      makeBudget({ id: "fun" as any, name: "Fun", weeklyAllowance: 250 }),
     ];
 
-    renderBudgetPieChart(container, { budgets, periods, windowWeeks: 12 });
+    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 1000 });
 
     const svg = container.querySelector("svg");
     expect(svg).not.toBeNull();
+    expect(svg!.getAttribute("aria-label")).toBe("Income allocation pie chart");
 
     const paths = svg!.querySelectorAll("path");
     expect(paths).toHaveLength(3);
@@ -149,53 +114,91 @@ describe("renderBudgetPieChart", () => {
     expect(legendText).toContain("Fun");
   });
 
-  it("renders a single arc path for a single budget", () => {
-    const container = trackedContainer();
-    const budgets = [makeBudget({ id: "food" as any, name: "Food" })];
-    const periods = [
-      makePeriod({ id: "f1", budgetId: "food", total: 75 }),
-    ];
-
-    renderBudgetPieChart(container, { budgets, periods, windowWeeks: 12 });
-
-    const svg = container.querySelector("svg");
-    expect(svg).not.toBeNull();
-
-    const paths = svg!.querySelectorAll("path");
-    expect(paths).toHaveLength(1);
-  });
-
-  it("shows empty state message when all spending is zero", () => {
+  it("shows empty state message when income is zero", () => {
     const container = trackedContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food" }),
-      makeBudget({ id: "transport" as any, name: "Transport" }),
-    ];
-    const periods = [
-      makePeriod({ id: "f1", budgetId: "food", total: 0 }),
-      makePeriod({ id: "t1", budgetId: "transport", total: 0 }),
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100 }),
     ];
 
-    renderBudgetPieChart(container, { budgets, periods, windowWeeks: 12 });
+    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 0 });
 
-    expect(container.textContent).toBe("No spending data");
+    expect(container.textContent).toBe("No income data");
     expect(container.querySelector("svg")).toBeNull();
+  });
+
+  it("renders warning banner when over-budget", () => {
+    const container = trackedContainer();
+    const budgets = [
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 600 }),
+      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 500 }),
+    ];
+
+    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 800 });
+
+    const warning = container.querySelector(".pie-overage-warning");
+    expect(warning).not.toBeNull();
+    expect(warning!.textContent).toContain("Budgets exceed income by");
+    expect(warning!.textContent).toContain("/week");
+  });
+
+  it("does not render warning when under-budget", () => {
+    const container = trackedContainer();
+    const budgets = [
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100 }),
+    ];
+
+    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 500 });
+
+    const warning = container.querySelector(".pie-overage-warning");
+    expect(warning).toBeNull();
+  });
+
+  it("shows 'Not Budgeted' in legend when under-budget", () => {
+    const container = trackedContainer();
+    const budgets = [
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 200 }),
+    ];
+
+    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 500 });
+
+    const legendText = container.querySelector(".pie-legend")!.textContent || "";
+    expect(legendText).toContain("Not Budgeted");
+
+    const paths = container.querySelectorAll("path");
+    expect(paths).toHaveLength(2);
+
+    const notBudgetedPath = Array.from(paths).find(
+      p => p.getAttribute("fill") === "#ccc",
+    );
+    expect(notBudgetedPath).not.toBeUndefined();
+  });
+
+  it("donut hole shows income, not spending sum", () => {
+    const container = trackedContainer();
+    const budgets = [
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 200 }),
+      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 100 }),
+    ];
+
+    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 750 });
+
+    const svg = container.querySelector("svg")!;
+    const text = svg.querySelector("text");
+    expect(text).not.toBeNull();
+    expect(text!.textContent).toBe(
+      (750).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+    );
   });
 
   it("legend percentages sum to approximately 100%", () => {
     const container = trackedContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food" }),
-      makeBudget({ id: "transport" as any, name: "Transport" }),
-      makeBudget({ id: "fun" as any, name: "Fun" }),
-    ];
-    const periods = [
-      makePeriod({ id: "f1", budgetId: "food", total: 33 }),
-      makePeriod({ id: "t1", budgetId: "transport", total: 33 }),
-      makePeriod({ id: "u1", budgetId: "fun", total: 34 }),
+      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 333 }),
+      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 333 }),
+      makeBudget({ id: "fun" as any, name: "Fun", weeklyAllowance: 334 }),
     ];
 
-    renderBudgetPieChart(container, { budgets, periods, windowWeeks: 12 });
+    renderBudgetPieChart(container, { budgets, averageWeeklyIncome: 1000 });
 
     const legendItems = container.querySelectorAll(".pie-legend-item");
     let totalPct = 0;
