@@ -147,7 +147,7 @@ export function createAppContext(
     : undefined;
 
   const db = initializeFirestore(app, {
-    localCache: persistentLocalCache({}),
+    ...(firestoreEmulatorHost ? {} : { localCache: persistentLocalCache({}) }),
   });
 
   if (firestoreEmulatorHost) {

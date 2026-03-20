@@ -89,7 +89,7 @@ describe("createAppContext", () => {
     expect(ctx).not.toHaveProperty("STORAGE_NAMESPACE");
   });
 
-  it("initializes Firestore with persistentLocalCache", async () => {
+  it("initializes Firestore with persistentLocalCache when no emulator", async () => {
     const { createAppContext } = await loadModule();
     const mocks = await loadMocks();
 
@@ -99,6 +99,17 @@ describe("createAppContext", () => {
     expect(mocks.initializeFirestore).toHaveBeenCalledWith(mockApp, {
       localCache: mockLocalCache,
     });
+  });
+
+  it("skips persistentLocalCache when emulator host is set", async () => {
+    vi.stubEnv("VITE_FIRESTORE_EMULATOR_HOST", "localhost:8080");
+    const { createAppContext } = await loadModule();
+    const mocks = await loadMocks();
+
+    createAppContext("myapp", "app-id-123");
+
+    expect(mocks.persistentLocalCache).not.toHaveBeenCalled();
+    expect(mocks.initializeFirestore).toHaveBeenCalledWith(mockApp, {});
   });
 
   it("returns correct shape with storage module", async () => {
