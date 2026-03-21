@@ -654,6 +654,7 @@ func (c *Client) UpsertWeeklyAggregates(ctx context.Context, group GroupInfo, ag
 		ref    *firestore.DocumentRef
 		fields map[string]interface{}
 		merge  []firestore.SetOption
+		delete bool
 	}
 	var ops []batchOp
 
@@ -672,22 +673,15 @@ func (c *Client) UpsertWeeklyAggregates(ctx context.Context, group GroupInfo, ag
 		})
 	}
 
-	// Zero out stale docs not in the computed set
-	var zeroed int
+	// Delete stale docs not in the computed set
+	var deleted int
 	for id := range existingIDs {
 		if !computedIDs[id] {
 			ops = append(ops, batchOp{
-				ref: col.Doc(id),
-				fields: map[string]interface{}{
-					"creditTotal":     0,
-					"unbudgetedTotal": 0,
-				},
-				merge: []firestore.SetOption{firestore.Merge(
-					firestore.FieldPath{"creditTotal"},
-					firestore.FieldPath{"unbudgetedTotal"},
-				)},
+				ref:    col.Doc(id),
+				delete: true,
 			})
-			zeroed++
+			deleted++
 		}
 	}
 
@@ -699,10 +693,10 @@ func (c *Client) UpsertWeeklyAggregates(ctx context.Context, group GroupInfo, ag
 		}
 		batch := c.fs.Batch()
 		for _, op := range ops[i:end] {
-			if len(op.merge) > 0 {
-				batch.Set(op.ref, op.fields, op.merge...)
+			if op.delete {
+				batch.Delete(op.ref)
 			} else {
-				batch.Set(op.ref, op.fields)
+				batch.Set(op.ref, op.fields, op.merge...)
 			}
 		}
 		if _, err := batch.Commit(ctx); err != nil {
@@ -710,7 +704,7 @@ func (c *Client) UpsertWeeklyAggregates(ctx context.Context, group GroupInfo, ag
 		}
 	}
 
-	log.Printf("weekly aggregates: %d upserted, %d zeroed", len(aggregates), zeroed)
+	log.Printf("weekly aggregates: %d upserted, %d deleted", len(aggregates), deleted)
 	return nil
 }
 
@@ -799,7 +793,7 @@ type FullTransaction struct {
 
 // FullTransactionFromDoc converts a TransactionDoc (ID + raw field map) into a
 // FullTransaction. Returns an error if required fields (amount, timestamp) are
-// missing or have the wrong type.
+// missing or have the wrong type, or if reimbursement has a non-numeric type.
 func FullTransactionFromDoc(id string, d map[string]interface{}) (FullTransaction, error) {
 	ft := FullTransaction{
 		ID:                id,
