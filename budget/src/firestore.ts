@@ -523,3 +523,29 @@ export async function deleteNormalizationRule(ruleId: string): Promise<void> {
   const ref = doc(db, path, ruleId);
   await deleteDoc(ref);
 }
+
+// --- Weekly Aggregates ---
+
+export interface WeeklyAggregate {
+  readonly id: string;
+  readonly weekStart: Timestamp;
+  readonly creditTotal: number;
+  readonly unbudgetedTotal: number;
+  readonly groupId: GroupId | null;
+}
+
+export async function getWeeklyAggregates(groupId: null): Promise<WeeklyAggregate[]>;
+export async function getWeeklyAggregates(groupId: GroupId, email: string): Promise<WeeklyAggregate[]>;
+export async function getWeeklyAggregates(groupId: GroupId | null, email?: string): Promise<WeeklyAggregate[]> {
+  const docs = await queryGroupCollection("weekly-aggregates", "seed-", groupId, email);
+  return docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      weekStart: requireTimestamp(data.weekStart, "weekStart"),
+      creditTotal: requireNumber(data.creditTotal, "creditTotal"),
+      unbudgetedTotal: requireNumber(data.unbudgetedTotal, "unbudgetedTotal"),
+      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
+    };
+  });
+}

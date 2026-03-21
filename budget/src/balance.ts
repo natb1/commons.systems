@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { Budget, BudgetId, BudgetPeriod, Rollover, Statement, Transaction, TransactionId } from "./firestore.js";
+import type { Budget, BudgetId, BudgetPeriod, Rollover, Statement, Transaction, TransactionId, WeeklyAggregate } from "./firestore.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -312,27 +312,24 @@ export function computeAggregateTrend(
 
 /**
  * Compute per-budget 3-week rolling average of non-credit spending.
- * Includes an "Other" series when qualifying unbudgeted transactions exist.
+ * Includes an "Other" series from pre-aggregated unbudgeted spending totals.
  */
 export function computePerBudgetTrend(
   budgets: Budget[],
   periods: BudgetPeriod[],
-  transactions: Transaction[],
+  aggregates: WeeklyAggregate[],
 ): PerBudgetPoint[] {
   const { weeks: periodsWeeks } = indexPeriodsByWeek(periods);
   const weekMap = new Map(periodsWeeks);
 
-  // Also include weeks from unbudgeted transactions
-  const unbudgetedTxns = transactions.filter(
-    (t): t is Transaction & { timestamp: Timestamp } =>
-      t.budget === null
-      && t.timestamp !== null
-      && (t.normalizedId === null || t.normalizedPrimary)
-      && computeNetAmount(t.amount, t.reimbursement) > 0,
-  );
-  for (const t of unbudgetedTxns) {
-    const entry = toSundayEntry(t.timestamp.toDate());
-    if (!weekMap.has(entry.ms)) weekMap.set(entry.ms, entry.label);
+  // Build "Other" weekly spending and register weeks in a single pass
+  const otherWeekly = new Map<number, number>();
+  for (const a of aggregates) {
+    if (a.unbudgetedTotal > 0) {
+      const entry = toSundayEntry(a.weekStart.toDate());
+      if (!weekMap.has(entry.ms)) weekMap.set(entry.ms, entry.label);
+      otherWeekly.set(entry.ms, (otherWeekly.get(entry.ms) ?? 0) + a.unbudgetedTotal);
+    }
   }
 
   const weeks = [...weekMap.entries()].sort((a, b) => a[0] - b[0]);
@@ -354,12 +351,6 @@ export function computePerBudgetTrend(
     m.set(entry.ms, (m.get(entry.ms) ?? 0) + p.total);
   }
 
-  // "Other" spending from unbudgeted transactions
-  const otherWeekly = new Map<number, number>();
-  for (const t of unbudgetedTxns) {
-    const entry = toSundayEntry(t.timestamp.toDate());
-    otherWeekly.set(entry.ms, (otherWeekly.get(entry.ms) ?? 0) + computeNetAmount(t.amount, t.reimbursement));
-  }
   if (otherWeekly.size > 0) perBudgetWeekly.set(UNBUDGETED_SERIES, otherWeekly);
 
   const result: PerBudgetPoint[] = [];
@@ -391,46 +382,30 @@ export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
   return trailing.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / trailing.length;
 }
 
-/** Return the start of the next Monday 00:00 UTC from a millisecond timestamp. A Monday input advances to the following Monday. */
-function endOfWeekMs(timestampMs: number): number {
-  const d = new Date(timestampMs);
-  const day = d.getUTCDay(); // 0=Sun, 1=Mon, ...
-  const daysUntilMonday = day === 0 ? 1 : 8 - day;
-  const nextMonday = new Date(Date.UTC(
-    d.getUTCFullYear(),
-    d.getUTCMonth(),
-    d.getUTCDate() + daysUntilMonday,
-  ));
-  return nextMonday.getTime();
-}
-
 /**
  * Compute average weekly credits over the trailing 12-week window ending at the
- * Monday after the latest credit transaction. Credit transactions are identified
- * by negative net amount. Transfer:CardPayment transactions are excluded even
- * when negative, to avoid double-counting card payment flows. Non-primary
- * normalized duplicates and null-timestamp transactions are excluded. Returns 0
- * when no qualifying credit transactions exist. Values are negated before
- * summing to produce positive display amounts.
+ * Monday following the latest aggregate's weekStart (i.e., weekStart + 7 days).
+ * Uses pre-aggregated WeeklyAggregate data (creditTotal per Monday-aligned week).
+ * Returns 0 when no weeks have credits.
  */
-export function computeAverageWeeklyCredits(transactions: Transaction[]): number {
-  const creditTxns = filterCreditTransactions(transactions);
+export function computeAverageWeeklyCredits(aggregates: WeeklyAggregate[]): number {
+  const withCredits = aggregates.filter(a => a.creditTotal > 0);
+  if (withCredits.length === 0) return 0;
 
-  if (creditTxns.length === 0) return 0;
-
-  let latestMs = -Infinity;
-  for (const t of creditTxns) {
-    const ms = t.timestamp.toMillis();
-    if (ms > latestMs) latestMs = ms;
+  let latestWeekStartMs = -Infinity;
+  for (const a of withCredits) {
+    const ms = a.weekStart.toMillis();
+    if (ms > latestWeekStartMs) latestWeekStartMs = ms;
   }
-  const windowEnd = endOfWeekMs(latestMs);
+  // Window end is next Monday (weekStart + 1 week)
+  const windowEnd = latestWeekStartMs + MS_PER_WEEK;
   const windowStart = windowEnd - CREDIT_WEEKS * MS_PER_WEEK;
 
   let sum = 0;
-  for (const t of creditTxns) {
-    const ms = t.timestamp.toMillis();
+  for (const a of withCredits) {
+    const ms = a.weekStart.toMillis();
     if (ms >= windowStart && ms < windowEnd) {
-      sum += -netAmount(t);
+      sum += a.creditTotal;
     }
   }
 
