@@ -93,17 +93,25 @@ func ApplyCategorization(txns []store.TransactionData, rules []Rule) error {
 
 // ApplyBudgetAssignment applies budget assignment rules to transactions.
 // Rules are matched in priority order (ascending); first match wins.
+// When a rule specifies a Category prefix, it only matches transactions whose category starts with that prefix (case-insensitive).
 // Only transactions with an empty Budget field are assigned.
 // Unmatched transactions are left with an empty budget (no error).
 func ApplyBudgetAssignment(txns []store.TransactionData, rules []Rule) {
 	budgetRules := rulesOfType(rules, "budget_assignment")
 
+	// Pre-compute lowered category prefixes so we don't call ToLower per (txn, rule) pair.
+	lowerCats := make([]string, len(budgetRules))
+	for i, r := range budgetRules {
+		lowerCats[i] = strings.ToLower(r.Category)
+	}
+
 	for i := range txns {
 		if txns[i].Budget != "" {
 			continue
 		}
-		for _, r := range budgetRules {
-			if r.Category != "" && !strings.HasPrefix(strings.ToLower(txns[i].Category), strings.ToLower(r.Category)) {
+		lowerTxnCat := strings.ToLower(txns[i].Category)
+		for j, r := range budgetRules {
+			if lowerCats[j] != "" && !strings.HasPrefix(lowerTxnCat, lowerCats[j]) {
 				continue
 			}
 			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account) {

@@ -484,34 +484,9 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 	// Convert Firestore docs to FullTransaction for aggregation
 	fullTxns := make([]FullTransaction, 0, len(txnDocs))
 	for _, doc := range txnDocs {
-		d := doc.Data()
-		ft := FullTransaction{
-			ID:                doc.Ref.ID,
-			NormalizedPrimary: true,
-		}
-		ft.Budget, _ = d["budget"].(string)
-		ft.Category, _ = d["category"].(string)
-		if v, ok := d["amount"].(float64); ok {
-			ft.Amount = v
-		} else {
-			return fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", doc.Ref.ID, d["amount"])
-		}
-		switch v := d["reimbursement"].(type) {
-		case float64:
-			ft.Reimbursement = v
-		case int64:
-			ft.Reimbursement = float64(v)
-		}
-		if v, ok := d["timestamp"].(time.Time); ok {
-			ft.Timestamp = v
-		} else {
-			return fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", doc.Ref.ID, d["timestamp"])
-		}
-		if nid, ok := d["normalizedId"].(string); ok {
-			ft.NormalizedID = nid
-		}
-		if primary, ok := d["normalizedPrimary"].(bool); ok {
-			ft.NormalizedPrimary = primary
+		ft, err := FullTransactionFromDoc(doc.Ref.ID, doc.Data())
+		if err != nil {
+			return err
 		}
 		fullTxns = append(fullTxns, ft)
 	}
@@ -820,6 +795,45 @@ type FullTransaction struct {
 	Timestamp         time.Time
 	NormalizedID      string // empty when not normalized
 	NormalizedPrimary bool
+}
+
+// FullTransactionFromDoc converts a TransactionDoc (ID + raw field map) into a
+// FullTransaction. Returns an error if required fields (amount, timestamp) are
+// missing or have the wrong type.
+func FullTransactionFromDoc(id string, d map[string]interface{}) (FullTransaction, error) {
+	ft := FullTransaction{
+		ID:                id,
+		NormalizedPrimary: true,
+	}
+	ft.Budget, _ = d["budget"].(string)
+	ft.Category, _ = d["category"].(string)
+	if v, ok := d["amount"].(float64); ok {
+		ft.Amount = v
+	} else {
+		return ft, fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", id, d["amount"])
+	}
+	switch v := d["reimbursement"].(type) {
+	case float64:
+		ft.Reimbursement = v
+	case int64:
+		ft.Reimbursement = float64(v)
+	case nil:
+		// no reimbursement, default 0 is correct
+	default:
+		return ft, fmt.Errorf("transaction %s: field 'reimbursement' is not a number (got %T)", id, d["reimbursement"])
+	}
+	if v, ok := d["timestamp"].(time.Time); ok {
+		ft.Timestamp = v
+	} else {
+		return ft, fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", id, d["timestamp"])
+	}
+	if nid, ok := d["normalizedId"].(string); ok {
+		ft.NormalizedID = nid
+	}
+	if primary, ok := d["normalizedPrimary"].(bool); ok {
+		ft.NormalizedPrimary = primary
+	}
+	return ft, nil
 }
 
 // PeriodResult holds aggregated data for a single budget period.

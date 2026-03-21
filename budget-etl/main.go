@@ -937,38 +937,23 @@ func runFirestore(ctx context.Context, client *store.Client, groupInfo store.Gro
 		}
 	}
 
+	// Build normalization overlay from updates applied above
+	normState := make(map[string]store.NormalizationUpdate, len(normUpdates))
+	for _, u := range normUpdates {
+		normState[u.DocID] = u
+	}
+
 	// Compute and upsert weekly aggregates from all transactions
 	fullTxnsForAgg := make([]store.FullTransaction, 0, len(allDocs))
 	for _, td := range allDocs {
-		ft := store.FullTransaction{
-			ID:                td.ID,
-			NormalizedPrimary: true,
+		ft, err := store.FullTransactionFromDoc(td.ID, td.Data)
+		if err != nil {
+			return err
 		}
-		ft.Budget, _ = td.Data["budget"].(string)
-		ft.Category, _ = td.Data["category"].(string)
-		if v, ok := td.Data["amount"].(float64); ok {
-			ft.Amount = v
-		} else {
-			return fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", td.ID, td.Data["amount"])
-		}
-		switch v := td.Data["reimbursement"].(type) {
-		case float64:
-			ft.Reimbursement = v
-		case int64:
-			ft.Reimbursement = float64(v)
-		}
-		if v, ok := td.Data["timestamp"].(time.Time); ok {
-			ft.Timestamp = v
-		} else {
-			return fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", td.ID, td.Data["timestamp"])
-		}
-		if nid, ok := td.Data["normalizedId"].(string); ok {
-			ft.NormalizedID = nid
-		}
-		if primary, ok := td.Data["normalizedPrimary"].(bool); ok {
-			ft.NormalizedPrimary = primary
-		} else if ft.NormalizedID != "" {
-			log.Printf("WARNING: transaction %s has normalizedId %q but no normalizedPrimary field", td.ID, ft.NormalizedID)
+		// Apply fresh normalization state (allDocs predates UpdateNormalization)
+		if nu, ok := normState[ft.ID]; ok {
+			ft.NormalizedID = nu.NormalizedID
+			ft.NormalizedPrimary = nu.NormalizedPrimary
 		}
 		fullTxnsForAgg = append(fullTxnsForAgg, ft)
 	}
