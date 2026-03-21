@@ -476,3 +476,21 @@
 .normalized-original .amount {
   text-align: right;
 }
+
+/* --- Infinite scroll --- */
+
+#scroll-sentinel {
+  height: 1px;
+}
+
+.scroll-loading {
+  text-align: center;
+  padding: 1rem;
+  opacity: 0.7;
+}
+
+.scroll-error {
+  text-align: center;
+  padding: 1rem;
+  color: var(--error, #e15759);
+}
