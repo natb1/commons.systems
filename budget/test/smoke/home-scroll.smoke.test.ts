@@ -28,6 +28,10 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
   };
 }
 
+function localOptions(dsOverrides: Partial<DataSource> = {}) {
+  return { authorized: true, groupName: "household", dataSource: createMockDataSource(dsOverrides) };
+}
+
 function seedOptions(dsOverrides: Partial<DataSource> = {}) {
   return { authorized: false, groupName: "", dataSource: createMockDataSource(dsOverrides) };
 }
@@ -37,8 +41,8 @@ describe("home page infinite scroll smoke", () => {
     vi.clearAllMocks();
   });
 
-  it("home page renders with scroll sentinel", async () => {
-    const html = await renderHome(seedOptions({
+  it("home page renders with scroll sentinel for authorized users", async () => {
+    const html = await renderHome(localOptions({
       getTransactions: vi.fn().mockResolvedValue([
         txn({ id: "t1" as any }),
       ]),
@@ -47,7 +51,7 @@ describe("home page infinite scroll smoke", () => {
   });
 
   it("sentinel has data-next-before attribute with numeric value", async () => {
-    const html = await renderHome(seedOptions({
+    const html = await renderHome(localOptions({
       getTransactions: vi.fn().mockResolvedValue([
         txn({ id: "t1" as any }),
       ]),

@@ -62,14 +62,14 @@ async function waitForTable(page: Page): Promise<void> {
 }
 
 test.describe("home page infinite scroll", () => {
-  test.describe("seed data — scroll sentinel present", () => {
-    test("scroll sentinel is present on initial load", async ({ page }) => {
+  test.describe("seed data — all transactions loaded without scroll", () => {
+    test("seed data loads all transactions without scroll sentinel", async ({ page }) => {
       await page.goto("/transactions");
       await waitForTable(page);
-      await expect(page.locator("#scroll-sentinel")).toBeAttached();
+      await expect(page.locator("#scroll-sentinel")).toHaveCount(0);
     });
 
-    test("sankey chart renders with initial load", async ({ page }) => {
+    test("sankey chart renders with seed data", async ({ page }) => {
       await page.goto("/transactions");
       await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
       await expect(page.locator("#category-sankey svg")).toHaveCount(1);

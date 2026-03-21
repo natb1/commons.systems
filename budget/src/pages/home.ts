@@ -238,7 +238,7 @@ function renderTransactionTable(
   budgetPeriods: BudgetPeriod[],
   sinceMs: number | null,
 ): string {
-  if (transactions.length === 0) {
+  if (transactions.length === 0 && sinceMs === null) {
     return "<p>No transactions found.</p>";
   }
 
@@ -300,8 +300,10 @@ function renderTransactionTable(
 export async function renderHome(options: RenderPageOptions): Promise<string> {
   const { authorized, groupName, dataSource } = options;
 
-  const sinceMs = weekStart(Date.now() - SCROLL_BATCH_WEEKS * MS_PER_WEEK);
-  const txnQuery: TransactionQuery = { since: Timestamp.fromMillis(sinceMs) };
+  // Seed data (unauthorized) is small — load all transactions without a time window.
+  // Authorized data uses a 12-week initial window with infinite scroll for older batches.
+  const sinceMs = authorized ? weekStart(Date.now() - SCROLL_BATCH_WEEKS * MS_PER_WEEK) : null;
+  const txnQuery: TransactionQuery = sinceMs !== null ? { since: Timestamp.fromMillis(sinceMs) } : {};
 
   let tableHtml: string;
   let chartHtml = "";

@@ -538,20 +538,33 @@ describe("renderHome", () => {
     expect(html).toContain('id="category-filter-label"');
   });
 
-  it("calls getTransactions with a since query param", async () => {
+  it("calls getTransactions with a since query param for authorized users", async () => {
     const mockGetTxns = vi.fn().mockResolvedValue([txn()]);
-    await renderHome(seedOptions({ getTransactions: mockGetTxns }));
+    await renderHome(localOptions({ getTransactions: mockGetTxns }));
     expect(mockGetTxns).toHaveBeenCalledWith(
       expect.objectContaining({ since: expect.anything() }),
     );
   });
 
-  it("renders scroll sentinel with data-next-before attribute", async () => {
-    const html = await renderHome(seedOptions({
+  it("calls getTransactions without since for seed data", async () => {
+    const mockGetTxns = vi.fn().mockResolvedValue([txn()]);
+    await renderHome(seedOptions({ getTransactions: mockGetTxns }));
+    expect(mockGetTxns).toHaveBeenCalledWith({});
+  });
+
+  it("renders scroll sentinel with data-next-before attribute for authorized users", async () => {
+    const html = await renderHome(localOptions({
       getTransactions: vi.fn().mockResolvedValue([txn()]),
     }));
     expect(html).toContain('id="scroll-sentinel"');
     expect(html).toMatch(/data-next-before="\d+"/);
+  });
+
+  it("does not render scroll sentinel for seed data", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([txn()]),
+    }));
+    expect(html).not.toContain('id="scroll-sentinel"');
   });
 
   it("renders data-group-name and data-editable on transactions table", async () => {
