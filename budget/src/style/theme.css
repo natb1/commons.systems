@@ -53,10 +53,16 @@
 .budget-header,
 .budget-row {
   display: grid;
-  grid-template-columns: 2fr 1fr auto auto;
+  grid-template-columns: 2fr 1fr auto auto auto auto;
   gap: 0.5rem;
   padding: 0.5rem;
   align-items: center;
+}
+
+.avg-col {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .budget-header {

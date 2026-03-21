@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, findLatestOverride, periodAllowance, weeklyEquivalent } from "../src/balance";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computePerBudgetAverageSpending, computeNetWorth, findLatestOverride, periodAllowance, weeklyEquivalent } from "../src/balance";
 import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -1403,5 +1403,68 @@ describe("weekStart", () => {
     const newYear = Date.UTC(2025, 0, 1, 12, 0, 0);
     const result = weekStart(newYear);
     expect(result).toBe(Date.UTC(2024, 11, 30, 0, 0, 0, 0));
+  });
+});
+
+describe("computePerBudgetAverageSpending", () => {
+  it("returns avg12 and avg52 for a budget with several weeks of periods", () => {
+    const budget = makeBudget({ id: "food", name: "Food" });
+    // 4 weekly periods: Jan 6, 13, 20, 27 (all map to different Sunday weeks)
+    const periods = [
+      makePeriod({ id: "p1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
+      makePeriod({ id: "p2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 200 }),
+      makePeriod({ id: "p3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 150 }),
+      makePeriod({ id: "p4", budgetId: "food", periodStart: ts("2025-01-27"), periodEnd: ts("2025-02-03"), total: 250 }),
+    ];
+    const result = computePerBudgetAverageSpending([budget], periods);
+    const avg = result.get("food")!;
+    // 4 weeks, all within 12 and 52 windows: avg = (100+200+150+250)/4 = 175
+    expect(avg.avg12).toBe(175);
+    expect(avg.avg52).toBe(175);
+  });
+
+  it("returns zeros for a budget with no periods", () => {
+    const budget = makeBudget({ id: "empty", name: "Empty" });
+    const result = computePerBudgetAverageSpending([budget], []);
+    const avg = result.get("empty")!;
+    expect(avg.avg12).toBe(0);
+    expect(avg.avg52).toBe(0);
+  });
+
+  it("separates averages by budget", () => {
+    const budgets = [
+      makeBudget({ id: "food", name: "Food" }),
+      makeBudget({ id: "fun", name: "Fun" }),
+    ];
+    const periods = [
+      makePeriod({ id: "f1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
+      makePeriod({ id: "n1", budgetId: "fun", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+    ];
+    const result = computePerBudgetAverageSpending(budgets, periods);
+    expect(result.get("food")!.avg12).toBe(100);
+    expect(result.get("fun")!.avg12).toBe(50);
+  });
+
+  it("12-week window uses only trailing 12 weeks when more data exists", () => {
+    const budget = makeBudget({ id: "food", name: "Food" });
+    // Create 14 weekly periods
+    const periods: ReturnType<typeof makePeriod>[] = [];
+    for (let i = 0; i < 14; i++) {
+      const start = new Date(Date.UTC(2025, 0, 6 + i * 7));
+      const end = new Date(Date.UTC(2025, 0, 13 + i * 7));
+      periods.push(makePeriod({
+        id: `p${i}`,
+        budgetId: "food",
+        periodStart: ts(start.toISOString()),
+        periodEnd: ts(end.toISOString()),
+        total: i < 2 ? 1000 : 100, // first 2 weeks high, rest low
+      }));
+    }
+    const result = computePerBudgetAverageSpending([budget], periods);
+    const avg = result.get("food")!;
+    // 12-week trailing: weeks 2-13, all 100 each → avg12 = 100
+    expect(avg.avg12).toBe(100);
+    // 52-week: all 14 weeks → (2*1000 + 12*100) / 14 = 3200/14 ≈ 228.57
+    expect(avg.avg52).toBeCloseTo(3200 / 14);
   });
 });

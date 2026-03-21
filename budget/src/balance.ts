@@ -507,6 +507,33 @@ export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
   return trailing.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / trailing.length;
 }
 
+export interface PerBudgetAverage {
+  readonly avg12: number;
+  readonly avg52: number;
+}
+
+/** Compute per-budget average weekly spending over trailing 12-week and 52-week windows. */
+export function computePerBudgetAverageSpending(
+  budgets: Budget[],
+  periods: BudgetPeriod[],
+): Map<BudgetId, PerBudgetAverage> {
+  const result = new Map<BudgetId, PerBudgetAverage>();
+  for (const budget of budgets) {
+    const budgetPeriods = periodsForBudget(periods, budget.id);
+    const { weeks, weeklySpending } = indexPeriodsByWeek(budgetPeriods);
+    if (weeks.length === 0) {
+      result.set(budget.id, { avg12: 0, avg52: 0 });
+      continue;
+    }
+    const trailing12 = weeks.slice(-12);
+    const avg12 = trailing12.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / trailing12.length;
+    const trailing52 = weeks.slice(-52);
+    const avg52 = trailing52.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / trailing52.length;
+    result.set(budget.id, { avg12, avg52 });
+  }
+  return result;
+}
+
 /** Return the start of the next Monday 00:00 UTC from a millisecond timestamp. A Monday input advances to the following Monday. */
 function endOfWeekMs(timestampMs: number): number {
   const d = new Date(timestampMs);

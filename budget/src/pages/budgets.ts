@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod } from "../firestore.js";
-import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computePerBudgetTrend, weeklyEquivalent, type PerBudgetPoint } from "../balance.js";
+import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computePerBudgetTrend, computePerBudgetAverageSpending, weeklyEquivalent, type PerBudgetPoint, type PerBudgetAverage } from "../balance.js";
 import { formatCurrency } from "../format.js";
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
@@ -34,29 +34,33 @@ function renderRolloverCell(budget: Budget, editable: boolean): string {
   return `<select class="edit-rollover" aria-label="Rollover"${dis}>${options}</select>`;
 }
 
-function renderRow(budget: Budget, editable: boolean): string {
+function renderRow(budget: Budget, editable: boolean, avg: PerBudgetAverage | undefined): string {
   const idAttr = editable ? ` data-budget-id="${escapeHtml(budget.id)}"` : "";
   const dis = editable ? "" : " disabled";
   const nameCell = `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name"${dis}>`;
   const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.weeklyAllowance))}" min="0" aria-label="Allowance"${dis}>`;
   const periodCell = renderPeriodCell(budget, editable);
   const rolloverCell = renderRolloverCell(budget, editable);
+  const avg12 = avg ? formatCurrency(avg.avg12) : "$0";
+  const avg52 = avg ? formatCurrency(avg.avg52) : "$0";
 
   return `<div class="budget-row"${idAttr}>
     <span>${nameCell}</span>
     <span>${allowanceCell}</span>
     <span>${periodCell}</span>
     <span>${rolloverCell}</span>
+    <span class="avg-col">${avg12}</span>
+    <span class="avg-col">${avg52}</span>
   </div>`;
 }
 
-function renderBudgetTable(budgets: Budget[], authorized: boolean): string {
+function renderBudgetTable(budgets: Budget[], authorized: boolean, averages: Map<string, PerBudgetAverage>): string {
   if (budgets.length === 0) {
     return "<p>No budgets found.</p>";
   }
 
   const sorted = [...budgets].sort((a, b) => a.name.localeCompare(b.name));
-  const rows = sorted.map(b => renderRow(b, authorized)).join("\n");
+  const rows = sorted.map(b => renderRow(b, authorized, averages.get(b.id))).join("\n");
 
   return `<div id="budgets-table">
       <div class="budget-header">
@@ -64,6 +68,8 @@ function renderBudgetTable(budgets: Budget[], authorized: boolean): string {
         <span>Allowance</span>
         <span>Period</span>
         <span>Rollover</span>
+        <span>12w Avg</span>
+        <span>52w Avg</span>
       </div>
       ${rows}
     </div>`;
@@ -223,8 +229,9 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
     const averageWeeklySpending = computeAverageWeeklySpending(periods);
     const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
     const perBudgetTrend = computePerBudgetTrend(budgets, periods, transactions);
+    const perBudgetAverages = computePerBudgetAverageSpending(budgets, periods);
     chartHtml = renderChartContainer(budgets, periods, metricsHtml, perBudgetTrend, averageWeeklyCredits);
-    tableHtml = renderBudgetTable(budgets, authorized);
+    tableHtml = renderBudgetTable(budgets, authorized, perBudgetAverages);
     if (budgets.length > 0) {
       overridesHtml = renderOverridesTable(budgets, authorized);
     }
