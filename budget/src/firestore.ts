@@ -22,6 +22,7 @@ export type { GroupId } from "@commons-systems/authutil/groups";
  * - "balance": full balance (positive or negative) carries over
  */
 export type Rollover = "none" | "debt" | "balance";
+export type AllowancePeriod = "weekly" | "monthly";
 
 export interface BudgetOverride {
   readonly date: Timestamp;
@@ -32,6 +33,7 @@ export interface Budget {
   readonly id: BudgetId;
   readonly name: string;
   readonly weeklyAllowance: number;
+  readonly allowancePeriod: AllowancePeriod;
   readonly rollover: Rollover;
   readonly overrides: BudgetOverride[];
   readonly groupId: GroupId | null;
@@ -162,6 +164,12 @@ function requireRollover(value: unknown): Rollover {
   throw new DataIntegrityError(`Expected rollover to be one of none, debt, balance, got ${value}`);
 }
 
+function requireAllowancePeriod(value: unknown): AllowancePeriod {
+  if (value == null) return "weekly";
+  if (value === "weekly" || value === "monthly") return value;
+  throw new DataIntegrityError(`Expected allowancePeriod to be weekly or monthly, got ${value}`);
+}
+
 /**
  * Build and execute a group-scoped Firestore query.
  * When groupId is null, reads the public seed collection (e.g. "seed-transactions").
@@ -276,6 +284,7 @@ export async function getBudgets(groupId: GroupId | null, email?: string): Promi
       id: docSnap.id as BudgetId,
       name,
       weeklyAllowance: requireNonNegativeNumber(data.weeklyAllowance, "weeklyAllowance"),
+      allowancePeriod: requireAllowancePeriod(data.allowancePeriod),
       rollover: requireRollover(data.rollover),
       overrides: requireOverrides(data.overrides),
       groupId: optionalString(data.groupId, "groupId") as GroupId | null,
@@ -361,7 +370,7 @@ export async function adjustBudgetPeriodTotal(
 
 export async function updateBudget(
   budgetId: BudgetId,
-  fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
+  fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "allowancePeriod" | "rollover">>,
 ): Promise<void> {
   requireDocId(budgetId, "budget");
   if (Object.keys(fields).length === 0) return;
@@ -371,6 +380,11 @@ export async function updateBudget(
   if (fields.weeklyAllowance !== undefined) {
     if (!Number.isFinite(fields.weeklyAllowance) || fields.weeklyAllowance < 0) {
       throw new RangeError("Weekly allowance must be a non-negative number");
+    }
+  }
+  if (fields.allowancePeriod !== undefined) {
+    if (fields.allowancePeriod !== "weekly" && fields.allowancePeriod !== "monthly") {
+      throw new Error("Allowance period must be weekly or monthly");
     }
   }
   if (fields.rollover !== undefined) {

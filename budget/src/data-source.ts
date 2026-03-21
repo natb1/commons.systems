@@ -13,6 +13,7 @@ import type {
   BudgetPeriodId,
   RuleId,
   GroupId,
+  AllowancePeriod,
 } from "./firestore.js";
 import {
   getTransactions as fsGetTransactions,
@@ -38,7 +39,7 @@ export interface DataSource {
   ): Promise<void>;
   updateBudget(
     id: BudgetId,
-    fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
+    fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "allowancePeriod" | "rollover">>,
   ): Promise<void>;
   updateBudgetOverrides(id: BudgetId, overrides: BudgetOverride[]): Promise<void>;
   adjustBudgetPeriodTotal(id: BudgetPeriodId, delta: number): Promise<void>;
@@ -127,11 +128,17 @@ function toTransaction(row: IdbTransaction): Transaction {
   };
 }
 
+function toAllowancePeriod(value: string | undefined): AllowancePeriod {
+  if (value === "monthly") return "monthly";
+  return "weekly";
+}
+
 function toBudget(row: IdbBudget): Budget {
   return {
     id: row.id as BudgetId,
     name: row.name,
     weeklyAllowance: row.weeklyAllowance,
+    allowancePeriod: toAllowancePeriod(row.allowancePeriod),
     rollover: row.rollover,
     overrides: (row.overrides ?? []).map(o => ({
       date: Timestamp.fromMillis(o.dateMs),
@@ -245,7 +252,7 @@ export class IdbDataSource implements DataSource {
 
   async updateBudget(
     id: BudgetId,
-    fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
+    fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "allowancePeriod" | "rollover">>,
   ): Promise<void> {
     await updateRecord<IdbBudget>("budgets", id, "Budget", fields);
   }

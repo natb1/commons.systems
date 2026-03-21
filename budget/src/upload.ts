@@ -13,6 +13,7 @@ import type {
   RuleId,
   GroupId,
   Rollover,
+  AllowancePeriod,
   RuleType,
 } from "./firestore.js";
 import type { ParsedData } from "./idb.js";
@@ -63,6 +64,7 @@ interface RawBudget {
   id: string;
   name: string;
   weeklyAllowance: number;
+  allowancePeriod?: string;
   rollover: string;
   overrides?: RawBudgetOverride[];
 }
@@ -132,6 +134,12 @@ function emptyToNull(value: string): string | null {
 function requireRollover(value: string): Rollover {
   if (value === "none" || value === "debt" || value === "balance") return value;
   throw new UploadValidationError(`Invalid rollover value: "${value}"`);
+}
+
+function requireAllowancePeriod(value: string | undefined): AllowancePeriod {
+  if (value == null || value === "weekly") return "weekly";
+  if (value === "monthly") return "monthly";
+  throw new UploadValidationError(`Invalid allowancePeriod value: "${value}"`);
 }
 
 function requireId(value: unknown, entity: string, index: number): string {
@@ -213,6 +221,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
     id: requireId(b.id, "budget", i) as BudgetId,
     name: b.name,
     weeklyAllowance: b.weeklyAllowance ?? 0,
+    allowancePeriod: requireAllowancePeriod(b.allowancePeriod),
     rollover: requireRollover(b.rollover ?? "none"),
     overrides: (b.overrides ?? []).map(o => ({
       date: parseTimestamp(o.date, "budget.overrides.date"),
@@ -305,6 +314,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       id: b.id,
       name: b.name,
       weeklyAllowance: b.weeklyAllowance,
+      allowancePeriod: b.allowancePeriod,
       rollover: b.rollover,
       overrides: b.overrides.map(o => ({ dateMs: o.date.toMillis(), balance: o.balance })),
     })),

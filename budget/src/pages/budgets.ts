@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
-import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computePerBudgetTrend, type PerBudgetPoint } from "../balance.js";
+import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod } from "../firestore.js";
+import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computePerBudgetTrend, weeklyEquivalent, type PerBudgetPoint } from "../balance.js";
 import { formatCurrency } from "../format.js";
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
@@ -9,6 +9,20 @@ const rolloverOptions: { value: Rollover; label: string }[] = [
   { value: "debt", label: "Debt only" },
   { value: "balance", label: "Full balance" },
 ];
+
+const periodOptions: { value: AllowancePeriod; label: string }[] = [
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
+
+function renderPeriodCell(budget: Budget, editable: boolean): string {
+  const dis = editable ? "" : " disabled";
+  const options = periodOptions.map(o => {
+    const sel = o.value === budget.allowancePeriod ? " selected" : "";
+    return `<option value="${escapeHtml(o.value)}"${sel}>${escapeHtml(o.label)}</option>`;
+  }).join("");
+  return `<select class="edit-period" aria-label="Period"${dis}>${options}</select>`;
+}
 
 function renderRolloverCell(budget: Budget, editable: boolean): string {
   const dis = editable ? "" : " disabled";
@@ -23,12 +37,14 @@ function renderRow(budget: Budget, editable: boolean): string {
   const idAttr = editable ? ` data-budget-id="${escapeHtml(budget.id)}"` : "";
   const dis = editable ? "" : " disabled";
   const nameCell = `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name"${dis}>`;
-  const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.weeklyAllowance))}" min="0" aria-label="Weekly allowance"${dis}>`;
+  const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.weeklyAllowance))}" min="0" aria-label="Allowance"${dis}>`;
+  const periodCell = renderPeriodCell(budget, editable);
   const rolloverCell = renderRolloverCell(budget, editable);
 
   return `<div class="budget-row"${idAttr}>
     <span>${nameCell}</span>
     <span>${allowanceCell}</span>
+    <span>${periodCell}</span>
     <span>${rolloverCell}</span>
   </div>`;
 }
@@ -44,7 +60,8 @@ function renderBudgetTable(budgets: Budget[], authorized: boolean): string {
   return `<div id="budgets-table">
       <div class="budget-header">
         <span>Name</span>
-        <span>Weekly Allowance</span>
+        <span>Allowance</span>
+        <span>Period</span>
         <span>Rollover</span>
       </div>
       ${rows}
@@ -60,6 +77,7 @@ export interface SerializedBudget {
   readonly id: string;
   readonly name: string;
   readonly weeklyAllowance: number;
+  readonly allowancePeriod: AllowancePeriod;
   readonly rollover: Rollover;
   readonly overrides: SerializedBudgetOverride[];
 }
@@ -69,6 +87,7 @@ function serializeBudgets(budgets: Budget[]): string {
     id: b.id,
     name: b.name,
     weeklyAllowance: b.weeklyAllowance,
+    allowancePeriod: b.allowancePeriod,
     rollover: b.rollover,
     overrides: b.overrides.map(o => ({ dateMs: o.date.toMillis(), balance: o.balance })),
   }));
@@ -199,7 +218,7 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
         .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
     ]);
     const averageWeeklyCredits = computeAverageWeeklyCredits(transactions);
-    const totalWeeklyBudget = budgets.reduce((s, b) => s + b.weeklyAllowance, 0);
+    const totalWeeklyBudget = budgets.reduce((s, b) => s + weeklyEquivalent(b.weeklyAllowance, b.allowancePeriod), 0);
     const averageWeeklySpending = computeAverageWeeklySpending(periods);
     const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
     const perBudgetTrend = computePerBudgetTrend(budgets, periods, transactions);

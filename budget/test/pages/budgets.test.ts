@@ -14,6 +14,7 @@ function budget(overrides: Partial<Budget> = {}): Budget {
     id: "food",
     name: "Food",
     weeklyAllowance: 150,
+    allowancePeriod: "weekly",
     rollover: "none",
     overrides: [],
     groupId: null,
@@ -114,7 +115,7 @@ describe("renderBudgets", () => {
     expect(html).toContain('class="edit-rollover"');
     expect(html).toContain('data-budget-id="food"');
     expect(html).toContain('aria-label="Name"');
-    expect(html).toContain('aria-label="Weekly allowance"');
+    expect(html).toContain('aria-label="Allowance"');
     expect(html).toContain('aria-label="Rollover"');
   });
 

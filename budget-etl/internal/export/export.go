@@ -148,6 +148,7 @@ type Budget struct {
 	ID              string  `json:"id"`
 	Name            string  `json:"name"`
 	WeeklyAllowance float64 `json:"weeklyAllowance"`
+	AllowancePeriod string  `json:"allowancePeriod,omitempty"`
 	Rollover        string  `json:"rollover"`
 }
 

@@ -35,7 +35,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
       } else if (target.classList.contains("edit-allowance")) {
         const allowance = Number(target.value);
         if (!Number.isFinite(allowance) || allowance < 0) {
-          showInputError(target, "Weekly allowance must be a non-negative number");
+          showInputError(target, "Allowance must be a non-negative number");
           return;
         }
         await getActiveDataSource().updateBudget(budgetId, { weeklyAllowance: allowance });
@@ -51,7 +51,6 @@ export function hydrateBudgetTable(container: HTMLElement): void {
   container.addEventListener("change", async (e) => {
     const target = e.target;
     if (!(target instanceof HTMLSelectElement)) return;
-    if (!target.classList.contains("edit-rollover")) return;
     const budgetId = rowBudgetId(target);
     if (!budgetId) return;
 
@@ -59,16 +58,27 @@ export function hydrateBudgetTable(container: HTMLElement): void {
     if (saved && target.value === saved.value) return;
 
     try {
-      const value = target.value;
-      if (value !== "none" && value !== "debt" && value !== "balance") {
-        showInputError(target, "Invalid rollover value");
+      if (target.classList.contains("edit-rollover")) {
+        const value = target.value;
+        if (value !== "none" && value !== "debt" && value !== "balance") {
+          showInputError(target, "Invalid rollover value");
+          return;
+        }
+        await getActiveDataSource().updateBudget(budgetId, { rollover: value });
+      } else if (target.classList.contains("edit-period")) {
+        const value = target.value;
+        if (value !== "weekly" && value !== "monthly") {
+          showInputError(target, "Invalid period value");
+          return;
+        }
+        await getActiveDataSource().updateBudget(budgetId, { allowancePeriod: value });
+      } else {
         return;
       }
-      await getActiveDataSource().updateBudget(budgetId, { rollover: value });
       // Update the selected attribute (not just .value) so showInputError can
       // revert to the last-saved value via option[selected].
       if (saved) saved.removeAttribute("selected");
-      const newSelected = Array.from(target.options).find(o => o.value === value) ?? null;
+      const newSelected = Array.from(target.options).find(o => o.value === target.value) ?? null;
       if (newSelected) newSelected.setAttribute("selected", "");
     } catch (error) {
       handleSaveError(target, error, "budget");
@@ -77,15 +87,17 @@ export function hydrateBudgetTable(container: HTMLElement): void {
 }
 
 function deserializeBudgets(raw: string): Budget[] {
-  let parsed: Array<Omit<SerializedBudget, "rollover" | "overrides"> & { rollover: string; overrides?: SerializedBudgetOverride[] }>;
+  let parsed: Array<Omit<SerializedBudget, "rollover" | "allowancePeriod" | "overrides"> & { rollover: string; allowancePeriod?: string; overrides?: SerializedBudgetOverride[] }>;
   try { parsed = JSON.parse(raw); } catch (e) { throw new DataIntegrityError(`Invalid budget chart data: ${e instanceof Error ? e.message : e}`); }
   return parsed.map(b => {
     if (b.rollover !== "none" && b.rollover !== "debt" && b.rollover !== "balance")
       throw new DataIntegrityError(`Invalid rollover value: ${b.rollover}`);
+    const allowancePeriod = b.allowancePeriod === "monthly" ? "monthly" as const : "weekly" as const;
     return {
       id: b.id as BudgetId,
       name: b.name,
       weeklyAllowance: b.weeklyAllowance,
+      allowancePeriod,
       rollover: b.rollover,
       overrides: (b.overrides ?? []).map(o => ({
         date: Timestamp.fromMillis(o.dateMs),

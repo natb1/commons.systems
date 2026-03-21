@@ -338,6 +338,7 @@ describe("getBudgets", () => {
         id: "food",
         name: "Food",
         weeklyAllowance: 150,
+        allowancePeriod: "weekly",
         rollover: "none",
         overrides: [],
         groupId: "household",

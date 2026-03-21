@@ -52,6 +52,7 @@ const idbBudgets = [
     id: "groceries",
     name: "Groceries",
     weeklyAllowance: 100,
+    allowancePeriod: "weekly",
     rollover: "none",
     overrides: [],
   },

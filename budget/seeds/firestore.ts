@@ -46,6 +46,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
     data: {
       name: "Food",
       weeklyAllowance: 150,
+      allowancePeriod: "weekly",
       rollover: "none",
       groupId: "household",
       memberEmails: ["test@example.com"],
@@ -56,6 +57,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
     data: {
       name: "Housing",
       weeklyAllowance: 500,
+      allowancePeriod: "monthly",
       rollover: "debt",
       groupId: "household",
       memberEmails: ["test@example.com"],
@@ -66,6 +68,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
     data: {
       name: "Vacation",
       weeklyAllowance: 100,
+      allowancePeriod: "weekly",
       rollover: "balance",
       groupId: "household",
       memberEmails: ["test@example.com"],

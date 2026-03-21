@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { Budget, BudgetId, BudgetOverride, BudgetPeriod, Rollover, Statement, Transaction, TransactionId } from "./firestore.js";
+import type { AllowancePeriod, Budget, BudgetId, BudgetOverride, BudgetPeriod, Rollover, Statement, Transaction, TransactionId } from "./firestore.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -53,6 +53,35 @@ export function applyRollover(running: number, weeklyAllowance: number, rollover
     case "balance":
       return running + weeklyAllowance;
   }
+}
+
+/**
+ * Compute the allowance for a period based on the allowance period type.
+ * Weekly: always returns the full allowance.
+ * Monthly: returns the full allowance when the period crosses a UTC month boundary
+ * (different month/year from the previous period), 0 otherwise.
+ * The first period (no previous) always gets the full allowance.
+ */
+export function periodAllowance(
+  allowance: number,
+  allowancePeriod: AllowancePeriod,
+  prevPeriodStartMs: number | null,
+  currentPeriodStartMs: number,
+): number {
+  if (allowancePeriod === "weekly") return allowance;
+  if (prevPeriodStartMs === null) return allowance;
+  const prev = new Date(prevPeriodStartMs);
+  const curr = new Date(currentPeriodStartMs);
+  if (prev.getUTCFullYear() !== curr.getUTCFullYear() || prev.getUTCMonth() !== curr.getUTCMonth()) {
+    return allowance;
+  }
+  return 0;
+}
+
+/** Convert an allowance to its weekly equivalent for apples-to-apples comparison. */
+export function weeklyEquivalent(allowance: number, allowancePeriod: AllowancePeriod): number {
+  if (allowancePeriod === "monthly") return allowance * 12 / 52;
+  return allowance;
 }
 
 export function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
@@ -137,13 +166,17 @@ export function computeBudgetBalance(
   if (!override) {
     // No override: accumulate through all prior periods
     for (let i = 0; i < targetPeriodIndex; i++) {
-      running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
+      const prevMs = i > 0 ? periods[i - 1].periodStart.toMillis() : null;
+      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periods[i].periodStart.toMillis());
+      running = applyRollover(running, allow, budget.rollover);
       running -= periods[i].total;
     }
   } else if (startIdx <= targetPeriodIndex) {
     // Override was in a prior period; continue accumulating from after override period
     for (let i = startIdx; i < targetPeriodIndex; i++) {
-      running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
+      const prevMs = i > 0 ? periods[i - 1].periodStart.toMillis() : null;
+      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periods[i].periodStart.toMillis());
+      running = applyRollover(running, allow, budget.rollover);
       running -= periods[i].total;
     }
   }
@@ -155,7 +188,9 @@ export function computeBudgetBalance(
     // Override is in the target period: running starts at override balance
     running = override.balance;
   } else {
-    running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
+    const prevMs = targetPeriodIndex > 0 ? periods[targetPeriodIndex - 1].periodStart.toMillis() : null;
+    const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, targetPeriod.periodStart.toMillis());
+    running = applyRollover(running, allow, budget.rollover);
   }
 
   // Walk same-period transactions up to and including the target transaction
@@ -197,20 +232,20 @@ export function computePeriodBalances(
     const sorted = periodsForBudget(periods, budget.id);
     const balances: PeriodBalance[] = [];
     let accumulated = 0;
-    for (const period of sorted) {
+    for (let idx = 0; idx < sorted.length; idx++) {
+      const period = sorted[idx];
       const periodStartMs = period.periodStart.toMillis();
       const periodEndMs = period.periodEnd.toMillis();
       const override = findLatestOverride(budget.overrides, periodStartMs);
+      const prevMs = idx > 0 ? sorted[idx - 1].periodStart.toMillis() : null;
+      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periodStartMs);
 
       let running: number;
       if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
         // Override is in this period: replaces rollover
         running = override.balance;
-      } else if (override) {
-        // Override is in a prior period: apply normal rollover
-        running = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
       } else {
-        running = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
+        running = applyRollover(accumulated, allow, budget.rollover);
       }
       accumulated = running - period.total;
       balances.push({
@@ -238,17 +273,20 @@ export function computeAllBudgetBalances(
     let accumulated = 0;
     let txnIdx = 0;
 
-    for (const period of periods) {
+    for (let pIdx = 0; pIdx < periods.length; pIdx++) {
+      const period = periods[pIdx];
       const periodStartMs = period.periodStart.toMillis();
       const periodEndMs = period.periodEnd.toMillis();
 
       const override = findLatestOverride(budget.overrides, periodStartMs);
+      const prevMs = pIdx > 0 ? periods[pIdx - 1].periodStart.toMillis() : null;
+      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periodStartMs);
       let running: number;
       if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
         accumulated = override.balance;
         running = accumulated;
       } else {
-        accumulated = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
+        accumulated = applyRollover(accumulated, allow, budget.rollover);
         running = accumulated;
       }
 

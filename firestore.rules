@@ -120,7 +120,8 @@ service cloud.firestore {
         && request.resource.data.weeklyAllowance >= 0
         && request.resource.data.rollover in ["none", "debt", "balance"]
         && (!('overrides' in request.resource.data) || request.resource.data.overrides is list)
-        && request.resource.data.keys().hasOnly(['name', 'weeklyAllowance', 'rollover', 'overrides', 'groupId', 'memberEmails']);
+        && (!('allowancePeriod' in request.resource.data) || request.resource.data.allowancePeriod in ["weekly", "monthly"])
+        && request.resource.data.keys().hasOnly(['name', 'weeklyAllowance', 'allowancePeriod', 'rollover', 'overrides', 'groupId', 'memberEmails']);
       allow create, delete: if false;
     }
 

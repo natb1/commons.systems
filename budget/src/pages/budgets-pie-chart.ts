@@ -2,6 +2,7 @@ import { pie, arc, type PieArcDatum } from "d3-shape";
 import { scaleOrdinal } from "d3-scale";
 import { schemeTableau10 } from "d3-scale-chromatic";
 import type { Budget } from "../firestore.js";
+import { weeklyEquivalent } from "../balance.js";
 import { formatCurrency } from "../format.js";
 
 const NOT_BUDGETED_LABEL = "Not Budgeted";
@@ -29,9 +30,10 @@ export function buildAllocationSlices(budgets: Budget[], averageWeeklyCredits: n
   const slices: Slice[] = [];
   let totalBudgeted = 0;
   for (const b of budgets) {
-    if (b.weeklyAllowance > 0) {
-      slices.push({ name: b.name, total: b.weeklyAllowance });
-      totalBudgeted += b.weeklyAllowance;
+    const weekly = weeklyEquivalent(b.weeklyAllowance, b.allowancePeriod);
+    if (weekly > 0) {
+      slices.push({ name: b.name, total: weekly });
+      totalBudgeted += weekly;
     }
   }
   const overage = Math.max(0, totalBudgeted - averageWeeklyCredits);

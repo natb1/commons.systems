@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, findLatestOverride } from "../src/balance";
+import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, findLatestOverride, periodAllowance, weeklyEquivalent } from "../src/balance";
 import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -25,6 +25,7 @@ function makeBudget(overrides: Partial<Budget> = {}): Budget {
     id: "food",
     name: "Food",
     weeklyAllowance: 150,
+    allowancePeriod: "weekly",
     rollover: "none",
     overrides: [],
     groupId: null,
@@ -1249,5 +1250,105 @@ describe("computeAllBudgetBalances with overrides", () => {
     expect(batch.get("txn-w2")).toBe(20);
     // txn-w3 (w3, override prior): running=50-30(w2.total)=20, w3: 20+100=120, -25=95
     expect(batch.get("txn-w3")).toBe(95);
+  });
+});
+
+describe("periodAllowance", () => {
+  it("weekly: always returns full allowance", () => {
+    expect(periodAllowance(100, "weekly", null, Date.parse("2025-01-06"))).toBe(100);
+    expect(periodAllowance(100, "weekly", Date.parse("2025-01-06"), Date.parse("2025-01-13"))).toBe(100);
+  });
+
+  it("monthly: first period always gets full allowance", () => {
+    expect(periodAllowance(500, "monthly", null, Date.parse("2025-01-06"))).toBe(500);
+  });
+
+  it("monthly: returns full allowance at month boundary", () => {
+    // Jan 27 → Feb 3: different months
+    expect(periodAllowance(500, "monthly", Date.parse("2025-01-27"), Date.parse("2025-02-03"))).toBe(500);
+  });
+
+  it("monthly: returns 0 within same month", () => {
+    // Jan 6 → Jan 13: same month
+    expect(periodAllowance(500, "monthly", Date.parse("2025-01-06"), Date.parse("2025-01-13"))).toBe(0);
+  });
+
+  it("monthly: year boundary counts as month boundary", () => {
+    // Dec 29 → Jan 5: different year
+    expect(periodAllowance(500, "monthly", Date.parse("2024-12-29"), Date.parse("2025-01-05"))).toBe(500);
+  });
+});
+
+describe("weeklyEquivalent", () => {
+  it("weekly: returns allowance unchanged", () => {
+    expect(weeklyEquivalent(150, "weekly")).toBe(150);
+  });
+
+  it("monthly: converts to weekly equivalent", () => {
+    expect(weeklyEquivalent(500, "monthly")).toBeCloseTo(500 * 12 / 52, 10);
+  });
+});
+
+describe("monthly allowance in computePeriodBalances", () => {
+  it("accumulates monthly allowance only at month boundaries", () => {
+    const budget = makeBudget({
+      weeklyAllowance: 500,
+      allowancePeriod: "monthly",
+      rollover: "balance",
+    });
+    // 3 periods: Jan 6, Jan 13, Feb 3 — first gets 500, second gets 0, third gets 500 (new month)
+    const periods = [
+      makePeriod({ id: "p1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
+      makePeriod({ id: "p2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 50 }),
+      makePeriod({ id: "p3", budgetId: "food", periodStart: ts("2025-02-03"), periodEnd: ts("2025-02-10"), total: 200 }),
+    ];
+    const result = computePeriodBalances([budget], periods);
+    const balances = result.get("food")!;
+    // p1: rollover(0, 500, balance) = 500; 500 - 100 = 400
+    expect(balances[0].runningBalance).toBe(400);
+    // p2: rollover(400, 0, balance) = 400; 400 - 50 = 350
+    expect(balances[1].runningBalance).toBe(350);
+    // p3: rollover(350, 500, balance) = 850; 850 - 200 = 650
+    expect(balances[2].runningBalance).toBe(650);
+  });
+
+  it("weekly budget is unaffected by monthly logic", () => {
+    const budget = makeBudget({
+      weeklyAllowance: 100,
+      allowancePeriod: "weekly",
+      rollover: "balance",
+    });
+    const periods = [
+      makePeriod({ id: "p1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
+      makePeriod({ id: "p2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
+    ];
+    const result = computePeriodBalances([budget], periods);
+    const balances = result.get("food")!;
+    // p1: 100 - 60 = 40
+    expect(balances[0].runningBalance).toBe(40);
+    // p2: 40 + 100 - 30 = 110
+    expect(balances[1].runningBalance).toBe(110);
+  });
+
+  it("monthly allowance with override interaction", () => {
+    const budget = makeBudget({
+      weeklyAllowance: 500,
+      allowancePeriod: "monthly",
+      rollover: "balance",
+      overrides: [{ date: ts("2025-01-13"), balance: 200 }],
+    });
+    const periods = [
+      makePeriod({ id: "p1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
+      makePeriod({ id: "p2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 50 }),
+      makePeriod({ id: "p3", budgetId: "food", periodStart: ts("2025-02-03"), periodEnd: ts("2025-02-10"), total: 80 }),
+    ];
+    const result = computePeriodBalances([budget], periods);
+    const balances = result.get("food")!;
+    // p1: rollover(0, 500, balance) = 500; 500 - 100 = 400
+    expect(balances[0].runningBalance).toBe(400);
+    // p2: override at Jan 13 => running = 200; 200 - 50 = 150
+    expect(balances[1].runningBalance).toBe(150);
+    // p3: rollover(150, 500, balance) = 650; 650 - 80 = 570
+    expect(balances[2].runningBalance).toBe(570);
   });
 });
