@@ -166,14 +166,16 @@ type BudgetPeriod struct {
 
 // Rule is a categorization or budget assignment rule in the JSON output.
 type Rule struct {
-	ID            string `json:"id"`
-	Type          string `json:"type"`
-	Pattern       string `json:"pattern"`
-	Target        string `json:"target"`
-	Priority      int    `json:"priority"`
-	Institution   string `json:"institution"`
-	Account       string `json:"account"`
-	TransactionID string `json:"transactionId,omitempty"`
+	ID            string   `json:"id"`
+	Type          string   `json:"type"`
+	Pattern       string   `json:"pattern"`
+	Target        string   `json:"target"`
+	Priority      int      `json:"priority"`
+	Institution   string   `json:"institution"`
+	Account       string   `json:"account"`
+	MinAmount     *float64 `json:"minAmount,omitempty"`
+	MaxAmount     *float64 `json:"maxAmount,omitempty"`
+	TransactionID string   `json:"transactionId,omitempty"`
 }
 
 // NormalizationRule is a normalization rule in the JSON output.

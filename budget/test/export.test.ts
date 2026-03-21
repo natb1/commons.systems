@@ -79,6 +79,8 @@ const idbRules = [
     priority: 1,
     institution: null,
     account: null,
+    minAmount: null,
+    maxAmount: null,
   },
 ];
 

@@ -1010,6 +1010,8 @@ describe("getRules", () => {
       priority: 10,
       institution: "Bank",
       account: "Checking",
+      minAmount: null,
+      maxAmount: null,
       groupId: "household",
     }]);
   });

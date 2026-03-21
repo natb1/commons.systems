@@ -11,6 +11,8 @@ export function renderRow(rule: Rule, editable: boolean): string {
   const priorityCell = `<input type="number" class="edit-priority" value="${escapeHtml(String(rule.priority))}" aria-label="Priority"${dis}>`;
   const institutionCell = `<input type="text" class="edit-institution" value="${escapeHtml(rule.institution ?? "")}" aria-label="Institution" data-autocomplete${dis}>`;
   const accountCell = `<input type="text" class="edit-account" value="${escapeHtml(rule.account ?? "")}" aria-label="Account" data-autocomplete${dis}>`;
+  const minAmountCell = `<input type="number" step="0.01" class="edit-min-amount" value="${rule.minAmount != null ? rule.minAmount : ""}" aria-label="Min Amount"${dis}>`;
+  const maxAmountCell = `<input type="number" step="0.01" class="edit-max-amount" value="${rule.maxAmount != null ? rule.maxAmount : ""}" aria-label="Max Amount"${dis}>`;
   const deleteCell = editable
     ? `<button class="delete-rule" aria-label="Delete rule">Delete</button>`
     : `<span></span>`;
@@ -26,6 +28,8 @@ export function renderRow(rule: Rule, editable: boolean): string {
       <span>${priorityCell}</span>
       <span>${institutionCell}</span>
       <span>${accountCell}</span>
+      <span>${minAmountCell}</span>
+      <span>${maxAmountCell}</span>
       <span>${deleteCell}</span>
     </div>
   </details>`;
@@ -100,6 +104,8 @@ function renderRulesTable(opts: RulesTableOptions): string {
         <span>Priority</span>
         <span>Institution</span>
         <span>Account</span>
+        <span>Min $</span>
+        <span>Max $</span>
         <span></span>
       </div>
       <div class="rule-header rule-header-normalization">

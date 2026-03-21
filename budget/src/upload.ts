@@ -87,6 +87,8 @@ interface RawRule {
   priority: number;
   institution: string;
   account: string;
+  minAmount?: number;
+  maxAmount?: number;
 }
 
 interface RawNormalizationRule {
@@ -140,6 +142,7 @@ function requireRollover(value: string): Rollover {
 function requireAllowancePeriod(value: string | undefined): AllowancePeriod {
   if (value == null || value === "weekly") return "weekly";
   if (value === "monthly") return "monthly";
+  if (value === "quarterly") return "quarterly";
   throw new UploadValidationError(`Invalid allowancePeriod value: "${value}"`);
 }
 
@@ -250,6 +253,8 @@ export function parseUploadedJson(text: string): ParsedUpload {
     priority: r.priority ?? 0,
     institution: emptyToNull(r.institution ?? ""),
     account: emptyToNull(r.account ?? ""),
+    minAmount: r.minAmount ?? null,
+    maxAmount: r.maxAmount ?? null,
     groupId: null as GroupId | null,
   }));
 
@@ -339,6 +344,8 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       priority: r.priority,
       institution: r.institution,
       account: r.account,
+      minAmount: r.minAmount,
+      maxAmount: r.maxAmount,
     })),
     normalizationRules: parsed.normalizationRules.map((r) => ({
       id: r.id,

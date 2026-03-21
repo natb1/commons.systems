@@ -120,7 +120,7 @@ service cloud.firestore {
         && request.resource.data.weeklyAllowance >= 0
         && request.resource.data.rollover in ["none", "debt", "balance"]
         && (!('overrides' in request.resource.data) || request.resource.data.overrides is list)
-        && (!('allowancePeriod' in request.resource.data) || request.resource.data.allowancePeriod in ["weekly", "monthly"])
+        && (!('allowancePeriod' in request.resource.data) || request.resource.data.allowancePeriod in ["weekly", "monthly", "quarterly"])
         && request.resource.data.keys().hasOnly(['name', 'weeklyAllowance', 'allowancePeriod', 'rollover', 'overrides', 'groupId', 'memberEmails']);
       allow create, delete: if false;
     }
@@ -197,7 +197,9 @@ service cloud.firestore {
         && request.resource.data.priority is number
         && (!('institution' in request.resource.data) || request.resource.data.institution is string || request.resource.data.institution == null)
         && (!('account' in request.resource.data) || request.resource.data.account is string || request.resource.data.account == null)
-        && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
+        && (!('minAmount' in request.resource.data) || request.resource.data.minAmount is number || request.resource.data.minAmount == null)
+        && (!('maxAmount' in request.resource.data) || request.resource.data.maxAmount is number || request.resource.data.maxAmount == null)
+        && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'minAmount', 'maxAmount', 'groupId', 'memberEmails']);
     }
 
     // Rules are scoped to group members via a denormalized `memberEmails` field.

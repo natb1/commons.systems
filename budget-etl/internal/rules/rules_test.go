@@ -14,6 +14,7 @@ func TestMatch(t *testing.T) {
 		desc        string
 		institution string
 		account     string
+		amount      int64
 		want        bool
 	}{
 		{
@@ -64,11 +65,53 @@ func TestMatch(t *testing.T) {
 			desc: "anything", institution: "any", account: "any",
 			want: true,
 		},
+		{
+			name: "minAmount matches when amount >= min",
+			rule: Rule{Pattern: "coffee", HasMinAmount: true, MinAmount: 500},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 500,
+			want:   true,
+		},
+		{
+			name: "minAmount rejects when amount < min",
+			rule: Rule{Pattern: "coffee", HasMinAmount: true, MinAmount: 500},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 499,
+			want:   false,
+		},
+		{
+			name: "maxAmount matches when amount <= max",
+			rule: Rule{Pattern: "coffee", HasMaxAmount: true, MaxAmount: 1000},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 1000,
+			want:   true,
+		},
+		{
+			name: "maxAmount rejects when amount > max",
+			rule: Rule{Pattern: "coffee", HasMaxAmount: true, MaxAmount: 1000},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 1001,
+			want:   false,
+		},
+		{
+			name: "both min and max: matches within range",
+			rule: Rule{Pattern: "coffee", HasMinAmount: true, MinAmount: 500, HasMaxAmount: true, MaxAmount: 1000},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 750,
+			want:   true,
+		},
+		{
+			name: "no amount filter matches any amount",
+			rule: Rule{Pattern: "coffee"},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 99999,
+			want:   true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.rule.Match(tt.desc, tt.institution, tt.account)
+			got := tt.rule.Match(tt.desc, tt.institution, tt.account, tt.amount)
 			if got != tt.want {
 				t.Errorf("Match() = %v, want %v", got, tt.want)
 			}

@@ -13,6 +13,7 @@ const rolloverOptions: { value: Rollover; label: string }[] = [
 const periodOptions: { value: AllowancePeriod; label: string }[] = [
   { value: "weekly", label: "Weekly" },
   { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
 ];
 
 function renderPeriodCell(budget: Budget, editable: boolean): string {

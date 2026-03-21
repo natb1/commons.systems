@@ -313,6 +313,8 @@ type RuleDoc struct {
 	Priority    int
 	Institution string
 	Account     string
+	MinAmount   *float64
+	MaxAmount   *float64
 }
 
 // LoadRules reads rules from budget/{env}/rules, filtered by groupId.
@@ -363,6 +365,18 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 			r.Account = v
 		} else if d["account"] != nil {
 			return nil, fmt.Errorf("rule %s: field 'account' is not a string (got %T)", doc.Ref.ID, d["account"])
+		}
+		if v, ok := d["minAmount"].(float64); ok {
+			r.MinAmount = &v
+		} else if v, ok := d["minAmount"].(int64); ok {
+			f := float64(v)
+			r.MinAmount = &f
+		}
+		if v, ok := d["maxAmount"].(float64); ok {
+			r.MaxAmount = &v
+		} else if v, ok := d["maxAmount"].(int64); ok {
+			f := float64(v)
+			r.MaxAmount = &f
 		}
 		result = append(result, r)
 	}

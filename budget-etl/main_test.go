@@ -58,6 +58,8 @@ func TestSplitRulesEmpty(t *testing.T) {
 }
 
 func TestConvertExportRules(t *testing.T) {
+	minAmt := 200.01
+	maxAmt := 500.0
 	input := []export.Rule{
 		{
 			ID:          "r1",
@@ -67,6 +69,8 @@ func TestConvertExportRules(t *testing.T) {
 			Priority:    10,
 			Institution: "chase",
 			Account:     "checking",
+			MinAmount:   &minAmt,
+			MaxAmount:   &maxAmt,
 		},
 		{
 			ID:       "r2",
@@ -106,8 +110,14 @@ func TestConvertExportRules(t *testing.T) {
 	if r.Account != "checking" {
 		t.Errorf("Account: got %q, want %q", r.Account, "checking")
 	}
+	if !r.HasMinAmount || r.MinAmount != 20001 {
+		t.Errorf("MinAmount: got HasMinAmount=%v MinAmount=%d, want true/20001", r.HasMinAmount, r.MinAmount)
+	}
+	if !r.HasMaxAmount || r.MaxAmount != 50000 {
+		t.Errorf("MaxAmount: got HasMaxAmount=%v MaxAmount=%d, want true/50000", r.HasMaxAmount, r.MaxAmount)
+	}
 
-	// Verify second rule
+	// Verify second rule (no amount filters)
 	r2 := result[1]
 	if r2.ID != "r2" {
 		t.Errorf("second rule ID: got %q, want %q", r2.ID, "r2")
@@ -117,6 +127,12 @@ func TestConvertExportRules(t *testing.T) {
 	}
 	if r2.Account != "" {
 		t.Errorf("second rule Account: got %q, want empty", r2.Account)
+	}
+	if r2.HasMinAmount {
+		t.Error("second rule should not have MinAmount")
+	}
+	if r2.HasMaxAmount {
+		t.Error("second rule should not have MaxAmount")
 	}
 }
 

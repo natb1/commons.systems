@@ -12,13 +12,17 @@ import (
 
 // Rule defines a categorization or budget assignment rule.
 type Rule struct {
-	ID          string
-	Type        string // "categorization" or "budget_assignment"
-	Pattern     string // case-insensitive substring to match against description
-	Target      string // categorization: category path (e.g. "Food:Coffee"); budget_assignment: budget ID
-	Priority    int    // lower number = higher priority
-	Institution string // optional: restrict to this institution
-	Account     string // optional: restrict to this account
+	ID            string
+	Type          string // "categorization" or "budget_assignment"
+	Pattern       string // case-insensitive substring to match against description
+	Target        string // categorization: category path (e.g. "Food:Coffee"); budget_assignment: budget ID
+	Priority      int    // lower number = higher priority
+	Institution   string // optional: restrict to this institution
+	Account       string // optional: restrict to this account
+	MinAmount     int64  // optional: minimum amount in cents (inclusive)
+	MaxAmount     int64  // optional: maximum amount in cents (inclusive)
+	HasMinAmount  bool
+	HasMaxAmount  bool
 }
 
 // matchFields checks whether a pattern/institution/account filter matches the
@@ -39,8 +43,18 @@ func matchFields(pattern, ruleInstitution, ruleAccount, description, institution
 }
 
 // Match returns true if the rule matches the given transaction fields.
-func (r Rule) Match(description, institution, account string) bool {
-	return matchFields(r.Pattern, r.Institution, r.Account, description, institution, account)
+// Amount is in cents. Amount filtering is applied after pattern/institution/account matching.
+func (r Rule) Match(description, institution, account string, amount int64) bool {
+	if !matchFields(r.Pattern, r.Institution, r.Account, description, institution, account) {
+		return false
+	}
+	if r.HasMinAmount && amount < r.MinAmount {
+		return false
+	}
+	if r.HasMaxAmount && amount > r.MaxAmount {
+		return false
+	}
+	return true
 }
 
 // rulesOfType filters rules by type and returns them sorted by priority (ascending).
@@ -71,7 +85,7 @@ func ApplyCategorization(txns []store.TransactionData, rules []Rule) error {
 		}
 		matched := false
 		for _, r := range catRules {
-			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account) {
+			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account, txns[i].Amount) {
 				txns[i].Category = r.Target
 				matched = true
 				break
@@ -102,7 +116,7 @@ func ApplyBudgetAssignment(txns []store.TransactionData, rules []Rule) {
 			continue
 		}
 		for _, r := range budgetRules {
-			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account) {
+			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account, txns[i].Amount) {
 				txns[i].Budget = r.Target
 				break
 			}

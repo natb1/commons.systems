@@ -145,6 +145,14 @@ describe("renderBudgets", () => {
     expect(foodIdx).toBeLessThan(vacationIdx);
   });
 
+  it("renders quarterly period option", async () => {
+    const html = await renderBudgets(localOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ allowancePeriod: "quarterly", groupId: "household" })]),
+    }));
+    expect(html).toContain('<option value="quarterly" selected>');
+    expect(html).toContain("Quarterly");
+  });
+
   it("renders rollover select with correct selected state", async () => {
     const html = await renderBudgets(localOptions({
       getBudgets: vi.fn().mockResolvedValue([budget({ rollover: "debt", groupId: "household" })]),

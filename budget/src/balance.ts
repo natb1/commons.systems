@@ -60,6 +60,8 @@ export function applyRollover(running: number, weeklyAllowance: number, rollover
  * Weekly: always returns the full allowance.
  * Monthly: returns the full allowance when the period crosses a UTC month boundary
  * (different month/year from the previous period), 0 otherwise.
+ * Quarterly: returns the full allowance when the period crosses a UTC quarter boundary
+ * (different quarter from the previous period), 0 otherwise.
  * The first period (no previous) always gets the full allowance.
  */
 export function periodAllowance(
@@ -69,6 +71,16 @@ export function periodAllowance(
   currentPeriodStartMs: number,
 ): number {
   if (allowancePeriod === "weekly") return allowance;
+  if (allowancePeriod === "quarterly") {
+    if (prevPeriodStartMs === null) return allowance;
+    const prev = new Date(prevPeriodStartMs);
+    const curr = new Date(currentPeriodStartMs);
+    if (prev.getUTCFullYear() !== curr.getUTCFullYear() ||
+        Math.floor(prev.getUTCMonth() / 3) !== Math.floor(curr.getUTCMonth() / 3)) {
+      return allowance;
+    }
+    return 0;
+  }
   if (prevPeriodStartMs === null) return allowance;
   const prev = new Date(prevPeriodStartMs);
   const curr = new Date(currentPeriodStartMs);
@@ -81,6 +93,7 @@ export function periodAllowance(
 /** Convert an allowance to its weekly equivalent for apples-to-apples comparison. */
 export function weeklyEquivalent(allowance: number, allowancePeriod: AllowancePeriod): number {
   if (allowancePeriod === "monthly") return allowance * 12 / 52;
+  if (allowancePeriod === "quarterly") return allowance * 4 / 52;
   return allowance;
 }
 

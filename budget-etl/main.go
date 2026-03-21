@@ -221,6 +221,14 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 			Institution: rd.Institution,
 			Account:     rd.Account,
 		}
+		if rd.MinAmount != nil {
+			ruleSet[i].HasMinAmount = true
+			ruleSet[i].MinAmount = int64(math.Round(*rd.MinAmount * 100))
+		}
+		if rd.MaxAmount != nil {
+			ruleSet[i].HasMaxAmount = true
+			ruleSet[i].MaxAmount = int64(math.Round(*rd.MaxAmount * 100))
+		}
 	}
 
 	// Apply categorization rules (error if <100% coverage)
@@ -398,6 +406,14 @@ func convertExportRules(exportRules []export.Rule) []rules.Rule {
 			Priority:    r.Priority,
 			Institution: r.Institution,
 			Account:     r.Account,
+		}
+		if r.MinAmount != nil {
+			ruleSet[i].HasMinAmount = true
+			ruleSet[i].MinAmount = int64(math.Round(*r.MinAmount * 100))
+		}
+		if r.MaxAmount != nil {
+			ruleSet[i].HasMaxAmount = true
+			ruleSet[i].MaxAmount = int64(math.Round(*r.MaxAmount * 100))
 		}
 	}
 	return ruleSet

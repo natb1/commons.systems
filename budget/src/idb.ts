@@ -79,6 +79,8 @@ export interface IdbRule {
   priority: number;
   institution: string | null;
   account: string | null;
+  minAmount: number | null;
+  maxAmount: number | null;
 }
 
 export interface IdbNormalizationRule {

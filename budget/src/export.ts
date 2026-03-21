@@ -69,6 +69,8 @@ export async function exportToJson(): Promise<string> {
       priority: r.priority,
       institution: nullToEmpty(r.institution),
       account: nullToEmpty(r.account),
+      ...(r.minAmount != null ? { minAmount: r.minAmount } : {}),
+      ...(r.maxAmount != null ? { maxAmount: r.maxAmount } : {}),
     })),
     normalizationRules: normalizationRules.map((r) => ({
       id: r.id,

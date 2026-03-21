@@ -67,7 +67,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
         await getActiveDataSource().updateBudget(budgetId, { rollover: value });
       } else if (target.classList.contains("edit-period")) {
         const value = target.value;
-        if (value !== "weekly" && value !== "monthly") {
+        if (value !== "weekly" && value !== "monthly" && value !== "quarterly") {
           showInputError(target, "Invalid period value");
           return;
         }
@@ -92,7 +92,7 @@ function deserializeBudgets(raw: string): Budget[] {
   return parsed.map(b => {
     if (b.rollover !== "none" && b.rollover !== "debt" && b.rollover !== "balance")
       throw new DataIntegrityError(`Invalid rollover value: ${b.rollover}`);
-    const allowancePeriod = b.allowancePeriod === "monthly" ? "monthly" as const : "weekly" as const;
+    const allowancePeriod = b.allowancePeriod === "monthly" ? "monthly" as const : b.allowancePeriod === "quarterly" ? "quarterly" as const : "weekly" as const;
     return {
       id: b.id as BudgetId,
       name: b.name,

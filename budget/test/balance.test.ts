@@ -1277,6 +1277,25 @@ describe("periodAllowance", () => {
     // Dec 29 → Jan 5: different year
     expect(periodAllowance(500, "monthly", Date.parse("2024-12-29"), Date.parse("2025-01-05"))).toBe(500);
   });
+
+  it("quarterly: first period gets full allowance", () => {
+    expect(periodAllowance(1200, "quarterly", null, Date.parse("2025-01-06"))).toBe(1200);
+  });
+
+  it("quarterly: returns 0 within same quarter", () => {
+    // Jan 6 → Feb 3: same Q1
+    expect(periodAllowance(1200, "quarterly", Date.parse("2025-01-06"), Date.parse("2025-02-03"))).toBe(0);
+  });
+
+  it("quarterly: cross-quarter boundary", () => {
+    // Mar 24 → Apr 7: Q1 → Q2
+    expect(periodAllowance(1200, "quarterly", Date.parse("2025-03-24"), Date.parse("2025-04-07"))).toBe(1200);
+  });
+
+  it("quarterly: cross-year boundary", () => {
+    // Dec 29 → Jan 5: Q4 → Q1
+    expect(periodAllowance(1200, "quarterly", Date.parse("2024-12-29"), Date.parse("2025-01-05"))).toBe(1200);
+  });
 });
 
 describe("weeklyEquivalent", () => {
@@ -1286,6 +1305,10 @@ describe("weeklyEquivalent", () => {
 
   it("monthly: converts to weekly equivalent", () => {
     expect(weeklyEquivalent(500, "monthly")).toBeCloseTo(500 * 12 / 52, 10);
+  });
+
+  it("quarterly: converts to weekly equivalent", () => {
+    expect(weeklyEquivalent(1200, "quarterly")).toBeCloseTo(1200 * 4 / 52, 10);
   });
 });
 
