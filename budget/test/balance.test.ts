@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeDerivedBalances } from "../src/balance";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeDerivedBalances } from "../src/balance";
 import type { Budget, BudgetPeriod, Statement, Transaction } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -1283,5 +1283,35 @@ describe("computeDerivedBalances", () => {
     // Window (Feb 1, Mar 1]: t1 at Feb 10 is included → derived = 1000 - 200 = 800
     expect(result[0].derivedBalance).toBe(800);
     expect(result[0].discrepancy).toBe(0);
+  });
+});
+
+describe("weekStart", () => {
+  it("a Monday returns the same Monday 00:00 UTC", () => {
+    // 2025-01-13 is a Monday
+    const monday = Date.UTC(2025, 0, 13, 10, 30, 0);
+    const result = weekStart(monday);
+    expect(result).toBe(Date.UTC(2025, 0, 13, 0, 0, 0, 0));
+  });
+
+  it("a Wednesday returns the previous Monday", () => {
+    // 2025-01-15 is a Wednesday
+    const wednesday = Date.UTC(2025, 0, 15, 14, 0, 0);
+    const result = weekStart(wednesday);
+    expect(result).toBe(Date.UTC(2025, 0, 13, 0, 0, 0, 0));
+  });
+
+  it("a Sunday returns the previous Monday", () => {
+    // 2025-01-19 is a Sunday
+    const sunday = Date.UTC(2025, 0, 19, 23, 59, 59);
+    const result = weekStart(sunday);
+    expect(result).toBe(Date.UTC(2025, 0, 13, 0, 0, 0, 0));
+  });
+
+  it("handles New Year's boundary", () => {
+    // 2025-01-01 is a Wednesday; previous Monday is 2024-12-30
+    const newYear = Date.UTC(2025, 0, 1, 12, 0, 0);
+    const result = weekStart(newYear);
+    expect(result).toBe(Date.UTC(2024, 11, 30, 0, 0, 0, 0));
   });
 });

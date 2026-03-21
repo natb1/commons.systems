@@ -150,17 +150,20 @@ async function queryGroupCollection(
   seedPrefix: string,
   groupId: GroupId | null,
   email?: string,
+  filters?: { since?: Timestamp; before?: Timestamp },
 ): Promise<QueryDocumentSnapshot<DocumentData, DocumentData>[]> {
   if (groupId && !email) throw new Error("email is required when querying by groupId");
   const name = groupId ? collectionName : `${seedPrefix}${collectionName}`;
   const path = nsCollectionPath(NAMESPACE, name);
-  const q = groupId
-    ? query(
-        collection(db, path),
+  const constraints = groupId
+    ? [
         where("groupId", "==", groupId),
         where("memberEmails", "array-contains", email),
-      )
-    : query(collection(db, path));
+      ]
+    : [];
+  if (filters?.since) constraints.push(where("timestamp", ">=", filters.since));
+  if (filters?.before) constraints.push(where("timestamp", "<", filters.before));
+  const q = query(collection(db, path), ...constraints);
   const snapshot = await getDocs(q);
   return snapshot.docs;
 }
@@ -179,10 +182,10 @@ export async function getGroupMembers(groupId: GroupId): Promise<string[]> {
   return members as string[];
 }
 
-export async function getTransactions(groupId: null): Promise<Transaction[]>;
-export async function getTransactions(groupId: GroupId, email: string): Promise<Transaction[]>;
-export async function getTransactions(groupId: GroupId | null, email?: string): Promise<Transaction[]> {
-  const docs = await queryGroupCollection("transactions", "seed-", groupId, email);
+export async function getTransactions(groupId: null, email?: undefined, filters?: { since?: Timestamp; before?: Timestamp }): Promise<Transaction[]>;
+export async function getTransactions(groupId: GroupId, email: string, filters?: { since?: Timestamp; before?: Timestamp }): Promise<Transaction[]>;
+export async function getTransactions(groupId: GroupId | null, email?: string, filters?: { since?: Timestamp; before?: Timestamp }): Promise<Transaction[]> {
+  const docs = await queryGroupCollection("transactions", "seed-", groupId, email, filters);
   return docs.map((docSnap) => {
     const data = docSnap.data();
     return {
