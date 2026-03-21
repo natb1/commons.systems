@@ -10,13 +10,18 @@ vi.mock("firebase/firestore", () => ({
     toDate() { return this._date; }
     toMillis() { return this._date.getTime(); }
     static fromDate(d: Date) { return new Timestamp(d); }
+    static fromMillis(ms: number) { return new Timestamp(new Date(ms)); }
   },
 }));
 
-vi.mock("../../src/balance.js", () => ({
-  computeAllBudgetBalances: vi.fn(),
-  computeNetAmount: (amount: number, reimbursement: number) => amount * (1 - reimbursement / 100),
-}));
+vi.mock("../../src/balance.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/balance")>();
+  return {
+    ...actual,
+    computeAllBudgetBalances: vi.fn(),
+    computeNetAmount: (amount: number, reimbursement: number) => amount * (1 - reimbursement / 100),
+  };
+});
 
 import { renderHome } from "../../src/pages/home";
 import type { Transaction, BudgetPeriod } from "../../src/firestore";
@@ -531,6 +536,43 @@ describe("renderHome", () => {
     }));
     expect(html).toContain('id="sankey-category-filter"');
     expect(html).toContain('id="category-filter-label"');
+  });
+
+  it("calls getTransactions with a since query param for authorized users", async () => {
+    const mockGetTxns = vi.fn().mockResolvedValue([txn()]);
+    await renderHome(localOptions({ getTransactions: mockGetTxns }));
+    expect(mockGetTxns).toHaveBeenCalledWith(
+      expect.objectContaining({ since: expect.anything() }),
+    );
+  });
+
+  it("calls getTransactions without since for seed data", async () => {
+    const mockGetTxns = vi.fn().mockResolvedValue([txn()]);
+    await renderHome(seedOptions({ getTransactions: mockGetTxns }));
+    expect(mockGetTxns).toHaveBeenCalledWith({});
+  });
+
+  it("renders scroll sentinel with data-next-before attribute for authorized users", async () => {
+    const html = await renderHome(localOptions({
+      getTransactions: vi.fn().mockResolvedValue([txn()]),
+    }));
+    expect(html).toContain('id="scroll-sentinel"');
+    expect(html).toMatch(/data-next-before="\d+"/);
+  });
+
+  it("does not render scroll sentinel for seed data", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([txn()]),
+    }));
+    expect(html).not.toContain('id="scroll-sentinel"');
+  });
+
+  it("renders data-group-name and data-editable on transactions table", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([txn()]),
+    }));
+    expect(html).toMatch(/id="transactions-table"[^>]*data-group-name="/);
+    expect(html).toMatch(/id="transactions-table"[^>]*data-editable="/);
   });
 
   it("renders data-category-options on sankey controls div", async () => {

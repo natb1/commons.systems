@@ -1,8 +1,12 @@
-import type { Timestamp } from "firebase/firestore";
+import { Timestamp } from "firebase/firestore";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { type Transaction, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
-import { computeAllBudgetBalances, computeNetAmount } from "../balance.js";
+import { type Transaction, type TransactionId, type Budget, type BudgetPeriod, type SerializedBudgetPeriod } from "../firestore.js";
+import { computeAllBudgetBalances, computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
+import type { TransactionQuery } from "../data-source.js";
+
+/** Number of weeks loaded per scroll batch (initial load and each subsequent fetch). */
+export const SCROLL_BATCH_WEEKS = 12;
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { uniqueSorted } from "./hydrate-util.js";
 import type { SerializedChartTransaction } from "./home-chart.js";
@@ -181,7 +185,45 @@ function renderCategorySankey(transactions: Transaction[]): string {
     <div id="category-sankey"><script type="application/json" id="sankey-data">${json}</script></div>`;
 }
 
-function compareByTimestampDesc(a: Transaction, b: Transaction): number {
+/**
+ * Render a list of transactions as HTML row strings, grouping normalized transactions.
+ * `getBalance` returns the budget balance for a transaction ID, or null if unavailable.
+ */
+export function renderTransactionRows(
+  transactions: Transaction[],
+  groupName: string,
+  editable: boolean,
+  budgetIdToName: Map<string, string>,
+  getBalance: (id: string) => number | null = () => null,
+): string {
+  const normalizedGroups = new Map<string, Transaction[]>();
+  for (const txn of transactions) {
+    if (txn.normalizedId !== null) {
+      const group = normalizedGroups.get(txn.normalizedId);
+      if (group) group.push(txn);
+      else normalizedGroups.set(txn.normalizedId, [txn]);
+    }
+  }
+
+  const seenGroups = new Set<string>();
+  return transactions
+    .flatMap((txn) => {
+      if (txn.normalizedId === null) {
+        return renderRow({ txn, groupName, editable, budgetIdToName, balance: getBalance(txn.id) });
+      }
+      if (seenGroups.has(txn.normalizedId)) return [];
+      seenGroups.add(txn.normalizedId);
+      const members = normalizedGroups.get(txn.normalizedId)!;
+      const primary = members.find(t => t.normalizedPrimary);
+      if (!primary) {
+        throw new DataIntegrityError(`Normalized group ${txn.normalizedId} has no primary transaction`);
+      }
+      return renderNormalizedGroup({ primary, members, groupName, editable, budgetIdToName, balance: getBalance(primary.id) });
+    })
+    .join("\n");
+}
+
+export function compareByTimestampDesc(a: Transaction, b: Transaction): number {
   if (!a.timestamp && !b.timestamp) return 0;
   if (!a.timestamp) return 1;
   if (!b.timestamp) return -1;
@@ -194,66 +236,34 @@ function renderTransactionTable(
   groupName: string,
   budgets: Budget[],
   budgetPeriods: BudgetPeriod[],
+  sinceMs: number | null,
 ): string {
-  if (transactions.length === 0) {
+  if (transactions.length === 0 && sinceMs === null) {
     return "<p>No transactions found.</p>";
   }
 
   const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
   const balances = computeAllBudgetBalances(transactions, budgets, budgetPeriods);
 
-  // Group normalized transactions by normalizedId
-  const normalizedGroups = new Map<string, Transaction[]>();
-  for (const txn of transactions) {
-    if (txn.normalizedId !== null) {
-      const group = normalizedGroups.get(txn.normalizedId);
-      if (group) group.push(txn);
-      else normalizedGroups.set(txn.normalizedId, [txn]);
+  const rows = renderTransactionRows(
+    transactions, groupName, authorized, budgetIdToName,
+    (id) => balances.get(id as TransactionId) ?? null,
+  );
+
+  // Budget map is always needed for scroll hydration (rendering budget names on appended rows)
+  const budgetNameToId: Record<string, string> = {};
+  for (const b of budgets) {
+    if (budgetNameToId[b.name] !== undefined) {
+      throw new DataIntegrityError(`Duplicate budget name: ${b.name}`);
     }
+    budgetNameToId[b.name] = b.id;
   }
+  const budgetMapAttr = escapeHtml(JSON.stringify(budgetNameToId));
 
-  const seenGroups = new Set<string>();
-  const rows = transactions
-    .flatMap((txn) => {
-      if (txn.normalizedId === null) {
-        return renderRow({
-          txn,
-          groupName,
-          editable: authorized,
-          budgetIdToName,
-          balance: balances.get(txn.id) ?? null,
-        });
-      }
-      if (seenGroups.has(txn.normalizedId)) return [];
-      seenGroups.add(txn.normalizedId);
-      const members = normalizedGroups.get(txn.normalizedId)!;
-      const primary = members.find(t => t.normalizedPrimary);
-      if (!primary) {
-        throw new DataIntegrityError(`Normalized group ${txn.normalizedId} has no primary transaction`);
-      }
-      return renderNormalizedGroup({
-        primary,
-        members,
-        groupName,
-        editable: authorized,
-        budgetIdToName,
-        balance: balances.get(primary.id) ?? null,
-      });
-    })
-    .join("\n");
-
-  let dataAttrs = "";
+  let dataAttrs = ` data-group-name="${escapeHtml(groupName)}" data-editable="${authorized}" data-budget-map="${budgetMapAttr}"`;
   if (authorized) {
     const budgetNames = budgets.map(b => b.name).sort();
     const budgetOpts = escapeHtml(JSON.stringify(budgetNames));
-    const budgetNameToId: Record<string, string> = {};
-    for (const b of budgets) {
-      if (budgetNameToId[b.name] !== undefined) {
-        throw new DataIntegrityError(`Duplicate budget name: ${b.name}`);
-      }
-      budgetNameToId[b.name] = b.id;
-    }
-    const budgetMapAttr = escapeHtml(JSON.stringify(budgetNameToId));
     const categoryOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))));
     const periodsData: SerializedBudgetPeriod[] = budgetPeriods.map((p) => ({
       id: p.id,
@@ -265,13 +275,16 @@ function renderTransactionTable(
       categoryBreakdown: p.categoryBreakdown,
     }));
     const periodsAttr = escapeHtml(JSON.stringify(periodsData));
-    dataAttrs = [
+    dataAttrs += [
       ` data-budget-options="${budgetOpts}"`,
-      ` data-budget-map="${budgetMapAttr}"`,
       ` data-category-options="${categoryOpts}"`,
       ` data-budget-periods="${periodsAttr}"`,
     ].join("");
   }
+
+  const sentinel = sinceMs !== null
+    ? `\n      <div id="scroll-sentinel" data-next-before="${sinceMs}" aria-hidden="true"></div>`
+    : "";
 
   return `<div id="transactions-table"${dataAttrs}>
       <div class="txn-header">
@@ -280,18 +293,23 @@ function renderTransactionTable(
         <span>Category</span>
         <span class="amount">Amount</span>
       </div>
-      ${rows}
+      ${rows}${sentinel}
     </div>`;
 }
 
 export async function renderHome(options: RenderPageOptions): Promise<string> {
   const { authorized, groupName, dataSource } = options;
 
+  // Seed data (unauthorized) is small — load all transactions without a time window.
+  // Authorized data uses a 12-week initial window with infinite scroll for older batches.
+  const sinceMs = authorized ? weekStart(Date.now() - SCROLL_BATCH_WEEKS * MS_PER_WEEK) : null;
+  const txnQuery: TransactionQuery = sinceMs !== null ? { since: Timestamp.fromMillis(sinceMs) } : {};
+
   let tableHtml: string;
   let chartHtml = "";
   try {
     const [transactions, budgets, budgetPeriods] = await Promise.all([
-      dataSource.getTransactions()
+      dataSource.getTransactions(txnQuery)
         .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
       dataSource.getBudgets()
         .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
@@ -306,7 +324,7 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
       console.error("Chart serialization failed:", chartError);
       chartHtml = `<p class="chart-error">Chart unavailable.</p>`;
     }
-    tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets, budgetPeriods);
+    tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets, budgetPeriods, sinceMs);
   } catch (error) {
     tableHtml = renderLoadError(error, "transactions-error");
   }
