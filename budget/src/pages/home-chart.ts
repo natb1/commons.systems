@@ -1,5 +1,5 @@
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
-import { computeNetAmount, isCardPaymentCategory, MS_PER_WEEK } from "../balance.js";
+import { computeNetAmount, isCardPaymentCategory, MS_PER_WEEK, weekStart } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { parseJsonArray } from "./hydrate-util.js";
@@ -21,16 +21,6 @@ export interface CategoryNode {
   value: number;
   count: number;
   children: CategoryNode[];
-}
-
-/** Return the Monday 00:00 UTC for the week containing `ms`. */
-function weekStart(ms: number): number {
-  const d = new Date(ms);
-  const day = d.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + diff);
-  d.setUTCHours(0, 0, 0, 0);
-  return d.getTime();
 }
 
 /** Compute sorted distinct week-start timestamps from transactions. */
@@ -78,13 +68,18 @@ export function filterByWeeks(
  * transactions whose category exactly matches the filter or starts with
  * categoryFilter + ":" (subcategories) are included.
  */
+export interface CategoryTreeOptions {
+  mode?: ChartMode;
+  unbudgetedOnly?: boolean;
+  showCardPayment?: boolean;
+  categoryFilter?: string;
+}
+
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
-  mode: ChartMode = "spending",
-  unbudgetedOnly = false,
-  showCardPayment = false,
-  categoryFilter = "",
+  opts: CategoryTreeOptions = {},
 ): CategoryNode {
+  const { mode = "spending", unbudgetedOnly = false, showCardPayment = false, categoryFilter = "" } = opts;
   const root: CategoryNode = { name: "All", fullPath: "", value: 0, count: 0, children: [] };
 
   for (const t of txns) {
@@ -234,9 +229,9 @@ function assertChartTransactions(data: unknown): asserts data is SerializedChart
     if (typeof item !== "object" || item === null) throw new Error("Invalid chart transaction entry");
     const rec = item as Record<string, unknown>;
     if (typeof rec.category !== "string") throw new Error("Chart transaction missing category string");
-    if (typeof rec.amount !== "number") throw new Error("Chart transaction missing amount number");
-    if (typeof rec.reimbursement !== "number") throw new Error("Chart transaction missing reimbursement number");
-    if (rec.timestampMs !== null && typeof rec.timestampMs !== "number") throw new Error("Chart transaction timestampMs must be number or null");
+    if (typeof rec.amount !== "number" || !Number.isFinite(rec.amount)) throw new Error("Chart transaction amount must be finite number");
+    if (typeof rec.reimbursement !== "number" || !Number.isFinite(rec.reimbursement)) throw new Error("Chart transaction reimbursement must be finite number");
+    if (rec.timestampMs !== null && (typeof rec.timestampMs !== "number" || !Number.isFinite(rec.timestampMs))) throw new Error("Chart transaction timestampMs must be finite number or null");
     if (typeof rec.hasBudget !== "boolean") throw new Error("Chart transaction missing hasBudget boolean");
   }
 }
@@ -282,7 +277,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox || !categoryFilterInputRaw) {
     throw new Error("sankey control elements missing");
   }
-  const categoryFilterInput: HTMLInputElement = categoryFilterInputRaw;
+  const categoryFilterInput = categoryFilterInputRaw;
 
   const categoryOptions = parseJsonArray(controlsDiv.dataset.categoryOptions);
 
@@ -298,7 +293,12 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     if (containerWidth === 0) return;
 
     const filtered = filterByWeeks(allTxns, weeks, currentNumWeeks, currentEndWeekIdx);
-    const rootData = buildCategoryTree(filtered, currentMode, currentUnbudgetedOnly, currentShowCardPayment, currentCategoryFilter);
+    const rootData = buildCategoryTree(filtered, {
+      mode: currentMode,
+      unbudgetedOnly: currentUnbudgetedOnly,
+      showCardPayment: currentShowCardPayment,
+      categoryFilter: currentCategoryFilter,
+    });
     divideTreeValues(rootData, currentNumWeeks);
 
     if (rootData.value === 0) {
