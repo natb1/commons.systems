@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -598,20 +599,21 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 // WeeklyAggregateResult holds pre-computed weekly credit and unbudgeted spending totals.
 type WeeklyAggregateResult struct {
 	WeekStart       time.Time
-	CreditTotal     float64 // positive: sum of -(net amount) for credit transactions
+	CreditTotal     float64 // positive: absolute value of net amount for credit transactions (where net < 0)
 	UnbudgetedTotal float64 // positive: sum of net amount for unbudgeted spending
 }
 
 // isCardPaymentCategory returns true for Transfer:CardPayment and its subcategories.
 func isCardPaymentCategory(cat string) bool {
-	return cat == "Transfer:CardPayment" || len(cat) > len("Transfer:CardPayment:") && cat[:len("Transfer:CardPayment:")] == "Transfer:CardPayment:"
+	return strings.HasPrefix(cat, "Transfer:CardPayment:") || cat == "Transfer:CardPayment"
 }
 
 // ComputeWeeklyAggregates groups transactions into Monday-aligned weeks and computes
 // credit totals and unbudgeted spending totals per week.
 //
-// Credit filter: net < 0, not non-primary normalized, not Transfer:CardPayment* category.
-// Unbudgeted filter: Budget == "", net > 0, not non-primary normalized.
+// Excluded: non-primary normalized transactions.
+// Credit filter: net < 0, not Transfer:CardPayment* category.
+// Unbudgeted filter: Budget == "", net > 0.
 func ComputeWeeklyAggregates(txns []FullTransaction) []WeeklyAggregateResult {
 	type weekData struct {
 		creditTotal     float64
@@ -660,30 +662,80 @@ func ComputeWeeklyAggregates(txns []FullTransaction) []WeeklyAggregateResult {
 func (c *Client) UpsertWeeklyAggregates(ctx context.Context, group GroupInfo, aggregates []WeeklyAggregateResult) error {
 	col := c.fs.Collection(fmt.Sprintf("budget/%s/weekly-aggregates", c.env))
 
-	const maxBatch = 500
-	for i := 0; i < len(aggregates); i += maxBatch {
-		end := i + maxBatch
-		if end > len(aggregates) {
-			end = len(aggregates)
-		}
-		batch := c.fs.Batch()
-		for _, agg := range aggregates[i:end] {
-			docID := fmt.Sprintf("%s-%s", group.ID, agg.WeekStart.Format("2006-01-02"))
-			ref := col.Doc(docID)
-			batch.Set(ref, map[string]interface{}{
+	// Query existing weekly-aggregate docs for this group
+	existingDocs, err := col.Where("groupId", "==", group.ID).Documents(ctx).GetAll()
+	if err != nil {
+		return fmt.Errorf("querying existing weekly-aggregates: %w", err)
+	}
+	existingIDs := make(map[string]bool, len(existingDocs))
+	for _, doc := range existingDocs {
+		existingIDs[doc.Ref.ID] = true
+	}
+
+	// Build set of computed doc IDs
+	computedIDs := make(map[string]bool, len(aggregates))
+
+	type batchOp struct {
+		ref    *firestore.DocumentRef
+		fields map[string]interface{}
+		merge  []firestore.SetOption
+	}
+	var ops []batchOp
+
+	for _, agg := range aggregates {
+		docID := fmt.Sprintf("%s-%s", group.ID, agg.WeekStart.Format("2006-01-02"))
+		computedIDs[docID] = true
+		ops = append(ops, batchOp{
+			ref: col.Doc(docID),
+			fields: map[string]interface{}{
 				"weekStart":       agg.WeekStart,
 				"creditTotal":     agg.CreditTotal,
 				"unbudgetedTotal": agg.UnbudgetedTotal,
 				"groupId":         group.ID,
 				"memberEmails":    group.MemberEmails,
+			},
+		})
+	}
+
+	// Zero out stale docs not in the computed set
+	var zeroed int
+	for id := range existingIDs {
+		if !computedIDs[id] {
+			ops = append(ops, batchOp{
+				ref: col.Doc(id),
+				fields: map[string]interface{}{
+					"creditTotal":     0,
+					"unbudgetedTotal": 0,
+				},
+				merge: []firestore.SetOption{firestore.Merge(
+					firestore.FieldPath{"creditTotal"},
+					firestore.FieldPath{"unbudgetedTotal"},
+				)},
 			})
+			zeroed++
+		}
+	}
+
+	const maxBatch = 500
+	for i := 0; i < len(ops); i += maxBatch {
+		end := i + maxBatch
+		if end > len(ops) {
+			end = len(ops)
+		}
+		batch := c.fs.Batch()
+		for _, op := range ops[i:end] {
+			if len(op.merge) > 0 {
+				batch.Set(op.ref, op.fields, op.merge...)
+			} else {
+				batch.Set(op.ref, op.fields)
+			}
 		}
 		if _, err := batch.Commit(ctx); err != nil {
 			return fmt.Errorf("committing weekly-aggregates batch: %w", err)
 		}
 	}
 
-	log.Printf("upserted %d weekly aggregates", len(aggregates))
+	log.Printf("weekly aggregates: %d upserted, %d zeroed", len(aggregates), zeroed)
 	return nil
 }
 

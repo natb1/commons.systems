@@ -379,8 +379,9 @@ export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
 
 /**
  * Compute average weekly credits over the trailing 12-week window ending at the
- * Monday after the latest week with credits. Uses pre-aggregated WeeklyAggregate
- * data (creditTotal per Monday-aligned week). Returns 0 when no weeks have credits.
+ * Monday following the latest aggregate's weekStart (i.e., weekStart + 7 days).
+ * Uses pre-aggregated WeeklyAggregate data (creditTotal per Monday-aligned week).
+ * Returns 0 when no weeks have credits.
  */
 export function computeAverageWeeklyCredits(aggregates: WeeklyAggregate[]): number {
   const withCredits = aggregates.filter(a => a.creditTotal > 0);
@@ -391,7 +392,7 @@ export function computeAverageWeeklyCredits(aggregates: WeeklyAggregate[]): numb
     const ms = a.weekStart.toMillis();
     if (ms > latestWeekStartMs) latestWeekStartMs = ms;
   }
-  // Window end is next Monday (weekStart + 1 week), matching original endOfWeekMs
+  // Window end is next Monday (weekStart + 1 week)
   const windowEnd = latestWeekStartMs + MS_PER_WEEK;
   const windowStart = windowEnd - CREDIT_WEEKS * MS_PER_WEEK;
 

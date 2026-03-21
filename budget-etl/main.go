@@ -348,8 +348,9 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 
 	// Rebuild export transactions with categorization, budget, and normalization applied
 	exportTxns := buildExportTxns(allTxns, txnDocIDs, normMap, editsMap)
-	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
-	weeklyAggregates := computeExportWeeklyAggregates(exportTxns, allTxns)
+	fullTxns := buildFullTransactions(exportTxns, allTxns)
+	budgetPeriods := computeExportPeriodsFromFull(fullTxns)
+	weeklyAggregates := computeExportWeeklyAggregatesFromFull(fullTxns)
 
 	// Compute lastTransactionDate on statements from all transactions
 	maxDates := maxTransactionDates(allTxns)
@@ -528,11 +529,8 @@ func buildExportTxns(allTxns []store.TransactionData, docIDs []string, normMap m
 	return exportTxns
 }
 
-// computeExportPeriods builds budget periods from export transactions and internal
-// transaction data. Returns sorted budget periods.
-func computeExportPeriods(exportTxns []export.Transaction, allTxns []store.TransactionData) []export.BudgetPeriod {
-	fullTxns := buildFullTransactions(exportTxns, allTxns)
-
+// computeExportPeriodsFromFull builds sorted budget periods from pre-built full transactions.
+func computeExportPeriodsFromFull(fullTxns []store.FullTransaction) []export.BudgetPeriod {
 	periods := store.ComputePeriods(fullTxns)
 	sort.Slice(periods, func(i, j int) bool {
 		return periods[i].ID < periods[j].ID
@@ -576,11 +574,8 @@ func buildFullTransactions(exportTxns []export.Transaction, allTxns []store.Tran
 	return fullTxns
 }
 
-// computeExportWeeklyAggregates computes weekly aggregates from export transactions
-// and internal transaction data. Returns sorted weekly aggregates.
-func computeExportWeeklyAggregates(exportTxns []export.Transaction, allTxns []store.TransactionData) []export.WeeklyAggregate {
-	fullTxns := buildFullTransactions(exportTxns, allTxns)
-
+// computeExportWeeklyAggregatesFromFull computes sorted weekly aggregates from pre-built full transactions.
+func computeExportWeeklyAggregatesFromFull(fullTxns []store.FullTransaction) []export.WeeklyAggregate {
 	aggregates := store.ComputeWeeklyAggregates(fullTxns)
 	sort.Slice(aggregates, func(i, j int) bool {
 		return aggregates[i].WeekStart.Before(aggregates[j].WeekStart)
@@ -775,8 +770,9 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 
 	// Build export transactions
 	exportTxns := buildExportTxns(allTxns, allDocIDs, normMap, editsMap)
-	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
-	weeklyAggregates := computeExportWeeklyAggregates(exportTxns, allTxns)
+	fullTxns := buildFullTransactions(exportTxns, allTxns)
+	budgetPeriods := computeExportPeriodsFromFull(fullTxns)
+	weeklyAggregates := computeExportWeeklyAggregatesFromFull(fullTxns)
 
 	// Merge statements: dir overrides by statementID, retain input-only
 	maxDates := maxTransactionDates(allTxns)
@@ -952,6 +948,8 @@ func runFirestore(ctx context.Context, client *store.Client, groupInfo store.Gro
 		ft.Category, _ = td.Data["category"].(string)
 		if v, ok := td.Data["amount"].(float64); ok {
 			ft.Amount = v
+		} else {
+			return fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", td.ID, td.Data["amount"])
 		}
 		switch v := td.Data["reimbursement"].(type) {
 		case float64:
@@ -961,12 +959,16 @@ func runFirestore(ctx context.Context, client *store.Client, groupInfo store.Gro
 		}
 		if v, ok := td.Data["timestamp"].(time.Time); ok {
 			ft.Timestamp = v
+		} else {
+			return fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", td.ID, td.Data["timestamp"])
 		}
 		if nid, ok := td.Data["normalizedId"].(string); ok {
 			ft.NormalizedID = nid
 		}
 		if primary, ok := td.Data["normalizedPrimary"].(bool); ok {
 			ft.NormalizedPrimary = primary
+		} else if ft.NormalizedID != "" {
+			log.Printf("WARNING: transaction %s has normalizedId %q but no normalizedPrimary field", td.ID, ft.NormalizedID)
 		}
 		fullTxnsForAgg = append(fullTxnsForAgg, ft)
 	}
