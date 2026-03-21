@@ -139,8 +139,12 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 			skipped++
 			continue
 		}
+		// Override path-derived period with document-inferred period before any
+		// downstream use of sf (StatementID, buildStatementData, etc.).
 		if inferred := r.result.InferPeriod(); inferred != "" {
 			r.sf.Period = inferred
+		} else {
+			log.Printf("could not infer period from document data for %s, using path-derived period %q", r.sf.Path, r.sf.Period)
 		}
 		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
 		totalTxns += len(r.result.Transactions)
@@ -647,8 +651,12 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 			skipped++
 			continue
 		}
+		// Override path-derived period with document-inferred period before any
+		// downstream use of sf (StatementID, buildStatementData, etc.).
 		if inferred := r.result.InferPeriod(); inferred != "" {
 			r.sf.Period = inferred
+		} else {
+			log.Printf("could not infer period from document data for %s, using path-derived period %q", r.sf.Path, r.sf.Period)
 		}
 		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
 		totalTxns += len(r.result.Transactions)
@@ -1003,13 +1011,18 @@ func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []s
 	out := make([]store.StatementData, len(parsed))
 	for i, pf := range parsed {
 		key := accountKey(pf.sf.Institution, pf.sf.Account)
+		var balanceDate *time.Time
+		if !pf.result.BalanceDate.IsZero() {
+			bd := pf.result.BalanceDate
+			balanceDate = &bd
+		}
 		out[i] = store.StatementData{
 			StatementID:         pf.sf.StatementID(),
 			Institution:         pf.sf.Institution,
 			Account:             pf.sf.Account,
 			Balance:             pf.result.Balance,
 			Period:              pf.sf.Period,
-			BalanceDate:         pf.result.BalanceDate,
+			BalanceDate:         balanceDate,
 			LastTransactionDate: maxDates[key],
 		}
 	}
@@ -1021,7 +1034,7 @@ func buildExportStatements(stmts []store.StatementData) []export.Statement {
 	out := make([]export.Statement, len(stmts))
 	for i, s := range stmts {
 		balanceDate := ""
-		if !s.BalanceDate.IsZero() {
+		if s.BalanceDate != nil {
 			balanceDate = s.BalanceDate.Format("2006-01-02")
 		}
 		var ltd *string

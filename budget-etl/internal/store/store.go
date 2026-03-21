@@ -90,7 +90,7 @@ type StatementData struct {
 	Account             string
 	Balance             int64 // cents; raw signed value from statement
 	Period              string
-	BalanceDate         time.Time  // LEDGERBAL DTASOF; zero if absent
+	BalanceDate         *time.Time // LEDGERBAL DTASOF; nil if absent
 	GroupID             string
 	MemberEmails        []string
 	LastTransactionDate *time.Time // nil when not yet computed or no transactions exist for this account
@@ -122,7 +122,7 @@ func (c *Client) UpsertStatements(ctx context.Context, stmts []StatementData) er
 		for _, stmt := range stmts[i:end] {
 			ref := col.Doc(StatementDocID(stmt.StatementID))
 			balanceDate := ""
-			if !stmt.BalanceDate.IsZero() {
+			if stmt.BalanceDate != nil {
 				balanceDate = stmt.BalanceDate.Format("2006-01-02")
 			}
 			batch.Set(ref, map[string]interface{}{

@@ -1022,8 +1022,8 @@ describe("computeNetWorth", () => {
     const result = computeNetWorth([], stmts, weeks);
     expect(result.divergences).toHaveLength(1);
     expect(result.divergences[0].period).toBe("2024-12");
-    expect(result.divergences[0].expected).toBe(800);
-    expect(result.divergences[0].derived).toBe(1000);
+    expect(result.divergences[0].statementBalance).toBe(800);
+    expect(result.divergences[0].derivedBalance).toBe(1000);
   });
 
   it("no divergence when transaction accounts for balance change", () => {
@@ -1074,6 +1074,28 @@ describe("computeNetWorth", () => {
     const result = computeNetWorth([], stmts, weeks);
     expect(result.points).toEqual([]);
     expect(result.divergences).toEqual([]);
+  });
+
+  it("uses balanceDate for anchor when present", () => {
+    // Two statements with balanceDates: Dec 15 (balance=1000) and Jan 20 (balance=900).
+    // statementEffectiveMs uses balanceDate midnight UTC, so latest is Jan 20.
+    // One transaction of 100 between them explains the drop → zero divergences.
+    const stmts = [
+      makeStmt({ id: "s1", period: "2024-12", balance: 1000, balanceDate: "2024-12-15" }),
+      makeStmt({ id: "s2", period: "2025-01", balance: 900, balanceDate: "2025-01-20" }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 100,
+        timestamp: ts("2025-01-10"), budget: null }),
+    ];
+    const result = computeNetWorth(txns, stmts, weeks);
+    expect(result.divergences).toHaveLength(0);
+    // Anchor is Jan 20 (latest by balanceDate). Week Jan 5 balance:
+    // anchorBalance(900) - (cumBefore(Jan5) - cumBefore(Jan20)) = 900 - (0 - 100) = 1000
+    expect(result.points[0].netWorth).toBe(1000);
+    // Week Jan 12 balance: txn at Jan 10 is before Jan 12
+    // 900 - (100 - 100) = 900
+    expect(result.points[1].netWorth).toBe(900);
   });
 });
 

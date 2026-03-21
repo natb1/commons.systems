@@ -320,7 +320,8 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
     try {
       chartHtml = renderCategorySankey(transactions);
     } catch (chartError) {
-      if (chartError instanceof TypeError || chartError instanceof ReferenceError) throw chartError;
+      if (chartError instanceof TypeError || chartError instanceof ReferenceError
+          || chartError instanceof DataIntegrityError || chartError instanceof RangeError) throw chartError;
       console.error("Chart serialization failed:", chartError);
       chartHtml = `<p class="chart-error">Chart unavailable.</p>`;
     }

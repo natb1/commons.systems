@@ -27,8 +27,8 @@ func (e *ParseError) Error() string { return fmt.Sprintf("%s: %v", e.Path, e.Err
 func (e *ParseError) Unwrap() error { return e.Err }
 
 // StatementFile identifies a statement file and the metadata extracted from its path.
-// Period is derived from either the period directory name (4-level layout) or the
-// filename stem (3-level layout). See [DiscoverFiles] for accepted layouts.
+// Period is initially derived from the directory or filename; callers may
+// override it with document-inferred data (see InferPeriod).
 type StatementFile struct {
 	Path        string
 	Institution string
@@ -155,9 +155,9 @@ type ParseResult struct {
 	SkipReason   string
 }
 
-// InferPeriod returns a YYYY-MM period from the parsed document data.
-// Prefers BalanceDate (OFX DTASOF), falls back to latest transaction date.
-// Returns empty string if neither is available.
+// InferPeriod returns a YYYY-MM period derived from document data. Prefers
+// BalanceDate (OFX DTASOF), falls back to latest transaction date. Returns
+// empty string if neither is available.
 func (pr ParseResult) InferPeriod() string {
 	if !pr.BalanceDate.IsZero() {
 		return pr.BalanceDate.Format("2006-01")

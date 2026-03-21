@@ -2,12 +2,13 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import type { Transaction, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
-import { computeAggregateTrend, computeNetWorth, computeDerivedBalances, type AggregatePoint, type NetWorthPoint, type DerivedAccountBalance } from "../balance.js";
+import { accountKey, splitAccountKey, computeAggregateTrend, computeNetWorth, computeDerivedBalances, type AggregatePoint, type NetWorthPoint, type DerivedAccountBalance } from "../balance.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 interface AccountRow {
   institution: string;
   account: string;
-  mostRecentTimestamp: number;
+  mostRecentTimestamp: number | null;
   balance: number | null;
   derivedBalance: number | null;
   hasDiscrepancy: boolean;
@@ -21,40 +22,40 @@ function buildAccountRows(
   // Compute max transaction timestamp per account from transactions
   const txnMaxTs = new Map<string, number>();
   for (const txn of transactions) {
-    const key = `${txn.institution}\0${txn.account}`;
+    const k = accountKey(txn.institution, txn.account);
     const ts = txn.timestamp?.toMillis() ?? 0;
-    const existing = txnMaxTs.get(key);
+    const existing = txnMaxTs.get(k);
     if (existing === undefined || ts > existing) {
-      txnMaxTs.set(key, ts);
+      txnMaxTs.set(k, ts);
     }
   }
 
   // Find latest statement per (institution, account) by comparing period strings (YYYY-MM format, zero-padded, so lexicographic order equals chronological order)
   const latestStatements = new Map<string, Statement>();
   for (const stmt of statements) {
-    const key = `${stmt.institution}\0${stmt.account}`;
-    const existing = latestStatements.get(key);
+    const k = accountKey(stmt.institution, stmt.account);
+    const existing = latestStatements.get(k);
     if (!existing || stmt.period > existing.period) {
-      latestStatements.set(key, stmt);
+      latestStatements.set(k, stmt);
     }
   }
 
   // Index derived balances by account key
   const derivedByAccount = new Map<string, DerivedAccountBalance>();
   for (const db of derivedBalances) {
-    derivedByAccount.set(`${db.institution}\0${db.account}`, db);
+    derivedByAccount.set(accountKey(db.institution, db.account), db);
   }
 
   // Collect all account keys from both transactions and statements
   const allKeys = new Set<string>([...txnMaxTs.keys(), ...latestStatements.keys()]);
 
   const rows: AccountRow[] = [];
-  for (const key of allKeys) {
-    const stmt = latestStatements.get(key);
-    const derived = derivedByAccount.get(key);
-    const [institution, account] = key.split("\0");
+  for (const k of allKeys) {
+    const stmt = latestStatements.get(k);
+    const derived = derivedByAccount.get(k);
+    const [institution, account] = splitAccountKey(k);
     // Use transaction max timestamp if available, otherwise fall back to statement lastTransactionDate
-    const maxTs = txnMaxTs.get(key) ?? stmt?.lastTransactionDate?.toMillis() ?? 0;
+    const maxTs = txnMaxTs.get(k) ?? stmt?.lastTransactionDate?.toMillis() ?? null;
     rows.push({
       institution,
       account,
@@ -65,12 +66,12 @@ function buildAccountRows(
     });
   }
 
-  rows.sort((a, b) => a.mostRecentTimestamp - b.mostRecentTimestamp);
+  rows.sort((a, b) => (a.mostRecentTimestamp ?? 0) - (b.mostRecentTimestamp ?? 0));
   return rows;
 }
 
-function formatDate(ms: number): string {
-  if (ms === 0) return "";
+function formatDate(ms: number | null): string {
+  if (ms === null) return "";
   return new Date(ms).toLocaleDateString();
 }
 
@@ -116,7 +117,7 @@ function renderDivergenceWarning(derivedBalances: DerivedAccountBalance[]): stri
   const discrepancies = derivedBalances.filter(d => Math.abs(d.discrepancy) > 0.01);
   if (discrepancies.length === 0) return "";
   const rows = discrepancies.map(d =>
-    `<li>${escapeHtml(d.institution)} ${escapeHtml(d.account)} (${escapeHtml(d.earliestPeriod)}\u2192${escapeHtml(d.latestPeriod)}): statement ${escapeHtml(formatCurrency(d.statementBalance))}, derived ${escapeHtml(formatCurrency(d.derivedBalance))}</li>`
+    `<li>${escapeHtml(d.institution)} ${escapeHtml(d.account)} (${escapeHtml(d.earliestPeriod)}\u2192${escapeHtml(d.latestPeriod)}): ${escapeHtml(formatCurrency(d.discrepancy))}</li>`
   ).join("\n");
   return `<div id="balance-divergence-warning" class="divergence-warning">
     <p>Balance verification found discrepancies between statement balances and transaction-derived balances:</p>
@@ -161,6 +162,10 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
       const { points: netWorthPoints } = computeNetWorth(transactions, statements, trendWeeks);
       chartHtml = renderChartContainers(aggregateTrend, netWorthPoints, derivedBalances);
     } catch (chartError) {
+      if (chartError instanceof TypeError || chartError instanceof ReferenceError
+          || chartError instanceof DataIntegrityError || chartError instanceof RangeError) {
+        throw chartError;
+      }
       console.error("Failed to compute chart data:", chartError);
       chartHtml = renderLoadError(chartError, "chart-error");
     }
