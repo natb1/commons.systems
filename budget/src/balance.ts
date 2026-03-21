@@ -322,11 +322,13 @@ export function computePerBudgetTrend(
   const { weeks: periodsWeeks } = indexPeriodsByWeek(periods);
   const weekMap = new Map(periodsWeeks);
 
-  // Also include weeks from aggregates that have unbudgeted spending
+  // Build "Other" weekly spending and register weeks in a single pass
+  const otherWeekly = new Map<number, number>();
   for (const a of aggregates) {
     if (a.unbudgetedTotal > 0) {
       const entry = toSundayEntry(a.weekStart.toDate());
       if (!weekMap.has(entry.ms)) weekMap.set(entry.ms, entry.label);
+      otherWeekly.set(entry.ms, (otherWeekly.get(entry.ms) ?? 0) + a.unbudgetedTotal);
     }
   }
 
@@ -349,14 +351,6 @@ export function computePerBudgetTrend(
     m.set(entry.ms, (m.get(entry.ms) ?? 0) + p.total);
   }
 
-  // "Other" spending from pre-aggregated unbudgeted totals
-  const otherWeekly = new Map<number, number>();
-  for (const a of aggregates) {
-    if (a.unbudgetedTotal > 0) {
-      const entry = toSundayEntry(a.weekStart.toDate());
-      otherWeekly.set(entry.ms, (otherWeekly.get(entry.ms) ?? 0) + a.unbudgetedTotal);
-    }
-  }
   if (otherWeekly.size > 0) perBudgetWeekly.set(UNBUDGETED_SERIES, otherWeekly);
 
   const result: PerBudgetPoint[] = [];
