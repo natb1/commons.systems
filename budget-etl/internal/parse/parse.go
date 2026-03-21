@@ -155,6 +155,27 @@ type ParseResult struct {
 	SkipReason   string
 }
 
+// InferPeriod returns a YYYY-MM period from the parsed document data.
+// Prefers BalanceDate (OFX DTASOF), falls back to latest transaction date.
+// Returns empty string if neither is available.
+func (pr ParseResult) InferPeriod() string {
+	if !pr.BalanceDate.IsZero() {
+		return pr.BalanceDate.Format("2006-01")
+	}
+	if len(pr.Transactions) > 0 {
+		latest := pr.Transactions[0].Date
+		for _, t := range pr.Transactions[1:] {
+			if t.Date.After(latest) {
+				latest = t.Date
+			}
+		}
+		if !latest.IsZero() {
+			return latest.Format("2006-01")
+		}
+	}
+	return ""
+}
+
 // ParseFile detects the format of the file at path and parses its transactions.
 func ParseFile(path string) (ParseResult, error) {
 	f, err := detectFormat(path)

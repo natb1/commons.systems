@@ -139,6 +139,9 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 			skipped++
 			continue
 		}
+		if inferred := r.result.InferPeriod(); inferred != "" {
+			r.sf.Period = inferred
+		}
 		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
 		totalTxns += len(r.result.Transactions)
 	}
@@ -643,6 +646,9 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 			log.Printf("skipping %s: %s", r.sf.Path, r.result.SkipReason)
 			skipped++
 			continue
+		}
+		if inferred := r.result.InferPeriod(); inferred != "" {
+			r.sf.Period = inferred
 		}
 		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
 		totalTxns += len(r.result.Transactions)
