@@ -37,16 +37,26 @@ func parseCSV(path string) (ParseResult, error) {
 		return ParseResult{}, fmt.Errorf("%s: CSV file has no data rows", path)
 	}
 
-	// Extract ending balance from metadata line (line 1) if available.
+	// Extract toDate and ending balance from metadata line (line 1) if available.
 	// Metadata format: [acctNumber, fromDate, toDate, startingBalance, endingBalance]
 	var balance int64
+	var balanceDate time.Time
 	meta := records[0]
-	if len(meta) >= 5 && meta[4] != "" {
-		b, err := parseCents(meta[4])
-		if err != nil {
-			return ParseResult{}, fmt.Errorf("%s: parsing balance %q from metadata: %w", path, meta[4], err)
+	if len(meta) >= 5 {
+		if meta[2] != "" {
+			bd, err := time.Parse("2006/01/02", meta[2])
+			if err != nil {
+				return ParseResult{}, fmt.Errorf("%s: parsing toDate %q from metadata: %w", path, meta[2], err)
+			}
+			balanceDate = bd
 		}
-		balance = b
+		if meta[4] != "" {
+			b, err := parseCents(meta[4])
+			if err != nil {
+				return ParseResult{}, fmt.Errorf("%s: parsing balance %q from metadata: %w", path, meta[4], err)
+			}
+			balance = b
+		}
 	}
 
 	var txns []Transaction
@@ -93,5 +103,5 @@ func parseCSV(path string) (ParseResult, error) {
 		})
 	}
 
-	return ParseResult{Transactions: txns, Balance: balance}, nil
+	return ParseResult{Transactions: txns, Balance: balance, BalanceDate: balanceDate}, nil
 }

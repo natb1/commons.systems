@@ -22,6 +22,12 @@ func TestParseCSV(t *testing.T) {
 		t.Errorf("Balance = %d, want %d", result.Balance, 1200000)
 	}
 
+	// BalanceDate: metadata toDate is "2025/07/10"
+	wantBD := time.Date(2025, 7, 10, 0, 0, 0, 0, time.UTC)
+	if !result.BalanceDate.Equal(wantBD) {
+		t.Errorf("BalanceDate = %v, want %v", result.BalanceDate, wantBD)
+	}
+
 	txns := result.Transactions
 	if len(txns) != 4 {
 		t.Fatalf("expected 4 transactions, got %d", len(txns))
