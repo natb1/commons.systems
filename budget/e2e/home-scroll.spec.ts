@@ -11,11 +11,19 @@ function buildScrollFixture(): Buffer {
   const TOTAL = 40;
   const categories = ["Food:Groceries", "Shopping", "Transport", "Utilities", "Entertainment"];
   const descriptions = ["GROCERY STORE", "ONLINE SHOP", "GAS STATION", "ELECTRIC CO", "STREAMING SVC"];
+  const budgets = [
+    { id: "budget-food", name: "Groceries", weeklyAllowance: 100, rollover: "none", groupId: null },
+    { id: "budget-transport", name: "Transport", weeklyAllowance: 50, rollover: "none", groupId: null },
+  ];
   const transactions = [];
   for (let i = 0; i < TOTAL; i++) {
     // Spread over 30 weeks — roughly one transaction every 5.25 days
     const offsetMs = Math.floor((i / TOTAL) * 30 * MS_PER_WEEK);
     const ts = new Date(now - offsetMs);
+    const cat = categories[i % 5];
+    const budget = cat === "Food:Groceries" ? "budget-food"
+      : cat === "Transport" ? "budget-transport"
+      : null;
     transactions.push({
       id: `txn-scroll-${String(i).padStart(3, "0")}`,
       institution: "bankone",
@@ -24,8 +32,8 @@ function buildScrollFixture(): Buffer {
       amount: 10 + i * 3.5,
       timestamp: ts.toISOString(),
       statementId: "stmt-1",
-      category: categories[i % 5],
-      budget: null,
+      category: cat,
+      budget,
       note: `note ${i + 1}`,
       reimbursement: 0,
       normalizedId: null,
@@ -39,7 +47,7 @@ function buildScrollFixture(): Buffer {
     groupId: "scroll-test-group",
     groupName: "Scroll Test",
     transactions,
-    budgets: [],
+    budgets,
     budgetPeriods: [],
     rules: [],
     normalizationRules: [],
@@ -155,6 +163,62 @@ test.describe("home page infinite scroll", () => {
     test("sankey chart renders with initial load", async ({ page }) => {
       await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
       await expect(page.locator("#category-sankey svg")).toHaveCount(1);
+    });
+
+    test("category filter applies to scroll-loaded rows", async ({ page }) => {
+      // Set category filter to "Food:Groceries"
+      const categoryInput = page.locator("#sankey-category-filter");
+      await categoryInput.fill("Food:Groceries");
+      await categoryInput.blur();
+
+      // Verify initial rows are filtered
+      const visibleRows = page.locator("#transactions-table .txn-row:visible");
+      const hiddenRows = page.locator('#transactions-table .txn-row[style*="display: none"]');
+      const initialVisible = await visibleRows.count();
+      expect(initialVisible).toBeGreaterThan(0);
+
+      // Scroll to load more
+      await page.locator("#scroll-sentinel").scrollIntoViewIfNeeded();
+      await expect(async () => {
+        const totalRows = await page.locator("#transactions-table .txn-row").count();
+        expect(totalRows).toBeGreaterThan(initialVisible + await hiddenRows.count());
+      }).toPass({ timeout: 10000 });
+
+      // Verify ALL visible rows match the category filter
+      const allVisible = page.locator('#transactions-table .txn-row:not([style*="display: none"])');
+      const categories = await allVisible.evaluateAll(rows =>
+        rows.map(r => (r as HTMLElement).dataset.category)
+      );
+      for (const cat of categories) {
+        expect(cat).toMatch(/^Food/);
+      }
+    });
+
+    test("budget filter applies to scroll-loaded rows", async ({ page }) => {
+      // Set budget filter to "Groceries"
+      const budgetInput = page.locator("#sankey-budget-filter");
+      await budgetInput.fill("Groceries");
+      await budgetInput.blur();
+
+      // Verify initial rows are filtered
+      const allVisible = page.locator('#transactions-table .txn-row:not([style*="display: none"])');
+      const initialVisible = await allVisible.count();
+      expect(initialVisible).toBeGreaterThan(0);
+
+      // Scroll to load more
+      await page.locator("#scroll-sentinel").scrollIntoViewIfNeeded();
+      await expect(async () => {
+        const totalRows = await page.locator("#transactions-table .txn-row").count();
+        expect(totalRows).toBeGreaterThan(initialVisible);
+      }).toPass({ timeout: 10000 });
+
+      // Verify ALL visible rows match the budget filter
+      const budgets = await allVisible.evaluateAll(rows =>
+        rows.map(r => (r as HTMLElement).dataset.budgetName)
+      );
+      for (const b of budgets) {
+        expect(b).toBe("Groceries");
+      }
     });
   });
 });

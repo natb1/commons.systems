@@ -251,7 +251,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     return;
   }
 
-  const weeks = distinctWeeks(allTxns);
+  let weeks = distinctWeeks(allTxns);
   if (weeks.length === 0) {
     container.textContent = "No dated transactions to chart.";
     return;
@@ -509,6 +509,20 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   }
 
   update();
+
+  document.addEventListener("transactions-appended", ((e: CustomEvent<SerializedChartTransaction[]>) => {
+    if (!container.isConnected) return;
+    const newTxns = e.detail;
+    assertChartTransactions(newTxns);
+    allTxns.push(...newTxns);
+    weeks = distinctWeeks(allTxns);
+    endSlider.max = String(weeks.length - 1);
+    if (currentEndWeekIdx >= weeks.length) {
+      currentEndWeekIdx = weeks.length - 1;
+    }
+    endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
+    update();
+  }) as EventListener);
 
   const debounced = makeDebounced();
 

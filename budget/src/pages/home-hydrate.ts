@@ -5,7 +5,7 @@ import { computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
-import { renderTransactionRows, compareByTimestampDesc, SCROLL_BATCH_WEEKS } from "./home.js";
+import { renderTransactionRows, compareByTimestampDesc, SCROLL_BATCH_WEEKS, serializeChartTransactions } from "./home.js";
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
@@ -302,6 +302,8 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       if (transactions.length > 0) {
         const html = renderTransactionRows(transactions, groupName, editable, budgetIdToName);
         sentinel.insertAdjacentHTML("beforebegin", html);
+        const chartTxns = serializeChartTransactions(transactions, budgetIdToName);
+        document.dispatchEvent(new CustomEvent("transactions-appended", { detail: chartTxns }));
         sentinel.dataset.nextBefore = String(sinceMs);
       } else {
         // Final batch: omit since to include null-timestamp transactions and any older than the earliest window boundary
@@ -313,6 +315,8 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         if (finalBatch.length > 0) {
           const html = renderTransactionRows(finalBatch, groupName, editable, budgetIdToName);
           sentinel.insertAdjacentHTML("beforebegin", html);
+          const chartTxns = serializeChartTransactions(finalBatch, budgetIdToName);
+          document.dispatchEvent(new CustomEvent("transactions-appended", { detail: chartTxns }));
         }
         sentinel.remove();
         observer.disconnect();
