@@ -273,4 +273,89 @@ describe("renderBudgets", () => {
     }));
     expect(html).not.toContain('id="budget-metrics"');
   });
+
+  it("header contains 12w Diff and 52w Diff columns", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget()]),
+    }));
+    expect(html).toContain("12w Diff");
+    expect(html).toContain("52w Diff");
+  });
+
+  it("diff cells show formatted currency", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], weeklyAllowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain("$50.00");
+  });
+
+  it("diff cells are spans not inputs", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], weeklyAllowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toMatch(/<span [^>]*>\$50\.00<\/span>/);
+    expect(html).not.toMatch(/<input[^>]*\$50\.00/);
+  });
+
+  it("surplus diff renders in green", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], weeklyAllowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('color: #4caf50');
+  });
+
+  it("deficit diff renders in red", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], weeklyAllowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 200,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('color: var(--error, #c00)');
+  });
 });

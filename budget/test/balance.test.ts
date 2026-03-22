@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeDerivedBalances } from "../src/balance";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeDerivedBalances, computePerBudgetAvgSpending, computeBudgetDiffs } from "../src/balance";
+import type { BudgetDiff } from "../src/balance";
 import type { Budget, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -1275,5 +1276,98 @@ describe("weekStart", () => {
     const newYear = Date.UTC(2025, 0, 1, 12, 0, 0);
     const result = weekStart(newYear);
     expect(result).toBe(Date.UTC(2024, 11, 30, 0, 0, 0, 0));
+  });
+});
+
+describe("computePerBudgetAvgSpending", () => {
+  it("returns 0 for empty periods array", () => {
+    expect(computePerBudgetAvgSpending([], "food", 12)).toBe(0);
+  });
+
+  it("returns 0 for unmatched budgetId", () => {
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-12"), periodEnd: ts("2025-01-19"), total: 100 }),
+    ];
+    expect(computePerBudgetAvgSpending(periods, "housing", 12)).toBe(0);
+  });
+
+  it("returns correct average for trailing N weeks", () => {
+    // Three periods on three different Sundays (week boundaries)
+    // 2025-01-05 is a Sunday, 2025-01-12 is a Sunday, 2025-01-19 is a Sunday
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-05"), periodEnd: ts("2025-01-12"), total: 90 }),
+      makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-12"), periodEnd: ts("2025-01-19"), total: 120 }),
+      makePeriod({ id: "food-w3", budgetId: "food", periodStart: ts("2025-01-19"), periodEnd: ts("2025-01-26"), total: 150 }),
+    ];
+    // Requesting trailing 2 weeks: should take the last 2 weeks (120 + 150) / 2 = 135
+    expect(computePerBudgetAvgSpending(periods, "food", 2)).toBe(135);
+  });
+
+  it("sums multiple periods in the same week before averaging", () => {
+    // Two periods with periodStart on the same Sunday week
+    // 2025-01-06 (Monday) and 2025-01-08 (Wednesday) both map to Sunday 2025-01-05
+    const periods = [
+      makePeriod({ id: "food-a", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 40 }),
+      makePeriod({ id: "food-b", budgetId: "food", periodStart: ts("2025-01-08"), periodEnd: ts("2025-01-13"), total: 60 }),
+    ];
+    // Both map to the same Sunday week, so sum = 100, one week, average = 100
+    expect(computePerBudgetAvgSpending(periods, "food", 12)).toBe(100);
+  });
+
+  it("averages over available weeks when fewer than N exist", () => {
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-05"), periodEnd: ts("2025-01-12"), total: 80 }),
+      makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-12"), periodEnd: ts("2025-01-19"), total: 120 }),
+    ];
+    // Only 2 weeks available, requesting 52: average over 2 weeks = (80 + 120) / 2 = 100
+    expect(computePerBudgetAvgSpending(periods, "food", 52)).toBe(100);
+  });
+});
+
+describe("computeBudgetDiffs", () => {
+  it("returns full allowance as diff when no periods exist", () => {
+    const budgets = [
+      makeBudget({ id: "food", weeklyAllowance: 150 }),
+      makeBudget({ id: "housing", name: "Housing", weeklyAllowance: 400 }),
+    ];
+    const result = computeBudgetDiffs(budgets, []);
+    expect(result.get("food")).toEqual({ diff12: 150, diff52: 150 } satisfies BudgetDiff);
+    expect(result.get("housing")).toEqual({ diff12: 400, diff52: 400 } satisfies BudgetDiff);
+  });
+
+  it("returns correct diff12 and diff52 for multiple budgets with spending data", () => {
+    const budgets = [
+      makeBudget({ id: "food", weeklyAllowance: 150 }),
+      makeBudget({ id: "fun", name: "Fun", weeklyAllowance: 100 }),
+    ];
+
+    // Create periods spanning many weeks so 12-week and 52-week windows differ.
+    // Weeks 1-12: food=200/week, fun=50/week
+    // Weeks 13-14: food=100/week, fun=150/week
+    const periods: BudgetPeriod[] = [];
+    for (let i = 0; i < 14; i++) {
+      const weekSunday = new Date(Date.UTC(2025, 0, 5 + i * 7)); // successive Sundays starting 2025-01-05
+      const nextSunday = new Date(Date.UTC(2025, 0, 12 + i * 7));
+      const foodTotal = i < 12 ? 200 : 100;
+      const funTotal = i < 12 ? 50 : 150;
+      periods.push(
+        makePeriod({ id: `food-w${i}`, budgetId: "food", periodStart: ts(weekSunday.toISOString()), periodEnd: ts(nextSunday.toISOString()), total: foodTotal }),
+        makePeriod({ id: `fun-w${i}`, budgetId: "fun", periodStart: ts(weekSunday.toISOString()), periodEnd: ts(nextSunday.toISOString()), total: funTotal }),
+      );
+    }
+
+    const result = computeBudgetDiffs(budgets, periods);
+
+    // food: 12-week trailing = last 12 weeks (weeks 2-13) = 10*200 + 2*100 = 2200, avg = 2200/12 ≈ 183.33
+    // food: 52-week trailing = all 14 weeks, avg = (12*200 + 2*100)/14 = 2600/14 ≈ 185.71
+    const foodDiff = result.get("food")!;
+    expect(foodDiff.diff12).toBeCloseTo(150 - 2200 / 12, 5);
+    expect(foodDiff.diff52).toBeCloseTo(150 - 2600 / 14, 5);
+
+    // fun: 12-week trailing = last 12 weeks (weeks 2-13) = 10*50 + 2*150 = 800, avg = 800/12 ≈ 66.67
+    // fun: 52-week trailing = all 14 weeks, avg = (12*50 + 2*150)/14 = 900/14 ≈ 64.29
+    const funDiff = result.get("fun")!;
+    expect(funDiff.diff12).toBeCloseTo(100 - 800 / 12, 5);
+    expect(funDiff.diff52).toBeCloseTo(100 - 900 / 14, 5);
   });
 });

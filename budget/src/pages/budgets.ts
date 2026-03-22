@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Budget, type BudgetPeriod, type Rollover, type SerializedBudgetPeriod } from "../firestore.js";
-import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computePerBudgetTrend, type PerBudgetPoint } from "../balance.js";
+import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetDiffs, computePerBudgetTrend, type BudgetDiff, type PerBudgetPoint } from "../balance.js";
 import { formatCurrency } from "../format.js";
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
@@ -19,32 +19,42 @@ function renderRolloverCell(budget: Budget, editable: boolean): string {
   return `<select class="edit-rollover" aria-label="Rollover"${dis}>${options}</select>`;
 }
 
-function renderRow(budget: Budget, editable: boolean): string {
+function diffStyle(value: number): string {
+  return value >= 0 ? 'style="color: #4caf50"' : 'style="color: var(--error, #c00)"';
+}
+
+function renderRow(budget: Budget, editable: boolean, diff: BudgetDiff | undefined): string {
   const idAttr = editable ? ` data-budget-id="${escapeHtml(budget.id)}"` : "";
   const dis = editable ? "" : " disabled";
   const nameCell = `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name"${dis}>`;
   const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.weeklyAllowance))}" min="0" aria-label="Weekly allowance"${dis}>`;
   const rolloverCell = renderRolloverCell(budget, editable);
+  const diff12 = diff ? `<span ${diffStyle(diff.diff12)}>${formatCurrency(diff.diff12)}</span>` : `<span></span>`;
+  const diff52 = diff ? `<span ${diffStyle(diff.diff52)}>${formatCurrency(diff.diff52)}</span>` : `<span></span>`;
 
   return `<div class="budget-row"${idAttr}>
     <span>${nameCell}</span>
     <span>${allowanceCell}</span>
+    <span>${diff12}</span>
+    <span>${diff52}</span>
     <span>${rolloverCell}</span>
   </div>`;
 }
 
-function renderBudgetTable(budgets: Budget[], authorized: boolean): string {
+function renderBudgetTable(budgets: Budget[], authorized: boolean, diffs: Map<Budget["id"], BudgetDiff>): string {
   if (budgets.length === 0) {
     return "<p>No budgets found.</p>";
   }
 
   const sorted = [...budgets].sort((a, b) => a.name.localeCompare(b.name));
-  const rows = sorted.map(b => renderRow(b, authorized)).join("\n");
+  const rows = sorted.map(b => renderRow(b, authorized, diffs.get(b.id))).join("\n");
 
   return `<div id="budgets-table">
       <div class="budget-header">
         <span>Name</span>
         <span>Weekly Allowance</span>
+        <span>12w Diff</span>
+        <span>52w Diff</span>
         <span>Rollover</span>
       </div>
       ${rows}
@@ -143,7 +153,8 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
     const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
     const perBudgetTrend = computePerBudgetTrend(budgets, periods, weeklyAggregates);
     chartHtml = renderChartContainer(budgets, periods, metricsHtml, perBudgetTrend, averageWeeklyCredits);
-    tableHtml = renderBudgetTable(budgets, authorized);
+    const diffs = computeBudgetDiffs(budgets, periods);
+    tableHtml = renderBudgetTable(budgets, authorized, diffs);
   } catch (error) {
     tableHtml = renderLoadError(error, "budgets-error");
   }
