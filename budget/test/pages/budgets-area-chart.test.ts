@@ -71,6 +71,63 @@ describe("renderPerBudgetAreaChart", () => {
     expect(chartSvg.getAttribute("height")).toBe("400");
   });
 
+  it("excludedBudgets removes series from SVG marks", () => {
+    const container = makeContainer();
+    const w1 = new Date("2025-01-05").getTime();
+    const data = [
+      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Food", avg3Spending: 100 }),
+      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Housing", avg3Spending: 200 }),
+    ];
+    renderPerBudgetAreaChart(container, {
+      data, containerWidth: 640, panelWidth: 60,
+      excludedBudgets: new Set(["Food"]),
+    });
+    // Legend should still show both budgets
+    const items = container.querySelectorAll(".area-legend-item");
+    expect(items).toHaveLength(2);
+    // The excluded item should have the .excluded class
+    const foodItem = [...items].find(el => el.textContent === "Food");
+    expect(foodItem?.classList.contains("excluded")).toBe(true);
+    // Housing should not be excluded
+    const housingItem = [...items].find(el => el.textContent === "Housing");
+    expect(housingItem?.classList.contains("excluded")).toBe(false);
+  });
+
+  it("empty excludedBudgets renders all budgets", () => {
+    const container = makeContainer();
+    const w1 = new Date("2025-01-05").getTime();
+    const data = [
+      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Food", avg3Spending: 100 }),
+      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Housing", avg3Spending: 200 }),
+    ];
+    renderPerBudgetAreaChart(container, {
+      data, containerWidth: 640, panelWidth: 60,
+      excludedBudgets: new Set(),
+    });
+    const items = container.querySelectorAll(".area-legend-item");
+    expect(items).toHaveLength(2);
+    // No item should be excluded
+    for (const item of items) {
+      expect(item.classList.contains("excluded")).toBe(false);
+    }
+  });
+
+  it("onToggleBudget callback fires when legend item is clicked", () => {
+    const container = makeContainer();
+    const w1 = new Date("2025-01-05").getTime();
+    const data = [
+      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Food", avg3Spending: 100 }),
+    ];
+    const onToggle = vi.fn();
+    renderPerBudgetAreaChart(container, {
+      data, containerWidth: 640, panelWidth: 60,
+      onToggleBudget: onToggle,
+    });
+    const item = container.querySelector(".area-legend-item") as HTMLElement;
+    item.click();
+    expect(onToggle).toHaveBeenCalledWith("Food");
+  });
+
   it("'Other' area appears when present", () => {
     const container = makeContainer();
     const w1 = new Date("2025-01-05").getTime();
