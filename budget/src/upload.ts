@@ -6,6 +6,7 @@ import type {
   BudgetPeriod,
   Rule,
   NormalizationRule,
+  WeeklyAggregate,
   TransactionId,
   StatementId,
   BudgetId,
@@ -35,6 +36,7 @@ interface RawOutput {
   rules: RawRule[];
   normalizationRules: RawNormalizationRule[];
   statements: RawStatement[];
+  weeklyAggregates?: RawWeeklyAggregate[];
 }
 
 interface RawTransaction {
@@ -103,6 +105,13 @@ interface RawStatement {
   lastTransactionDate?: string | null;
 }
 
+interface RawWeeklyAggregate {
+  id: string;
+  weekStart: string;
+  creditTotal: number;
+  unbudgetedTotal: number;
+}
+
 export interface ParsedUpload {
   transactions: Transaction[];
   statements: Statement[];
@@ -110,6 +119,7 @@ export interface ParsedUpload {
   budgetPeriods: BudgetPeriod[];
   rules: Rule[];
   normalizationRules: NormalizationRule[];
+  weeklyAggregates: WeeklyAggregate[];
   groupName: string;
   version: number;
   exportedAt: string;
@@ -265,6 +275,16 @@ export function parseUploadedJson(text: string): ParsedUpload {
     }),
   );
 
+  const weeklyAggregates: WeeklyAggregate[] = (raw.weeklyAggregates ?? []).map(
+    (a: RawWeeklyAggregate, i: number) => ({
+      id: requireId(a.id, "weeklyAggregate", i),
+      weekStart: parseTimestamp(a.weekStart, "weeklyAggregate.weekStart"),
+      creditTotal: requireFiniteNumber(a.creditTotal, "weeklyAggregate", i, "creditTotal"),
+      unbudgetedTotal: requireFiniteNumber(a.unbudgetedTotal, "weeklyAggregate", i, "unbudgetedTotal"),
+      groupId: null as GroupId | null,
+    }),
+  );
+
   return {
     transactions,
     statements,
@@ -272,6 +292,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
     budgetPeriods,
     rules,
     normalizationRules,
+    weeklyAggregates,
     groupName: raw.groupName,
     version: raw.version,
     exportedAt: raw.exportedAt,
@@ -340,6 +361,12 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       period: s.period,
       balanceDate: s.balanceDate,
       lastTransactionDateMs: s.lastTransactionDate?.toMillis() ?? null,
+    })),
+    weeklyAggregates: parsed.weeklyAggregates.map((a) => ({
+      id: a.id,
+      weekStartMs: a.weekStart.toMillis(),
+      creditTotal: a.creditTotal,
+      unbudgetedTotal: a.unbudgetedTotal,
     })),
     meta: {
       key: "upload",

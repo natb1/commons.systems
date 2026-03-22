@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -319,6 +320,7 @@ type RuleDoc struct {
 	Priority    int
 	Institution string
 	Account     string
+	Category    string
 }
 
 // LoadRules reads rules from budget/{env}/rules, filtered by groupId.
@@ -369,6 +371,11 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 			r.Account = v
 		} else if d["account"] != nil {
 			return nil, fmt.Errorf("rule %s: field 'account' is not a string (got %T)", doc.Ref.ID, d["account"])
+		}
+		if v, ok := d["category"].(string); ok {
+			r.Category = v
+		} else if d["category"] != nil {
+			return nil, fmt.Errorf("rule %s: field 'category' is not a string (got %T)", doc.Ref.ID, d["category"])
 		}
 		result = append(result, r)
 	}
@@ -483,34 +490,9 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 	// Convert Firestore docs to FullTransaction for aggregation
 	fullTxns := make([]FullTransaction, 0, len(txnDocs))
 	for _, doc := range txnDocs {
-		d := doc.Data()
-		ft := FullTransaction{
-			ID:                doc.Ref.ID,
-			NormalizedPrimary: true,
-		}
-		ft.Budget, _ = d["budget"].(string)
-		ft.Category, _ = d["category"].(string)
-		if v, ok := d["amount"].(float64); ok {
-			ft.Amount = v
-		} else {
-			return fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", doc.Ref.ID, d["amount"])
-		}
-		switch v := d["reimbursement"].(type) {
-		case float64:
-			ft.Reimbursement = v
-		case int64:
-			ft.Reimbursement = float64(v)
-		}
-		if v, ok := d["timestamp"].(time.Time); ok {
-			ft.Timestamp = v
-		} else {
-			return fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", doc.Ref.ID, d["timestamp"])
-		}
-		if nid, ok := d["normalizedId"].(string); ok {
-			ft.NormalizedID = nid
-		}
-		if primary, ok := d["normalizedPrimary"].(bool); ok {
-			ft.NormalizedPrimary = primary
+		ft, err := FullTransactionFromDoc(doc.Ref.ID, doc.Data())
+		if err != nil {
+			return err
 		}
 		fullTxns = append(fullTxns, ft)
 	}
@@ -595,6 +577,143 @@ func (c *Client) RecalculatePeriods(ctx context.Context, group GroupInfo, minTim
 	return nil
 }
 
+// WeeklyAggregateResult holds pre-computed weekly credit and unbudgeted spending totals.
+type WeeklyAggregateResult struct {
+	WeekStart       time.Time
+	CreditTotal     float64 // positive: absolute value of net amount for credit transactions (where net < 0)
+	UnbudgetedTotal float64 // positive: sum of net amount for unbudgeted spending
+}
+
+// isCardPaymentCategory returns true for Transfer:CardPayment and its subcategories.
+func isCardPaymentCategory(cat string) bool {
+	return strings.HasPrefix(cat, "Transfer:CardPayment:") || cat == "Transfer:CardPayment"
+}
+
+// ComputeWeeklyAggregates groups transactions into Monday-aligned weeks and computes
+// credit totals and unbudgeted spending totals per week.
+//
+// Excluded: non-primary normalized transactions.
+// Credit filter: net < 0, not Transfer:CardPayment* category.
+// Unbudgeted filter: Budget == "", net > 0.
+func ComputeWeeklyAggregates(txns []FullTransaction) []WeeklyAggregateResult {
+	type weekData struct {
+		creditTotal     float64
+		unbudgetedTotal float64
+	}
+	weeks := make(map[time.Time]*weekData)
+
+	for _, txn := range txns {
+		if txn.NormalizedID != "" && !txn.NormalizedPrimary {
+			continue
+		}
+
+		net := txn.Amount * (1 - txn.Reimbursement/100)
+		ps := PeriodStart(txn.Timestamp)
+
+		wd, exists := weeks[ps]
+		if !exists {
+			wd = &weekData{}
+			weeks[ps] = wd
+		}
+
+		// Credit: negative net, not card payment
+		if net < 0 && !isCardPaymentCategory(txn.Category) {
+			wd.creditTotal += -net
+		}
+
+		// Unbudgeted spending: no budget, positive net
+		if txn.Budget == "" && net > 0 {
+			wd.unbudgetedTotal += net
+		}
+	}
+
+	result := make([]WeeklyAggregateResult, 0, len(weeks))
+	for weekStart, wd := range weeks {
+		result = append(result, WeeklyAggregateResult{
+			WeekStart:       weekStart,
+			CreditTotal:     math.Round(wd.creditTotal*100) / 100,
+			UnbudgetedTotal: math.Round(wd.unbudgetedTotal*100) / 100,
+		})
+	}
+	return result
+}
+
+// UpsertWeeklyAggregates writes weekly aggregate documents to Firestore in batches of 500.
+// Document ID format: "{groupId}-{YYYY-MM-DD}".
+func (c *Client) UpsertWeeklyAggregates(ctx context.Context, group GroupInfo, aggregates []WeeklyAggregateResult) error {
+	col := c.fs.Collection(fmt.Sprintf("budget/%s/weekly-aggregates", c.env))
+
+	// Query existing weekly-aggregate docs for this group
+	existingDocs, err := col.Where("groupId", "==", group.ID).Documents(ctx).GetAll()
+	if err != nil {
+		return fmt.Errorf("querying existing weekly-aggregates: %w", err)
+	}
+	existingIDs := make(map[string]bool, len(existingDocs))
+	for _, doc := range existingDocs {
+		existingIDs[doc.Ref.ID] = true
+	}
+
+	// Build set of computed doc IDs
+	computedIDs := make(map[string]bool, len(aggregates))
+
+	type batchOp struct {
+		ref    *firestore.DocumentRef
+		fields map[string]interface{}
+		merge  []firestore.SetOption
+		delete bool
+	}
+	var ops []batchOp
+
+	for _, agg := range aggregates {
+		docID := fmt.Sprintf("%s-%s", group.ID, agg.WeekStart.Format("2006-01-02"))
+		computedIDs[docID] = true
+		ops = append(ops, batchOp{
+			ref: col.Doc(docID),
+			fields: map[string]interface{}{
+				"weekStart":       agg.WeekStart,
+				"creditTotal":     agg.CreditTotal,
+				"unbudgetedTotal": agg.UnbudgetedTotal,
+				"groupId":         group.ID,
+				"memberEmails":    group.MemberEmails,
+			},
+		})
+	}
+
+	// Delete stale docs not in the computed set
+	var deleted int
+	for id := range existingIDs {
+		if !computedIDs[id] {
+			ops = append(ops, batchOp{
+				ref:    col.Doc(id),
+				delete: true,
+			})
+			deleted++
+		}
+	}
+
+	const maxBatch = 500
+	for i := 0; i < len(ops); i += maxBatch {
+		end := i + maxBatch
+		if end > len(ops) {
+			end = len(ops)
+		}
+		batch := c.fs.Batch()
+		for _, op := range ops[i:end] {
+			if op.delete {
+				batch.Delete(op.ref)
+			} else {
+				batch.Set(op.ref, op.fields, op.merge...)
+			}
+		}
+		if _, err := batch.Commit(ctx); err != nil {
+			return fmt.Errorf("committing weekly-aggregates batch: %w", err)
+		}
+	}
+
+	log.Printf("weekly aggregates: %d upserted, %d deleted", len(aggregates), deleted)
+	return nil
+}
+
 // NormalizationRuleDoc holds a normalization rule document read from Firestore.
 type NormalizationRuleDoc struct {
 	ID                   string
@@ -676,6 +795,45 @@ type FullTransaction struct {
 	Timestamp         time.Time
 	NormalizedID      string // empty when not normalized
 	NormalizedPrimary bool
+}
+
+// FullTransactionFromDoc converts a TransactionDoc (ID + raw field map) into a
+// FullTransaction. Returns an error if required fields (amount, timestamp) are
+// missing or have the wrong type, or if reimbursement has a non-numeric type.
+func FullTransactionFromDoc(id string, d map[string]interface{}) (FullTransaction, error) {
+	ft := FullTransaction{
+		ID:                id,
+		NormalizedPrimary: true,
+	}
+	ft.Budget, _ = d["budget"].(string)
+	ft.Category, _ = d["category"].(string)
+	if v, ok := d["amount"].(float64); ok {
+		ft.Amount = v
+	} else {
+		return ft, fmt.Errorf("transaction %s: field 'amount' is not a float64 (got %T)", id, d["amount"])
+	}
+	switch v := d["reimbursement"].(type) {
+	case float64:
+		ft.Reimbursement = v
+	case int64:
+		ft.Reimbursement = float64(v)
+	case nil:
+		// no reimbursement, default 0 is correct
+	default:
+		return ft, fmt.Errorf("transaction %s: field 'reimbursement' is not a number (got %T)", id, d["reimbursement"])
+	}
+	if v, ok := d["timestamp"].(time.Time); ok {
+		ft.Timestamp = v
+	} else {
+		return ft, fmt.Errorf("transaction %s: field 'timestamp' is not a time.Time (got %T)", id, d["timestamp"])
+	}
+	if nid, ok := d["normalizedId"].(string); ok {
+		ft.NormalizedID = nid
+	}
+	if primary, ok := d["normalizedPrimary"].(bool); ok {
+		ft.NormalizedPrimary = primary
+	}
+	return ft, nil
 }
 
 // PeriodResult holds aggregated data for a single budget period.

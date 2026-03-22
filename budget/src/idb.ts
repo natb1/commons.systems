@@ -8,6 +8,7 @@ const STORE_NAMES = [
   "rules",
   "normalizationRules",
   "statements",
+  "weeklyAggregates",
   "meta",
 ] as const;
 
@@ -15,7 +16,7 @@ export type StoreName = (typeof STORE_NAMES)[number];
 
 const { openDb, closeDb: closeDbConn } = createDbConnection({
   name: "budget",
-  version: 2,
+  version: 3,
   onUpgrade(db) {
     for (const name of STORE_NAMES) {
       if (!db.objectStoreNames.contains(name)) {
@@ -101,6 +102,13 @@ export interface IdbStatement {
   lastTransactionDateMs: number | null;
 }
 
+export interface IdbWeeklyAggregate {
+  id: string;
+  weekStartMs: number;
+  creditTotal: number;
+  unbudgetedTotal: number;
+}
+
 export interface ParsedData {
   transactions: IdbTransaction[];
   budgets: IdbBudget[];
@@ -108,6 +116,7 @@ export interface ParsedData {
   rules: IdbRule[];
   normalizationRules: IdbNormalizationRule[];
   statements: IdbStatement[];
+  weeklyAggregates: IdbWeeklyAggregate[];
   meta: UploadMeta;
 }
 
@@ -139,6 +148,7 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
   for (const record of data.rules) stores.rules.put(record);
   for (const record of data.normalizationRules) stores.normalizationRules.put(record);
   for (const record of data.statements) stores.statements.put(record);
+  for (const record of data.weeklyAggregates) stores.weeklyAggregates.put(record);
   stores.meta.put(data.meta);
 
   await new Promise<void>((resolve, reject) => {

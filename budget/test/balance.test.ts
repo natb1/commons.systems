@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
 import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeDerivedBalances } from "../src/balance";
-import type { Budget, BudgetPeriod, Statement, Transaction } from "../src/firestore";
+import type { Budget, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
   const d = new Date(dateStr);
@@ -48,6 +48,17 @@ function makeTxn(overrides: Partial<Transaction> = {}): Transaction {
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    ...overrides,
+  };
+}
+
+function makeAggregate(overrides: Partial<{id: string; weekStart: any; creditTotal: number; unbudgetedTotal: number; groupId: any}> = {}): any {
+  return {
+    id: "2025-01-06",
+    weekStart: ts("2025-01-06"),
+    creditTotal: 0,
+    unbudgetedTotal: 0,
+    groupId: null,
     ...overrides,
   };
 }
@@ -593,116 +604,62 @@ describe("computeAverageWeeklyCredits", () => {
     expect(computeAverageWeeklyCredits([])).toBe(0);
   });
 
-  it("returns 0 when no credit transactions (all positive amounts)", () => {
-    const txns = [
-      makeTxn({ id: "t1", category: "Food", amount: 100, timestamp: ts("2025-03-10T12:00:00Z") }),
-      makeTxn({ id: "t2", category: "Housing", amount: 200, timestamp: ts("2025-03-11T12:00:00Z") }),
+  it("returns 0 when no aggregates have credits", () => {
+    const aggs = [
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 0 }),
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 0 }),
     ];
-    expect(computeAverageWeeklyCredits(txns)).toBe(0);
+    expect(computeAverageWeeklyCredits(aggs)).toBe(0);
   });
 
-  it("single credit txn (negative amount) returns abs(amount) / 12", () => {
-    const txns = [
-      makeTxn({ id: "t1", category: "Income:Salary", amount: -1200, timestamp: ts("2025-03-10T12:00:00Z") }),
+  it("single aggregate with creditTotal returns creditTotal / 12", () => {
+    const aggs = [
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
     ];
-    expect(computeAverageWeeklyCredits(txns)).toBe(100);
+    expect(computeAverageWeeklyCredits(aggs)).toBe(100);
   });
 
-  it("positive-amount Income:Salary is not a credit (excluded)", () => {
-    const txns = [
-      makeTxn({ id: "t1", category: "Income:Salary", amount: 1200, timestamp: ts("2025-03-10T12:00:00Z") }),
+  it("multiple aggregates within window are summed then divided by 12", () => {
+    const aggs = [
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 600 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 600 }),
     ];
-    expect(computeAverageWeeklyCredits(txns)).toBe(0);
+    expect(computeAverageWeeklyCredits(aggs)).toBe(100);
   });
 
-  it("non-Income negative amounts (e.g. Travel:Reimbursement) are included", () => {
-    const txns = [
-      makeTxn({ id: "t1", category: "Travel:Reimbursement", amount: -1200, timestamp: ts("2025-03-10T12:00:00Z") }),
+  it("excludes aggregates outside 12-week window (before windowStart)", () => {
+    // Latest weekStart is 2025-03-10 → windowEnd = 2025-03-17, windowStart = 2024-12-22
+    // An aggregate at 2024-12-15 is before windowStart, excluded
+    const aggs = [
+      makeAggregate({ id: "2024-12-15", weekStart: ts("2024-12-15"), creditTotal: 9999 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
     ];
-    expect(computeAverageWeeklyCredits(txns)).toBe(100);
+    expect(computeAverageWeeklyCredits(aggs)).toBe(100);
   });
 
-  it("multiple credit txns within window are summed then divided by 12", () => {
-    const txns = [
-      makeTxn({ id: "t1", category: "Income:Salary", amount: -600, timestamp: ts("2025-03-10T12:00:00Z") }),
-      makeTxn({ id: "t2", category: "Income:Salary", amount: -600, timestamp: ts("2025-03-12T12:00:00Z") }),
+  it("window is anchored to latest weekStart + 1 week", () => {
+    // Latest weekStart: 2025-03-10 → windowEnd = 2025-03-17
+    // windowStart = 2025-03-17 - 12 weeks = 2024-12-23
+    // Aggregate at 2024-12-23 is exactly at windowStart (inclusive)
+    const aggs = [
+      makeAggregate({ id: "2024-12-23", weekStart: ts("2024-12-23T00:00:00Z"), creditTotal: 240 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
     ];
-    expect(computeAverageWeeklyCredits(txns)).toBe(100);
+    expect(computeAverageWeeklyCredits(aggs)).toBe(120);
+
+    // Aggregate at 2024-12-22 is just before windowStart (excluded)
+    const aggsExcluded = [
+      makeAggregate({ id: "2024-12-22", weekStart: ts("2024-12-22T23:59:59.999Z"), creditTotal: 9999 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
+    ];
+    expect(computeAverageWeeklyCredits(aggsExcluded)).toBe(100);
   });
 
-  it("excludes txns outside 12-week window (before windowStart)", () => {
-    const txns = [
-      makeTxn({ id: "old", category: "Income", amount: -9999, timestamp: ts("2024-12-22T23:59:59Z") }),
-      makeTxn({ id: "recent", category: "Income", amount: -1200, timestamp: ts("2025-03-10T12:00:00Z") }),
+  it("fractional creditTotal is handled correctly", () => {
+    const aggs = [
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 500 }),
     ];
-    expect(computeAverageWeeklyCredits(txns)).toBe(100);
-  });
-
-  it("excludes non-primary normalized txns", () => {
-    const txns = [
-      makeTxn({
-        id: "primary",
-        category: "Income",
-        amount: -1200,
-        timestamp: ts("2025-03-10T12:00:00Z"),
-        normalizedId: "norm-1",
-        normalizedPrimary: true,
-      }),
-      makeTxn({
-        id: "secondary",
-        category: "Income",
-        amount: -600,
-        timestamp: ts("2025-03-10T12:00:00Z"),
-        normalizedId: "norm-1",
-        normalizedPrimary: false,
-      }),
-    ];
-    expect(computeAverageWeeklyCredits(txns)).toBe(100);
-  });
-
-  it("excludes null-timestamp txns", () => {
-    const txns = [
-      makeTxn({ id: "no-ts", category: "Income", amount: -9999, timestamp: null }),
-      makeTxn({ id: "with-ts", category: "Income", amount: -1200, timestamp: ts("2025-03-10T12:00:00Z") }),
-    ];
-    expect(computeAverageWeeklyCredits(txns)).toBe(100);
-  });
-
-  it("handles mixed categories — only negative amounts count", () => {
-    const txns = [
-      makeTxn({ id: "t1", category: "Income:Salary", amount: -600, timestamp: ts("2025-03-10T12:00:00Z") }),
-      makeTxn({ id: "t2", category: "Travel:Reimbursement", amount: -600, timestamp: ts("2025-03-11T12:00:00Z") }),
-    ];
-    expect(computeAverageWeeklyCredits(txns)).toBe(100);
-  });
-
-  it("applies reimbursement via computeNetAmount", () => {
-    // amount=-1000, reimbursement=50 → net = -1000 * 0.5 = -500 → credit=500
-    const txns = [
-      makeTxn({ id: "t1", category: "Income", amount: -1000, reimbursement: 50, timestamp: ts("2025-03-10T12:00:00Z") }),
-    ];
-    expect(computeAverageWeeklyCredits(txns)).toBeCloseTo(500 / 12, 10);
-  });
-
-  it("window is anchored to latest credit txn week end (Wednesday → next Monday)", () => {
-    const txns = [
-      makeTxn({ id: "boundary", category: "Income", amount: -240, timestamp: ts("2024-12-23T00:00:00Z") }),
-      makeTxn({ id: "latest", category: "Income", amount: -1200, timestamp: ts("2025-03-12T12:00:00Z") }),
-    ];
-    expect(computeAverageWeeklyCredits(txns)).toBe(120);
-
-    const txnsWithExcluded = [
-      makeTxn({ id: "before", category: "Income", amount: -9999, timestamp: ts("2024-12-22T23:59:59.999Z") }),
-      makeTxn({ id: "latest2", category: "Income", amount: -1200, timestamp: ts("2025-03-12T12:00:00Z") }),
-    ];
-    expect(computeAverageWeeklyCredits(txnsWithExcluded)).toBe(100);
-  });
-
-  it("excludes Transfer:CardPayment transactions", () => {
-    const creditTxn = makeTxn({ id: "credit-1", amount: -1200, category: "Travel:Reimbursement", timestamp: ts("2025-01-07"), budget: null });
-    const cardPaymentTxn = makeTxn({ id: "card-1", amount: -500, category: "Transfer:CardPayment", timestamp: ts("2025-01-07"), budget: null });
-    // Only credit-1 should count: 1200 over 12 weeks = 100
-    expect(computeAverageWeeklyCredits([creditTxn, cardPaymentTxn])).toBeCloseTo(100);
+    expect(computeAverageWeeklyCredits(aggs)).toBeCloseTo(500 / 12, 10);
   });
 });
 
@@ -846,48 +803,31 @@ describe("computePerBudgetTrend", () => {
     expect(funPoints[0].avg3Spending).toBe(30);
   });
 
-  it("'Other' series from null-budget transactions", () => {
+  it("'Other' series from aggregates with unbudgetedTotal", () => {
     const budgets = [makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 })];
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
     ];
-    const txns = [
-      makeTxn({ id: "unbudgeted-1", amount: 25, budget: null, category: "Misc", timestamp: ts("2025-01-07") }),
+    const aggs = [
+      makeAggregate({ id: "2025-01-06", weekStart: ts("2025-01-06"), unbudgetedTotal: 25 }),
     ];
-    const result = computePerBudgetTrend(budgets, periods, txns);
+    const result = computePerBudgetTrend(budgets, periods, aggs);
     const otherPoints = result.filter(r => r.budget === "Other");
     expect(otherPoints.length).toBeGreaterThan(0);
     expect(otherPoints[0].avg3Spending).toBe(25);
   });
 
-  it("excludes null-budget negative-amount transactions from 'Other' series", () => {
-    // Sign-based filter: negative net = credit, excluded from spending chart
+  it("no 'Other' series when unbudgetedTotal is zero", () => {
     const budgets = [makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 })];
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
     ];
-    const txns = [
-      makeTxn({ id: "reimbursement", amount: -25, budget: null, category: "Travel:Reimbursement", timestamp: ts("2025-01-07") }),
+    const aggs = [
+      makeAggregate({ id: "2025-01-06", weekStart: ts("2025-01-06"), unbudgetedTotal: 0 }),
     ];
-    const result = computePerBudgetTrend(budgets, periods, txns);
+    const result = computePerBudgetTrend(budgets, periods, aggs);
     const otherPoints = result.filter(r => r.budget === "Other");
     expect(otherPoints).toHaveLength(0);
-  });
-
-  it("includes null-budget positive-amount Income:Salary in 'Other' series (sign-based, not category-based)", () => {
-    // Under the old category-prefix filter, Income:Salary was excluded from Other.
-    // Under the new sign-based filter, a positive-amount Income:Salary counts as spending.
-    const budgets = [makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 })];
-    const periods = [
-      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
-    ];
-    const txns = [
-      makeTxn({ id: "income-positive", amount: 100, budget: null, category: "Income:Salary", timestamp: ts("2025-01-07") }),
-    ];
-    const result = computePerBudgetTrend(budgets, periods, txns);
-    const otherPoints = result.filter(r => r.budget === "Other");
-    expect(otherPoints.length).toBeGreaterThan(0);
-    expect(otherPoints[0].avg3Spending).toBe(100);
   });
 });
 

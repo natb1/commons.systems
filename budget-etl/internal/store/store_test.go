@@ -2,6 +2,7 @@ package store
 
 import (
 	"math"
+	"sort"
 	"testing"
 	"time"
 )
@@ -445,6 +446,193 @@ func TestComputePeriods(t *testing.T) {
 		}
 		if !p.End.Equal(wantEnd) {
 			t.Errorf("end = %v, want %v", p.End, wantEnd)
+		}
+	})
+}
+
+func TestComputeWeeklyAggregates(t *testing.T) {
+	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)     // Monday
+	wed := time.Date(2025, 1, 8, 10, 0, 0, 0, time.UTC)     // Wednesday same week
+	nextMon := time.Date(2025, 1, 13, 9, 0, 0, 0, time.UTC) // Next Monday
+
+	sortResults := func(results []WeeklyAggregateResult) {
+		sort.Slice(results, func(i, j int) bool {
+			return results[i].WeekStart.Before(results[j].WeekStart)
+		})
+	}
+
+	t.Run("basic credit negative net", func(t *testing.T) {
+		txns := []FullTransaction{makeTxn("food", "Food:Groceries", -50.0, 0, mon)}
+		results := ComputeWeeklyAggregates(txns)
+		if len(results) != 1 {
+			t.Fatalf("got %d results, want 1", len(results))
+		}
+		if results[0].CreditTotal != 50.0 {
+			t.Errorf("CreditTotal = %v, want 50.0", results[0].CreditTotal)
+		}
+		if results[0].UnbudgetedTotal != 0.0 {
+			t.Errorf("UnbudgetedTotal = %v, want 0.0", results[0].UnbudgetedTotal)
+		}
+	})
+
+	t.Run("basic unbudgeted positive net", func(t *testing.T) {
+		txns := []FullTransaction{makeTxn("", "Food:Dining", 75.0, 0, mon)}
+		results := ComputeWeeklyAggregates(txns)
+		if len(results) != 1 {
+			t.Fatalf("got %d results, want 1", len(results))
+		}
+		if results[0].UnbudgetedTotal != 75.0 {
+			t.Errorf("UnbudgetedTotal = %v, want 75.0", results[0].UnbudgetedTotal)
+		}
+		if results[0].CreditTotal != 0.0 {
+			t.Errorf("CreditTotal = %v, want 0.0", results[0].CreditTotal)
+		}
+	})
+
+	t.Run("card payment excluded from credit", func(t *testing.T) {
+		txns := []FullTransaction{makeTxn("transfer", "Transfer:CardPayment", -200.0, 0, mon)}
+		results := ComputeWeeklyAggregates(txns)
+		if len(results) != 1 {
+			t.Fatalf("got %d results, want 1", len(results))
+		}
+		if results[0].CreditTotal != 0.0 {
+			t.Errorf("CreditTotal = %v, want 0.0 (card payment excluded)", results[0].CreditTotal)
+		}
+	})
+
+	t.Run("card payment subcategory excluded from credit", func(t *testing.T) {
+		txns := []FullTransaction{makeTxn("transfer", "Transfer:CardPayment:CreditCard", -150.0, 0, mon)}
+		results := ComputeWeeklyAggregates(txns)
+		if len(results) != 1 {
+			t.Fatalf("got %d results, want 1", len(results))
+		}
+		if results[0].CreditTotal != 0.0 {
+			t.Errorf("CreditTotal = %v, want 0.0 (card payment subcategory excluded)", results[0].CreditTotal)
+		}
+	})
+
+	t.Run("non-primary normalized excluded from credit", func(t *testing.T) {
+		txn := FullTransaction{
+			ID: "t1", Budget: "food", Category: "Food", Amount: -100.0,
+			Timestamp: mon, NormalizedID: "norm-1", NormalizedPrimary: false,
+		}
+		results := ComputeWeeklyAggregates([]FullTransaction{txn})
+		if len(results) != 0 {
+			t.Errorf("got %d results, want 0 (non-primary normalized excluded)", len(results))
+		}
+	})
+
+	t.Run("non-primary normalized excluded from unbudgeted", func(t *testing.T) {
+		txn := FullTransaction{
+			ID: "t1", Budget: "", Category: "Food", Amount: 80.0,
+			Timestamp: mon, NormalizedID: "norm-1", NormalizedPrimary: false,
+		}
+		results := ComputeWeeklyAggregates([]FullTransaction{txn})
+		if len(results) != 0 {
+			t.Errorf("got %d results, want 0 (non-primary normalized excluded)", len(results))
+		}
+	})
+
+	t.Run("rounding to 2 decimal places", func(t *testing.T) {
+		txns := []FullTransaction{
+			makeTxn("", "Food", 10.015, 0, mon),
+			makeTxn("", "Food", 20.019, 0, wed),
+		}
+		results := ComputeWeeklyAggregates(txns)
+		if len(results) != 1 {
+			t.Fatalf("got %d results, want 1", len(results))
+		}
+		if results[0].UnbudgetedTotal != 30.03 {
+			t.Errorf("UnbudgetedTotal = %v, want 30.03", results[0].UnbudgetedTotal)
+		}
+	})
+
+	t.Run("multiple weeks produce separate results", func(t *testing.T) {
+		txns := []FullTransaction{
+			makeTxn("", "Food", 40.0, 0, mon),
+			makeTxn("", "Food", 60.0, 0, nextMon),
+		}
+		results := ComputeWeeklyAggregates(txns)
+		if len(results) != 2 {
+			t.Fatalf("got %d results, want 2", len(results))
+		}
+		sortResults(results)
+		wantStart1 := time.Date(2025, 1, 6, 0, 0, 0, 0, time.UTC)
+		wantStart2 := time.Date(2025, 1, 13, 0, 0, 0, 0, time.UTC)
+		if !results[0].WeekStart.Equal(wantStart1) {
+			t.Errorf("week1 start = %v, want %v", results[0].WeekStart, wantStart1)
+		}
+		if results[0].UnbudgetedTotal != 40.0 {
+			t.Errorf("week1 UnbudgetedTotal = %v, want 40.0", results[0].UnbudgetedTotal)
+		}
+		if !results[1].WeekStart.Equal(wantStart2) {
+			t.Errorf("week2 start = %v, want %v", results[1].WeekStart, wantStart2)
+		}
+		if results[1].UnbudgetedTotal != 60.0 {
+			t.Errorf("week2 UnbudgetedTotal = %v, want 60.0", results[1].UnbudgetedTotal)
+		}
+	})
+
+	t.Run("budgeted positive net excluded from unbudgeted", func(t *testing.T) {
+		txns := []FullTransaction{makeTxn("food", "Food", 100.0, 0, mon)}
+		results := ComputeWeeklyAggregates(txns)
+		if len(results) != 1 {
+			t.Fatalf("got %d results, want 1", len(results))
+		}
+		if results[0].UnbudgetedTotal != 0.0 {
+			t.Errorf("UnbudgetedTotal = %v, want 0.0 (budgeted txn excluded)", results[0].UnbudgetedTotal)
+		}
+	})
+
+	t.Run("empty input returns empty slice", func(t *testing.T) {
+		results := ComputeWeeklyAggregates(nil)
+		if len(results) != 0 {
+			t.Errorf("got %d results, want 0", len(results))
+		}
+		results = ComputeWeeklyAggregates([]FullTransaction{})
+		if len(results) != 0 {
+			t.Errorf("got %d results, want 0 for empty slice", len(results))
+		}
+	})
+
+	t.Run("reimbursement affects credit filter", func(t *testing.T) {
+		// Amount -100 with 60% reimbursement: net = -100 * (1 - 0.6) = -40
+		txns := []FullTransaction{makeTxn("food", "Food", -100.0, 60.0, mon)}
+		results := ComputeWeeklyAggregates(txns)
+		if len(results) != 1 {
+			t.Fatalf("got %d results, want 1", len(results))
+		}
+		if results[0].CreditTotal != 40.0 {
+			t.Errorf("CreditTotal = %v, want 40.0", results[0].CreditTotal)
+		}
+	})
+
+	t.Run("reimbursement affects unbudgeted filter", func(t *testing.T) {
+		// Amount 200 with 25% reimbursement: net = 200 * (1 - 0.25) = 150
+		txns := []FullTransaction{makeTxn("", "Food", 200.0, 25.0, mon)}
+		results := ComputeWeeklyAggregates(txns)
+		if len(results) != 1 {
+			t.Fatalf("got %d results, want 1", len(results))
+		}
+		if results[0].UnbudgetedTotal != 150.0 {
+			t.Errorf("UnbudgetedTotal = %v, want 150.0", results[0].UnbudgetedTotal)
+		}
+	})
+
+	t.Run("full reimbursement zeroes net excludes from both", func(t *testing.T) {
+		txns := []FullTransaction{
+			makeTxn("food", "Food", -100.0, 100.0, mon), // net = 0, not < 0
+			makeTxn("", "Food", 50.0, 100.0, mon),       // net = 0, not > 0
+		}
+		results := ComputeWeeklyAggregates(txns)
+		if len(results) != 1 {
+			t.Fatalf("got %d results, want 1", len(results))
+		}
+		if results[0].CreditTotal != 0.0 {
+			t.Errorf("CreditTotal = %v, want 0.0", results[0].CreditTotal)
+		}
+		if results[0].UnbudgetedTotal != 0.0 {
+			t.Errorf("UnbudgetedTotal = %v, want 0.0", results[0].UnbudgetedTotal)
 		}
 	})
 }
