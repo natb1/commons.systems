@@ -37,8 +37,8 @@ interface RowParts {
   timestampAttr: string;
   reimbursementAttr: string;
   categoryAttr: string;
-  hasBudgetAttr: string;
   netAmountAttr: string;
+  budgetNameAttr: string;
   detailDl: string;
 }
 
@@ -72,8 +72,8 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
   const timestampAttr = editable && txn.timestamp ? ` data-timestamp="${txn.timestamp.toMillis()}"` : "";
   const reimbursementAttr = editable ? ` data-reimbursement="${txn.reimbursement}"` : "";
   const categoryAttr = ` data-category="${escapeHtml(txn.category)}"`;
-  const hasBudgetAttr = ` data-has-budget="${txn.budget !== null}"`;
   const netAmountAttr = ` data-net-amount="${computeNetAmount(txn.amount, txn.reimbursement)}"`;
+  const budgetNameAttr = ` data-budget-name="${escapeHtml(budgetName)}"`;
   const detailDl = `<dl>
         <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
         <dt>Institution</dt><dd>${escapeHtml(txn.institution)}</dd>
@@ -84,7 +84,7 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
       </dl>`;
-  return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, categoryAttr, hasBudgetAttr, netAmountAttr, detailDl };
+  return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, categoryAttr, netAmountAttr, budgetNameAttr, detailDl };
 }
 
 interface RenderRowOptions {
@@ -99,7 +99,7 @@ function renderRow(opts: RenderRowOptions): string {
   const { txn, groupName, editable, budgetIdToName, balance } = opts;
   const p = buildRowParts(txn, editable, budgetIdToName, balance, groupName);
 
-  return `<details class="expand-row txn-row"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.hasBudgetAttr}${p.netAmountAttr}>
+  return `<details class="expand-row txn-row"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.netAmountAttr}${p.budgetNameAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(txn.description)}</span>
@@ -137,7 +137,7 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
     </div>`
   ).join("\n");
 
-  return `<details class="expand-row txn-row normalized-group"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.hasBudgetAttr}${p.netAmountAttr}>
+  return `<details class="expand-row txn-row normalized-group"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.netAmountAttr}${p.budgetNameAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(description)}</span>
@@ -156,7 +156,14 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
   </details>`;
 }
 
-function serializeChartTransactions(transactions: Transaction[]): SerializedChartTransaction[] {
+function resolveBudgetName(budgetId: string | null, budgetIdToName: Map<string, string>): string | null {
+  if (budgetId === null) return null;
+  const name = budgetIdToName.get(budgetId);
+  if (name === undefined) throw new DataIntegrityError(`Transaction references unknown budget ID: ${budgetId}`);
+  return name;
+}
+
+function serializeChartTransactions(transactions: Transaction[], budgetIdToName: Map<string, string>): SerializedChartTransaction[] {
   return transactions
     .filter(t => t.normalizedId === null || t.normalizedPrimary)
     .map(t => ({
@@ -164,15 +171,17 @@ function serializeChartTransactions(transactions: Transaction[]): SerializedChar
       amount: t.amount,
       reimbursement: t.reimbursement,
       timestampMs: t.timestamp ? t.timestamp.toMillis() : null,
-      hasBudget: t.budget !== null,
+      budgetName: resolveBudgetName(t.budget, budgetIdToName),
     }));
 }
 
-function renderCategorySankey(transactions: Transaction[]): string {
-  const chartData = serializeChartTransactions(transactions);
+function renderCategorySankey(transactions: Transaction[], budgets: Budget[]): string {
+  const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
+  const chartData = serializeChartTransactions(transactions, budgetIdToName);
   const json = JSON.stringify(chartData).replace(/</g, "\\u003c");
   const categoryOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))));
-  return `<div id="sankey-controls" data-category-options="${categoryOpts}">
+  const budgetOpts = escapeHtml(JSON.stringify(uniqueSorted(budgets.map(b => b.name))));
+  return `<div id="sankey-controls" data-category-options="${categoryOpts}" data-budget-options="${budgetOpts}">
       <fieldset id="sankey-mode">
         <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
         <label><input type="radio" name="sankey-mode" value="credits"> Credits</label>
@@ -180,6 +189,7 @@ function renderCategorySankey(transactions: Transaction[]): string {
       <label id="unbudgeted-toggle"><input type="checkbox" id="sankey-unbudgeted"> Unbudgeted only</label>
       <label id="card-payment-toggle"><input type="checkbox" id="sankey-card-payment"> Show card payments</label>
       <label id="category-filter-label">Category: <input type="text" id="sankey-category-filter" data-autocomplete></label>
+      <label id="budget-filter-label">Budget: <input type="text" id="sankey-budget-filter" data-autocomplete></label>
       <label>Weeks: <input type="number" id="sankey-weeks" value="12" min="1" max="104"></label>
       <label>Ending week: <input type="range" id="sankey-end-week"> <span id="sankey-end-label"></span></label>
     </div>
@@ -319,7 +329,7 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
     ]);
     transactions.sort(compareByTimestampDesc);
     try {
-      chartHtml = renderCategorySankey(transactions);
+      chartHtml = renderCategorySankey(transactions, budgets);
     } catch (chartError) {
       if (chartError instanceof TypeError || chartError instanceof ReferenceError
           || chartError instanceof DataIntegrityError || chartError instanceof RangeError) throw chartError;

@@ -176,6 +176,8 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   const allWeekMs = allWeeks.map(w => w.ms);
   let anchorMs = allWeeks.length > 0 ? allWeeks[allWeeks.length - 1].ms : 0;
 
+  const excludedBudgets = new Set<string>();
+
   function render(): void {
     const windowSet = filterToWindow(allWeekMs, anchorMs);
     const windowedPeriods = periods.filter(p => windowSet.has(toSundayEntry(p.periodStart.toDate()).ms));
@@ -185,7 +187,18 @@ export function hydrateBudgetChart(container: HTMLElement): void {
     renderBudgetPieChart(pieEl, { budgets, averageWeeklyCredits });
 
     const containerWidth = container.clientWidth || 640;
-    renderPerBudgetAreaChart(areaEl, { data: windowedTrend, containerWidth, panelWidth });
+    renderPerBudgetAreaChart(areaEl, {
+      data: windowedTrend,
+      containerWidth,
+      panelWidth,
+      excludedBudgets,
+      onToggleBudget(budgetName: string) {
+        if (excludedBudgets.has(budgetName)) excludedBudgets.delete(budgetName);
+        else excludedBudgets.add(budgetName);
+        render();
+        reattachScrollSync();
+      },
+    });
   }
 
   render();
