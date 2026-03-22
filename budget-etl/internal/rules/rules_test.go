@@ -111,12 +111,53 @@ func TestMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.rule.Match(tt.desc, tt.institution, tt.account, tt.amount)
+			got := tt.rule.Match(tt.desc, tt.institution, tt.account, "", tt.amount)
 			if got != tt.want {
 				t.Errorf("Match() = %v, want %v", got, tt.want)
 			}
 		})
 	}
+
+	t.Run("matchCategory exact match", func(t *testing.T) {
+		r := Rule{Pattern: "", MatchCategory: "Food"}
+		if !r.Match("anything", "", "", "Food", 0) {
+			t.Error("expected match for exact category")
+		}
+	})
+
+	t.Run("matchCategory prefix match", func(t *testing.T) {
+		r := Rule{Pattern: "", MatchCategory: "Food"}
+		if !r.Match("anything", "", "", "Food:Coffee", 0) {
+			t.Error("expected match for category prefix")
+		}
+	})
+
+	t.Run("matchCategory rejects non-matching category", func(t *testing.T) {
+		r := Rule{Pattern: "", MatchCategory: "Food"}
+		if r.Match("anything", "", "", "Housing", 0) {
+			t.Error("expected no match for different category")
+		}
+	})
+
+	t.Run("matchCategory with pattern requires both", func(t *testing.T) {
+		r := Rule{Pattern: "starbucks", MatchCategory: "Food"}
+		if !r.Match("STARBUCKS COFFEE", "", "", "Food:Coffee", 0) {
+			t.Error("expected match when both pattern and category match")
+		}
+		if r.Match("STARBUCKS COFFEE", "", "", "Housing", 0) {
+			t.Error("expected no match when category doesn't match")
+		}
+		if r.Match("UNKNOWN", "", "", "Food:Coffee", 0) {
+			t.Error("expected no match when pattern doesn't match")
+		}
+	})
+
+	t.Run("matchCategory does not match partial prefix", func(t *testing.T) {
+		r := Rule{Pattern: "", MatchCategory: "Food"}
+		if r.Match("anything", "", "", "FoodTruck", 0) {
+			t.Error("expected no match for partial prefix without colon separator")
+		}
+	})
 }
 
 func TestApplyCategorization(t *testing.T) {

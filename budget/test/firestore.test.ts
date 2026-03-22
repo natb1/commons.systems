@@ -1012,6 +1012,8 @@ describe("getRules", () => {
       account: "Checking",
       minAmount: null,
       maxAmount: null,
+      excludeCategory: null,
+      matchCategory: null,
       groupId: "household",
     }]);
   });
@@ -1062,6 +1064,10 @@ describe("createRule", () => {
       priority: 10,
       institution: null,
       account: null,
+      minAmount: null,
+      maxAmount: null,
+      excludeCategory: null,
+      matchCategory: null,
     });
     expect(id).toBe("new-rule-id");
     expect(mockAddDoc).toHaveBeenCalledWith("mock-collection-ref", {
@@ -1071,12 +1077,16 @@ describe("createRule", () => {
       priority: 10,
       institution: null,
       account: null,
+      minAmount: null,
+      maxAmount: null,
+      excludeCategory: null,
+      matchCategory: null,
       groupId: "household",
       memberEmails: ["a@b.com"],
     });
   });
 
-  it("rejects empty pattern", async () => {
+  it("rejects empty pattern when matchCategory is also empty", async () => {
     await expect(createRule("g", ["a@b.com"], {
       type: "categorization",
       pattern: "",
@@ -1084,7 +1094,11 @@ describe("createRule", () => {
       priority: 10,
       institution: null,
       account: null,
-    })).rejects.toThrow("pattern cannot be empty");
+      minAmount: null,
+      maxAmount: null,
+      excludeCategory: null,
+      matchCategory: null,
+    })).rejects.toThrow("pattern or matchCategory is required");
   });
 
   it("rejects empty target", async () => {
@@ -1095,6 +1109,10 @@ describe("createRule", () => {
       priority: 10,
       institution: null,
       account: null,
+      minAmount: null,
+      maxAmount: null,
+      excludeCategory: null,
+      matchCategory: null,
     })).rejects.toThrow("target cannot be empty");
   });
 });

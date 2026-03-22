@@ -12,17 +12,19 @@ import (
 
 // Rule defines a categorization or budget assignment rule.
 type Rule struct {
-	ID            string
-	Type          string // "categorization" or "budget_assignment"
-	Pattern       string // case-insensitive substring to match against description
-	Target        string // categorization: category path (e.g. "Food:Coffee"); budget_assignment: budget ID
-	Priority      int    // lower number = higher priority
-	Institution   string // optional: restrict to this institution
-	Account       string // optional: restrict to this account
-	MinAmount     int64  // optional: minimum amount in cents (inclusive)
-	MaxAmount     int64  // optional: maximum amount in cents (inclusive)
-	HasMinAmount  bool
-	HasMaxAmount  bool
+	ID              string
+	Type            string // "categorization" or "budget_assignment"
+	Pattern         string // case-insensitive substring to match against description
+	Target          string // categorization: category path (e.g. "Food:Coffee"); budget_assignment: budget ID
+	Priority        int    // lower number = higher priority
+	Institution     string // optional: restrict to this institution
+	Account         string // optional: restrict to this account
+	MinAmount       int64  // optional: minimum amount in cents (inclusive)
+	MaxAmount       int64  // optional: maximum amount in cents (inclusive)
+	HasMinAmount    bool
+	HasMaxAmount    bool
+	ExcludeCategory string // optional: reject transactions whose category equals or starts with this prefix
+	MatchCategory   string // optional: require category equals or starts with this prefix
 }
 
 // matchFields checks whether a pattern/institution/account filter matches the
@@ -44,7 +46,9 @@ func matchFields(pattern, ruleInstitution, ruleAccount, description, institution
 
 // Match returns true if the rule matches the given transaction fields.
 // Amount is in cents. Amount filtering is applied after pattern/institution/account matching.
-func (r Rule) Match(description, institution, account string, amount int64) bool {
+// When ExcludeCategory is non-empty, transactions whose category equals or starts with
+// ExcludeCategory+":" are rejected.
+func (r Rule) Match(description, institution, account, category string, amount int64) bool {
 	if !matchFields(r.Pattern, r.Institution, r.Account, description, institution, account) {
 		return false
 	}
@@ -53,6 +57,16 @@ func (r Rule) Match(description, institution, account string, amount int64) bool
 	}
 	if r.HasMaxAmount && amount > r.MaxAmount {
 		return false
+	}
+	if r.ExcludeCategory != "" {
+		if category == r.ExcludeCategory || strings.HasPrefix(category, r.ExcludeCategory+":") {
+			return false
+		}
+	}
+	if r.MatchCategory != "" {
+		if category != r.MatchCategory && !strings.HasPrefix(category, r.MatchCategory+":") {
+			return false
+		}
 	}
 	return true
 }
@@ -85,7 +99,7 @@ func ApplyCategorization(txns []store.TransactionData, rules []Rule) error {
 		}
 		matched := false
 		for _, r := range catRules {
-			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account, txns[i].Amount) {
+			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account, txns[i].Category, txns[i].Amount) {
 				txns[i].Category = r.Target
 				matched = true
 				break
@@ -116,7 +130,7 @@ func ApplyBudgetAssignment(txns []store.TransactionData, rules []Rule) {
 			continue
 		}
 		for _, r := range budgetRules {
-			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account, txns[i].Amount) {
+			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account, txns[i].Category, txns[i].Amount) {
 				txns[i].Budget = r.Target
 				break
 			}

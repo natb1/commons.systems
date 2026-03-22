@@ -71,7 +71,8 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
   const timestampAttr = editable && txn.timestamp ? ` data-timestamp="${txn.timestamp.toMillis()}"` : "";
   const reimbursementAttr = editable ? ` data-reimbursement="${txn.reimbursement}"` : "";
   const categoryAttr = ` data-category="${escapeHtml(txn.category)}"`;
-  const hasBudgetAttr = ` data-has-budget="${txn.budget !== null}"`;
+  const hasNonDefaultBudget = txn.budget !== null && budgetName !== "default";
+  const hasBudgetAttr = ` data-has-budget="${hasNonDefaultBudget}"`;
   const netAmountAttr = ` data-net-amount="${computeNetAmount(txn.amount, txn.reimbursement)}"`;
   const detailDl = `<dl>
         <dt>Date</dt><dd>${formatTimestamp(txn.timestamp)}</dd>
@@ -155,7 +156,7 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
   </details>`;
 }
 
-function serializeChartTransactions(transactions: Transaction[]): SerializedChartTransaction[] {
+function serializeChartTransactions(transactions: Transaction[], budgetIdToName: Map<string, string>): SerializedChartTransaction[] {
   return transactions
     .filter(t => t.normalizedId === null || t.normalizedPrimary)
     .map(t => ({
@@ -163,12 +164,13 @@ function serializeChartTransactions(transactions: Transaction[]): SerializedChar
       amount: t.amount,
       reimbursement: t.reimbursement,
       timestampMs: t.timestamp ? t.timestamp.toMillis() : null,
-      hasBudget: t.budget !== null,
+      hasBudget: t.budget !== null && budgetIdToName.get(t.budget) !== "default",
     }));
 }
 
-function renderCategorySankey(transactions: Transaction[]): string {
-  const chartData = serializeChartTransactions(transactions);
+function renderCategorySankey(transactions: Transaction[], budgets: Budget[]): string {
+  const budgetIdToName = new Map(budgets.map(b => [b.id, b.name]));
+  const chartData = serializeChartTransactions(transactions, budgetIdToName);
   const json = JSON.stringify(chartData).replace(/</g, "\\u003c");
   const categoryOpts = escapeHtml(JSON.stringify(uniqueSorted(transactions.map(t => t.category))));
   return `<div id="sankey-controls" data-category-options="${categoryOpts}">
@@ -318,7 +320,7 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
     ]);
     transactions.sort(compareByTimestampDesc);
     try {
-      chartHtml = renderCategorySankey(transactions);
+      chartHtml = renderCategorySankey(transactions, budgets);
     } catch (chartError) {
       if (chartError instanceof TypeError || chartError instanceof ReferenceError) throw chartError;
       console.error("Chart serialization failed:", chartError);

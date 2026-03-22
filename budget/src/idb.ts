@@ -81,6 +81,8 @@ export interface IdbRule {
   account: string | null;
   minAmount: number | null;
   maxAmount: number | null;
+  excludeCategory: string | null;
+  matchCategory: string | null;
 }
 
 export interface IdbNormalizationRule {

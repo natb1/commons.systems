@@ -191,7 +191,6 @@ service cloud.firestore {
     function isValidRuleData() {
       return request.resource.data.type in ["categorization", "budget_assignment"]
         && request.resource.data.pattern is string
-        && request.resource.data.pattern.size() > 0
         && request.resource.data.target is string
         && request.resource.data.target.size() > 0
         && request.resource.data.priority is number
@@ -199,7 +198,9 @@ service cloud.firestore {
         && (!('account' in request.resource.data) || request.resource.data.account is string || request.resource.data.account == null)
         && (!('minAmount' in request.resource.data) || request.resource.data.minAmount is number || request.resource.data.minAmount == null)
         && (!('maxAmount' in request.resource.data) || request.resource.data.maxAmount is number || request.resource.data.maxAmount == null)
-        && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'minAmount', 'maxAmount', 'groupId', 'memberEmails']);
+        && (!('excludeCategory' in request.resource.data) || request.resource.data.excludeCategory is string || request.resource.data.excludeCategory == null)
+        && (!('matchCategory' in request.resource.data) || request.resource.data.matchCategory is string || request.resource.data.matchCategory == null)
+        && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'minAmount', 'maxAmount', 'excludeCategory', 'matchCategory', 'groupId', 'memberEmails']);
     }
 
     // Rules are scoped to group members via a denormalized `memberEmails` field.

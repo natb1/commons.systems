@@ -41,8 +41,11 @@ function renderRow(budget: Budget, editable: boolean, avg: PerBudgetAverage | un
   const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.weeklyAllowance))}" min="0" aria-label="Allowance"${dis}>`;
   const periodCell = renderPeriodCell(budget, editable);
   const rolloverCell = renderRolloverCell(budget, editable);
-  const avg12 = avg ? formatCurrency(avg.avg12) : "$0";
-  const avg52 = avg ? formatCurrency(avg.avg52) : "$0";
+  const periodScale = budget.allowancePeriod === "monthly" ? 52 / 12
+    : budget.allowancePeriod === "quarterly" ? 52 / 4
+    : 1;
+  const avg12 = avg ? formatCurrency(avg.avg12 * periodScale) : "$0";
+  const avg52 = avg ? formatCurrency(avg.avg52 * periodScale) : "$0";
 
   return `<div class="budget-row"${idAttr}>
     <span>${nameCell}</span>
@@ -68,8 +71,8 @@ function renderBudgetTable(budgets: Budget[], authorized: boolean, averages: Map
         <span>Allowance</span>
         <span>Period</span>
         <span>Rollover</span>
-        <span>12w Avg</span>
-        <span>52w Avg</span>
+        <span class="avg-col">12w Avg</span>
+        <span class="avg-col">52w Avg</span>
       </div>
       ${rows}
     </div>`;

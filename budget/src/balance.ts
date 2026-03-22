@@ -42,8 +42,7 @@ function filterCreditTransactions(transactions: Transaction[]): TimestampedTrans
     (t): t is TimestampedTransaction =>
       computeNetAmount(t.amount, t.reimbursement) < 0
       && t.timestamp !== null
-      && (t.normalizedId === null || t.normalizedPrimary)
-      && !isCardPaymentCategory(t.category),
+      && (t.normalizedId === null || t.normalizedPrimary),
   );
 }
 
@@ -438,13 +437,15 @@ export function computePerBudgetTrend(
   const { weeks: periodsWeeks } = indexPeriodsByWeek(periods);
   const weekMap = new Map(periodsWeeks);
 
-  // Also include weeks from unbudgeted transactions
+  // Also include weeks from unbudgeted transactions (excluding card payments,
+  // which are balance transfers, not spending)
   const unbudgetedTxns = transactions.filter(
     (t): t is Transaction & { timestamp: Timestamp } =>
       t.budget === null
       && t.timestamp !== null
       && (t.normalizedId === null || t.normalizedPrimary)
-      && computeNetAmount(t.amount, t.reimbursement) > 0,
+      && computeNetAmount(t.amount, t.reimbursement) > 0
+      && !isCardPaymentCategory(t.category),
   );
   for (const t of unbudgetedTxns) {
     const entry = toSundayEntry(t.timestamp.toDate());
@@ -512,6 +513,12 @@ export interface PerBudgetAverage {
   readonly avg52: number;
 }
 
+/** Return the number of calendar weeks spanned by a slice of [ms, label] entries. */
+function calendarWeekSpan(slice: [number, string][]): number {
+  if (slice.length <= 1) return slice.length;
+  return Math.round((slice[slice.length - 1][0] - slice[0][0]) / MS_PER_WEEK) + 1;
+}
+
 /** Compute per-budget average weekly spending over trailing 12-week and 52-week windows. */
 export function computePerBudgetAverageSpending(
   budgets: Budget[],
@@ -526,9 +533,9 @@ export function computePerBudgetAverageSpending(
       continue;
     }
     const trailing12 = weeks.slice(-12);
-    const avg12 = trailing12.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / trailing12.length;
+    const avg12 = trailing12.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / calendarWeekSpan(trailing12);
     const trailing52 = weeks.slice(-52);
-    const avg52 = trailing52.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / trailing52.length;
+    const avg52 = trailing52.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / calendarWeekSpan(trailing52);
     result.set(budget.id, { avg12, avg52 });
   }
   return result;
@@ -550,11 +557,9 @@ function endOfWeekMs(timestampMs: number): number {
 /**
  * Compute average weekly credits over the trailing 12-week window ending at the
  * Monday after the latest credit transaction. Credit transactions are identified
- * by negative net amount. Transfer:CardPayment transactions are excluded even
- * when negative, to avoid double-counting card payment flows. Non-primary
- * normalized duplicates and null-timestamp transactions are excluded. Returns 0
- * when no qualifying credit transactions exist. Values are negated before
- * summing to produce positive display amounts.
+ * by negative net amount. Non-primary normalized duplicates and null-timestamp
+ * transactions are excluded. Returns 0 when no qualifying credit transactions
+ * exist. Values are negated before summing to produce positive display amounts.
  */
 export function computeAverageWeeklyCredits(transactions: Transaction[]): number {
   const creditTxns = filterCreditTransactions(transactions);

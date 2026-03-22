@@ -213,13 +213,15 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 	ruleSet := make([]rules.Rule, len(ruleDocs))
 	for i, rd := range ruleDocs {
 		ruleSet[i] = rules.Rule{
-			ID:          rd.ID,
-			Type:        rd.Type,
-			Pattern:     rd.Pattern,
-			Target:      rd.Target,
-			Priority:    rd.Priority,
-			Institution: rd.Institution,
-			Account:     rd.Account,
+			ID:              rd.ID,
+			Type:            rd.Type,
+			Pattern:         rd.Pattern,
+			Target:          rd.Target,
+			Priority:        rd.Priority,
+			Institution:     rd.Institution,
+			Account:         rd.Account,
+			ExcludeCategory: rd.ExcludeCategory,
+			MatchCategory:   rd.MatchCategory,
 		}
 		if rd.MinAmount != nil {
 			ruleSet[i].HasMinAmount = true
@@ -399,13 +401,15 @@ func convertExportRules(exportRules []export.Rule) []rules.Rule {
 	ruleSet := make([]rules.Rule, len(exportRules))
 	for i, r := range exportRules {
 		ruleSet[i] = rules.Rule{
-			ID:          r.ID,
-			Type:        r.Type,
-			Pattern:     r.Pattern,
-			Target:      r.Target,
-			Priority:    r.Priority,
-			Institution: r.Institution,
-			Account:     r.Account,
+			ID:              r.ID,
+			Type:            r.Type,
+			Pattern:         r.Pattern,
+			Target:          r.Target,
+			Priority:        r.Priority,
+			Institution:     r.Institution,
+			Account:         r.Account,
+			ExcludeCategory: r.ExcludeCategory,
+			MatchCategory:   r.MatchCategory,
 		}
 		if r.MinAmount != nil {
 			ruleSet[i].HasMinAmount = true

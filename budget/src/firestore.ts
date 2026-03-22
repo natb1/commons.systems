@@ -431,6 +431,8 @@ export interface Rule {
   readonly account: string | null;
   readonly minAmount: number | null;
   readonly maxAmount: number | null;
+  readonly excludeCategory: string | null;
+  readonly matchCategory: string | null;
   readonly groupId: GroupId | null;
 }
 
@@ -455,6 +457,8 @@ export async function getRules(groupId: GroupId | null, email?: string): Promise
       account: optionalString(data.account, "account"),
       minAmount: optionalNumber(data.minAmount, "minAmount"),
       maxAmount: optionalNumber(data.maxAmount, "maxAmount"),
+      excludeCategory: optionalString(data.excludeCategory, "excludeCategory"),
+      matchCategory: optionalString(data.matchCategory, "matchCategory"),
       groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     };
   });
@@ -467,7 +471,7 @@ export async function createRule(
 ): Promise<RuleId> {
   requireRuleType(fields.type);
   if (!Number.isFinite(fields.priority)) throw new RangeError("Rule priority must be a finite number");
-  if (!fields.pattern) throw new Error("Rule pattern cannot be empty");
+  if (!fields.pattern && !fields.matchCategory) throw new Error("Rule pattern or matchCategory is required");
   if (!fields.target) throw new Error("Rule target cannot be empty");
   const path = nsCollectionPath(NAMESPACE, "rules");
   const ref = await addDoc(collection(db, path), {
@@ -479,6 +483,8 @@ export async function createRule(
     account: fields.account,
     minAmount: fields.minAmount,
     maxAmount: fields.maxAmount,
+    excludeCategory: fields.excludeCategory,
+    matchCategory: fields.matchCategory,
     groupId,
     memberEmails,
   });
@@ -487,7 +493,7 @@ export async function createRule(
 
 export async function updateRule(
   ruleId: RuleId,
-  fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount">>,
+  fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount" | "excludeCategory" | "matchCategory">>,
 ): Promise<void> {
   requireDocId(ruleId, "rule");
   if (Object.keys(fields).length === 0) return;

@@ -306,15 +306,17 @@ func TransactionDocID(statementID, transactionID string) string {
 
 // RuleDoc holds a rule document read from Firestore.
 type RuleDoc struct {
-	ID          string
-	Type        string
-	Pattern     string
-	Target      string
-	Priority    int
-	Institution string
-	Account     string
-	MinAmount   *float64
-	MaxAmount   *float64
+	ID              string
+	Type            string
+	Pattern         string
+	Target          string
+	Priority        int
+	Institution     string
+	Account         string
+	MinAmount       *float64
+	MaxAmount       *float64
+	ExcludeCategory string
+	MatchCategory   string
 }
 
 // LoadRules reads rules from budget/{env}/rules, filtered by groupId.
@@ -377,6 +379,16 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 		} else if v, ok := d["maxAmount"].(int64); ok {
 			f := float64(v)
 			r.MaxAmount = &f
+		}
+		if v, ok := d["excludeCategory"].(string); ok {
+			r.ExcludeCategory = v
+		} else if d["excludeCategory"] != nil {
+			return nil, fmt.Errorf("rule %s: field 'excludeCategory' is not a string (got %T)", doc.Ref.ID, d["excludeCategory"])
+		}
+		if v, ok := d["matchCategory"].(string); ok {
+			r.MatchCategory = v
+		} else if d["matchCategory"] != nil {
+			return nil, fmt.Errorf("rule %s: field 'matchCategory' is not a string (got %T)", doc.Ref.ID, d["matchCategory"])
 		}
 		result = append(result, r)
 	}

@@ -81,6 +81,8 @@ const idbRules = [
     account: null,
     minAmount: null,
     maxAmount: null,
+    excludeCategory: null,
+    matchCategory: null,
   },
 ];
 

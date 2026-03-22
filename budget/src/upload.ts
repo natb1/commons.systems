@@ -89,6 +89,8 @@ interface RawRule {
   account: string;
   minAmount?: number;
   maxAmount?: number;
+  excludeCategory?: string;
+  matchCategory?: string;
 }
 
 interface RawNormalizationRule {
@@ -255,6 +257,8 @@ export function parseUploadedJson(text: string): ParsedUpload {
     account: emptyToNull(r.account ?? ""),
     minAmount: r.minAmount ?? null,
     maxAmount: r.maxAmount ?? null,
+    excludeCategory: emptyToNull(r.excludeCategory ?? ""),
+    matchCategory: emptyToNull(r.matchCategory ?? ""),
     groupId: null as GroupId | null,
   }));
 
@@ -346,6 +350,8 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       account: r.account,
       minAmount: r.minAmount,
       maxAmount: r.maxAmount,
+      excludeCategory: r.excludeCategory,
+      matchCategory: r.matchCategory,
     })),
     normalizationRules: parsed.normalizationRules.map((r) => ({
       id: r.id,

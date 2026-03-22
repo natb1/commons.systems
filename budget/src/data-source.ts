@@ -51,7 +51,7 @@ export interface DataSource {
   createRule(fields: Omit<Rule, "id" | "groupId">): Promise<RuleId>;
   updateRule(
     id: RuleId,
-    fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount">>,
+    fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount" | "excludeCategory" | "matchCategory">>,
   ): Promise<void>;
   deleteRule(id: RuleId): Promise<void>;
   createNormalizationRule(fields: Omit<NormalizationRule, "id" | "groupId">): Promise<string>;
@@ -193,6 +193,8 @@ function toRule(row: IdbRule): Rule {
     account: row.account,
     minAmount: row.minAmount,
     maxAmount: row.maxAmount,
+    excludeCategory: row.excludeCategory,
+    matchCategory: row.matchCategory,
     groupId: null as GroupId | null,
   };
 }
@@ -326,6 +328,8 @@ export class IdbDataSource implements DataSource {
       account: fields.account,
       minAmount: fields.minAmount,
       maxAmount: fields.maxAmount,
+      excludeCategory: fields.excludeCategory,
+      matchCategory: fields.matchCategory,
     };
     await put("rules", record as unknown as Record<string, unknown>);
     return id;
@@ -333,7 +337,7 @@ export class IdbDataSource implements DataSource {
 
   async updateRule(
     id: RuleId,
-    fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount">>,
+    fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount" | "excludeCategory" | "matchCategory">>,
   ): Promise<void> {
     await updateRecord<IdbRule>("rules", id, "Rule", fields);
   }

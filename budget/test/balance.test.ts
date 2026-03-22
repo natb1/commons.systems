@@ -700,11 +700,11 @@ describe("computeAverageWeeklyCredits", () => {
     expect(computeAverageWeeklyCredits(txnsWithExcluded)).toBe(100);
   });
 
-  it("excludes Transfer:CardPayment transactions", () => {
+  it("includes Transfer:CardPayment transactions in credits", () => {
     const creditTxn = makeTxn({ id: "credit-1", amount: -1200, category: "Travel:Reimbursement", timestamp: ts("2025-01-07"), budget: null });
     const cardPaymentTxn = makeTxn({ id: "card-1", amount: -500, category: "Transfer:CardPayment", timestamp: ts("2025-01-07"), budget: null });
-    // Only credit-1 should count: 1200 over 12 weeks = 100
-    expect(computeAverageWeeklyCredits([creditTxn, cardPaymentTxn])).toBeCloseTo(100);
+    // Both count: (1200 + 500) over 12 weeks = 141.67
+    expect(computeAverageWeeklyCredits([creditTxn, cardPaymentTxn])).toBeCloseTo(141.67, 1);
   });
 });
 
@@ -795,7 +795,7 @@ describe("computeAggregateTrend", () => {
     expect(result[1].avg12Credits).toBe(900);
   });
 
-  it("excludes Transfer:CardPayment from avg12Credits", () => {
+  it("includes Transfer:CardPayment in avg12Credits", () => {
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
     ];
@@ -804,10 +804,10 @@ describe("computeAggregateTrend", () => {
       makeTxn({ id: "card-1", category: "Transfer:CardPayment", amount: -500, timestamp: ts("2025-01-07"), budget: null }),
     ];
     const result = computeAggregateTrend(periods, txns);
-    expect(result[0].avg12Credits).toBe(1200);
+    expect(result[0].avg12Credits).toBe(1700);
   });
 
-  it("excludes Transfer:CardPayment subcategories (e.g. :Amex) from avg12Credits", () => {
+  it("includes Transfer:CardPayment subcategories (e.g. :Amex) in avg12Credits", () => {
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
     ];
@@ -816,7 +816,7 @@ describe("computeAggregateTrend", () => {
       makeTxn({ id: "card-amex", category: "Transfer:CardPayment:Amex", amount: -150, timestamp: ts("2025-01-07"), budget: null }),
     ];
     const result = computeAggregateTrend(periods, txns);
-    expect(result[0].avg12Credits).toBe(1200);
+    expect(result[0].avg12Credits).toBe(1350);
   });
 });
 
@@ -1443,6 +1443,23 @@ describe("computePerBudgetAverageSpending", () => {
     const result = computePerBudgetAverageSpending(budgets, periods);
     expect(result.get("food")!.avg12).toBe(100);
     expect(result.get("fun")!.avg12).toBe(50);
+  });
+
+  it("divides by calendar week span, not count of non-zero weeks (sparse divisor fix)", () => {
+    const budget = makeBudget({ id: "transport", name: "Transport" });
+    // 2 periods spanning a large gap: week of Jan 6 and week of Aug 4 (~31 weeks apart)
+    const periods = [
+      makePeriod({ id: "p1", budgetId: "transport", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 200 }),
+      makePeriod({ id: "p2", budgetId: "transport", periodStart: ts("2025-08-04"), periodEnd: ts("2025-08-11"), total: 100 }),
+    ];
+    const result = computePerBudgetAverageSpending([budget], periods);
+    const avg = result.get("transport")!;
+    // Calendar span: round((Aug 4 - Jan 6) / MS_PER_WEEK) + 1 = 31 weeks
+    // Without the fix, avg12 would be (200+100)/2 = 150 (dividing by 2 non-zero weeks)
+    // With the fix, avg12 = (200+100)/31 ≈ 9.68
+    const spanWeeks = Math.round((new Date("2025-08-04").getTime() - new Date("2025-01-06").getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+    expect(avg.avg12).toBeCloseTo(300 / spanWeeks);
+    expect(avg.avg52).toBeCloseTo(300 / spanWeeks);
   });
 
   it("12-week window uses only trailing 12 weeks when more data exists", () => {
