@@ -1,4 +1,5 @@
 import * as Plot from "@observablehq/plot";
+import { MS_PER_WEEK } from "../balance.js";
 
 export const AXIS_WIDTH = 50;
 export const MARGIN_RIGHT = 20;
@@ -35,7 +36,19 @@ export function getThemeFg(container: HTMLElement): string {
 }
 
 export function computePanelWidth(budgetCount: number): number {
-  return Math.max(budgetCount * 60 + 40, 120);
+  return Math.max(budgetCount * 30 + 30, 80);
+}
+
+const WINDOW_WEEKS = 12;
+
+/** Return the subset of weekTimestamps in (anchorMs - WINDOW_WEEKS weeks, anchorMs]. */
+export function filterToWindow(weekTimestamps: readonly number[], anchorMs: number): Set<number> {
+  const cutoff = anchorMs - WINDOW_WEEKS * MS_PER_WEEK;
+  const result = new Set<number>();
+  for (const ms of weekTimestamps) {
+    if (ms > cutoff && ms <= anchorMs) result.add(ms);
+  }
+  return result;
 }
 
 /** Assemble the standard chart-layout DOM: fixed y-axis + horizontally scrollable chart body. */

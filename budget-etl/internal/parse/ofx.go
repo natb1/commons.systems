@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // OFX 2.x XML structures. We parse only the transaction list from both
@@ -14,6 +15,7 @@ import (
 
 type ofxLedgerBal struct {
 	BalAmt string `xml:"BALAMT"`
+	DtAsOf string `xml:"DTASOF"`
 }
 
 type ofxDoc struct {
@@ -79,6 +81,7 @@ func parseOFX(path string) (ParseResult, error) {
 	}
 
 	var balance int64
+	var balanceDate time.Time
 	bal := doc.BankBal
 	if bal == nil {
 		bal = doc.CCBal
@@ -89,7 +92,14 @@ func parseOFX(path string) (ParseResult, error) {
 			return ParseResult{}, fmt.Errorf("%s: parsing LEDGERBAL BALAMT %q: %w", path, bal.BalAmt, err)
 		}
 		balance = b
+		if bal.DtAsOf != "" {
+			bd, err := parseOFXDate(bal.DtAsOf)
+			if err != nil {
+				return ParseResult{}, fmt.Errorf("%s: parsing LEDGERBAL DTASOF %q: %w", path, bal.DtAsOf, err)
+			}
+			balanceDate = bd
+		}
 	}
 
-	return ParseResult{Transactions: txns, Balance: balance}, nil
+	return ParseResult{Transactions: txns, Balance: balance, BalanceDate: balanceDate}, nil
 }

@@ -3,11 +3,11 @@ import { type Budget, type BudgetId, type BudgetPeriod, type BudgetPeriodId, typ
 import { getActiveDataSource } from "../active-data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize } from "./hydrate-util.js";
-import { renderBudgetChart, type ChartResult } from "./budgets-chart.js";
+import { renderBudgetChart } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
-import { computePanelWidth } from "./chart-util.js";
-import type { PerBudgetPoint } from "../balance.js";
+import { computePanelWidth, filterToWindow } from "./chart-util.js";
+import { toSundayEntry, type PerBudgetPoint } from "../balance.js";
 import type { SerializedBudget } from "./budgets.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
@@ -131,6 +131,19 @@ function reattachScrollSync(): void {
   scrollAbort = result.abort;
 }
 
+/** Collect all unique week timestamps from periods and per-budget trend data, sorted chronologically. */
+function collectAllWeeks(periods: BudgetPeriod[], perBudgetTrend: PerBudgetPoint[]): { label: string; ms: number }[] {
+  const seen = new Map<number, string>();
+  for (const p of periods) {
+    const entry = toSundayEntry(p.periodStart.toDate());
+    if (!seen.has(entry.ms)) seen.set(entry.ms, entry.label);
+  }
+  for (const d of perBudgetTrend) {
+    if (!seen.has(d.weekMs)) seen.set(d.weekMs, d.weekLabel);
+  }
+  return [...seen.entries()].sort((a, b) => a[0] - b[0]).map(([ms, label]) => ({ label, ms }));
+}
+
 export function hydrateBudgetChart(container: HTMLElement): void {
   const budgetsRaw = container.dataset.budgets;
   const periodsRaw = container.dataset.periods;
@@ -139,7 +152,6 @@ export function hydrateBudgetChart(container: HTMLElement): void {
 
   const budgets = deserializeBudgets(budgetsRaw);
   const periods = deserializePeriods(periodsRaw);
-  let chartResult: ChartResult = { weeks: [] };
 
   const pieElOrNull = document.getElementById("budgets-pie");
   if (!pieElOrNull) throw new DataIntegrityError("budgets-pie container not found in page markup");
@@ -160,16 +172,28 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   // Match the bar chart's per-week column width so scroll sync aligns weeks.
   const panelWidth = computePanelWidth(budgets.length);
 
+  const allWeeks = collectAllWeeks(periods, perBudgetTrend);
+  const allWeekMs = allWeeks.map(w => w.ms);
+  let anchorMs = allWeeks.length > 0 ? allWeeks[allWeeks.length - 1].ms : 0;
+
   function render(): void {
-    chartResult = renderBudgetChart(container, { budgets, periods });
+    const windowSet = filterToWindow(allWeekMs, anchorMs);
+    const windowedPeriods = periods.filter(p => windowSet.has(toSundayEntry(p.periodStart.toDate()).ms));
+    const windowedTrend = perBudgetTrend.filter(d => windowSet.has(d.weekMs));
+
+    renderBudgetChart(container, { budgets, periods: windowedPeriods });
     renderBudgetPieChart(pieEl, { budgets, averageWeeklyCredits });
 
     const containerWidth = container.clientWidth || 640;
-    renderPerBudgetAreaChart(areaEl, { data: perBudgetTrend, containerWidth, panelWidth });
+    renderPerBudgetAreaChart(areaEl, { data: windowedTrend, containerWidth, panelWidth });
   }
 
   render();
   reattachScrollSync();
-  wireChartDatePicker("chart-date-picker", () => chartResult, getAllScrollWrappers);
+  wireChartDatePicker("chart-date-picker", allWeeks, (newAnchorMs) => {
+    anchorMs = newAnchorMs;
+    render();
+    reattachScrollSync();
+  });
   wireChartResize(container, render, getAllScrollWrappers, [container, areaEl], reattachScrollSync);
 }

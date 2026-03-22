@@ -186,7 +186,7 @@ describe("buildCategoryTree", () => {
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Food", amount: 50 }),
       txn({ category: "Travel:Reimbursement", amount: -22.99 }),
-    ], "credits");
+    ], { mode: "credits" });
     expect(root.children).toHaveLength(2);
     const income = root.children.find(c => c.name === "Income");
     const travel = root.children.find(c => c.name === "Travel");
@@ -199,7 +199,7 @@ describe("buildCategoryTree", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Food", amount: 50 }),
-    ], "spending");
+    ], { mode: "spending" });
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Food");
     expect(root.value).toBe(50);
@@ -208,13 +208,13 @@ describe("buildCategoryTree", () => {
   it("credits mode excludes positive amounts; spending mode includes them", () => {
     const creditsRoot = buildCategoryTree([
       txn({ category: "Income:Salary", amount: 2400 }),
-    ], "credits");
+    ], { mode: "credits" });
     expect(creditsRoot.value).toBe(0);
     expect(creditsRoot.children).toHaveLength(0);
 
     const spendingRoot = buildCategoryTree([
       txn({ category: "Income:Salary", amount: 2400 }),
-    ], "spending");
+    ], { mode: "spending" });
     expect(spendingRoot.value).toBe(2400);
     expect(spendingRoot.children[0].name).toBe("Income");
   });
@@ -222,7 +222,7 @@ describe("buildCategoryTree", () => {
   it("credits mode with no negative-amount transactions returns empty tree", () => {
     const root = buildCategoryTree([
       txn({ category: "Food", amount: 50 }),
-    ], "credits");
+    ], { mode: "credits" });
     expect(root.value).toBe(0);
     expect(root.children).toHaveLength(0);
   });
@@ -231,7 +231,7 @@ describe("buildCategoryTree", () => {
     const root = buildCategoryTree([
       txn({ category: "Food", amount: 50, hasBudget: true }),
       txn({ category: "Transport", amount: 30, hasBudget: false }),
-    ], "spending", true);
+    ], { mode: "spending", unbudgetedOnly: true });
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Transport");
     expect(root.value).toBe(30);
@@ -241,7 +241,7 @@ describe("buildCategoryTree", () => {
     const root = buildCategoryTree([
       txn({ category: "Food", amount: 50, hasBudget: true }),
       txn({ category: "Transport", amount: 30, hasBudget: false }),
-    ], "spending", false);
+    ], { mode: "spending" });
     expect(root.children).toHaveLength(2);
     expect(root.value).toBe(80);
   });
@@ -250,7 +250,7 @@ describe("buildCategoryTree", () => {
     const root = buildCategoryTree([
       txn({ category: "Food", amount: 50, hasBudget: true }),
       txn({ category: "Transport", amount: 30, hasBudget: true }),
-    ], "spending", true);
+    ], { mode: "spending", unbudgetedOnly: true });
     expect(root.value).toBe(0);
     expect(root.count).toBe(0);
     expect(root.children).toHaveLength(0);
@@ -260,7 +260,7 @@ describe("buildCategoryTree", () => {
     const root = buildCategoryTree([
       txn({ category: "Food", amount: 50 }),
       txn({ category: "Transfer:CardPayment", amount: 200 }),
-    ], "spending", false, false);
+    ], { mode: "spending" });
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Food");
     expect(root.value).toBe(50);
@@ -270,7 +270,7 @@ describe("buildCategoryTree", () => {
     const root = buildCategoryTree([
       txn({ category: "Food", amount: 50 }),
       txn({ category: "Transfer:CardPayment", amount: 200 }),
-    ], "spending", false, true);
+    ], { mode: "spending", showCardPayment: true });
     expect(root.children).toHaveLength(2);
     expect(root.value).toBe(250);
   });
@@ -279,7 +279,7 @@ describe("buildCategoryTree", () => {
     const root = buildCategoryTree([
       txn({ category: "Food", amount: 50 }),
       txn({ category: "Transfer:CardPayment:Amex", amount: 300 }),
-    ], "spending", false, false);
+    ], { mode: "spending" });
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Food");
     expect(root.value).toBe(50);
@@ -290,7 +290,7 @@ describe("buildCategoryTree", () => {
       txn({ category: "Transfer:CardPayment", amount: -200 }),
       txn({ category: "Travel:Reimbursement", amount: -50 }),
     ];
-    const tree = buildCategoryTree(txns, "credits", false, false);
+    const tree = buildCategoryTree(txns, { mode: "credits" });
     expect(tree.value).toBeCloseTo(50);
     expect(tree.children.some(c => c.name === "Transfer")).toBe(false);
   });
@@ -300,7 +300,7 @@ describe("buildCategoryTree", () => {
       txn({ category: "Transfer:CardPayment", amount: -200 }),
       txn({ category: "Travel:Reimbursement", amount: -50 }),
     ];
-    const tree = buildCategoryTree(txns, "credits", false, true);
+    const tree = buildCategoryTree(txns, { mode: "credits", showCardPayment: true });
     expect(tree.value).toBeCloseTo(250);
     expect(tree.children.some(c => c.name === "Transfer")).toBe(true);
   });
@@ -309,7 +309,7 @@ describe("buildCategoryTree", () => {
     const root = buildCategoryTree([
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Income:Freelance", amount: -500 }),
-    ], "credits");
+    ], { mode: "credits" });
     expect(root.value).toBe(2900);
     const income = root.children.find(c => c.name === "Income");
     expect(income).toBeDefined();
@@ -325,7 +325,7 @@ describe("buildCategoryTree", () => {
       txn({ category: "Income:Salary", amount: -2400 }),
       txn({ category: "Income:Freelance", amount: -500 }),
       txn({ category: "Food", amount: 50 }),
-    ], "spending");
+    ], { mode: "spending" });
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Food");
     expect(root.children[0].value).toBe(50);
@@ -335,13 +335,13 @@ describe("buildCategoryTree", () => {
     const creditsRoot = buildCategoryTree([
       txn({ category: "Income:Salary", amount: 2400 }),
       txn({ category: "Income:Freelance", amount: -500 }),
-    ], "credits");
+    ], { mode: "credits" });
     expect(creditsRoot.value).toBe(500);
 
     const spendingRoot = buildCategoryTree([
       txn({ category: "Income:Salary", amount: 2400 }),
       txn({ category: "Income:Freelance", amount: -500 }),
-    ], "spending");
+    ], { mode: "spending" });
     expect(spendingRoot.value).toBe(2400);
   });
 });
@@ -352,7 +352,7 @@ describe("buildCategoryTree with categoryFilter", () => {
       txn({ category: "Food", amount: 50 }),
       txn({ category: "Food:Groceries", amount: 30 }),
       txn({ category: "Travel", amount: 20 }),
-    ], "spending", false, false, "Food");
+    ], { mode: "spending", categoryFilter: "Food" });
     expect(root.value).toBe(80);
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Food");
@@ -363,7 +363,7 @@ describe("buildCategoryTree with categoryFilter", () => {
       txn({ category: "Food", amount: 50 }),
       txn({ category: "Food:Groceries", amount: 30 }),
       txn({ category: "Food:Dining", amount: 20 }),
-    ], "spending", false, false, "Food:Groceries");
+    ], { mode: "spending", categoryFilter: "Food:Groceries" });
     expect(root.value).toBe(30);
     expect(root.children).toHaveLength(1);
     const food = root.children[0];
@@ -376,7 +376,7 @@ describe("buildCategoryTree with categoryFilter", () => {
     const root = buildCategoryTree([
       txn({ category: "Food", amount: 50 }),
       txn({ category: "Travel", amount: 20 }),
-    ], "spending", false, false, "");
+    ], { mode: "spending" });
     expect(root.value).toBe(70);
     expect(root.children).toHaveLength(2);
   });
@@ -384,7 +384,7 @@ describe("buildCategoryTree with categoryFilter", () => {
   it('exact match works: category "Food" with filter "Food"', () => {
     const root = buildCategoryTree([
       txn({ category: "Food", amount: 50 }),
-    ], "spending", false, false, "Food");
+    ], { mode: "spending", categoryFilter: "Food" });
     expect(root.value).toBe(50);
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Food");

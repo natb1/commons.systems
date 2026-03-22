@@ -36,6 +36,8 @@ function stmt(overrides: Partial<Statement> = {}): Statement {
     account: "Checking",
     balance: 1000,
     period: "2025-02",
+    balanceDate: null,
+    lastTransactionDate: null,
     groupId: null,
     ...overrides,
   };
@@ -50,24 +52,18 @@ describe("accounts page smoke — multi-account aggregation", () => {
     vi.clearAllMocks();
   });
 
-  it("aggregates 3 accounts across 2 institutions with correct row count", async () => {
+  it("aggregates accounts from statements with correct row count", async () => {
     const transactions = [
-      // Bank / Checking — 3 transactions
-      txn({ id: "t1" as any, institution: "Bank", account: "Checking", timestamp: ts("2025-01-10"), amount: 100 }),
-      txn({ id: "t2" as any, institution: "Bank", account: "Checking", timestamp: ts("2025-02-15"), amount: 50 }),
-      txn({ id: "t3" as any, institution: "Bank", account: "Checking", timestamp: ts("2025-02-20"), amount: 75 }),
-      // Bank / Savings — 2 transactions
-      txn({ id: "t4" as any, institution: "Bank", account: "Savings", timestamp: ts("2025-01-05"), amount: 200 }),
-      txn({ id: "t5" as any, institution: "Bank", account: "Savings", timestamp: ts("2025-01-20"), amount: 300 }),
-      // Credit Union / Checking — 2 transactions, no statement
-      txn({ id: "t6" as any, institution: "Credit Union", account: "Checking", timestamp: ts("2025-02-01"), amount: 80 }),
-      txn({ id: "t7" as any, institution: "Credit Union", account: "Checking", timestamp: ts("2025-02-10"), amount: 120 }),
+      txn({ id: "t1" as any, institution: "Bank", account: "Checking", timestamp: ts("2025-02-20"), amount: 75 }),
+      txn({ id: "t4" as any, institution: "Bank", account: "Savings", timestamp: ts("2025-01-20"), amount: 300 }),
+      txn({ id: "t6" as any, institution: "Credit Union", account: "Checking", timestamp: ts("2025-02-10"), amount: 120 }),
     ];
 
     const statements = [
-      stmt({ id: "s1", institution: "Bank", account: "Checking", period: "2025-01", balance: 3000 }),
-      stmt({ id: "s2", institution: "Bank", account: "Checking", period: "2025-02", balance: 3500 }),
-      stmt({ id: "s3", institution: "Bank", account: "Savings", period: "2025-01", balance: 10000 }),
+      stmt({ id: "s1", institution: "Bank", account: "Checking", period: "2025-01", balance: 3000, lastTransactionDate: ts("2025-01-10") }),
+      stmt({ id: "s2", institution: "Bank", account: "Checking", period: "2025-02", balance: 3500, lastTransactionDate: ts("2025-02-20") }),
+      stmt({ id: "s3", institution: "Bank", account: "Savings", period: "2025-01", balance: 10000, lastTransactionDate: ts("2025-01-20") }),
+      stmt({ id: "s4", institution: "Credit Union", account: "Checking", period: "2025-02", balance: 500, lastTransactionDate: ts("2025-02-10") }),
     ];
 
     const html = await renderAccounts(seedOptions({
@@ -79,28 +75,30 @@ describe("accounts page smoke — multi-account aggregation", () => {
 
     // 3 accounts → 3 <tr> rows in <tbody>
     const tbody = html.slice(html.indexOf("<tbody>"), html.indexOf("</tbody>"));
-    const rowCount = (tbody.match(/<tr>/g) ?? []).length;
+    const rowCount = (tbody.match(/<tr[\s>]/g) ?? []).length;
     expect(rowCount).toBe(3);
 
     // Bank/Checking gets latest statement balance ($3,500.00)
     expect(html).toContain("$3,500.00");
     // Bank/Savings gets its statement balance ($10,000.00)
     expect(html).toContain("$10,000.00");
-    // Credit Union/Checking has no statement — empty balance cell
+    // Credit Union/Checking has statement with balance ($500.00)
     expect(html).toContain("Credit Union");
+    expect(html).toContain("$500.00");
   });
 
   it("table structure has expected column headers", async () => {
     const html = await renderAccounts(seedOptions({
-      getTransactions: vi.fn().mockResolvedValue([
-        txn({ institution: "Bank", account: "Checking" }),
+      getTransactions: vi.fn().mockResolvedValue([]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt({ institution: "Bank", account: "Checking", lastTransactionDate: ts("2025-02-15") }),
       ]),
-      getStatements: vi.fn().mockResolvedValue([]),
     }));
 
     expect(html).toContain("<th>Institution</th>");
     expect(html).toContain("<th>Account</th>");
     expect(html).toContain("<th>Most recent transaction</th>");
     expect(html).toContain("<th>Balance</th>");
+    expect(html).toContain("<th>Derived</th>");
   });
 });

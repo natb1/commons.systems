@@ -27,8 +27,8 @@ func (e *ParseError) Error() string { return fmt.Sprintf("%s: %v", e.Path, e.Err
 func (e *ParseError) Unwrap() error { return e.Err }
 
 // StatementFile identifies a statement file and the metadata extracted from its path.
-// Period is derived from either the period directory name (4-level layout) or the
-// filename stem (3-level layout). See [DiscoverFiles] for accepted layouts.
+// Period is initially derived from the directory or filename; callers may
+// override it with document-inferred data (see InferPeriod).
 type StatementFile struct {
 	Path        string
 	Institution string
@@ -149,9 +149,31 @@ func detectFormat(path string) (format, error) {
 // along with a flag indicating if the file was skipped (e.g., investment accounts).
 type ParseResult struct {
 	Transactions []Transaction
-	Balance      int64 // cents; 0 if absent. Raw signed value from statement.
+	Balance      int64     // cents; 0 if absent. Raw signed value from statement.
+	BalanceDate  time.Time // LEDGERBAL DTASOF; zero if absent or not in OFX/SGML format.
 	Skipped      bool
 	SkipReason   string
+}
+
+// InferPeriod returns a YYYY-MM period derived from document data. Prefers
+// BalanceDate (OFX DTASOF), falls back to latest transaction date. Returns
+// empty string if neither is available.
+func (pr ParseResult) InferPeriod() string {
+	if !pr.BalanceDate.IsZero() {
+		return pr.BalanceDate.Format("2006-01")
+	}
+	if len(pr.Transactions) > 0 {
+		latest := pr.Transactions[0].Date
+		for _, t := range pr.Transactions[1:] {
+			if t.Date.After(latest) {
+				latest = t.Date
+			}
+		}
+		if !latest.IsZero() {
+			return latest.Format("2006-01")
+		}
+	}
+	return ""
 }
 
 // ParseFile detects the format of the file at path and parses its transactions.

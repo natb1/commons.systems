@@ -1,9 +1,11 @@
+import { Timestamp } from "firebase/firestore";
 import { type SerializedBudgetPeriod, type TransactionId, type BudgetId } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
-import { computeNetAmount } from "../balance.js";
+import { computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
+import { renderTransactionRows, compareByTimestampDesc, SCROLL_BATCH_WEEKS } from "./home.js";
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
@@ -255,4 +257,86 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       handleSaveError(input, error, "transaction");
     }
   }, true);
+
+  // Infinite scroll: load older transactions when sentinel is visible
+  const sentinel = container.querySelector("#scroll-sentinel") as HTMLElement | null;
+  if (!sentinel) return;
+
+  const groupName = container.dataset.groupName;
+  if (groupName === undefined) throw new DataIntegrityError("transactions-table missing data-group-name attribute");
+  const editableRaw = container.dataset.editable;
+  if (editableRaw === undefined) throw new DataIntegrityError("transactions-table missing data-editable attribute");
+  const editable = editableRaw === "true";
+
+  const budgetIdToName = new Map<string, string>();
+  for (const [name, id] of Object.entries(budgetNameToId)) {
+    budgetIdToName.set(id, name);
+  }
+
+  let loading = false;
+  const observer = new IntersectionObserver(async (entries) => {
+    if (!entries[0].isIntersecting || loading) return;
+    loading = true;
+
+    const prevError = sentinel.previousElementSibling;
+    if (prevError?.classList.contains("scroll-error")) prevError.remove();
+
+    const loadingDiv = document.createElement("div");
+    loadingDiv.className = "scroll-loading";
+    loadingDiv.textContent = "Loading older transactions...";
+    sentinel.insertAdjacentElement("beforebegin", loadingDiv);
+
+    try {
+      const raw = sentinel.dataset.nextBefore;
+      if (!raw) throw new DataIntegrityError("scroll-sentinel missing data-next-before");
+      const beforeMs = Number(raw);
+      if (!Number.isFinite(beforeMs)) throw new DataIntegrityError(`Invalid data-next-before: "${raw}"`);
+      const sinceMs = weekStart(beforeMs - SCROLL_BATCH_WEEKS * MS_PER_WEEK);
+
+      const transactions = await getActiveDataSource().getTransactions({
+        since: Timestamp.fromMillis(sinceMs),
+        before: Timestamp.fromMillis(beforeMs),
+      });
+      transactions.sort(compareByTimestampDesc);
+
+      if (transactions.length > 0) {
+        const html = renderTransactionRows(transactions, groupName, editable, budgetIdToName);
+        sentinel.insertAdjacentHTML("beforebegin", html);
+        sentinel.dataset.nextBefore = String(sinceMs);
+      } else {
+        // Final batch: omit since to include null-timestamp transactions and any older than the earliest window boundary
+        const finalBatch = await getActiveDataSource().getTransactions({
+          before: Timestamp.fromMillis(beforeMs),
+        });
+        finalBatch.sort(compareByTimestampDesc);
+
+        if (finalBatch.length > 0) {
+          const html = renderTransactionRows(finalBatch, groupName, editable, budgetIdToName);
+          sentinel.insertAdjacentHTML("beforebegin", html);
+        }
+        sentinel.remove();
+        observer.disconnect();
+      }
+    } catch (error) {
+      if (error instanceof TypeError || error instanceof ReferenceError) {
+        setTimeout(() => { throw error; }, 0);
+        return;
+      }
+      console.error("Failed to load older transactions:", error);
+      if (error instanceof DataIntegrityError) {
+        sentinel.insertAdjacentHTML("beforebegin",
+          `<div class="scroll-error">Data error — please re-upload your file.</div>`);
+        sentinel.remove();
+        observer.disconnect();
+      } else {
+        sentinel.insertAdjacentHTML("beforebegin",
+          `<div class="scroll-error">Failed to load older transactions. Scroll down to retry.</div>`);
+      }
+    } finally {
+      loadingDiv.remove();
+      loading = false;
+    }
+  });
+
+  observer.observe(sentinel);
 }

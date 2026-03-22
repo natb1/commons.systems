@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // parseSGML parses OFX 1.x / QFX SGML files by scanning for SGML tags.
@@ -29,11 +30,12 @@ func parseSGML(path string) (ParseResult, error) {
 		return ParseResult{}, err
 	}
 
-	balance, err := parseSGMLBalance(text)
+	bal, err := parseSGMLBalance(text)
 	if err != nil {
 		return ParseResult{}, fmt.Errorf("%s: %w", path, err)
 	}
-	result.Balance = balance
+	result.Balance = bal.cents
+	result.BalanceDate = bal.balanceDate
 
 	return result, nil
 }
@@ -95,22 +97,37 @@ func parseSGMLBlock(block string) (Transaction, error) {
 	})
 }
 
-// parseSGMLBalance extracts the ledger balance from a LEDGERBAL block.
-// Returns 0 if no LEDGERBAL block is found.
-func parseSGMLBalance(text string) (int64, error) {
+type sgmlBalance struct {
+	cents       int64
+	balanceDate time.Time
+}
+
+// parseSGMLBalance extracts the ledger balance and DTASOF from a LEDGERBAL block.
+// Returns zero values if no LEDGERBAL block is found.
+func parseSGMLBalance(text string) (sgmlBalance, error) {
 	idx := strings.Index(text, "<LEDGERBAL>")
 	if idx < 0 {
-		return 0, nil
+		return sgmlBalance{}, nil
 	}
-	balAmt := sgmlTagValue(text[idx:], "BALAMT")
+	block := text[idx:]
+	balAmt := sgmlTagValue(block, "BALAMT")
 	if balAmt == "" {
-		return 0, fmt.Errorf("LEDGERBAL block found but BALAMT is empty")
+		return sgmlBalance{}, fmt.Errorf("LEDGERBAL block found but BALAMT is empty")
 	}
 	cents, err := parseCents(balAmt)
 	if err != nil {
-		return 0, fmt.Errorf("parsing LEDGERBAL BALAMT %q: %w", balAmt, err)
+		return sgmlBalance{}, fmt.Errorf("parsing LEDGERBAL BALAMT %q: %w", balAmt, err)
 	}
-	return cents, nil
+	var balanceDate time.Time
+	dtAsOf := sgmlTagValue(block, "DTASOF")
+	if dtAsOf != "" {
+		bd, err := parseOFXDate(dtAsOf)
+		if err != nil {
+			return sgmlBalance{}, fmt.Errorf("parsing LEDGERBAL DTASOF %q: %w", dtAsOf, err)
+		}
+		balanceDate = bd
+	}
+	return sgmlBalance{cents: cents, balanceDate: balanceDate}, nil
 }
 
 // sgmlTagValue extracts the value following <TAG> in SGML content.

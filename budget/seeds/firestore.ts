@@ -2,7 +2,7 @@
 // The firestoreutil seed runner writes these specs to Firestore using the Admin SDK,
 // which converts Date objects to Timestamps on write.
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { Transaction, Statement, Budget, BudgetPeriod, Rule, NormalizationRule } from "../src/firestore.js";
+import type { Transaction, Statement, Budget, BudgetPeriod, Rule, NormalizationRule, WeeklyAggregate } from "../src/firestore.js";
 import type { Group } from "@commons-systems/authutil/groups";
 
 /** Seed groups include `members` (used in queries and security rules, omitted from the authutil Group type) */
@@ -37,8 +37,15 @@ type RuleSeedData = Omit<Rule, "id" | "groupId"> & { memberEmails: string[]; gro
 
 type NormalizationRuleSeedData = Omit<NormalizationRule, "id"> & { memberEmails: string[] };
 
-/** Seed statements use plain string for statementId (not branded), require groupId (non-nullable), and add memberEmails for security rules. */
-type StatementSeedData = Omit<Statement, "id" | "statementId" | "groupId"> & { statementId: string; groupId: string; memberEmails: string[] };
+/** Seed statements use plain string for statementId (not branded), Date instead of Timestamp for lastTransactionDate, require groupId (non-nullable), and add memberEmails for security rules. */
+type StatementSeedData = Omit<Statement, "id" | "statementId" | "groupId" | "lastTransactionDate"> & { statementId: string; groupId: string; memberEmails: string[]; lastTransactionDate: Date | null };
+
+/** Seed weekly aggregates use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client WeeklyAggregate type) */
+type WeeklyAggregateSeedData = Omit<WeeklyAggregate, "id" | "weekStart" | "groupId"> & {
+  weekStart: Date;
+  memberEmails: string[];
+  groupId: string | null;
+};
 
 const budgetDocs: { id: string; data: BudgetSeedData }[] = [
   {
@@ -566,6 +573,8 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Checking",
       balance: 2286.00,
       period: "2025-01",
+      balanceDate: null,
+      lastTransactionDate: new Date("2025-02-19"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
@@ -578,6 +587,8 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Checking",
       balance: 3825.50,
       period: "2025-02",
+      balanceDate: null,
+      lastTransactionDate: new Date("2025-02-19"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
@@ -590,6 +601,8 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Credit Card",
       balance: 0,
       period: "2025-01",
+      balanceDate: null,
+      lastTransactionDate: new Date("2025-02-20"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
@@ -602,6 +615,8 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Credit Card",
       balance: -285.00,
       period: "2025-02",
+      balanceDate: null,
+      lastTransactionDate: new Date("2025-02-20"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
@@ -614,6 +629,8 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Savings",
       balance: 1210.00,
       period: "2025-01",
+      balanceDate: null,
+      lastTransactionDate: new Date("2025-02-21"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
@@ -626,10 +643,40 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       account: "Savings",
       balance: 980.00,
       period: "2025-02",
+      balanceDate: null,
+      lastTransactionDate: new Date("2025-02-21"),
       groupId: "household",
       memberEmails: ["test@example.com"],
     } satisfies StatementSeedData,
   },
+];
+
+// Weekly aggregates: pre-computed credit and unbudgeted spending totals per Monday-aligned week.
+// Derived from seed transactions using the same logic as the ETL:
+//   creditTotal: sum of -net for credit transactions (net < 0, not Transfer:CardPayment*)
+//   unbudgetedTotal: sum of net for unbudgeted spending (budget == null, net > 0)
+// Only weeks with non-zero creditTotal or unbudgetedTotal are included.
+const weeklyAggregateDocs: { id: string; data: WeeklyAggregateSeedData }[] = [
+  // Biweekly paycheck weeks (each $2400 credit)
+  { id: "household-2024-10-07", data: { weekStart: new Date("2024-10-07"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2024-10-21", data: { weekStart: new Date("2024-10-21"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2024-11-04", data: { weekStart: new Date("2024-11-04"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2024-11-18", data: { weekStart: new Date("2024-11-18"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2024-12-02", data: { weekStart: new Date("2024-12-02"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2024-12-16", data: { weekStart: new Date("2024-12-16"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2024-12-30", data: { weekStart: new Date("2024-12-30"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  // Credit: $500 freelance. Unbudgeted: $500 card payment.
+  { id: "household-2025-01-06", data: { weekStart: new Date("2025-01-06"), creditTotal: 500, unbudgetedTotal: 500, groupId: "household", memberEmails: ["test@example.com"] } },
+  // Paycheck $2400 + parking $8 unbudgeted
+  { id: "household-2025-01-13", data: { weekStart: new Date("2025-01-13"), creditTotal: 2400, unbudgetedTotal: 8, groupId: "household", memberEmails: ["test@example.com"] } },
+  // Paycheck $2400
+  { id: "household-2025-01-27", data: { weekStart: new Date("2025-01-27"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  // Dry cleaner $22 unbudgeted
+  { id: "household-2025-02-03", data: { weekStart: new Date("2025-02-03"), creditTotal: 0, unbudgetedTotal: 22, groupId: "household", memberEmails: ["test@example.com"] } },
+  // Credit: $2400 paycheck. Unbudgeted: $285 + $150 card payments = $435.
+  { id: "household-2025-02-10", data: { weekStart: new Date("2025-02-10"), creditTotal: 2400, unbudgetedTotal: 435, groupId: "household", memberEmails: ["test@example.com"] } },
+  // Pharmacy $15.50 unbudgeted
+  { id: "household-2025-02-17", data: { weekStart: new Date("2025-02-17"), creditTotal: 0, unbudgetedTotal: 15.50, groupId: "household", memberEmails: ["test@example.com"] } },
 ];
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
@@ -708,6 +755,8 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
     { name: "normalization-rules", testOnly: true, documents: seedNormalizationRuleDocs },
     { name: "seed-statements", convergent: true, documents: seedStatementDocs },
     { name: "statements", testOnly: true, documents: seedStatementDocs },
+    { name: "seed-weekly-aggregates", convergent: true, documents: weeklyAggregateDocs },
+    { name: "weekly-aggregates", testOnly: true, documents: weeklyAggregateDocs },
   ],
 };
 

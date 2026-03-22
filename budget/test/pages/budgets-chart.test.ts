@@ -36,7 +36,7 @@ describe("renderBudgetChart", () => {
     expect(result.weeks.map(w => w.ms)).toEqual([]);
   });
 
-  it("renders all periods without filtering", () => {
+  it("renders all periods passed to it", () => {
     const budgets = [makeBudget({ weeklyAllowance: 100 })];
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 10 }),

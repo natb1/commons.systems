@@ -1,9 +1,21 @@
 import type { Timestamp } from "firebase/firestore";
-import type { Budget, BudgetId, BudgetPeriod, Rollover, Statement, Transaction, TransactionId } from "./firestore.js";
+import type { Budget, BudgetId, BudgetPeriod, Rollover, Statement, Transaction, TransactionId, WeeklyAggregate } from "./firestore.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 export const UNBUDGETED_SERIES = "Other";
+const BALANCE_TOLERANCE_DOLLARS = 0.01;
+
+/** Return the Monday 00:00 UTC for the week containing `ms`. */
+export function weekStart(ms: number): number {
+  const d = new Date(ms);
+  const day = d.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setUTCDate(d.getUTCDate() + diff);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 const CREDIT_WEEKS = 12;
 
 export function computeNetAmount(amount: number, reimbursement: number): number {
@@ -17,15 +29,27 @@ interface TimestampedTransaction extends Transaction {
   readonly timestamp: Timestamp;
 }
 
-function isCardPaymentCategory(category: string): boolean {
+export function isCardPaymentCategory(category: string): boolean {
   return category === "Transfer:CardPayment" || category.startsWith("Transfer:CardPayment:");
+}
+
+/** Composite map key for an (institution, account) pair. Uses null byte separator (cannot appear in institution/account strings). */
+export function accountKey(institution: string, account: string): string {
+  return `${institution}\0${account}`;
+}
+
+/** Split a composite account key back into [institution, account]. */
+export function splitAccountKey(key: string): [string, string] {
+  const idx = key.indexOf("\0");
+  if (idx === -1) throw new DataIntegrityError(`Invalid account key: missing separator`);
+  return [key.substring(0, idx), key.substring(idx + 1)];
 }
 
 function netAmount(t: Transaction): number {
   return computeNetAmount(t.amount, t.reimbursement);
 }
 
-/** Filter to timestamped credit transactions (negative net amount), excluding non-primary normalized duplicates. */
+/** Filter to timestamped credit transactions (negative net amount), excluding non-primary normalized duplicates and card payment transfers. */
 function filterCreditTransactions(transactions: Transaction[]): TimestampedTransaction[] {
   return transactions.filter(
     (t): t is TimestampedTransaction =>
@@ -238,7 +262,7 @@ export function computeRollingAverage(values: number[], windowSize: number): num
   return result;
 }
 
-/** Normalize a Date to the Sunday of the same week, returning "M/D" label and ms timestamp. */
+/** Normalize a Date to the preceding Sunday 00:00 UTC (start of its Sun–Sat week), returning "M/D" label and ms timestamp. */
 export function toSundayEntry(d: Date): { label: string; ms: number } {
   if (isNaN(d.getTime())) throw new DataIntegrityError("toSundayEntry received an invalid Date");
   const sun = new Date(d);
@@ -301,27 +325,24 @@ export function computeAggregateTrend(
 
 /**
  * Compute per-budget 3-week rolling average of non-credit spending.
- * Includes an "Other" series when qualifying unbudgeted transactions exist.
+ * Includes an "Other" series from pre-aggregated unbudgeted spending totals.
  */
 export function computePerBudgetTrend(
   budgets: Budget[],
   periods: BudgetPeriod[],
-  transactions: Transaction[],
+  aggregates: WeeklyAggregate[],
 ): PerBudgetPoint[] {
   const { weeks: periodsWeeks } = indexPeriodsByWeek(periods);
   const weekMap = new Map(periodsWeeks);
 
-  // Also include weeks from unbudgeted transactions
-  const unbudgetedTxns = transactions.filter(
-    (t): t is Transaction & { timestamp: Timestamp } =>
-      t.budget === null
-      && t.timestamp !== null
-      && (t.normalizedId === null || t.normalizedPrimary)
-      && computeNetAmount(t.amount, t.reimbursement) > 0,
-  );
-  for (const t of unbudgetedTxns) {
-    const entry = toSundayEntry(t.timestamp.toDate());
-    if (!weekMap.has(entry.ms)) weekMap.set(entry.ms, entry.label);
+  // Build "Other" weekly spending and register weeks in a single pass
+  const otherWeekly = new Map<number, number>();
+  for (const a of aggregates) {
+    if (a.unbudgetedTotal > 0) {
+      const entry = toSundayEntry(a.weekStart.toDate());
+      if (!weekMap.has(entry.ms)) weekMap.set(entry.ms, entry.label);
+      otherWeekly.set(entry.ms, (otherWeekly.get(entry.ms) ?? 0) + a.unbudgetedTotal);
+    }
   }
 
   const weeks = [...weekMap.entries()].sort((a, b) => a[0] - b[0]);
@@ -343,12 +364,6 @@ export function computePerBudgetTrend(
     m.set(entry.ms, (m.get(entry.ms) ?? 0) + p.total);
   }
 
-  // "Other" spending from unbudgeted transactions
-  const otherWeekly = new Map<number, number>();
-  for (const t of unbudgetedTxns) {
-    const entry = toSundayEntry(t.timestamp.toDate());
-    otherWeekly.set(entry.ms, (otherWeekly.get(entry.ms) ?? 0) + computeNetAmount(t.amount, t.reimbursement));
-  }
   if (otherWeekly.size > 0) perBudgetWeekly.set(UNBUDGETED_SERIES, otherWeekly);
 
   const result: PerBudgetPoint[] = [];
@@ -380,50 +395,148 @@ export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
   return trailing.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / trailing.length;
 }
 
-/** Return the start of the next Monday 00:00 UTC from a millisecond timestamp. A Monday input advances to the following Monday. */
-function endOfWeekMs(timestampMs: number): number {
-  const d = new Date(timestampMs);
-  const day = d.getUTCDay(); // 0=Sun, 1=Mon, ...
-  const daysUntilMonday = day === 0 ? 1 : 8 - day;
-  const nextMonday = new Date(Date.UTC(
-    d.getUTCFullYear(),
-    d.getUTCMonth(),
-    d.getUTCDate() + daysUntilMonday,
-  ));
-  return nextMonday.getTime();
-}
-
 /**
- * Compute average weekly credits over the trailing 12-week window ending at the
- * Monday after the latest credit transaction. Credit transactions are identified
- * by negative net amount. Transfer:CardPayment transactions are excluded even
- * when negative, to avoid double-counting card payment flows. Non-primary
- * normalized duplicates and null-timestamp transactions are excluded. Returns 0
- * when no qualifying credit transactions exist. Values are negated before
- * summing to produce positive display amounts.
+ * Compute average weekly credits over the trailing CREDIT_WEEKS-week window ending at the
+ * Monday following the latest aggregate's weekStart (i.e., weekStart + 7 days).
+ * Uses pre-aggregated WeeklyAggregate data (creditTotal per Monday-aligned week).
+ * Returns 0 when no weeks have credits.
  */
-export function computeAverageWeeklyCredits(transactions: Transaction[]): number {
-  const creditTxns = filterCreditTransactions(transactions);
+export function computeAverageWeeklyCredits(aggregates: WeeklyAggregate[]): number {
+  const withCredits = aggregates.filter(a => a.creditTotal > 0);
+  if (withCredits.length === 0) return 0;
 
-  if (creditTxns.length === 0) return 0;
-
-  let latestMs = -Infinity;
-  for (const t of creditTxns) {
-    const ms = t.timestamp.toMillis();
-    if (ms > latestMs) latestMs = ms;
+  let latestWeekStartMs = -Infinity;
+  for (const a of withCredits) {
+    const ms = a.weekStart.toMillis();
+    if (ms > latestWeekStartMs) latestWeekStartMs = ms;
   }
-  const windowEnd = endOfWeekMs(latestMs);
+  // Window end is next Monday (weekStart + 1 week)
+  const windowEnd = latestWeekStartMs + MS_PER_WEEK;
   const windowStart = windowEnd - CREDIT_WEEKS * MS_PER_WEEK;
 
   let sum = 0;
-  for (const t of creditTxns) {
-    const ms = t.timestamp.toMillis();
+  for (const a of withCredits) {
+    const ms = a.weekStart.toMillis();
     if (ms >= windowStart && ms < windowEnd) {
-      sum += -netAmount(t);
+      sum += a.creditTotal;
     }
   }
 
   return sum / CREDIT_WEEKS;
+}
+
+export interface DerivedAccountBalance {
+  readonly institution: string;
+  readonly account: string;
+  readonly earliestPeriod: string;
+  readonly latestPeriod: string;
+  readonly derivedBalance: number;
+  readonly statementBalance: number;
+  readonly discrepancy: number;
+}
+
+/**
+ * Return the effective timestamp for a statement's balance snapshot.
+ * If balanceDate is present (from OFX DTASOF), use midnight UTC on that date.
+ * Otherwise fall back to first-of-next-month from the YYYY-MM period.
+ */
+function statementEffectiveMs(s: Statement): number {
+  if (s.balanceDate) {
+    const ms = Date.parse(s.balanceDate + "T00:00:00Z");
+    if (isNaN(ms)) throw new DataIntegrityError(`Invalid balanceDate: "${s.balanceDate}"`);
+    return ms;
+  }
+  return periodToAnchorMs(s.period);
+}
+
+/** Group statements by account key into a Map. */
+function groupStatementsByAccount(stmts: Statement[]): Map<string, Statement[]> {
+  const result = new Map<string, Statement[]>();
+  for (const s of stmts) {
+    const k = accountKey(s.institution, s.account);
+    if (!result.has(k)) result.set(k, []);
+    result.get(k)!.push(s);
+  }
+  return result;
+}
+
+/** Group primary (non-duplicate) timestamped transactions by account as sorted {ms, net} arrays. */
+function groupPrimaryTxnsByAccount(transactions: Transaction[]): Map<string, { ms: number; net: number }[]> {
+  const result = new Map<string, { ms: number; net: number }[]>();
+  for (const t of transactions) {
+    if (t.timestamp === null) continue;
+    if (t.normalizedId !== null && !t.normalizedPrimary) continue;
+    const k = accountKey(t.institution, t.account);
+    if (!result.has(k)) result.set(k, []);
+    result.get(k)!.push({
+      ms: t.timestamp.toMillis(),
+      net: computeNetAmount(t.amount, t.reimbursement),
+    });
+  }
+  for (const txns of result.values()) {
+    txns.sort((a, b) => a.ms - b.ms);
+  }
+  return result;
+}
+
+/**
+ * Compute one derived-balance discrepancy per account: earliest statement balance
+ * minus all primary transactions in the window vs latest statement balance.
+ *
+ * This single-span approach tolerates intermediate OFX noise (pending charges,
+ * missing card payments) that causes false positives in per-period checking.
+ *
+ * Non-primary normalized transactions are excluded.
+ */
+export function computeDerivedBalances(
+  transactions: Transaction[],
+  statements: Statement[],
+): DerivedAccountBalance[] {
+  const validStatements = statements.filter(s => isValidPeriod(s.period));
+  if (validStatements.length === 0) return [];
+
+  const stmtsByAccount = groupStatementsByAccount(validStatements);
+  const txnsByAccount = groupPrimaryTxnsByAccount(transactions);
+
+  const results: DerivedAccountBalance[] = [];
+
+  for (const [k, stmts] of stmtsByAccount) {
+    if (stmts.length < 2) continue;
+
+    // Sort by effectiveMs to find earliest and latest
+    stmts.sort((a, b) => statementEffectiveMs(a) - statementEffectiveMs(b));
+    const earliest = stmts[0];
+    const latest = stmts[stmts.length - 1];
+
+    const earliestMs = statementEffectiveMs(earliest);
+    const latestMs = statementEffectiveMs(latest);
+
+    // Sum all primary transactions in (earliestMs, latestMs] — earliest boundary is exclusive
+    // because the earliest statement balance already accounts for transactions up to that point
+    const txns = txnsByAccount.get(k) ?? [];
+    let txnSum = 0;
+    for (const txn of txns) {
+      if (txn.ms <= earliestMs) continue;
+      if (txn.ms > latestMs) break;
+      txnSum += txn.net;
+    }
+
+    const derivedBalance = earliest.balance - txnSum;
+    const discrepancy = Math.round((derivedBalance - latest.balance) * 100) / 100;
+
+    const [inst, acct] = splitAccountKey(k);
+    results.push({
+      institution: inst,
+      account: acct,
+      earliestPeriod: earliest.period,
+      latestPeriod: latest.period,
+      derivedBalance,
+      statementBalance: latest.balance,
+      discrepancy,
+    });
+  }
+
+  return results;
 }
 
 export interface NetWorthPoint {
@@ -436,8 +549,8 @@ export interface BalanceDivergence {
   readonly institution: string;
   readonly account: string;
   readonly period: string;
-  readonly expected: number;
-  readonly derived: number;
+  readonly statementBalance: number;
+  readonly derivedBalance: number;
 }
 
 export interface NetWorthResult {
@@ -456,7 +569,8 @@ function periodToAnchorMs(period: string): number {
   const year = parseInt(yearStr, 10);
   const month = parseInt(monthStr, 10);
   if (isNaN(year) || isNaN(month)) throw new DataIntegrityError(`Invalid statement period: ${period}`);
-  // Date.UTC with 1-based month gives first of next month (month param is 0-based)
+  // Anchor at first of next month: a "2025-01" statement covers through January,
+  // so the boundary is Feb 1. Date.UTC month param is 0-based, so 1-based input works directly.
   return Date.UTC(year, month, 1);
 }
 
@@ -469,6 +583,9 @@ function periodToAnchorMs(period: string): number {
  *
  * Transaction sign convention: positive = spending (reduces balance), negative = credit (increases balance).
  * Statement balance: raw signed from bank (positive = asset, negative = liability).
+ *
+ * Note: computeDerivedBalances anchors on the earliest statement (forward);
+ * this function anchors on the latest (backward interpolation).
  */
 export function computeNetWorth(
   transactions: Transaction[],
@@ -480,48 +597,36 @@ export function computeNetWorth(
   const validStatements = statements.filter(s => isValidPeriod(s.period));
   if (weeks.length === 0 || validStatements.length === 0) return { points: [], divergences: [] };
 
-  type AccountKey = string;
-  const key = (inst: string, acct: string): AccountKey => `${inst}\0${acct}`;
+  const allStmts = groupStatementsByAccount(validStatements);
 
-  // Group statements by account, keep latest per account
-  const latestStmts = new Map<AccountKey, Statement>();
-  const allStmts = new Map<AccountKey, Statement[]>();
-  for (const s of validStatements) {
-    const k = key(s.institution, s.account);
-    if (!allStmts.has(k)) allStmts.set(k, []);
-    allStmts.get(k)!.push(s);
-    const existing = latestStmts.get(k);
-    if (!existing || s.period > existing.period) {
-      latestStmts.set(k, s);
+  // Find latest statement per account
+  const latestStmts = new Map<string, Statement>();
+  for (const [k, stmts] of allStmts) {
+    let latest = stmts[0];
+    for (let i = 1; i < stmts.length; i++) {
+      if (statementEffectiveMs(stmts[i]) > statementEffectiveMs(latest)) latest = stmts[i];
     }
+    latestStmts.set(k, latest);
   }
 
-  // Group non-duplicate timestamped transactions by account
-  const accountTxns = new Map<AccountKey, TimestampedTransaction[]>();
-  for (const t of transactions) {
-    if (t.timestamp === null) continue;
-    if (t.normalizedId !== null && !t.normalizedPrimary) continue;
-    const k = key(t.institution, t.account);
-    if (!accountTxns.has(k)) accountTxns.set(k, []);
-    accountTxns.get(k)!.push(t as TimestampedTransaction);
-  }
+  // Group primary transactions by account (sorted by ms)
+  const txnsByAccount = groupPrimaryTxnsByAccount(transactions);
 
   // For each account, compute balance at each week and verify against statements
-  const accountWeekBalances = new Map<AccountKey, number[]>();
+  const accountWeekBalances = new Map<string, number[]>();
   const divergences: BalanceDivergence[] = [];
 
   for (const [k, anchor] of latestStmts) {
-    const anchorMs = periodToAnchorMs(anchor.period);
+    const anchorMs = statementEffectiveMs(anchor);
     const anchorBalance = anchor.balance;
 
-    const txns = accountTxns.get(k) ?? [];
-    txns.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+    const txnData = txnsByAccount.get(k) ?? [];
+    const txnTimes = txnData.map(t => t.ms);
+    const txnNets = txnData.map(t => t.net);
 
-    // Cache transaction timestamps and net amounts for cumSumBefore lookups
-    const txnTimes = txns.map(t => t.timestamp.toMillis());
-    const txnNets = txns.map(t => computeNetAmount(t.amount, t.reimbursement));
-
-    // cumSumBefore: cumulative net amount for txns before timestamp T. Uses sorted txnTimes with early break. Retained for non-sequential lookups (divergence verification) where the advancing pointer cannot be used.
+    // cumSumBefore: cumulative net amount for txns before timestamp T.
+    // Uses sorted txnTimes with early break. Retained for non-sequential
+    // lookups (divergence verification) where the advancing pointer cannot be used.
     function cumSumBefore(T: number): number {
       let sum = 0;
       for (let i = 0; i < txnTimes.length; i++) {
@@ -550,17 +655,17 @@ export function computeNetWorth(
     const stmts = allStmts.get(k) ?? [];
     for (const stmt of stmts) {
       if (stmt.period === anchor.period) continue;
-      const stmtMs = periodToAnchorMs(stmt.period);
+      const stmtMs = statementEffectiveMs(stmt);
       const stmtCum = cumSumBefore(stmtMs);
       const derived = anchorBalance - (stmtCum - anchorCum);
-      if (Math.abs(derived - stmt.balance) > 0.01) {
-        const [inst, acct] = k.split("\0");
+      if (Math.abs(derived - stmt.balance) > BALANCE_TOLERANCE_DOLLARS) {
+        const [inst, acct] = splitAccountKey(k);
         divergences.push({
           institution: inst,
           account: acct,
           period: stmt.period,
-          expected: stmt.balance,
-          derived,
+          statementBalance: stmt.balance,
+          derivedBalance: derived,
         });
       }
     }

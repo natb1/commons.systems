@@ -128,19 +128,19 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
   let tableHtml: string;
   let chartHtml = "";
   try {
-    const [budgets, periods, transactions] = await Promise.all([
+    const [budgets, periods, weeklyAggregates] = await Promise.all([
       dataSource.getBudgets()
         .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
       dataSource.getBudgetPeriods()
         .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
-      dataSource.getTransactions()
-        .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
+      dataSource.getWeeklyAggregates()
+        .catch((e) => { console.error("Failed to load weekly aggregates:", e); throw e; }),
     ]);
-    const averageWeeklyCredits = computeAverageWeeklyCredits(transactions);
+    const averageWeeklyCredits = computeAverageWeeklyCredits(weeklyAggregates);
     const totalWeeklyBudget = budgets.reduce((s, b) => s + b.weeklyAllowance, 0);
     const averageWeeklySpending = computeAverageWeeklySpending(periods);
     const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
-    const perBudgetTrend = computePerBudgetTrend(budgets, periods, transactions);
+    const perBudgetTrend = computePerBudgetTrend(budgets, periods, weeklyAggregates);
     chartHtml = renderChartContainer(budgets, periods, metricsHtml, perBudgetTrend, averageWeeklyCredits);
     tableHtml = renderBudgetTable(budgets, authorized);
   } catch (error) {

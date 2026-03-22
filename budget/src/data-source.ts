@@ -6,6 +6,7 @@ import type {
   BudgetPeriod,
   Rule,
   NormalizationRule,
+  WeeklyAggregate,
   TransactionId,
   StatementId,
   BudgetId,
@@ -20,17 +21,24 @@ import {
   getBudgetPeriods as fsGetBudgetPeriods,
   getRules as fsGetRules,
   getNormalizationRules as fsGetNormalizationRules,
+  getWeeklyAggregates as fsGetWeeklyAggregates,
 } from "./firestore.js";
 import { getAll, get, put, deleteRecord } from "./idb.js";
-import type { IdbTransaction, IdbStatement, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule } from "./idb.js";
+import type { IdbTransaction, IdbStatement, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
+
+export interface TransactionQuery {
+  since?: Timestamp;
+  before?: Timestamp;
+}
 
 export interface DataSource {
-  getTransactions(): Promise<Transaction[]>;
+  getTransactions(query?: TransactionQuery): Promise<Transaction[]>;
   getStatements(): Promise<Statement[]>;
   getBudgets(): Promise<Budget[]>;
   getBudgetPeriods(): Promise<BudgetPeriod[]>;
   getRules(): Promise<Rule[]>;
   getNormalizationRules(): Promise<NormalizationRule[]>;
+  getWeeklyAggregates(): Promise<WeeklyAggregate[]>;
   updateTransaction(
     id: TransactionId,
     fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
@@ -55,8 +63,23 @@ export interface DataSource {
 }
 
 export class FirestoreSeedDataSource implements DataSource {
-  async getTransactions(): Promise<Transaction[]> {
-    return fsGetTransactions(null);
+  async getTransactions(query?: TransactionQuery): Promise<Transaction[]> {
+    const all = await fsGetTransactions(null);
+    if (!query) return all;
+    const sinceMs = query.since?.toMillis();
+    const beforeMs = query.before?.toMillis();
+    return all.filter(txn => {
+      const ms = txn.timestamp?.toMillis() ?? null;
+      if (sinceMs !== undefined) {
+        if (ms === null) return false;
+        if (ms < sinceMs) return false;
+      }
+      if (beforeMs !== undefined) {
+        if (ms !== null && ms >= beforeMs) return false;
+        if (ms === null && sinceMs !== undefined) return false;
+      }
+      return true;
+    });
   }
   async getStatements(): Promise<Statement[]> {
     return fsGetStatements(null);
@@ -72,6 +95,9 @@ export class FirestoreSeedDataSource implements DataSource {
   }
   async getNormalizationRules(): Promise<NormalizationRule[]> {
     return fsGetNormalizationRules(null);
+  }
+  async getWeeklyAggregates(): Promise<WeeklyAggregate[]> {
+    return fsGetWeeklyAggregates(null);
   }
   async updateTransaction(): Promise<void> {
     throw new Error("Seed data is read-only");
@@ -166,6 +192,20 @@ function toStatement(row: IdbStatement): Statement {
     account: row.account,
     balance: row.balance,
     period: row.period,
+    balanceDate: row.balanceDate ?? null,
+    lastTransactionDate: row.lastTransactionDateMs != null
+      ? Timestamp.fromMillis(row.lastTransactionDateMs)
+      : null,
+    groupId: null as GroupId | null,
+  };
+}
+
+function toWeeklyAggregate(row: IdbWeeklyAggregate): WeeklyAggregate {
+  return {
+    id: row.id,
+    weekStart: Timestamp.fromMillis(row.weekStartMs),
+    creditTotal: row.creditTotal,
+    unbudgetedTotal: row.unbudgetedTotal,
     groupId: null as GroupId | null,
   };
 }
@@ -197,9 +237,23 @@ async function updateRecord<T extends { id: string }>(
 }
 
 export class IdbDataSource implements DataSource {
-  async getTransactions(): Promise<Transaction[]> {
+  async getTransactions(query?: TransactionQuery): Promise<Transaction[]> {
     const rows = await getAll<IdbTransaction>("transactions");
-    return rows.map(toTransaction);
+    const sinceMs = query?.since?.toMillis();
+    const beforeMs = query?.before?.toMillis();
+    const filtered = rows.filter(row => {
+      if (sinceMs !== undefined) {
+        if (row.timestampMs === null) return false;
+        if (row.timestampMs < sinceMs) return false;
+      }
+      if (beforeMs !== undefined) {
+        if (row.timestampMs !== null && row.timestampMs >= beforeMs) return false;
+        // Exclude null-timestamp rows when since is present (already caught by since check above for non-before queries)
+        if (row.timestampMs === null && sinceMs !== undefined) return false;
+      }
+      return true;
+    });
+    return filtered.map(toTransaction);
   }
 
   async getStatements(): Promise<Statement[]> {
@@ -225,6 +279,11 @@ export class IdbDataSource implements DataSource {
   async getNormalizationRules(): Promise<NormalizationRule[]> {
     const rows = await getAll<IdbNormalizationRule>("normalizationRules");
     return rows.map(toNormalizationRule);
+  }
+
+  async getWeeklyAggregates(): Promise<WeeklyAggregate[]> {
+    const rows = await getAll<IdbWeeklyAggregate>("weeklyAggregates");
+    return rows.map(toWeeklyAggregate);
   }
 
   async updateTransaction(

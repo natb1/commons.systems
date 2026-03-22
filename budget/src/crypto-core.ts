@@ -8,7 +8,7 @@
 export const MAGIC = new Uint8Array([0x42, 0x45, 0x4e, 0x43]); // "BENC"
 export const SALT_LEN = 16;
 export const IV_LEN = 12;
-export const HEADER_LEN = MAGIC.length + SALT_LEN + IV_LEN; // 32
+export const HEADER_LEN = MAGIC.length + SALT_LEN + IV_LEN;
 export const PBKDF2_ITERATIONS = 600000;
 export const KEY_LEN = 32;
 
@@ -62,6 +62,9 @@ export async function decryptData(
   password: string,
 ): Promise<string> {
   const bytes = new Uint8Array(data);
+  if (bytes.length < HEADER_LEN || !MAGIC.every((b, i) => bytes[i] === b)) {
+    throw new Error("Not a BENC encrypted file");
+  }
   const salt = bytes.slice(MAGIC.length, MAGIC.length + SALT_LEN);
   const iv = bytes.slice(MAGIC.length + SALT_LEN, HEADER_LEN);
   const ciphertext = bytes.slice(HEADER_LEN);

@@ -25,6 +25,7 @@ vi.mock("../src/firestore.js", () => ({
   getNormalizationRules: vi.fn(),
 }));
 
+import { Timestamp } from "firebase/firestore";
 import { storeParsedData, closeDb } from "../src/idb";
 import { IdbDataSource, FirestoreSeedDataSource } from "../src/data-source";
 import type { TransactionId, BudgetPeriodId, RuleId } from "../src/firestore";
@@ -146,12 +147,122 @@ describe("IdbDataSource", () => {
     expect(newRule!.pattern).toBe("TARGET");
   });
 
+  it("reads weekly aggregates from IDB", async () => {
+    await storeParsedData(makeParsedData({
+      weeklyAggregates: [{
+        id: "2025-01-06",
+        weekStartMs: 1736121600000, // 2025-01-06T00:00:00Z
+        creditTotal: 500,
+        unbudgetedTotal: 75.50,
+      }],
+    }));
+    const ds = new IdbDataSource();
+    const aggs = await ds.getWeeklyAggregates();
+    expect(aggs).toHaveLength(1);
+    expect(aggs[0].id).toBe("2025-01-06");
+    expect(aggs[0].weekStart.toMillis()).toBe(1736121600000);
+    expect(aggs[0].creditTotal).toBe(500);
+    expect(aggs[0].unbudgetedTotal).toBe(75.50);
+  });
+
   it("deleteRule removes from IDB", async () => {
     await storeParsedData(makeParsedData());
     const ds = new IdbDataSource();
     await ds.deleteRule("r-1" as RuleId);
     const rules = await ds.getRules();
     expect(rules).toHaveLength(0);
+  });
+
+  describe("getTransactions with query params", () => {
+    const T1 = 1000;
+    const T2 = 2000;
+    const T3 = 3000;
+
+    function multiTxnData() {
+      return makeParsedData({
+        transactions: [
+          {
+            id: "t-early", institution: "bank", account: "1234",
+            description: "Early", amount: 10, timestampMs: T1,
+            statementId: null, category: "A", budget: null, note: "",
+            reimbursement: 0, normalizedId: null, normalizedPrimary: true,
+            normalizedDescription: null,
+          },
+          {
+            id: "t-mid", institution: "bank", account: "1234",
+            description: "Mid", amount: 20, timestampMs: T2,
+            statementId: null, category: "B", budget: null, note: "",
+            reimbursement: 0, normalizedId: null, normalizedPrimary: true,
+            normalizedDescription: null,
+          },
+          {
+            id: "t-late", institution: "bank", account: "1234",
+            description: "Late", amount: 30, timestampMs: T3,
+            statementId: null, category: "C", budget: null, note: "",
+            reimbursement: 0, normalizedId: null, normalizedPrimary: true,
+            normalizedDescription: null,
+          },
+          {
+            id: "t-null", institution: "bank", account: "1234",
+            description: "No date", amount: 40, timestampMs: null,
+            statementId: null, category: "D", budget: null, note: "",
+            reimbursement: 0, normalizedId: null, normalizedPrimary: true,
+            normalizedDescription: null,
+          },
+        ],
+      });
+    }
+
+    it("since — only returns transactions at or after sinceMs, excludes nulls", async () => {
+      await storeParsedData(multiTxnData());
+      const ds = new IdbDataSource();
+      const txns = await ds.getTransactions({ since: Timestamp.fromMillis(T2) });
+      const ids = txns.map(t => t.id);
+      expect(ids).toContain("t-mid");
+      expect(ids).toContain("t-late");
+      expect(ids).not.toContain("t-early");
+      expect(ids).not.toContain("t-null");
+    });
+
+    it("before — only returns transactions before beforeMs, includes null timestamps", async () => {
+      await storeParsedData(multiTxnData());
+      const ds = new IdbDataSource();
+      const txns = await ds.getTransactions({ before: Timestamp.fromMillis(T2) });
+      const ids = txns.map(t => t.id);
+      expect(ids).toContain("t-early");
+      expect(ids).toContain("t-null");
+      expect(ids).not.toContain("t-mid");
+      expect(ids).not.toContain("t-late");
+    });
+
+    it("since + before — returns transactions in range, excludes nulls", async () => {
+      await storeParsedData(multiTxnData());
+      const ds = new IdbDataSource();
+      const txns = await ds.getTransactions({
+        since: Timestamp.fromMillis(T2),
+        before: Timestamp.fromMillis(T3),
+      });
+      const ids = txns.map(t => t.id);
+      expect(ids).toEqual(["t-mid"]);
+    });
+
+    it("no args — returns all transactions (backward compatible)", async () => {
+      await storeParsedData(multiTxnData());
+      const ds = new IdbDataSource();
+      const txns = await ds.getTransactions();
+      expect(txns).toHaveLength(4);
+    });
+
+    it("null timestamps excluded with since, included with before only", async () => {
+      await storeParsedData(multiTxnData());
+      const ds = new IdbDataSource();
+
+      const withSince = await ds.getTransactions({ since: Timestamp.fromMillis(T1) });
+      expect(withSince.find(t => t.id === "t-null")).toBeUndefined();
+
+      const withBefore = await ds.getTransactions({ before: Timestamp.fromMillis(T3) });
+      expect(withBefore.find(t => t.id === "t-null")).toBeDefined();
+    });
   });
 });
 

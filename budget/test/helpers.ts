@@ -102,6 +102,7 @@ export function makeParsedData(overrides: Partial<ParsedData> = {}): ParsedData 
       },
     ],
     statements: [],
+    weeklyAggregates: [],
     meta: {
       key: "upload",
       groupName: "household",
@@ -120,6 +121,7 @@ export function createMockDataSource(overrides: Partial<DataSource> = {}): DataS
     getBudgetPeriods: vi.fn().mockResolvedValue([]),
     getRules: vi.fn().mockResolvedValue([]),
     getNormalizationRules: vi.fn().mockResolvedValue([]),
+    getWeeklyAggregates: vi.fn().mockResolvedValue([]),
     updateTransaction: vi.fn(),
     updateBudget: vi.fn(),
     adjustBudgetPeriodTotal: vi.fn(),
