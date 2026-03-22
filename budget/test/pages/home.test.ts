@@ -235,11 +235,11 @@ describe("renderHome", () => {
         txn({ category: "Food", budget: "food" }),
       ]),
     }));
-    expect(html).not.toContain("data-budget-options");
-    // data-category-options appears on sankey-controls for all users,
+    // data-budget-options and data-category-options appear on sankey-controls for all users,
     // but must not appear on the transactions table for unauthorized users
     const tableMatch = html.match(/<div id="transactions-table"([^>]*)>/);
     expect(tableMatch).not.toBeNull();
+    expect(tableMatch![1]).not.toContain("data-budget-options");
     expect(tableMatch![1]).not.toContain("data-category-options");
   });
 
@@ -536,6 +536,61 @@ describe("renderHome", () => {
     }));
     expect(html).toContain('id="sankey-category-filter"');
     expect(html).toContain('id="category-filter-label"');
+  });
+
+  it("renders budget filter input in sankey controls", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([txn()]),
+    }));
+    expect(html).toContain('id="sankey-budget-filter"');
+    expect(html).toContain('id="budget-filter-label"');
+  });
+
+  it("renders data-budget-options on sankey controls for all users", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([txn()]),
+    }));
+    const match = html.match(/id="sankey-controls"[^>]*data-budget-options="([^"]*)"/);
+    expect(match).not.toBeNull();
+    const decoded = match![1].replace(/&quot;/g, '"');
+    const options = JSON.parse(decoded);
+    expect(options).toContain("Food");
+    expect(options).toContain("Vacation");
+  });
+
+  it("renders data-budget-name on rows for budgeted transactions", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ budget: "food" }),
+      ]),
+    }));
+    expect(html).toContain('data-budget-name="Food"');
+  });
+
+  it("renders empty data-budget-name on rows for unbudgeted transactions", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ budget: null }),
+      ]),
+    }));
+    expect(html).toContain('data-budget-name=""');
+  });
+
+  it("includes budgetName in serialized chart JSON", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ budget: "food" }),
+        txn({ id: "txn-2", budget: null, category: "Travel", amount: 30, institution: "Bank B", account: "Savings", timestamp: mockTimestamp("2025-02-01") }),
+      ]),
+    }));
+    const match = html.match(/<script type="application\/json" id="sankey-data">([\s\S]*?)<\/script>/);
+    expect(match).not.toBeNull();
+    const chartTxns = JSON.parse(match![1]);
+    expect(chartTxns).toHaveLength(2);
+    const budgeted = chartTxns.find((t: any) => t.budgetName === "Food");
+    const unbudgeted = chartTxns.find((t: any) => t.budgetName === null);
+    expect(budgeted).toBeDefined();
+    expect(unbudgeted).toBeDefined();
   });
 
   it("calls getTransactions with a since query param for authorized users", async () => {

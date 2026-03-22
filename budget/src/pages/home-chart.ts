@@ -13,6 +13,7 @@ export interface SerializedChartTransaction {
   reimbursement: number;
   timestampMs: number | null;
   hasBudget: boolean;
+  budgetName: string | null;
 }
 
 export interface CategoryNode {
@@ -73,13 +74,14 @@ export interface CategoryTreeOptions {
   unbudgetedOnly?: boolean;
   showCardPayment?: boolean;
   categoryFilter?: string;
+  budgetFilter?: string;
 }
 
 export function buildCategoryTree(
   txns: SerializedChartTransaction[],
   opts: CategoryTreeOptions = {},
 ): CategoryNode {
-  const { mode = "spending", unbudgetedOnly = false, showCardPayment = false, categoryFilter = "" } = opts;
+  const { mode = "spending", unbudgetedOnly = false, showCardPayment = false, categoryFilter = "", budgetFilter = "" } = opts;
   const root: CategoryNode = { name: "All", fullPath: "", value: 0, count: 0, children: [] };
 
   for (const t of txns) {
@@ -94,6 +96,7 @@ export function buildCategoryTree(
     } else {
       throw new Error(`Unhandled chart mode: ${mode}`);
     }
+    if (budgetFilter && t.budgetName !== budgetFilter) continue;
     if (categoryFilter && t.category !== categoryFilter && !t.category.startsWith(categoryFilter + ":")) continue;
     const net = mode === "credits" ? -raw : raw;
     let node = root;
@@ -233,6 +236,7 @@ function assertChartTransactions(data: unknown): asserts data is SerializedChart
     if (typeof rec.reimbursement !== "number" || !Number.isFinite(rec.reimbursement)) throw new Error("Chart transaction reimbursement must be finite number");
     if (rec.timestampMs !== null && (typeof rec.timestampMs !== "number" || !Number.isFinite(rec.timestampMs))) throw new Error("Chart transaction timestampMs must be finite number or null");
     if (typeof rec.hasBudget !== "boolean") throw new Error("Chart transaction missing hasBudget boolean");
+    if (rec.budgetName !== null && typeof rec.budgetName !== "string") throw new Error("Chart transaction budgetName must be string or null");
   }
 }
 
@@ -262,6 +266,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   let currentUnbudgetedOnly = false;
   let currentShowCardPayment = false;
   let currentCategoryFilter = "";
+  let currentBudgetFilter = "";
 
   const controlsDiv = document.getElementById("sankey-controls");
   if (!controlsDiv) throw new Error("sankey-controls element not found");
@@ -274,12 +279,15 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   const cardPaymentToggle = controlsDiv.querySelector("#card-payment-toggle") as HTMLElement | null;
   const cardPaymentCheckbox = controlsDiv.querySelector("#sankey-card-payment") as HTMLInputElement | null;
   const categoryFilterInputRaw = controlsDiv.querySelector("#sankey-category-filter") as HTMLInputElement | null;
-  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox || !categoryFilterInputRaw) {
+  const budgetFilterInputRaw = controlsDiv.querySelector("#sankey-budget-filter") as HTMLInputElement | null;
+  if (!weeksInput || !endSlider || !endLabel || modeRadios.length === 0 || !unbudgetedToggle || !unbudgetedCheckbox || !cardPaymentToggle || !cardPaymentCheckbox || !categoryFilterInputRaw || !budgetFilterInputRaw) {
     throw new Error("sankey control elements missing");
   }
   const categoryFilterInput = categoryFilterInputRaw;
+  const budgetFilterInput = budgetFilterInputRaw;
 
   const categoryOptions = parseJsonArray(controlsDiv.dataset.categoryOptions);
+  const budgetOptions = parseJsonArray(controlsDiv.dataset.budgetOptions);
 
   endSlider.min = "0";
   endSlider.max = String(weeks.length - 1);
@@ -298,6 +306,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       unbudgetedOnly: currentUnbudgetedOnly,
       showCardPayment: currentShowCardPayment,
       categoryFilter: currentCategoryFilter,
+      budgetFilter: currentBudgetFilter,
     });
     divideTreeValues(rootData, currentNumWeeks);
 
@@ -478,6 +487,10 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       if (visible && currentCategoryFilter) {
         visible = category === currentCategoryFilter || category.startsWith(currentCategoryFilter + ":");
       }
+      if (visible && currentBudgetFilter) {
+        const budgetName = row.dataset.budgetName ?? "";
+        visible = budgetName === currentBudgetFilter;
+      }
       row.style.display = visible ? "" : "none";
     }
   }
@@ -564,6 +577,16 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   });
   categoryFilterInput.addEventListener("blur", () => {
     currentCategoryFilter = categoryFilterInput.value;
+    update();
+  });
+  budgetFilterInput.addEventListener("focus", () => {
+    showDropdown(budgetFilterInput, budgetOptions, "");
+  });
+  budgetFilterInput.addEventListener("input", () => {
+    showDropdown(budgetFilterInput, budgetOptions);
+  });
+  budgetFilterInput.addEventListener("blur", () => {
+    currentBudgetFilter = budgetFilterInput.value;
     update();
   });
 
