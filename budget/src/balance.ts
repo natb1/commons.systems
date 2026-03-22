@@ -245,6 +245,7 @@ export interface PerBudgetPoint {
   readonly weekLabel: string;
   readonly weekMs: number;
   readonly budget: string;
+  /** Raw (un-averaged) weekly spending for this budget. Rolling average is applied at the hydration layer. */
   readonly spending: number;
 }
 

@@ -2,7 +2,7 @@ import { Timestamp } from "firebase/firestore";
 import { type Budget, type BudgetId, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize } from "./hydrate-util.js";
+import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, makeDebounced } from "./hydrate-util.js";
 import { renderBudgetChart } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
@@ -144,7 +144,9 @@ function collectAllWeeks(periods: BudgetPeriod[], perBudgetTrend: PerBudgetPoint
   return [...seen.entries()].sort((a, b) => a[0] - b[0]).map(([ms, label]) => ({ label, ms }));
 }
 
+/** Apply a trailing rolling average to spending values independently per budget series, preserving week metadata. */
 export function applyRollingAverage(data: PerBudgetPoint[], windowSize: number): PerBudgetPoint[] {
+  if (!Number.isInteger(windowSize) || windowSize < 1) throw new RangeError(`windowSize must be a positive integer, got ${windowSize}`);
   const groups = new Map<string, PerBudgetPoint[]>();
   for (const d of data) {
     let arr = groups.get(d.budget);
@@ -194,12 +196,12 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   const allWeekMs = allWeeks.map(w => w.ms);
   let anchorMs = allWeeks.length > 0 ? allWeeks[allWeeks.length - 1].ms : 0;
   let currentWindowSize = 3;
+  let cachedAveraged = applyRollingAverage(perBudgetTrend, currentWindowSize);
 
   function render(): void {
     const windowSet = filterToWindow(allWeekMs, anchorMs);
     const windowedPeriods = periods.filter(p => windowSet.has(toSundayEntry(p.periodStart.toDate()).ms));
-    const averaged = applyRollingAverage(perBudgetTrend, currentWindowSize);
-    const windowedTrend = averaged.filter(d => windowSet.has(d.weekMs));
+    const windowedTrend = cachedAveraged.filter(d => windowSet.has(d.weekMs));
 
     renderBudgetChart(container, { budgets, periods: windowedPeriods });
     renderBudgetPieChart(pieEl, { budgets, averageWeeklyCredits });
@@ -218,18 +220,14 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   wireChartResize(container, render, getAllScrollWrappers, [container, areaEl], reattachScrollSync);
 
   const weeksInput = document.getElementById("area-chart-weeks") as HTMLInputElement | null;
-  if (weeksInput) {
-    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
-    function debounced(fn: () => void, ms: number): void {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(fn, ms);
+  if (!weeksInput) throw new DataIntegrityError("area-chart-weeks input not found in page markup");
+  const debounced = makeDebounced();
+  weeksInput.addEventListener("input", () => {
+    const v = parseInt(weeksInput.value, 10);
+    if (Number.isFinite(v) && v >= 1 && v <= 104) {
+      currentWindowSize = v;
+      cachedAveraged = applyRollingAverage(perBudgetTrend, currentWindowSize);
+      debounced(() => { render(); reattachScrollSync(); }, 100);
     }
-    weeksInput.addEventListener("input", () => {
-      const v = parseInt(weeksInput.value, 10);
-      if (Number.isFinite(v) && v >= 1) {
-        currentWindowSize = v;
-        debounced(() => { render(); reattachScrollSync(); }, 100);
-      }
-    });
-  }
+  });
 }

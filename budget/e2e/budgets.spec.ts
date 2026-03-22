@@ -80,9 +80,15 @@ test.describe("budgets", () => {
     await page.goto("/");
     await expect(page.locator("#budgets-area-chart svg").first()).toBeVisible({ timeout: 10000 });
     const weeksInput = page.locator("#area-chart-weeks");
+    const svgBefore = await page.locator("#budgets-area-chart svg").first().innerHTML();
     await weeksInput.fill("5");
-    // Wait for debounced re-render
-    await page.waitForTimeout(200);
-    await expect(page.locator("#budgets-area-chart svg").first()).toBeVisible();
+    await page.waitForFunction(
+      (prev) => {
+        const svg = document.querySelector("#budgets-area-chart svg");
+        return svg && svg.innerHTML !== prev;
+      },
+      svgBefore,
+      { timeout: 5000 },
+    );
   });
 });
