@@ -483,8 +483,8 @@ func TestRunMerge(t *testing.T) {
 	if stmt.StatementID != "test_bank-1234-2025-01" {
 		t.Errorf("statement.statementId = %q, want %q", stmt.StatementID, "test_bank-1234-2025-01")
 	}
-	if stmt.Balance != 100.00 {
-		t.Errorf("statement.balance = %v, want 100.00", stmt.Balance)
+	if stmt.Balance != 50.00 {
+		t.Errorf("statement.balance = %v, want 50.00", stmt.Balance)
 	}
 	if stmt.Institution != "test_bank" {
 		t.Errorf("statement.institution = %q, want %q", stmt.Institution, "test_bank")

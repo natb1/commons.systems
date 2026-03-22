@@ -150,14 +150,14 @@ func detectFormat(path string) (format, error) {
 type ParseResult struct {
 	Transactions []Transaction
 	Balance      int64     // cents; 0 if absent. Raw signed value from statement.
-	BalanceDate  time.Time // LEDGERBAL DTASOF; zero if absent or not in OFX/SGML format.
+	BalanceDate  time.Time // date the balance was observed; zero if absent. OFX: LEDGERBAL DTASOF. CSV: toDate.
 	Skipped      bool
 	SkipReason   string
 }
 
 // InferPeriod returns a YYYY-MM period derived from document data. Prefers
-// BalanceDate (OFX DTASOF), falls back to latest transaction date. Returns
-// empty string if neither is available.
+// BalanceDate, falls back to latest transaction date. Returns empty string
+// if neither is available.
 func (pr ParseResult) InferPeriod() string {
 	if !pr.BalanceDate.IsZero() {
 		return pr.BalanceDate.Format("2006-01")
