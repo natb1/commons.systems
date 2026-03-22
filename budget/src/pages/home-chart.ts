@@ -572,7 +572,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     input.addEventListener("focus", () => showDropdown(input, options, ""));
     input.addEventListener("input", () => showDropdown(input, options));
     input.addEventListener("blur", () => {
-      if (input.value && !options.includes(input.value)) input.value = "";
+      if (input.value && !options.includes(input.value) && !options.some(o => o.startsWith(input.value + ":"))) input.value = "";
       onBlur(input.value);
     });
   }
