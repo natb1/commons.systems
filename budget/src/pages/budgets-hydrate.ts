@@ -2,12 +2,12 @@ import { Timestamp } from "firebase/firestore";
 import { type Budget, type BudgetId, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize } from "./hydrate-util.js";
+import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, makeDebounced } from "./hydrate-util.js";
 import { renderBudgetChart } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
 import { computePanelWidth, filterToWindow } from "./chart-util.js";
-import { toSundayEntry, type PerBudgetPoint } from "../balance.js";
+import { toSundayEntry, computeRollingAverage, type PerBudgetPoint } from "../balance.js";
 import type { SerializedBudget } from "./budgets.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
@@ -113,8 +113,8 @@ function deserializePerBudgetTrend(raw: string): PerBudgetPoint[] {
   for (let i = 0; i < parsed.length; i++) {
     const el = parsed[i];
     if (typeof el.weekLabel !== "string" || typeof el.weekMs !== "number"
-      || typeof el.budget !== "string" || typeof el.avg3Spending !== "number") {
-      throw new DataIntegrityError(`Per-budget trend element ${i} missing or invalid fields: expected weekLabel(string), weekMs(number), budget(string), avg3Spending(number)`);
+      || typeof el.budget !== "string" || typeof el.spending !== "number") {
+      throw new DataIntegrityError(`Per-budget trend element ${i} missing or invalid fields: expected weekLabel(string), weekMs(number), budget(string), spending(number)`);
     }
   }
   return parsed as PerBudgetPoint[];
@@ -142,6 +142,26 @@ function collectAllWeeks(periods: BudgetPeriod[], perBudgetTrend: PerBudgetPoint
     if (!seen.has(d.weekMs)) seen.set(d.weekMs, d.weekLabel);
   }
   return [...seen.entries()].sort((a, b) => a[0] - b[0]).map(([ms, label]) => ({ label, ms }));
+}
+
+/** Apply a trailing rolling average to raw spending values independently per budget series. Returns new points where the spending field contains averaged values. */
+export function applyRollingAverage(data: PerBudgetPoint[], windowSize: number): PerBudgetPoint[] {
+  if (!Number.isInteger(windowSize) || windowSize < 1) throw new RangeError(`windowSize must be a positive integer, got ${windowSize}`);
+  const groups = new Map<string, PerBudgetPoint[]>();
+  for (const d of data) {
+    let arr = groups.get(d.budget);
+    if (!arr) { arr = []; groups.set(d.budget, arr); }
+    arr.push(d);
+  }
+  const result: PerBudgetPoint[] = [];
+  for (const [, points] of groups) {
+    points.sort((a, b) => a.weekMs - b.weekMs);
+    const averaged = computeRollingAverage(points.map(p => p.spending), windowSize);
+    for (let i = 0; i < points.length; i++) {
+      result.push({ ...points[i], spending: averaged[i] });
+    }
+  }
+  return result;
 }
 
 export function hydrateBudgetChart(container: HTMLElement): void {
@@ -175,13 +195,15 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   const allWeeks = collectAllWeeks(periods, perBudgetTrend);
   const allWeekMs = allWeeks.map(w => w.ms);
   let anchorMs = allWeeks.length > 0 ? allWeeks[allWeeks.length - 1].ms : 0;
+  let currentWindowSize = 3;
+  let cachedAveraged = applyRollingAverage(perBudgetTrend, currentWindowSize);
 
   const excludedBudgets = new Set<string>();
 
   function render(): void {
     const windowSet = filterToWindow(allWeekMs, anchorMs);
     const windowedPeriods = periods.filter(p => windowSet.has(toSundayEntry(p.periodStart.toDate()).ms));
-    const windowedTrend = perBudgetTrend.filter(d => windowSet.has(d.weekMs));
+    const windowedTrend = cachedAveraged.filter(d => windowSet.has(d.weekMs));
 
     renderBudgetChart(container, { budgets, periods: windowedPeriods });
     renderBudgetPieChart(pieEl, { budgets, averageWeeklyCredits });
@@ -209,4 +231,19 @@ export function hydrateBudgetChart(container: HTMLElement): void {
     reattachScrollSync();
   });
   wireChartResize(container, render, getAllScrollWrappers, [container, areaEl], reattachScrollSync);
+
+  const weeksInput = document.getElementById("area-chart-weeks") as HTMLInputElement | null;
+  if (!weeksInput) throw new DataIntegrityError("area-chart-weeks input not found in page markup");
+  const debounced = makeDebounced();
+  weeksInput.addEventListener("input", () => {
+    const v = parseInt(weeksInput.value, 10);
+    if (Number.isFinite(v) && v >= 1 && v <= 104) {
+      currentWindowSize = v;
+      debounced(() => {
+        cachedAveraged = applyRollingAverage(perBudgetTrend, currentWindowSize);
+        render();
+        reattachScrollSync();
+      }, 100);
+    }
+  });
 }

@@ -2,7 +2,7 @@ import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
 import { computeNetAmount, isCardPaymentCategory, MS_PER_WEEK, weekStart } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
-import { parseJsonArray } from "./hydrate-util.js";
+import { parseJsonArray, makeDebounced } from "./hydrate-util.js";
 
 export type ChartMode = "spending" | "credits";
 
@@ -510,11 +510,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
   update();
 
-  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
-  function debounced(fn: () => void, ms: number): void {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(fn, ms);
-  }
+  const debounced = makeDebounced();
 
   weeksInput.addEventListener("input", () => {
     const v = parseInt(weeksInput.value, 10);

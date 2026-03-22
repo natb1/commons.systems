@@ -11,7 +11,7 @@ function makePerBudgetPoint(overrides: Partial<PerBudgetPoint> = {}): PerBudgetP
     weekLabel: "1/5",
     weekMs: new Date("2025-01-05").getTime(),
     budget: "Food",
-    avg3Spending: 120,
+    spending: 120,
     ...overrides,
   };
 }
@@ -46,8 +46,8 @@ describe("renderPerBudgetAreaChart", () => {
     const container = makeContainer();
     const w1 = new Date("2025-01-05").getTime();
     const data = [
-      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Food", avg3Spending: 100 }),
-      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Housing", avg3Spending: 200 }),
+      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Food", spending: 100 }),
+      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Housing", spending: 200 }),
     ];
     renderPerBudgetAreaChart(container, { data, containerWidth: 640, panelWidth: 60 });
     const legend = container.querySelector(".area-legend");
@@ -132,8 +132,8 @@ describe("renderPerBudgetAreaChart", () => {
     const container = makeContainer();
     const w1 = new Date("2025-01-05").getTime();
     const data = [
-      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Food", avg3Spending: 100 }),
-      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Other", avg3Spending: 50 }),
+      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Food", spending: 100 }),
+      makePerBudgetPoint({ weekLabel: "1/5", weekMs: w1, budget: "Other", spending: 50 }),
     ];
     renderPerBudgetAreaChart(container, { data, containerWidth: 640, panelWidth: 60 });
     const legend = container.querySelector(".area-legend");
