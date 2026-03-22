@@ -99,10 +99,13 @@ function renderRow(opts: RenderRowOptions): string {
   const { txn, groupName, editable, budgetIdToName, balance } = opts;
   const p = buildRowParts(txn, editable, budgetIdToName, balance, groupName);
 
-  return `<details class="expand-row txn-row"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.netAmountAttr}${p.budgetNameAttr}>
+  const virtualClass = txn.virtual ? " virtual-txn" : "";
+  const virtualBadge = txn.virtual ? '<span class="virtual-badge">virtual</span>' : "";
+
+  return `<details class="expand-row txn-row${virtualClass}"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.netAmountAttr}${p.budgetNameAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
-        <span>${escapeHtml(txn.description)}</span>
+        <span>${virtualBadge}${escapeHtml(txn.description)}</span>
         <span>${p.noteCell}</span>
         <span>${p.categoryCell}</span>
         <span class="amount">${escapeHtml(txn.amount.toFixed(2))}</span>
@@ -162,6 +165,7 @@ function resolveBudgetName(budgetId: string | null, budgetIdToName: Map<string, 
   if (name === undefined) throw new DataIntegrityError(`Transaction references unknown budget ID: ${budgetId}`);
   return name;
 }
+
 
 function serializeChartTransactions(transactions: Transaction[], budgetIdToName: Map<string, string>): SerializedChartTransaction[] {
   return transactions

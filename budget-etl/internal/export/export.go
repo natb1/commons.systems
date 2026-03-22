@@ -134,24 +134,26 @@ type Statement struct {
 	Period              string  `json:"period"`
 	BalanceDate         string  `json:"balanceDate"`
 	LastTransactionDate *string `json:"lastTransactionDate"`
+	Virtual             bool    `json:"virtual"`
 }
 
 // Transaction is a single transaction in the JSON output.
 type Transaction struct {
-	ID                      string  `json:"id"`
-	Institution             string  `json:"institution"`
-	Account                 string  `json:"account"`
-	Description             string  `json:"description"`
-	Amount                  float64 `json:"amount"`
-	Timestamp               string  `json:"timestamp"`
-	StatementID             string  `json:"statementId"`
-	Category                string  `json:"category"`
-	Budget                  *string `json:"budget"`
-	Note                    string  `json:"note"`
-	Reimbursement           float64 `json:"reimbursement"`
-	NormalizedID            *string `json:"normalizedId"`
-	NormalizedPrimary       bool    `json:"normalizedPrimary"`
-	NormalizedDescription   *string `json:"normalizedDescription"`
+	ID                    string  `json:"id"`
+	Institution           string  `json:"institution"`
+	Account               string  `json:"account"`
+	Description           string  `json:"description"`
+	Amount                float64 `json:"amount"`
+	Timestamp             string  `json:"timestamp"`
+	StatementID           string  `json:"statementId"`
+	Category              string  `json:"category"`
+	Budget                *string `json:"budget"`
+	Note                  string  `json:"note"`
+	Reimbursement         float64 `json:"reimbursement"`
+	NormalizedID          *string `json:"normalizedId"`
+	NormalizedPrimary     bool    `json:"normalizedPrimary"`
+	NormalizedDescription *string `json:"normalizedDescription"`
+	Virtual               bool    `json:"virtual"`
 }
 
 // Budget is a budget definition in the JSON output.
@@ -159,6 +161,7 @@ type Budget struct {
 	ID              string  `json:"id"`
 	Name            string  `json:"name"`
 	WeeklyAllowance float64 `json:"weeklyAllowance"`
+	AllowancePeriod string  `json:"allowancePeriod,omitempty"`
 	Rollover        string  `json:"rollover"`
 }
 
@@ -175,15 +178,19 @@ type BudgetPeriod struct {
 
 // Rule is a categorization or budget assignment rule in the JSON output.
 type Rule struct {
-	ID            string `json:"id"`
-	Type          string `json:"type"`
-	Pattern       string `json:"pattern"`
-	Target        string `json:"target"`
-	Priority      int    `json:"priority"`
-	Institution   string `json:"institution"`
-	Account       string `json:"account"`
-	Category      string `json:"category,omitempty"`
-	TransactionID string `json:"transactionId,omitempty"`
+	ID              string   `json:"id"`
+	Type            string   `json:"type"`
+	Pattern         string   `json:"pattern"`
+	Target          string   `json:"target"`
+	Priority        int      `json:"priority"`
+	Institution     string   `json:"institution"`
+	Account         string   `json:"account"`
+	MinAmount       *float64 `json:"minAmount,omitempty"`
+	MaxAmount       *float64 `json:"maxAmount,omitempty"`
+	ExcludeCategory string   `json:"excludeCategory,omitempty"`
+	MatchCategory   string   `json:"matchCategory,omitempty"`
+	Category        string   `json:"category,omitempty"`
+	TransactionID   string   `json:"transactionId,omitempty"`
 }
 
 // NormalizationRule is a normalization rule in the JSON output.

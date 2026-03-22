@@ -3,6 +3,7 @@ import type {
   Transaction,
   Statement,
   Budget,
+  BudgetOverride,
   BudgetPeriod,
   Rule,
   NormalizationRule,
@@ -13,6 +14,7 @@ import type {
   BudgetPeriodId,
   RuleId,
   GroupId,
+  AllowancePeriod,
 } from "./firestore.js";
 import {
   getTransactions as fsGetTransactions,
@@ -45,13 +47,14 @@ export interface DataSource {
   ): Promise<void>;
   updateBudget(
     id: BudgetId,
-    fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
+    fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "allowancePeriod" | "rollover">>,
   ): Promise<void>;
+  updateBudgetOverrides(id: BudgetId, overrides: BudgetOverride[]): Promise<void>;
   adjustBudgetPeriodTotal(id: BudgetPeriodId, delta: number): Promise<void>;
   createRule(fields: Omit<Rule, "id" | "groupId">): Promise<RuleId>;
   updateRule(
     id: RuleId,
-    fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account">>,
+    fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount" | "excludeCategory" | "matchCategory">>,
   ): Promise<void>;
   deleteRule(id: RuleId): Promise<void>;
   createNormalizationRule(fields: Omit<NormalizationRule, "id" | "groupId">): Promise<string>;
@@ -105,6 +108,9 @@ export class FirestoreSeedDataSource implements DataSource {
   async updateBudget(): Promise<void> {
     throw new Error("Seed data is read-only");
   }
+  async updateBudgetOverrides(): Promise<void> {
+    throw new Error("Seed data is read-only");
+  }
   async adjustBudgetPeriodTotal(): Promise<void> {
     throw new Error("Seed data is read-only");
   }
@@ -145,7 +151,14 @@ function toTransaction(row: IdbTransaction): Transaction {
     normalizedId: row.normalizedId,
     normalizedPrimary: row.normalizedPrimary,
     normalizedDescription: row.normalizedDescription,
+    virtual: row.virtual ?? false,
   };
+}
+
+function toAllowancePeriod(value: string | undefined): AllowancePeriod {
+  if (value === "monthly") return "monthly";
+  if (value === "quarterly") return "quarterly";
+  return "weekly";
 }
 
 function toBudget(row: IdbBudget): Budget {
@@ -153,7 +166,12 @@ function toBudget(row: IdbBudget): Budget {
     id: row.id as BudgetId,
     name: row.name,
     weeklyAllowance: row.weeklyAllowance,
+    allowancePeriod: toAllowancePeriod(row.allowancePeriod),
     rollover: row.rollover,
+    overrides: (row.overrides ?? []).map(o => ({
+      date: Timestamp.fromMillis(o.dateMs),
+      balance: o.balance,
+    })),
     groupId: null as GroupId | null,
   };
 }
@@ -180,6 +198,10 @@ function toRule(row: IdbRule): Rule {
     priority: row.priority,
     institution: row.institution,
     account: row.account,
+    minAmount: row.minAmount,
+    maxAmount: row.maxAmount,
+    excludeCategory: row.excludeCategory,
+    matchCategory: row.matchCategory,
     groupId: null as GroupId | null,
   };
 }
@@ -197,6 +219,7 @@ function toStatement(row: IdbStatement): Statement {
       ? Timestamp.fromMillis(row.lastTransactionDateMs)
       : null,
     groupId: null as GroupId | null,
+    virtual: row.virtual ?? false,
   };
 }
 
@@ -295,9 +318,18 @@ export class IdbDataSource implements DataSource {
 
   async updateBudget(
     id: BudgetId,
-    fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
+    fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "allowancePeriod" | "rollover">>,
   ): Promise<void> {
     await updateRecord<IdbBudget>("budgets", id, "Budget", fields);
+  }
+
+  async updateBudgetOverrides(id: BudgetId, overrides: BudgetOverride[]): Promise<void> {
+    const row = await get<IdbBudget>("budgets", id);
+    if (!row) throw new Error(`Budget ${id} not found`);
+    await put("budgets", {
+      ...row,
+      overrides: overrides.map(o => ({ dateMs: o.date.toMillis(), balance: o.balance })),
+    } as unknown as Record<string, unknown>);
   }
 
   async adjustBudgetPeriodTotal(id: BudgetPeriodId, delta: number): Promise<void> {
@@ -318,6 +350,10 @@ export class IdbDataSource implements DataSource {
       priority: fields.priority,
       institution: fields.institution,
       account: fields.account,
+      minAmount: fields.minAmount,
+      maxAmount: fields.maxAmount,
+      excludeCategory: fields.excludeCategory,
+      matchCategory: fields.matchCategory,
     };
     await put("rules", record as unknown as Record<string, unknown>);
     return id;
@@ -325,7 +361,7 @@ export class IdbDataSource implements DataSource {
 
   async updateRule(
     id: RuleId,
-    fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account">>,
+    fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount" | "excludeCategory" | "matchCategory">>,
   ): Promise<void> {
     await updateRecord<IdbRule>("rules", id, "Rule", fields);
   }

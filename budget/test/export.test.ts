@@ -44,6 +44,7 @@ const idbTransactions = [
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
   },
 ];
 
@@ -52,7 +53,9 @@ const idbBudgets = [
     id: "groceries",
     name: "Groceries",
     weeklyAllowance: 100,
+    allowancePeriod: "weekly",
     rollover: "none",
+    overrides: [],
   },
 ];
 
@@ -77,6 +80,10 @@ const idbRules = [
     priority: 1,
     institution: null,
     account: null,
+    minAmount: null,
+    maxAmount: null,
+    excludeCategory: null,
+    matchCategory: null,
   },
 ];
 
@@ -103,6 +110,7 @@ const idbStatements = [
     period: "2025-06",
     balanceDate: null,
     lastTransactionDateMs: Date.parse("2025-06-10T00:00:00.000Z"),
+    virtual: false,
   },
 ];
 

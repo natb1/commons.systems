@@ -27,6 +27,7 @@ const secondTxn = {
   normalizedId: null,
   normalizedPrimary: true,
   normalizedDescription: null,
+  virtual: false,
 };
 
 function makeParsedData() {
@@ -91,7 +92,7 @@ describe("put + get", () => {
     const data = makeParsedData();
     await storeParsedData(data);
 
-    const record = { id: "txn-new", institution: "boa", account: "1234", description: "WALMART", amount: 10, timestampMs: null, statementId: null, category: "", budget: null, note: "", reimbursement: 0, normalizedId: null, normalizedPrimary: true, normalizedDescription: null };
+    const record = { id: "txn-new", institution: "boa", account: "1234", description: "WALMART", amount: 10, timestampMs: null, statementId: null, category: "", budget: null, note: "", reimbursement: 0, normalizedId: null, normalizedPrimary: true, normalizedDescription: null, virtual: false };
     await put("transactions", record);
     const result = await get("transactions", "txn-new");
     expect(result).toEqual(record);

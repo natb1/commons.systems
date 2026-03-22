@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { Budget, BudgetId, BudgetPeriod, Rollover, Statement, Transaction, TransactionId, WeeklyAggregate } from "./firestore.js";
+import type { AllowancePeriod, Budget, BudgetId, BudgetOverride, BudgetPeriod, Rollover, Statement, Transaction, TransactionId, WeeklyAggregate } from "./firestore.js";
 
 export interface BudgetDiff {
   readonly diff12: number;
@@ -60,8 +60,7 @@ function filterCreditTransactions(transactions: Transaction[]): TimestampedTrans
     (t): t is TimestampedTransaction =>
       computeNetAmount(t.amount, t.reimbursement) < 0
       && t.timestamp !== null
-      && (t.normalizedId === null || t.normalizedPrimary)
-      && !isCardPaymentCategory(t.category),
+      && (t.normalizedId === null || t.normalizedPrimary),
   );
 }
 
@@ -84,10 +83,62 @@ export function applyRollover(running: number, weeklyAllowance: number, rollover
   }
 }
 
+/**
+ * Compute the allowance for a period based on the allowance period type.
+ * Weekly: always returns the full allowance.
+ * Monthly: returns the full allowance when the period crosses a UTC month boundary
+ * (different month/year from the previous period), 0 otherwise.
+ * Quarterly: returns the full allowance when the period crosses a UTC quarter boundary
+ * (different quarter from the previous period), 0 otherwise.
+ * The first period (no previous) always gets the full allowance.
+ */
+export function periodAllowance(
+  allowance: number,
+  allowancePeriod: AllowancePeriod,
+  prevPeriodStartMs: number | null,
+  currentPeriodStartMs: number,
+): number {
+  if (allowancePeriod === "weekly") return allowance;
+  if (allowancePeriod === "quarterly") {
+    if (prevPeriodStartMs === null) return allowance;
+    const prev = new Date(prevPeriodStartMs);
+    const curr = new Date(currentPeriodStartMs);
+    if (prev.getUTCFullYear() !== curr.getUTCFullYear() ||
+        Math.floor(prev.getUTCMonth() / 3) !== Math.floor(curr.getUTCMonth() / 3)) {
+      return allowance;
+    }
+    return 0;
+  }
+  if (prevPeriodStartMs === null) return allowance;
+  const prev = new Date(prevPeriodStartMs);
+  const curr = new Date(currentPeriodStartMs);
+  if (prev.getUTCFullYear() !== curr.getUTCFullYear() || prev.getUTCMonth() !== curr.getUTCMonth()) {
+    return allowance;
+  }
+  return 0;
+}
+
+/** Convert an allowance to its weekly equivalent for apples-to-apples comparison. */
+export function weeklyEquivalent(allowance: number, allowancePeriod: AllowancePeriod): number {
+  if (allowancePeriod === "monthly") return allowance * 12 / 52;
+  if (allowancePeriod === "quarterly") return allowance * 4 / 52;
+  return allowance;
+}
+
 export function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
   return periods
     .filter((p) => p.budgetId === budgetId)
     .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
+}
+
+/** Return the latest override with date <= beforeMs, or null. Assumes overrides are sorted by date ascending. */
+export function findLatestOverride(overrides: BudgetOverride[], beforeMs: number): BudgetOverride | null {
+  let result: BudgetOverride | null = null;
+  for (const o of overrides) {
+    if (o.date.toMillis() <= beforeMs) result = o;
+    else break;
+  }
+  return result;
 }
 
 // Exclude non-primary normalized transactions to avoid double-counting duplicates
@@ -132,15 +183,56 @@ export function computeBudgetBalance(
 
   const targetPeriod = periods[targetPeriodIndex];
 
-  // Accumulate balance through prior periods
+  // Check for override that applies at or before the target period start
+  const targetStartMs = targetPeriod.periodStart.toMillis();
+  const override = findLatestOverride(budget.overrides, targetStartMs);
+
+  // Determine which period to start accumulating from
+  let startIdx = 0;
   let running = 0;
-  for (let i = 0; i < targetPeriodIndex; i++) {
-    running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
-    running -= periods[i].total;
+
+  if (override) {
+    const overrideMs = override.date.toMillis();
+    // Find the period containing the override date
+    const overridePeriodIdx = periods.findIndex(
+      (p) => p.periodStart.toMillis() <= overrideMs && overrideMs < p.periodEnd.toMillis(),
+    );
+    if (overridePeriodIdx !== -1 && overridePeriodIdx <= targetPeriodIndex) {
+      // Start from the override: set balance to override value, subtract the override period's total, then continue
+      startIdx = overridePeriodIdx + 1;
+      running = override.balance - periods[overridePeriodIdx].total;
+    }
   }
 
-  // Apply rollover entering the target period
-  running = applyRollover(running, budget.weeklyAllowance, budget.rollover);
+  if (!override) {
+    // No override: accumulate through all prior periods
+    for (let i = 0; i < targetPeriodIndex; i++) {
+      const prevMs = i > 0 ? periods[i - 1].periodStart.toMillis() : null;
+      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periods[i].periodStart.toMillis());
+      running = applyRollover(running, allow, budget.rollover);
+      running -= periods[i].total;
+    }
+  } else if (startIdx <= targetPeriodIndex) {
+    // Override was in a prior period; continue accumulating from after override period
+    for (let i = startIdx; i < targetPeriodIndex; i++) {
+      const prevMs = i > 0 ? periods[i - 1].periodStart.toMillis() : null;
+      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periods[i].periodStart.toMillis());
+      running = applyRollover(running, allow, budget.rollover);
+      running -= periods[i].total;
+    }
+  }
+
+  // Apply rollover entering the target period (unless override is in this period)
+  if (override && periods.findIndex(
+    (p) => p.periodStart.toMillis() <= override.date.toMillis() && override.date.toMillis() < p.periodEnd.toMillis(),
+  ) === targetPeriodIndex) {
+    // Override is in the target period: running starts at override balance
+    running = override.balance;
+  } else {
+    const prevMs = targetPeriodIndex > 0 ? periods[targetPeriodIndex - 1].periodStart.toMillis() : null;
+    const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, targetPeriod.periodStart.toMillis());
+    running = applyRollover(running, allow, budget.rollover);
+  }
 
   // Walk same-period transactions up to and including the target transaction
   const periodStartMs = targetPeriod.periodStart.toMillis();
@@ -181,8 +273,21 @@ export function computePeriodBalances(
     const sorted = periodsForBudget(periods, budget.id);
     const balances: PeriodBalance[] = [];
     let accumulated = 0;
-    for (const period of sorted) {
-      const running = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
+    for (let idx = 0; idx < sorted.length; idx++) {
+      const period = sorted[idx];
+      const periodStartMs = period.periodStart.toMillis();
+      const periodEndMs = period.periodEnd.toMillis();
+      const override = findLatestOverride(budget.overrides, periodStartMs);
+      const prevMs = idx > 0 ? sorted[idx - 1].periodStart.toMillis() : null;
+      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periodStartMs);
+
+      let running: number;
+      if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
+        // Override is in this period: replaces rollover
+        running = override.balance;
+      } else {
+        running = applyRollover(accumulated, allow, budget.rollover);
+      }
       accumulated = running - period.total;
       balances.push({
         periodStart: period.periodStart,
@@ -209,12 +314,22 @@ export function computeAllBudgetBalances(
     let accumulated = 0;
     let txnIdx = 0;
 
-    for (const period of periods) {
+    for (let pIdx = 0; pIdx < periods.length; pIdx++) {
+      const period = periods[pIdx];
       const periodStartMs = period.periodStart.toMillis();
       const periodEndMs = period.periodEnd.toMillis();
 
-      accumulated = applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
-      let running = accumulated;
+      const override = findLatestOverride(budget.overrides, periodStartMs);
+      const prevMs = pIdx > 0 ? periods[pIdx - 1].periodStart.toMillis() : null;
+      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periodStartMs);
+      let running: number;
+      if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
+        accumulated = override.balance;
+        running = accumulated;
+      } else {
+        accumulated = applyRollover(accumulated, allow, budget.rollover);
+        running = accumulated;
+      }
 
       // Walk transactions that fall within this period
       while (txnIdx < txns.length) {
@@ -394,29 +509,74 @@ export function computePerBudgetTrend(
  */
 export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
   const { weeks, weeklySpending } = indexPeriodsByWeek(periods);
-  if (weeks.length === 0) return 0;
+  if (weeks.length <= 1) return 0;
 
-  const trailing = weeks.slice(-12);
+  const completed = weeks.slice(0, -1); // exclude latest incomplete week
+  const trailing = completed.slice(-12);
   return trailing.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / trailing.length;
+}
+
+export interface PerBudgetAverage {
+  readonly avg12: number;
+  readonly avg52: number;
+}
+
+/** Return the number of calendar weeks spanned by a slice of [ms, label] entries. */
+function calendarWeekSpan(slice: [number, string][]): number {
+  if (slice.length <= 1) return slice.length;
+  return Math.round((slice[slice.length - 1][0] - slice[0][0]) / MS_PER_WEEK) + 1;
+}
+
+/** Compute per-budget average weekly spending over trailing 12-week and 52-week windows. */
+export function computePerBudgetAverageSpending(
+  budgets: Budget[],
+  periods: BudgetPeriod[],
+): Map<BudgetId, PerBudgetAverage> {
+  // Determine the global latest week so we exclude the same calendar week across all budgets
+  const { weeks: allWeeks } = indexPeriodsByWeek(periods);
+  const latestWeekMs = allWeeks.length > 0 ? allWeeks[allWeeks.length - 1][0] : undefined;
+
+  const result = new Map<BudgetId, PerBudgetAverage>();
+  for (const budget of budgets) {
+    const budgetPeriods = periodsForBudget(periods, budget.id);
+    const { weeks, weeklySpending } = indexPeriodsByWeek(budgetPeriods);
+    const completed = latestWeekMs !== undefined
+      ? weeks.filter(([ms]) => ms !== latestWeekMs)
+      : weeks;
+    if (completed.length === 0) {
+      result.set(budget.id, { avg12: 0, avg52: 0 });
+      continue;
+    }
+    const trailing12 = completed.slice(-12);
+    const avg12 = trailing12.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / calendarWeekSpan(trailing12);
+    const trailing52 = completed.slice(-52);
+    const avg52 = trailing52.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / calendarWeekSpan(trailing52);
+    result.set(budget.id, { avg12, avg52 });
+  }
+  return result;
 }
 
 /**
  * Compute average weekly credits over the trailing CREDIT_WEEKS-week window ending at the
- * Monday following the latest aggregate's weekStart (i.e., weekStart + 7 days).
+ * latest aggregate's weekStart (exclusive), excluding the latest incomplete week.
  * Uses pre-aggregated WeeklyAggregate data (creditTotal per Monday-aligned week).
  * Returns 0 when no weeks have credits.
  */
 export function computeAverageWeeklyCredits(aggregates: WeeklyAggregate[]): number {
-  const withCredits = aggregates.filter(a => a.creditTotal > 0);
-  if (withCredits.length === 0) return 0;
+  if (aggregates.length === 0) return 0;
 
+  // Find the latest week across all aggregates (the incomplete current week)
   let latestWeekStartMs = -Infinity;
-  for (const a of withCredits) {
+  for (const a of aggregates) {
     const ms = a.weekStart.toMillis();
     if (ms > latestWeekStartMs) latestWeekStartMs = ms;
   }
-  // Window end is next Monday (weekStart + 1 week)
-  const windowEnd = latestWeekStartMs + MS_PER_WEEK;
+
+  const withCredits = aggregates.filter(a => a.creditTotal > 0);
+  if (withCredits.length === 0) return 0;
+
+  // Exclude latest incomplete week: window ends at the start of the latest week
+  const windowEnd = latestWeekStartMs;
   const windowStart = windowEnd - CREDIT_WEEKS * MS_PER_WEEK;
 
   let sum = 0;
@@ -548,6 +708,25 @@ export interface NetWorthPoint {
   readonly weekLabel: string;
   readonly weekMs: number;
   readonly netWorth: number;
+  readonly isStatementAnchored: boolean;
+}
+
+export interface CashFlowPoint {
+  readonly weekLabel: string;
+  readonly weekMs: number;
+  readonly cashFlow: number;
+  readonly isStatementAnchored: boolean;
+}
+
+/** Compute week-over-week net worth change (discrete derivative). Drops the first week (no prior value to diff against). */
+export function computeCashFlow(points: NetWorthPoint[]): CashFlowPoint[] {
+  if (points.length < 2) return [];
+  return points.slice(1).map((p, i) => ({
+    weekLabel: p.weekLabel,
+    weekMs: p.weekMs,
+    cashFlow: p.netWorth - points[i].netWorth,
+    isStatementAnchored: p.isStatementAnchored,
+  }));
 }
 
 export interface BalanceDivergence {
@@ -568,6 +747,15 @@ function isValidPeriod(period: string): boolean {
   return /^\d{4}-\d{2}$/.test(period);
 }
 
+/** Convert statement period "YYYY-MM" to first-of-month UTC timestamp (period start). */
+function periodToStartMs(period: string): number {
+  const [yearStr, monthStr] = period.split("-");
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  if (isNaN(year) || isNaN(month)) throw new DataIntegrityError(`Invalid statement period: ${period}`);
+  return Date.UTC(year, month - 1, 1);
+}
+
 /** Convert statement period "YYYY-MM" to first-of-next-month UTC timestamp (anchor boundary). */
 function periodToAnchorMs(period: string): number {
   const [yearStr, monthStr] = period.split("-");
@@ -582,56 +770,38 @@ function periodToAnchorMs(period: string): number {
 /**
  * Compute weekly liquid net worth from transactions and statement balances.
  *
- * For each account, anchors at the latest statement balance and uses cumulative
- * transaction sums relative to the anchor to derive balance at each week boundary. Net worth at each week
- * is the sum of all account balances.
+ * Multi-anchor algorithm: for each account, uses ALL statement balances as anchors.
+ * Between consecutive statements, derives balance forward from the earlier statement
+ * using cumulative transaction sums. At each statement boundary, snaps to the actual
+ * statement balance to prevent cumulative drift.
  *
  * Transaction sign convention: positive = spending (reduces balance), negative = credit (increases balance).
  * Statement balance: raw signed from bank (positive = asset, negative = liability).
- *
- * Note: computeDerivedBalances anchors on the earliest statement (forward);
- * this function anchors on the latest (backward interpolation).
  */
 export function computeNetWorth(
   transactions: Transaction[],
   statements: Statement[],
   weeks: readonly { label: string; ms: number }[],
 ): NetWorthResult {
-  // Only statements with YYYY-MM periods can be converted to timestamps for balance derivation.
-  // Non-YYYY-MM periods (e.g. bank export filenames like "accountActivityExport(3)") are skipped.
   const validStatements = statements.filter(s => isValidPeriod(s.period));
   if (weeks.length === 0 || validStatements.length === 0) return { points: [], divergences: [] };
 
   const allStmts = groupStatementsByAccount(validStatements);
-
-  // Find latest statement per account
-  const latestStmts = new Map<string, Statement>();
-  for (const [k, stmts] of allStmts) {
-    let latest = stmts[0];
-    for (let i = 1; i < stmts.length; i++) {
-      if (statementEffectiveMs(stmts[i]) > statementEffectiveMs(latest)) latest = stmts[i];
-    }
-    latestStmts.set(k, latest);
-  }
-
-  // Group primary transactions by account (sorted by ms)
   const txnsByAccount = groupPrimaryTxnsByAccount(transactions);
 
-  // For each account, compute balance at each week and verify against statements
-  const accountWeekBalances = new Map<string, number[]>();
+  const accountWeekBalances = new Map<string, (number | null)[]>();
+  const accountWeekAnchored = new Map<string, boolean[]>();
   const divergences: BalanceDivergence[] = [];
 
-  for (const [k, anchor] of latestStmts) {
-    const anchorMs = statementEffectiveMs(anchor);
-    const anchorBalance = anchor.balance;
+  for (const [k, stmts] of allStmts) {
+    // Sort statements chronologically by effective timestamp
+    stmts.sort((a, b) => statementEffectiveMs(a) - statementEffectiveMs(b));
 
     const txnData = txnsByAccount.get(k) ?? [];
     const txnTimes = txnData.map(t => t.ms);
     const txnNets = txnData.map(t => t.net);
 
-    // cumSumBefore: cumulative net amount for txns before timestamp T.
-    // Uses sorted txnTimes with early break. Retained for non-sequential
-    // lookups (divergence verification) where the advancing pointer cannot be used.
+    // Cumulative net from index 0 to just before timestamp T
     function cumSumBefore(T: number): number {
       let sum = 0;
       for (let i = 0; i < txnTimes.length; i++) {
@@ -641,28 +811,93 @@ export function computeNetWorth(
       return sum;
     }
 
-    const anchorCum = cumSumBefore(anchorMs);
+    // Build segment anchors: [{ms, balance}] sorted chronologically
+    const anchors = stmts.map(s => ({ ms: statementEffectiveMs(s), balance: s.balance, period: s.period }));
 
-    // Compute balance at each week using an advancing pointer (weeks are sorted chronologically)
-    const balances: number[] = [];
+    // Compute raw derived balance at each week, then apply linear error correction
+    // for segments between two anchors where transaction data may be incomplete.
+    const rawBalances: (number | null)[] = [];
+    const anchored: boolean[] = [];
+    // Track which anchor segment each week belongs to
+    const weekAnchorIdx: number[] = [];
     let txnPtr = 0;
     let runningCum = 0;
+
     for (const week of weeks) {
       while (txnPtr < txnTimes.length && txnTimes[txnPtr] < week.ms) {
         runningCum += txnNets[txnPtr];
         txnPtr++;
       }
-      balances.push(anchorBalance - (runningCum - anchorCum));
-    }
-    accountWeekBalances.set(k, balances);
 
-    // Verify against non-anchor statements (unordered access, use cumSumBefore)
-    const stmts = allStmts.get(k) ?? [];
-    for (const stmt of stmts) {
-      if (stmt.period === anchor.period) continue;
-      const stmtMs = statementEffectiveMs(stmt);
-      const stmtCum = cumSumBefore(stmtMs);
-      const derived = anchorBalance - (stmtCum - anchorCum);
+      let anchorIdx = -1;
+      let isAnchored = false;
+      for (let i = anchors.length - 1; i >= 0; i--) {
+        if (week.ms >= anchors[i].ms) {
+          anchorIdx = i;
+          break;
+        }
+      }
+
+      let balance: number | null;
+      if (anchorIdx === -1) {
+        const firstAnchor = anchors[0];
+        const periodStartMs = periodToStartMs(stmts[0].period);
+        if (week.ms >= periodStartMs) {
+          const anchorCum = cumSumBefore(firstAnchor.ms);
+          balance = firstAnchor.balance - (runningCum - anchorCum);
+        } else {
+          balance = null;
+        }
+      } else {
+        const anchor = anchors[anchorIdx];
+        const anchorCum = cumSumBefore(anchor.ms);
+        balance = anchor.balance - (runningCum - anchorCum);
+        if (week.ms === anchor.ms) {
+          isAnchored = true;
+        }
+      }
+
+      rawBalances.push(balance);
+      anchored.push(isAnchored);
+      weekAnchorIdx.push(anchorIdx);
+    }
+
+    // Apply linear error correction: for each segment between anchor[i] and anchor[i+1],
+    // compute the error at the endpoint and distribute it linearly across weeks in that segment.
+    const balances: (number | null)[] = [...rawBalances];
+    for (let ai = 0; ai < anchors.length - 1; ai++) {
+      const nextAnchor = anchors[ai + 1];
+      // Find derived balance at the next anchor point
+      const derivedAtNext = anchors[ai].balance - (cumSumBefore(nextAnchor.ms) - cumSumBefore(anchors[ai].ms));
+      const error = derivedAtNext - nextAnchor.balance;
+      if (Math.abs(error) <= BALANCE_TOLERANCE_DOLLARS) continue;
+
+      // Find weeks in this segment
+      const segmentWeeks: number[] = [];
+      for (let wi = 0; wi < weeks.length; wi++) {
+        if (weekAnchorIdx[wi] === ai) segmentWeeks.push(wi);
+      }
+      if (segmentWeeks.length === 0) continue;
+
+      // Distribute error linearly: first week gets 0 correction, last gets full correction
+      const span = nextAnchor.ms - anchors[ai].ms;
+      for (const wi of segmentWeeks) {
+        if (balances[wi] === null) continue;
+        const progress = span > 0 ? (weeks[wi].ms - anchors[ai].ms) / span : 0;
+        balances[wi] = balances[wi]! - error * progress;
+      }
+    }
+
+    accountWeekBalances.set(k, balances);
+    accountWeekAnchored.set(k, anchored);
+
+    // Verify derived balance at each non-first statement against actual
+    for (let si = 1; si < anchors.length; si++) {
+      const stmt = anchors[si];
+      const prevAnchor = anchors[si - 1];
+      const prevCum = cumSumBefore(prevAnchor.ms);
+      const stmtCum = cumSumBefore(stmt.ms);
+      const derived = prevAnchor.balance - (stmtCum - prevCum);
       if (Math.abs(derived - stmt.balance) > BALANCE_TOLERANCE_DOLLARS) {
         const [inst, acct] = splitAccountKey(k);
         divergences.push({
@@ -676,13 +911,17 @@ export function computeNetWorth(
     }
   }
 
-  // Sum all account balances per week
+  // Sum all account balances per week; anchored if any account has anchor that week
   const points: NetWorthPoint[] = weeks.map((week, i) => {
     let netWorth = 0;
-    for (const balances of accountWeekBalances.values()) {
-      netWorth += balances[i];
+    let isStatementAnchored = false;
+    for (const [k, balances] of accountWeekBalances) {
+      const b = balances[i];
+      if (b !== null) netWorth += b;
+      const anchored = accountWeekAnchored.get(k);
+      if (anchored && anchored[i]) isStatementAnchored = true;
     }
-    return { weekLabel: week.label, weekMs: week.ms, netWorth };
+    return { weekLabel: week.label, weekMs: week.ms, netWorth, isStatementAnchored };
   });
 
   return { points, divergences };

@@ -14,6 +14,7 @@ import type {
   RuleId,
   GroupId,
   Rollover,
+  AllowancePeriod,
   RuleType,
 } from "./firestore.js";
 import type { ParsedData } from "./idb.js";
@@ -54,13 +55,21 @@ interface RawTransaction {
   normalizedId: string | null;
   normalizedPrimary: boolean;
   normalizedDescription: string | null;
+  virtual?: boolean;
+}
+
+interface RawBudgetOverride {
+  date: string;
+  balance: number;
 }
 
 interface RawBudget {
   id: string;
   name: string;
   weeklyAllowance: number;
+  allowancePeriod?: string;
   rollover: string;
+  overrides?: RawBudgetOverride[];
 }
 
 interface RawBudgetPeriod {
@@ -81,6 +90,10 @@ interface RawRule {
   priority: number;
   institution: string;
   account: string;
+  minAmount?: number;
+  maxAmount?: number;
+  excludeCategory?: string;
+  matchCategory?: string;
 }
 
 interface RawNormalizationRule {
@@ -103,6 +116,7 @@ interface RawStatement {
   period: string;
   balanceDate?: string;
   lastTransactionDate?: string | null;
+  virtual?: boolean;
 }
 
 interface RawWeeklyAggregate {
@@ -138,6 +152,13 @@ function emptyToNull(value: string): string | null {
 function requireRollover(value: string): Rollover {
   if (value === "none" || value === "debt" || value === "balance") return value;
   throw new UploadValidationError(`Invalid rollover value: "${value}"`);
+}
+
+function requireAllowancePeriod(value: string | undefined): AllowancePeriod {
+  if (value == null || value === "weekly") return "weekly";
+  if (value === "monthly") return "monthly";
+  if (value === "quarterly") return "quarterly";
+  throw new UploadValidationError(`Invalid allowancePeriod value: "${value}"`);
 }
 
 function requireId(value: unknown, entity: string, index: number): string {
@@ -213,13 +234,19 @@ export function parseUploadedJson(text: string): ParsedUpload {
     normalizedId: t.normalizedId || null,
     normalizedPrimary: t.normalizedPrimary !== false,
     normalizedDescription: t.normalizedDescription || null,
+    virtual: t.virtual ?? false,
   }));
 
   const budgets: Budget[] = (raw.budgets ?? []).map((b: RawBudget, i: number) => ({
     id: requireId(b.id, "budget", i) as BudgetId,
     name: b.name,
     weeklyAllowance: b.weeklyAllowance ?? 0,
+    allowancePeriod: requireAllowancePeriod(b.allowancePeriod),
     rollover: requireRollover(b.rollover ?? "none"),
+    overrides: (b.overrides ?? []).map(o => ({
+      date: parseTimestamp(o.date, "budget.overrides.date"),
+      balance: o.balance,
+    })),
     groupId: null as GroupId | null,
   }));
 
@@ -242,6 +269,10 @@ export function parseUploadedJson(text: string): ParsedUpload {
     priority: r.priority ?? 0,
     institution: emptyToNull(r.institution ?? ""),
     account: emptyToNull(r.account ?? ""),
+    minAmount: r.minAmount ?? null,
+    maxAmount: r.maxAmount ?? null,
+    excludeCategory: emptyToNull(r.excludeCategory ?? ""),
+    matchCategory: emptyToNull(r.matchCategory ?? ""),
     groupId: null as GroupId | null,
   }));
 
@@ -272,6 +303,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
         ? parseTimestamp(s.lastTransactionDate, `statement[${i}].lastTransactionDate`)
         : null,
       groupId: null as GroupId | null,
+      virtual: s.virtual ?? false,
     }),
   );
 
@@ -317,12 +349,15 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       normalizedId: t.normalizedId,
       normalizedPrimary: t.normalizedPrimary,
       normalizedDescription: t.normalizedDescription,
+      virtual: t.virtual,
     })),
     budgets: parsed.budgets.map((b) => ({
       id: b.id,
       name: b.name,
       weeklyAllowance: b.weeklyAllowance,
+      allowancePeriod: b.allowancePeriod,
       rollover: b.rollover,
+      overrides: b.overrides.map(o => ({ dateMs: o.date.toMillis(), balance: o.balance })),
     })),
     budgetPeriods: parsed.budgetPeriods.map((p) => ({
       id: p.id,
@@ -341,6 +376,10 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       priority: r.priority,
       institution: r.institution,
       account: r.account,
+      minAmount: r.minAmount,
+      maxAmount: r.maxAmount,
+      excludeCategory: r.excludeCategory,
+      matchCategory: r.matchCategory,
     })),
     normalizationRules: parsed.normalizationRules.map((r) => ({
       id: r.id,
@@ -361,6 +400,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       period: s.period,
       balanceDate: s.balanceDate,
       lastTransactionDateMs: s.lastTransactionDate?.toMillis() ?? null,
+      virtual: s.virtual,
     })),
     weeklyAggregates: parsed.weeklyAggregates.map((a) => ({
       id: a.id,

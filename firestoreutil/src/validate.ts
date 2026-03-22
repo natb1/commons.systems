@@ -34,3 +34,11 @@ export function optionalString(value: unknown, field: string): string | null {
   }
   return value;
 }
+
+export function optionalNumber(value: unknown, field: string): number | null {
+  if (value == null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new DataIntegrityError(`Expected finite number or null for ${field}, got ${value}`);
+  }
+  return value;
+}

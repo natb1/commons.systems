@@ -25,6 +25,7 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -40,6 +41,7 @@ function stmt(overrides: Partial<Statement> = {}): Statement {
     balanceDate: null,
     lastTransactionDate: null,
     groupId: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -196,6 +198,8 @@ describe("renderAccounts", () => {
     }));
     expect(html).toContain('id="accounts-net-worth-chart"');
     expect(html).toContain("data-net-worth");
+    expect(html).toContain('id="accounts-cash-flow-chart"');
+    expect(html).toContain("data-cash-flow");
   });
 
   it("renders date picker for chart navigation", async () => {
@@ -289,5 +293,38 @@ describe("renderAccounts", () => {
       getBudgetPeriods: vi.fn().mockResolvedValue([]),
     }));
     expect(html).not.toContain('id="balance-divergence-warning"');
+  });
+
+  it("shows virtual badge on account where all statements are virtual", async () => {
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue([]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt({ institution: "Synchrony", account: "Card", virtual: true, lastTransactionDate: ts("2025-02-15") }),
+        stmt({ id: "s2", statementId: "Synchrony-Card-2025-01" as any, institution: "Synchrony", account: "Card", period: "2025-01", virtual: true, lastTransactionDate: ts("2025-01-15") }),
+      ]),
+    }));
+    expect(html).toContain('virtual-badge');
+    expect(html).toContain('virtual');
+  });
+
+  it("does not show virtual badge on account with non-virtual statements", async () => {
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue([]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt({ institution: "Bank", account: "Checking", virtual: false, lastTransactionDate: ts("2025-02-15") }),
+      ]),
+    }));
+    expect(html).not.toContain('virtual-badge');
+  });
+
+  it("does not show virtual badge when account has mix of virtual and non-virtual statements", async () => {
+    const html = await renderAccounts(localOptions({
+      getTransactions: vi.fn().mockResolvedValue([]),
+      getStatements: vi.fn().mockResolvedValue([
+        stmt({ institution: "Bank", account: "Checking", virtual: true, lastTransactionDate: ts("2025-02-15") }),
+        stmt({ id: "s2", statementId: "Bank-Checking-2025-01" as any, institution: "Bank", account: "Checking", period: "2025-01", virtual: false, lastTransactionDate: ts("2025-01-15") }),
+      ]),
+    }));
+    expect(html).not.toContain('virtual-badge');
   });
 });

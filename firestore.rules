@@ -105,8 +105,8 @@ service cloud.firestore {
     }
 
     // Budgets are scoped to group members via a denormalized `memberEmails` field.
-    // Updates limited to name, weeklyAllowance (must be non-negative), and rollover;
-    // rollover must be one of "none", "debt", "balance". Create and delete are explicitly denied.
+    // Updates limited to name, weeklyAllowance (must be non-negative), rollover,
+    // and overrides. Create and delete are explicitly denied.
     match /budget/{env}/budgets/{budgetId} {
       allow read: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;
@@ -119,7 +119,9 @@ service cloud.firestore {
         && request.resource.data.weeklyAllowance is number
         && request.resource.data.weeklyAllowance >= 0
         && request.resource.data.rollover in ["none", "debt", "balance"]
-        && request.resource.data.keys().hasOnly(['name', 'weeklyAllowance', 'rollover', 'groupId', 'memberEmails']);
+        && (!('overrides' in request.resource.data) || request.resource.data.overrides is list)
+        && (!('allowancePeriod' in request.resource.data) || request.resource.data.allowancePeriod in ["weekly", "monthly", "quarterly"])
+        && request.resource.data.keys().hasOnly(['name', 'weeklyAllowance', 'allowancePeriod', 'rollover', 'overrides', 'groupId', 'memberEmails']);
       allow create, delete: if false;
     }
 
@@ -203,13 +205,16 @@ service cloud.firestore {
     function isValidRuleData() {
       return request.resource.data.type in ["categorization", "budget_assignment"]
         && request.resource.data.pattern is string
-        && request.resource.data.pattern.size() > 0
         && request.resource.data.target is string
         && request.resource.data.target.size() > 0
         && request.resource.data.priority is number
         && (!('institution' in request.resource.data) || request.resource.data.institution is string || request.resource.data.institution == null)
         && (!('account' in request.resource.data) || request.resource.data.account is string || request.resource.data.account == null)
-        && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'groupId', 'memberEmails']);
+        && (!('minAmount' in request.resource.data) || request.resource.data.minAmount is number || request.resource.data.minAmount == null)
+        && (!('maxAmount' in request.resource.data) || request.resource.data.maxAmount is number || request.resource.data.maxAmount == null)
+        && (!('excludeCategory' in request.resource.data) || request.resource.data.excludeCategory is string || request.resource.data.excludeCategory == null)
+        && (!('matchCategory' in request.resource.data) || request.resource.data.matchCategory is string || request.resource.data.matchCategory == null)
+        && request.resource.data.keys().hasOnly(['type', 'pattern', 'target', 'priority', 'institution', 'account', 'minAmount', 'maxAmount', 'excludeCategory', 'matchCategory', 'groupId', 'memberEmails']);
     }
 
     // Rules are scoped to group members via a denormalized `memberEmails` field.

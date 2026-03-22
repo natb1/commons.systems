@@ -24,6 +24,7 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -39,6 +40,7 @@ function stmt(overrides: Partial<Statement> = {}): Statement {
     balanceDate: null,
     lastTransactionDate: null,
     groupId: null,
+    virtual: false,
     ...overrides,
   };
 }

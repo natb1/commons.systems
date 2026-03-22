@@ -1,6 +1,6 @@
 import { collection, doc, getDoc, getDocs, query, updateDoc, where, increment, Timestamp, addDoc, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
-import { requireString, requireNumber, requireNonNegativeNumber, optionalString } from "@commons-systems/firestoreutil/validate";
+import { requireString, requireNumber, requireNonNegativeNumber, optionalString, optionalNumber } from "@commons-systems/firestoreutil/validate";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
@@ -22,12 +22,20 @@ export type { GroupId } from "@commons-systems/authutil/groups";
  * - "balance": full balance (positive or negative) carries over
  */
 export type Rollover = "none" | "debt" | "balance";
+export type AllowancePeriod = "weekly" | "monthly" | "quarterly";
+
+export interface BudgetOverride {
+  readonly date: Timestamp;
+  readonly balance: number;
+}
 
 export interface Budget {
   readonly id: BudgetId;
   readonly name: string;
   readonly weeklyAllowance: number;
+  readonly allowancePeriod: AllowancePeriod;
   readonly rollover: Rollover;
+  readonly overrides: BudgetOverride[];
   readonly groupId: GroupId | null;
 }
 
@@ -66,6 +74,7 @@ export interface Statement {
   readonly balanceDate: string | null;
   readonly lastTransactionDate: Timestamp | null;
   readonly groupId: GroupId | null;
+  readonly virtual: boolean;
 }
 
 export interface Transaction {
@@ -92,6 +101,7 @@ export interface Transaction {
   readonly normalizedId: string | null;
   readonly normalizedPrimary: boolean;
   readonly normalizedDescription: string | null;
+  readonly virtual: boolean;
 }
 
 function validateReimbursementRange(n: number): void {
@@ -135,9 +145,33 @@ function requireCategoryBreakdown(value: unknown): Record<string, number> {
   return result;
 }
 
+function requireOverrides(value: unknown): BudgetOverride[] {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    throw new DataIntegrityError(`Expected array for overrides, got ${typeof value}`);
+  }
+  const result: BudgetOverride[] = [];
+  for (let i = 0; i < value.length; i++) {
+    const entry = value[i];
+    if (entry == null || typeof entry !== "object") {
+      throw new DataIntegrityError(`overrides[${i}] is not an object`);
+    }
+    const date = requireTimestamp(entry.date, `overrides[${i}].date`);
+    const balance = requireNumber(entry.balance, `overrides[${i}].balance`);
+    result.push({ date, balance });
+  }
+  return result;
+}
+
 function requireRollover(value: unknown): Rollover {
   if (value === "none" || value === "debt" || value === "balance") return value;
   throw new DataIntegrityError(`Expected rollover to be one of none, debt, balance, got ${value}`);
+}
+
+function requireAllowancePeriod(value: unknown): AllowancePeriod {
+  if (value == null) return "weekly";
+  if (value === "weekly" || value === "monthly" || value === "quarterly") return value;
+  throw new DataIntegrityError(`Expected allowancePeriod to be weekly, monthly, or quarterly, got ${value}`);
 }
 
 /**
@@ -205,6 +239,7 @@ export async function getTransactions(groupId: GroupId | null, email?: string, f
       // Defaults to true for un-normalized transactions (field may be missing or null)
       normalizedPrimary: data.normalizedPrimary !== false,
       normalizedDescription: optionalString(data.normalizedDescription, "normalizedDescription"),
+      virtual: data.virtual === true,
     };
   });
 }
@@ -225,6 +260,7 @@ export async function getStatements(groupId: GroupId | null, email?: string): Pr
       balanceDate: optionalString(data.balanceDate, "balanceDate"),
       lastTransactionDate: optionalTimestamp(data.lastTransactionDate, "lastTransactionDate"),
       groupId: optionalString(data.groupId, "groupId") as GroupId | null,
+      virtual: data.virtual === true,
     };
   });
 }
@@ -259,7 +295,9 @@ export async function getBudgets(groupId: GroupId | null, email?: string): Promi
       id: docSnap.id as BudgetId,
       name,
       weeklyAllowance: requireNonNegativeNumber(data.weeklyAllowance, "weeklyAllowance"),
+      allowancePeriod: requireAllowancePeriod(data.allowancePeriod),
       rollover: requireRollover(data.rollover),
+      overrides: requireOverrides(data.overrides),
       groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     };
   });
@@ -343,7 +381,7 @@ export async function adjustBudgetPeriodTotal(
 
 export async function updateBudget(
   budgetId: BudgetId,
-  fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "rollover">>,
+  fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "allowancePeriod" | "rollover">>,
 ): Promise<void> {
   requireDocId(budgetId, "budget");
   if (Object.keys(fields).length === 0) return;
@@ -355,12 +393,34 @@ export async function updateBudget(
       throw new RangeError("Weekly allowance must be a non-negative number");
     }
   }
+  if (fields.allowancePeriod !== undefined) {
+    if (fields.allowancePeriod !== "weekly" && fields.allowancePeriod !== "monthly" && fields.allowancePeriod !== "quarterly") {
+      throw new Error("Allowance period must be weekly, monthly, or quarterly");
+    }
+  }
   if (fields.rollover !== undefined) {
     requireRollover(fields.rollover);
   }
   const path = nsCollectionPath(NAMESPACE, "budgets");
   const ref = doc(db, path, budgetId);
   await updateDoc(ref, fields);
+}
+
+export async function updateBudgetOverrides(
+  budgetId: BudgetId,
+  overrides: BudgetOverride[],
+): Promise<void> {
+  requireDocId(budgetId, "budget");
+  for (let i = 1; i < overrides.length; i++) {
+    if (overrides[i].date.toMillis() <= overrides[i - 1].date.toMillis()) {
+      throw new Error("Overrides must be sorted by date ascending");
+    }
+  }
+  const path = nsCollectionPath(NAMESPACE, "budgets");
+  const ref = doc(db, path, budgetId);
+  await updateDoc(ref, {
+    overrides: overrides.map(o => ({ date: o.date, balance: o.balance })),
+  });
 }
 
 // --- Rules ---
@@ -375,6 +435,10 @@ export interface Rule {
   readonly priority: number;
   readonly institution: string | null;
   readonly account: string | null;
+  readonly minAmount: number | null;
+  readonly maxAmount: number | null;
+  readonly excludeCategory: string | null;
+  readonly matchCategory: string | null;
   readonly groupId: GroupId | null;
 }
 
@@ -397,6 +461,10 @@ export async function getRules(groupId: GroupId | null, email?: string): Promise
       priority: requireNumber(data.priority, "priority"),
       institution: optionalString(data.institution, "institution"),
       account: optionalString(data.account, "account"),
+      minAmount: optionalNumber(data.minAmount, "minAmount"),
+      maxAmount: optionalNumber(data.maxAmount, "maxAmount"),
+      excludeCategory: optionalString(data.excludeCategory, "excludeCategory"),
+      matchCategory: optionalString(data.matchCategory, "matchCategory"),
       groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     };
   });
@@ -409,7 +477,7 @@ export async function createRule(
 ): Promise<RuleId> {
   requireRuleType(fields.type);
   if (!Number.isFinite(fields.priority)) throw new RangeError("Rule priority must be a finite number");
-  if (!fields.pattern) throw new Error("Rule pattern cannot be empty");
+  if (!fields.pattern && !fields.matchCategory) throw new Error("Rule pattern or matchCategory is required");
   if (!fields.target) throw new Error("Rule target cannot be empty");
   const path = nsCollectionPath(NAMESPACE, "rules");
   const ref = await addDoc(collection(db, path), {
@@ -419,6 +487,10 @@ export async function createRule(
     priority: fields.priority,
     institution: fields.institution,
     account: fields.account,
+    minAmount: fields.minAmount,
+    maxAmount: fields.maxAmount,
+    excludeCategory: fields.excludeCategory,
+    matchCategory: fields.matchCategory,
     groupId,
     memberEmails,
   });
@@ -427,7 +499,7 @@ export async function createRule(
 
 export async function updateRule(
   ruleId: RuleId,
-  fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account">>,
+  fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount" | "excludeCategory" | "matchCategory">>,
 ): Promise<void> {
   requireDocId(ruleId, "rule");
   if (Object.keys(fields).length === 0) return;

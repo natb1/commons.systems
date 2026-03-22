@@ -51,13 +51,16 @@ export interface IdbTransaction {
   normalizedId: string | null;
   normalizedPrimary: boolean;
   normalizedDescription: string | null;
+  virtual: boolean;
 }
 
 export interface IdbBudget {
   id: string;
   name: string;
   weeklyAllowance: number;
+  allowancePeriod?: string;
   rollover: Rollover;
+  overrides?: Array<{ dateMs: number; balance: number }>;
 }
 
 export interface IdbBudgetPeriod {
@@ -78,6 +81,10 @@ export interface IdbRule {
   priority: number;
   institution: string | null;
   account: string | null;
+  minAmount: number | null;
+  maxAmount: number | null;
+  excludeCategory: string | null;
+  matchCategory: string | null;
 }
 
 export interface IdbNormalizationRule {
@@ -100,6 +107,7 @@ export interface IdbStatement {
   period: string;
   balanceDate: string | null;
   lastTransactionDateMs: number | null;
+  virtual: boolean;
 }
 
 export interface IdbWeeklyAggregate {

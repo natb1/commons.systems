@@ -14,7 +14,9 @@ function budget(overrides: Partial<Budget> = {}): Budget {
     id: "food",
     name: "Food",
     weeklyAllowance: 150,
+    allowancePeriod: "weekly",
     rollover: "none",
+    overrides: [],
     groupId: null,
     ...overrides,
   };
@@ -37,6 +39,7 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -113,7 +116,7 @@ describe("renderBudgets", () => {
     expect(html).toContain('class="edit-rollover"');
     expect(html).toContain('data-budget-id="food"');
     expect(html).toContain('aria-label="Name"');
-    expect(html).toContain('aria-label="Weekly allowance"');
+    expect(html).toContain('aria-label="Allowance"');
     expect(html).toContain('aria-label="Rollover"');
   });
 
@@ -141,6 +144,14 @@ describe("renderBudgets", () => {
     const foodIdx = tableHtml.indexOf("Food");
     const vacationIdx = tableHtml.indexOf("Vacation");
     expect(foodIdx).toBeLessThan(vacationIdx);
+  });
+
+  it("renders quarterly period option", async () => {
+    const html = await renderBudgets(localOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ allowancePeriod: "quarterly", groupId: "household" })]),
+    }));
+    expect(html).toContain('<option value="quarterly" selected>');
+    expect(html).toContain("Quarterly");
   });
 
   it("renders rollover select with correct selected state", async () => {
@@ -211,15 +222,23 @@ describe("renderBudgets", () => {
       ]),
       getWeeklyAggregates: vi.fn().mockResolvedValue([
         {
+          id: "2026-02-16",
+          weekStart: Timestamp.fromDate(new Date("2026-02-16")),
+          creditTotal: 1200,
+          unbudgetedTotal: 0,
+          groupId: null,
+        },
+        {
           id: "2026-02-23",
           weekStart: Timestamp.fromDate(new Date("2026-02-23")),
-          creditTotal: 1200,
+          creditTotal: 0,
           unbudgetedTotal: 0,
           groupId: null,
         },
       ]),
     }));
     expect(html).toContain('id="budget-metrics"');
+    // 1200 / 12 = $100.00 (latest week 2026-02-23 excluded from average)
     expect(html).toContain("$100.00");
     expect(html).toContain("$150.00");
   });
@@ -357,5 +376,72 @@ describe("renderBudgets", () => {
       ]),
     }));
     expect(html).toContain('color: var(--error, #c00)');
+  });
+
+  it("renders overrides table when budgets have overrides", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([
+        budget({
+          overrides: [{ date: Timestamp.fromDate(new Date("2025-06-15")), balance: 42.5 }],
+        }),
+      ]),
+    }));
+    expect(html).toContain('id="overrides-table"');
+    expect(html).toContain("Balance Overrides");
+    expect(html).toContain("Food");
+    expect(html).toContain("2025-06-15");
+    expect(html).toContain("42.5");
+  });
+
+  it("renders overrides table empty when budgets exist but have no overrides", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ overrides: [] })]),
+    }));
+    expect(html).toContain('id="overrides-table"');
+    expect(html).not.toContain('class="override-row"');
+  });
+
+  it("hides overrides table when no budgets exist", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([]),
+    }));
+    expect(html).not.toContain('id="overrides-table"');
+  });
+
+  it("renders add override button for authorized users", async () => {
+    const html = await renderBudgets(localOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ groupId: "household" })]),
+    }));
+    expect(html).toContain('id="add-override"');
+  });
+
+  it("does not render add override button for unauthorized users", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget()]),
+    }));
+    expect(html).not.toContain('id="add-override"');
+  });
+
+  it("renders delete button for authorized users", async () => {
+    const html = await renderBudgets(localOptions({
+      getBudgets: vi.fn().mockResolvedValue([
+        budget({
+          groupId: "household",
+          overrides: [{ date: Timestamp.fromDate(new Date("2025-06-15")), balance: 100 }],
+        }),
+      ]),
+    }));
+    expect(html).toContain('class="delete-override"');
+  });
+
+  it("disables override inputs for unauthorized users", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([
+        budget({
+          overrides: [{ date: Timestamp.fromDate(new Date("2025-06-15")), balance: 100 }],
+        }),
+      ]),
+    }));
+    expect(html).toContain("disabled");
   });
 });

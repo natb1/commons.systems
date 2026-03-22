@@ -50,6 +50,7 @@ const validInput = {
       id: "groceries",
       name: "Groceries",
       weeklyAllowance: 100,
+      allowancePeriod: "weekly",
       rollover: "none",
     },
   ],
@@ -73,6 +74,8 @@ const validInput = {
       priority: 1,
       institution: "",
       account: "",
+      minAmount: 10.5,
+      maxAmount: 200,
     },
   ],
   normalizationRules: [
@@ -232,6 +235,28 @@ describe("parseUploadedJson", () => {
     );
     expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
       'Invalid rollover value: "invalid"',
+    );
+  });
+
+  it("accepts quarterly allowancePeriod", () => {
+    const input = {
+      ...validInput,
+      budgets: [{ ...validInput.budgets[0], allowancePeriod: "quarterly" }],
+    };
+    const result = parseUploadedJson(JSON.stringify(input));
+    expect(result.budgets[0].allowancePeriod).toBe("quarterly");
+  });
+
+  it("throws UploadValidationError for invalid allowancePeriod", () => {
+    const input = {
+      ...validInput,
+      budgets: [{ ...validInput.budgets[0], allowancePeriod: "biweekly" }],
+    };
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      UploadValidationError,
+    );
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      'Invalid allowancePeriod value: "biweekly"',
     );
   });
 

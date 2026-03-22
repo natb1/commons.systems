@@ -12,14 +12,20 @@ import (
 
 // Rule defines a categorization or budget assignment rule.
 type Rule struct {
-	ID          string
-	Type        string // "categorization" or "budget_assignment"
-	Pattern     string // case-insensitive substring to match against description
-	Target      string // categorization: category path (e.g. "Food:Coffee"); budget_assignment: budget ID
-	Priority    int    // lower number = higher priority
-	Institution string // optional: restrict to this institution
-	Account     string // optional: restrict to this account
-	Category    string // optional: restrict to transactions whose category starts with this prefix (case-insensitive)
+	ID              string
+	Type            string // "categorization" or "budget_assignment"
+	Pattern         string // case-insensitive substring to match against description
+	Target          string // categorization: category path (e.g. "Food:Coffee"); budget_assignment: budget ID
+	Priority        int    // lower number = higher priority
+	Institution     string // optional: restrict to this institution
+	Account         string // optional: restrict to this account
+	MinAmount       int64  // optional: minimum amount in cents (inclusive)
+	MaxAmount       int64  // optional: maximum amount in cents (inclusive)
+	HasMinAmount    bool
+	HasMaxAmount    bool
+	ExcludeCategory string // optional: reject transactions whose category equals or starts with this prefix
+	MatchCategory   string // optional: require category equals or starts with this prefix
+	Category        string // optional: restrict to transactions whose category starts with this prefix (case-insensitive)
 }
 
 // matchFields checks whether a pattern/institution/account filter matches the
@@ -40,8 +46,35 @@ func matchFields(pattern, ruleInstitution, ruleAccount, description, institution
 }
 
 // Match returns true if the rule matches the given transaction fields.
-func (r Rule) Match(description, institution, account string) bool {
-	return matchFields(r.Pattern, r.Institution, r.Account, description, institution, account)
+// Amount is in cents. Amount filtering is applied after pattern/institution/account matching.
+// When ExcludeCategory is non-empty, transactions whose category equals or starts with
+// ExcludeCategory+":" are rejected.
+func (r Rule) Match(description, institution, account, category string, amount int64) bool {
+	if !matchFields(r.Pattern, r.Institution, r.Account, description, institution, account) {
+		return false
+	}
+	if r.HasMinAmount && amount < r.MinAmount {
+		return false
+	}
+	if r.HasMaxAmount && amount > r.MaxAmount {
+		return false
+	}
+	if r.ExcludeCategory != "" {
+		if category == r.ExcludeCategory || strings.HasPrefix(category, r.ExcludeCategory+":") {
+			return false
+		}
+	}
+	if r.MatchCategory != "" {
+		if category != r.MatchCategory && !strings.HasPrefix(category, r.MatchCategory+":") {
+			return false
+		}
+	}
+	if r.Category != "" {
+		if !strings.HasPrefix(strings.ToLower(category), strings.ToLower(r.Category)) {
+			return false
+		}
+	}
+	return true
 }
 
 // rulesOfType filters rules by type and returns them sorted by priority (ascending).
@@ -72,7 +105,7 @@ func ApplyCategorization(txns []store.TransactionData, rules []Rule) error {
 		}
 		matched := false
 		for _, r := range catRules {
-			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account) {
+			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account, txns[i].Category, txns[i].Amount) {
 				txns[i].Category = r.Target
 				matched = true
 				break
@@ -99,22 +132,12 @@ func ApplyCategorization(txns []store.TransactionData, rules []Rule) error {
 func ApplyBudgetAssignment(txns []store.TransactionData, rules []Rule) {
 	budgetRules := rulesOfType(rules, "budget_assignment")
 
-	// Pre-compute lowered category prefixes so we don't call ToLower per (txn, rule) pair.
-	lowerCats := make([]string, len(budgetRules))
-	for i, r := range budgetRules {
-		lowerCats[i] = strings.ToLower(r.Category)
-	}
-
 	for i := range txns {
 		if txns[i].Budget != "" {
 			continue
 		}
-		lowerTxnCat := strings.ToLower(txns[i].Category)
-		for j, r := range budgetRules {
-			if lowerCats[j] != "" && !strings.HasPrefix(lowerTxnCat, lowerCats[j]) {
-				continue
-			}
-			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account) {
+		for _, r := range budgetRules {
+			if r.Match(txns[i].Description, txns[i].Institution, txns[i].Account, txns[i].Category, txns[i].Amount) {
 				txns[i].Budget = r.Target
 				break
 			}
