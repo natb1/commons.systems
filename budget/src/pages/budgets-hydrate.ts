@@ -144,7 +144,7 @@ function collectAllWeeks(periods: BudgetPeriod[], perBudgetTrend: PerBudgetPoint
   return [...seen.entries()].sort((a, b) => a[0] - b[0]).map(([ms, label]) => ({ label, ms }));
 }
 
-/** Apply a trailing rolling average to spending values independently per budget series, preserving week metadata. */
+/** Apply a trailing rolling average to raw spending values independently per budget series. Returns new points where the spending field contains averaged values. */
 export function applyRollingAverage(data: PerBudgetPoint[], windowSize: number): PerBudgetPoint[] {
   if (!Number.isInteger(windowSize) || windowSize < 1) throw new RangeError(`windowSize must be a positive integer, got ${windowSize}`);
   const groups = new Map<string, PerBudgetPoint[]>();
@@ -239,8 +239,11 @@ export function hydrateBudgetChart(container: HTMLElement): void {
     const v = parseInt(weeksInput.value, 10);
     if (Number.isFinite(v) && v >= 1 && v <= 104) {
       currentWindowSize = v;
-      cachedAveraged = applyRollingAverage(perBudgetTrend, currentWindowSize);
-      debounced(() => { render(); reattachScrollSync(); }, 100);
+      debounced(() => {
+        cachedAveraged = applyRollingAverage(perBudgetTrend, currentWindowSize);
+        render();
+        reattachScrollSync();
+      }, 100);
     }
   });
 }

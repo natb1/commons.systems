@@ -215,6 +215,15 @@ export function uniqueSorted(values: (string | null)[]): string[] {
   return [...new Set(values.filter((v): v is string => v != null))].sort();
 }
 
+/** Create a debounced wrapper that delays `fn` by `ms`, resetting the timer on each call. */
+export function makeDebounced(): (fn: () => void, ms: number) => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return (fn, ms) => {
+    clearTimeout(timer);
+    timer = setTimeout(fn, ms);
+  };
+}
+
 /**
  * Parse a JSON-encoded string array from a data attribute.
  * Returns [] when the attribute is absent (unauthorized users).
