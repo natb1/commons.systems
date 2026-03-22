@@ -44,6 +44,7 @@ const idbTransactions = [
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
   },
 ];
 
@@ -109,6 +110,7 @@ const idbStatements = [
     period: "2025-06",
     balanceDate: null,
     lastTransactionDateMs: Date.parse("2025-06-10T00:00:00.000Z"),
+    virtual: false,
   },
 ];
 

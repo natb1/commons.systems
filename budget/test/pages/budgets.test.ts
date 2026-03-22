@@ -39,6 +39,7 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -221,15 +222,23 @@ describe("renderBudgets", () => {
       ]),
       getWeeklyAggregates: vi.fn().mockResolvedValue([
         {
+          id: "2026-02-16",
+          weekStart: Timestamp.fromDate(new Date("2026-02-16")),
+          creditTotal: 1200,
+          unbudgetedTotal: 0,
+          groupId: null,
+        },
+        {
           id: "2026-02-23",
           weekStart: Timestamp.fromDate(new Date("2026-02-23")),
-          creditTotal: 1200,
+          creditTotal: 0,
           unbudgetedTotal: 0,
           groupId: null,
         },
       ]),
     }));
     expect(html).toContain('id="budget-metrics"');
+    // 1200 / 12 = $100.00 (latest week 2026-02-23 excluded from average)
     expect(html).toContain("$100.00");
     expect(html).toContain("$150.00");
   });

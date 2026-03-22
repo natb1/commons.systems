@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computePerBudgetAverageSpending, computeNetWorth, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent } from "../src/balance";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computePerBudgetAverageSpending, computeNetWorth, computeCashFlow, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent } from "../src/balance";
 import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -50,6 +50,7 @@ function makeTxn(overrides: Partial<Transaction> = {}): Transaction {
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -614,52 +615,62 @@ describe("computeAverageWeeklyCredits", () => {
     expect(computeAverageWeeklyCredits(aggs)).toBe(0);
   });
 
-  it("single aggregate with creditTotal returns creditTotal / 12", () => {
+  it("excludes latest incomplete week from window", () => {
+    // Only 1 aggregate — it's the latest, so it's excluded → sum = 0
     const aggs = [
       makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
     ];
+    expect(computeAverageWeeklyCredits(aggs)).toBe(0);
+  });
+
+  it("includes completed weeks but not the latest", () => {
+    // Latest is 2025-03-10 (excluded), earlier week 2025-03-03 is included
+    const aggs = [
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 1200 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 600 }),
+    ];
+    // windowEnd = 2025-03-10, windowStart = 2025-03-10 - 12 weeks = 2024-12-16
+    // Only 2025-03-03 is in window → 1200 / 12 = 100
     expect(computeAverageWeeklyCredits(aggs)).toBe(100);
   });
 
-  it("multiple aggregates within window are summed then divided by 12", () => {
+  it("excludes aggregates outside 12-week window (before windowStart)", () => {
+    // Latest weekStart is 2025-03-10 → windowEnd = 2025-03-10, windowStart = 2024-12-15
+    // An aggregate at 2024-12-08 is before windowStart, excluded
     const aggs = [
-      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 600 }),
+      makeAggregate({ id: "2024-12-08", weekStart: ts("2024-12-08"), creditTotal: 9999 }),
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 1200 }),
       makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 600 }),
     ];
     expect(computeAverageWeeklyCredits(aggs)).toBe(100);
   });
 
-  it("excludes aggregates outside 12-week window (before windowStart)", () => {
-    // Latest weekStart is 2025-03-10 → windowEnd = 2025-03-17, windowStart = 2024-12-22
-    // An aggregate at 2024-12-15 is before windowStart, excluded
+  it("window is anchored to latest weekStart (exclusive end)", () => {
+    // Latest weekStart: 2025-03-10 → windowEnd = 2025-03-10
+    // windowStart = 2025-03-10 - 12 weeks = 2024-12-16
+    // Aggregate at 2024-12-16 is exactly at windowStart (inclusive)
     const aggs = [
-      makeAggregate({ id: "2024-12-15", weekStart: ts("2024-12-15"), creditTotal: 9999 }),
-      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
+      makeAggregate({ id: "2024-12-16", weekStart: ts("2024-12-16T00:00:00Z"), creditTotal: 240 }),
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 1200 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 600 }),
     ];
-    expect(computeAverageWeeklyCredits(aggs)).toBe(100);
-  });
-
-  it("window is anchored to latest weekStart + 1 week", () => {
-    // Latest weekStart: 2025-03-10 → windowEnd = 2025-03-17
-    // windowStart = 2025-03-17 - 12 weeks = 2024-12-23
-    // Aggregate at 2024-12-23 is exactly at windowStart (inclusive)
-    const aggs = [
-      makeAggregate({ id: "2024-12-23", weekStart: ts("2024-12-23T00:00:00Z"), creditTotal: 240 }),
-      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
-    ];
+    // Window: [2024-12-16, 2025-03-10) → includes 2024-12-16 (240) and 2025-03-03 (1200)
     expect(computeAverageWeeklyCredits(aggs)).toBe(120);
 
-    // Aggregate at 2024-12-22 is just before windowStart (excluded)
+    // Aggregate at 2024-12-15 is just before windowStart (excluded)
     const aggsExcluded = [
-      makeAggregate({ id: "2024-12-22", weekStart: ts("2024-12-22T23:59:59.999Z"), creditTotal: 9999 }),
-      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
+      makeAggregate({ id: "2024-12-15", weekStart: ts("2024-12-15T23:59:59.999Z"), creditTotal: 9999 }),
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 1200 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 600 }),
     ];
     expect(computeAverageWeeklyCredits(aggsExcluded)).toBe(100);
   });
 
   it("fractional creditTotal is handled correctly", () => {
+    // Need at least 2 aggregates; latest is excluded
     const aggs = [
-      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 500 }),
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 500 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 100 }),
     ];
     expect(computeAverageWeeklyCredits(aggs)).toBeCloseTo(500 / 12, 10);
   });
@@ -838,10 +849,17 @@ describe("computeAverageWeeklySpending", () => {
     expect(computeAverageWeeklySpending([])).toBe(0);
   });
 
-  it("averages weekly totals over trailing 12 weeks", () => {
-    // Create 14 weeks of periods; only trailing 12 should be used
+  it("returns 0 for single week (only the incomplete current week)", () => {
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
+    ];
+    expect(computeAverageWeeklySpending(periods)).toBe(0);
+  });
+
+  it("excludes latest incomplete week from trailing 12", () => {
+    // Create 15 weeks of periods; latest excluded, then trailing 12 of the remaining 14
     const periods: ReturnType<typeof makePeriod>[] = [];
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 15; i++) {
       const start = new Date("2025-01-06");
       start.setDate(start.getDate() + i * 7);
       const end = new Date(start);
@@ -852,22 +870,23 @@ describe("computeAverageWeeklySpending", () => {
           budgetId: "food",
           periodStart: ts(start.toISOString()),
           periodEnd: ts(end.toISOString()),
-          total: i < 2 ? 999 : 100, // first 2 weeks have large totals that should be excluded
+          total: i < 2 ? 999 : 100, // first 2 weeks have large totals outside trailing 12
         }),
       );
     }
     const result = computeAverageWeeklySpending(periods);
-    // Trailing 12 weeks (indices 2-13) all have total=100
+    // Completed = weeks 0-13 (latest week 14 excluded), trailing 12 = weeks 2-13 (all 100)
     expect(result).toBe(100);
   });
 
-  it("fewer than 12 weeks averages over available weeks", () => {
+  it("fewer than 12 completed weeks averages over available completed weeks", () => {
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
       makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 120 }),
+      makePeriod({ id: "food-w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 200 }),
     ];
     const result = computeAverageWeeklySpending(periods);
-    // 2 weeks: (80 + 120) / 2 = 100
+    // Latest week (w3) excluded, completed = w1 + w2: (80 + 120) / 2 = 100
     expect(result).toBe(100);
   });
 });
@@ -897,6 +916,7 @@ function makeStmt(overrides: Partial<Statement> = {}): Statement {
     balanceDate: null,
     lastTransactionDate: null,
     groupId: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -959,13 +979,13 @@ describe("computeNetWorth", () => {
       makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
       makeStmt({ id: "s2", period: "2024-12", balance: 800 }),
     ];
-    // No transactions between Dec and Jan, so derived Dec balance = 1000
-    // But statement says 800 → divergence of 200
+    // Multi-anchor: sorted chronologically, Dec (800) → Jan (1000).
+    // Derived from Dec with no transactions = 800, but Jan says 1000 → divergence.
     const result = computeNetWorth([], stmts, weeks);
     expect(result.divergences).toHaveLength(1);
-    expect(result.divergences[0].period).toBe("2024-12");
-    expect(result.divergences[0].statementBalance).toBe(800);
-    expect(result.divergences[0].derivedBalance).toBe(1000);
+    expect(result.divergences[0].period).toBe("2025-01");
+    expect(result.divergences[0].statementBalance).toBe(1000);
+    expect(result.divergences[0].derivedBalance).toBe(800);
   });
 
   it("no divergence when transaction accounts for balance change", () => {
@@ -1019,9 +1039,6 @@ describe("computeNetWorth", () => {
   });
 
   it("uses balanceDate for anchor when present", () => {
-    // Two statements with balanceDates: Dec 15 (balance=1000) and Jan 20 (balance=900).
-    // statementEffectiveMs uses balanceDate midnight UTC, so latest is Jan 20.
-    // One transaction of 100 between them explains the drop → zero divergences.
     const stmts = [
       makeStmt({ id: "s1", period: "2024-12", balance: 1000, balanceDate: "2024-12-15" }),
       makeStmt({ id: "s2", period: "2025-01", balance: 900, balanceDate: "2025-01-20" }),
@@ -1032,12 +1049,124 @@ describe("computeNetWorth", () => {
     ];
     const result = computeNetWorth(txns, stmts, weeks);
     expect(result.divergences).toHaveLength(0);
-    // Anchor is Jan 20 (latest by balanceDate). Week Jan 5 balance:
-    // anchorBalance(900) - (cumBefore(Jan5) - cumBefore(Jan20)) = 900 - (0 - 100) = 1000
     expect(result.points[0].netWorth).toBe(1000);
-    // Week Jan 12 balance: txn at Jan 10 is before Jan 12
-    // 900 - (100 - 100) = 900
     expect(result.points[1].netWorth).toBe(900);
+  });
+
+  it("marks weeks at statement boundaries as anchored", () => {
+    // Statement for 2025-01 has effectiveMs = Feb 1 (first of next month).
+    // A week starting on Feb 1 should be anchored.
+    const febWeeks = [
+      { label: "1/19", ms: new Date("2025-01-19").getTime() },
+      { label: "2/1", ms: Date.UTC(2025, 1, 1) },  // Feb 1 = anchor boundary for 2025-01 stmt
+      { label: "2/9", ms: new Date("2025-02-09").getTime() },
+    ];
+    const result = computeNetWorth([], [makeStmt({ balance: 500, period: "2025-01" })], febWeeks);
+    expect(result.points[0].isStatementAnchored).toBe(false);
+    expect(result.points[1].isStatementAnchored).toBe(true);
+    expect(result.points[2].isStatementAnchored).toBe(false);
+  });
+
+  it("two statements: both boundaries anchored, intermediate interpolated", () => {
+    const twoStmtWeeks = [
+      { label: "1/1", ms: Date.UTC(2025, 0, 1) },  // anchor for 2024-12
+      { label: "1/15", ms: Date.UTC(2025, 0, 15) }, // interpolated
+      { label: "2/1", ms: Date.UTC(2025, 1, 1) },   // anchor for 2025-01
+    ];
+    const stmts = [
+      makeStmt({ id: "s1", period: "2024-12", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-01", balance: 900 }),
+    ];
+    const result = computeNetWorth([], stmts, twoStmtWeeks);
+    expect(result.points[0].isStatementAnchored).toBe(true);
+    expect(result.points[1].isStatementAnchored).toBe(false);
+    expect(result.points[2].isStatementAnchored).toBe(true);
+  });
+
+  it("multi-account: anchored when any account has statement that week", () => {
+    const multiWeeks = [
+      { label: "1/1", ms: Date.UTC(2025, 0, 1) },  // anchor for Bank 2024-12
+      { label: "2/1", ms: Date.UTC(2025, 1, 1) },   // anchor for both Bank 2025-01 and CC 2025-01
+    ];
+    const stmts = [
+      makeStmt({ id: "s1", institution: "Bank", account: "Checking", period: "2024-12", balance: 1000 }),
+      makeStmt({ id: "s2", institution: "Bank", account: "Checking", period: "2025-01", balance: 900 }),
+      makeStmt({ id: "s3", institution: "CC", account: "Visa", period: "2025-01", balance: -500 }),
+    ];
+    const result = computeNetWorth([], stmts, multiWeeks);
+    // Jan 1: anchored (Bank has 2024-12 anchor)
+    expect(result.points[0].isStatementAnchored).toBe(true);
+    // Feb 1: anchored (both Bank and CC have 2025-01 anchor)
+    expect(result.points[1].isStatementAnchored).toBe(true);
+  });
+
+  it("multi-anchor re-anchoring eliminates drift", () => {
+    // Two statements: Dec (balance=1000) and Jan (balance=800).
+    // A "phantom" $50 spending between Dec and Jan would cause the old single-anchor
+    // approach to show drift. With multi-anchor, the Jan boundary snaps to 800.
+    const reanchorWeeks = [
+      { label: "12/15", ms: Date.UTC(2024, 11, 15) },
+      { label: "1/1", ms: Date.UTC(2025, 0, 1) },   // Dec anchor
+      { label: "1/15", ms: Date.UTC(2025, 0, 15) },
+      { label: "2/1", ms: Date.UTC(2025, 1, 1) },    // Jan anchor
+      { label: "2/15", ms: Date.UTC(2025, 1, 15) },
+    ];
+    const stmts = [
+      makeStmt({ id: "s1", period: "2024-12", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-01", balance: 800 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 150,
+        timestamp: ts("2025-01-10"), budget: null }),
+    ];
+    const result = computeNetWorth(txns, stmts, reanchorWeeks);
+    // At Feb 1 (Jan anchor), balance should snap to 800 (the actual statement balance)
+    expect(result.points[3].netWorth).toBe(800);
+    // At Feb 15 (after Jan anchor), no more txns, stays at 800
+    expect(result.points[4].netWorth).toBe(800);
+  });
+});
+
+describe("computeCashFlow", () => {
+  it("returns empty for empty input", () => {
+    expect(computeCashFlow([])).toEqual([]);
+  });
+
+  it("returns empty for single point (need 2 to diff)", () => {
+    const points = [{ weekLabel: "1/5", weekMs: 1000, netWorth: 500, isStatementAnchored: false }];
+    expect(computeCashFlow(points)).toEqual([]);
+  });
+
+  it("computes week-over-week diffs for three points", () => {
+    const points = [
+      { weekLabel: "1/5", weekMs: 1000, netWorth: 500, isStatementAnchored: false },
+      { weekLabel: "1/12", weekMs: 2000, netWorth: 600, isStatementAnchored: true },
+      { weekLabel: "1/19", weekMs: 3000, netWorth: 550, isStatementAnchored: false },
+    ];
+    const result = computeCashFlow(points);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ weekLabel: "1/12", weekMs: 2000, cashFlow: 100, isStatementAnchored: true });
+    expect(result[1]).toEqual({ weekLabel: "1/19", weekMs: 3000, cashFlow: -50, isStatementAnchored: false });
+  });
+
+  it("carries isStatementAnchored through from source points", () => {
+    const points = [
+      { weekLabel: "1/5", weekMs: 1000, netWorth: 100, isStatementAnchored: true },
+      { weekLabel: "1/12", weekMs: 2000, netWorth: 200, isStatementAnchored: false },
+      { weekLabel: "1/19", weekMs: 3000, netWorth: 300, isStatementAnchored: true },
+    ];
+    const result = computeCashFlow(points);
+    expect(result[0].isStatementAnchored).toBe(false);
+    expect(result[1].isStatementAnchored).toBe(true);
+  });
+
+  it("produces negative cash flow when net worth decreases", () => {
+    const points = [
+      { weekLabel: "1/5", weekMs: 1000, netWorth: 1000, isStatementAnchored: false },
+      { weekLabel: "1/12", weekMs: 2000, netWorth: 800, isStatementAnchored: false },
+    ];
+    const result = computeCashFlow(points);
+    expect(result[0].cashFlow).toBe(-200);
   });
 });
 
@@ -1580,18 +1709,19 @@ describe("weekStart", () => {
 });
 
 describe("computePerBudgetAverageSpending", () => {
-  it("returns avg12 and avg52 for a budget with several weeks of periods", () => {
+  it("returns avg12 and avg52 excluding the latest incomplete week", () => {
     const budget = makeBudget({ id: "food", name: "Food" });
-    // 4 weekly periods: Jan 6, 13, 20, 27 (all map to different Sunday weeks)
+    // 5 weekly periods: latest (Jan 27) is excluded as incomplete
     const periods = [
       makePeriod({ id: "p1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
       makePeriod({ id: "p2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 200 }),
       makePeriod({ id: "p3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 150 }),
       makePeriod({ id: "p4", budgetId: "food", periodStart: ts("2025-01-27"), periodEnd: ts("2025-02-03"), total: 250 }),
+      makePeriod({ id: "p5", budgetId: "food", periodStart: ts("2025-02-03"), periodEnd: ts("2025-02-10"), total: 999 }),
     ];
     const result = computePerBudgetAverageSpending([budget], periods);
     const avg = result.get("food")!;
-    // 4 weeks, all within 12 and 52 windows: avg = (100+200+150+250)/4 = 175
+    // Completed weeks (latest excluded): (100+200+150+250)/4 = 175
     expect(avg.avg12).toBe(175);
     expect(avg.avg52).toBe(175);
   });
@@ -1604,42 +1734,44 @@ describe("computePerBudgetAverageSpending", () => {
     expect(avg.avg52).toBe(0);
   });
 
-  it("separates averages by budget", () => {
+  it("separates averages by budget, excluding the global latest week", () => {
     const budgets = [
       makeBudget({ id: "food", name: "Food" }),
       makeBudget({ id: "fun", name: "Fun" }),
     ];
     const periods = [
       makePeriod({ id: "f1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
+      makePeriod({ id: "f2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 200 }),
       makePeriod({ id: "n1", budgetId: "fun", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+      makePeriod({ id: "n2", budgetId: "fun", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 70 }),
     ];
     const result = computePerBudgetAverageSpending(budgets, periods);
+    // Global latest week is Jan 13; excluded from both budgets
     expect(result.get("food")!.avg12).toBe(100);
     expect(result.get("fun")!.avg12).toBe(50);
   });
 
   it("divides by calendar week span, not count of non-zero weeks (sparse divisor fix)", () => {
     const budget = makeBudget({ id: "transport", name: "Transport" });
-    // 2 periods spanning a large gap: week of Jan 6 and week of Aug 4 (~31 weeks apart)
+    // 3 periods spanning a large gap; latest (Aug 11) excluded, leaving Jan 6 and Aug 4
     const periods = [
       makePeriod({ id: "p1", budgetId: "transport", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 200 }),
       makePeriod({ id: "p2", budgetId: "transport", periodStart: ts("2025-08-04"), periodEnd: ts("2025-08-11"), total: 100 }),
+      makePeriod({ id: "p3", budgetId: "transport", periodStart: ts("2025-08-11"), periodEnd: ts("2025-08-18"), total: 50 }),
     ];
     const result = computePerBudgetAverageSpending([budget], periods);
     const avg = result.get("transport")!;
-    // Calendar span: round((Aug 4 - Jan 6) / MS_PER_WEEK) + 1 = 31 weeks
-    // Without the fix, avg12 would be (200+100)/2 = 150 (dividing by 2 non-zero weeks)
-    // With the fix, avg12 = (200+100)/31 ≈ 9.68
+    // Completed: Jan 6 (200) and Aug 4 (100), latest Aug 11 excluded
     const spanWeeks = Math.round((new Date("2025-08-04").getTime() - new Date("2025-01-06").getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
     expect(avg.avg12).toBeCloseTo(300 / spanWeeks);
     expect(avg.avg52).toBeCloseTo(300 / spanWeeks);
   });
 
-  it("12-week window uses only trailing 12 weeks when more data exists", () => {
+  it("12-week window uses only trailing 12 completed weeks when more data exists", () => {
     const budget = makeBudget({ id: "food", name: "Food" });
-    // Create 14 weekly periods
+    // Create 15 weekly periods; latest excluded → 14 completed, trailing 12 = indices 2-13
     const periods: ReturnType<typeof makePeriod>[] = [];
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 15; i++) {
       const start = new Date(Date.UTC(2025, 0, 6 + i * 7));
       const end = new Date(Date.UTC(2025, 0, 13 + i * 7));
       periods.push(makePeriod({
@@ -1652,9 +1784,9 @@ describe("computePerBudgetAverageSpending", () => {
     }
     const result = computePerBudgetAverageSpending([budget], periods);
     const avg = result.get("food")!;
-    // 12-week trailing: weeks 2-13, all 100 each → avg12 = 100
+    // Completed = weeks 0-13 (latest week 14 excluded), trailing 12 = weeks 2-13, all 100
     expect(avg.avg12).toBe(100);
-    // 52-week: all 14 weeks → (2*1000 + 12*100) / 14 = 3200/14 ≈ 228.57
+    // 52-week: all 14 completed weeks → (2*1000 + 12*100) / 14 = 3200/14 ≈ 228.57
     expect(avg.avg52).toBeCloseTo(3200 / 14);
   });
 });

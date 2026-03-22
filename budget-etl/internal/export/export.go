@@ -134,24 +134,26 @@ type Statement struct {
 	Period              string  `json:"period"`
 	BalanceDate         string  `json:"balanceDate"`
 	LastTransactionDate *string `json:"lastTransactionDate"`
+	Virtual             bool    `json:"virtual"`
 }
 
 // Transaction is a single transaction in the JSON output.
 type Transaction struct {
-	ID                      string  `json:"id"`
-	Institution             string  `json:"institution"`
-	Account                 string  `json:"account"`
-	Description             string  `json:"description"`
-	Amount                  float64 `json:"amount"`
-	Timestamp               string  `json:"timestamp"`
-	StatementID             string  `json:"statementId"`
-	Category                string  `json:"category"`
-	Budget                  *string `json:"budget"`
-	Note                    string  `json:"note"`
-	Reimbursement           float64 `json:"reimbursement"`
-	NormalizedID            *string `json:"normalizedId"`
-	NormalizedPrimary       bool    `json:"normalizedPrimary"`
-	NormalizedDescription   *string `json:"normalizedDescription"`
+	ID                    string  `json:"id"`
+	Institution           string  `json:"institution"`
+	Account               string  `json:"account"`
+	Description           string  `json:"description"`
+	Amount                float64 `json:"amount"`
+	Timestamp             string  `json:"timestamp"`
+	StatementID           string  `json:"statementId"`
+	Category              string  `json:"category"`
+	Budget                *string `json:"budget"`
+	Note                  string  `json:"note"`
+	Reimbursement         float64 `json:"reimbursement"`
+	NormalizedID          *string `json:"normalizedId"`
+	NormalizedPrimary     bool    `json:"normalizedPrimary"`
+	NormalizedDescription *string `json:"normalizedDescription"`
+	Virtual               bool    `json:"virtual"`
 }
 
 // Budget is a budget definition in the JSON output.

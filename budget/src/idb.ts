@@ -51,6 +51,7 @@ export interface IdbTransaction {
   normalizedId: string | null;
   normalizedPrimary: boolean;
   normalizedDescription: string | null;
+  virtual: boolean;
 }
 
 export interface IdbBudget {
@@ -106,6 +107,7 @@ export interface IdbStatement {
   period: string;
   balanceDate: string | null;
   lastTransactionDateMs: number | null;
+  virtual: boolean;
 }
 
 export interface IdbWeeklyAggregate {

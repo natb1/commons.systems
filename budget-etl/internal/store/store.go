@@ -158,6 +158,7 @@ type TransactionData struct {
 	TransactionID string
 	Category      string // set by categorization rules; preserved across re-imports
 	Budget        string // set by budget assignment rules; preserved across re-imports
+	Virtual       bool   // true for ETL-generated virtual transactions
 }
 
 // NormTxn is a read-only view of a transaction used by normalization rules.
@@ -647,8 +648,8 @@ func ComputeWeeklyAggregates(txns []FullTransaction) []WeeklyAggregateResult {
 			wd.creditTotal += -net
 		}
 
-		// Unbudgeted spending: no budget, positive net
-		if txn.Budget == "" && net > 0 {
+		// Unbudgeted spending: no budget, positive net, not card payment
+		if txn.Budget == "" && net > 0 && !isCardPaymentCategory(txn.Category) {
 			wd.unbudgetedTotal += net
 		}
 	}

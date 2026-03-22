@@ -51,6 +51,7 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -685,6 +686,38 @@ describe("renderHome", () => {
       }));
       expect(html).toContain('class="expand-row txn-row"');
       expect(html).not.toContain("normalized-group");
+    });
+  });
+
+  describe("virtual transaction badges", () => {
+    it("renders virtual badge and virtual-txn class on virtual transaction", async () => {
+      const html = await renderHome(seedOptions({
+        getTransactions: vi.fn().mockResolvedValue([
+          txn({ id: "vt1", description: "Amex Credit", virtual: true }),
+        ]),
+      }));
+      expect(html).toContain('class="virtual-badge"');
+      expect(html).toContain("virtual-txn");
+      expect(html).toContain("virtual");
+    });
+
+    it("does not render virtual badge on non-virtual transaction", async () => {
+      const html = await renderHome(seedOptions({
+        getTransactions: vi.fn().mockResolvedValue([
+          txn({ id: "t1", description: "Regular purchase", virtual: false }),
+        ]),
+      }));
+      expect(html).not.toContain('class="virtual-badge"');
+      expect(html).not.toContain("virtual-txn");
+    });
+
+    it("virtual transaction has reduced opacity class", async () => {
+      const html = await renderHome(seedOptions({
+        getTransactions: vi.fn().mockResolvedValue([
+          txn({ id: "vt1", description: "Virtual payment", virtual: true }),
+        ]),
+      }));
+      expect(html).toContain('class="expand-row txn-row virtual-txn"');
     });
   });
 });

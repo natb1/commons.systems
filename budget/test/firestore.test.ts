@@ -113,6 +113,7 @@ describe("getTransactions", () => {
         normalizedId: null,
         normalizedPrimary: true,
         normalizedDescription: null,
+        virtual: false,
       },
     ]);
   });
@@ -256,6 +257,7 @@ describe("data validation", () => {
           normalizedId: null,
           normalizedPrimary: true,
           normalizedDescription: null,
+          virtual: false,
           ...data,
         }),
       }],

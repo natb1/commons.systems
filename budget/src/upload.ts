@@ -55,6 +55,7 @@ interface RawTransaction {
   normalizedId: string | null;
   normalizedPrimary: boolean;
   normalizedDescription: string | null;
+  virtual?: boolean;
 }
 
 interface RawBudgetOverride {
@@ -115,6 +116,7 @@ interface RawStatement {
   period: string;
   balanceDate?: string;
   lastTransactionDate?: string | null;
+  virtual?: boolean;
 }
 
 interface RawWeeklyAggregate {
@@ -232,6 +234,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
     normalizedId: t.normalizedId || null,
     normalizedPrimary: t.normalizedPrimary !== false,
     normalizedDescription: t.normalizedDescription || null,
+    virtual: t.virtual ?? false,
   }));
 
   const budgets: Budget[] = (raw.budgets ?? []).map((b: RawBudget, i: number) => ({
@@ -300,6 +303,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
         ? parseTimestamp(s.lastTransactionDate, `statement[${i}].lastTransactionDate`)
         : null,
       groupId: null as GroupId | null,
+      virtual: s.virtual ?? false,
     }),
   );
 
@@ -345,6 +349,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       normalizedId: t.normalizedId,
       normalizedPrimary: t.normalizedPrimary,
       normalizedDescription: t.normalizedDescription,
+      virtual: t.virtual,
     })),
     budgets: parsed.budgets.map((b) => ({
       id: b.id,
@@ -395,6 +400,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       period: s.period,
       balanceDate: s.balanceDate,
       lastTransactionDateMs: s.lastTransactionDate?.toMillis() ?? null,
+      virtual: s.virtual,
     })),
     weeklyAggregates: parsed.weeklyAggregates.map((a) => ({
       id: a.id,

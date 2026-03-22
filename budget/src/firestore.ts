@@ -74,6 +74,7 @@ export interface Statement {
   readonly balanceDate: string | null;
   readonly lastTransactionDate: Timestamp | null;
   readonly groupId: GroupId | null;
+  readonly virtual: boolean;
 }
 
 export interface Transaction {
@@ -100,6 +101,7 @@ export interface Transaction {
   readonly normalizedId: string | null;
   readonly normalizedPrimary: boolean;
   readonly normalizedDescription: string | null;
+  readonly virtual: boolean;
 }
 
 function validateReimbursementRange(n: number): void {
@@ -237,6 +239,7 @@ export async function getTransactions(groupId: GroupId | null, email?: string, f
       // Defaults to true for un-normalized transactions (field may be missing or null)
       normalizedPrimary: data.normalizedPrimary !== false,
       normalizedDescription: optionalString(data.normalizedDescription, "normalizedDescription"),
+      virtual: data.virtual === true,
     };
   });
 }
@@ -257,6 +260,7 @@ export async function getStatements(groupId: GroupId | null, email?: string): Pr
       balanceDate: optionalString(data.balanceDate, "balanceDate"),
       lastTransactionDate: optionalTimestamp(data.lastTransactionDate, "lastTransactionDate"),
       groupId: optionalString(data.groupId, "groupId") as GroupId | null,
+      virtual: data.virtual === true,
     };
   });
 }

@@ -64,6 +64,7 @@ export function makeParsedData(overrides: Partial<ParsedData> = {}): ParsedData 
         normalizedId: null,
         normalizedPrimary: true,
         normalizedDescription: null,
+        virtual: false,
       },
     ],
     budgets: [

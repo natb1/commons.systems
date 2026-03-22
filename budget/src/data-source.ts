@@ -151,6 +151,7 @@ function toTransaction(row: IdbTransaction): Transaction {
     normalizedId: row.normalizedId,
     normalizedPrimary: row.normalizedPrimary,
     normalizedDescription: row.normalizedDescription,
+    virtual: row.virtual ?? false,
   };
 }
 
@@ -218,6 +219,7 @@ function toStatement(row: IdbStatement): Statement {
       ? Timestamp.fromMillis(row.lastTransactionDateMs)
       : null,
     groupId: null as GroupId | null,
+    virtual: row.virtual ?? false,
   };
 }
 

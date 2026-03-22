@@ -564,3 +564,165 @@ func TestRunMergeGroupNameOverride(t *testing.T) {
 		t.Errorf("groupName: got %q, want %q", out.GroupName, "override-group")
 	}
 }
+
+func TestGenerateVirtualCardCredits(t *testing.T) {
+	allTxns := []store.TransactionData{
+		{
+			Institution:   "pnc",
+			Account:       "5111",
+			Description:   "Online Payment To AMEX EPAYMENT",
+			Amount:        150000, // $1500
+			Timestamp:     time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC),
+			StatementID:   "pnc-5111-2025-03",
+			TransactionID: "txn-amex-pay",
+			Category:      "Transfer:CardPayment",
+		},
+		{
+			Institution:   "pnc",
+			Account:       "5111",
+			Description:   "Online Payment To SYNCHRONY BANK",
+			Amount:        50000,
+			Timestamp:     time.Date(2025, 3, 10, 0, 0, 0, 0, time.UTC),
+			StatementID:   "pnc-5111-2025-03",
+			TransactionID: "txn-sync-pay",
+			Category:      "Transfer:CardPayment",
+		},
+		{
+			Institution:   "pnc",
+			Account:       "5111",
+			Description:   "GROCERY STORE",
+			Amount:        5000,
+			Timestamp:     time.Date(2025, 3, 12, 0, 0, 0, 0, time.UTC),
+			StatementID:   "pnc-5111-2025-03",
+			TransactionID: "txn-grocery",
+			Category:      "Food:Groceries",
+		},
+		{
+			Institution:   "american_express",
+			Account:       "2011",
+			Description:   "RESTAURANT",
+			Amount:        3000,
+			Timestamp:     time.Date(2025, 3, 5, 0, 0, 0, 0, time.UTC),
+			StatementID:   "american_express-2011-2025-03",
+			TransactionID: "txn-amex-rest",
+			Category:      "Food:Restaurant",
+		},
+	}
+	docIDs := []string{"doc-amex-pay", "doc-sync-pay", "doc-grocery", "doc-amex-rest"}
+
+	vcr := generateVirtualCardCredits(allTxns, docIDs)
+
+	if len(vcr.transactions) != 1 {
+		t.Fatalf("expected 1 virtual credit, got %d", len(vcr.transactions))
+	}
+
+	vc := vcr.transactions[0]
+	if vc.Institution != "american_express" || vc.Account != "2011" {
+		t.Errorf("institution/account: got %s/%s, want american_express/2011", vc.Institution, vc.Account)
+	}
+	if vc.Amount != -150000 {
+		t.Errorf("amount: got %d, want -150000", vc.Amount)
+	}
+	if vc.Category != "Transfer:CardPayment" {
+		t.Errorf("category: got %q, want %q", vc.Category, "Transfer:CardPayment")
+	}
+	if !vc.Virtual {
+		t.Error("virtual: got false, want true")
+	}
+	if vcr.docIDs[0] != "virtual-credit-doc-amex-pay" {
+		t.Errorf("docID: got %q, want %q", vcr.docIDs[0], "virtual-credit-doc-amex-pay")
+	}
+}
+
+func TestGenerateVirtualSynchrony(t *testing.T) {
+	allTxns := []store.TransactionData{
+		{
+			Institution:   "pnc",
+			Account:       "5111",
+			Description:   "Online Payment To SYNCHRONY BANK",
+			Amount:        50000,
+			Timestamp:     time.Date(2025, 2, 15, 0, 0, 0, 0, time.UTC),
+			StatementID:   "pnc-5111-2025-02",
+			TransactionID: "txn-sync-1",
+			Category:      "Transfer:CardPayment",
+		},
+		{
+			Institution:   "pnc",
+			Account:       "5111",
+			Description:   "Online Payment To SYNCHRONY BANK",
+			Amount:        60000,
+			Timestamp:     time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC),
+			StatementID:   "pnc-5111-2025-03",
+			TransactionID: "txn-sync-2",
+			Category:      "Transfer:CardPayment",
+		},
+	}
+	docIDs := []string{"doc-sync-1", "doc-sync-2"}
+
+	vsr := generateVirtualSynchrony(allTxns, docIDs)
+
+	if len(vsr.transactions) != 2 {
+		t.Fatalf("expected 2 virtual transactions, got %d", len(vsr.transactions))
+	}
+
+	for _, vt := range vsr.transactions {
+		if vt.Institution != "synchrony" || vt.Account != "virtual" {
+			t.Errorf("institution/account: got %s/%s, want synchrony/virtual", vt.Institution, vt.Account)
+		}
+		if vt.Category != "Pet:Veterinarian" {
+			t.Errorf("category: got %q, want %q", vt.Category, "Pet:Veterinarian")
+		}
+		if vt.Budget != "pet" {
+			t.Errorf("budget: got %q, want %q", vt.Budget, "pet")
+		}
+		if !vt.Virtual {
+			t.Error("virtual: got false, want true")
+		}
+	}
+
+	// Should have statements for 2 unique periods
+	if len(vsr.statements) != 2 {
+		t.Fatalf("expected 2 virtual statements, got %d", len(vsr.statements))
+	}
+	for _, s := range vsr.statements {
+		if s.Balance != 0 {
+			t.Errorf("statement balance: got %f, want 0", s.Balance)
+		}
+		if !s.Virtual {
+			t.Error("statement virtual: got false, want true")
+		}
+	}
+}
+
+func TestComputePetBudget(t *testing.T) {
+	txns := []store.TransactionData{
+		{Amount: 50000, Timestamp: time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)},
+		{Amount: 60000, Timestamp: time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC)},
+		{Amount: 70000, Timestamp: time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)},
+	}
+
+	b := computePetBudget(txns)
+	if b == nil {
+		t.Fatal("expected non-nil budget")
+	}
+	if b.ID != "pet" {
+		t.Errorf("id: got %q, want %q", b.ID, "pet")
+	}
+	if b.AllowancePeriod != "monthly" {
+		t.Errorf("allowancePeriod: got %q, want %q", b.AllowancePeriod, "monthly")
+	}
+	if b.Rollover != "none" {
+		t.Errorf("rollover: got %q, want %q", b.Rollover, "none")
+	}
+	// Total: $500 + $600 + $700 = $1800 over ~5 months ≈ $360/month
+	if b.WeeklyAllowance < 200 || b.WeeklyAllowance > 500 {
+		t.Errorf("monthlyAvg out of expected range: got %.2f", b.WeeklyAllowance)
+	}
+}
+
+func TestComputePetBudgetEmpty(t *testing.T) {
+	b := computePetBudget(nil)
+	if b != nil {
+		t.Errorf("expected nil budget for empty transactions, got %+v", b)
+	}
+}

@@ -1,15 +1,15 @@
 import * as Plot from "@observablehq/plot";
-import type { NetWorthPoint } from "../balance.js";
+import type { CashFlowPoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
 import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
-export interface NetWorthChartOptions {
-  readonly data: NetWorthPoint[];
+export interface CashFlowChartOptions {
+  readonly data: CashFlowPoint[];
   readonly containerWidth: number;
   readonly pointWidth: number;
 }
 
-const SERIES_NET_WORTH = "Liquid Net Worth";
+const SERIES_CASH_FLOW = "Weekly Cash Flow";
 
 interface LineDatum {
   weekIndex: number;
@@ -18,11 +18,11 @@ interface LineDatum {
   isAnchored: boolean;
 }
 
-export function renderNetWorthChart(container: HTMLElement, options: NetWorthChartOptions): ChartResult {
+export function renderCashFlowChart(container: HTMLElement, options: CashFlowChartOptions): ChartResult {
   const { data, containerWidth, pointWidth } = options;
 
   if (data.length === 0) {
-    container.textContent = "No net worth data to chart.";
+    container.textContent = "No cash flow data to chart.";
     return { weeks: [] };
   }
 
@@ -33,7 +33,7 @@ export function renderNetWorthChart(container: HTMLElement, options: NetWorthCha
   const lineData: LineDatum[] = data.map((d, i) => ({
     weekIndex: i,
     weekLabel: d.weekLabel,
-    value: d.netWorth,
+    value: d.cashFlow,
     isAnchored: d.isStatementAnchored,
   }));
 
@@ -54,7 +54,8 @@ export function renderNetWorthChart(container: HTMLElement, options: NetWorthCha
 
   const axisSvg = renderAxisSvg({ height, style: sharedStyle, yDomain });
 
-  const color = "#26a69a";
+  const colorPositive = "#26a69a";
+  const colorNegative = "#ef5350";
 
   const chartSvg = Plot.plot({
     width: chartWidth,
@@ -78,23 +79,32 @@ export function renderNetWorthChart(container: HTMLElement, options: NetWorthCha
       Plot.ruleY([0]),
       Plot.areaY(lineData, {
         x: "weekIndex",
-        y: "value",
-        fill: color,
+        y1: 0,
+        y2: (d: LineDatum) => Math.max(0, d.value),
+        fill: colorPositive,
+        fillOpacity: 0.15,
+        curve: "monotone-x",
+      }),
+      Plot.areaY(lineData, {
+        x: "weekIndex",
+        y1: 0,
+        y2: (d: LineDatum) => Math.min(0, d.value),
+        fill: colorNegative,
         fillOpacity: 0.15,
         curve: "monotone-x",
       }),
       Plot.lineY(lineData, {
         x: "weekIndex",
         y: "value",
-        stroke: color,
-        strokeWidth: 2,
+        stroke: fg,
+        strokeWidth: 1.5,
         curve: "monotone-x",
       }),
       // Interpolated points — smaller, semi-transparent
       Plot.dot(lineData.filter(d => !d.isAnchored), {
         x: "weekIndex",
         y: "value",
-        fill: color,
+        fill: (d: LineDatum) => d.value >= 0 ? colorPositive : colorNegative,
         r: 2,
         fillOpacity: 0.5,
       }),
@@ -102,7 +112,7 @@ export function renderNetWorthChart(container: HTMLElement, options: NetWorthCha
       Plot.dot(lineData.filter(d => d.isAnchored), {
         x: "weekIndex",
         y: "value",
-        fill: color,
+        fill: (d: LineDatum) => d.value >= 0 ? colorPositive : colorNegative,
         r: 4,
         stroke: fg,
         strokeWidth: 1,
@@ -111,7 +121,7 @@ export function renderNetWorthChart(container: HTMLElement, options: NetWorthCha
         x: "weekIndex",
         y: "value",
         title: (d: LineDatum) =>
-          `${SERIES_NET_WORTH}${d.isAnchored ? " (statement)" : ""}\nWeek: ${d.weekLabel}\n$${d.value.toFixed(2)}`,
+          `${SERIES_CASH_FLOW}${d.isAnchored ? " (statement)" : ""}\nWeek: ${d.weekLabel}\n$${d.value.toFixed(2)}`,
       })),
     ],
   });
@@ -127,9 +137,9 @@ export function renderNetWorthChart(container: HTMLElement, options: NetWorthCha
   item.className = "trend-legend-item";
   const line = document.createElement("span");
   line.className = "legend-line";
-  line.style.backgroundColor = color;
+  line.style.backgroundColor = fg;
   const label = document.createElement("span");
-  label.textContent = SERIES_NET_WORTH;
+  label.textContent = SERIES_CASH_FLOW;
   item.appendChild(line);
   item.appendChild(label);
   legend.appendChild(item);

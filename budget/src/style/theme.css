@@ -158,7 +158,8 @@
 #budgets-chart [aria-label="tip"] text,
 #budgets-area-chart [aria-label="tip"] text,
 #accounts-trend-chart [aria-label="tip"] text,
-#accounts-net-worth-chart [aria-label="tip"] text { fill: #222; }
+#accounts-net-worth-chart [aria-label="tip"] text,
+#accounts-cash-flow-chart [aria-label="tip"] text { fill: #222; }
 .chart-layout {
   display: flex;
   align-items: stretch;
@@ -187,7 +188,8 @@
 
 #budgets-area-chart,
 #accounts-trend-chart,
-#accounts-net-worth-chart {
+#accounts-net-worth-chart,
+#accounts-cash-flow-chart {
   width: 100%;
   margin-bottom: 0.5rem;
 }
@@ -499,4 +501,21 @@
   text-align: center;
   padding: 1rem;
   color: var(--error, #e15759);
+}
+
+/* --- Virtual transaction/account indicators --- */
+
+.virtual-badge {
+  font-size: 0.7em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  color: var(--fg);
+  opacity: 0.6;
+  margin-left: 0.5em;
+  vertical-align: middle;
+}
+
+.virtual-txn {
+  opacity: 0.75;
 }
