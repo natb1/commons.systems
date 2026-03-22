@@ -65,4 +65,30 @@ test.describe("budgets", () => {
     await expect(page.locator("#budget-metrics")).toContainText("12-Week Avg Weekly Credits");
     await expect(page.locator("#budget-metrics")).toContainText("Total Weekly Budget");
   });
+
+  test("weeks input visible with default value", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#budgets-chart svg").first()).toBeVisible({ timeout: 10000 });
+    const weeksInput = page.locator("#area-chart-weeks");
+    await expect(weeksInput).toBeVisible();
+    await expect(weeksInput).toHaveValue("3");
+    await expect(weeksInput).toHaveAttribute("min", "1");
+    await expect(weeksInput).toHaveAttribute("max", "104");
+  });
+
+  test("changing weeks input re-renders area chart", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#budgets-area-chart svg").first()).toBeVisible({ timeout: 10000 });
+    const weeksInput = page.locator("#area-chart-weeks");
+    const svgBefore = await page.locator("#budgets-area-chart svg").first().innerHTML();
+    await weeksInput.fill("5");
+    await page.waitForFunction(
+      (prev) => {
+        const svg = document.querySelector("#budgets-area-chart svg");
+        return svg && svg.innerHTML !== prev;
+      },
+      svgBefore,
+      { timeout: 5000 },
+    );
+  });
 });

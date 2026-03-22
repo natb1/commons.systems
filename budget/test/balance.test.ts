@@ -812,8 +812,8 @@ describe("computePerBudgetTrend", () => {
     const funPoints = result.filter(r => r.budget === "Fun");
     expect(foodPoints).toHaveLength(1);
     expect(funPoints).toHaveLength(1);
-    expect(foodPoints[0].avg3Spending).toBe(80);
-    expect(funPoints[0].avg3Spending).toBe(30);
+    expect(foodPoints[0].spending).toBe(80);
+    expect(funPoints[0].spending).toBe(30);
   });
 
   it("'Other' series from aggregates with unbudgetedTotal", () => {
@@ -827,7 +827,7 @@ describe("computePerBudgetTrend", () => {
     const result = computePerBudgetTrend(budgets, periods, aggs);
     const otherPoints = result.filter(r => r.budget === "Other");
     expect(otherPoints.length).toBeGreaterThan(0);
-    expect(otherPoints[0].avg3Spending).toBe(25);
+    expect(otherPoints[0].spending).toBe(25);
   });
 
   it("no 'Other' series when unbudgetedTotal is zero", () => {

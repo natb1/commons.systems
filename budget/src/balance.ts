@@ -360,7 +360,8 @@ export interface PerBudgetPoint {
   readonly weekLabel: string;
   readonly weekMs: number;
   readonly budget: string;
-  readonly avg3Spending: number;
+  /** Raw (un-averaged) weekly spending for this budget. */
+  readonly spending: number;
 }
 
 /** Compute trailing rolling average over a window of `windowSize` values including the current index. For indices with fewer than `windowSize` preceding values, averages over available values. */
@@ -439,7 +440,7 @@ export function computeAggregateTrend(
 }
 
 /**
- * Compute per-budget 3-week rolling average of non-credit spending.
+ * Compute per-budget raw weekly non-credit spending.
  * Includes an "Other" series from pre-aggregated unbudgeted spending totals.
  */
 export function computePerBudgetTrend(
@@ -484,13 +485,12 @@ export function computePerBudgetTrend(
   const result: PerBudgetPoint[] = [];
   for (const [budgetName, weeklyMap] of perBudgetWeekly) {
     const values = weeks.map(([ms]) => weeklyMap.get(ms) ?? 0);
-    const avg3 = computeRollingAverage(values, 3);
     for (let i = 0; i < weeks.length; i++) {
       result.push({
         weekLabel: weeks[i][1],
         weekMs: weeks[i][0],
         budget: budgetName,
-        avg3Spending: avg3[i],
+        spending: values[i],
       });
     }
   }

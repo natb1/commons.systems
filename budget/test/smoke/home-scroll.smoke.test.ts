@@ -84,4 +84,29 @@ describe("home page infinite scroll smoke", () => {
     expect(html).toContain('data-group-name="');
     expect(html).toContain('data-editable="');
   });
+
+  it("budget filter input renders in sankey controls", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ id: "t1" as any }),
+      ]),
+      getBudgets: vi.fn().mockResolvedValue([
+        { id: "groceries" as any, name: "Groceries", weeklyAllowance: 100, rollover: "none", groupId: null },
+      ]),
+    }));
+    expect(html).toContain('id="sankey-budget-filter"');
+    expect(html).toContain("data-budget-options");
+  });
+
+  it("data-budget-name attribute present on transaction rows", async () => {
+    const html = await renderHome(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue([
+        txn({ id: "t1" as any, budget: "groceries" as any }),
+      ]),
+      getBudgets: vi.fn().mockResolvedValue([
+        { id: "groceries" as any, name: "Groceries", weeklyAllowance: 100, rollover: "none", groupId: null },
+      ]),
+    }));
+    expect(html).toContain('data-budget-name="Groceries"');
+  });
 });

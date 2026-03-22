@@ -149,6 +149,7 @@ function renderChartContainer(
 ): string {
   return `<div id="budgets-chart-controls">
       <label>Jump to: <input type="date" id="chart-date-picker"></label>
+      <label>Weeks: <input type="number" id="area-chart-weeks" value="3" min="1" max="104"></label>
     </div>
     <div id="budgets-area-chart" data-per-budget-trend="${serializeTrendData(perBudgetTrend)}"></div>
     <div id="budgets-chart" data-budgets="${serializeBudgets(budgets)}" data-periods="${serializePeriods(periods)}"></div>

@@ -54,4 +54,31 @@ test.describe("budgets trend charts", () => {
     await expect(page.locator("#budget-metrics")).toBeVisible({ timeout: 30000 });
     await expect(page.locator("#budget-metrics")).toContainText("12-Week Avg Weekly Spending");
   });
+
+  test("clicking a legend item dims it and removes that series from the chart", async ({ page }) => {
+    const legendItems = page.locator(".area-legend .area-legend-item");
+    await expect(legendItems.first()).toBeVisible({ timeout: 10000 });
+
+    const firstItem = legendItems.first();
+    await firstItem.click();
+    await expect(firstItem).toHaveClass(/excluded/);
+
+    const chartSvg = page.locator("#budgets-area-chart .chart-scroll-wrapper svg").first();
+    await expect(chartSvg).toBeVisible();
+
+    await firstItem.click();
+    await expect(firstItem).not.toHaveClass(/excluded/);
+  });
+
+  test("chart remains valid after excluding a legend item", async ({ page }) => {
+    const legendItems = page.locator(".area-legend .area-legend-item");
+    await expect(legendItems.first()).toBeVisible({ timeout: 10000 });
+    const count = await legendItems.count();
+    if (count < 2) test.skip();
+
+    const yAxis = page.locator("#budgets-area-chart .chart-y-axis svg").first();
+    await legendItems.first().click();
+    await expect(legendItems.first()).toHaveClass(/excluded/);
+    await expect(yAxis).toBeVisible();
+  });
 });

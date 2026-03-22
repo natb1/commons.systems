@@ -210,6 +210,14 @@
   gap: 0.375rem;
 }
 
+.area-legend-item {
+  cursor: pointer;
+}
+
+.area-legend-item.excluded {
+  opacity: 0.35;
+}
+
 .legend-line {
   display: inline-block;
   width: 20px;

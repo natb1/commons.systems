@@ -51,4 +51,17 @@ describe("budgets trend charts smoke", () => {
     expect(html).toContain("<h2>Budgets</h2>");
     expect(html).not.toContain('id="budgets-error"');
   });
+
+  it("weeks input exists with correct attributes", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([makeBudget()]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        makePeriod({ id: "food-w1", budgetId: "food", total: 80 }),
+      ]),
+    }));
+    expect(html).toContain('id="area-chart-weeks"');
+    expect(html).toContain('value="3"');
+    expect(html).toContain('min="1"');
+    expect(html).toContain('max="104"');
+  });
 });
