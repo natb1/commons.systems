@@ -192,6 +192,7 @@ function toStatement(row: IdbStatement): Statement {
     account: row.account,
     balance: row.balance,
     period: row.period,
+    balanceDate: row.balanceDate ?? null,
     lastTransactionDate: row.lastTransactionDateMs != null
       ? Timestamp.fromMillis(row.lastTransactionDateMs)
       : null,

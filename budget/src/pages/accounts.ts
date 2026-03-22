@@ -1,43 +1,77 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import type { Statement } from "../firestore.js";
+import type { Transaction, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
-import { computeAggregateTrend, computeNetWorth, type AggregatePoint, type NetWorthPoint, type BalanceDivergence } from "../balance.js";
+import { accountKey, splitAccountKey, computeAggregateTrend, computeNetWorth, computeDerivedBalances, type AggregatePoint, type NetWorthPoint, type DerivedAccountBalance } from "../balance.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 interface AccountRow {
   institution: string;
   account: string;
-  mostRecentTimestamp: number;
-  balance: number;
+  mostRecentTimestamp: number | null;
+  balance: number | null;
+  derivedBalance: number | null;
+  hasDiscrepancy: boolean;
 }
 
-function buildAccountRows(statements: Statement[]): AccountRow[] {
-  // Find latest statement per (institution, account) by comparing period strings (YYYY-MM format, zero-padded, so lexicographic order equals chronological order)
-  const latestStatements = new Map<string, Statement>();
-  for (const stmt of statements) {
-    const key = `${stmt.institution}\0${stmt.account}`;
-    const existing = latestStatements.get(key);
-    if (!existing || stmt.period > existing.period) {
-      latestStatements.set(key, stmt);
+function buildAccountRows(
+  transactions: Transaction[],
+  statements: Statement[],
+  derivedBalances: DerivedAccountBalance[],
+): AccountRow[] {
+  // Compute max transaction timestamp per account from transactions
+  const txnMaxTs = new Map<string, number>();
+  for (const txn of transactions) {
+    const k = accountKey(txn.institution, txn.account);
+    const ts = txn.timestamp?.toMillis() ?? 0;
+    const existing = txnMaxTs.get(k);
+    if (existing === undefined || ts > existing) {
+      txnMaxTs.set(k, ts);
     }
   }
 
+  // Find latest statement per (institution, account) by comparing period strings (YYYY-MM format, zero-padded, so lexicographic order equals chronological order)
+  const latestStatements = new Map<string, Statement>();
+  for (const stmt of statements) {
+    const k = accountKey(stmt.institution, stmt.account);
+    const existing = latestStatements.get(k);
+    if (!existing || stmt.period > existing.period) {
+      latestStatements.set(k, stmt);
+    }
+  }
+
+  // Index derived balances by account key
+  const derivedByAccount = new Map<string, DerivedAccountBalance>();
+  for (const db of derivedBalances) {
+    derivedByAccount.set(accountKey(db.institution, db.account), db);
+  }
+
+  // Collect all account keys from both transactions and statements
+  const allKeys = new Set<string>([...txnMaxTs.keys(), ...latestStatements.keys()]);
+
   const rows: AccountRow[] = [];
-  for (const [, stmt] of latestStatements) {
+  for (const k of allKeys) {
+    const stmt = latestStatements.get(k);
+    const derived = derivedByAccount.get(k);
+    const [institution, account] = splitAccountKey(k);
+    // Use transaction max timestamp if available, otherwise fall back to statement lastTransactionDate
+    const maxTs = txnMaxTs.get(k) ?? stmt?.lastTransactionDate?.toMillis() ?? null;
     rows.push({
-      institution: stmt.institution,
-      account: stmt.account,
-      mostRecentTimestamp: stmt.lastTransactionDate?.toMillis() ?? 0,
-      balance: stmt.balance,
+      institution,
+      account,
+      mostRecentTimestamp: maxTs,
+      balance: stmt ? stmt.balance : null,
+      derivedBalance: derived ? derived.derivedBalance : null,
+      hasDiscrepancy: derived ? Math.abs(derived.discrepancy) > 0.01 : false,
     });
   }
 
-  rows.sort((a, b) => a.mostRecentTimestamp - b.mostRecentTimestamp);
+  rows.sort((a, b) => (a.mostRecentTimestamp ?? 0) - (b.mostRecentTimestamp ?? 0));
   return rows;
 }
 
-function formatDate(ms: number): string {
-  if (ms === 0) return "";
+function formatDate(ms: number | null): string {
+  if (ms === null) return "";
   return new Date(ms).toLocaleDateString();
 }
 
@@ -47,12 +81,15 @@ function renderAccountsTable(rows: AccountRow[]): string {
   }
 
   const tableRows = rows.map((row) => {
-    const balanceCell = escapeHtml(formatCurrency(row.balance));
-    return `<tr>
+    const balanceCell = row.balance !== null ? escapeHtml(formatCurrency(row.balance)) : "";
+    const derivedCell = row.derivedBalance !== null ? escapeHtml(formatCurrency(row.derivedBalance)) : "";
+    const rowClass = row.hasDiscrepancy ? ' class="discrepancy"' : "";
+    return `<tr${rowClass}>
       <td>${escapeHtml(row.institution)}</td>
       <td>${escapeHtml(row.account)}</td>
       <td>${escapeHtml(formatDate(row.mostRecentTimestamp))}</td>
       <td>${balanceCell}</td>
+      <td>${derivedCell}</td>
     </tr>`;
   }).join("\n");
 
@@ -63,6 +100,7 @@ function renderAccountsTable(rows: AccountRow[]): string {
         <th>Account</th>
         <th>Most recent transaction</th>
         <th>Balance</th>
+        <th>Derived</th>
       </tr>
     </thead>
     <tbody>
@@ -75,10 +113,11 @@ function serializeData(data: readonly AggregatePoint[] | readonly NetWorthPoint[
   return escapeHtml(JSON.stringify(data));
 }
 
-function renderDivergenceWarning(divergences: BalanceDivergence[]): string {
-  if (divergences.length === 0) return "";
-  const rows = divergences.map(d =>
-    `<li>${escapeHtml(d.institution)} ${escapeHtml(d.account)} (${escapeHtml(d.period)}): statement ${escapeHtml(formatCurrency(d.expected))}, derived ${escapeHtml(formatCurrency(d.derived))}</li>`
+function renderDivergenceWarning(derivedBalances: DerivedAccountBalance[]): string {
+  const discrepancies = derivedBalances.filter(d => Math.abs(d.discrepancy) > 0.01);
+  if (discrepancies.length === 0) return "";
+  const rows = discrepancies.map(d =>
+    `<li>${escapeHtml(d.institution)} ${escapeHtml(d.account)} (${escapeHtml(d.earliestPeriod)}\u2192${escapeHtml(d.latestPeriod)}): ${escapeHtml(formatCurrency(d.discrepancy))}</li>`
   ).join("\n");
   return `<div id="balance-divergence-warning" class="divergence-warning">
     <p>Balance verification found discrepancies between statement balances and transaction-derived balances:</p>
@@ -89,9 +128,9 @@ function renderDivergenceWarning(divergences: BalanceDivergence[]): string {
 function renderChartContainers(
   aggregateTrend: AggregatePoint[],
   netWorthPoints: NetWorthPoint[],
-  divergences: BalanceDivergence[],
+  derivedBalances: DerivedAccountBalance[],
 ): string {
-  return `${renderDivergenceWarning(divergences)}
+  return `${renderDivergenceWarning(derivedBalances)}
     <div id="accounts-chart-controls">
       <label>Jump to: <input type="date" id="accounts-date-picker"></label>
     </div>
@@ -113,15 +152,20 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
       dataSource.getBudgetPeriods()
         .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
     ]);
-    const rows = buildAccountRows(statements);
+    const derivedBalances = computeDerivedBalances(transactions, statements);
+    const rows = buildAccountRows(transactions, statements, derivedBalances);
     tableHtml = renderAccountsTable(rows);
 
     try {
       const aggregateTrend = computeAggregateTrend(periods, transactions);
       const trendWeeks = aggregateTrend.map(p => ({ label: p.weekLabel, ms: p.weekMs }));
-      const { points: netWorthPoints, divergences } = computeNetWorth(transactions, statements, trendWeeks);
-      chartHtml = renderChartContainers(aggregateTrend, netWorthPoints, divergences);
+      const { points: netWorthPoints } = computeNetWorth(transactions, statements, trendWeeks);
+      chartHtml = renderChartContainers(aggregateTrend, netWorthPoints, derivedBalances);
     } catch (chartError) {
+      if (chartError instanceof TypeError || chartError instanceof ReferenceError
+          || chartError instanceof DataIntegrityError || chartError instanceof RangeError) {
+        throw chartError;
+      }
       console.error("Failed to compute chart data:", chartError);
       chartHtml = renderLoadError(chartError, "chart-error");
     }

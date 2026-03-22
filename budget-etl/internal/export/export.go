@@ -132,6 +132,7 @@ type Statement struct {
 	Account             string  `json:"account"`
 	Balance             float64 `json:"balance"`
 	Period              string  `json:"period"`
+	BalanceDate         string  `json:"balanceDate"`
 	LastTransactionDate *string `json:"lastTransactionDate"`
 }
 

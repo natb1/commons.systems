@@ -101,6 +101,7 @@ interface RawStatement {
   account: string;
   balance: number;
   period: string;
+  balanceDate?: string;
   lastTransactionDate?: string | null;
 }
 
@@ -266,6 +267,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
       account: requireString(s.account, "statement", i, "account"),
       balance: requireFiniteNumber(s.balance, "statement", i, "balance"),
       period: requireString(s.period, "statement", i, "period"),
+      balanceDate: s.balanceDate || null,
       lastTransactionDate: s.lastTransactionDate
         ? parseTimestamp(s.lastTransactionDate, `statement[${i}].lastTransactionDate`)
         : null,
@@ -357,6 +359,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       account: s.account,
       balance: s.balance,
       period: s.period,
+      balanceDate: s.balanceDate,
       lastTransactionDateMs: s.lastTransactionDate?.toMillis() ?? null,
     })),
     weeklyAggregates: parsed.weeklyAggregates.map((a) => ({

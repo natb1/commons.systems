@@ -63,6 +63,7 @@ export interface Statement {
   readonly account: string;
   readonly balance: number;
   readonly period: string;
+  readonly balanceDate: string | null;
   readonly lastTransactionDate: Timestamp | null;
   readonly groupId: GroupId | null;
 }
@@ -221,6 +222,7 @@ export async function getStatements(groupId: GroupId | null, email?: string): Pr
       account: requireString(data.account, "account"),
       balance: requireNumber(data.balance, "balance"),
       period: requireString(data.period, "period"),
+      balanceDate: optionalString(data.balanceDate, "balanceDate"),
       lastTransactionDate: optionalTimestamp(data.lastTransactionDate, "lastTransactionDate"),
       groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     };

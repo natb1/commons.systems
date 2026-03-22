@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestDiscoverFiles(t *testing.T) {
@@ -130,6 +131,50 @@ func TestDetectFormat_Unrecognized(t *testing.T) {
 	_, err := detectFormat(tmp)
 	if err == nil {
 		t.Fatal("expected error for unrecognized format")
+	}
+}
+
+func TestInferPeriod(t *testing.T) {
+	tests := []struct {
+		name string
+		pr   ParseResult
+		want string
+	}{
+		{
+			name: "BalanceDate present",
+			pr: ParseResult{
+				BalanceDate: time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC),
+				Transactions: []Transaction{
+					{Date: time.Date(2026, 2, 10, 0, 0, 0, 0, time.UTC)},
+				},
+			},
+			want: "2026-03",
+		},
+		{
+			name: "no BalanceDate, uses latest transaction",
+			pr: ParseResult{
+				Transactions: []Transaction{
+					{Date: time.Date(2025, 10, 5, 0, 0, 0, 0, time.UTC)},
+					{Date: time.Date(2025, 11, 20, 0, 0, 0, 0, time.UTC)},
+					{Date: time.Date(2025, 9, 1, 0, 0, 0, 0, time.UTC)},
+				},
+			},
+			want: "2025-11",
+		},
+		{
+			name: "no data",
+			pr:   ParseResult{},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.pr.InferPeriod()
+			if got != tt.want {
+				t.Errorf("InferPeriod() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

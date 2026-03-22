@@ -5,11 +5,12 @@ import { type Transaction, type TransactionId, type Budget, type BudgetPeriod, t
 import { computeAllBudgetBalances, computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import type { TransactionQuery } from "../data-source.js";
 
-/** Number of weeks loaded per scroll batch (initial load and each subsequent fetch). */
-export const SCROLL_BATCH_WEEKS = 12;
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { uniqueSorted } from "./hydrate-util.js";
 import type { SerializedChartTransaction } from "./home-chart.js";
+
+/** Number of weeks loaded per scroll batch (initial load and each subsequent fetch). */
+export const SCROLL_BATCH_WEEKS = 12;
 
 function formatTimestamp(ts: Timestamp | null): string {
   if (!ts) return "";
@@ -320,7 +321,8 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
     try {
       chartHtml = renderCategorySankey(transactions);
     } catch (chartError) {
-      if (chartError instanceof TypeError || chartError instanceof ReferenceError) throw chartError;
+      if (chartError instanceof TypeError || chartError instanceof ReferenceError
+          || chartError instanceof DataIntegrityError || chartError instanceof RangeError) throw chartError;
       console.error("Chart serialization failed:", chartError);
       chartHtml = `<p class="chart-error">Chart unavailable.</p>`;
     }
