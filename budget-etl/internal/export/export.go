@@ -113,6 +113,15 @@ type Output struct {
 	BudgetPeriods      []BudgetPeriod      `json:"budgetPeriods"`
 	Rules              []Rule              `json:"rules"`
 	NormalizationRules []NormalizationRule `json:"normalizationRules"`
+	WeeklyAggregates   []WeeklyAggregate   `json:"weeklyAggregates"`
+}
+
+// WeeklyAggregate is a pre-computed weekly credit and unbudgeted spending total.
+type WeeklyAggregate struct {
+	ID              string  `json:"id"`
+	WeekStart       string  `json:"weekStart"`
+	CreditTotal     float64 `json:"creditTotal"`
+	UnbudgetedTotal float64 `json:"unbudgetedTotal"`
 }
 
 // Statement is a statement-level record in the JSON output.
@@ -123,6 +132,7 @@ type Statement struct {
 	Account             string  `json:"account"`
 	Balance             float64 `json:"balance"`
 	Period              string  `json:"period"`
+	BalanceDate         string  `json:"balanceDate"`
 	LastTransactionDate *string `json:"lastTransactionDate"`
 }
 
@@ -177,6 +187,7 @@ type Rule struct {
 	MaxAmount       *float64 `json:"maxAmount,omitempty"`
 	ExcludeCategory string   `json:"excludeCategory,omitempty"`
 	MatchCategory   string   `json:"matchCategory,omitempty"`
+	Category        string   `json:"category,omitempty"`
 	TransactionID   string   `json:"transactionId,omitempty"`
 }
 

@@ -25,6 +25,7 @@ type Rule struct {
 	HasMaxAmount    bool
 	ExcludeCategory string // optional: reject transactions whose category equals or starts with this prefix
 	MatchCategory   string // optional: require category equals or starts with this prefix
+	Category        string // optional: restrict to transactions whose category starts with this prefix (case-insensitive)
 }
 
 // matchFields checks whether a pattern/institution/account filter matches the
@@ -65,6 +66,11 @@ func (r Rule) Match(description, institution, account, category string, amount i
 	}
 	if r.MatchCategory != "" {
 		if category != r.MatchCategory && !strings.HasPrefix(category, r.MatchCategory+":") {
+			return false
+		}
+	}
+	if r.Category != "" {
+		if !strings.HasPrefix(strings.ToLower(category), strings.ToLower(r.Category)) {
 			return false
 		}
 	}
@@ -120,6 +126,7 @@ func ApplyCategorization(txns []store.TransactionData, rules []Rule) error {
 
 // ApplyBudgetAssignment applies budget assignment rules to transactions.
 // Rules are matched in priority order (ascending); first match wins.
+// When a rule specifies a Category prefix, it only matches transactions whose category starts with that prefix (case-insensitive).
 // Only transactions with an empty Budget field are assigned.
 // Unmatched transactions are left with an empty budget (no error).
 func ApplyBudgetAssignment(txns []store.TransactionData, rules []Rule) {

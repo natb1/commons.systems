@@ -91,6 +91,7 @@ export async function exportToJson(): Promise<string> {
       account: s.account,
       balance: s.balance,
       period: s.period,
+      balanceDate: s.balanceDate ?? "",
       lastTransactionDate: s.lastTransactionDateMs != null
         ? msToIso(s.lastTransactionDateMs)
         : null,

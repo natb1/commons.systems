@@ -139,6 +139,13 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 			skipped++
 			continue
 		}
+		// Override path-derived period with document-inferred period before any
+		// downstream use of sf (StatementID, buildStatementData, etc.).
+		if inferred := r.result.InferPeriod(); inferred != "" {
+			r.sf.Period = inferred
+		} else {
+			log.Printf("could not infer period from document data for %s, using path-derived period %q", r.sf.Path, r.sf.Period)
+		}
 		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
 		totalTxns += len(r.result.Transactions)
 	}
@@ -222,6 +229,7 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 			Account:         rd.Account,
 			ExcludeCategory: rd.ExcludeCategory,
 			MatchCategory:   rd.MatchCategory,
+			Category:        rd.Category,
 		}
 		if rd.MinAmount != nil {
 			ruleSet[i].HasMinAmount = true
@@ -276,6 +284,7 @@ func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementDa
 		BudgetPeriods:      []export.BudgetPeriod{},
 		Rules:              []export.Rule{},
 		NormalizationRules: []export.NormalizationRule{},
+		WeeklyAggregates:   []export.WeeklyAggregate{},
 	}
 
 	if err := export.WriteFile(output.path, out, output.password); err != nil {
@@ -356,7 +365,9 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 
 	// Rebuild export transactions with categorization, budget, and normalization applied
 	exportTxns := buildExportTxns(allTxns, txnDocIDs, normMap, editsMap)
-	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
+	fullTxns := buildFullTransactions(exportTxns, allTxns)
+	budgetPeriods := computeExportPeriodsFromFull(fullTxns)
+	weeklyAggregates := computeExportWeeklyAggregatesFromFull(fullTxns)
 
 	// Compute lastTransactionDate on statements from all transactions
 	maxDates := maxTransactionDates(allTxns)
@@ -381,6 +392,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		BudgetPeriods:      budgetPeriods,
 		Rules:              inp.Rules,
 		NormalizationRules: inp.NormalizationRules,
+		WeeklyAggregates:   weeklyAggregates,
 	})
 }
 
@@ -410,6 +422,7 @@ func convertExportRules(exportRules []export.Rule) []rules.Rule {
 			Account:         r.Account,
 			ExcludeCategory: r.ExcludeCategory,
 			MatchCategory:   r.MatchCategory,
+			Category:        r.Category,
 		}
 		if r.MinAmount != nil {
 			ruleSet[i].HasMinAmount = true
@@ -543,9 +556,30 @@ func buildExportTxns(allTxns []store.TransactionData, docIDs []string, normMap m
 	return exportTxns
 }
 
-// computeExportPeriods builds budget periods from export transactions and internal
-// transaction data. Returns sorted budget periods.
-func computeExportPeriods(exportTxns []export.Transaction, allTxns []store.TransactionData) []export.BudgetPeriod {
+// computeExportPeriodsFromFull builds sorted budget periods from pre-built full transactions.
+func computeExportPeriodsFromFull(fullTxns []store.FullTransaction) []export.BudgetPeriod {
+	periods := store.ComputePeriods(fullTxns)
+	sort.Slice(periods, func(i, j int) bool {
+		return periods[i].ID < periods[j].ID
+	})
+	budgetPeriods := make([]export.BudgetPeriod, len(periods))
+	for i, p := range periods {
+		budgetPeriods[i] = export.BudgetPeriod{
+			ID:                p.ID,
+			BudgetID:          p.BudgetID,
+			PeriodStart:       export.FormatTimestamp(p.Start),
+			PeriodEnd:         export.FormatTimestamp(p.End),
+			Total:             p.Total,
+			Count:             p.Count,
+			CategoryBreakdown: p.CategoryBreakdown,
+		}
+	}
+	return budgetPeriods
+}
+
+// buildFullTransactions converts export transactions and internal transaction data
+// to store.FullTransaction for aggregation functions.
+func buildFullTransactions(exportTxns []export.Transaction, allTxns []store.TransactionData) []store.FullTransaction {
 	fullTxns := make([]store.FullTransaction, len(exportTxns))
 	for i, et := range exportTxns {
 		ft := store.FullTransaction{
@@ -564,24 +598,25 @@ func computeExportPeriods(exportTxns []export.Transaction, allTxns []store.Trans
 		}
 		fullTxns[i] = ft
 	}
+	return fullTxns
+}
 
-	periods := store.ComputePeriods(fullTxns)
-	sort.Slice(periods, func(i, j int) bool {
-		return periods[i].ID < periods[j].ID
+// computeExportWeeklyAggregatesFromFull computes sorted weekly aggregates from pre-built full transactions.
+func computeExportWeeklyAggregatesFromFull(fullTxns []store.FullTransaction) []export.WeeklyAggregate {
+	aggregates := store.ComputeWeeklyAggregates(fullTxns)
+	sort.Slice(aggregates, func(i, j int) bool {
+		return aggregates[i].WeekStart.Before(aggregates[j].WeekStart)
 	})
-	budgetPeriods := make([]export.BudgetPeriod, len(periods))
-	for i, p := range periods {
-		budgetPeriods[i] = export.BudgetPeriod{
-			ID:                p.ID,
-			BudgetID:          p.BudgetID,
-			PeriodStart:       export.FormatTimestamp(p.Start),
-			PeriodEnd:         export.FormatTimestamp(p.End),
-			Total:             p.Total,
-			Count:             p.Count,
-			CategoryBreakdown: p.CategoryBreakdown,
+	result := make([]export.WeeklyAggregate, len(aggregates))
+	for i, a := range aggregates {
+		result[i] = export.WeeklyAggregate{
+			ID:              a.WeekStart.Format("2006-01-02"),
+			WeekStart:       export.FormatTimestamp(a.WeekStart),
+			CreditTotal:     a.CreditTotal,
+			UnbudgetedTotal: a.UnbudgetedTotal,
 		}
 	}
-	return budgetPeriods
+	return result
 }
 
 // writeOutputAndLog writes the export output to a file and logs a summary.
@@ -663,6 +698,13 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 			log.Printf("skipping %s: %s", r.sf.Path, r.result.SkipReason)
 			skipped++
 			continue
+		}
+		// Override path-derived period with document-inferred period before any
+		// downstream use of sf (StatementID, buildStatementData, etc.).
+		if inferred := r.result.InferPeriod(); inferred != "" {
+			r.sf.Period = inferred
+		} else {
+			log.Printf("could not infer period from document data for %s, using path-derived period %q", r.sf.Path, r.sf.Period)
 		}
 		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
 		totalTxns += len(r.result.Transactions)
@@ -762,7 +804,9 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 
 	// Build export transactions
 	exportTxns := buildExportTxns(allTxns, allDocIDs, normMap, editsMap)
-	budgetPeriods := computeExportPeriods(exportTxns, allTxns)
+	fullTxns := buildFullTransactions(exportTxns, allTxns)
+	budgetPeriods := computeExportPeriodsFromFull(fullTxns)
+	weeklyAggregates := computeExportWeeklyAggregatesFromFull(fullTxns)
 
 	// Merge statements: dir overrides by statementID, retain input-only
 	maxDates := maxTransactionDates(allTxns)
@@ -779,6 +823,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		BudgetPeriods:      budgetPeriods,
 		Rules:              inp.Rules,
 		NormalizationRules: inp.NormalizationRules,
+		WeeklyAggregates:   weeklyAggregates,
 	})
 }
 
@@ -926,6 +971,31 @@ func runFirestore(ctx context.Context, client *store.Client, groupInfo store.Gro
 		}
 	}
 
+	// Build normalization overlay from updates applied above
+	normState := make(map[string]store.NormalizationUpdate, len(normUpdates))
+	for _, u := range normUpdates {
+		normState[u.DocID] = u
+	}
+
+	// Compute and upsert weekly aggregates from all transactions
+	fullTxnsForAgg := make([]store.FullTransaction, 0, len(allDocs))
+	for _, td := range allDocs {
+		ft, err := store.FullTransactionFromDoc(td.ID, td.Data)
+		if err != nil {
+			return err
+		}
+		// Apply fresh normalization state (allDocs predates UpdateNormalization)
+		if nu, ok := normState[ft.ID]; ok {
+			ft.NormalizedID = nu.NormalizedID
+			ft.NormalizedPrimary = nu.NormalizedPrimary
+		}
+		fullTxnsForAgg = append(fullTxnsForAgg, ft)
+	}
+	weeklyAggs := store.ComputeWeeklyAggregates(fullTxnsForAgg)
+	if err := client.UpsertWeeklyAggregates(ctx, groupInfo, weeklyAggs); err != nil {
+		return fmt.Errorf("upserting weekly aggregates: %w", err)
+	}
+
 	// Recalculate affected budget periods
 	if len(allTxns) > 0 {
 		minTime := allTxns[0].Timestamp
@@ -1017,12 +1087,18 @@ func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []s
 	out := make([]store.StatementData, len(parsed))
 	for i, pf := range parsed {
 		key := accountKey(pf.sf.Institution, pf.sf.Account)
+		var balanceDate *time.Time
+		if !pf.result.BalanceDate.IsZero() {
+			bd := pf.result.BalanceDate
+			balanceDate = &bd
+		}
 		out[i] = store.StatementData{
 			StatementID:         pf.sf.StatementID(),
 			Institution:         pf.sf.Institution,
 			Account:             pf.sf.Account,
 			Balance:             pf.result.Balance,
 			Period:              pf.sf.Period,
+			BalanceDate:         balanceDate,
 			LastTransactionDate: maxDates[key],
 		}
 	}
@@ -1033,6 +1109,10 @@ func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []s
 func buildExportStatements(stmts []store.StatementData) []export.Statement {
 	out := make([]export.Statement, len(stmts))
 	for i, s := range stmts {
+		balanceDate := ""
+		if s.BalanceDate != nil {
+			balanceDate = s.BalanceDate.Format("2006-01-02")
+		}
 		var ltd *string
 		if s.LastTransactionDate != nil {
 			v := export.FormatTimestamp(*s.LastTransactionDate)
@@ -1045,6 +1125,7 @@ func buildExportStatements(stmts []store.StatementData) []export.Statement {
 			Account:             s.Account,
 			Balance:             store.DollarAmount(s.Balance),
 			Period:              s.Period,
+			BalanceDate:         balanceDate,
 			LastTransactionDate: ltd,
 		}
 	}

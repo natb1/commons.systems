@@ -7,6 +7,7 @@ import type {
   BudgetPeriod,
   Rule,
   NormalizationRule,
+  WeeklyAggregate,
   TransactionId,
   StatementId,
   BudgetId,
@@ -22,9 +23,10 @@ import {
   getBudgetPeriods as fsGetBudgetPeriods,
   getRules as fsGetRules,
   getNormalizationRules as fsGetNormalizationRules,
+  getWeeklyAggregates as fsGetWeeklyAggregates,
 } from "./firestore.js";
 import { getAll, get, put, deleteRecord } from "./idb.js";
-import type { IdbTransaction, IdbStatement, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule } from "./idb.js";
+import type { IdbTransaction, IdbStatement, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
 
 export interface TransactionQuery {
   since?: Timestamp;
@@ -38,6 +40,7 @@ export interface DataSource {
   getBudgetPeriods(): Promise<BudgetPeriod[]>;
   getRules(): Promise<Rule[]>;
   getNormalizationRules(): Promise<NormalizationRule[]>;
+  getWeeklyAggregates(): Promise<WeeklyAggregate[]>;
   updateTransaction(
     id: TransactionId,
     fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
@@ -95,6 +98,9 @@ export class FirestoreSeedDataSource implements DataSource {
   }
   async getNormalizationRules(): Promise<NormalizationRule[]> {
     return fsGetNormalizationRules(null);
+  }
+  async getWeeklyAggregates(): Promise<WeeklyAggregate[]> {
+    return fsGetWeeklyAggregates(null);
   }
   async updateTransaction(): Promise<void> {
     throw new Error("Seed data is read-only");
@@ -207,9 +213,20 @@ function toStatement(row: IdbStatement): Statement {
     account: row.account,
     balance: row.balance,
     period: row.period,
+    balanceDate: row.balanceDate ?? null,
     lastTransactionDate: row.lastTransactionDateMs != null
       ? Timestamp.fromMillis(row.lastTransactionDateMs)
       : null,
+    groupId: null as GroupId | null,
+  };
+}
+
+function toWeeklyAggregate(row: IdbWeeklyAggregate): WeeklyAggregate {
+  return {
+    id: row.id,
+    weekStart: Timestamp.fromMillis(row.weekStartMs),
+    creditTotal: row.creditTotal,
+    unbudgetedTotal: row.unbudgetedTotal,
     groupId: null as GroupId | null,
   };
 }
@@ -283,6 +300,11 @@ export class IdbDataSource implements DataSource {
   async getNormalizationRules(): Promise<NormalizationRule[]> {
     const rows = await getAll<IdbNormalizationRule>("normalizationRules");
     return rows.map(toNormalizationRule);
+  }
+
+  async getWeeklyAggregates(): Promise<WeeklyAggregate[]> {
+    const rows = await getAll<IdbWeeklyAggregate>("weeklyAggregates");
+    return rows.map(toWeeklyAggregate);
   }
 
   async updateTransaction(

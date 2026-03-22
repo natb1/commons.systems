@@ -71,6 +71,7 @@ export interface Statement {
   readonly account: string;
   readonly balance: number;
   readonly period: string;
+  readonly balanceDate: string | null;
   readonly lastTransactionDate: Timestamp | null;
   readonly groupId: GroupId | null;
 }
@@ -253,6 +254,7 @@ export async function getStatements(groupId: GroupId | null, email?: string): Pr
       account: requireString(data.account, "account"),
       balance: requireNumber(data.balance, "balance"),
       period: requireString(data.period, "period"),
+      balanceDate: optionalString(data.balanceDate, "balanceDate"),
       lastTransactionDate: optionalTimestamp(data.lastTransactionDate, "lastTransactionDate"),
       groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     };
@@ -590,4 +592,30 @@ export async function deleteNormalizationRule(ruleId: string): Promise<void> {
   const path = nsCollectionPath(NAMESPACE, "normalization-rules");
   const ref = doc(db, path, ruleId);
   await deleteDoc(ref);
+}
+
+// --- Weekly Aggregates ---
+
+export interface WeeklyAggregate {
+  readonly id: string;
+  readonly weekStart: Timestamp;
+  readonly creditTotal: number;
+  readonly unbudgetedTotal: number;
+  readonly groupId: GroupId | null;
+}
+
+export async function getWeeklyAggregates(groupId: null): Promise<WeeklyAggregate[]>;
+export async function getWeeklyAggregates(groupId: GroupId, email: string): Promise<WeeklyAggregate[]>;
+export async function getWeeklyAggregates(groupId: GroupId | null, email?: string): Promise<WeeklyAggregate[]> {
+  const docs = await queryGroupCollection("weekly-aggregates", "seed-", groupId, email);
+  return docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      weekStart: requireTimestamp(data.weekStart, "weekStart"),
+      creditTotal: requireNumber(data.creditTotal, "creditTotal"),
+      unbudgetedTotal: requireNumber(data.unbudgetedTotal, "unbudgetedTotal"),
+      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
+    };
+  });
 }

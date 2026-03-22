@@ -36,6 +36,7 @@ function stmt(overrides: Partial<Statement> = {}): Statement {
     account: "Checking",
     balance: 1000,
     period: "2025-02",
+    balanceDate: null,
     lastTransactionDate: null,
     groupId: null,
     ...overrides,
@@ -74,7 +75,7 @@ describe("accounts page smoke — multi-account aggregation", () => {
 
     // 3 accounts → 3 <tr> rows in <tbody>
     const tbody = html.slice(html.indexOf("<tbody>"), html.indexOf("</tbody>"));
-    const rowCount = (tbody.match(/<tr>/g) ?? []).length;
+    const rowCount = (tbody.match(/<tr[\s>]/g) ?? []).length;
     expect(rowCount).toBe(3);
 
     // Bank/Checking gets latest statement balance ($3,500.00)
@@ -98,5 +99,6 @@ describe("accounts page smoke — multi-account aggregation", () => {
     expect(html).toContain("<th>Account</th>");
     expect(html).toContain("<th>Most recent transaction</th>");
     expect(html).toContain("<th>Balance</th>");
+    expect(html).toContain("<th>Derived</th>");
   });
 });

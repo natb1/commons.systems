@@ -187,6 +187,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Seed weekly aggregates are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-weekly-aggregates/{aggId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Weekly aggregates are scoped to group members via a denormalized `memberEmails` field.
+    // Client writes are denied; data is managed via the ETL pipeline.
+    match /budget/{env}/weekly-aggregates/{aggId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow write: if false;
+    }
+
     // Validates rule field types and constraints on both create and update.
     function isValidRuleData() {
       return request.resource.data.type in ["categorization", "budget_assignment"]

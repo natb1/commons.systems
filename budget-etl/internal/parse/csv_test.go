@@ -17,9 +17,15 @@ func TestParseCSV(t *testing.T) {
 		t.Fatal("expected non-skipped result")
 	}
 
-	// Balance: metadata line has "15000.00" → 1500000 cents
-	if result.Balance != 1500000 {
-		t.Errorf("Balance = %d, want %d", result.Balance, 1500000)
+	// Balance: metadata ending balance is "12000.00" → 1200000 cents
+	if result.Balance != 1200000 {
+		t.Errorf("Balance = %d, want %d", result.Balance, 1200000)
+	}
+
+	// BalanceDate: metadata toDate is "2025/07/10"
+	wantBD := time.Date(2025, 7, 10, 0, 0, 0, 0, time.UTC)
+	if !result.BalanceDate.Equal(wantBD) {
+		t.Errorf("BalanceDate = %v, want %v", result.BalanceDate, wantBD)
 	}
 
 	txns := result.Transactions

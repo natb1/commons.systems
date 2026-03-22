@@ -263,6 +263,58 @@ func TestApplyBudgetAssignment(t *testing.T) {
 			t.Errorf("should preserve existing budget: got %q", txns[0].Budget)
 		}
 	})
+
+	t.Run("category prefix match", func(t *testing.T) {
+		rules := []Rule{
+			{Type: "budget_assignment", Pattern: "", Category: "Food", Target: "food-budget", Priority: 10},
+		}
+		txns := []store.TransactionData{
+			{Description: "GROCERY STORE", Category: "Food:Groceries", StatementID: "s1", TransactionID: "t1"},
+		}
+		ApplyBudgetAssignment(txns, rules)
+		if txns[0].Budget != "food-budget" {
+			t.Errorf("txn[0].Budget = %q, want food-budget", txns[0].Budget)
+		}
+	})
+
+	t.Run("category prefix mismatch", func(t *testing.T) {
+		rules := []Rule{
+			{Type: "budget_assignment", Pattern: "", Category: "Food", Target: "food-budget", Priority: 10},
+		}
+		txns := []store.TransactionData{
+			{Description: "ELECTRIC CO", Category: "Housing:Utilities", StatementID: "s1", TransactionID: "t1"},
+		}
+		ApplyBudgetAssignment(txns, rules)
+		if txns[0].Budget != "" {
+			t.Errorf("txn[0].Budget = %q, want empty (no match)", txns[0].Budget)
+		}
+	})
+
+	t.Run("category filter is case-insensitive", func(t *testing.T) {
+		rules := []Rule{
+			{Type: "budget_assignment", Pattern: "", Category: "food", Target: "food-budget", Priority: 10},
+		}
+		txns := []store.TransactionData{
+			{Description: "GROCERY STORE", Category: "Food:Groceries", StatementID: "s1", TransactionID: "t1"},
+		}
+		ApplyBudgetAssignment(txns, rules)
+		if txns[0].Budget != "food-budget" {
+			t.Errorf("txn[0].Budget = %q, want food-budget", txns[0].Budget)
+		}
+	})
+
+	t.Run("empty category matches any", func(t *testing.T) {
+		rules := []Rule{
+			{Type: "budget_assignment", Pattern: "grocery", Category: "", Target: "catch-all", Priority: 10},
+		}
+		txns := []store.TransactionData{
+			{Description: "GROCERY STORE", Category: "Food:Groceries", StatementID: "s1", TransactionID: "t1"},
+		}
+		ApplyBudgetAssignment(txns, rules)
+		if txns[0].Budget != "catch-all" {
+			t.Errorf("txn[0].Budget = %q, want catch-all", txns[0].Budget)
+		}
+	})
 }
 
 func TestNormalizationRuleMatch(t *testing.T) {

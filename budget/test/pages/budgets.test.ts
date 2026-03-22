@@ -6,7 +6,7 @@ import { timestampMockFactory, createMockDataSource } from "../helpers";
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
 import { renderBudgets } from "../../src/pages/budgets";
-import type { Budget, Transaction } from "../../src/firestore";
+import type { Budget, Transaction, WeeklyAggregate } from "../../src/firestore";
 import { Timestamp } from "firebase/firestore";
 
 function budget(overrides: Partial<Budget> = {}): Budget {
@@ -219,15 +219,14 @@ describe("renderBudgets", () => {
         budget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 100 }),
         budget({ id: "fun" as Budget["id"], name: "Fun", weeklyAllowance: 50 }),
       ]),
-      getTransactions: vi.fn().mockResolvedValue([
-        txn({
-          id: "credit-1" as Transaction["id"],
-          category: "Travel:Reimbursement",
-          amount: -1200,
-          timestamp: Timestamp.fromDate(new Date("2026-03-01")),
-          normalizedId: null,
-          normalizedPrimary: true,
-        }),
+      getWeeklyAggregates: vi.fn().mockResolvedValue([
+        {
+          id: "2026-02-23",
+          weekStart: Timestamp.fromDate(new Date("2026-02-23")),
+          creditTotal: 1200,
+          unbudgetedTotal: 0,
+          groupId: null,
+        },
       ]),
     }));
     expect(html).toContain('id="budget-metrics"');
@@ -235,19 +234,12 @@ describe("renderBudgets", () => {
     expect(html).toContain("$150.00");
   });
 
-  it("renders zero income when no income transactions", async () => {
+  it("renders zero income when no credit aggregates", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
         budget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 75 }),
       ]),
-      getTransactions: vi.fn().mockResolvedValue([
-        txn({
-          id: "exp-1" as Transaction["id"],
-          category: "Food",
-          amount: 50,
-          timestamp: Timestamp.fromDate(new Date("2026-03-01")),
-        }),
-      ]),
+      getWeeklyAggregates: vi.fn().mockResolvedValue([]),
     }));
     expect(html).toContain("$0.00");
     expect(html).toContain("$75.00");
