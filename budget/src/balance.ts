@@ -4,6 +4,7 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 export const UNBUDGETED_SERIES = "Other";
+const BALANCE_TOLERANCE_DOLLARS = 0.01;
 
 /** Return the Monday 00:00 UTC for the week containing `ms`. */
 export function weekStart(ms: number): number {
@@ -593,7 +594,8 @@ function periodToAnchorMs(period: string): number {
   const year = parseInt(yearStr, 10);
   const month = parseInt(monthStr, 10);
   if (isNaN(year) || isNaN(month)) throw new DataIntegrityError(`Invalid statement period: ${period}`);
-  // Date.UTC with 1-based month gives first of next month (month param is 0-based)
+  // Anchor at first of next month: a "2025-01" statement covers through January,
+  // so the boundary is Feb 1. Date.UTC month param is 0-based, so 1-based input works directly.
   return Date.UTC(year, month, 1);
 }
 
@@ -606,6 +608,9 @@ function periodToAnchorMs(period: string): number {
  *
  * Transaction sign convention: positive = spending (reduces balance), negative = credit (increases balance).
  * Statement balance: raw signed from bank (positive = asset, negative = liability).
+ *
+ * Note: computeDerivedBalances anchors on the earliest statement (forward);
+ * this function anchors on the latest (backward interpolation).
  */
 export function computeNetWorth(
   transactions: Transaction[],
@@ -644,7 +649,9 @@ export function computeNetWorth(
     const txnTimes = txnData.map(t => t.ms);
     const txnNets = txnData.map(t => t.net);
 
-    // cumSumBefore: cumulative net amount for txns before timestamp T. Uses sorted txnTimes with early break. Retained for non-sequential lookups (divergence verification) where the advancing pointer cannot be used.
+    // cumSumBefore: cumulative net amount for txns before timestamp T.
+    // Uses sorted txnTimes with early break. Retained for non-sequential
+    // lookups (divergence verification) where the advancing pointer cannot be used.
     function cumSumBefore(T: number): number {
       let sum = 0;
       for (let i = 0; i < txnTimes.length; i++) {
@@ -676,7 +683,7 @@ export function computeNetWorth(
       const stmtMs = statementEffectiveMs(stmt);
       const stmtCum = cumSumBefore(stmtMs);
       const derived = anchorBalance - (stmtCum - anchorCum);
-      if (Math.abs(derived - stmt.balance) > 0.01) {
+      if (Math.abs(derived - stmt.balance) > BALANCE_TOLERANCE_DOLLARS) {
         const [inst, acct] = splitAccountKey(k);
         divergences.push({
           institution: inst,
