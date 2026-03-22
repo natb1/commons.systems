@@ -472,42 +472,7 @@ describe("renderHome", () => {
     expect(html).toContain('data-category="Food:Groceries"');
   });
 
-  it("renders data-has-budget='false' when txn.budget is null", async () => {
-    const html = await renderHome(seedOptions({
-      getTransactions: vi.fn().mockResolvedValue([
-        txn({ budget: null }),
-      ]),
-    }));
-    expect(html).toContain('data-has-budget="false"');
-  });
-
-  it("renders data-has-budget='true' when txn.budget is set", async () => {
-    const html = await renderHome(seedOptions({
-      getTransactions: vi.fn().mockResolvedValue([
-        txn({ budget: "food" }),
-      ]),
-    }));
-    expect(html).toContain('data-has-budget="true"');
-  });
-
-  it("includes hasBudget field in serialized chart JSON", async () => {
-    const html = await renderHome(seedOptions({
-      getTransactions: vi.fn().mockResolvedValue([
-        txn({ budget: null }),
-        txn({ id: "txn-2", budget: "food", category: "Food", amount: 30, institution: "Bank B", account: "Savings", timestamp: mockTimestamp("2025-02-01") }),
-      ]),
-    }));
-    const match = html.match(/<script type="application\/json" id="sankey-data">([\s\S]*?)<\/script>/);
-    expect(match).not.toBeNull();
-    const chartTxns = JSON.parse(match![1]);
-    expect(chartTxns).toHaveLength(2);
-    const unbudgeted = chartTxns.find((t: any) => t.hasBudget === false);
-    const budgeted = chartTxns.find((t: any) => t.hasBudget === true);
-    expect(unbudgeted).toBeDefined();
-    expect(budgeted).toBeDefined();
-  });
-
-  it("serializes hasBudget as false when budget is null, true when set", async () => {
+  it("serializes budgetName in chart JSON as name for budgeted, null for unbudgeted", async () => {
     const html = await renderHome(seedOptions({
       getTransactions: vi.fn().mockResolvedValue([
         txn({ id: "txn-no-budget", budget: null, amount: 10 }),
@@ -515,11 +480,12 @@ describe("renderHome", () => {
       ]),
     }));
     const match = html.match(/<script type="application\/json" id="sankey-data">([\s\S]*?)<\/script>/);
+    expect(match).not.toBeNull();
     const chartTxns = JSON.parse(match![1]);
     const noBudget = chartTxns.find((t: any) => t.amount === 10);
-    const hasBudget = chartTxns.find((t: any) => t.amount === 20);
-    expect(noBudget.hasBudget).toBe(false);
-    expect(hasBudget.hasBudget).toBe(true);
+    const withBudget = chartTxns.find((t: any) => t.amount === 20);
+    expect(noBudget.budgetName).toBeNull();
+    expect(withBudget.budgetName).toBe("Food");
   });
 
   it("renders unbudgeted toggle in sankey controls", async () => {

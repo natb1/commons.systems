@@ -32,7 +32,6 @@ function txn(overrides: Partial<SerializedChartTransaction> = {}): SerializedCha
     amount: 50,
     reimbursement: 0,
     timestampMs: MON_JAN_06 + 86400000, // Tuesday Jan 7
-    hasBudget: false,
     budgetName: null,
     ...overrides,
   };
@@ -41,6 +40,10 @@ function txn(overrides: Partial<SerializedChartTransaction> = {}): SerializedCha
 function makeContainer(txns?: SerializedChartTransaction[]): HTMLElement {
   const controlsDiv = document.createElement("div");
   controlsDiv.id = "sankey-controls";
+  const categoryOpts = txns ? [...new Set(txns.map(t => t.category))].sort() : [];
+  const budgetOpts = txns ? [...new Set(txns.map(t => t.budgetName).filter((n): n is string => n !== null))].sort() : [];
+  controlsDiv.dataset.categoryOptions = JSON.stringify(categoryOpts);
+  controlsDiv.dataset.budgetOptions = JSON.stringify(budgetOpts);
   controlsDiv.innerHTML = `
     <fieldset id="sankey-mode">
       <label><input type="radio" name="sankey-mode" value="spending" checked> Spending</label>
@@ -231,8 +234,8 @@ describe("buildCategoryTree", () => {
 
   it("unbudgetedOnly=true excludes budgeted transactions", () => {
     const root = buildCategoryTree([
-      txn({ category: "Food", amount: 50, hasBudget: true }),
-      txn({ category: "Transport", amount: 30, hasBudget: false }),
+      txn({ category: "Food", amount: 50, budgetName: "Food" }),
+      txn({ category: "Transport", amount: 30 }),
     ], { mode: "spending", unbudgetedOnly: true });
     expect(root.children).toHaveLength(1);
     expect(root.children[0].name).toBe("Transport");
@@ -241,8 +244,8 @@ describe("buildCategoryTree", () => {
 
   it("unbudgetedOnly=false includes all transactions", () => {
     const root = buildCategoryTree([
-      txn({ category: "Food", amount: 50, hasBudget: true }),
-      txn({ category: "Transport", amount: 30, hasBudget: false }),
+      txn({ category: "Food", amount: 50, budgetName: "Food" }),
+      txn({ category: "Transport", amount: 30 }),
     ], { mode: "spending" });
     expect(root.children).toHaveLength(2);
     expect(root.value).toBe(80);
@@ -250,8 +253,8 @@ describe("buildCategoryTree", () => {
 
   it("unbudgetedOnly=true with all budgeted transactions returns empty tree", () => {
     const root = buildCategoryTree([
-      txn({ category: "Food", amount: 50, hasBudget: true }),
-      txn({ category: "Transport", amount: 30, hasBudget: true }),
+      txn({ category: "Food", amount: 50, budgetName: "Food" }),
+      txn({ category: "Transport", amount: 30, budgetName: "Transport" }),
     ], { mode: "spending", unbudgetedOnly: true });
     expect(root.value).toBe(0);
     expect(root.count).toBe(0);
@@ -591,26 +594,26 @@ describe("hydrateCategorySankey", () => {
     const table = document.createElement("div");
     table.id = "transactions-table";
     const rows = [
-      { category: "Food", hasBudget: "true", netAmount: "50" },
-      { category: "Transport", hasBudget: "false", netAmount: "30" },
-      { category: "Transfer:CardPayment", hasBudget: "false", netAmount: "200" },
-      { category: "Income:Salary", hasBudget: "false", netAmount: "-2400" },
+      { category: "Food", budgetName: "Food", netAmount: "50" },
+      { category: "Transport", budgetName: "", netAmount: "30" },
+      { category: "Transfer:CardPayment", budgetName: "", netAmount: "200" },
+      { category: "Income:Salary", budgetName: "", netAmount: "-2400" },
     ];
     for (const r of rows) {
       const row = document.createElement("div");
       row.className = "txn-row";
       row.dataset.category = r.category;
-      row.dataset.hasBudget = r.hasBudget;
+      row.dataset.budgetName = r.budgetName;
       row.dataset.netAmount = r.netAmount;
       table.appendChild(row);
     }
     document.body.appendChild(table);
 
     const container = makeContainer([
-      txn({ category: "Food", amount: 50, hasBudget: true }),
-      txn({ category: "Transport", amount: 30, hasBudget: false }),
-      txn({ category: "Transfer:CardPayment", amount: 200, hasBudget: false }),
-      txn({ category: "Income:Salary", amount: -2400, hasBudget: false }),
+      txn({ category: "Food", amount: 50, budgetName: "Food" }),
+      txn({ category: "Transport", amount: 30 }),
+      txn({ category: "Transfer:CardPayment", amount: 200 }),
+      txn({ category: "Income:Salary", amount: -2400 }),
     ]);
     hydrateCategorySankey(container);
 
@@ -644,7 +647,7 @@ describe("hydrateCategorySankey", () => {
     const row = document.createElement("div");
     row.className = "txn-row";
     row.dataset.category = "Travel:Reimbursement";
-    row.dataset.hasBudget = "false";
+    row.dataset.budgetName = "";
     row.dataset.netAmount = "-22.99";
     table.appendChild(row);
     document.body.appendChild(table);
@@ -669,14 +672,14 @@ describe("hydrateCategorySankey", () => {
     const table = document.createElement("div");
     table.id = "transactions-table";
     const rows = [
-      { category: "Food", hasBudget: "false", netAmount: "50" },
-      { category: "Income:Salary", hasBudget: "false", netAmount: "-2400" },
+      { category: "Food", budgetName: "", netAmount: "50" },
+      { category: "Income:Salary", budgetName: "", netAmount: "-2400" },
     ];
     for (const r of rows) {
       const row = document.createElement("div");
       row.className = "txn-row";
       row.dataset.category = r.category;
-      row.dataset.hasBudget = r.hasBudget;
+      row.dataset.budgetName = r.budgetName ?? "";
       row.dataset.netAmount = r.netAmount;
       table.appendChild(row);
     }
@@ -705,14 +708,14 @@ describe("hydrateCategorySankey", () => {
     const table = document.createElement("div");
     table.id = "transactions-table";
     const rows = [
-      { category: "Income:Salary", hasBudget: "false", netAmount: "-2400" },
-      { category: "Transfer:CardPayment", hasBudget: "false", netAmount: "-150" },
+      { category: "Income:Salary", budgetName: "", netAmount: "-2400" },
+      { category: "Transfer:CardPayment", budgetName: "", netAmount: "-150" },
     ];
     for (const r of rows) {
       const row = document.createElement("div");
       row.className = "txn-row";
       row.dataset.category = r.category;
-      row.dataset.hasBudget = r.hasBudget;
+      row.dataset.budgetName = r.budgetName ?? "";
       row.dataset.netAmount = r.netAmount;
       table.appendChild(row);
     }
@@ -740,16 +743,16 @@ describe("hydrateCategorySankey", () => {
     const table = document.createElement("div");
     table.id = "transactions-table";
     const rows = [
-      { category: "Food", hasBudget: "false", netAmount: "50" },
-      { category: "Food:Groceries", hasBudget: "false", netAmount: "30" },
-      { category: "Food:Dining", hasBudget: "false", netAmount: "20" },
-      { category: "Travel", hasBudget: "false", netAmount: "40" },
+      { category: "Food", budgetName: "", netAmount: "50" },
+      { category: "Food:Groceries", budgetName: "", netAmount: "30" },
+      { category: "Food:Dining", budgetName: "", netAmount: "20" },
+      { category: "Travel", budgetName: "", netAmount: "40" },
     ];
     for (const r of rows) {
       const row = document.createElement("div");
       row.className = "txn-row";
       row.dataset.category = r.category;
-      row.dataset.hasBudget = r.hasBudget;
+      row.dataset.budgetName = r.budgetName ?? "";
       row.dataset.netAmount = r.netAmount;
       table.appendChild(row);
     }
@@ -787,25 +790,24 @@ describe("hydrateCategorySankey", () => {
     const table = document.createElement("div");
     table.id = "transactions-table";
     const rows = [
-      { category: "Food", hasBudget: "true", netAmount: "50", budgetName: "Food" },
-      { category: "Travel", hasBudget: "true", netAmount: "30", budgetName: "Vacation" },
-      { category: "Gas", hasBudget: "false", netAmount: "20", budgetName: "" },
+      { category: "Food", netAmount: "50", budgetName: "Food" },
+      { category: "Travel", netAmount: "30", budgetName: "Vacation" },
+      { category: "Gas", netAmount: "20", budgetName: "" },
     ];
     for (const r of rows) {
       const row = document.createElement("div");
       row.className = "txn-row";
       row.dataset.category = r.category;
-      row.dataset.hasBudget = r.hasBudget;
-      row.dataset.netAmount = r.netAmount;
       row.dataset.budgetName = r.budgetName;
+      row.dataset.netAmount = r.netAmount;
       table.appendChild(row);
     }
     document.body.appendChild(table);
 
     const container = makeContainer([
-      txn({ category: "Food", amount: 50, hasBudget: true, budgetName: "Food" }),
-      txn({ category: "Travel", amount: 30, hasBudget: true, budgetName: "Vacation" }),
-      txn({ category: "Gas", amount: 20, hasBudget: false, budgetName: null }),
+      txn({ category: "Food", amount: 50, budgetName: "Food" }),
+      txn({ category: "Travel", amount: 30, budgetName: "Vacation" }),
+      txn({ category: "Gas", amount: 20, budgetName: null }),
     ]);
     hydrateCategorySankey(container);
 

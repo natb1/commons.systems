@@ -12,7 +12,6 @@ export interface SerializedChartTransaction {
   amount: number;
   reimbursement: number;
   timestampMs: number | null;
-  hasBudget: boolean;
   budgetName: string | null;
 }
 
@@ -87,7 +86,7 @@ export function buildCategoryTree(
   for (const t of txns) {
     const parts = t.category.split(":");
     const raw = computeNetAmount(t.amount, t.reimbursement);
-    if (unbudgetedOnly && t.hasBudget) continue;
+    if (unbudgetedOnly && t.budgetName !== null) continue;
     if (!showCardPayment && isCardPaymentCategory(t.category)) continue;
     if (mode === "spending") {
       if (raw <= 0) continue;
@@ -235,7 +234,6 @@ function assertChartTransactions(data: unknown): asserts data is SerializedChart
     if (typeof rec.amount !== "number" || !Number.isFinite(rec.amount)) throw new Error("Chart transaction amount must be finite number");
     if (typeof rec.reimbursement !== "number" || !Number.isFinite(rec.reimbursement)) throw new Error("Chart transaction reimbursement must be finite number");
     if (rec.timestampMs !== null && (typeof rec.timestampMs !== "number" || !Number.isFinite(rec.timestampMs))) throw new Error("Chart transaction timestampMs must be finite number or null");
-    if (typeof rec.hasBudget !== "boolean") throw new Error("Chart transaction missing hasBudget boolean");
     if (rec.budgetName !== null && typeof rec.budgetName !== "string") throw new Error("Chart transaction budgetName must be string or null");
   }
 }
@@ -469,7 +467,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     const rows = document.querySelectorAll<HTMLElement>("#transactions-table .txn-row");
     for (const row of rows) {
       const category = row.dataset.category ?? "";
-      const hasBudget = row.dataset.hasBudget === "true";
+      const hasBudget = (row.dataset.budgetName ?? "") !== "";
       const isCardPayment = isCardPaymentCategory(category);
       const rawNetAmount = row.dataset.netAmount;
       if (rawNetAmount === undefined) throw new Error(`Transaction row missing data-net-amount`);
@@ -569,24 +567,22 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   });
 
   registerAutocompleteListeners();
-  categoryFilterInput.addEventListener("focus", () => {
-    showDropdown(categoryFilterInput, categoryOptions, "");
-  });
-  categoryFilterInput.addEventListener("input", () => {
-    showDropdown(categoryFilterInput, categoryOptions);
-  });
-  categoryFilterInput.addEventListener("blur", () => {
-    currentCategoryFilter = categoryFilterInput.value;
+
+  function attachFilterListeners(input: HTMLInputElement, options: string[], onBlur: (value: string) => void): void {
+    input.addEventListener("focus", () => showDropdown(input, options, ""));
+    input.addEventListener("input", () => showDropdown(input, options));
+    input.addEventListener("blur", () => {
+      if (input.value && !options.includes(input.value)) input.value = "";
+      onBlur(input.value);
+    });
+  }
+
+  attachFilterListeners(categoryFilterInput, categoryOptions, (value) => {
+    currentCategoryFilter = value;
     update();
   });
-  budgetFilterInput.addEventListener("focus", () => {
-    showDropdown(budgetFilterInput, budgetOptions, "");
-  });
-  budgetFilterInput.addEventListener("input", () => {
-    showDropdown(budgetFilterInput, budgetOptions);
-  });
-  budgetFilterInput.addEventListener("blur", () => {
-    currentBudgetFilter = budgetFilterInput.value;
+  attachFilterListeners(budgetFilterInput, budgetOptions, (value) => {
+    currentBudgetFilter = value;
     update();
   });
 

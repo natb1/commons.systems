@@ -37,7 +37,6 @@ interface RowParts {
   timestampAttr: string;
   reimbursementAttr: string;
   categoryAttr: string;
-  hasBudgetAttr: string;
   netAmountAttr: string;
   budgetNameAttr: string;
   detailDl: string;
@@ -73,7 +72,6 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
   const timestampAttr = editable && txn.timestamp ? ` data-timestamp="${txn.timestamp.toMillis()}"` : "";
   const reimbursementAttr = editable ? ` data-reimbursement="${txn.reimbursement}"` : "";
   const categoryAttr = ` data-category="${escapeHtml(txn.category)}"`;
-  const hasBudgetAttr = ` data-has-budget="${txn.budget !== null}"`;
   const netAmountAttr = ` data-net-amount="${computeNetAmount(txn.amount, txn.reimbursement)}"`;
   const budgetNameAttr = ` data-budget-name="${escapeHtml(budgetName)}"`;
   const detailDl = `<dl>
@@ -86,7 +84,7 @@ function buildRowParts(txn: Transaction, editable: boolean, budgetIdToName: Map<
         <dt>Group</dt><dd>${escapeHtml(groupName)}</dd>
         <dt>Statement</dt><dd>${txn.statementId ? `<a href="#">statement</a>` : ""}</dd>
       </dl>`;
-  return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, categoryAttr, hasBudgetAttr, netAmountAttr, budgetNameAttr, detailDl };
+  return { txnIdAttr, noteCell, categoryCell, reimbursementCell, budgetCell, balanceRow, amountAttr, budgetIdAttr, timestampAttr, reimbursementAttr, categoryAttr, netAmountAttr, budgetNameAttr, detailDl };
 }
 
 interface RenderRowOptions {
@@ -101,7 +99,7 @@ function renderRow(opts: RenderRowOptions): string {
   const { txn, groupName, editable, budgetIdToName, balance } = opts;
   const p = buildRowParts(txn, editable, budgetIdToName, balance, groupName);
 
-  return `<details class="expand-row txn-row"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.hasBudgetAttr}${p.netAmountAttr}${p.budgetNameAttr}>
+  return `<details class="expand-row txn-row"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.netAmountAttr}${p.budgetNameAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(txn.description)}</span>
@@ -139,7 +137,7 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
     </div>`
   ).join("\n");
 
-  return `<details class="expand-row txn-row normalized-group"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.hasBudgetAttr}${p.netAmountAttr}${p.budgetNameAttr}>
+  return `<details class="expand-row txn-row normalized-group"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.netAmountAttr}${p.budgetNameAttr}>
     <summary class="txn-summary">
       <div class="txn-summary-content">
         <span>${escapeHtml(description)}</span>
@@ -158,6 +156,13 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
   </details>`;
 }
 
+function resolveBudgetName(budgetId: string | null, budgetIdToName: Map<string, string>): string | null {
+  if (budgetId === null) return null;
+  const name = budgetIdToName.get(budgetId);
+  if (name === undefined) throw new DataIntegrityError(`Transaction references unknown budget ID: ${budgetId}`);
+  return name;
+}
+
 function serializeChartTransactions(transactions: Transaction[], budgetIdToName: Map<string, string>): SerializedChartTransaction[] {
   return transactions
     .filter(t => t.normalizedId === null || t.normalizedPrimary)
@@ -166,8 +171,7 @@ function serializeChartTransactions(transactions: Transaction[], budgetIdToName:
       amount: t.amount,
       reimbursement: t.reimbursement,
       timestampMs: t.timestamp ? t.timestamp.toMillis() : null,
-      hasBudget: t.budget !== null,
-      budgetName: t.budget ? budgetIdToName.get(t.budget) ?? null : null,
+      budgetName: resolveBudgetName(t.budget, budgetIdToName),
     }));
 }
 

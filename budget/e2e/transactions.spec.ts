@@ -299,12 +299,6 @@ test.describe("transactions", () => {
   test("budget filter input present @smoke", async ({ page }) => {
     await page.goto("/transactions");
     await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
-    await expect(page.locator("#sankey-budget-filter")).toBeVisible();
-  });
-
-  test("budget filter input visible on transaction page", async ({ page }) => {
-    await page.goto("/transactions");
-    await expect(page.locator("#category-sankey")).toBeVisible({ timeout: 30000 });
     await expect(page.locator("#budget-filter-label")).toBeVisible();
     await expect(page.locator("#sankey-budget-filter")).toBeVisible();
   });
