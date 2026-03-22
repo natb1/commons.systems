@@ -8,6 +8,8 @@ export interface AreaChartOptions {
   readonly data: PerBudgetPoint[];
   readonly containerWidth: number;
   readonly panelWidth: number;
+  readonly excludedBudgets?: ReadonlySet<string>;
+  readonly onToggleBudget?: (budgetName: string) => void;
 }
 
 interface AreaDatum {
@@ -18,7 +20,7 @@ interface AreaDatum {
 }
 
 export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaChartOptions): ChartResult {
-  const { data, containerWidth, panelWidth } = options;
+  const { data, containerWidth, panelWidth, excludedBudgets, onToggleBudget } = options;
 
   if (data.length === 0) {
     container.textContent = "No per-budget trend data to chart.";
@@ -41,8 +43,12 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   const sortedBudgets = budgetNames.filter(n => n !== UNBUDGETED_SERIES).sort();
   if (budgetNames.includes(UNBUDGETED_SERIES)) sortedBudgets.push(UNBUDGETED_SERIES);
 
+  const visibleData = excludedBudgets?.size
+    ? data.filter(d => !excludedBudgets.has(d.budget))
+    : data;
+
   const areaData: AreaDatum[] = [];
-  for (const d of data) {
+  for (const d of visibleData) {
     const weekIndex = weekIndexMap.get(d.weekMs);
     if (weekIndex === undefined) throw new Error(`Unknown weekMs: ${d.weekMs}`);
     areaData.push({
@@ -158,8 +164,14 @@ export function renderPerBudgetAreaChart(container: HTMLElement, options: AreaCh
   legend.className = "area-legend";
   for (let i = 0; i < sortedBudgets.length; i++) {
     const name = sortedBudgets[i];
+    const isExcluded = excludedBudgets?.has(name) ?? false;
     const item = document.createElement("div");
-    item.className = "area-legend-item";
+    item.className = isExcluded ? "area-legend-item excluded" : "area-legend-item";
+    item.dataset.budget = name;
+
+    if (onToggleBudget) {
+      item.addEventListener("click", () => onToggleBudget(name));
+    }
 
     const swatch = document.createElement("span");
     swatch.className = "legend-swatch";
