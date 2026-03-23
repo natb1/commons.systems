@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
+	"github.com/natb1/commons.systems/budget-etl/internal/parse"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
 	"github.com/natb1/commons.systems/budget-etl/internal/store"
 )
@@ -565,72 +566,65 @@ func TestRunMergeGroupNameOverride(t *testing.T) {
 	}
 }
 
-func TestGenerateVirtualCardCredits(t *testing.T) {
-	allTxns := []store.TransactionData{
-		{
-			Institution:   "pnc",
-			Account:       "5111",
-			Description:   "Online Payment To AMEX EPAYMENT",
-			Amount:        150000, // $1500
-			Timestamp:     time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC),
-			StatementID:   "pnc-5111-2025-03",
-			TransactionID: "txn-amex-pay",
-			Category:      "Transfer:CardPayment",
-		},
-		{
-			Institution:   "pnc",
-			Account:       "5111",
-			Description:   "Online Payment To SYNCHRONY BANK",
-			Amount:        50000,
-			Timestamp:     time.Date(2025, 3, 10, 0, 0, 0, 0, time.UTC),
-			StatementID:   "pnc-5111-2025-03",
-			TransactionID: "txn-sync-pay",
-			Category:      "Transfer:CardPayment",
-		},
-		{
-			Institution:   "pnc",
-			Account:       "5111",
-			Description:   "GROCERY STORE",
-			Amount:        5000,
-			Timestamp:     time.Date(2025, 3, 12, 0, 0, 0, 0, time.UTC),
-			StatementID:   "pnc-5111-2025-03",
-			TransactionID: "txn-grocery",
-			Category:      "Food:Groceries",
-		},
-		{
-			Institution:   "american_express",
-			Account:       "2011",
-			Description:   "RESTAURANT",
-			Amount:        3000,
-			Timestamp:     time.Date(2025, 3, 5, 0, 0, 0, 0, time.UTC),
-			StatementID:   "american_express-2011-2025-03",
-			TransactionID: "txn-amex-rest",
-			Category:      "Food:Restaurant",
+func TestRunMergeDedupOverlappingFiles(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Two CSV files in different subdirectories that produce the same statementId
+	// (simulating overlapping QFX downloads for the same period).
+	// Both share transaction TXN-OVERLAP; file2 also has TXN-UNIQUE.
+	csv1 := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "download1.csv")
+	writeCSVFixture(t, csv1, [][6]string{
+		{"2025/01/10", "5.00", "SHARED PURCHASE", "", "TXN-OVERLAP", "DEBIT"},
+	})
+	csv2 := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "download2.csv")
+	writeCSVFixture(t, csv2, [][6]string{
+		{"2025/01/10", "5.00", "SHARED PURCHASE", "", "TXN-OVERLAP", "DEBIT"},
+		{"2025/01/15", "10.00", "UNIQUE PURCHASE", "", "TXN-UNIQUE", "DEBIT"},
+	})
+
+	inputJSON := export.Output{
+		Version:      1,
+		GroupName:    "test-group",
+		Transactions: []export.Transaction{},
+		Rules: []export.Rule{
+			{ID: "cat-all", Type: "categorization", Pattern: "PURCHASE", Target: "Test:General", Priority: 10},
 		},
 	}
-	docIDs := []string{"doc-amex-pay", "doc-sync-pay", "doc-grocery", "doc-amex-rest"}
-
-	vcr := generateVirtualCardCredits(allTxns, docIDs)
-
-	if len(vcr.transactions) != 1 {
-		t.Fatalf("expected 1 virtual credit, got %d", len(vcr.transactions))
+	inputPath := filepath.Join(tmp, "input.json")
+	if err := export.WriteFile(inputPath, inputJSON, ""); err != nil {
+		t.Fatalf("writing input JSON: %v", err)
 	}
 
-	vc := vcr.transactions[0]
-	if vc.Institution != "american_express" || vc.Account != "2011" {
-		t.Errorf("institution/account: got %s/%s, want american_express/2011", vc.Institution, vc.Account)
+	outputPath := filepath.Join(tmp, "output.json")
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", fileOpts{path: outputPath}); err != nil {
+		t.Fatalf("runMerge: %v", err)
 	}
-	if vc.Amount != -150000 {
-		t.Errorf("amount: got %d, want -150000", vc.Amount)
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
 	}
-	if vc.Category != "Transfer:CardPayment" {
-		t.Errorf("category: got %q, want %q", vc.Category, "Transfer:CardPayment")
+	var out export.Output
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("parsing output: %v", err)
 	}
-	if !vc.Virtual {
-		t.Error("virtual: got false, want true")
+
+	// TXN-OVERLAP should appear once (deduped), TXN-UNIQUE once → 2 total
+	if len(out.Transactions) != 2 {
+		t.Fatalf("expected 2 transactions (deduped), got %d", len(out.Transactions))
 	}
-	if vcr.docIDs[0] != "virtual-credit-doc-amex-pay" {
-		t.Errorf("docID: got %q, want %q", vcr.docIDs[0], "virtual-credit-doc-amex-pay")
+
+	docOverlap := store.TransactionDocID("test_bank-1234-2025-01", "TXN-OVERLAP")
+	docUnique := store.TransactionDocID("test_bank-1234-2025-01", "TXN-UNIQUE")
+	ids := make(map[string]int)
+	for _, txn := range out.Transactions {
+		ids[txn.ID]++
+	}
+	if ids[docOverlap] != 1 {
+		t.Errorf("TXN-OVERLAP: expected 1 occurrence, got %d", ids[docOverlap])
+	}
+	if ids[docUnique] != 1 {
+		t.Errorf("TXN-UNIQUE: expected 1 occurrence, got %d", ids[docUnique])
 	}
 }
 
@@ -725,4 +719,165 @@ func TestComputePetBudgetEmpty(t *testing.T) {
 	if b != nil {
 		t.Errorf("expected nil budget for empty transactions, got %+v", b)
 	}
+}
+
+func TestDeriveMonthlyStatements(t *testing.T) {
+	t.Run("multi-month QFX generates intermediate statements", func(t *testing.T) {
+		// Simulate AMEX-like scenario: balance -4312.99 at 2026-03-22,
+		// transactions from 2025-12 through 2026-03.
+		parsed := []parsedFile{{
+			sf: parse.StatementFile{
+				Path:        "amex/2011/activity.qfx",
+				Institution: "amex",
+				Account:     "2011",
+				Period:      "2026-03",
+			},
+			result: parse.ParseResult{
+				Balance:     -431299, // -$4312.99 in cents
+				BalanceDate: time.Date(2026, 3, 22, 0, 0, 0, 0, time.UTC),
+				Transactions: []parse.Transaction{
+					{Date: time.Date(2025, 12, 5, 0, 0, 0, 0, time.UTC), Amount: 10000},  // $100 spending
+					{Date: time.Date(2025, 12, 20, 0, 0, 0, 0, time.UTC), Amount: -5000}, // -$50 credit
+					{Date: time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC), Amount: 20000},  // $200 spending
+					{Date: time.Date(2026, 2, 15, 0, 0, 0, 0, time.UTC), Amount: 15000},  // $150 spending
+					{Date: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Amount: 8000},    // $80 spending
+				},
+			},
+		}}
+
+		derived := deriveMonthlyStatements(parsed)
+
+		// Expect 3 derived statements: 2025-12, 2026-01, 2026-02
+		// (2026-03 is the original statement's month, not derived)
+		if len(derived) != 3 {
+			t.Fatalf("expected 3 derived statements, got %d", len(derived))
+		}
+
+		// Verify periods
+		periods := make([]string, len(derived))
+		for i, s := range derived {
+			periods[i] = s.Period
+		}
+		expectedPeriods := []string{"2025-12", "2026-01", "2026-02"}
+		for i, exp := range expectedPeriods {
+			if periods[i] != exp {
+				t.Errorf("derived[%d].Period = %q, want %q", i, periods[i], exp)
+			}
+		}
+
+		// Verify 2025-12 balance: known balance + all txns from Dec onward
+		// txns from 2025-12-01 onward: 10000 + (-5000) + 20000 + 15000 + 8000 = 48000
+		// derived = -431299 + 48000 = -383299 (-$3832.99)
+		if derived[0].Balance != -383299 {
+			t.Errorf("derived[0].Balance = %d, want %d", derived[0].Balance, -383299)
+		}
+
+		// Verify 2026-01 balance: known balance + txns from Jan onward
+		// txns from 2026-01-01 onward: 20000 + 15000 + 8000 = 43000
+		// derived = -431299 + 43000 = -388299 (-$3882.99)
+		if derived[1].Balance != -388299 {
+			t.Errorf("derived[1].Balance = %d, want %d", derived[1].Balance, -388299)
+		}
+
+		// Verify 2026-02 balance: known balance + txns from Feb onward
+		// txns from 2026-02-01 onward: 15000 + 8000 = 23000
+		// derived = -431299 + 23000 = -408299 (-$4082.99)
+		if derived[2].Balance != -408299 {
+			t.Errorf("derived[2].Balance = %d, want %d", derived[2].Balance, -408299)
+		}
+
+		// Verify balance dates are last day of each month
+		if derived[0].BalanceDate == nil || *derived[0].BalanceDate != time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC) {
+			t.Errorf("derived[0].BalanceDate = %v, want 2025-12-31", derived[0].BalanceDate)
+		}
+		if derived[1].BalanceDate == nil || *derived[1].BalanceDate != time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC) {
+			t.Errorf("derived[1].BalanceDate = %v, want 2026-01-31", derived[1].BalanceDate)
+		}
+		if derived[2].BalanceDate == nil || *derived[2].BalanceDate != time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC) {
+			t.Errorf("derived[2].BalanceDate = %v, want 2026-02-28", derived[2].BalanceDate)
+		}
+
+		// Verify institution/account
+		for i, s := range derived {
+			if s.Institution != "amex" || s.Account != "2011" {
+				t.Errorf("derived[%d]: inst=%q acct=%q, want amex/2011", i, s.Institution, s.Account)
+			}
+		}
+	})
+
+	t.Run("single month produces no derived statements", func(t *testing.T) {
+		parsed := []parsedFile{{
+			sf: parse.StatementFile{
+				Institution: "bank", Account: "1234", Period: "2026-03",
+			},
+			result: parse.ParseResult{
+				Balance:     100000,
+				BalanceDate: time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC),
+				Transactions: []parse.Transaction{
+					{Date: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Amount: 5000},
+					{Date: time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC), Amount: 3000},
+				},
+			},
+		}}
+
+		derived := deriveMonthlyStatements(parsed)
+		if len(derived) != 0 {
+			t.Errorf("expected 0 derived statements for single-month data, got %d", len(derived))
+		}
+	})
+
+	t.Run("multiple files for same account produces no derived statements", func(t *testing.T) {
+		parsed := []parsedFile{
+			{
+				sf: parse.StatementFile{
+					Institution: "bank", Account: "1234", Period: "2026-01",
+				},
+				result: parse.ParseResult{
+					Balance:     200000,
+					BalanceDate: time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC),
+					Transactions: []parse.Transaction{
+						{Date: time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC), Amount: 5000},
+					},
+				},
+			},
+			{
+				sf: parse.StatementFile{
+					Institution: "bank", Account: "1234", Period: "2026-03",
+				},
+				result: parse.ParseResult{
+					Balance:     150000,
+					BalanceDate: time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC),
+					Transactions: []parse.Transaction{
+						{Date: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), Amount: 10000},
+						{Date: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Amount: 8000},
+					},
+				},
+			},
+		}
+
+		derived := deriveMonthlyStatements(parsed)
+		if len(derived) != 0 {
+			t.Errorf("expected 0 derived statements for multi-file account, got %d", len(derived))
+		}
+	})
+
+	t.Run("no balance produces no derived statements", func(t *testing.T) {
+		parsed := []parsedFile{{
+			sf: parse.StatementFile{
+				Institution: "bank", Account: "1234", Period: "2026-03",
+			},
+			result: parse.ParseResult{
+				Balance: 0,
+				Transactions: []parse.Transaction{
+					{Date: time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC), Amount: 5000},
+					{Date: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Amount: 8000},
+				},
+			},
+		}}
+
+		derived := deriveMonthlyStatements(parsed)
+		if len(derived) != 0 {
+			t.Errorf("expected 0 derived statements for zero balance, got %d", len(derived))
+		}
+	})
 }

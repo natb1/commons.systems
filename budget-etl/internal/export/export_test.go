@@ -647,12 +647,14 @@ func TestPlaintextFileWithPassword(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	_, err := ReadFile(path, "unexpected-password")
-	if err == nil {
-		t.Fatal("expected error reading plaintext file with password")
+	// Reading plaintext with a password should succeed — the password
+	// is only used for encrypting output.
+	got, err := ReadFile(path, "some-password")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
 	}
-	if !strings.Contains(err.Error(), "file is not encrypted") {
-		t.Errorf("error = %q, want it to contain 'file is not encrypted'", err.Error())
+	if got.GroupName != original.GroupName {
+		t.Errorf("GroupName = %q, want %q", got.GroupName, original.GroupName)
 	}
 }
 

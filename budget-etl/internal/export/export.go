@@ -226,9 +226,8 @@ func ReadFile(path, password string) (Output, error) {
 	if encrypted && password == "" {
 		return Output{}, fmt.Errorf("file is encrypted but no password was provided")
 	}
-	if !encrypted && password != "" {
-		return Output{}, fmt.Errorf("file is not encrypted but a password was provided")
-	}
+	// Allow reading plaintext input even when a password is provided —
+	// the password is still used for encrypting output.
 	if encrypted {
 		data, err = decryptJSON(data, password)
 		if err != nil {

@@ -152,10 +152,18 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 
 	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
-	// Build all TransactionData and StatementData across all files
+	// Build all TransactionData and StatementData across all files.
+	// Dedup by doc ID: overlapping statement files (same statementId) can
+	// produce duplicate transactions with the same OFX FITID.
+	seen := make(map[string]bool, totalTxns)
 	allTxns := make([]store.TransactionData, 0, totalTxns)
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
+			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			if seen[docID] {
+				continue
+			}
+			seen[docID] = true
 			allTxns = append(allTxns, store.TransactionData{
 				Institution:   pf.sf.Institution,
 				Account:       pf.sf.Account,
@@ -169,6 +177,7 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 	}
 	maxDates := maxTransactionDates(allTxns)
 	allStmts := buildStatementData(parsed, maxDates)
+	allStmts = append(allStmts, deriveMonthlyStatements(parsed)...)
 
 	if dryRun {
 		printSummary(parsed, totalTxns, skipped)
@@ -292,58 +301,6 @@ func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementDa
 	}
 	log.Printf("wrote %d transactions, %d statements to %s", len(exportTxns), len(exportStmts), output.path)
 	return nil
-}
-
-// virtualCreditResult holds generated virtual card credit transactions.
-type virtualCreditResult struct {
-	transactions []store.TransactionData
-	docIDs       []string
-}
-
-// generateVirtualCardCredits creates matching credits on american_express/2011
-// for each PNC->Amex card payment found in allTxns. Deduplicates by (date, amount)
-// so that normalized transaction pairs don't produce duplicate virtual credits.
-func generateVirtualCardCredits(
-	allTxns []store.TransactionData,
-	txnDocIDs []string,
-) virtualCreditResult {
-	type dateAmount struct {
-		date   string
-		amount int64
-	}
-	seen := make(map[dateAmount]bool)
-	var result virtualCreditResult
-	for i, txn := range allTxns {
-		if txn.Institution != "pnc" || txn.Account != "5111" {
-			continue
-		}
-		if txn.Category != "Transfer:CardPayment" {
-			continue
-		}
-		if !strings.Contains(strings.ToUpper(txn.Description), "AMEX") {
-			continue
-		}
-		key := dateAmount{date: txn.Timestamp.Format("2006-01-02"), amount: txn.Amount}
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		period := txn.Timestamp.Format("2006-01")
-		result.transactions = append(result.transactions, store.TransactionData{
-			Institution:   "american_express",
-			Account:       "2011",
-			Description:   txn.Description,
-			Amount:        -txn.Amount, // negate: PNC debit becomes Amex credit
-			Timestamp:     txn.Timestamp,
-			StatementID:   "american_express-2011-" + period,
-			TransactionID: "virtual-credit-" + txnDocIDs[i],
-			Category:      "Transfer:CardPayment",
-			Budget:        "",
-			Virtual:       true,
-		})
-		result.docIDs = append(result.docIDs, "virtual-credit-"+txnDocIDs[i])
-	}
-	return result
 }
 
 // virtualSynchronyResult holds generated virtual Synchrony spending transactions and statements.
@@ -522,11 +479,6 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	// Apply general budget assignment (skips transactions assigned by transaction-specific rules)
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
 
-	// Generate virtual card credit transactions (Amex)
-	vcr := generateVirtualCardCredits(allTxns, txnDocIDs)
-	allTxns = append(allTxns, vcr.transactions...)
-	txnDocIDs = append(txnDocIDs, vcr.docIDs...)
-
 	// Generate virtual Synchrony spending transactions and statements
 	vsr := generateVirtualSynchrony(allTxns, txnDocIDs)
 	allTxns = append(allTxns, vsr.transactions...)
@@ -552,7 +504,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	weeklyAggregates := computeExportWeeklyAggregatesFromFull(fullTxns)
 
 	// Compute lastTransactionDate on statements from all transactions.
-	// Filter out virtual statements — they are regenerated fresh each run.
+	// Filter out virtual statements from prior runs.
 	maxDates := maxTransactionDates(allTxns)
 	var updatedStmts []export.Statement
 	for _, s := range inp.Statements {
@@ -906,6 +858,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 
 	// Build statements from dir-parsed files (maxDates computed later after merge)
 	dirStmts := buildStatementData(parsed, nil)
+	dirStmts = append(dirStmts, deriveMonthlyStatements(parsed)...)
 
 	// Build input lookup by doc ID
 	inputByID := make(map[string]export.Transaction, len(inp.Transactions))
@@ -923,6 +876,9 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
 			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			if dirDocIDs[docID] {
+				continue // already seen from another file with the same statementId
+			}
 			dirDocIDs[docID] = true
 
 			td := store.TransactionData{
@@ -947,9 +903,9 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		}
 	}
 
-	// Append input-only transactions (not in dir)
+	// Append input-only transactions (not in dir), skipping virtual transactions
 	for _, t := range inp.Transactions {
-		if dirDocIDs[t.ID] {
+		if dirDocIDs[t.ID] || t.Virtual {
 			continue
 		}
 		ts, err := time.Parse(time.RFC3339, t.Timestamp)
@@ -988,6 +944,11 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	}
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
 
+	// Generate virtual Synchrony spending transactions and statements
+	vsr := generateVirtualSynchrony(allTxns, allDocIDs)
+	allTxns = append(allTxns, vsr.transactions...)
+	allDocIDs = append(allDocIDs, vsr.docIDs...)
+
 	// Apply normalization
 	normTxns := buildNormTxns(allTxns, allDocIDs)
 	normMap, err := applyNormToMap(normTxns, convertNormRules(inp.NormalizationRules))
@@ -1004,6 +965,11 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	// Merge statements: dir overrides by statementID, retain input-only
 	maxDates := maxTransactionDates(allTxns)
 	exportStmts := mergeStatements(dirStmts, inp.Statements, maxDates)
+	// Append virtual Synchrony statements
+	exportStmts = append(exportStmts, vsr.statements...)
+
+	// Append pet budget if virtual Synchrony transactions exist
+	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
 
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
@@ -1012,7 +978,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		GroupName:           groupName,
 		Transactions:       exportTxns,
 		Statements:         exportStmts,
-		Budgets:            inp.Budgets,
+		Budgets:            budgets,
 		BudgetPeriods:      budgetPeriods,
 		Rules:              inp.Rules,
 		NormalizationRules: inp.NormalizationRules,
@@ -1037,15 +1003,16 @@ func mergeStatements(dirStmts []store.StatementData, inputStmts []export.Stateme
 
 	result := append([]export.Statement{}, dirExport...)
 	for _, s := range inputStmts {
-		if !dirByStmtID[s.StatementID] {
-			// Update input-only statement's LastTransactionDate from merged transactions
-			key := accountKey(s.Institution, s.Account)
-			if t, ok := maxDates[key]; ok {
-				v := export.FormatTimestamp(*t)
-				s.LastTransactionDate = &v
-			}
-			result = append(result, s)
+		if dirByStmtID[s.StatementID] || s.Virtual {
+			continue
 		}
+		// Update input-only statement's LastTransactionDate from merged transactions
+		key := accountKey(s.Institution, s.Account)
+		if t, ok := maxDates[key]; ok {
+			v := export.FormatTimestamp(*t)
+			s.LastTransactionDate = &v
+		}
+		result = append(result, s)
 	}
 	return result
 }
@@ -1273,6 +1240,99 @@ func maxTransactionDates(txns []store.TransactionData) map[string]*time.Time {
 		}
 	}
 	return m
+}
+
+// deriveMonthlyStatements generates intermediate monthly balance anchors for
+// accounts that have exactly one parsed statement file with a balance snapshot
+// but transactions spanning multiple months. For each month boundary between
+// the earliest transaction and the balance date, it derives the balance by
+// reversing transaction sums from the known balance.
+//
+// This allows computeNetWorth to track the account's balance over time instead
+// of treating it as NULL until the single statement's period.
+func deriveMonthlyStatements(parsed []parsedFile) []store.StatementData {
+	// Group parsed files by (institution, account)
+	type acctKey struct{ inst, acct string }
+	byAccount := make(map[acctKey][]parsedFile)
+	for _, pf := range parsed {
+		k := acctKey{pf.sf.Institution, pf.sf.Account}
+		byAccount[k] = append(byAccount[k], pf)
+	}
+
+	var derived []store.StatementData
+	for k, pfs := range byAccount {
+		// Only derive for accounts with exactly one statement file
+		if len(pfs) != 1 {
+			continue
+		}
+		pf := pfs[0]
+		// Must have a balance and balance date
+		if pf.result.Balance == 0 || pf.result.BalanceDate.IsZero() {
+			continue
+		}
+		if len(pf.result.Transactions) == 0 {
+			continue
+		}
+
+		// Find earliest transaction date
+		earliest := pf.result.Transactions[0].Date
+		for _, t := range pf.result.Transactions[1:] {
+			if t.Date.Before(earliest) {
+				earliest = t.Date
+			}
+		}
+
+		// Compute month boundaries: first of each month from earliest through balance date
+		balDate := pf.result.BalanceDate
+		firstMonth := time.Date(earliest.Year(), earliest.Month(), 1, 0, 0, 0, 0, time.UTC)
+		balMonth := time.Date(balDate.Year(), balDate.Month(), 1, 0, 0, 0, 0, time.UTC)
+
+		// Need at least 2 distinct months to generate intermediate statements
+		if !firstMonth.Before(balMonth) {
+			continue
+		}
+
+		// For each month boundary (first of month), derive the balance by computing
+		// the sum of all transactions on or after that boundary, then:
+		//   derived_balance = known_balance + txn_sum_from_boundary_onward
+		// This reverses the effect of those transactions to get the earlier balance.
+		//
+		// Skip the balance date's own month — the original statement already covers it.
+		for m := firstMonth; m.Before(balMonth); m = m.AddDate(0, 1, 0) {
+			// Sum all transactions with date >= boundary (first of this month)
+			// and date < balanceDate
+			var txnSum int64
+			for _, t := range pf.result.Transactions {
+				if !t.Date.Before(m) {
+					txnSum += t.Amount
+				}
+			}
+
+			// derived_balance = known_balance + txn_sum
+			// (adding back the spending that occurred after this point)
+			derivedBalance := pf.result.Balance + txnSum
+
+			period := m.Format("2006-01")
+			// Use last day of this month as balance date
+			lastDay := m.AddDate(0, 1, -1)
+			bd := lastDay
+
+			stmtID := k.inst + "-" + k.acct + "-" + period
+
+			derived = append(derived, store.StatementData{
+				StatementID: stmtID,
+				Institution: k.inst,
+				Account:     k.acct,
+				Balance:     derivedBalance,
+				Period:      period,
+				BalanceDate: &bd,
+			})
+		}
+		if len(derived) > 0 {
+			log.Printf("derived %d intermediate balance anchors for %s/%s", len(derived), k.inst, k.acct)
+		}
+	}
+	return derived
 }
 
 // buildStatementData converts parsed files to store.StatementData.

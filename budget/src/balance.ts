@@ -55,7 +55,8 @@ function filterCreditTransactions(transactions: Transaction[]): TimestampedTrans
     (t): t is TimestampedTransaction =>
       computeNetAmount(t.amount, t.reimbursement) < 0
       && t.timestamp !== null
-      && (t.normalizedId === null || t.normalizedPrimary),
+      && (t.normalizedId === null || t.normalizedPrimary)
+      && !t.category.startsWith("Transfer:CardPayment"),
   );
 }
 
@@ -506,9 +507,13 @@ export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
   const { weeks, weeklySpending } = indexPeriodsByWeek(periods);
   if (weeks.length <= 1) return 0;
 
-  const completed = weeks.slice(0, -1); // exclude latest incomplete week
-  const trailing = completed.slice(-12);
-  return trailing.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / trailing.length;
+  const latestWeekMs = weeks[weeks.length - 1][0];
+  const completed = weeks.filter(([ms]) => ms !== latestWeekMs);
+  if (completed.length === 0) return 0;
+  const window12Ms = 12 * MS_PER_WEEK;
+  const trailing = completed.filter(([ms]) => latestWeekMs - ms <= window12Ms);
+  if (trailing.length === 0) return 0;
+  return trailing.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / 12;
 }
 
 export interface PerBudgetAverage {
@@ -516,20 +521,17 @@ export interface PerBudgetAverage {
   readonly avg52: number;
 }
 
-/** Return the number of calendar weeks spanned by a slice of [ms, label] entries. */
-function calendarWeekSpan(slice: [number, string][]): number {
-  if (slice.length <= 1) return slice.length;
-  return Math.round((slice[slice.length - 1][0] - slice[0][0]) / MS_PER_WEEK) + 1;
-}
-
 /** Compute per-budget average weekly spending over trailing 12-week and 52-week windows. */
 export function computePerBudgetAverageSpending(
   budgets: Budget[],
   periods: BudgetPeriod[],
 ): Map<BudgetId, PerBudgetAverage> {
-  // Determine the global latest week so we exclude the same calendar week across all budgets
+  // Determine the global latest completed week across all budgets
   const { weeks: allWeeks } = indexPeriodsByWeek(periods);
   const latestWeekMs = allWeeks.length > 0 ? allWeeks[allWeeks.length - 1][0] : undefined;
+
+  const window12Ms = 12 * MS_PER_WEEK;
+  const window52Ms = 52 * MS_PER_WEEK;
 
   const result = new Map<BudgetId, PerBudgetAverage>();
   for (const budget of budgets) {
@@ -538,14 +540,17 @@ export function computePerBudgetAverageSpending(
     const completed = latestWeekMs !== undefined
       ? weeks.filter(([ms]) => ms !== latestWeekMs)
       : weeks;
-    if (completed.length === 0) {
+    if (completed.length === 0 || latestWeekMs === undefined) {
       result.set(budget.id, { avg12: 0, avg52: 0 });
       continue;
     }
-    const trailing12 = completed.slice(-12);
-    const avg12 = trailing12.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / calendarWeekSpan(trailing12);
-    const trailing52 = completed.slice(-52);
-    const avg52 = trailing52.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / calendarWeekSpan(trailing52);
+    // Calendar-week window: include weeks within N weeks of the global latest completed week
+    const trailing12 = completed.filter(([ms]) => latestWeekMs - ms <= window12Ms);
+    const trailing52 = completed.filter(([ms]) => latestWeekMs - ms <= window52Ms);
+    const avg12 = trailing12.length === 0 ? 0
+      : trailing12.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / 12;
+    const avg52 = trailing52.length === 0 ? 0
+      : trailing52.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / 52;
     result.set(budget.id, { avg12, avg52 });
   }
   return result;
