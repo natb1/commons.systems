@@ -6,7 +6,7 @@ import { parseJsonArray, makeDebounced } from "./hydrate-util.js";
 
 export type ChartMode = "spending" | "credits";
 
-/** Custom event name dispatched when scroll-loaded transactions are appended to the chart. */
+/** Custom event name dispatched after scroll-loaded transactions are appended to the table. The chart listens for this to incorporate new data and re-apply filters. */
 export const TRANSACTIONS_APPENDED_EVENT = "transactions-appended";
 
 export interface SerializedChartTransaction {
@@ -513,8 +513,9 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
   update();
 
-  // Integration point: home-hydrate.ts dispatches this event after scroll-loading
-  // older transactions. update() calls filterTable() to re-apply filters to newly appended rows.
+  // Integration point: home-hydrate.ts dispatches this event after scroll-loading older transactions.
+  // The listener merges new data into allTxns, adjusts the week slider to preserve the current
+  // position, then calls update() to re-render the chart and re-apply table filters.
   document.addEventListener(TRANSACTIONS_APPENDED_EVENT, ((e: CustomEvent<SerializedChartTransaction[]>) => {
     if (!container.isConnected) return;
     try {
