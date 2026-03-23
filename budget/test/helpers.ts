@@ -25,7 +25,7 @@ export function makeBudget(overrides: Partial<Budget> = {}): Budget {
   return {
     id: "food" as any,
     name: "Food",
-    weeklyAllowance: 150,
+    allowance: 150,
     allowancePeriod: "weekly",
     rollover: "none",
     overrides: [],
@@ -68,7 +68,7 @@ export function makeParsedData(overrides: Partial<ParsedData> = {}): ParsedData 
       },
     ],
     budgets: [
-      { id: "groceries", name: "Groceries", weeklyAllowance: 100, allowancePeriod: "weekly", rollover: "none" },
+      { id: "groceries", name: "Groceries", allowance: 100, allowancePeriod: "weekly", rollover: "none" },
     ],
     budgetPeriods: [
       {

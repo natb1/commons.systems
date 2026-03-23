@@ -57,7 +57,7 @@ export interface IdbTransaction {
 export interface IdbBudget {
   id: string;
   name: string;
-  weeklyAllowance: number;
+  allowance: number;
   allowancePeriod?: string;
   rollover: Rollover;
   overrides?: Array<{ dateMs: number; balance: number }>;

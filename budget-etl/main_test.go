@@ -111,11 +111,11 @@ func TestConvertExportRules(t *testing.T) {
 	if r.Account != "checking" {
 		t.Errorf("Account: got %q, want %q", r.Account, "checking")
 	}
-	if !r.HasMinAmount || r.MinAmount != 20001 {
-		t.Errorf("MinAmount: got HasMinAmount=%v MinAmount=%d, want true/20001", r.HasMinAmount, r.MinAmount)
+	if r.MinAmount == nil || *r.MinAmount != 20001 {
+		t.Errorf("MinAmount: got %v, want 20001", r.MinAmount)
 	}
-	if !r.HasMaxAmount || r.MaxAmount != 50000 {
-		t.Errorf("MaxAmount: got HasMaxAmount=%v MaxAmount=%d, want true/50000", r.HasMaxAmount, r.MaxAmount)
+	if r.MaxAmount == nil || *r.MaxAmount != 50000 {
+		t.Errorf("MaxAmount: got %v, want 50000", r.MaxAmount)
 	}
 
 	// Verify second rule (no amount filters)
@@ -129,11 +129,11 @@ func TestConvertExportRules(t *testing.T) {
 	if r2.Account != "" {
 		t.Errorf("second rule Account: got %q, want empty", r2.Account)
 	}
-	if r2.HasMinAmount {
-		t.Error("second rule should not have MinAmount")
+	if r2.MinAmount != nil {
+		t.Errorf("second rule should not have MinAmount, got %d", *r2.MinAmount)
 	}
-	if r2.HasMaxAmount {
-		t.Error("second rule should not have MaxAmount")
+	if r2.MaxAmount != nil {
+		t.Errorf("second rule should not have MaxAmount, got %d", *r2.MaxAmount)
 	}
 }
 
@@ -403,7 +403,7 @@ func TestRunMerge(t *testing.T) {
 			{ID: "bud-test", Type: "budget_assignment", Pattern: "TEST", Target: "test-budget", Priority: 10},
 		},
 		Budgets: []export.Budget{
-			{ID: "test-budget", Name: "Test Budget", WeeklyAllowance: 100},
+			{ID: "test-budget", Name: "Test Budget", Allowance: 100},
 		},
 		NormalizationRules: []export.NormalizationRule{},
 	}
@@ -709,8 +709,8 @@ func TestComputePetBudget(t *testing.T) {
 		t.Errorf("rollover: got %q, want %q", b.Rollover, "none")
 	}
 	// Total: $500 + $600 + $700 = $1800 over ~5 months ≈ $360/month
-	if b.WeeklyAllowance < 200 || b.WeeklyAllowance > 500 {
-		t.Errorf("monthlyAvg out of expected range: got %.2f", b.WeeklyAllowance)
+	if b.Allowance < 200 || b.Allowance > 500 {
+		t.Errorf("monthlyAvg out of expected range: got %.2f", b.Allowance)
 	}
 }
 

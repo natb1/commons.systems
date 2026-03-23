@@ -325,7 +325,7 @@ describe("getBudgets", () => {
           id: "food",
           data: () => ({
             name: "Food",
-            weeklyAllowance: 150,
+            allowance: 150,
             rollover: "none",
             groupId: "household",
           }),
@@ -339,7 +339,7 @@ describe("getBudgets", () => {
       {
         id: "food",
         name: "Food",
-        weeklyAllowance: 150,
+        allowance: 150,
         allowancePeriod: "weekly",
         rollover: "none",
         overrides: [],
@@ -360,7 +360,7 @@ describe("getBudgets", () => {
         id: "bad",
         data: () => ({
           name: "Bad",
-          weeklyAllowance: 100,
+          allowance: 100,
           rollover: "invalid",
           groupId: null,
         }),
@@ -375,7 +375,7 @@ describe("getBudgets", () => {
         id: "bad",
         data: () => ({
           name: 123,
-          weeklyAllowance: 100,
+          allowance: 100,
           rollover: "none",
           groupId: null,
         }),
@@ -384,19 +384,19 @@ describe("getBudgets", () => {
     await expect(getBudgets(null)).rejects.toThrow(/Expected string for name/);
   });
 
-  it("throws DataIntegrityError for non-finite weeklyAllowance", async () => {
+  it("throws DataIntegrityError for non-finite allowance", async () => {
     mockGetDocs.mockResolvedValue({
       docs: [{
         id: "bad",
         data: () => ({
           name: "Bad",
-          weeklyAllowance: NaN,
+          allowance: NaN,
           rollover: "none",
           groupId: null,
         }),
       }],
     });
-    await expect(getBudgets(null)).rejects.toThrow(/Expected finite number for weeklyAllowance/);
+    await expect(getBudgets(null)).rejects.toThrow(/Expected finite number for allowance/);
   });
 
   it("throws DataIntegrityError for empty budget name", async () => {
@@ -405,7 +405,7 @@ describe("getBudgets", () => {
         id: "bad",
         data: () => ({
           name: "",
-          weeklyAllowance: 100,
+          allowance: 100,
           rollover: "none",
           groupId: null,
         }),
@@ -414,19 +414,19 @@ describe("getBudgets", () => {
     await expect(getBudgets(null)).rejects.toThrow("Budget name must be non-empty");
   });
 
-  it("throws DataIntegrityError for negative weeklyAllowance", async () => {
+  it("throws DataIntegrityError for negative allowance", async () => {
     mockGetDocs.mockResolvedValue({
       docs: [{
         id: "bad",
         data: () => ({
           name: "Bad",
-          weeklyAllowance: -10,
+          allowance: -10,
           rollover: "none",
           groupId: null,
         }),
       }],
     });
-    await expect(getBudgets(null)).rejects.toThrow(/Expected non-negative number for weeklyAllowance/);
+    await expect(getBudgets(null)).rejects.toThrow(/Expected non-negative number for allowance/);
   });
 });
 
@@ -715,19 +715,19 @@ describe("updateBudget", () => {
     expect(mockUpdateDoc).not.toHaveBeenCalled();
   });
 
-  it("throws RangeError for negative weeklyAllowance", async () => {
-    await expect(updateBudget("food", { weeklyAllowance: -5 })).rejects.toThrow(RangeError);
+  it("throws RangeError for negative allowance", async () => {
+    await expect(updateBudget("food", { allowance: -5 })).rejects.toThrow(RangeError);
     expect(mockUpdateDoc).not.toHaveBeenCalled();
   });
 
-  it("throws RangeError for non-finite weeklyAllowance", async () => {
-    await expect(updateBudget("food", { weeklyAllowance: NaN })).rejects.toThrow(RangeError);
+  it("throws RangeError for non-finite allowance", async () => {
+    await expect(updateBudget("food", { allowance: NaN })).rejects.toThrow(RangeError);
     expect(mockUpdateDoc).not.toHaveBeenCalled();
   });
 
-  it("accepts weeklyAllowance of zero", async () => {
-    await updateBudget("food", { weeklyAllowance: 0 });
-    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { weeklyAllowance: 0 });
+  it("accepts allowance of zero", async () => {
+    await updateBudget("food", { allowance: 0 });
+    expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", { allowance: 0 });
   });
 
   it("throws DataIntegrityError for invalid rollover", async () => {
@@ -747,10 +747,10 @@ describe("updateBudget", () => {
   });
 
   it("passes multiple fields to updateDoc", async () => {
-    await updateBudget("food", { name: "Food", weeklyAllowance: 200, rollover: "debt" });
+    await updateBudget("food", { name: "Food", allowance: 200, rollover: "debt" });
     expect(mockUpdateDoc).toHaveBeenCalledWith("mock-doc-ref", {
       name: "Food",
-      weeklyAllowance: 200,
+      allowance: 200,
       rollover: "debt",
     });
   });

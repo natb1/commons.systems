@@ -105,7 +105,7 @@ service cloud.firestore {
     }
 
     // Budgets are scoped to group members via a denormalized `memberEmails` field.
-    // Updates limited to name, weeklyAllowance (must be non-negative), rollover,
+    // Updates limited to name, allowance (must be non-negative), rollover,
     // and overrides. Create and delete are explicitly denied.
     match /budget/{env}/budgets/{budgetId} {
       allow read: if request.auth != null
@@ -116,12 +116,12 @@ service cloud.firestore {
         && request.resource.data.memberEmails == resource.data.memberEmails
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
-        && request.resource.data.weeklyAllowance is number
-        && request.resource.data.weeklyAllowance >= 0
+        && request.resource.data.allowance is number
+        && request.resource.data.allowance >= 0
         && request.resource.data.rollover in ["none", "debt", "balance"]
         && (!('overrides' in request.resource.data) || request.resource.data.overrides is list)
         && (!('allowancePeriod' in request.resource.data) || request.resource.data.allowancePeriod in ["weekly", "monthly", "quarterly"])
-        && request.resource.data.keys().hasOnly(['name', 'weeklyAllowance', 'allowancePeriod', 'rollover', 'overrides', 'groupId', 'memberEmails']);
+        && request.resource.data.keys().hasOnly(['name', 'allowance', 'allowancePeriod', 'rollover', 'overrides', 'groupId', 'memberEmails']);
       allow create, delete: if false;
     }
 

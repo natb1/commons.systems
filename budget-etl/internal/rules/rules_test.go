@@ -7,6 +7,8 @@ import (
 	"github.com/natb1/commons.systems/budget-etl/internal/store"
 )
 
+func intPtr(v int64) *int64 { return &v }
+
 func TestMatch(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -67,35 +69,35 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name: "minAmount matches when amount >= min",
-			rule: Rule{Pattern: "coffee", HasMinAmount: true, MinAmount: 500},
+			rule: Rule{Pattern: "coffee", MinAmount: intPtr(500)},
 			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
 			amount: 500,
 			want:   true,
 		},
 		{
 			name: "minAmount rejects when amount < min",
-			rule: Rule{Pattern: "coffee", HasMinAmount: true, MinAmount: 500},
+			rule: Rule{Pattern: "coffee", MinAmount: intPtr(500)},
 			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
 			amount: 499,
 			want:   false,
 		},
 		{
 			name: "maxAmount matches when amount <= max",
-			rule: Rule{Pattern: "coffee", HasMaxAmount: true, MaxAmount: 1000},
+			rule: Rule{Pattern: "coffee", MaxAmount: intPtr(1000)},
 			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
 			amount: 1000,
 			want:   true,
 		},
 		{
 			name: "maxAmount rejects when amount > max",
-			rule: Rule{Pattern: "coffee", HasMaxAmount: true, MaxAmount: 1000},
+			rule: Rule{Pattern: "coffee", MaxAmount: intPtr(1000)},
 			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
 			amount: 1001,
 			want:   false,
 		},
 		{
 			name: "both min and max: matches within range",
-			rule: Rule{Pattern: "coffee", HasMinAmount: true, MinAmount: 500, HasMaxAmount: true, MaxAmount: 1000},
+			rule: Rule{Pattern: "coffee", MinAmount: intPtr(500), MaxAmount: intPtr(1000)},
 			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
 			amount: 750,
 			want:   true,

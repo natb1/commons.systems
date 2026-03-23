@@ -382,12 +382,16 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 		} else if v, ok := d["minAmount"].(int64); ok {
 			f := float64(v)
 			r.MinAmount = &f
+		} else if d["minAmount"] != nil {
+			return nil, fmt.Errorf("rule %s: field 'minAmount' is not a number (got %T)", doc.Ref.ID, d["minAmount"])
 		}
 		if v, ok := d["maxAmount"].(float64); ok {
 			r.MaxAmount = &v
 		} else if v, ok := d["maxAmount"].(int64); ok {
 			f := float64(v)
 			r.MaxAmount = &f
+		} else if d["maxAmount"] != nil {
+			return nil, fmt.Errorf("rule %s: field 'maxAmount' is not a number (got %T)", doc.Ref.ID, d["maxAmount"])
 		}
 		if v, ok := d["excludeCategory"].(string); ok {
 			r.ExcludeCategory = v

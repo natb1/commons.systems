@@ -32,9 +32,10 @@ export interface BudgetOverride {
 export interface Budget {
   readonly id: BudgetId;
   readonly name: string;
-  readonly weeklyAllowance: number;
+  readonly allowance: number;
   readonly allowancePeriod: AllowancePeriod;
   readonly rollover: Rollover;
+  /** Sorted by date ascending. findLatestOverride assumes this ordering. */
   readonly overrides: BudgetOverride[];
   readonly groupId: GroupId | null;
 }
@@ -294,7 +295,7 @@ export async function getBudgets(groupId: GroupId | null, email?: string): Promi
     return {
       id: docSnap.id as BudgetId,
       name,
-      weeklyAllowance: requireNonNegativeNumber(data.weeklyAllowance, "weeklyAllowance"),
+      allowance: requireNonNegativeNumber(data.allowance, "allowance"),
       allowancePeriod: requireAllowancePeriod(data.allowancePeriod),
       rollover: requireRollover(data.rollover),
       overrides: requireOverrides(data.overrides),
@@ -381,16 +382,16 @@ export async function adjustBudgetPeriodTotal(
 
 export async function updateBudget(
   budgetId: BudgetId,
-  fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "allowancePeriod" | "rollover">>,
+  fields: Partial<Pick<Budget, "name" | "allowance" | "allowancePeriod" | "rollover">>,
 ): Promise<void> {
   requireDocId(budgetId, "budget");
   if (Object.keys(fields).length === 0) return;
   if (fields.name !== undefined && !fields.name) {
     throw new Error("Budget name cannot be empty");
   }
-  if (fields.weeklyAllowance !== undefined) {
-    if (!Number.isFinite(fields.weeklyAllowance) || fields.weeklyAllowance < 0) {
-      throw new RangeError("Weekly allowance must be a non-negative number");
+  if (fields.allowance !== undefined) {
+    if (!Number.isFinite(fields.allowance) || fields.allowance < 0) {
+      throw new RangeError("Allowance must be a non-negative number");
     }
   }
   if (fields.allowancePeriod !== undefined) {

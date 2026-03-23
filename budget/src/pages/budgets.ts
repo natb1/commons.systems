@@ -42,7 +42,7 @@ function renderRow(budget: Budget, editable: boolean, diff: BudgetDiff | undefin
   const idAttr = editable ? ` data-budget-id="${escapeHtml(budget.id)}"` : "";
   const dis = editable ? "" : " disabled";
   const nameCell = `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name"${dis}>`;
-  const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.weeklyAllowance))}" min="0" aria-label="Allowance"${dis}>`;
+  const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.allowance))}" min="0" aria-label="Allowance"${dis}>`;
   const periodCell = renderPeriodCell(budget, editable);
   const rolloverCell = renderRolloverCell(budget, editable);
   const diff12 = diff ? `<span ${diffStyle(diff.diff12)}>${formatCurrency(diff.diff12)}</span>` : `<span></span>`;
@@ -96,7 +96,7 @@ export interface SerializedBudgetOverride {
 export interface SerializedBudget {
   readonly id: string;
   readonly name: string;
-  readonly weeklyAllowance: number;
+  readonly allowance: number;
   readonly allowancePeriod: AllowancePeriod;
   readonly rollover: Rollover;
   readonly overrides: SerializedBudgetOverride[];
@@ -106,7 +106,7 @@ function serializeBudgets(budgets: Budget[]): string {
   const data: SerializedBudget[] = budgets.map(b => ({
     id: b.id,
     name: b.name,
-    weeklyAllowance: b.weeklyAllowance,
+    allowance: b.allowance,
     allowancePeriod: b.allowancePeriod,
     rollover: b.rollover,
     overrides: b.overrides.map(o => ({ dateMs: o.date.toMillis(), balance: o.balance })),
@@ -239,7 +239,7 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
         .catch((e) => { console.error("Failed to load weekly aggregates:", e); throw e; }),
     ]);
     const averageWeeklyCredits = computeAverageWeeklyCredits(weeklyAggregates);
-    const totalWeeklyBudget = budgets.reduce((s, b) => s + weeklyEquivalent(b.weeklyAllowance, b.allowancePeriod), 0);
+    const totalWeeklyBudget = budgets.reduce((s, b) => s + weeklyEquivalent(b.allowance, b.allowancePeriod), 0);
     const averageWeeklySpending = computeAverageWeeklySpending(periods);
     const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
     const perBudgetTrend = computePerBudgetTrend(budgets, periods, weeklyAggregates);

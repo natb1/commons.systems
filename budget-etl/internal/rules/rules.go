@@ -19,10 +19,8 @@ type Rule struct {
 	Priority        int    // lower number = higher priority
 	Institution     string // optional: restrict to this institution
 	Account         string // optional: restrict to this account
-	MinAmount       int64  // optional: minimum amount in cents (inclusive)
-	MaxAmount       int64  // optional: maximum amount in cents (inclusive)
-	HasMinAmount    bool
-	HasMaxAmount    bool
+	MinAmount       *int64 // optional: minimum amount in cents (inclusive); nil = no filter
+	MaxAmount       *int64 // optional: maximum amount in cents (inclusive); nil = no filter
 	ExcludeCategory string // optional: reject transactions whose category equals or starts with this prefix
 	MatchCategory   string // optional: require category equals or starts with this prefix
 	Category        string // optional: restrict to transactions whose category starts with this prefix (case-insensitive)
@@ -53,10 +51,10 @@ func (r Rule) Match(description, institution, account, category string, amount i
 	if !matchFields(r.Pattern, r.Institution, r.Account, description, institution, account) {
 		return false
 	}
-	if r.HasMinAmount && amount < r.MinAmount {
+	if r.MinAmount != nil && amount < *r.MinAmount {
 		return false
 	}
-	if r.HasMaxAmount && amount > r.MaxAmount {
+	if r.MaxAmount != nil && amount > *r.MaxAmount {
 		return false
 	}
 	if r.ExcludeCategory != "" {

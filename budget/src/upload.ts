@@ -66,7 +66,7 @@ interface RawBudgetOverride {
 interface RawBudget {
   id: string;
   name: string;
-  weeklyAllowance: number;
+  allowance: number;
   allowancePeriod?: string;
   rollover: string;
   overrides?: RawBudgetOverride[];
@@ -240,7 +240,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
   const budgets: Budget[] = (raw.budgets ?? []).map((b: RawBudget, i: number) => ({
     id: requireId(b.id, "budget", i) as BudgetId,
     name: b.name,
-    weeklyAllowance: b.weeklyAllowance ?? 0,
+    allowance: b.allowance ?? 0,
     allowancePeriod: requireAllowancePeriod(b.allowancePeriod),
     rollover: requireRollover(b.rollover ?? "none"),
     overrides: (b.overrides ?? []).map(o => ({
@@ -354,7 +354,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
     budgets: parsed.budgets.map((b) => ({
       id: b.id,
       name: b.name,
-      weeklyAllowance: b.weeklyAllowance,
+      allowance: b.allowance,
       allowancePeriod: b.allowancePeriod,
       rollover: b.rollover,
       overrides: b.overrides.map(o => ({ dateMs: o.date.toMillis(), balance: o.balance })),

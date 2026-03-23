@@ -70,7 +70,7 @@ describe("hydrateBudgetTable", () => {
     input.value = "200";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockDataSource.updateBudget).toHaveBeenCalledWith("food", { weeklyAllowance: 200 });
+    expect(mockDataSource.updateBudget).toHaveBeenCalledWith("food", { allowance: 200 });
   });
 
   it("saves rollover on change", async () => {

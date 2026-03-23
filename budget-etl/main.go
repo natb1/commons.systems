@@ -221,7 +221,7 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 	}
 	log.Printf("group %q (id=%s)", groupName, groupInfo.ID)
 
-	// Load rules from Firestore
+	// Load rules from Firestore and convert dollar amounts to cents
 	ruleDocs, err := client.LoadRules(ctx, groupInfo.ID)
 	if err != nil {
 		return err
@@ -240,13 +240,10 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 			MatchCategory:   rd.MatchCategory,
 			Category:        rd.Category,
 		}
-		if rd.MinAmount != nil {
-			ruleSet[i].HasMinAmount = true
-			ruleSet[i].MinAmount = int64(math.Round(*rd.MinAmount * 100))
-		}
-		if rd.MaxAmount != nil {
-			ruleSet[i].HasMaxAmount = true
-			ruleSet[i].MaxAmount = int64(math.Round(*rd.MaxAmount * 100))
+		ruleSet[i].MinAmount = dollarsToOptionalCents(rd.MinAmount)
+		ruleSet[i].MaxAmount = dollarsToOptionalCents(rd.MaxAmount)
+		if ruleSet[i].MinAmount != nil && ruleSet[i].MaxAmount != nil && *ruleSet[i].MinAmount > *ruleSet[i].MaxAmount {
+			return fmt.Errorf("rule %s: minAmount (%d) > maxAmount (%d)", rd.ID, *ruleSet[i].MinAmount, *ruleSet[i].MaxAmount)
 		}
 	}
 
@@ -314,6 +311,10 @@ type virtualSynchronyResult struct {
 // for each PNC->Synchrony card payment, plus virtual zero-balance statements per period.
 // Deduplicates by (date, amount) so that normalized transaction pairs don't produce
 // duplicate virtual transactions.
+//
+// Filter criteria: institution=pnc, account=5111, category=Transfer:CardPayment,
+// description contains "SYNCHRONY" (case-insensitive).
+// Output: category=Pet:Veterinarian, budget=pet.
 func generateVirtualSynchrony(
 	allTxns []store.TransactionData,
 	txnDocIDs []string,
@@ -346,7 +347,7 @@ func generateVirtualSynchrony(
 			Institution:   "synchrony",
 			Account:       "virtual",
 			Description:   txn.Description,
-			Amount:        txn.Amount, // same positive amount (spending)
+			Amount:        txn.Amount,
 			Timestamp:     txn.Timestamp,
 			StatementID:   stmtID,
 			TransactionID: "virtual-" + txnDocIDs[i],
@@ -375,6 +376,8 @@ func generateVirtualSynchrony(
 
 // computePetBudget computes a pet budget from virtual Synchrony transactions.
 // Returns nil if no virtual transactions exist.
+// Note: the returned Allowance field holds the monthly average because
+// AllowancePeriod is "monthly".
 func computePetBudget(virtualTxns []store.TransactionData) *export.Budget {
 	if len(virtualTxns) == 0 {
 		return nil
@@ -398,7 +401,7 @@ func computePetBudget(virtualTxns []store.TransactionData) *export.Budget {
 	return &export.Budget{
 		ID:              "pet",
 		Name:            "Pet",
-		WeeklyAllowance: math.Round(monthlyAvg*100) / 100,
+		Allowance: math.Round(monthlyAvg*100) / 100,
 		AllowancePeriod: "monthly",
 		Rollover:        "none",
 	}
@@ -540,6 +543,14 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	})
 }
 
+func dollarsToOptionalCents(d *float64) *int64 {
+	if d == nil {
+		return nil
+	}
+	v := int64(math.Round(*d * 100))
+	return &v
+}
+
 // splitRules separates transaction-specific rules (with TransactionID) from general rules.
 func splitRules(exportRules []export.Rule) (txnRules, general []export.Rule) {
 	for _, r := range exportRules {
@@ -568,14 +579,8 @@ func convertExportRules(exportRules []export.Rule) []rules.Rule {
 			MatchCategory:   r.MatchCategory,
 			Category:        r.Category,
 		}
-		if r.MinAmount != nil {
-			ruleSet[i].HasMinAmount = true
-			ruleSet[i].MinAmount = int64(math.Round(*r.MinAmount * 100))
-		}
-		if r.MaxAmount != nil {
-			ruleSet[i].HasMaxAmount = true
-			ruleSet[i].MaxAmount = int64(math.Round(*r.MaxAmount * 100))
-		}
+		ruleSet[i].MinAmount = dollarsToOptionalCents(r.MinAmount)
+		ruleSet[i].MaxAmount = dollarsToOptionalCents(r.MaxAmount)
 	}
 	return ruleSet
 }
@@ -1298,9 +1303,9 @@ func deriveMonthlyStatements(parsed []parsedFile) []store.StatementData {
 		// This reverses the effect of those transactions to get the earlier balance.
 		//
 		// Skip the balance date's own month — the original statement already covers it.
+		beforeLen := len(derived)
 		for m := firstMonth; m.Before(balMonth); m = m.AddDate(0, 1, 0) {
 			// Sum all transactions with date >= boundary (first of this month)
-			// and date < balanceDate
 			var txnSum int64
 			for _, t := range pf.result.Transactions {
 				if !t.Date.Before(m) {
@@ -1308,12 +1313,9 @@ func deriveMonthlyStatements(parsed []parsedFile) []store.StatementData {
 				}
 			}
 
-			// derived_balance = known_balance + txn_sum
-			// (adding back the spending that occurred after this point)
 			derivedBalance := pf.result.Balance + txnSum
 
 			period := m.Format("2006-01")
-			// Use last day of this month as balance date
 			lastDay := m.AddDate(0, 1, -1)
 			bd := lastDay
 
@@ -1328,8 +1330,8 @@ func deriveMonthlyStatements(parsed []parsedFile) []store.StatementData {
 				BalanceDate: &bd,
 			})
 		}
-		if len(derived) > 0 {
-			log.Printf("derived %d intermediate balance anchors for %s/%s", len(derived), k.inst, k.acct)
+		if count := len(derived) - beforeLen; count > 0 {
+			log.Printf("derived %d intermediate balance anchors for %s/%s", count, k.inst, k.acct)
 		}
 	}
 	return derived

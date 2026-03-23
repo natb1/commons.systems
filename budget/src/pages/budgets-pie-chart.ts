@@ -10,7 +10,7 @@ const NOT_BUDGETED_COLOR = "#ccc";
 
 interface Slice {
   readonly name: string;
-  /** Weekly amount: the budget's weeklyAllowance, or the unbudgeted credits remainder. Always > 0. */
+  /** Weekly amount: the budget's allowance, or the unbudgeted credits remainder. Always > 0. */
   readonly total: number;
 }
 
@@ -30,7 +30,7 @@ export function buildAllocationSlices(budgets: Budget[], averageWeeklyCredits: n
   const slices: Slice[] = [];
   let totalBudgeted = 0;
   for (const b of budgets) {
-    const weekly = weeklyEquivalent(b.weeklyAllowance, b.allowancePeriod);
+    const weekly = weeklyEquivalent(b.allowance, b.allowancePeriod);
     if (weekly > 0) {
       slices.push({ name: b.name, total: weekly });
       totalBudgeted += weekly;

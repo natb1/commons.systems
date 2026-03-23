@@ -70,7 +70,7 @@
     }
   ],
   "budgets": [
-    {"id": "groceries", "name": "Groceries", "weeklyAllowance": 100, "rollover": "none"}
+    {"id": "groceries", "name": "Groceries", "allowance": 100, "rollover": "none"}
   ],
   "budgetPeriods": [
     {"id": "bp-1", "budgetId": "groceries", "periodStart": "2025-06-09T00:00:00Z", "periodEnd": "2025-06-16T00:00:00Z", "total": 52.30, "count": 1, "categoryBreakdown": {"Food:Groceries": 52.30}}

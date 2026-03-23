@@ -70,7 +70,7 @@ func TestWriteFileRoundTrip(t *testing.T) {
 			{
 				ID:              "budget-food",
 				Name:            "groceries",
-				WeeklyAllowance: 150.00,
+				Allowance: 150.00,
 				Rollover:        "debt",
 			},
 		},
@@ -262,7 +262,7 @@ func TestReadFile(t *testing.T) {
 			},
 		},
 		Budgets: []Budget{
-			{ID: "food", Name: "food", WeeklyAllowance: 375, Rollover: "none"},
+			{ID: "food", Name: "food", Allowance: 375, Rollover: "none"},
 		},
 		BudgetPeriods: []BudgetPeriod{},
 		Rules: []Rule{

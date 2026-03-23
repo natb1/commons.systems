@@ -49,7 +49,7 @@ const validInput = {
     {
       id: "groceries",
       name: "Groceries",
-      weeklyAllowance: 100,
+      allowance: 100,
       allowancePeriod: "weekly",
       rollover: "none",
     },
@@ -299,7 +299,7 @@ describe("toParsedData", () => {
 
     expect(data.budgets[0].id).toBe("groceries");
     expect(data.budgets[0].name).toBe("Groceries");
-    expect(data.budgets[0].weeklyAllowance).toBe(100);
+    expect(data.budgets[0].allowance).toBe(100);
 
     expect(data.rules[0].type).toBe("categorization");
     expect(data.rules[0].pattern).toBe("KROGER");

@@ -16,8 +16,8 @@ function trackedContainer(): HTMLElement {
 describe("buildAllocationSlices", () => {
   it("produces 'Not Budgeted' slice for the difference when under-budget", () => {
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100 }),
-      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 50 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 100 }),
+      makeBudget({ id: "transport" as any, name: "Transport", allowance: 50 }),
     ];
     const result = buildAllocationSlices(budgets, 200);
     expect(result.slices).toEqual([
@@ -30,8 +30,8 @@ describe("buildAllocationSlices", () => {
 
   it("returns no 'Not Budgeted' slice and overage=0 on exact match", () => {
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 120 }),
-      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 80 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 120 }),
+      makeBudget({ id: "transport" as any, name: "Transport", allowance: 80 }),
     ];
     const result = buildAllocationSlices(budgets, 200);
     expect(result.slices).toEqual([
@@ -43,8 +43,8 @@ describe("buildAllocationSlices", () => {
 
   it("returns overage and no 'Not Budgeted' slice when over-budget", () => {
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 300 }),
-      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 200 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 300 }),
+      makeBudget({ id: "transport" as any, name: "Transport", allowance: 200 }),
     ];
     const result = buildAllocationSlices(budgets, 400);
     expect(result.slices).toEqual([
@@ -54,10 +54,10 @@ describe("buildAllocationSlices", () => {
     expect(result.overage).toBe(100);
   });
 
-  it("excludes budgets with weeklyAllowance=0", () => {
+  it("excludes budgets with allowance=0", () => {
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100 }),
-      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 0 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 100 }),
+      makeBudget({ id: "transport" as any, name: "Transport", allowance: 0 }),
     ];
     const result = buildAllocationSlices(budgets, 200);
     expect(result.slices).toEqual([
@@ -69,8 +69,8 @@ describe("buildAllocationSlices", () => {
 
   it("returns only Not Budgeted slice when all allowances are zero", () => {
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 0 }),
-      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 0 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 0 }),
+      makeBudget({ id: "transport" as any, name: "Transport", allowance: 0 }),
     ];
     const result = buildAllocationSlices(budgets, 200);
     expect(result.slices).toEqual([{ name: "Not Budgeted", total: 200 }]);
@@ -91,9 +91,9 @@ describe("renderBudgetPieChart", () => {
   it("renders SVG paths and legend items for multiple budgets", () => {
     const container = trackedContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 400 }),
-      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 350 }),
-      makeBudget({ id: "fun" as any, name: "Fun", weeklyAllowance: 250 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 400 }),
+      makeBudget({ id: "transport" as any, name: "Transport", allowance: 350 }),
+      makeBudget({ id: "fun" as any, name: "Fun", allowance: 250 }),
     ];
 
     renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 1000 });
@@ -117,7 +117,7 @@ describe("renderBudgetPieChart", () => {
   it("shows empty state message when income is zero", () => {
     const container = trackedContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 100 }),
     ];
 
     renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 0 });
@@ -129,8 +129,8 @@ describe("renderBudgetPieChart", () => {
   it("renders warning banner when over-budget", () => {
     const container = trackedContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 600 }),
-      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 500 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 600 }),
+      makeBudget({ id: "transport" as any, name: "Transport", allowance: 500 }),
     ];
 
     renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 800 });
@@ -144,7 +144,7 @@ describe("renderBudgetPieChart", () => {
   it("does not render warning when under-budget", () => {
     const container = trackedContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 100 }),
     ];
 
     renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 500 });
@@ -156,7 +156,7 @@ describe("renderBudgetPieChart", () => {
   it("shows 'Not Budgeted' in legend when under-budget", () => {
     const container = trackedContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 200 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 200 }),
     ];
 
     renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 500 });
@@ -176,8 +176,8 @@ describe("renderBudgetPieChart", () => {
   it("donut hole shows income, not spending sum", () => {
     const container = trackedContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 200 }),
-      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 100 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 200 }),
+      makeBudget({ id: "transport" as any, name: "Transport", allowance: 100 }),
     ];
 
     renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 750 });
@@ -193,9 +193,9 @@ describe("renderBudgetPieChart", () => {
   it("legend percentages sum to approximately 100%", () => {
     const container = trackedContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 333 }),
-      makeBudget({ id: "transport" as any, name: "Transport", weeklyAllowance: 333 }),
-      makeBudget({ id: "fun" as any, name: "Fun", weeklyAllowance: 334 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 333 }),
+      makeBudget({ id: "transport" as any, name: "Transport", allowance: 333 }),
+      makeBudget({ id: "fun" as any, name: "Fun", allowance: 334 }),
     ];
 
     renderBudgetPieChart(container, { budgets, averageWeeklyCredits: 1000 });

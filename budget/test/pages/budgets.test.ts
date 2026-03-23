@@ -13,7 +13,7 @@ function budget(overrides: Partial<Budget> = {}): Budget {
   return {
     id: "food",
     name: "Food",
-    weeklyAllowance: 150,
+    allowance: 150,
     allowancePeriod: "weekly",
     rollover: "none",
     overrides: [],
@@ -135,8 +135,8 @@ describe("renderBudgets", () => {
   it("sorts budgets alphabetically by name", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        budget({ id: "vacation", name: "Vacation", weeklyAllowance: 100, rollover: "balance" }),
-        budget({ id: "food", name: "Food", weeklyAllowance: 150, rollover: "none" }),
+        budget({ id: "vacation", name: "Vacation", allowance: 100, rollover: "balance" }),
+        budget({ id: "food", name: "Food", allowance: 150, rollover: "none" }),
       ]),
     }));
     const tableStart = html.indexOf('id="budgets-table"');
@@ -217,8 +217,8 @@ describe("renderBudgets", () => {
   it("renders metrics section with formatted currency", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        budget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 100 }),
-        budget({ id: "fun" as Budget["id"], name: "Fun", weeklyAllowance: 50 }),
+        budget({ id: "food" as Budget["id"], name: "Food", allowance: 100 }),
+        budget({ id: "fun" as Budget["id"], name: "Fun", allowance: 50 }),
       ]),
       getWeeklyAggregates: vi.fn().mockResolvedValue([
         {
@@ -246,7 +246,7 @@ describe("renderBudgets", () => {
   it("renders zero income when no credit aggregates", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        budget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 75 }),
+        budget({ id: "food" as Budget["id"], name: "Food", allowance: 75 }),
       ]),
       getWeeklyAggregates: vi.fn().mockResolvedValue([]),
     }));
@@ -257,9 +257,9 @@ describe("renderBudgets", () => {
   it("computes correct total weekly budget sum", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        budget({ id: "a" as Budget["id"], name: "A", weeklyAllowance: 100 }),
-        budget({ id: "b" as Budget["id"], name: "B", weeklyAllowance: 200 }),
-        budget({ id: "c" as Budget["id"], name: "C", weeklyAllowance: 50 }),
+        budget({ id: "a" as Budget["id"], name: "A", allowance: 100 }),
+        budget({ id: "b" as Budget["id"], name: "B", allowance: 200 }),
+        budget({ id: "c" as Budget["id"], name: "C", allowance: 50 }),
       ]),
     }));
     expect(html).toContain("$350.00");
@@ -268,7 +268,7 @@ describe("renderBudgets", () => {
   it("renders 12-Week Avg Weekly Spending metric", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        budget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 100 }),
+        budget({ id: "food" as Budget["id"], name: "Food", allowance: 100 }),
       ]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         {
@@ -303,7 +303,7 @@ describe("renderBudgets", () => {
 
   it("diff cells show formatted currency", async () => {
     const html = await renderBudgets(seedOptions({
-      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], weeklyAllowance: 150 })]),
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         {
           id: "food-w1",
@@ -322,7 +322,7 @@ describe("renderBudgets", () => {
 
   it("diff cells are spans not inputs", async () => {
     const html = await renderBudgets(seedOptions({
-      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], weeklyAllowance: 150 })]),
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         {
           id: "food-w1",
@@ -342,7 +342,7 @@ describe("renderBudgets", () => {
 
   it("surplus diff renders in green", async () => {
     const html = await renderBudgets(seedOptions({
-      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], weeklyAllowance: 150 })]),
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         {
           id: "food-w1",
@@ -361,7 +361,7 @@ describe("renderBudgets", () => {
 
   it("deficit diff renders in red", async () => {
     const html = await renderBudgets(seedOptions({
-      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], weeklyAllowance: 150 })]),
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         {
           id: "food-w1",

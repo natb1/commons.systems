@@ -38,7 +38,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
           showInputError(target, "Allowance must be a non-negative number");
           return;
         }
-        await getActiveDataSource().updateBudget(budgetId, { weeklyAllowance: allowance });
+        await getActiveDataSource().updateBudget(budgetId, { allowance: allowance });
       } else {
         return;
       }
@@ -92,11 +92,14 @@ function deserializeBudgets(raw: string): Budget[] {
   return parsed.map(b => {
     if (b.rollover !== "none" && b.rollover !== "debt" && b.rollover !== "balance")
       throw new DataIntegrityError(`Invalid rollover value: ${b.rollover}`);
-    const allowancePeriod = b.allowancePeriod === "monthly" ? "monthly" as const : b.allowancePeriod === "quarterly" ? "quarterly" as const : "weekly" as const;
+    const allowancePeriod = b.allowancePeriod === "monthly" ? "monthly" as const
+      : b.allowancePeriod === "quarterly" ? "quarterly" as const
+      : b.allowancePeriod === "weekly" || b.allowancePeriod == null ? "weekly" as const
+      : (() => { throw new DataIntegrityError(`Invalid allowancePeriod: ${b.allowancePeriod}`); })();
     return {
       id: b.id as BudgetId,
       name: b.name,
-      weeklyAllowance: b.weeklyAllowance,
+      allowance: b.allowance,
       allowancePeriod,
       rollover: b.rollover,
       overrides: (b.overrides ?? []).map(o => ({
@@ -270,11 +273,17 @@ function collectOverridesForBudget(container: HTMLElement, budgetId: string): Bu
   for (const row of rows) {
     const dateInput = row.querySelector<HTMLInputElement>(".edit-override-date");
     const balanceInput = row.querySelector<HTMLInputElement>(".edit-override-balance");
-    if (!dateInput || !balanceInput) continue;
+    if (!dateInput || !balanceInput) throw new DataIntegrityError(`Override row missing input elements for budget ${budgetId}`);
     const dateMs = new Date(dateInput.value + "T00:00:00Z").getTime();
-    if (isNaN(dateMs)) continue;
+    if (isNaN(dateMs)) {
+      showInputError(dateInput, "Invalid date");
+      return [];
+    }
     const balance = Number(balanceInput.value);
-    if (!Number.isFinite(balance)) continue;
+    if (!Number.isFinite(balance)) {
+      showInputError(balanceInput, "Balance must be a finite number");
+      return [];
+    }
     overrides.push({ date: Timestamp.fromMillis(dateMs), balance });
   }
   overrides.sort((a, b) => a.date.toMillis() - b.date.toMillis());

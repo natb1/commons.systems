@@ -1,6 +1,7 @@
 import type { Timestamp } from "firebase/firestore";
 import type { AllowancePeriod, Budget, BudgetId, BudgetOverride, BudgetPeriod, Rollover, Statement, Transaction, TransactionId, WeeklyAggregate } from "./firestore.js";
 
+/** Allowance minus average weekly spending. Positive = surplus, negative = deficit. Units: dollars/week. */
 export interface BudgetDiff {
   readonly diff12: number;
   readonly diff52: number;
@@ -61,7 +62,7 @@ function filterCreditTransactions(transactions: Transaction[]): TimestampedTrans
       computeNetAmount(t.amount, t.reimbursement) < 0
       && t.timestamp !== null
       && (t.normalizedId === null || t.normalizedPrimary)
-      && !t.category.startsWith("Transfer:CardPayment"),
+      && !isCardPaymentCategory(t.category),
   );
 }
 
@@ -73,14 +74,14 @@ function compareByTimestampThenId(a: TimestampedTransaction, b: TimestampedTrans
   return 0;
 }
 
-export function applyRollover(running: number, weeklyAllowance: number, rollover: Rollover): number {
+export function applyRollover(running: number, allowance: number, rollover: Rollover): number {
   switch (rollover) {
     case "none":
-      return weeklyAllowance;
+      return allowance;
     case "debt":
-      return Math.min(running, 0) + weeklyAllowance;
+      return Math.min(running, 0) + allowance;
     case "balance":
-      return running + weeklyAllowance;
+      return running + allowance;
   }
 }
 
@@ -192,46 +193,35 @@ export function computeBudgetBalance(
   let startIdx = 0;
   let running = 0;
 
-  if (override) {
-    const overrideMs = override.date.toMillis();
-    // Find the period containing the override date
-    const overridePeriodIdx = periods.findIndex(
-      (p) => p.periodStart.toMillis() <= overrideMs && overrideMs < p.periodEnd.toMillis(),
-    );
-    if (overridePeriodIdx !== -1 && overridePeriodIdx <= targetPeriodIndex) {
-      // Start from the override: set balance to override value, subtract the override period's total, then continue
-      startIdx = overridePeriodIdx + 1;
-      running = override.balance - periods[overridePeriodIdx].total;
-    }
+  // Find the period containing the override date (if any)
+  const overridePeriodIdx = override ? periods.findIndex(
+    (p) => {
+      const overrideMs = override.date.toMillis();
+      return p.periodStart.toMillis() <= overrideMs && overrideMs < p.periodEnd.toMillis();
+    },
+  ) : -1;
+
+  if (override && overridePeriodIdx !== -1 && overridePeriodIdx <= targetPeriodIndex) {
+    // Start from the override: set balance to override value, subtract the override period's total, then continue
+    startIdx = overridePeriodIdx + 1;
+    running = override.balance - periods[overridePeriodIdx].total;
   }
 
-  if (!override) {
-    // No override: accumulate through all prior periods
-    for (let i = 0; i < targetPeriodIndex; i++) {
-      const prevMs = i > 0 ? periods[i - 1].periodStart.toMillis() : null;
-      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periods[i].periodStart.toMillis());
-      running = applyRollover(running, allow, budget.rollover);
-      running -= periods[i].total;
-    }
-  } else if (startIdx <= targetPeriodIndex) {
-    // Override was in a prior period; continue accumulating from after override period
-    for (let i = startIdx; i < targetPeriodIndex; i++) {
-      const prevMs = i > 0 ? periods[i - 1].periodStart.toMillis() : null;
-      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periods[i].periodStart.toMillis());
-      running = applyRollover(running, allow, budget.rollover);
-      running -= periods[i].total;
-    }
+  // Accumulate through prior periods (from startIdx, which is 0 when no override)
+  for (let i = startIdx; i < targetPeriodIndex; i++) {
+    const prevMs = i > 0 ? periods[i - 1].periodStart.toMillis() : null;
+    const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, periods[i].periodStart.toMillis());
+    running = applyRollover(running, allow, budget.rollover);
+    running -= periods[i].total;
   }
 
   // Apply rollover entering the target period (unless override is in this period)
-  if (override && periods.findIndex(
-    (p) => p.periodStart.toMillis() <= override.date.toMillis() && override.date.toMillis() < p.periodEnd.toMillis(),
-  ) === targetPeriodIndex) {
+  if (override && overridePeriodIdx === targetPeriodIndex) {
     // Override is in the target period: running starts at override balance
     running = override.balance;
   } else {
     const prevMs = targetPeriodIndex > 0 ? periods[targetPeriodIndex - 1].periodStart.toMillis() : null;
-    const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, targetPeriod.periodStart.toMillis());
+    const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, targetPeriod.periodStart.toMillis());
     running = applyRollover(running, allow, budget.rollover);
   }
 
@@ -280,7 +270,7 @@ export function computePeriodBalances(
       const periodEndMs = period.periodEnd.toMillis();
       const override = findLatestOverride(budget.overrides, periodStartMs);
       const prevMs = idx > 0 ? sorted[idx - 1].periodStart.toMillis() : null;
-      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periodStartMs);
+      const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, periodStartMs);
 
       let running: number;
       if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
@@ -322,7 +312,7 @@ export function computeAllBudgetBalances(
 
       const override = findLatestOverride(budget.overrides, periodStartMs);
       const prevMs = pIdx > 0 ? periods[pIdx - 1].periodStart.toMillis() : null;
-      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevMs, periodStartMs);
+      const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevMs, periodStartMs);
       let running: number;
       if (override && override.date.toMillis() >= periodStartMs && override.date.toMillis() < periodEndMs) {
         accumulated = override.balance;
@@ -505,8 +495,9 @@ export function computePerBudgetTrend(
 }
 
 /**
- * Compute average weekly spending over the trailing 12 weeks (or all available weeks if fewer than 12 exist).
- * Uses the same week set as the bar chart (from budget periods).
+ * Compute average weekly spending over a fixed 12-week trailing window
+ * (excluding the latest incomplete week). Divides the sum by 12 regardless
+ * of data-bearing weeks.
  */
 export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
   const { weeks, weeklySpending } = indexPeriodsByWeek(periods);
@@ -565,7 +556,8 @@ export function computePerBudgetAverageSpending(
  * Compute average weekly credits over the trailing CREDIT_WEEKS-week window ending at the
  * latest aggregate's weekStart (exclusive), excluding the latest incomplete week.
  * Uses pre-aggregated WeeklyAggregate data (creditTotal per Monday-aligned week).
- * Returns 0 when no weeks have credits.
+ * Returns 0 when no completed weeks have credits (the latest week is always excluded
+ * as potentially incomplete).
  */
 export function computeAverageWeeklyCredits(aggregates: WeeklyAggregate[]): number {
   if (aggregates.length === 0) return 0;
@@ -777,8 +769,9 @@ function periodToAnchorMs(period: string): number {
  *
  * Multi-anchor algorithm: for each account, uses ALL statement balances as anchors.
  * Between consecutive statements, derives balance forward from the earlier statement
- * using cumulative transaction sums. At each statement boundary, snaps to the actual
- * statement balance to prevent cumulative drift.
+ * using cumulative transaction sums. When the derived balance at a subsequent anchor
+ * disagrees with the statement, the error is distributed linearly across the
+ * intervening segment.
  *
  * Transaction sign convention: positive = spending (reduces balance), negative = credit (increases balance).
  * Statement balance: raw signed from bank (positive = asset, negative = liability).
@@ -955,11 +948,12 @@ export function computePerBudgetAvgSpending(periods: BudgetPeriod[], budgetId: B
 export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): Map<BudgetId, BudgetDiff> {
   const result = new Map<BudgetId, BudgetDiff>();
   for (const budget of budgets) {
+    const weeklyAllow = weeklyEquivalent(budget.allowance, budget.allowancePeriod);
     const avg12 = computePerBudgetAvgSpending(periods, budget.id, 12);
     const avg52 = computePerBudgetAvgSpending(periods, budget.id, 52);
     result.set(budget.id, {
-      diff12: budget.weeklyAllowance - avg12,
-      diff52: budget.weeklyAllowance - avg52,
+      diff12: weeklyAllow - avg12,
+      diff52: weeklyAllow - avg52,
     });
   }
   return result;

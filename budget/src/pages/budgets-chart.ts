@@ -56,11 +56,11 @@ function buildChartData(
     // Walk all weeks: fill missing periods (no period record for this budget at this timestamp) with zero-spend rollover entries
     let accumulated = 0;
     let prevWeekMs: number | null = null;
-    const weeklyAllow = weeklyEquivalent(budget.weeklyAllowance, budget.allowancePeriod);
+    const weeklyAllow = weeklyEquivalent(budget.allowance, budget.allowancePeriod);
     for (const entry of weeks) {
       const pb = byMs.get(entry.ms);
       const spent = pb ? pb.spent : 0;
-      const allow = periodAllowance(budget.weeklyAllowance, budget.allowancePeriod, prevWeekMs, entry.ms);
+      const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevWeekMs, entry.ms);
       const balance = pb
         ? pb.runningBalance
         : applyRollover(accumulated, allow, budget.rollover);

@@ -25,7 +25,7 @@ function makeBudget(overrides: Partial<Budget> = {}): Budget {
   return {
     id: "food",
     name: "Food",
-    weeklyAllowance: 150,
+    allowance: 150,
     allowancePeriod: "weekly",
     rollover: "none",
     overrides: [],
@@ -154,7 +154,7 @@ describe("computeBudgetBalance", () => {
   it("computes balance for single period with single transaction", () => {
     const txn = makeTxn({ amount: 50 });
     const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
-    const budget = makeBudget({ weeklyAllowance: 150 });
+    const budget = makeBudget({ allowance: 150 });
     const result = computeBudgetBalance(txn, [txn], budget, [period]);
     // allowance 150 - txn 50 = 100
     expect(result).toBe(100);
@@ -164,7 +164,7 @@ describe("computeBudgetBalance", () => {
     const txn1 = makeTxn({ id: "txn-1", amount: 30, timestamp: ts("2025-01-14") });
     const txn2 = makeTxn({ id: "txn-2", amount: 50, timestamp: ts("2025-01-16") });
     const period = makePeriod({ id: "food-w2", budgetId: "food", total: 80 });
-    const budget = makeBudget({ weeklyAllowance: 150 });
+    const budget = makeBudget({ allowance: 150 });
 
     // Balance at txn1: 150 - 30 = 120
     expect(computeBudgetBalance(txn1, [txn1, txn2], budget, [period])).toBe(120);
@@ -176,7 +176,7 @@ describe("computeBudgetBalance", () => {
     const txnA = makeTxn({ id: "aaa", amount: 30, timestamp: ts("2025-01-15") });
     const txnB = makeTxn({ id: "bbb", amount: 50, timestamp: ts("2025-01-15") });
     const period = makePeriod({ id: "food-w2", budgetId: "food", total: 80 });
-    const budget = makeBudget({ weeklyAllowance: 150 });
+    const budget = makeBudget({ allowance: 150 });
 
     // aaa comes first: 150 - 30 = 120
     expect(computeBudgetBalance(txnA, [txnA, txnB], budget, [period])).toBe(120);
@@ -186,7 +186,7 @@ describe("computeBudgetBalance", () => {
 
   describe("rollover: none", () => {
     it("resets to weekly allowance each period", () => {
-      const budget = makeBudget({ weeklyAllowance: 150, rollover: "none" });
+      const budget = makeBudget({ allowance: 150, rollover: "none" });
       const periods = [
         makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 120 }),
         makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 50 }),
@@ -200,7 +200,7 @@ describe("computeBudgetBalance", () => {
 
   describe("rollover: debt", () => {
     it("carries only negative balance to next period", () => {
-      const budget = makeBudget({ weeklyAllowance: 100, rollover: "debt" });
+      const budget = makeBudget({ allowance: 100, rollover: "debt" });
       const periods = [
         makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 120 }),
         makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 10 }),
@@ -212,7 +212,7 @@ describe("computeBudgetBalance", () => {
     });
 
     it("does not carry positive balance", () => {
-      const budget = makeBudget({ weeklyAllowance: 200, rollover: "debt" });
+      const budget = makeBudget({ allowance: 200, rollover: "debt" });
       const periods = [
         makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
         makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 10 }),
@@ -226,7 +226,7 @@ describe("computeBudgetBalance", () => {
 
   describe("rollover: balance", () => {
     it("carries full balance forward", () => {
-      const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+      const budget = makeBudget({ allowance: 100, rollover: "balance" });
       const periods = [
         makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
         makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
@@ -238,7 +238,7 @@ describe("computeBudgetBalance", () => {
     });
 
     it("carries negative balance forward", () => {
-      const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+      const budget = makeBudget({ allowance: 100, rollover: "balance" });
       const periods = [
         makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 120 }),
         makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 10 }),
@@ -251,7 +251,7 @@ describe("computeBudgetBalance", () => {
   });
 
   it("handles multiple prior periods with rollover", () => {
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const budget = makeBudget({ allowance: 100, rollover: "balance" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
       makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 80 }),
@@ -265,7 +265,7 @@ describe("computeBudgetBalance", () => {
   });
 
   it("only considers transactions for the same budget", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 150 });
+    const budget = makeBudget({ id: "food", allowance: 150 });
     const period = makePeriod({ id: "food-w2", budgetId: "food" });
     const foodTxn = makeTxn({ id: "txn-food", amount: 50, budget: "food" });
     const housingTxn = makeTxn({ id: "txn-housing", amount: 200, budget: "housing" });
@@ -286,7 +286,7 @@ describe("computeBudgetBalance", () => {
   it("reimbursement reduces effective amount in balance", () => {
     const txn = makeTxn({ amount: 100, reimbursement: 50 });
     const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
-    const budget = makeBudget({ weeklyAllowance: 150 });
+    const budget = makeBudget({ allowance: 150 });
     // net = 100 * (1 - 50/100) = 50; balance = 150 - 50 = 100
     expect(computeBudgetBalance(txn, [txn], budget, [period])).toBe(100);
   });
@@ -303,14 +303,14 @@ describe("computeAllBudgetBalances", () => {
   it("computes balance for single budget and period", () => {
     const txn = makeTxn({ id: "txn-1", amount: 50 });
     const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
-    const budget = makeBudget({ weeklyAllowance: 150 });
+    const budget = makeBudget({ allowance: 150 });
     const result = computeAllBudgetBalances([txn], [budget], [period]);
     expect(result.get("txn-1")).toBe(100);
   });
 
   it("computes balances for multi-budget with rollover", () => {
-    const foodBudget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance" });
-    const vacBudget = makeBudget({ id: "vacation", weeklyAllowance: 50, rollover: "none" });
+    const foodBudget = makeBudget({ id: "food", allowance: 100, rollover: "balance" });
+    const vacBudget = makeBudget({ id: "vacation", allowance: 50, rollover: "none" });
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
       makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
@@ -331,7 +331,7 @@ describe("computeAllBudgetBalances", () => {
   });
 
   it("skips transactions in gaps between non-contiguous periods", () => {
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const budget = makeBudget({ allowance: 100, rollover: "balance" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
       makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 30 }),
@@ -345,7 +345,7 @@ describe("computeAllBudgetBalances", () => {
   });
 
   it("uses period.total (not live transaction sums) for prior-period rollover", () => {
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const budget = makeBudget({ allowance: 100, rollover: "balance" });
     const periods = [
       // total says 60, but actual transaction sums to 40 — simulating drift
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
@@ -361,7 +361,7 @@ describe("computeAllBudgetBalances", () => {
   });
 
   it("matches computeBudgetBalance cross-check", () => {
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const budget = makeBudget({ allowance: 100, rollover: "balance" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
       makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 25 }),
@@ -380,7 +380,7 @@ describe("computeAllBudgetBalances", () => {
 
   describe("normalization filtering", () => {
     it("excludes non-primary normalized transactions from balances", () => {
-      const budget = makeBudget({ weeklyAllowance: 150 });
+      const budget = makeBudget({ allowance: 150 });
       const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
       const primary = makeTxn({
         id: "txn-primary",
@@ -400,7 +400,7 @@ describe("computeAllBudgetBalances", () => {
     });
 
     it("includes primary normalized transaction with a normal balance", () => {
-      const budget = makeBudget({ weeklyAllowance: 150 });
+      const budget = makeBudget({ allowance: 150 });
       const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
       const primary = makeTxn({
         id: "txn-primary",
@@ -414,7 +414,7 @@ describe("computeAllBudgetBalances", () => {
     });
 
     it("includes unnormalized and primary, excludes non-primary", () => {
-      const budget = makeBudget({ weeklyAllowance: 200 });
+      const budget = makeBudget({ allowance: 200 });
       const period = makePeriod({ id: "food-w2", budgetId: "food", total: 110 });
       const unnormalized = makeTxn({
         id: "txn-unnorm",
@@ -454,7 +454,7 @@ describe("computeAllBudgetBalances", () => {
 
 describe("computePeriodBalances", () => {
   it("single budget, single period: returns correct spent and runningBalance", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 150, rollover: "none" });
+    const budget = makeBudget({ id: "food", allowance: 150, rollover: "none" });
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
     ];
@@ -468,7 +468,7 @@ describe("computePeriodBalances", () => {
   });
 
   it("multi-period with rollover none: balance resets each period", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "none" });
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "none" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
       makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
@@ -485,7 +485,7 @@ describe("computePeriodBalances", () => {
   });
 
   it("multi-period with rollover debt: only negative carries", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "debt" });
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "debt" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 120 }),
       makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 50 }),
@@ -502,7 +502,7 @@ describe("computePeriodBalances", () => {
   });
 
   it("multi-period with rollover balance: full balance carries", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance" });
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "balance" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
       makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
@@ -519,8 +519,8 @@ describe("computePeriodBalances", () => {
   });
 
   it("multi-budget: returns separate entries per budget", () => {
-    const foodBudget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "none" });
-    const vacBudget = makeBudget({ id: "vacation", name: "Vacation", weeklyAllowance: 50, rollover: "balance" });
+    const foodBudget = makeBudget({ id: "food", allowance: 100, rollover: "none" });
+    const vacBudget = makeBudget({ id: "vacation", name: "Vacation", allowance: 50, rollover: "balance" });
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
       makePeriod({ id: "vac-w1", budgetId: "vacation", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 20 }),
@@ -540,13 +540,13 @@ describe("computePeriodBalances", () => {
   });
 
   it("empty periods: returns empty array for each budget", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 100 });
+    const budget = makeBudget({ id: "food", allowance: 100 });
     const result = computePeriodBalances([budget], []);
     expect(result.get("food" as any)).toEqual([]);
   });
 
   it("budget with no matching periods: returns empty array", () => {
-    const foodBudget = makeBudget({ id: "food", weeklyAllowance: 100 });
+    const foodBudget = makeBudget({ id: "food", allowance: 100 });
     const periods = [
       makePeriod({ id: "vac-w1", budgetId: "vacation", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 20 }),
     ];
@@ -797,8 +797,8 @@ describe("computePerBudgetTrend", () => {
 
   it("each budget gets separate series", () => {
     const budgets = [
-      makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 }),
-      makeBudget({ id: "fun", name: "Fun", weeklyAllowance: 50 }),
+      makeBudget({ id: "food", name: "Food", allowance: 100 }),
+      makeBudget({ id: "fun", name: "Fun", allowance: 50 }),
     ];
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
@@ -818,7 +818,7 @@ describe("computePerBudgetTrend", () => {
   });
 
   it("'Other' series from aggregates with unbudgetedTotal", () => {
-    const budgets = [makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 })];
+    const budgets = [makeBudget({ id: "food", name: "Food", allowance: 100 })];
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
     ];
@@ -832,7 +832,7 @@ describe("computePerBudgetTrend", () => {
   });
 
   it("no 'Other' series when unbudgetedTotal is zero", () => {
-    const budgets = [makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 })];
+    const budgets = [makeBudget({ id: "food", name: "Food", allowance: 100 })];
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
     ];
@@ -1382,7 +1382,7 @@ describe("computeDerivedBalances", () => {
 });
 
 // Shared setup for override tests:
-// Budget with weeklyAllowance=100, rollover="balance"
+// Budget with allowance=100, rollover="balance"
 // 3 consecutive weekly periods: w1 (Jan 6-13), w2 (Jan 13-20), w3 (Jan 20-27)
 // Override date of Jan 13 with balance=50 (in w2)
 
@@ -1435,7 +1435,7 @@ describe("computeBudgetBalance with overrides", () => {
   const periods = [w1, w2, w3];
 
   it("no override: existing behavior unchanged", () => {
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const budget = makeBudget({ allowance: 100, rollover: "balance" });
     const txn = makeTxn({ id: "txn-1", amount: 30, timestamp: ts("2025-01-15") });
     // w1: 0+100=100, -40(total)=60; w2: 60+100=160, -txn30=130
     expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(130);
@@ -1444,7 +1444,7 @@ describe("computeBudgetBalance with overrides", () => {
   it("single override in a prior period: balance starts from override", () => {
     // Override at Jan 13 (start of w2) with balance=50 — override falls in w2
     // but target txn is in w3, so override is "prior" to w3
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const budget = makeBudget({ allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
     const txn = makeTxn({ id: "txn-1", amount: 25, timestamp: ts("2025-01-22") });
     // Override in w2: running = 50 - w2.total(30) = 20
     // w3: applyRollover(20, 100, "balance") = 120, -txn25 = 95
@@ -1453,7 +1453,7 @@ describe("computeBudgetBalance with overrides", () => {
 
   it("override in the same period as the target transaction: replaces rollover", () => {
     // Override at Jan 13 (w2), target txn also in w2
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const budget = makeBudget({ allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
     const txn = makeTxn({ id: "txn-1", amount: 30, timestamp: ts("2025-01-15") });
     // Override is in w2 (target period): running starts at 50, -txn30 = 20
     expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(20);
@@ -1463,7 +1463,7 @@ describe("computeBudgetBalance with overrides", () => {
     // Two overrides: Jan 6 (w1) and Jan 13 (w2). Target txn in w3.
     // Latest override at or before start of w3 (Jan 20) is Jan 13.
     const budget = makeBudget({
-      weeklyAllowance: 100,
+      allowance: 100,
       rollover: "balance",
       overrides: [makeOverride("2025-01-06", 20), makeOverride("2025-01-13", 50)],
     });
@@ -1475,7 +1475,7 @@ describe("computeBudgetBalance with overrides", () => {
 
   it("override after all transactions: no effect on earlier transactions", () => {
     // Override at Jan 27 (after w3) — target txn is in w2
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-27", 999)] });
+    const budget = makeBudget({ allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-27", 999)] });
     const txn = makeTxn({ id: "txn-1", amount: 30, timestamp: ts("2025-01-15") });
     // No applicable override for w2 target period start (Jan 13): normal behavior
     // w1: 0+100=100, -40=60; w2: 60+100=160, -txn30=130
@@ -1490,7 +1490,7 @@ describe("computePeriodBalances with overrides", () => {
 
   it("override in the first period: replaces initial balance", () => {
     // Override at Jan 6 (start of w1) with balance=50
-    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-06", 50)] });
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-06", 50)] });
     const result = computePeriodBalances([budget], [w1, w2, w3]);
     const balances = result.get("food" as any)!;
     expect(balances).toHaveLength(3);
@@ -1504,7 +1504,7 @@ describe("computePeriodBalances with overrides", () => {
 
   it("override in a middle period: resets accumulated balance", () => {
     // Override at Jan 13 (start of w2) with balance=50
-    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
     const result = computePeriodBalances([budget], [w1, w2, w3]);
     const balances = result.get("food" as any)!;
     expect(balances).toHaveLength(3);
@@ -1518,7 +1518,7 @@ describe("computePeriodBalances with overrides", () => {
 
   it("rollover resumes normally after the override period", () => {
     // Override only in w2; w3 should use normal rollover from w2's result
-    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
     const w4 = makePeriod({ id: "w4", budgetId: "food", periodStart: ts("2025-01-27"), periodEnd: ts("2025-02-03"), total: 10 });
     const result = computePeriodBalances([budget], [w1, w2, w3, w4]);
     const balances = result.get("food" as any)!;
@@ -1536,7 +1536,7 @@ describe("computeAllBudgetBalances with overrides", () => {
     const periods = [w1, w2, w3];
 
     // Override at Jan 13 (w2) with balance=50
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const budget = makeBudget({ allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
 
     const txn1 = makeTxn({ id: "txn-w2", amount: 30, timestamp: ts("2025-01-15") });
     const txn2 = makeTxn({ id: "txn-w3", amount: 25, timestamp: ts("2025-01-22") });
@@ -1619,7 +1619,7 @@ describe("weeklyEquivalent", () => {
 describe("monthly allowance in computePeriodBalances", () => {
   it("accumulates monthly allowance only at month boundaries", () => {
     const budget = makeBudget({
-      weeklyAllowance: 500,
+      allowance: 500,
       allowancePeriod: "monthly",
       rollover: "balance",
     });
@@ -1641,7 +1641,7 @@ describe("monthly allowance in computePeriodBalances", () => {
 
   it("weekly budget is unaffected by monthly logic", () => {
     const budget = makeBudget({
-      weeklyAllowance: 100,
+      allowance: 100,
       allowancePeriod: "weekly",
       rollover: "balance",
     });
@@ -1659,7 +1659,7 @@ describe("monthly allowance in computePeriodBalances", () => {
 
   it("monthly allowance with override interaction", () => {
     const budget = makeBudget({
-      weeklyAllowance: 500,
+      allowance: 500,
       allowancePeriod: "monthly",
       rollover: "balance",
       overrides: [{ date: ts("2025-01-13"), balance: 200 }],
@@ -1758,8 +1758,8 @@ describe("computePerBudgetAvgSpending", () => {
 describe("computeBudgetDiffs", () => {
   it("returns full allowance as diff when no periods exist", () => {
     const budgets = [
-      makeBudget({ id: "food", weeklyAllowance: 150 }),
-      makeBudget({ id: "housing", name: "Housing", weeklyAllowance: 400 }),
+      makeBudget({ id: "food", allowance: 150 }),
+      makeBudget({ id: "housing", name: "Housing", allowance: 400 }),
     ];
     const result = computeBudgetDiffs(budgets, []);
     expect(result.get("food")).toEqual({ diff12: 150, diff52: 150 } satisfies BudgetDiff);
@@ -1768,8 +1768,8 @@ describe("computeBudgetDiffs", () => {
 
   it("returns correct diff12 and diff52 for multiple budgets with spending data", () => {
     const budgets = [
-      makeBudget({ id: "food", weeklyAllowance: 150 }),
-      makeBudget({ id: "fun", name: "Fun", weeklyAllowance: 100 }),
+      makeBudget({ id: "food", allowance: 150 }),
+      makeBudget({ id: "fun", name: "Fun", allowance: 100 }),
     ];
 
     // Create periods spanning many weeks so 12-week and 52-week windows differ.

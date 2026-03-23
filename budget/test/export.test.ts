@@ -52,7 +52,7 @@ const idbBudgets = [
   {
     id: "groceries",
     name: "Groceries",
-    weeklyAllowance: 100,
+    allowance: 100,
     allowancePeriod: "weekly",
     rollover: "none",
     overrides: [],
@@ -183,7 +183,7 @@ describe("exportToJson", () => {
     const budget = output.budgets[0];
     expect(budget.id).toBe("groceries");
     expect(budget.name).toBe("Groceries");
-    expect(budget.weeklyAllowance).toBe(100);
+    expect(budget.allowance).toBe(100);
     expect(budget.rollover).toBe("none");
 
     const period = output.budgetPeriods[0];

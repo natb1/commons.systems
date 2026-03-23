@@ -1,4 +1,5 @@
 import { Timestamp } from "firebase/firestore";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type {
   Transaction,
   Statement,
@@ -47,7 +48,7 @@ export interface DataSource {
   ): Promise<void>;
   updateBudget(
     id: BudgetId,
-    fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "allowancePeriod" | "rollover">>,
+    fields: Partial<Pick<Budget, "name" | "allowance" | "allowancePeriod" | "rollover">>,
   ): Promise<void>;
   updateBudgetOverrides(id: BudgetId, overrides: BudgetOverride[]): Promise<void>;
   adjustBudgetPeriodTotal(id: BudgetPeriodId, delta: number): Promise<void>;
@@ -158,14 +159,15 @@ function toTransaction(row: IdbTransaction): Transaction {
 function toAllowancePeriod(value: string | undefined): AllowancePeriod {
   if (value === "monthly") return "monthly";
   if (value === "quarterly") return "quarterly";
-  return "weekly";
+  if (value == null || value === "weekly") return "weekly";
+  throw new DataIntegrityError(`Invalid allowancePeriod: ${value}`);
 }
 
 function toBudget(row: IdbBudget): Budget {
   return {
     id: row.id as BudgetId,
     name: row.name,
-    weeklyAllowance: row.weeklyAllowance,
+    allowance: row.allowance,
     allowancePeriod: toAllowancePeriod(row.allowancePeriod),
     rollover: row.rollover,
     overrides: (row.overrides ?? []).map(o => ({
@@ -318,7 +320,7 @@ export class IdbDataSource implements DataSource {
 
   async updateBudget(
     id: BudgetId,
-    fields: Partial<Pick<Budget, "name" | "weeklyAllowance" | "allowancePeriod" | "rollover">>,
+    fields: Partial<Pick<Budget, "name" | "allowance" | "allowancePeriod" | "rollover">>,
   ): Promise<void> {
     await updateRecord<IdbBudget>("budgets", id, "Budget", fields);
   }
