@@ -91,4 +91,21 @@ test.describe("budgets", () => {
       { timeout: 5000 },
     );
   });
+
+  test("budget table header contains diff column labels", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#budgets-table")).toBeVisible();
+    await expect(page.locator("#budgets-table")).toContainText("12w Diff");
+    await expect(page.locator("#budgets-table")).toContainText("52w Diff");
+  });
+
+  test("diff values visible in budget rows", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#budgets-table")).toBeVisible();
+    const rows = page.locator("#budgets-table .budget-row");
+    await expect(rows.first()).toBeVisible();
+    const rowTexts = await rows.allTextContents();
+    const hasCurrency = rowTexts.some((text) => text.includes("$"));
+    expect(hasCurrency).toBe(true);
+  });
 });

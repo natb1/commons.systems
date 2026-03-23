@@ -1,5 +1,10 @@
 import type { Timestamp } from "firebase/firestore";
 import type { AllowancePeriod, Budget, BudgetId, BudgetOverride, BudgetPeriod, Rollover, Statement, Transaction, TransactionId, WeeklyAggregate } from "./firestore.js";
+
+export interface BudgetDiff {
+  readonly diff12: number;
+  readonly diff52: number;
+}
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
@@ -925,4 +930,37 @@ export function computeNetWorth(
   });
 
   return { points, divergences };
+}
+
+/** Compute average weekly spending for a single budget over the trailing `weekCount` weeks. */
+export function computePerBudgetAvgSpending(periods: BudgetPeriod[], budgetId: BudgetId, weekCount: number): number {
+  const budgetPeriods = periods.filter(p => p.budgetId === budgetId);
+  if (budgetPeriods.length === 0) return 0;
+
+  const weeklySpending = new Map<number, number>();
+  for (const p of budgetPeriods) {
+    const entry = toSundayEntry(p.periodStart.toDate());
+    weeklySpending.set(entry.ms, (weeklySpending.get(entry.ms) ?? 0) + p.total);
+  }
+
+  const weeks = [...weeklySpending.entries()].sort((a, b) => a[0] - b[0]);
+  const trailing = weeks.slice(-weekCount);
+  if (trailing.length === 0) return 0;
+
+  const sum = trailing.reduce((acc, [, total]) => acc + total, 0);
+  return sum / trailing.length;
+}
+
+/** Compute allowance-minus-spending diffs for each budget over 12 and 52 week windows. */
+export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): Map<BudgetId, BudgetDiff> {
+  const result = new Map<BudgetId, BudgetDiff>();
+  for (const budget of budgets) {
+    const avg12 = computePerBudgetAvgSpending(periods, budget.id, 12);
+    const avg52 = computePerBudgetAvgSpending(periods, budget.id, 52);
+    result.set(budget.id, {
+      diff12: budget.weeklyAllowance - avg12,
+      diff52: budget.weeklyAllowance - avg52,
+    });
+  }
+  return result;
 }
