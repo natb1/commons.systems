@@ -903,22 +903,55 @@ describe("transactions-appended event", () => {
   });
 
   it("weeks slider range updates when new transactions extend the date range", () => {
-    // Create container with txns only in week of Jan 6
+    // Create container with txns in weeks of Jan 6 and Jan 13
     const container = makeContainer([
       txn({ category: "Food", amount: 50, timestampMs: MON_JAN_06 + 86400000 }),
+      txn({ category: "Food", amount: 40, timestampMs: MON_JAN_13 + 86400000 }),
     ]);
     hydrateCategorySankey(container);
 
     const endSlider = document.querySelector("#sankey-end-week") as HTMLInputElement;
+    const endLabel = document.querySelector("#sankey-end-label") as HTMLElement;
     const initialMax = endSlider.max;
 
-    // Dispatch transactions-appended with txns in week of Jan 20 (extends range)
+    // Slider starts at the last week (Jan 13); capture its timestamp via the label
+    const initialEndValue = endSlider.value;
+    const initialLabelText = endLabel.textContent;
+
+    // Dispatch older transactions (Dec 30 week) — prepends to the sorted weeks array
+    const MON_DEC_30 = new Date("2024-12-30T00:00:00Z").getTime();
     document.dispatchEvent(new CustomEvent("transactions-appended", {
-      detail: [txn({ category: "Transport", amount: 30, timestampMs: MON_JAN_20 + 86400000 })],
+      detail: [txn({ category: "Transport", amount: 30, timestampMs: MON_DEC_30 + 86400000 })],
     }));
 
-    // endSlider.max should have increased
+    // endSlider.max should have increased (more weeks now)
     expect(Number(endSlider.max)).toBeGreaterThan(Number(initialMax));
+    // currentEndWeekIdx shifted — endSlider.value must update to track the same week
+    expect(Number(endSlider.value)).toBeGreaterThan(Number(initialEndValue));
+    // The label should still show the same date (Jan 13 week)
+    expect(endLabel.textContent).toBe(initialLabelText);
+  });
+
+  it("chart error does not propagate through dispatchEvent", () => {
+    vi.useFakeTimers();
+    try {
+      const container = makeContainer([
+        txn({ category: "Food", amount: 50 }),
+      ]);
+      hydrateCategorySankey(container);
+
+      // Dispatch event with invalid data to trigger an error inside the listener
+      expect(() => {
+        document.dispatchEvent(new CustomEvent("transactions-appended", {
+          detail: [{ category: "Food", amount: "not a number" }],
+        }));
+      }).not.toThrow();
+
+      // Container should show error message instead of crashing
+      expect(container.textContent).toContain("Chart update failed");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("event ignored when container is disconnected", () => {

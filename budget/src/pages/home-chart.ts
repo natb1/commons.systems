@@ -6,6 +6,9 @@ import { parseJsonArray, makeDebounced } from "./hydrate-util.js";
 
 export type ChartMode = "spending" | "credits";
 
+/** Custom event name dispatched when scroll-loaded transactions are appended to the chart. */
+export const TRANSACTIONS_APPENDED_EVENT = "transactions-appended";
+
 export interface SerializedChartTransaction {
   category: string;
   /** Dollars. Positive = spending/debit, negative = credit. Credits mode sign-flips to positive for display. */
@@ -510,18 +513,26 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
   update();
 
-  document.addEventListener("transactions-appended", ((e: CustomEvent<SerializedChartTransaction[]>) => {
+  // Integration point: home-hydrate.ts dispatches this event after scroll-loading
+  // older transactions. update() calls filterTable() to re-apply filters to newly appended rows.
+  document.addEventListener(TRANSACTIONS_APPENDED_EVENT, ((e: CustomEvent<SerializedChartTransaction[]>) => {
     if (!container.isConnected) return;
-    const newTxns = e.detail;
-    assertChartTransactions(newTxns);
-    allTxns.push(...newTxns);
-    weeks = distinctWeeks(allTxns);
-    endSlider.max = String(weeks.length - 1);
-    if (currentEndWeekIdx >= weeks.length) {
-      currentEndWeekIdx = weeks.length - 1;
+    try {
+      const newTxns = e.detail;
+      assertChartTransactions(newTxns);
+      const targetWeekMs = weeks[currentEndWeekIdx];
+      allTxns.push(...newTxns);
+      weeks = distinctWeeks(allTxns);
+      endSlider.max = String(weeks.length - 1);
+      currentEndWeekIdx = weeks.indexOf(targetWeekMs);
+      if (currentEndWeekIdx === -1) currentEndWeekIdx = weeks.length - 1;
+      endSlider.value = String(currentEndWeekIdx);
+      endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
+      update();
+    } catch (error) {
+      container.textContent = "Chart update failed after loading new transactions.";
+      setTimeout(() => { throw error; }, 0);
     }
-    endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
-    update();
   }) as EventListener);
 
   const debounced = makeDebounced();

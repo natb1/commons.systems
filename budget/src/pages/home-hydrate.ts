@@ -6,6 +6,7 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
 import { renderTransactionRows, compareByTimestampDesc, SCROLL_BATCH_WEEKS, serializeChartTransactions } from "./home.js";
+import { TRANSACTIONS_APPENDED_EVENT } from "./home-chart.js";
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
@@ -302,9 +303,14 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       if (transactions.length > 0) {
         const html = renderTransactionRows(transactions, groupName, editable, budgetIdToName);
         sentinel.insertAdjacentHTML("beforebegin", html);
-        const chartTxns = serializeChartTransactions(transactions, budgetIdToName);
-        document.dispatchEvent(new CustomEvent("transactions-appended", { detail: chartTxns }));
         sentinel.dataset.nextBefore = String(sinceMs);
+        // Notify the chart module so it can incorporate new transactions and re-apply filters.
+        try {
+          const chartTxns = serializeChartTransactions(transactions, budgetIdToName);
+          document.dispatchEvent(new CustomEvent(TRANSACTIONS_APPENDED_EVENT, { detail: chartTxns }));
+        } catch (chartError) {
+          console.error("Failed to update chart with scroll-loaded transactions:", chartError);
+        }
       } else {
         // Final batch: omit since to include null-timestamp transactions and any older than the earliest window boundary
         const finalBatch = await getActiveDataSource().getTransactions({
@@ -315,8 +321,12 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         if (finalBatch.length > 0) {
           const html = renderTransactionRows(finalBatch, groupName, editable, budgetIdToName);
           sentinel.insertAdjacentHTML("beforebegin", html);
-          const chartTxns = serializeChartTransactions(finalBatch, budgetIdToName);
-          document.dispatchEvent(new CustomEvent("transactions-appended", { detail: chartTxns }));
+          try {
+            const chartTxns = serializeChartTransactions(finalBatch, budgetIdToName);
+            document.dispatchEvent(new CustomEvent(TRANSACTIONS_APPENDED_EVENT, { detail: chartTxns }));
+          } catch (chartError) {
+            console.error("Failed to update chart with scroll-loaded transactions:", chartError);
+          }
         }
         sentinel.remove();
         observer.disconnect();
