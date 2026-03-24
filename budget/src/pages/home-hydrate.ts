@@ -1,5 +1,5 @@
 import { Timestamp } from "firebase/firestore";
-import { type SerializedBudgetPeriod, type TransactionId, type BudgetId } from "../firestore.js";
+import { type SerializedBudgetPeriod, type TransactionId, type BudgetId, type Transaction } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
