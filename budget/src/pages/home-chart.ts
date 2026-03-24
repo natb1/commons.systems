@@ -6,6 +6,9 @@ import { parseJsonArray, makeDebounced } from "./hydrate-util.js";
 
 export type ChartMode = "spending" | "credits";
 
+/** Custom event name dispatched after scroll-loaded transactions are appended to the table. The chart listens for this to incorporate new data and re-apply filters. */
+export const TRANSACTIONS_APPENDED_EVENT = "transactions-appended";
+
 export interface SerializedChartTransaction {
   category: string;
   /** Dollars. Positive = spending/debit, negative = credit. Credits mode sign-flips to positive for display. */
@@ -251,7 +254,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
     return;
   }
 
-  const weeks = distinctWeeks(allTxns);
+  let weeks = distinctWeeks(allTxns);
   if (weeks.length === 0) {
     container.textContent = "No dated transactions to chart.";
     return;
@@ -509,6 +512,29 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   }
 
   update();
+
+  // Integration point: home-hydrate.ts dispatches this event after scroll-loading older transactions.
+  // The listener merges new data into allTxns, adjusts the week slider to preserve the current
+  // position, then calls update() to re-render the chart and re-apply table filters.
+  document.addEventListener(TRANSACTIONS_APPENDED_EVENT, ((e: CustomEvent<SerializedChartTransaction[]>) => {
+    if (!container.isConnected) return;
+    try {
+      const newTxns = e.detail;
+      assertChartTransactions(newTxns);
+      const targetWeekMs = weeks[currentEndWeekIdx];
+      allTxns.push(...newTxns);
+      weeks = distinctWeeks(allTxns);
+      endSlider.max = String(weeks.length - 1);
+      currentEndWeekIdx = weeks.indexOf(targetWeekMs);
+      if (currentEndWeekIdx === -1) currentEndWeekIdx = weeks.length - 1;
+      endSlider.value = String(currentEndWeekIdx);
+      endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
+      update();
+    } catch (error) {
+      container.textContent = "Chart update failed after loading new transactions.";
+      setTimeout(() => { throw error; }, 0);
+    }
+  }) as EventListener);
 
   const debounced = makeDebounced();
 

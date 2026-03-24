@@ -838,3 +838,136 @@ describe("hydrateCategorySankey", () => {
     expect(txnRows[2].style.display).toBe(""); // Gas
   });
 });
+
+describe("transactions-appended event", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("filterTable applies to scroll-appended rows after transactions-appended event", () => {
+    const table = document.createElement("div");
+    table.id = "transactions-table";
+    const initialRow = document.createElement("div");
+    initialRow.className = "txn-row";
+    initialRow.dataset.category = "Food";
+    initialRow.dataset.budgetName = "Food";
+    initialRow.dataset.netAmount = "50";
+    table.appendChild(initialRow);
+    document.body.appendChild(table);
+
+    const container = makeContainer([
+      txn({ category: "Food", amount: 50, budgetName: "Food" }),
+    ]);
+    hydrateCategorySankey(container);
+
+    // Set budget filter to "Food" and trigger blur
+    const budgetInput = document.querySelector("#sankey-budget-filter") as HTMLInputElement;
+    budgetInput.value = "Food";
+    budgetInput.dispatchEvent(new Event("blur"));
+
+    // Append a new row to the DOM table (simulating scroll append) with a different budget
+    const newRow = document.createElement("div");
+    newRow.className = "txn-row";
+    newRow.dataset.category = "Travel";
+    newRow.dataset.budgetName = "Vacation";
+    newRow.dataset.netAmount = "30";
+    table.appendChild(newRow);
+
+    // Dispatch transactions-appended with new txns
+    document.dispatchEvent(new CustomEvent("transactions-appended", {
+      detail: [txn({ category: "Travel", amount: 30, budgetName: "Vacation" })],
+    }));
+
+    // The newly appended row should be hidden (budget filter is "Food")
+    expect(newRow.style.display).toBe("none");
+  });
+
+  it("chart rebuilds with new transactions from event", () => {
+    const container = makeContainer([
+      txn({ category: "Food", amount: 50 }),
+    ]);
+    hydrateCategorySankey(container);
+    expect(container.querySelector("svg")).not.toBeNull();
+
+    // Dispatch transactions-appended with additional txns
+    document.dispatchEvent(new CustomEvent("transactions-appended", {
+      detail: [txn({ category: "Transport", amount: 30 })],
+    }));
+
+    // SVG still exists (chart re-rendered)
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("weeks slider range updates when new transactions extend the date range", () => {
+    // Create container with txns in weeks of Jan 6 and Jan 13
+    const container = makeContainer([
+      txn({ category: "Food", amount: 50, timestampMs: MON_JAN_06 + 86400000 }),
+      txn({ category: "Food", amount: 40, timestampMs: MON_JAN_13 + 86400000 }),
+    ]);
+    hydrateCategorySankey(container);
+
+    const endSlider = document.querySelector("#sankey-end-week") as HTMLInputElement;
+    const endLabel = document.querySelector("#sankey-end-label") as HTMLElement;
+    const initialMax = endSlider.max;
+
+    // Slider starts at the last week (Jan 13); capture its timestamp via the label
+    const initialEndValue = endSlider.value;
+    const initialLabelText = endLabel.textContent;
+
+    // Dispatch older transactions (Dec 30 week) — prepends to the sorted weeks array
+    const MON_DEC_30 = new Date("2024-12-30T00:00:00Z").getTime();
+    document.dispatchEvent(new CustomEvent("transactions-appended", {
+      detail: [txn({ category: "Transport", amount: 30, timestampMs: MON_DEC_30 + 86400000 })],
+    }));
+
+    // endSlider.max should have increased (more weeks now)
+    expect(Number(endSlider.max)).toBeGreaterThan(Number(initialMax));
+    // currentEndWeekIdx shifted — endSlider.value must update to track the same week
+    expect(Number(endSlider.value)).toBeGreaterThan(Number(initialEndValue));
+    // The label should still show the same date (Jan 13 week)
+    expect(endLabel.textContent).toBe(initialLabelText);
+  });
+
+  it("chart error does not propagate through dispatchEvent", () => {
+    vi.useFakeTimers();
+    try {
+      const container = makeContainer([
+        txn({ category: "Food", amount: 50 }),
+      ]);
+      hydrateCategorySankey(container);
+
+      // Dispatch event with invalid data to trigger an error inside the listener
+      expect(() => {
+        document.dispatchEvent(new CustomEvent("transactions-appended", {
+          detail: [{ category: "Food", amount: "not a number" }],
+        }));
+      }).not.toThrow();
+
+      // Container should show error message instead of crashing
+      expect(container.textContent).toContain("Chart update failed");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("event ignored when container is disconnected", () => {
+    const container = makeContainer([
+      txn({ category: "Food", amount: 50 }),
+    ]);
+    hydrateCategorySankey(container);
+
+    // Remove container from DOM
+    container.remove();
+
+    // Dispatch event — should not throw
+    expect(() => {
+      document.dispatchEvent(new CustomEvent("transactions-appended", {
+        detail: [txn({ category: "Transport", amount: 30 })],
+      }));
+    }).not.toThrow();
+  });
+});

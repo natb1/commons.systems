@@ -1,11 +1,12 @@
 import { Timestamp } from "firebase/firestore";
-import { type SerializedBudgetPeriod, type TransactionId, type BudgetId } from "../firestore.js";
+import { type SerializedBudgetPeriod, type TransactionId, type BudgetId, type Transaction } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
-import { renderTransactionRows, compareByTimestampDesc, SCROLL_BATCH_WEEKS } from "./home.js";
+import { renderTransactionRows, compareByTimestampDesc, SCROLL_BATCH_WEEKS, serializeChartTransactions } from "./home.js";
+import { TRANSACTIONS_APPENDED_EVENT } from "./home-chart.js";
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
@@ -273,6 +274,15 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     budgetIdToName.set(id, name);
   }
 
+  function notifyChart(txns: Transaction[]): void {
+    try {
+      const chartTxns = serializeChartTransactions(txns, budgetIdToName);
+      document.dispatchEvent(new CustomEvent(TRANSACTIONS_APPENDED_EVENT, { detail: chartTxns }));
+    } catch (chartError) {
+      console.error("Failed to update chart with scroll-loaded transactions:", chartError);
+    }
+  }
+
   let loading = false;
   const observer = new IntersectionObserver(async (entries) => {
     if (!entries[0].isIntersecting || loading) return;
@@ -303,6 +313,8 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         const html = renderTransactionRows(transactions, groupName, editable, budgetIdToName);
         sentinel.insertAdjacentHTML("beforebegin", html);
         sentinel.dataset.nextBefore = String(sinceMs);
+        // Notify the chart module so it can incorporate new transactions and re-apply filters.
+        notifyChart(transactions);
       } else {
         // Final batch: omit since to include null-timestamp transactions and any older than the earliest window boundary
         const finalBatch = await getActiveDataSource().getTransactions({
@@ -313,6 +325,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         if (finalBatch.length > 0) {
           const html = renderTransactionRows(finalBatch, groupName, editable, budgetIdToName);
           sentinel.insertAdjacentHTML("beforebegin", html);
+          notifyChart(finalBatch);
         }
         sentinel.remove();
         observer.disconnect();
