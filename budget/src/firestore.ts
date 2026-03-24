@@ -161,6 +161,11 @@ function requireOverrides(value: unknown): BudgetOverride[] {
     const balance = requireNumber(entry.balance, `overrides[${i}].balance`);
     result.push({ date, balance });
   }
+  for (let i = 1; i < result.length; i++) {
+    if (result[i].date.toMillis() <= result[i - 1].date.toMillis()) {
+      throw new DataIntegrityError(`overrides not sorted by date ascending at index ${i}`);
+    }
+  }
   return result;
 }
 

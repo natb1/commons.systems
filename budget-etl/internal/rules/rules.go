@@ -21,9 +21,9 @@ type Rule struct {
 	Account         string // optional: restrict to this account
 	MinAmount       *int64 // optional: minimum amount in cents (inclusive); nil = no filter
 	MaxAmount       *int64 // optional: maximum amount in cents (inclusive); nil = no filter
-	ExcludeCategory string // optional: reject transactions whose category equals or starts with this prefix
-	MatchCategory   string // optional: require category equals or starts with this prefix
-	Category        string // optional: restrict to transactions whose category starts with this prefix (case-insensitive)
+	ExcludeCategory string // optional: reject if category == this or starts with this+":"
+	MatchCategory   string // optional: require category == this or starts with this+":"
+	Category        string // optional: require category starts with this string (case-insensitive prefix)
 }
 
 // matchFields checks whether a pattern/institution/account filter matches the
@@ -44,9 +44,11 @@ func matchFields(pattern, ruleInstitution, ruleAccount, description, institution
 }
 
 // Match returns true if the rule matches the given transaction fields.
-// Amount is in cents. Amount filtering is applied after pattern/institution/account matching.
-// When ExcludeCategory is non-empty, transactions whose category equals or starts with
-// ExcludeCategory+":" are rejected.
+// Amount is in cents. Filters applied after pattern/institution/account matching:
+//   - MinAmount/MaxAmount: inclusive bounds on transaction amount
+//   - ExcludeCategory: rejects if category equals this or has this+":" prefix
+//   - MatchCategory: requires category to equal this or have this+":" prefix
+//   - Category: requires category to start with this prefix (case-insensitive)
 func (r Rule) Match(description, institution, account, category string, amount int64) bool {
 	if !matchFields(r.Pattern, r.Institution, r.Account, description, institution, account) {
 		return false

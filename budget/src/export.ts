@@ -50,7 +50,12 @@ export async function exportToJson(): Promise<string> {
       id: b.id,
       name: b.name,
       allowance: b.allowance,
+      allowancePeriod: b.allowancePeriod,
       rollover: b.rollover,
+      overrides: (b.overrides ?? []).map(o => ({
+        date: msToIso(o.dateMs),
+        balance: o.balance,
+      })),
     })),
     budgetPeriods: budgetPeriods.map((p) => ({
       id: p.id,

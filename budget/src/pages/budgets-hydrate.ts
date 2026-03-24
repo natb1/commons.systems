@@ -267,7 +267,7 @@ export function hydrateBudgetChart(container: HTMLElement): void {
   });
 }
 
-function collectOverridesForBudget(container: HTMLElement, budgetId: string): BudgetOverride[] {
+function collectOverridesForBudget(container: HTMLElement, budgetId: string): BudgetOverride[] | null {
   const rows = container.querySelectorAll<HTMLElement>(`.override-row[data-budget-id="${budgetId}"]`);
   const overrides: BudgetOverride[] = [];
   for (const row of rows) {
@@ -277,12 +277,12 @@ function collectOverridesForBudget(container: HTMLElement, budgetId: string): Bu
     const dateMs = new Date(dateInput.value + "T00:00:00Z").getTime();
     if (isNaN(dateMs)) {
       showInputError(dateInput, "Invalid date");
-      return [];
+      return null;
     }
     const balance = Number(balanceInput.value);
     if (!Number.isFinite(balance)) {
       showInputError(balanceInput, "Balance must be a finite number");
-      return [];
+      return null;
     }
     overrides.push({ date: Timestamp.fromMillis(dateMs), balance });
   }
@@ -303,8 +303,10 @@ export function hydrateOverridesTable(container: HTMLElement): void {
 
     try {
       const overrides = collectOverridesForBudget(container, budgetId);
-      await getActiveDataSource().updateBudgetOverrides(budgetId, overrides);
-      target.defaultValue = target.value;
+      if (overrides) {
+        await getActiveDataSource().updateBudgetOverrides(budgetId, overrides);
+        target.defaultValue = target.value;
+      }
     } catch (error) {
       handleSaveError(target, error, "override");
     }
@@ -322,7 +324,7 @@ export function hydrateOverridesTable(container: HTMLElement): void {
       row.remove();
       try {
         const overrides = collectOverridesForBudget(container, budgetId);
-        await getActiveDataSource().updateBudgetOverrides(budgetId, overrides);
+        if (overrides) await getActiveDataSource().updateBudgetOverrides(budgetId, overrides);
       } catch (error) {
         handleSaveError(target, error, "override");
       }
@@ -369,7 +371,7 @@ export function hydrateOverridesTable(container: HTMLElement): void {
       // Save immediately
       try {
         const overrides = collectOverridesForBudget(container, firstBudget.id);
-        await getActiveDataSource().updateBudgetOverrides(firstBudget.id as BudgetId, overrides);
+        if (overrides) await getActiveDataSource().updateBudgetOverrides(firstBudget.id as BudgetId, overrides);
       } catch (error) {
         handleSaveError(target, error, "override");
       }

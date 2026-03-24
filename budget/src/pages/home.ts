@@ -166,7 +166,6 @@ function resolveBudgetName(budgetId: string | null, budgetIdToName: Map<string, 
   return name;
 }
 
-
 function serializeChartTransactions(transactions: Transaction[], budgetIdToName: Map<string, string>): SerializedChartTransaction[] {
   return transactions
     .filter(t => t.normalizedId === null || t.normalizedPrimary)

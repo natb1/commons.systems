@@ -3,6 +3,7 @@ import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./re
 import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetDiffs, computePerBudgetTrend, computePerBudgetAverageSpending, weeklyEquivalent, type BudgetDiff, type PerBudgetPoint, type PerBudgetAverage } from "../balance.js";
 import { formatCurrency } from "../format.js";
+import { toISODate } from "./hydrate-util.js";
 
 const rolloverOptions: { value: Rollover; label: string }[] = [
   { value: "none", label: "None" },
@@ -169,12 +170,6 @@ function renderChartContainer(
     </div>`;
 }
 
-function formatDate(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 function renderOverrideRow(
   budgetId: string,
@@ -184,7 +179,7 @@ function renderOverrideRow(
   editable: boolean,
 ): string {
   const dis = editable ? "" : " disabled";
-  const dateStr = formatDate(override.date.toDate());
+  const dateStr = toISODate(override.date.toMillis());
   return `<div class="override-row" data-budget-id="${escapeHtml(budgetId)}" data-override-index="${index}">
     <span>${escapeHtml(budgetName)}</span>
     <span><input type="date" class="edit-override-date" value="${escapeHtml(dateStr)}" aria-label="Override date"${dis}></span>
@@ -251,6 +246,8 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
       overridesHtml = renderOverridesTable(budgets, authorized);
     }
   } catch (error) {
+    chartHtml = "";
+    overridesHtml = "";
     tableHtml = renderLoadError(error, "budgets-error");
   }
 

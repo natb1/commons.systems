@@ -1271,7 +1271,7 @@ func deriveMonthlyStatements(parsed []parsedFile) []store.StatementData {
 			continue
 		}
 		pf := pfs[0]
-		// Must have a balance and balance date
+		// Skip accounts with zero balance or missing balance date
 		if pf.result.Balance == 0 || pf.result.BalanceDate.IsZero() {
 			continue
 		}

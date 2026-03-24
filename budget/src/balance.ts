@@ -133,7 +133,7 @@ export function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): B
     .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
 }
 
-/** Return the latest override with date <= beforeMs, or null. Assumes overrides are sorted by date ascending. */
+/** Return the override with the greatest date <= beforeMs, or null. Requires overrides sorted by date ascending. */
 export function findLatestOverride(overrides: BudgetOverride[], beforeMs: number): BudgetOverride | null {
   let result: BudgetOverride | null = null;
   for (const o of overrides) {
@@ -540,7 +540,7 @@ export function computePerBudgetAverageSpending(
       result.set(budget.id, { avg12: 0, avg52: 0 });
       continue;
     }
-    // Calendar-week window: include weeks within N weeks of the global latest completed week
+    // Calendar-week window: include completed weeks within N weeks of the latest (excluded) week
     const trailing12 = completed.filter(([ms]) => latestWeekMs - ms <= window12Ms);
     const trailing52 = completed.filter(([ms]) => latestWeekMs - ms <= window52Ms);
     const avg12 = trailing12.length === 0 ? 0
