@@ -160,6 +160,34 @@ func TestMatch(t *testing.T) {
 			t.Error("expected no match for partial prefix without colon separator")
 		}
 	})
+
+	t.Run("excludeCategory exact match rejects", func(t *testing.T) {
+		r := Rule{Pattern: "", ExcludeCategory: "Transfer"}
+		if r.Match("anything", "", "", "Transfer", 0) {
+			t.Error("expected no match for exact excludeCategory")
+		}
+	})
+
+	t.Run("excludeCategory prefix+colon rejects", func(t *testing.T) {
+		r := Rule{Pattern: "", ExcludeCategory: "Transfer"}
+		if r.Match("anything", "", "", "Transfer:CardPayment", 0) {
+			t.Error("expected no match for excludeCategory prefix with colon")
+		}
+	})
+
+	t.Run("excludeCategory non-matching passes", func(t *testing.T) {
+		r := Rule{Pattern: "", ExcludeCategory: "Transfer"}
+		if !r.Match("anything", "", "", "Food:Coffee", 0) {
+			t.Error("expected match when category doesn't match excludeCategory")
+		}
+	})
+
+	t.Run("excludeCategory partial prefix does not reject", func(t *testing.T) {
+		r := Rule{Pattern: "", ExcludeCategory: "Transfer"}
+		if !r.Match("anything", "", "", "TransferWise", 0) {
+			t.Error("expected match for partial prefix without colon separator")
+		}
+	})
 }
 
 func TestApplyCategorization(t *testing.T) {

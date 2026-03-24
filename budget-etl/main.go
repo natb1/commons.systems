@@ -443,7 +443,10 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	txnRules, generalExportRules := splitRules(inp.Rules)
 
 	// Convert general export rules to rules.Rule
-	ruleSet := convertExportRules(generalExportRules)
+	ruleSet, err := convertExportRules(generalExportRules)
+	if err != nil {
+		return err
+	}
 
 	// Convert transactions to store.TransactionData for categorization/budget assignment.
 	// Skip virtual transactions — they are regenerated fresh each run.
@@ -564,7 +567,7 @@ func splitRules(exportRules []export.Rule) (txnRules, general []export.Rule) {
 }
 
 // convertExportRules converts export.Rule to rules.Rule for the rules engine.
-func convertExportRules(exportRules []export.Rule) []rules.Rule {
+func convertExportRules(exportRules []export.Rule) ([]rules.Rule, error) {
 	ruleSet := make([]rules.Rule, len(exportRules))
 	for i, r := range exportRules {
 		ruleSet[i] = rules.Rule{
@@ -581,8 +584,11 @@ func convertExportRules(exportRules []export.Rule) []rules.Rule {
 		}
 		ruleSet[i].MinAmount = dollarsToOptionalCents(r.MinAmount)
 		ruleSet[i].MaxAmount = dollarsToOptionalCents(r.MaxAmount)
+		if ruleSet[i].MinAmount != nil && ruleSet[i].MaxAmount != nil && *ruleSet[i].MinAmount > *ruleSet[i].MaxAmount {
+			return nil, fmt.Errorf("rule %s: minAmount (%d) > maxAmount (%d)", r.ID, *ruleSet[i].MinAmount, *ruleSet[i].MaxAmount)
+		}
 	}
-	return ruleSet
+	return ruleSet, nil
 }
 
 // applyTransactionRules pre-populates Category/Budget on transactions that have
@@ -938,7 +944,10 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 
 	// Split rules and apply
 	txnRules, generalExportRules := splitRules(inp.Rules)
-	ruleSet := convertExportRules(generalExportRules)
+	ruleSet, err := convertExportRules(generalExportRules)
+	if err != nil {
+		return err
+	}
 
 	if err := applyTransactionRules(allTxns, allDocIDs, txnRules); err != nil {
 		return err
@@ -1313,6 +1322,7 @@ func deriveMonthlyStatements(parsed []parsedFile) []store.StatementData {
 				}
 			}
 
+			// Addition is correct: txnSum is positive for spending that reduced the balance, so adding it back recovers the earlier (higher) balance.
 			derivedBalance := pf.result.Balance + txnSum
 
 			period := m.Format("2006-01")

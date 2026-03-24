@@ -82,7 +82,10 @@ func TestConvertExportRules(t *testing.T) {
 		},
 	}
 
-	result := convertExportRules(input)
+	result, err := convertExportRules(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if len(result) != 2 {
 		t.Fatalf("expected 2 rules, got %d", len(result))
@@ -138,7 +141,10 @@ func TestConvertExportRules(t *testing.T) {
 }
 
 func TestConvertExportRulesEmpty(t *testing.T) {
-	result := convertExportRules(nil)
+	result, err := convertExportRules(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(result) != 0 {
 		t.Errorf("expected empty result for nil input, got %d", len(result))
 	}

@@ -1,12 +1,12 @@
 import type { Timestamp } from "firebase/firestore";
 import type { AllowancePeriod, Budget, BudgetId, BudgetOverride, BudgetPeriod, Rollover, Statement, Transaction, TransactionId, WeeklyAggregate } from "./firestore.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
-/** Allowance minus average weekly spending. Positive = surplus, negative = deficit. Units: dollars/week. */
+/** Allowance minus average weekly spending (averaged over available weeks in each window). Positive = surplus, negative = deficit. */
 export interface BudgetDiff {
   readonly diff12: number;
   readonly diff52: number;
 }
-import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 export const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 export const UNBUDGETED_SERIES = "Other";
@@ -110,6 +110,9 @@ export function periodAllowance(
       return allowance;
     }
     return 0;
+  }
+  if (allowancePeriod !== "monthly") {
+    throw new DataIntegrityError(`Unrecognized allowancePeriod: ${allowancePeriod}`);
   }
   if (prevPeriodStartMs === null) return allowance;
   const prev = new Date(prevPeriodStartMs);

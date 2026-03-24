@@ -60,15 +60,7 @@ export function renderCashFlowChart(container: HTMLElement, options: CashFlowCha
 
   let yMax = 0;
   let yMin = 0;
-  for (const d of lineData) {
-    yMax = Math.max(yMax, d.value);
-    yMin = Math.min(yMin, d.value);
-  }
-  for (const d of avg12Data) {
-    yMax = Math.max(yMax, d.value);
-    yMin = Math.min(yMin, d.value);
-  }
-  for (const d of avg52Data) {
+  for (const d of [...lineData, ...avg12Data, ...avg52Data]) {
     yMax = Math.max(yMax, d.value);
     yMin = Math.min(yMin, d.value);
   }

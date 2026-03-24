@@ -2,7 +2,7 @@ import { Timestamp } from "firebase/firestore";
 import { type Budget, type BudgetId, type BudgetOverride, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, makeDebounced } from "./hydrate-util.js";
+import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, makeDebounced, toISODate } from "./hydrate-util.js";
 import { renderBudgetChart } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
@@ -321,11 +321,15 @@ export function hydrateOverridesTable(container: HTMLElement): void {
       if (!(row instanceof HTMLElement)) return;
       const budgetId = row.dataset.budgetId as BudgetId | undefined;
       if (!budgetId) return;
-      row.remove();
+      const addBtn = container.querySelector("#add-override");
+      row.style.opacity = "0.5";
       try {
+        row.remove();
         const overrides = collectOverridesForBudget(container, budgetId);
         if (overrides) await getActiveDataSource().updateBudgetOverrides(budgetId, overrides);
       } catch (error) {
+        if (!row.parentElement && addBtn) addBtn.before(row);
+        row.style.opacity = "";
         handleSaveError(target, error, "override");
       }
       return;
@@ -339,8 +343,7 @@ export function hydrateOverridesTable(container: HTMLElement): void {
       if (budgets.length === 0) return;
 
       const firstBudget = budgets[0];
-      const today = new Date();
-      const dateStr = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
+      const dateStr = toISODate(Date.now());
 
       const newRow = document.createElement("div");
       newRow.className = "override-row";
@@ -363,8 +366,20 @@ export function hydrateOverridesTable(container: HTMLElement): void {
       // Wire budget select change
       const select = newRow.querySelector<HTMLSelectElement>(".edit-override-budget");
       if (select) {
-        select.addEventListener("change", () => {
+        select.addEventListener("change", async () => {
+          const oldBudgetId = newRow.dataset.budgetId as BudgetId | undefined;
           newRow.dataset.budgetId = select.value;
+          try {
+            const newBudgetId = select.value as BudgetId;
+            const newOverrides = collectOverridesForBudget(container, newBudgetId);
+            if (newOverrides) await getActiveDataSource().updateBudgetOverrides(newBudgetId, newOverrides);
+            if (oldBudgetId && oldBudgetId !== newBudgetId) {
+              const oldOverrides = collectOverridesForBudget(container, oldBudgetId);
+              if (oldOverrides) await getActiveDataSource().updateBudgetOverrides(oldBudgetId, oldOverrides);
+            }
+          } catch (error) {
+            handleSaveError(select, error, "override");
+          }
         });
       }
 

@@ -243,10 +243,18 @@ export function parseUploadedJson(text: string): ParsedUpload {
     allowance: b.allowance ?? 0,
     allowancePeriod: requireAllowancePeriod(b.allowancePeriod),
     rollover: requireRollover(b.rollover ?? "none"),
-    overrides: (b.overrides ?? []).map(o => ({
-      date: parseTimestamp(o.date, "budget.overrides.date"),
-      balance: o.balance,
-    })),
+    overrides: ((rawOverrides: Array<{date: string; balance: number}>) => {
+      const parsed = rawOverrides.map(o => ({
+        date: parseTimestamp(o.date, "budget.overrides.date"),
+        balance: o.balance,
+      }));
+      for (let j = 1; j < parsed.length; j++) {
+        if (parsed[j].date.toMillis() <= parsed[j - 1].date.toMillis()) {
+          throw new UploadValidationError(`budget[${i}].overrides not sorted by date ascending at index ${j}`);
+        }
+      }
+      return parsed;
+    })(b.overrides ?? []),
     groupId: null as GroupId | null,
   }));
 
