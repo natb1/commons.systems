@@ -109,4 +109,31 @@ describe("home page infinite scroll smoke", () => {
     }));
     expect(html).toContain('data-budget-name="Groceries"');
   });
+
+  it("serializeChartTransactions produces valid SerializedChartTransaction objects", async () => {
+    const { serializeChartTransactions } = await import("../../src/pages/home");
+    const budgetIdToName = new Map([["b1", "Groceries"]]);
+    const result = serializeChartTransactions(
+      [txn({ id: "t1" as any, budget: "b1" as any, category: "Food", amount: 50, reimbursement: 0 })],
+      budgetIdToName,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      category: "Food",
+      amount: 50,
+      reimbursement: 0,
+      timestampMs: expect.any(Number),
+      budgetName: "Groceries",
+    });
+  });
+
+  it("serializeChartTransactions maps null budget to null budgetName", async () => {
+    const { serializeChartTransactions } = await import("../../src/pages/home");
+    const result = serializeChartTransactions(
+      [txn({ id: "t2" as any, budget: null })],
+      new Map(),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].budgetName).toBeNull();
+  });
 });
