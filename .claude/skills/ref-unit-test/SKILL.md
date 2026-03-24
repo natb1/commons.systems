@@ -2,7 +2,6 @@
 name: ref-unit-test
 description: Forked unit test loop — runs Step 4 in isolated context
 context: fork
-allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # Unit Test Loop (Forked)
