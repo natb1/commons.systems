@@ -18,7 +18,13 @@ if [ -z "$COMMAND" ]; then
 fi
 
 approve() {
-  jq -n '{"decision": "approve", "reason": "auto-approved by workflow hook"}'
+  jq -n '{
+    "hookSpecificOutput": {
+      "hookEventName": "PreToolUse",
+      "permissionDecision": "allow",
+      "permissionDecisionReason": "auto-approved by workflow hook"
+    }
+  }'
   exit 0
 }
 
