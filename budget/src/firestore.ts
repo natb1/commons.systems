@@ -511,7 +511,6 @@ export async function updateRule(
   if (Object.keys(fields).length === 0) return;
   if (fields.type !== undefined) requireRuleType(fields.type);
   if (fields.priority !== undefined && !Number.isFinite(fields.priority)) throw new RangeError("Rule priority must be a finite number");
-  if (fields.pattern !== undefined && !fields.pattern) throw new Error("Rule pattern cannot be empty");
   if (fields.target !== undefined && !fields.target) throw new Error("Rule target cannot be empty");
   const path = nsCollectionPath(NAMESPACE, "rules");
   const ref = doc(db, path, ruleId);

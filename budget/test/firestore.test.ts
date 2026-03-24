@@ -1136,10 +1136,6 @@ describe("updateRule", () => {
     expect(mockUpdateDoc).not.toHaveBeenCalled();
   });
 
-  it("rejects empty pattern", async () => {
-    await expect(updateRule("rule-1", { pattern: "" })).rejects.toThrow("pattern cannot be empty");
-  });
-
   it("rejects empty target", async () => {
     await expect(updateRule("rule-1", { target: "" })).rejects.toThrow("target cannot be empty");
   });

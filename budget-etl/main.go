@@ -299,6 +299,7 @@ type virtualSynchronyResult struct {
 // Filter criteria: institution=pnc, account=5111, category=Transfer:CardPayment,
 // description contains "SYNCHRONY" (case-insensitive).
 // Output: category=Pet:Veterinarian, budget=pet.
+// These values match the current PNC/Synchrony account setup; update if account details change.
 func generateVirtualSynchrony(
 	allTxns []store.TransactionData,
 	txnDocIDs []string,

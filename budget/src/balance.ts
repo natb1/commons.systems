@@ -93,6 +93,7 @@ export function applyRollover(running: number, allowance: number, rollover: Roll
  * Quarterly: returns the full allowance when the period crosses a UTC quarter boundary
  * (different quarter from the previous period), 0 otherwise.
  * The first period (no previous) always gets the full allowance.
+ * Unrecognized allowancePeriod values throw DataIntegrityError.
  */
 export function periodAllowance(
   allowance: number,
@@ -128,6 +129,14 @@ export function weeklyEquivalent(allowance: number, allowancePeriod: AllowancePe
   if (allowancePeriod === "weekly") return allowance;
   if (allowancePeriod === "monthly") return allowance * 12 / 52;
   if (allowancePeriod === "quarterly") return allowance * 4 / 52;
+  throw new DataIntegrityError(`Unrecognized allowancePeriod: ${allowancePeriod}`);
+}
+
+/** Convert a weekly amount to the budget's native period scale (inverse of weeklyEquivalent). */
+export function periodEquivalent(weeklyAmount: number, allowancePeriod: AllowancePeriod): number {
+  if (allowancePeriod === "weekly") return weeklyAmount;
+  if (allowancePeriod === "monthly") return weeklyAmount * 52 / 12;
+  if (allowancePeriod === "quarterly") return weeklyAmount * 52 / 4;
   throw new DataIntegrityError(`Unrecognized allowancePeriod: ${allowancePeriod}`);
 }
 
@@ -521,41 +530,6 @@ export interface PerBudgetAverage {
   readonly avg52: number;
 }
 
-/** Compute per-budget average weekly spending over trailing 12-week and 52-week windows. */
-export function computePerBudgetAverageSpending(
-  budgets: Budget[],
-  periods: BudgetPeriod[],
-): Map<BudgetId, PerBudgetAverage> {
-  // Determine the global latest completed week across all budgets
-  const { weeks: allWeeks } = indexPeriodsByWeek(periods);
-  const latestWeekMs = allWeeks.length > 0 ? allWeeks[allWeeks.length - 1][0] : undefined;
-
-  const window12Ms = 12 * MS_PER_WEEK;
-  const window52Ms = 52 * MS_PER_WEEK;
-
-  const result = new Map<BudgetId, PerBudgetAverage>();
-  for (const budget of budgets) {
-    const budgetPeriods = periodsForBudget(periods, budget.id);
-    const { weeks, weeklySpending } = indexPeriodsByWeek(budgetPeriods);
-    const completed = latestWeekMs !== undefined
-      ? weeks.filter(([ms]) => ms !== latestWeekMs)
-      : weeks;
-    if (completed.length === 0 || latestWeekMs === undefined) {
-      result.set(budget.id, { avg12: 0, avg52: 0 });
-      continue;
-    }
-    // Calendar-week window: include completed weeks within N weeks of the latest (excluded) week
-    const trailing12 = completed.filter(([ms]) => latestWeekMs - ms <= window12Ms);
-    const trailing52 = completed.filter(([ms]) => latestWeekMs - ms <= window52Ms);
-    const avg12 = trailing12.length === 0 ? 0
-      : trailing12.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / 12;
-    const avg52 = trailing52.length === 0 ? 0
-      : trailing52.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / 52;
-    result.set(budget.id, { avg12, avg52 });
-  }
-  return result;
-}
-
 /**
  * Compute average weekly credits over the trailing CREDIT_WEEKS-week window ending at the
  * latest aggregate's weekStart (exclusive), excluding the latest incomplete week.
@@ -932,39 +906,16 @@ export function computeNetWorth(
   return { points, divergences };
 }
 
-/** Compute average weekly spending for a single budget over the trailing `weekCount`
- * data-bearing weeks (excluding the latest potentially-incomplete week). Divides by
- * `weekCount` (fixed window), not the number of data-bearing weeks. */
-export function computePerBudgetAvgSpending(periods: BudgetPeriod[], budgetId: BudgetId, weekCount: number): number {
-  // Determine global latest week from all periods (not just this budget's)
-  const allWeekMs = new Set<number>();
-  for (const p of periods) {
-    allWeekMs.add(toSundayEntry(p.periodStart.toDate()).ms);
-  }
-  if (allWeekMs.size === 0) return 0;
-  const latestWeekMs = Math.max(...allWeekMs);
-
-  const budgetPeriods = periods.filter(p => p.budgetId === budgetId);
-  if (budgetPeriods.length === 0) return 0;
-
-  const weeklySpending = new Map<number, number>();
-  for (const p of budgetPeriods) {
-    const entry = toSundayEntry(p.periodStart.toDate());
-    weeklySpending.set(entry.ms, (weeklySpending.get(entry.ms) ?? 0) + p.total);
-  }
-
-  const weeks = [...weeklySpending.entries()]
-    .filter(([ms]) => ms !== latestWeekMs)
-    .sort((a, b) => a[0] - b[0]);
-  const trailing = weeks.slice(-weekCount);
-  if (trailing.length === 0) return 0;
-
-  const sum = trailing.reduce((acc, [, total]) => acc + total, 0);
-  return sum / weekCount;
+/** Combined per-budget stats: diffs (allowance minus spending) and averages. */
+export interface PerBudgetStats {
+  readonly diff: BudgetDiff;
+  readonly avg: PerBudgetAverage;
 }
 
-/** Compute allowance-minus-spending diffs for each budget over 12 and 52 week windows. */
-export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): Map<BudgetId, BudgetDiff> {
+/** Compute per-budget diffs and averages over 12 and 52 week trailing windows.
+ * Combines what were previously two separate passes (computeBudgetDiffs + computePerBudgetAverageSpending)
+ * into a single traversal. */
+export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): Map<BudgetId, PerBudgetStats> {
   // Determine global latest week across all budgets (to exclude incomplete week).
   const allWeekMs = new Set<number>();
   for (const p of periods) {
@@ -980,7 +931,7 @@ export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): 
     else periodsByBudget.set(p.budgetId, [p]);
   }
 
-  const result = new Map<BudgetId, BudgetDiff>();
+  const result = new Map<BudgetId, PerBudgetStats>();
   for (const budget of budgets) {
     const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
     const weeklyAllow = weeklyEquivalent(budget.allowance, budget.allowancePeriod);
@@ -991,19 +942,24 @@ export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): 
       const entry = toSundayEntry(p.periodStart.toDate());
       weeklySpending.set(entry.ms, (weeklySpending.get(entry.ms) ?? 0) + p.total);
     }
-    const weeks = [...weeklySpending.entries()]
+    const completed = [...weeklySpending.entries()]
       .filter(([ms]) => latestWeekMs === undefined || ms !== latestWeekMs)
       .sort((a, b) => a[0] - b[0]);
 
     function trailingAvg(weekCount: number): number {
-      const trailing = weeks.slice(-weekCount);
+      if (completed.length === 0 || latestWeekMs === undefined) return 0;
+      const windowMs = weekCount * MS_PER_WEEK;
+      const trailing = completed.filter(([ms]) => latestWeekMs - ms <= windowMs);
       if (trailing.length === 0) return 0;
       return trailing.reduce((acc, [, total]) => acc + total, 0) / weekCount;
     }
 
+    const avg12 = trailingAvg(12);
+    const avg52 = trailingAvg(52);
+
     result.set(budget.id, {
-      diff12: weeklyAllow - trailingAvg(12),
-      diff52: weeklyAllow - trailingAvg(52),
+      diff: { diff12: weeklyAllow - avg12, diff52: weeklyAllow - avg52 },
+      avg: { avg12, avg52 },
     });
   }
   return result;

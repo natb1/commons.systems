@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computePerBudgetAverageSpending, computeNetWorth, computeCashFlow, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent, computePerBudgetAvgSpending, computeBudgetDiffs } from "../src/balance";
-import type { BudgetDiff } from "../src/balance";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetDiffs } from "../src/balance";
+import type { BudgetDiff, PerBudgetStats } from "../src/balance";
 import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
@@ -1738,71 +1738,17 @@ describe("weekStart", () => {
   });
 });
 
-describe("computePerBudgetAvgSpending", () => {
-  it("returns 0 for empty periods array", () => {
-    expect(computePerBudgetAvgSpending([], "food", 12)).toBe(0);
-  });
-
-  it("returns 0 for unmatched budgetId", () => {
-    const periods = [
-      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-12"), periodEnd: ts("2025-01-19"), total: 100 }),
-    ];
-    // Only one week total → it's the latest and gets excluded → no data for housing
-    expect(computePerBudgetAvgSpending(periods, "housing", 12)).toBe(0);
-  });
-
-  it("excludes latest week and divides by weekCount", () => {
-    // Three periods on three different Sundays
-    // 2025-01-05, 2025-01-12, 2025-01-19 — latest (Jan 19) excluded
-    const periods = [
-      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-05"), periodEnd: ts("2025-01-12"), total: 90 }),
-      makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-12"), periodEnd: ts("2025-01-19"), total: 120 }),
-      makePeriod({ id: "food-w3", budgetId: "food", periodStart: ts("2025-01-19"), periodEnd: ts("2025-01-26"), total: 150 }),
-    ];
-    // Requesting trailing 2 weeks: completed weeks = [Jan 5 (90), Jan 12 (120)], last 2 = both
-    // sum = 210, divide by weekCount=2 → 105
-    expect(computePerBudgetAvgSpending(periods, "food", 2)).toBe(105);
-  });
-
-  it("sums multiple periods in the same week before averaging", () => {
-    // Two periods mapping to the same Sunday week (Jan 5), plus a second week to avoid
-    // having only one week (which would be excluded as latest).
-    const periods = [
-      makePeriod({ id: "food-a", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 40 }),
-      makePeriod({ id: "food-b", budgetId: "food", periodStart: ts("2025-01-08"), periodEnd: ts("2025-01-13"), total: 60 }),
-      makePeriod({ id: "food-c", budgetId: "food", periodStart: ts("2025-01-12"), periodEnd: ts("2025-01-19"), total: 10 }),
-    ];
-    // Latest week is Jan 12 (excluded). Completed: Jan 5 (40+60=100). sum=100, weekCount=12 → 100/12
-    expect(computePerBudgetAvgSpending(periods, "food", 12)).toBeCloseTo(100 / 12);
-  });
-
-  it("divides by weekCount even when fewer data-bearing weeks exist", () => {
-    const periods = [
-      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-05"), periodEnd: ts("2025-01-12"), total: 80 }),
-      makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-12"), periodEnd: ts("2025-01-19"), total: 120 }),
-    ];
-    // Latest week Jan 12 excluded. Completed: Jan 5 (80). sum=80, weekCount=52 → 80/52
-    expect(computePerBudgetAvgSpending(periods, "food", 52)).toBeCloseTo(80 / 52);
-  });
-
-  it("returns 0 when only one week exists (latest excluded)", () => {
-    const periods = [
-      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-05"), periodEnd: ts("2025-01-12"), total: 100 }),
-    ];
-    // Only one week → it's the latest → excluded → 0
-    expect(computePerBudgetAvgSpending(periods, "food", 12)).toBe(0);
-  });
-});
-
 describe("computeBudgetDiffs", () => {
-  it("returns full allowance as diff when no periods exist", () => {
+  it("returns full allowance as diff and zero averages when no periods exist", () => {
     const budgets = [
       makeBudget({ id: "food", allowance: 150 }),
       makeBudget({ id: "housing", name: "Housing", allowance: 400 }),
     ];
     const result = computeBudgetDiffs(budgets, []);
-    expect(result.get("food")).toEqual({ diff12: 150, diff52: 150 } satisfies BudgetDiff);
-    expect(result.get("housing")).toEqual({ diff12: 400, diff52: 400 } satisfies BudgetDiff);
+    expect(result.get("food")!.diff).toEqual({ diff12: 150, diff52: 150 } satisfies BudgetDiff);
+    expect(result.get("food")!.avg).toEqual({ avg12: 0, avg52: 0 });
+    expect(result.get("housing")!.diff).toEqual({ diff12: 400, diff52: 400 } satisfies BudgetDiff);
+    expect(result.get("housing")!.avg).toEqual({ avg12: 0, avg52: 0 });
   });
 
   it("excludes latest week and divides by weekCount for multiple budgets", () => {
@@ -1811,7 +1757,7 @@ describe("computeBudgetDiffs", () => {
       makeBudget({ id: "fun", name: "Fun", allowance: 100 }),
     ];
 
-    // 15 weeks: latest (week 14) excluded → 14 completed weeks (0-13)
+    // 15 weeks: latest (week 14) excluded -> 14 completed weeks (0-13)
     // Weeks 0-11: food=200/week, fun=50/week
     // Weeks 12-13: food=100/week, fun=150/week
     const periods: BudgetPeriod[] = [];
@@ -1830,19 +1776,21 @@ describe("computeBudgetDiffs", () => {
 
     // food: 14 completed weeks. Last 12 = weeks 2-13 = 10*200 + 2*100 = 2200, avg = 2200/12
     // 52-week trailing: all 14 completed = 12*200+2*100 = 2600, avg = 2600/52
-    const foodDiff = result.get("food")!;
-    expect(foodDiff.diff12).toBeCloseTo(150 - 2200 / 12, 5);
-    expect(foodDiff.diff52).toBeCloseTo(150 - 2600 / 52, 5);
+    const foodStats = result.get("food")!;
+    expect(foodStats.diff.diff12).toBeCloseTo(150 - 2200 / 12, 5);
+    expect(foodStats.diff.diff52).toBeCloseTo(150 - 2600 / 52, 5);
+    expect(foodStats.avg.avg12).toBeCloseTo(2200 / 12, 5);
+    expect(foodStats.avg.avg52).toBeCloseTo(2600 / 52, 5);
 
     // fun: Last 12 completed = weeks 2-13 = 10*50 + 2*150 = 800, avg = 800/12
     // 52-week trailing: all 14 completed = 12*50+2*150 = 900, avg = 900/52
-    const funDiff = result.get("fun")!;
-    expect(funDiff.diff12).toBeCloseTo(100 - 800 / 12, 5);
-    expect(funDiff.diff52).toBeCloseTo(100 - 900 / 52, 5);
+    const funStats = result.get("fun")!;
+    expect(funStats.diff.diff12).toBeCloseTo(100 - 800 / 12, 5);
+    expect(funStats.diff.diff52).toBeCloseTo(100 - 900 / 52, 5);
+    expect(funStats.avg.avg12).toBeCloseTo(800 / 12, 5);
+    expect(funStats.avg.avg52).toBeCloseTo(900 / 52, 5);
   });
-});
 
-describe("computePerBudgetAverageSpending", () => {
   it("returns avg12 and avg52 excluding the latest incomplete week", () => {
     const budget = makeBudget({ id: "food", name: "Food" });
     // 5 weekly periods: latest (Feb 3) is excluded as incomplete
@@ -1853,20 +1801,12 @@ describe("computePerBudgetAverageSpending", () => {
       makePeriod({ id: "p4", budgetId: "food", periodStart: ts("2025-01-27"), periodEnd: ts("2025-02-03"), total: 250 }),
       makePeriod({ id: "p5", budgetId: "food", periodStart: ts("2025-02-03"), periodEnd: ts("2025-02-10"), total: 999 }),
     ];
-    const result = computePerBudgetAverageSpending([budget], periods);
-    const avg = result.get("food")!;
+    const result = computeBudgetDiffs([budget], periods);
+    const avg = result.get("food")!.avg;
     // Completed weeks: Jan 6-Jan 27 (4 weeks, all within 12w of latest Feb 3)
     // avg12 = (100+200+150+250) / 12 = 700/12
     expect(avg.avg12).toBeCloseTo(700 / 12);
     expect(avg.avg52).toBeCloseTo(700 / 52);
-  });
-
-  it("returns zeros for a budget with no periods", () => {
-    const budget = makeBudget({ id: "empty", name: "Empty" });
-    const result = computePerBudgetAverageSpending([budget], []);
-    const avg = result.get("empty")!;
-    expect(avg.avg12).toBe(0);
-    expect(avg.avg52).toBe(0);
   });
 
   it("separates averages by budget, excluding the global latest week", () => {
@@ -1880,14 +1820,14 @@ describe("computePerBudgetAverageSpending", () => {
       makePeriod({ id: "n1", budgetId: "fun", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
       makePeriod({ id: "n2", budgetId: "fun", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 70 }),
     ];
-    const result = computePerBudgetAverageSpending(budgets, periods);
+    const result = computeBudgetDiffs(budgets, periods);
     // Global latest week is Jan 13; excluded from both budgets
     // Each has 1 completed week within 12w window, divided by 12
-    expect(result.get("food")!.avg12).toBeCloseTo(100 / 12);
-    expect(result.get("fun")!.avg12).toBeCloseTo(50 / 12);
+    expect(result.get("food")!.avg.avg12).toBeCloseTo(100 / 12);
+    expect(result.get("fun")!.avg.avg12).toBeCloseTo(50 / 12);
   });
 
-  it("sparse data: only includes weeks within calendar window (sparse divisor fix)", () => {
+  it("sparse data: only includes weeks within calendar window", () => {
     const budget = makeBudget({ id: "transport", name: "Transport" });
     // 3 periods spanning a large gap; latest (Aug 11) excluded, leaving Jan 6 and Aug 4
     // Jan 6 is ~30 weeks before Aug 11, so outside the 12w window but inside 52w
@@ -1896,20 +1836,17 @@ describe("computePerBudgetAverageSpending", () => {
       makePeriod({ id: "p2", budgetId: "transport", periodStart: ts("2025-08-04"), periodEnd: ts("2025-08-11"), total: 100 }),
       makePeriod({ id: "p3", budgetId: "transport", periodStart: ts("2025-08-11"), periodEnd: ts("2025-08-18"), total: 50 }),
     ];
-    const result = computePerBudgetAverageSpending([budget], periods);
-    const avg = result.get("transport")!;
-    // 12w: only Aug 4 (100) is within 12 calendar weeks of Aug 11 → 100/12
+    const result = computeBudgetDiffs([budget], periods);
+    const avg = result.get("transport")!.avg;
+    // 12w: only Aug 4 (100) is within 12 calendar weeks of Aug 11 -> 100/12
     expect(avg.avg12).toBeCloseTo(100 / 12);
-    // 52w: both Jan 6 (200) and Aug 4 (100) are within 52 weeks → 300/52
+    // 52w: both Jan 6 (200) and Aug 4 (100) are within 52 weeks -> 300/52
     expect(avg.avg52).toBeCloseTo(300 / 52);
   });
 
   it("12-week calendar window excludes old data from avg12 but not avg52", () => {
     const budget = makeBudget({ id: "food", name: "Food" });
-    // Create 15 weekly periods; latest (week 14) excluded → 14 completed weeks (0-13)
-    // 12w window from week 14: weeks where latestWeekMs - ms <= 12*MS_PER_WEEK
-    // Week 2 is exactly 12 weeks before week 14, included with <=
-    // Weeks 2-13 = 12 data-bearing weeks within window
+    // Create 15 weekly periods; latest (week 14) excluded -> 14 completed weeks (0-13)
     const periods: ReturnType<typeof makePeriod>[] = [];
     for (let i = 0; i < 15; i++) {
       const start = new Date(Date.UTC(2025, 0, 6 + i * 7));
@@ -1922,28 +1859,27 @@ describe("computePerBudgetAverageSpending", () => {
         total: i < 2 ? 1000 : 100, // first 2 weeks high, rest low
       }));
     }
-    const result = computePerBudgetAverageSpending([budget], periods);
-    const avg = result.get("food")!;
-    // 12w: weeks 2-13 (12 weeks × 100) / 12 = 1200/12
+    const result = computeBudgetDiffs([budget], periods);
+    const avg = result.get("food")!.avg;
+    // 12w: weeks 2-13 (12 weeks x 100) / 12 = 1200/12
     expect(avg.avg12).toBeCloseTo(1200 / 12);
-    // 52w: all 14 completed weeks → (2*1000 + 12*100) / 52 = 3200/52
+    // 52w: all 14 completed weeks -> (2*1000 + 12*100) / 52 = 3200/52
     expect(avg.avg52).toBeCloseTo(3200 / 52);
   });
 
   it("returns avg12=0 when all data is outside the 12-week window", () => {
     const budget = makeBudget({ id: "default", name: "Default" });
-    // Data from Jan, but latest week is in Aug — Jan data is >12 weeks old
+    // Data from Jan, but latest week is in Aug -- Jan data is >12 weeks old
     const periods = [
       makePeriod({ id: "p1", budgetId: "default", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 500 }),
-      // Need a second budget to push the global latest week far out
       makePeriod({ id: "p2", budgetId: "other", periodStart: ts("2025-08-04"), periodEnd: ts("2025-08-11"), total: 10 }),
     ];
     const budgets = [budget, makeBudget({ id: "other", name: "Other" })];
-    const result = computePerBudgetAverageSpending(budgets, periods);
-    const avg = result.get("default")!;
-    // Jan 6 is ~30 weeks before Aug 4 → outside 12w window
+    const result = computeBudgetDiffs(budgets, periods);
+    const avg = result.get("default")!.avg;
+    // Jan 6 is ~30 weeks before Aug 4 -> outside 12w window
     expect(avg.avg12).toBe(0);
-    // But within 52w window → 500/52
+    // But within 52w window -> 500/52
     expect(avg.avg52).toBeCloseTo(500 / 52);
   });
 });

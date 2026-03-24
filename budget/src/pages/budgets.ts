@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod } from "../firestore.js";
-import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetDiffs, computePerBudgetTrend, computePerBudgetAverageSpending, weeklyEquivalent, type BudgetDiff, type PerBudgetPoint, type PerBudgetAverage } from "../balance.js";
+import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetDiffs, computePerBudgetTrend, weeklyEquivalent, periodEquivalent, type PerBudgetPoint, type PerBudgetStats } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { toISODate } from "./hydrate-util.js";
 
@@ -39,20 +39,17 @@ function diffStyle(value: number): string {
   return value >= 0 ? 'style="color: #4caf50"' : 'style="color: var(--error, #c00)"';
 }
 
-function renderRow(budget: Budget, editable: boolean, diff: BudgetDiff | undefined, avg: PerBudgetAverage | undefined): string {
+function renderRow(budget: Budget, editable: boolean, stats: PerBudgetStats | undefined): string {
   const idAttr = editable ? ` data-budget-id="${escapeHtml(budget.id)}"` : "";
   const dis = editable ? "" : " disabled";
   const nameCell = `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name"${dis}>`;
   const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.allowance))}" min="0" aria-label="Allowance"${dis}>`;
   const periodCell = renderPeriodCell(budget, editable);
   const rolloverCell = renderRolloverCell(budget, editable);
-  const diff12 = diff ? `<span ${diffStyle(diff.diff12)}>${formatCurrency(diff.diff12)}</span>` : `<span></span>`;
-  const diff52 = diff ? `<span ${diffStyle(diff.diff52)}>${formatCurrency(diff.diff52)}</span>` : `<span></span>`;
-  const periodScale = budget.allowancePeriod === "monthly" ? 52 / 12
-    : budget.allowancePeriod === "quarterly" ? 52 / 4
-    : 1;
-  const avg12 = avg ? formatCurrency(avg.avg12 * periodScale) : "$0";
-  const avg52 = avg ? formatCurrency(avg.avg52 * periodScale) : "$0";
+  const diff12 = stats ? `<span ${diffStyle(stats.diff.diff12)}>${formatCurrency(stats.diff.diff12)}</span>` : `<span></span>`;
+  const diff52 = stats ? `<span ${diffStyle(stats.diff.diff52)}>${formatCurrency(stats.diff.diff52)}</span>` : `<span></span>`;
+  const avg12 = stats ? formatCurrency(periodEquivalent(stats.avg.avg12, budget.allowancePeriod)) : "$0";
+  const avg52 = stats ? formatCurrency(periodEquivalent(stats.avg.avg52, budget.allowancePeriod)) : "$0";
 
   return `<div class="budget-row"${idAttr}>
     <span>${nameCell}</span>
@@ -66,13 +63,13 @@ function renderRow(budget: Budget, editable: boolean, diff: BudgetDiff | undefin
   </div>`;
 }
 
-function renderBudgetTable(budgets: Budget[], authorized: boolean, diffs: Map<Budget["id"], BudgetDiff>, averages: Map<string, PerBudgetAverage>): string {
+function renderBudgetTable(budgets: Budget[], authorized: boolean, stats: Map<Budget["id"], PerBudgetStats>): string {
   if (budgets.length === 0) {
     return "<p>No budgets found.</p>";
   }
 
   const sorted = [...budgets].sort((a, b) => a.name.localeCompare(b.name));
-  const rows = sorted.map(b => renderRow(b, authorized, diffs.get(b.id), averages.get(b.id))).join("\n");
+  const rows = sorted.map(b => renderRow(b, authorized, stats.get(b.id))).join("\n");
 
   return `<div id="budgets-table">
       <div class="budget-header">
@@ -238,10 +235,9 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
     const averageWeeklySpending = computeAverageWeeklySpending(periods);
     const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
     const perBudgetTrend = computePerBudgetTrend(budgets, periods, weeklyAggregates);
-    const perBudgetAverages = computePerBudgetAverageSpending(budgets, periods);
     chartHtml = renderChartContainer(budgets, periods, metricsHtml, perBudgetTrend, averageWeeklyCredits);
-    const diffs = computeBudgetDiffs(budgets, periods);
-    tableHtml = renderBudgetTable(budgets, authorized, diffs, perBudgetAverages);
+    const budgetStats = computeBudgetDiffs(budgets, periods);
+    tableHtml = renderBudgetTable(budgets, authorized, budgetStats);
     if (budgets.length > 0) {
       overridesHtml = renderOverridesTable(budgets, authorized);
     }
