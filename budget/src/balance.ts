@@ -125,9 +125,10 @@ export function periodAllowance(
 
 /** Convert an allowance to its weekly equivalent for apples-to-apples comparison. */
 export function weeklyEquivalent(allowance: number, allowancePeriod: AllowancePeriod): number {
+  if (allowancePeriod === "weekly") return allowance;
   if (allowancePeriod === "monthly") return allowance * 12 / 52;
   if (allowancePeriod === "quarterly") return allowance * 4 / 52;
-  return allowance;
+  throw new DataIntegrityError(`Unrecognized allowancePeriod: ${allowancePeriod}`);
 }
 
 export function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
@@ -747,21 +748,24 @@ function isValidPeriod(period: string): boolean {
   return /^\d{4}-\d{2}$/.test(period);
 }
 
-/** Convert statement period "YYYY-MM" to first-of-month UTC timestamp (period start). */
-function periodToStartMs(period: string): number {
+/** Parse "YYYY-MM" into (year, 1-based month), or throw. */
+function parsePeriod(period: string): [number, number] {
   const [yearStr, monthStr] = period.split("-");
   const year = parseInt(yearStr, 10);
   const month = parseInt(monthStr, 10);
   if (isNaN(year) || isNaN(month)) throw new DataIntegrityError(`Invalid statement period: ${period}`);
+  return [year, month];
+}
+
+/** Convert statement period "YYYY-MM" to first-of-month UTC timestamp (period start). */
+function periodToStartMs(period: string): number {
+  const [year, month] = parsePeriod(period);
   return Date.UTC(year, month - 1, 1);
 }
 
 /** Convert statement period "YYYY-MM" to first-of-next-month UTC timestamp (anchor boundary). */
 function periodToAnchorMs(period: string): number {
-  const [yearStr, monthStr] = period.split("-");
-  const year = parseInt(yearStr, 10);
-  const month = parseInt(monthStr, 10);
-  if (isNaN(year) || isNaN(month)) throw new DataIntegrityError(`Invalid statement period: ${period}`);
+  const [year, month] = parsePeriod(period);
   // Anchor at first of next month: a "2025-01" statement covers through January,
   // so the boundary is Feb 1. Date.UTC month param is 0-based, so 1-based input works directly.
   return Date.UTC(year, month, 1);
@@ -928,8 +932,18 @@ export function computeNetWorth(
   return { points, divergences };
 }
 
-/** Compute average weekly spending for a single budget over the trailing `weekCount` weeks. */
+/** Compute average weekly spending for a single budget over the trailing `weekCount`
+ * data-bearing weeks (excluding the latest potentially-incomplete week). Divides by
+ * `weekCount` (fixed window), not the number of data-bearing weeks. */
 export function computePerBudgetAvgSpending(periods: BudgetPeriod[], budgetId: BudgetId, weekCount: number): number {
+  // Determine global latest week from all periods (not just this budget's)
+  const allWeekMs = new Set<number>();
+  for (const p of periods) {
+    allWeekMs.add(toSundayEntry(p.periodStart.toDate()).ms);
+  }
+  if (allWeekMs.size === 0) return 0;
+  const latestWeekMs = Math.max(...allWeekMs);
+
   const budgetPeriods = periods.filter(p => p.budgetId === budgetId);
   if (budgetPeriods.length === 0) return 0;
 
@@ -939,24 +953,57 @@ export function computePerBudgetAvgSpending(periods: BudgetPeriod[], budgetId: B
     weeklySpending.set(entry.ms, (weeklySpending.get(entry.ms) ?? 0) + p.total);
   }
 
-  const weeks = [...weeklySpending.entries()].sort((a, b) => a[0] - b[0]);
+  const weeks = [...weeklySpending.entries()]
+    .filter(([ms]) => ms !== latestWeekMs)
+    .sort((a, b) => a[0] - b[0]);
   const trailing = weeks.slice(-weekCount);
   if (trailing.length === 0) return 0;
 
   const sum = trailing.reduce((acc, [, total]) => acc + total, 0);
-  return sum / trailing.length;
+  return sum / weekCount;
 }
 
 /** Compute allowance-minus-spending diffs for each budget over 12 and 52 week windows. */
 export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): Map<BudgetId, BudgetDiff> {
+  // Determine global latest week across all budgets (to exclude incomplete week).
+  const allWeekMs = new Set<number>();
+  for (const p of periods) {
+    allWeekMs.add(toSundayEntry(p.periodStart.toDate()).ms);
+  }
+  const latestWeekMs = allWeekMs.size > 0 ? Math.max(...allWeekMs) : undefined;
+
+  // Pre-group periods by budgetId to avoid re-filtering per budget per window.
+  const periodsByBudget = new Map<BudgetId, BudgetPeriod[]>();
+  for (const p of periods) {
+    const existing = periodsByBudget.get(p.budgetId);
+    if (existing) existing.push(p);
+    else periodsByBudget.set(p.budgetId, [p]);
+  }
+
   const result = new Map<BudgetId, BudgetDiff>();
   for (const budget of budgets) {
+    const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
     const weeklyAllow = weeklyEquivalent(budget.allowance, budget.allowancePeriod);
-    const avg12 = computePerBudgetAvgSpending(periods, budget.id, 12);
-    const avg52 = computePerBudgetAvgSpending(periods, budget.id, 52);
+
+    // Build weekly spending map once, then compute both trailing windows.
+    const weeklySpending = new Map<number, number>();
+    for (const p of budgetPeriods) {
+      const entry = toSundayEntry(p.periodStart.toDate());
+      weeklySpending.set(entry.ms, (weeklySpending.get(entry.ms) ?? 0) + p.total);
+    }
+    const weeks = [...weeklySpending.entries()]
+      .filter(([ms]) => latestWeekMs === undefined || ms !== latestWeekMs)
+      .sort((a, b) => a[0] - b[0]);
+
+    function trailingAvg(weekCount: number): number {
+      const trailing = weeks.slice(-weekCount);
+      if (trailing.length === 0) return 0;
+      return trailing.reduce((acc, [, total]) => acc + total, 0) / weekCount;
+    }
+
     result.set(budget.id, {
-      diff12: weeklyAllow - avg12,
-      diff52: weeklyAllow - avg52,
+      diff12: weeklyAllow - trailingAvg(12),
+      diff52: weeklyAllow - trailingAvg(52),
     });
   }
   return result;

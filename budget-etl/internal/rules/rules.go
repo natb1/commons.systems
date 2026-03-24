@@ -126,7 +126,9 @@ func ApplyCategorization(txns []store.TransactionData, rules []Rule) error {
 
 // ApplyBudgetAssignment applies budget assignment rules to transactions.
 // Rules are matched in priority order (ascending); first match wins.
-// When a rule specifies a Category prefix, it only matches transactions whose category starts with that prefix (case-insensitive).
+// Matching checks pattern, institution, account, amount range (MinAmount/MaxAmount),
+// category prefix (Category), exact-or-colon category (MatchCategory), and
+// category exclusion (ExcludeCategory) — see Rule.Match for details.
 // Only transactions with an empty Budget field are assigned.
 // Unmatched transactions are left with an empty budget (no error).
 func ApplyBudgetAssignment(txns []store.TransactionData, rules []Rule) {

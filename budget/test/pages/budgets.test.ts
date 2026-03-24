@@ -302,6 +302,8 @@ describe("renderBudgets", () => {
   });
 
   it("diff cells show formatted currency", async () => {
+    // Two weeks needed: latest (w2) is excluded; w1 (total=100) is the completed data.
+    // allowance=150, avg12 = 100/12, diff12 = 150 - 100/12 ≈ 141.67
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
@@ -315,9 +317,19 @@ describe("renderBudgets", () => {
           categoryBreakdown: {},
           groupId: null,
         },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 50,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
       ]),
     }));
-    expect(html).toContain("$50.00");
+    expect(html).toContain("$141.67");
   });
 
   it("diff cells are spans not inputs", async () => {
@@ -334,10 +346,20 @@ describe("renderBudgets", () => {
           categoryBreakdown: {},
           groupId: null,
         },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 50,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
       ]),
     }));
-    expect(html).toMatch(/<span [^>]*>\$50\.00<\/span>/);
-    expect(html).not.toMatch(/<input[^>]*\$50\.00/);
+    expect(html).toMatch(/<span [^>]*>\$141\.67<\/span>/);
+    expect(html).not.toMatch(/<input[^>]*\$141\.67/);
   });
 
   it("surplus diff renders in green", async () => {
@@ -360,6 +382,7 @@ describe("renderBudgets", () => {
   });
 
   it("deficit diff renders in red", async () => {
+    // Two weeks: latest (w2) excluded. Completed w1 total=2400 → avg12=2400/12=200 > allowance=150 → deficit
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
@@ -368,7 +391,17 @@ describe("renderBudgets", () => {
           budgetId: "food",
           periodStart: Timestamp.fromDate(new Date("2025-01-06")),
           periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
-          total: 200,
+          total: 2400,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 50,
           count: 1,
           categoryBreakdown: {},
           groupId: null,

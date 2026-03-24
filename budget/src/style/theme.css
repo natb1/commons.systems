@@ -342,7 +342,7 @@
 @media (min-width: 768px) {
   #rules-table {
     display: grid;
-    grid-template-columns: 2fr 2fr 0.5fr 1fr 1fr 0.7fr 0.7fr 0.5fr;
+    grid-template-columns: 2fr 2fr 0.5fr 1fr 1fr 0.7fr 0.7fr 0.7fr 0.7fr 0.5fr;
     gap: 0 0.5rem;
     align-items: center;
   }
@@ -391,7 +391,7 @@
     grid-column: 3 / -1;
     grid-row: 1;
     display: grid;
-    grid-template-columns: 0.5fr 1fr 1fr 0.7fr 0.7fr 0.5fr;
+    grid-template-columns: 0.5fr 1fr 1fr 0.7fr 0.7fr 0.7fr 0.7fr 0.5fr;
     gap: 0 0.5rem;
     padding: 0;
     align-items: center;

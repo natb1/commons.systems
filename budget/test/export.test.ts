@@ -282,6 +282,24 @@ describe("exportToJson", () => {
     await expect(exportToJson()).rejects.toThrow("No local data to export. Upload a file first.");
   });
 
+  it("round-trip preserves budget overrides", async () => {
+    const original = mockGetAll.getMockImplementation()!;
+    mockGetAll.mockImplementation((storeName: string) =>
+      storeName === "budgets"
+        ? Promise.resolve([{
+            ...idbBudgets[0],
+            overrides: [{ dateMs: Date.parse("2025-06-10T00:00:00Z"), balance: 50 }],
+          }])
+        : original(storeName),
+    );
+    const json = await exportToJson();
+    const parsed = parseUploadedJson(json);
+    const data = toParsedData(parsed);
+    expect(data.budgets[0].overrides).toHaveLength(1);
+    expect(data.budgets[0].overrides[0].dateMs).toBe(Date.parse("2025-06-10T00:00:00Z"));
+    expect(data.budgets[0].overrides[0].balance).toBe(50);
+  });
+
   it("round-trip: export -> parseUploadedJson -> toParsedData produces equivalent IDB data", async () => {
     const json = await exportToJson();
     const parsed = parseUploadedJson(json);

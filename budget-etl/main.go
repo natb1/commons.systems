@@ -226,25 +226,9 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 	if err != nil {
 		return err
 	}
-	ruleSet := make([]rules.Rule, len(ruleDocs))
-	for i, rd := range ruleDocs {
-		ruleSet[i] = rules.Rule{
-			ID:              rd.ID,
-			Type:            rd.Type,
-			Pattern:         rd.Pattern,
-			Target:          rd.Target,
-			Priority:        rd.Priority,
-			Institution:     rd.Institution,
-			Account:         rd.Account,
-			ExcludeCategory: rd.ExcludeCategory,
-			MatchCategory:   rd.MatchCategory,
-			Category:        rd.Category,
-		}
-		ruleSet[i].MinAmount = dollarsToOptionalCents(rd.MinAmount)
-		ruleSet[i].MaxAmount = dollarsToOptionalCents(rd.MaxAmount)
-		if ruleSet[i].MinAmount != nil && ruleSet[i].MaxAmount != nil && *ruleSet[i].MinAmount > *ruleSet[i].MaxAmount {
-			return fmt.Errorf("rule %s: minAmount (%d) > maxAmount (%d)", rd.ID, *ruleSet[i].MinAmount, *ruleSet[i].MaxAmount)
-		}
+	ruleSet, err := convertRuleDocs(ruleDocs)
+	if err != nil {
+		return err
 	}
 
 	// Apply categorization rules (error if <100% coverage)
@@ -566,27 +550,55 @@ func splitRules(exportRules []export.Rule) (txnRules, general []export.Rule) {
 	return txnRules, general
 }
 
+// buildRule constructs a rules.Rule from common fields, converting dollar
+// amounts to cents and validating min/max bounds.
+func buildRule(id, typ, pattern, target string, priority int, institution, account, excludeCategory, matchCategory, category string, minAmountDollars, maxAmountDollars *float64) (rules.Rule, error) {
+	r := rules.Rule{
+		ID:              id,
+		Type:            typ,
+		Pattern:         pattern,
+		Target:          target,
+		Priority:        priority,
+		Institution:     institution,
+		Account:         account,
+		ExcludeCategory: excludeCategory,
+		MatchCategory:   matchCategory,
+		Category:        category,
+	}
+	r.MinAmount = dollarsToOptionalCents(minAmountDollars)
+	r.MaxAmount = dollarsToOptionalCents(maxAmountDollars)
+	if r.MinAmount != nil && r.MaxAmount != nil && *r.MinAmount > *r.MaxAmount {
+		return rules.Rule{}, fmt.Errorf("rule %s: minAmount (%d) > maxAmount (%d)", id, *r.MinAmount, *r.MaxAmount)
+	}
+	return r, nil
+}
+
+// convertRuleDocs converts store.RuleDoc (from Firestore) to rules.Rule.
+func convertRuleDocs(docs []store.RuleDoc) ([]rules.Rule, error) {
+	ruleSet := make([]rules.Rule, len(docs))
+	for i, rd := range docs {
+		r, err := buildRule(rd.ID, rd.Type, rd.Pattern, rd.Target, rd.Priority,
+			rd.Institution, rd.Account, rd.ExcludeCategory, rd.MatchCategory, rd.Category,
+			rd.MinAmount, rd.MaxAmount)
+		if err != nil {
+			return nil, err
+		}
+		ruleSet[i] = r
+	}
+	return ruleSet, nil
+}
+
 // convertExportRules converts export.Rule to rules.Rule for the rules engine.
 func convertExportRules(exportRules []export.Rule) ([]rules.Rule, error) {
 	ruleSet := make([]rules.Rule, len(exportRules))
 	for i, r := range exportRules {
-		ruleSet[i] = rules.Rule{
-			ID:              r.ID,
-			Type:            r.Type,
-			Pattern:         r.Pattern,
-			Target:          r.Target,
-			Priority:        r.Priority,
-			Institution:     r.Institution,
-			Account:         r.Account,
-			ExcludeCategory: r.ExcludeCategory,
-			MatchCategory:   r.MatchCategory,
-			Category:        r.Category,
+		built, err := buildRule(r.ID, r.Type, r.Pattern, r.Target, r.Priority,
+			r.Institution, r.Account, r.ExcludeCategory, r.MatchCategory, r.Category,
+			r.MinAmount, r.MaxAmount)
+		if err != nil {
+			return nil, err
 		}
-		ruleSet[i].MinAmount = dollarsToOptionalCents(r.MinAmount)
-		ruleSet[i].MaxAmount = dollarsToOptionalCents(r.MaxAmount)
-		if ruleSet[i].MinAmount != nil && ruleSet[i].MaxAmount != nil && *ruleSet[i].MinAmount > *ruleSet[i].MaxAmount {
-			return nil, fmt.Errorf("rule %s: minAmount (%d) > maxAmount (%d)", r.ID, *ruleSet[i].MinAmount, *ruleSet[i].MaxAmount)
-		}
+		ruleSet[i] = built
 	}
 	return ruleSet, nil
 }
