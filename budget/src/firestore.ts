@@ -17,7 +17,7 @@ export type { GroupId } from "@commons-systems/authutil/groups";
 
 /**
  * Budget rollover strategy:
- * - "none": balance resets to the weekly allowance each period (no carry-forward)
+ * - "none": balance resets to the allowance each period (no carry-forward)
  * - "debt": only negative balances carry to next period
  * - "balance": full balance (positive or negative) carries over
  */

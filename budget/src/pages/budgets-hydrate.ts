@@ -326,7 +326,12 @@ export function hydrateOverridesTable(container: HTMLElement): void {
       try {
         row.remove();
         const overrides = collectOverridesForBudget(container, budgetId);
-        if (overrides) await getActiveDataSource().updateBudgetOverrides(budgetId, overrides);
+        if (overrides) {
+          await getActiveDataSource().updateBudgetOverrides(budgetId, overrides);
+        } else {
+          if (!row.parentElement && addBtn) addBtn.before(row);
+          row.style.opacity = "";
+        }
       } catch (error) {
         if (!row.parentElement && addBtn) addBtn.before(row);
         row.style.opacity = "";

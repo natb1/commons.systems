@@ -211,9 +211,9 @@ func FormatTimestamp(t time.Time) string {
 }
 
 // ReadFile reads and unmarshals a JSON file into an Output struct.
-// If password is non-empty, the file is decrypted first. Encryption
-// state must match strictly: an encrypted file without a password, or
-// a plaintext file with a password, both return an error.
+// If password is non-empty and the file is encrypted, it is decrypted
+// first. An encrypted file without a password returns an error.
+// Plaintext files are accepted regardless of password.
 // Returns an error if the file is missing, contains invalid JSON, or
 // is missing required fields (version, groupName, transactions).
 func ReadFile(path, password string) (Output, error) {

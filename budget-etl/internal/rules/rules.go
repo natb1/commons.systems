@@ -43,6 +43,12 @@ func matchFields(pattern, ruleInstitution, ruleAccount, description, institution
 	return true
 }
 
+// categoryMatchesExact returns true if category equals prefix or has prefix+":"
+// as a path prefix (e.g. "Food" matches "Food" and "Food:Coffee" but not "FoodTruck").
+func categoryMatchesExact(category, prefix string) bool {
+	return category == prefix || strings.HasPrefix(category, prefix+":")
+}
+
 // Match returns true if the rule matches the given transaction fields.
 // Amount is in cents. Filters applied after pattern/institution/account matching:
 //   - MinAmount/MaxAmount: inclusive bounds on transaction amount
@@ -59,15 +65,11 @@ func (r Rule) Match(description, institution, account, category string, amount i
 	if r.MaxAmount != nil && amount > *r.MaxAmount {
 		return false
 	}
-	if r.ExcludeCategory != "" {
-		if category == r.ExcludeCategory || strings.HasPrefix(category, r.ExcludeCategory+":") {
-			return false
-		}
+	if r.ExcludeCategory != "" && categoryMatchesExact(category, r.ExcludeCategory) {
+		return false
 	}
-	if r.MatchCategory != "" {
-		if category != r.MatchCategory && !strings.HasPrefix(category, r.MatchCategory+":") {
-			return false
-		}
+	if r.MatchCategory != "" && !categoryMatchesExact(category, r.MatchCategory) {
+		return false
 	}
 	if r.Category != "" {
 		if !strings.HasPrefix(strings.ToLower(category), strings.ToLower(r.Category)) {

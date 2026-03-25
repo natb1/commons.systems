@@ -551,25 +551,13 @@ func splitRules(exportRules []export.Rule) (txnRules, general []export.Rule) {
 	return txnRules, general
 }
 
-// buildRule constructs a rules.Rule from common fields, converting dollar
-// amounts to cents and validating min/max bounds.
-func buildRule(id, typ, pattern, target string, priority int, institution, account, excludeCategory, matchCategory, category string, minAmountDollars, maxAmountDollars *float64) (rules.Rule, error) {
-	r := rules.Rule{
-		ID:              id,
-		Type:            typ,
-		Pattern:         pattern,
-		Target:          target,
-		Priority:        priority,
-		Institution:     institution,
-		Account:         account,
-		ExcludeCategory: excludeCategory,
-		MatchCategory:   matchCategory,
-		Category:        category,
-	}
+// buildRule converts dollar amounts to cents and validates min/max bounds.
+// All other fields are passed through unchanged on the input rule.
+func buildRule(r rules.Rule, minAmountDollars, maxAmountDollars *float64) (rules.Rule, error) {
 	r.MinAmount = dollarsToOptionalCents(minAmountDollars)
 	r.MaxAmount = dollarsToOptionalCents(maxAmountDollars)
 	if r.MinAmount != nil && r.MaxAmount != nil && *r.MinAmount > *r.MaxAmount {
-		return rules.Rule{}, fmt.Errorf("rule %s: minAmount (%d) > maxAmount (%d)", id, *r.MinAmount, *r.MaxAmount)
+		return rules.Rule{}, fmt.Errorf("rule %s: minAmount (%d) > maxAmount (%d)", r.ID, *r.MinAmount, *r.MaxAmount)
 	}
 	return r, nil
 }
@@ -578,9 +566,18 @@ func buildRule(id, typ, pattern, target string, priority int, institution, accou
 func convertRuleDocs(docs []store.RuleDoc) ([]rules.Rule, error) {
 	ruleSet := make([]rules.Rule, len(docs))
 	for i, rd := range docs {
-		r, err := buildRule(rd.ID, rd.Type, rd.Pattern, rd.Target, rd.Priority,
-			rd.Institution, rd.Account, rd.ExcludeCategory, rd.MatchCategory, rd.Category,
-			rd.MinAmount, rd.MaxAmount)
+		r, err := buildRule(rules.Rule{
+			ID:              rd.ID,
+			Type:            rd.Type,
+			Pattern:         rd.Pattern,
+			Target:          rd.Target,
+			Priority:        rd.Priority,
+			Institution:     rd.Institution,
+			Account:         rd.Account,
+			ExcludeCategory: rd.ExcludeCategory,
+			MatchCategory:   rd.MatchCategory,
+			Category:        rd.Category,
+		}, rd.MinAmount, rd.MaxAmount)
 		if err != nil {
 			return nil, err
 		}
@@ -593,9 +590,18 @@ func convertRuleDocs(docs []store.RuleDoc) ([]rules.Rule, error) {
 func convertExportRules(exportRules []export.Rule) ([]rules.Rule, error) {
 	ruleSet := make([]rules.Rule, len(exportRules))
 	for i, r := range exportRules {
-		built, err := buildRule(r.ID, r.Type, r.Pattern, r.Target, r.Priority,
-			r.Institution, r.Account, r.ExcludeCategory, r.MatchCategory, r.Category,
-			r.MinAmount, r.MaxAmount)
+		built, err := buildRule(rules.Rule{
+			ID:              r.ID,
+			Type:            r.Type,
+			Pattern:         r.Pattern,
+			Target:          r.Target,
+			Priority:        r.Priority,
+			Institution:     r.Institution,
+			Account:         r.Account,
+			ExcludeCategory: r.ExcludeCategory,
+			MatchCategory:   r.MatchCategory,
+			Category:        r.Category,
+		}, r.MinAmount, r.MaxAmount)
 		if err != nil {
 			return nil, err
 		}

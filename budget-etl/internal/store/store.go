@@ -328,6 +328,23 @@ type RuleDoc struct {
 	Category        string
 }
 
+// optionalFloat reads an optional numeric field from a Firestore document map,
+// accepting both float64 and int64 representations. Returns nil if the field
+// is absent or null. Returns an error if the field is present but not numeric.
+func optionalFloat(d map[string]interface{}, docID, field string) (*float64, error) {
+	if v, ok := d[field].(float64); ok {
+		return &v, nil
+	}
+	if v, ok := d[field].(int64); ok {
+		f := float64(v)
+		return &f, nil
+	}
+	if d[field] != nil {
+		return nil, fmt.Errorf("rule %s: field '%s' is not a number (got %T)", docID, field, d[field])
+	}
+	return nil, nil
+}
+
 // LoadRules reads rules from budget/{env}/rules, filtered by groupId.
 func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, error) {
 	col := c.fs.Collection(fmt.Sprintf("budget/%s/rules", c.env))
@@ -377,21 +394,11 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 		} else if d["account"] != nil {
 			return nil, fmt.Errorf("rule %s: field 'account' is not a string (got %T)", doc.Ref.ID, d["account"])
 		}
-		if v, ok := d["minAmount"].(float64); ok {
-			r.MinAmount = &v
-		} else if v, ok := d["minAmount"].(int64); ok {
-			f := float64(v)
-			r.MinAmount = &f
-		} else if d["minAmount"] != nil {
-			return nil, fmt.Errorf("rule %s: field 'minAmount' is not a number (got %T)", doc.Ref.ID, d["minAmount"])
+		if r.MinAmount, err = optionalFloat(d, doc.Ref.ID, "minAmount"); err != nil {
+			return nil, err
 		}
-		if v, ok := d["maxAmount"].(float64); ok {
-			r.MaxAmount = &v
-		} else if v, ok := d["maxAmount"].(int64); ok {
-			f := float64(v)
-			r.MaxAmount = &f
-		} else if d["maxAmount"] != nil {
-			return nil, fmt.Errorf("rule %s: field 'maxAmount' is not a number (got %T)", doc.Ref.ID, d["maxAmount"])
+		if r.MaxAmount, err = optionalFloat(d, doc.Ref.ID, "maxAmount"); err != nil {
+			return nil, err
 		}
 		if v, ok := d["excludeCategory"].(string); ok {
 			r.ExcludeCategory = v
