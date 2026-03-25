@@ -2,6 +2,7 @@ import { Timestamp } from "firebase/firestore";
 import { type Budget, type BudgetId, type BudgetOverride, type BudgetPeriod, type BudgetPeriodId, type SerializedBudgetPeriod } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
+import { escapeHtml } from "@commons-systems/htmlutil";
 import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, makeDebounced, toISODate } from "./hydrate-util.js";
 import { renderBudgetChart } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
@@ -356,7 +357,7 @@ export function hydrateOverridesTable(container: HTMLElement): void {
       newRow.dataset.overrideIndex = "new";
 
       const budgetOptions = budgets.map(b =>
-        `<option value="${b.id}">${b.name}</option>`
+        `<option value="${escapeHtml(b.id)}">${escapeHtml(b.name)}</option>`
       ).join("");
 
       newRow.innerHTML = `
