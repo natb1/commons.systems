@@ -39,4 +39,23 @@ describe("createAppAuth", () => {
     const result = createAppAuth(mockApp);
     expect(result).toEqual({ type: "mock-auth-result" });
   });
+
+  it("returns signIn, signOut, and onAuthStateChanged", async () => {
+    const mockSignIn = vi.fn();
+    const mockSignOut = vi.fn();
+    const mockOnAuthStateChanged = vi.fn();
+    mockCreateFirebaseAuth.mockReturnValue({
+      auth: {},
+      signIn: mockSignIn,
+      signOut: mockSignOut,
+      onAuthStateChanged: mockOnAuthStateChanged,
+    });
+    vi.stubEnv("VITE_AUTH_EMULATOR_HOST", "");
+    const { createAppAuth } = await import("../src/app-auth");
+    const result = createAppAuth(mockApp);
+
+    expect(result).toHaveProperty("signIn", mockSignIn);
+    expect(result).toHaveProperty("signOut", mockSignOut);
+    expect(result).toHaveProperty("onAuthStateChanged", mockOnAuthStateChanged);
+  });
 });
