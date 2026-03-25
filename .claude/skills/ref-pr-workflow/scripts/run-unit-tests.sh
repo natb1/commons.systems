@@ -11,6 +11,7 @@ source "$SCRIPTS/lib.sh"
 declare -A DIRTY_APPS
 RUN_NIX=false
 RUN_RULES=false
+RUN_CI_SCRIPTS=false
 EXPLICIT=false
 
 while [[ $# -gt 0 ]]; do
@@ -31,8 +32,13 @@ while [[ $# -gt 0 ]]; do
       EXPLICIT=true
       shift
       ;;
+    --ci-scripts)
+      RUN_CI_SCRIPTS=true
+      EXPLICIT=true
+      shift
+      ;;
     *)
-      echo "Usage: run-unit-tests.sh [--app <dir>] [--nix] [--rules]" >&2
+      echo "Usage: run-unit-tests.sh [--app <dir>] [--nix] [--rules] [--ci-scripts]" >&2
       exit 1
       ;;
   esac
@@ -56,6 +62,7 @@ if [ "$EXPLICIT" = false ]; then
     case "$file" in
       nix/*|flake.nix|flake.lock) RUN_NIX=true ;;
       firestore.rules) RUN_RULES=true ;;
+      .github/scripts/*) RUN_CI_SCRIPTS=true ;;
     esac
   done <<< "$CHANGED"
 fi
@@ -101,7 +108,18 @@ if [ "$RUN_RULES" = true ]; then
   fi
 fi
 
-if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ]; then
+# Run CI scripts tests
+if [ "$RUN_CI_SCRIPTS" = true ]; then
+  echo "=== CI scripts tests ==="
+  if "$REPO_ROOT/.github/scripts/test-firebase-auth.sh"; then
+    echo "PASS: CI scripts"
+  else
+    echo "FAIL: CI scripts" >&2
+    FAILURES+=(ci-scripts)
+  fi
+fi
+
+if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_CI_SCRIPTS" = false ]; then
   echo "No test suites matched changed files. Nothing to check."
   exit 0
 fi

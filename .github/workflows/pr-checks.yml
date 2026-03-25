@@ -17,7 +17,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "22"
+          node-version-file: .node-version
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: "temurin"
@@ -39,13 +39,11 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "22"
+          node-version-file: .node-version
       - name: Authenticate with Firebase
-        run: |
-          CREDS_FILE=$(mktemp --suffix=.json)
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$CREDS_FILE"
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE" >> "$GITHUB_ENV"
-          echo "CREDS_FILE=$CREDS_FILE" >> "$GITHUB_ENV"
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: .github/scripts/firebase-auth.sh
       - name: Deploy Cloud Functions (if changed)
         run: |
           if git diff --name-only origin/main...HEAD | grep -q '^functions/'; then
@@ -78,4 +76,4 @@ jobs:
             --body "$PREVIEW_COMMENT"
       - name: Cleanup credentials
         if: always()
-        run: rm -f "$CREDS_FILE"
+        run: .github/scripts/firebase-auth-cleanup.sh
