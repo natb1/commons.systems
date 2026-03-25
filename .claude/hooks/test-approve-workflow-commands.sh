@@ -146,9 +146,44 @@ assert_passthrough \
   ".claude/skills/ref-pr-workflow/scripts/run-lint.sh; evil-command"
 
 assert_passthrough \
-  "newline injection" \
+  "newline injection (evil first, script second)" \
   "Bash" \
   "$(printf 'rm -rf /\n.claude/skills/ref-pr-workflow/scripts/run-lint.sh')"
+
+assert_passthrough \
+  "newline injection (script first, evil second)" \
+  "Bash" \
+  "$(printf '.claude/skills/ref-pr-workflow/scripts/run-lint.sh\nrm -rf /')"
+
+assert_passthrough \
+  "command substitution via \$()" \
+  "Bash" \
+  '.claude/skills/ref-pr-workflow/scripts/run-lint.sh $(evil-command)'
+
+assert_passthrough \
+  "output redirection" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh > /tmp/exfil"
+
+assert_passthrough \
+  "input redirection" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh < /etc/shadow"
+
+assert_passthrough \
+  "process substitution" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh <(evil-command)"
+
+assert_passthrough \
+  "or-chaining with ||" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh || evil-command"
+
+assert_passthrough \
+  "backtick substitution" \
+  "Bash" \
+  '.claude/skills/ref-pr-workflow/scripts/run-lint.sh `evil-command`'
 
 # --- Other edge cases ---
 
