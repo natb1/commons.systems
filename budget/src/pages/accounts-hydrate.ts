@@ -1,8 +1,9 @@
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { renderAggregateTrendChart } from "./budgets-trend-chart.js";
 import { renderNetWorthChart } from "./accounts-net-worth-chart.js";
+import { renderCashFlowChart } from "./accounts-cash-flow-chart.js";
 import { deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, findNearestWeekMs } from "./hydrate-util.js";
-import type { AggregatePoint, NetWorthPoint } from "../balance.js";
+import type { AggregatePoint, NetWorthPoint, CashFlowPoint } from "../balance.js";
 import type { ChartResult } from "./budgets-chart.js";
 
 const ACCOUNTS_POINT_WIDTH = 40;
@@ -27,18 +28,32 @@ function deserializeNetWorth(raw: string): NetWorthPoint[] {
   for (let i = 0; i < parsed.length; i++) {
     const el = parsed[i];
     if (typeof el.weekLabel !== "string" || typeof el.weekMs !== "number"
-      || typeof el.netWorth !== "number") {
+      || typeof el.netWorth !== "number" || typeof el.isStatementAnchored !== "boolean") {
       throw new DataIntegrityError(`Net worth element ${i} missing or invalid fields`);
     }
   }
   return parsed as NetWorthPoint[];
 }
 
+function deserializeCashFlow(raw: string): CashFlowPoint[] {
+  const parsed = deserializeJSON(raw, "cash flow data");
+  if (!Array.isArray(parsed)) throw new DataIntegrityError("Cash flow data is not an array");
+  for (let i = 0; i < parsed.length; i++) {
+    const el = parsed[i];
+    if (typeof el.weekLabel !== "string" || typeof el.weekMs !== "number"
+      || typeof el.cashFlow !== "number" || typeof el.isStatementAnchored !== "boolean") {
+      throw new DataIntegrityError(`Cash flow element ${i} missing or invalid fields`);
+    }
+  }
+  return parsed as CashFlowPoint[];
+}
+
 function getAccountsScrollWrappers(): HTMLElement[] {
   const trendEl = document.getElementById("accounts-trend-chart");
   const nwEl = document.getElementById("accounts-net-worth-chart");
+  const cfEl = document.getElementById("accounts-cash-flow-chart");
   const wrappers: HTMLElement[] = [];
-  for (const el of [trendEl, nwEl]) {
+  for (const el of [trendEl, nwEl, cfEl]) {
     if (!el) continue;
     const w = el.querySelector<HTMLElement>(".chart-scroll-wrapper");
     if (w) wrappers.push(w);
@@ -60,6 +75,9 @@ export function hydrateAccountsCharts(container: HTMLElement): void {
   const nwElOrNull = document.getElementById("accounts-net-worth-chart");
   if (!nwElOrNull) throw new DataIntegrityError("accounts-net-worth-chart container not found");
   const nwEl: HTMLElement = nwElOrNull;
+  const cfElOrNull = document.getElementById("accounts-cash-flow-chart");
+  if (!cfElOrNull) throw new DataIntegrityError("accounts-cash-flow-chart container not found");
+  const cfEl: HTMLElement = cfElOrNull;
 
   const aggregateRaw = trendEl.dataset.aggregateTrend;
   if (aggregateRaw === undefined) throw new DataIntegrityError("accounts-trend-chart missing data-aggregate-trend");
@@ -69,12 +87,17 @@ export function hydrateAccountsCharts(container: HTMLElement): void {
   if (nwRaw === undefined) throw new DataIntegrityError("accounts-net-worth-chart missing data-net-worth");
   const netWorthData = deserializeNetWorth(nwRaw);
 
+  const cfRaw = cfEl.dataset.cashFlow;
+  if (cfRaw === undefined) throw new DataIntegrityError("accounts-cash-flow-chart missing data-cash-flow");
+  const cashFlowData = deserializeCashFlow(cfRaw);
+
   let chartResult: ChartResult = { weeks: [] };
 
   function render(): void {
     const containerWidth = container.clientWidth || 640;
     chartResult = renderAggregateTrendChart(trendEl, { data: aggregateTrend, containerWidth, panelWidth: ACCOUNTS_POINT_WIDTH });
     renderNetWorthChart(nwEl, { data: netWorthData, containerWidth, pointWidth: ACCOUNTS_POINT_WIDTH });
+    renderCashFlowChart(cfEl, { data: cashFlowData, containerWidth, pointWidth: ACCOUNTS_POINT_WIDTH });
   }
 
   render();
@@ -93,5 +116,5 @@ export function hydrateAccountsCharts(container: HTMLElement): void {
       wrapper.scrollTo({ left: Math.max(0, left - wrapper.clientWidth / 2), behavior: "smooth" });
     }
   });
-  wireChartResize(container, render, getAccountsScrollWrappers, [trendEl, nwEl], reattachScrollSync);
+  wireChartResize(container, render, getAccountsScrollWrappers, [trendEl, nwEl, cfEl], reattachScrollSync);
 }

@@ -25,8 +25,10 @@ export function makeBudget(overrides: Partial<Budget> = {}): Budget {
   return {
     id: "food" as any,
     name: "Food",
-    weeklyAllowance: 150,
+    allowance: 150,
+    allowancePeriod: "weekly",
     rollover: "none",
+    overrides: [],
     groupId: null,
     ...overrides,
   };
@@ -62,10 +64,11 @@ export function makeParsedData(overrides: Partial<ParsedData> = {}): ParsedData 
         normalizedId: null,
         normalizedPrimary: true,
         normalizedDescription: null,
+        virtual: false,
       },
     ],
     budgets: [
-      { id: "groceries", name: "Groceries", weeklyAllowance: 100, rollover: "none" },
+      { id: "groceries", name: "Groceries", allowance: 100, allowancePeriod: "weekly", rollover: "none" },
     ],
     budgetPeriods: [
       {
@@ -124,6 +127,7 @@ export function createMockDataSource(overrides: Partial<DataSource> = {}): DataS
     getWeeklyAggregates: vi.fn().mockResolvedValue([]),
     updateTransaction: vi.fn(),
     updateBudget: vi.fn(),
+    updateBudgetOverrides: vi.fn(),
     adjustBudgetPeriodTotal: vi.fn(),
     createRule: vi.fn(),
     updateRule: vi.fn(),

@@ -37,7 +37,7 @@ describe("renderBudgetChart", () => {
   });
 
   it("renders all periods passed to it", () => {
-    const budgets = [makeBudget({ weeklyAllowance: 100 })];
+    const budgets = [makeBudget({ allowance: 100 })];
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 10 }),
       makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 20 }),
@@ -53,8 +53,8 @@ describe("renderBudgetChart", () => {
   it("multiple budgets: creates bars for each budget", () => {
     const container = makeContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100 }),
-      makeBudget({ id: "vacation" as any, name: "Vacation", weeklyAllowance: 50 }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 100 }),
+      makeBudget({ id: "vacation" as any, name: "Vacation", allowance: 50 }),
     ];
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
@@ -71,7 +71,7 @@ describe("renderBudgetChart", () => {
 
   it("weekLabels are in chronological order even when alphabetical differs", () => {
     const container = makeContainer();
-    const budgets = [makeBudget({ weeklyAllowance: 100 })];
+    const budgets = [makeBudget({ allowance: 100 })];
     // Week-start labels: 12/7, 12/21, 12/28 — alphabetical would be "12/21", "12/28", "12/7"
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-12-08"), periodEnd: ts("2025-12-15"), total: 10 }),
@@ -85,8 +85,8 @@ describe("renderBudgetChart", () => {
   it("non-overlapping budgets: gap weeks get zero-spend entries with correct rollover", () => {
     const container = makeContainer();
     const budgets = [
-      makeBudget({ id: "food" as any, name: "Food", weeklyAllowance: 100, rollover: "balance" }),
-      makeBudget({ id: "vacation" as any, name: "Vacation", weeklyAllowance: 50, rollover: "none" }),
+      makeBudget({ id: "food" as any, name: "Food", allowance: 100, rollover: "balance" }),
+      makeBudget({ id: "vacation" as any, name: "Vacation", allowance: 50, rollover: "none" }),
     ];
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),

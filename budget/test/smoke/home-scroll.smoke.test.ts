@@ -24,6 +24,7 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -90,7 +91,7 @@ describe("home page infinite scroll smoke", () => {
         txn({ id: "t1" as any }),
       ]),
       getBudgets: vi.fn().mockResolvedValue([
-        { id: "groceries" as any, name: "Groceries", weeklyAllowance: 100, rollover: "none", groupId: null },
+        { id: "groceries" as any, name: "Groceries", allowance: 100, rollover: "none", groupId: null },
       ]),
     }));
     expect(html).toContain('id="sankey-budget-filter"');
@@ -103,7 +104,7 @@ describe("home page infinite scroll smoke", () => {
         txn({ id: "t1" as any, budget: "groceries" as any }),
       ]),
       getBudgets: vi.fn().mockResolvedValue([
-        { id: "groceries" as any, name: "Groceries", weeklyAllowance: 100, rollover: "none", groupId: null },
+        { id: "groceries" as any, name: "Groceries", allowance: 100, rollover: "none", groupId: null },
       ]),
     }));
     expect(html).toContain('data-budget-name="Groceries"');

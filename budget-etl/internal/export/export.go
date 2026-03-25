@@ -134,31 +134,34 @@ type Statement struct {
 	Period              string  `json:"period"`
 	BalanceDate         string  `json:"balanceDate"`
 	LastTransactionDate *string `json:"lastTransactionDate"`
+	Virtual             bool    `json:"virtual"`
 }
 
 // Transaction is a single transaction in the JSON output.
 type Transaction struct {
-	ID                      string  `json:"id"`
-	Institution             string  `json:"institution"`
-	Account                 string  `json:"account"`
-	Description             string  `json:"description"`
-	Amount                  float64 `json:"amount"`
-	Timestamp               string  `json:"timestamp"`
-	StatementID             string  `json:"statementId"`
-	Category                string  `json:"category"`
-	Budget                  *string `json:"budget"`
-	Note                    string  `json:"note"`
-	Reimbursement           float64 `json:"reimbursement"`
-	NormalizedID            *string `json:"normalizedId"`
-	NormalizedPrimary       bool    `json:"normalizedPrimary"`
-	NormalizedDescription   *string `json:"normalizedDescription"`
+	ID                    string  `json:"id"`
+	Institution           string  `json:"institution"`
+	Account               string  `json:"account"`
+	Description           string  `json:"description"`
+	Amount                float64 `json:"amount"`
+	Timestamp             string  `json:"timestamp"`
+	StatementID           string  `json:"statementId"`
+	Category              string  `json:"category"`
+	Budget                *string `json:"budget"`
+	Note                  string  `json:"note"`
+	Reimbursement         float64 `json:"reimbursement"`
+	NormalizedID          *string `json:"normalizedId"`
+	NormalizedPrimary     bool    `json:"normalizedPrimary"`
+	NormalizedDescription *string `json:"normalizedDescription"`
+	Virtual               bool    `json:"virtual"`
 }
 
 // Budget is a budget definition in the JSON output.
 type Budget struct {
 	ID              string  `json:"id"`
 	Name            string  `json:"name"`
-	WeeklyAllowance float64 `json:"weeklyAllowance"`
+	Allowance float64 `json:"allowance"`
+	AllowancePeriod string  `json:"allowancePeriod,omitempty"`
 	Rollover        string  `json:"rollover"`
 }
 
@@ -175,15 +178,19 @@ type BudgetPeriod struct {
 
 // Rule is a categorization or budget assignment rule in the JSON output.
 type Rule struct {
-	ID            string `json:"id"`
-	Type          string `json:"type"`
-	Pattern       string `json:"pattern"`
-	Target        string `json:"target"`
-	Priority      int    `json:"priority"`
-	Institution   string `json:"institution"`
-	Account       string `json:"account"`
-	Category      string `json:"category,omitempty"`
-	TransactionID string `json:"transactionId,omitempty"`
+	ID              string   `json:"id"`
+	Type            string   `json:"type"`
+	Pattern         string   `json:"pattern"`
+	Target          string   `json:"target"`
+	Priority        int      `json:"priority"`
+	Institution     string   `json:"institution"`
+	Account         string   `json:"account"`
+	MinAmount       *float64 `json:"minAmount,omitempty"`
+	MaxAmount       *float64 `json:"maxAmount,omitempty"`
+	ExcludeCategory string   `json:"excludeCategory,omitempty"`
+	MatchCategory   string   `json:"matchCategory,omitempty"`
+	Category        string   `json:"category,omitempty"`
+	TransactionID   string   `json:"transactionId,omitempty"`
 }
 
 // NormalizationRule is a normalization rule in the JSON output.
@@ -204,9 +211,9 @@ func FormatTimestamp(t time.Time) string {
 }
 
 // ReadFile reads and unmarshals a JSON file into an Output struct.
-// If password is non-empty, the file is decrypted first. Encryption
-// state must match strictly: an encrypted file without a password, or
-// a plaintext file with a password, both return an error.
+// If password is non-empty and the file is encrypted, it is decrypted
+// first. An encrypted file without a password returns an error.
+// Plaintext files are accepted regardless of password.
 // Returns an error if the file is missing, contains invalid JSON, or
 // is missing required fields (version, groupName, transactions).
 func ReadFile(path, password string) (Output, error) {
@@ -219,9 +226,8 @@ func ReadFile(path, password string) (Output, error) {
 	if encrypted && password == "" {
 		return Output{}, fmt.Errorf("file is encrypted but no password was provided")
 	}
-	if !encrypted && password != "" {
-		return Output{}, fmt.Errorf("file is not encrypted but a password was provided")
-	}
+	// Allow reading plaintext input even when a password is provided —
+	// the password is still used for encrypting output.
 	if encrypted {
 		data, err = decryptJSON(data, password)
 		if err != nil {

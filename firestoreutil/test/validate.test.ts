@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { requireString, requireNumber, requireNonNegativeNumber, requireBoolean, optionalString } from "../src/validate.js";
+import { requireString, requireNumber, requireNonNegativeNumber, requireBoolean, optionalString, optionalNumber } from "../src/validate.js";
 import { DataIntegrityError } from "../src/errors.js";
 
 describe("requireString", () => {
@@ -70,5 +70,27 @@ describe("optionalString", () => {
   it("throws for non-string non-null", () => {
     expect(() => optionalString(123, "field")).toThrow(DataIntegrityError);
     expect(() => optionalString(true, "field")).toThrow(DataIntegrityError);
+  });
+});
+
+describe("optionalNumber", () => {
+  it("returns the value for a finite number", () => {
+    expect(optionalNumber(42, "field")).toBe(42);
+    expect(optionalNumber(-3.5, "field")).toBe(-3.5);
+    expect(optionalNumber(0, "field")).toBe(0);
+  });
+  it("returns null for null", () => {
+    expect(optionalNumber(null, "field")).toBeNull();
+  });
+  it("returns null for undefined", () => {
+    expect(optionalNumber(undefined, "field")).toBeNull();
+  });
+  it("throws for non-number", () => {
+    expect(() => optionalNumber("42", "field")).toThrow(DataIntegrityError);
+    expect(() => optionalNumber(true, "field")).toThrow(DataIntegrityError);
+  });
+  it("throws for non-finite number", () => {
+    expect(() => optionalNumber(NaN, "field")).toThrow(DataIntegrityError);
+    expect(() => optionalNumber(Infinity, "field")).toThrow(DataIntegrityError);
   });
 });

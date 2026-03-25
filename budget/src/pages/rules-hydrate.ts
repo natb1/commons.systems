@@ -116,6 +116,18 @@ export function hydrateRulesTable(container: HTMLElement): void {
           await ds.updateRule(ruleId, { institution: target.value || null });
         } else if (target.classList.contains("edit-account")) {
           await ds.updateRule(ruleId, { account: target.value || null });
+        } else if (target.classList.contains("edit-min-amount")) {
+          const val = target.value === "" ? null : Number(target.value);
+          if (val !== null && !Number.isFinite(val)) { showInputError(target, "Min amount must be a number"); return; }
+          await ds.updateRule(ruleId, { minAmount: val });
+        } else if (target.classList.contains("edit-max-amount")) {
+          const val = target.value === "" ? null : Number(target.value);
+          if (val !== null && !Number.isFinite(val)) { showInputError(target, "Max amount must be a number"); return; }
+          await ds.updateRule(ruleId, { maxAmount: val });
+        } else if (target.classList.contains("edit-exclude-category")) {
+          await ds.updateRule(ruleId, { excludeCategory: target.value || null });
+        } else if (target.classList.contains("edit-match-category")) {
+          await ds.updateRule(ruleId, { matchCategory: target.value || null });
         } else {
           return;
         }
@@ -174,6 +186,10 @@ export function hydrateRulesTable(container: HTMLElement): void {
             priority: 100,
             institution: null,
             account: null,
+            minAmount: null,
+            maxAmount: null,
+            excludeCategory: null,
+            matchCategory: null,
           };
           const newId = await ds.createRule(defaultFields);
           const newRule: Rule = { id: newId, groupId: null, ...defaultFields };

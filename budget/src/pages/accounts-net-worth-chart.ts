@@ -15,6 +15,7 @@ interface LineDatum {
   weekIndex: number;
   weekLabel: string;
   value: number;
+  isAnchored: boolean;
 }
 
 export function renderNetWorthChart(container: HTMLElement, options: NetWorthChartOptions): ChartResult {
@@ -33,6 +34,7 @@ export function renderNetWorthChart(container: HTMLElement, options: NetWorthCha
     weekIndex: i,
     weekLabel: d.weekLabel,
     value: d.netWorth,
+    isAnchored: d.isStatementAnchored,
   }));
 
   const chartWidth = computeChartWidth(weekCount, pointWidth, containerWidth);
@@ -88,17 +90,28 @@ export function renderNetWorthChart(container: HTMLElement, options: NetWorthCha
         strokeWidth: 2,
         curve: "monotone-x",
       }),
-      Plot.dot(lineData, {
+      // Interpolated points — smaller, semi-transparent
+      Plot.dot(lineData.filter(d => !d.isAnchored), {
         x: "weekIndex",
         y: "value",
         fill: color,
-        r: 3,
+        r: 2,
+        fillOpacity: 0.5,
+      }),
+      // Statement-anchored points — larger, solid, with ring
+      Plot.dot(lineData.filter(d => d.isAnchored), {
+        x: "weekIndex",
+        y: "value",
+        fill: color,
+        r: 4,
+        stroke: fg,
+        strokeWidth: 1,
       }),
       Plot.tip(lineData, Plot.pointer({
         x: "weekIndex",
         y: "value",
         title: (d: LineDatum) =>
-          `${SERIES_NET_WORTH}\nWeek: ${d.weekLabel}\n$${d.value.toFixed(2)}`,
+          `${SERIES_NET_WORTH}${d.isAnchored ? " (statement)" : ""}\nWeek: ${d.weekLabel}\n$${d.value.toFixed(2)}`,
       })),
     ],
   });
