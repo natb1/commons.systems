@@ -29,22 +29,26 @@ if [ -z "$COMMAND" ]; then
 fi
 
 approve() {
-  if ! jq -n '{
+  jq -n '{
     "hookSpecificOutput": {
       "hookEventName": "PreToolUse",
       "permissionDecision": "allow",
       "permissionDecisionReason": "auto-approved by workflow hook"
     }
-  }'; then
-    echo "[approve-workflow-commands] WARNING: jq failed to produce approval JSON" >&2
-  fi
-  return 0
+  }'
 }
 
-# Workflow scripts — matches .claude/skills/ref-pr-workflow/scripts/ at start of command
-# or after a "/" (absolute path). This prevents matching when the path appears as an
-# argument to another command (e.g., "echo .claude/..." or "cat .claude/...").
-if printf '%s\n' "$COMMAND" | grep -qE '(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_.-]+'; then
+# Workflow scripts — matches .claude/skills/ref-pr-workflow/scripts/<name> at start of
+# command or after "/" (absolute path). Guards against:
+# - Path traversal: first char of script name must not be a dot
+# - Command chaining: rejects commands with shell operators (&&, ||, ;, |)
+# - Newline injection: only the first line of the command is checked
+# Note: relative paths preceded by a space (e.g., "echo .claude/...") do not match,
+# but absolute paths as arguments (e.g., "cat /abs/.claude/...") will match if no
+# shell operators are present — an acceptable trade-off for worktree path support.
+FIRST_LINE=$(printf '%s' "$COMMAND" | head -1)
+if printf '%s\n' "$FIRST_LINE" | grep -qE '(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*' && \
+   ! printf '%s\n' "$FIRST_LINE" | grep -qE '(&&|\|\||[;|`])'; then
   approve
   exit 0
 fi

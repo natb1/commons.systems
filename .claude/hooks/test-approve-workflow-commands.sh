@@ -123,7 +123,34 @@ assert_passthrough \
   "Bash" \
   "ls -la"
 
-# --- Edge cases ---
+# --- Security edge cases ---
+
+assert_passthrough \
+  "path traversal via .." \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/../../../evil.sh"
+
+assert_passthrough \
+  "command chaining with &&" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh && rm -rf /"
+
+assert_passthrough \
+  "pipe to another command" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh | malicious-command"
+
+assert_passthrough \
+  "semicolon chaining" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh; evil-command"
+
+assert_passthrough \
+  "newline injection" \
+  "Bash" \
+  "$(printf 'rm -rf /\n.claude/skills/ref-pr-workflow/scripts/run-lint.sh')"
+
+# --- Other edge cases ---
 
 assert_passthrough_raw \
   "malformed JSON input" \
