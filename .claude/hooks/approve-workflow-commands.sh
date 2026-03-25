@@ -23,22 +23,14 @@ fi
 
 APPROVE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"auto-approved by workflow hook"}}'
 
-# Workflow scripts — matches .claude/skills/ref-pr-workflow/scripts/<name> at start of
-# command or after "/" (absolute path). Guards against:
-# - Path traversal: script name after scripts/ must start with alphanumeric, _, or -
-#   (not a dot), which prevents ../ sequences at that position
-# - Shell metacharacters: rejects commands containing &&, ||, ;, |, backtick, $, <, >
-#   (covers command substitution, redirection, piping, and chaining)
-# - Multiline commands: rejects if command contains embedded newlines
-# Note: the regex requires .claude to appear at line-start or immediately after "/".
-# Commands where .claude is preceded by a space (e.g., "echo .claude/...") do not match,
-# but any path with "/" before .claude will match (e.g., "cat /abs/.claude/...") —
-# an acceptable trade-off for worktree path support.
+# Match ref-pr-workflow script at start of command or after "/" (worktree absolute paths).
+# Denylist rejects shell metacharacters instead of allowlisting safe chars around the path,
+# because the path prefix varies across worktrees and quoting styles.
 FIRST_LINE=$(printf '%s' "$COMMAND" | head -n 1)
 if [ "$COMMAND" != "$FIRST_LINE" ]; then
   exit 0
 fi
-if printf '%s\n' "$FIRST_LINE" | grep -qE '(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*' && \
+if printf '%s\n' "$FIRST_LINE" | grep -qE '(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*( |\)|$)' && \
    ! printf '%s\n' "$FIRST_LINE" | grep -qE '(&&|\|\||[;|`<>$])'; then
   printf '%s\n' "$APPROVE"
   exit 0

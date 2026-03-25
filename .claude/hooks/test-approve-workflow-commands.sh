@@ -131,6 +131,16 @@ assert_passthrough \
   ".claude/skills/ref-pr-workflow/scripts/../../../evil.sh"
 
 assert_passthrough \
+  "path traversal after valid script name prefix" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/legit/../../../evil.sh"
+
+assert_passthrough \
+  "path continuation through script name as directory" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh/../../evil.sh"
+
+assert_passthrough \
   "command chaining with &&" \
   "Bash" \
   ".claude/skills/ref-pr-workflow/scripts/run-lint.sh && rm -rf /"
