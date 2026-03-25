@@ -1,8 +1,18 @@
 import type { FirebaseOptions } from "firebase/app";
 
+function requireEnv(name: string): string {
+  const value = import.meta.env[name];
+  if (!value) {
+    throw new Error(
+      `${name} is required. Set it in your .env or build command.`,
+    );
+  }
+  return value;
+}
+
 export const firebaseConfig = {
   projectId: "commons-systems",
-  apiKey: "AIzaSyCeT2nQbB_RCtu2Ybt9D3828okcodri4wc",
+  apiKey: requireEnv("VITE_FIREBASE_API_KEY"),
   authDomain:
     // Preview channel hostnames contain "--" (e.g., "pr-42--site.web.app") and must
     // use the default firebaseapp.com domain since auth cookies are scoped to the project.
@@ -13,4 +23,4 @@ export const firebaseConfig = {
 } satisfies FirebaseOptions;
 
 /** reCAPTCHA Enterprise site key for Firebase AppCheck (shared across all apps in this project). */
-export const RECAPTCHA_SITE_KEY = "6Lfv044sAAAAADtxsrFCfRFer_t7GLf1lG5vmyqN";
+export const RECAPTCHA_SITE_KEY = requireEnv("VITE_RECAPTCHA_SITE_KEY");
