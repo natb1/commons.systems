@@ -152,10 +152,18 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 
 	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
-	// Build all TransactionData and StatementData across all files
+	// Build all TransactionData and StatementData across all files.
+	// Dedup by doc ID: overlapping statement files (same statementId) can
+	// produce duplicate transactions with the same OFX FITID.
+	seen := make(map[string]bool, totalTxns)
 	allTxns := make([]store.TransactionData, 0, totalTxns)
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
+			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			if seen[docID] {
+				continue
+			}
+			seen[docID] = true
 			allTxns = append(allTxns, store.TransactionData{
 				Institution:   pf.sf.Institution,
 				Account:       pf.sf.Account,
@@ -169,6 +177,7 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 	}
 	maxDates := maxTransactionDates(allTxns)
 	allStmts := buildStatementData(parsed, maxDates)
+	allStmts = append(allStmts, deriveMonthlyStatements(parsed)...)
 
 	if dryRun {
 		printSummary(parsed, totalTxns, skipped)
@@ -212,23 +221,14 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 	}
 	log.Printf("group %q (id=%s)", groupName, groupInfo.ID)
 
-	// Load rules from Firestore
+	// Load rules from Firestore and convert dollar amounts to cents
 	ruleDocs, err := client.LoadRules(ctx, groupInfo.ID)
 	if err != nil {
 		return err
 	}
-	ruleSet := make([]rules.Rule, len(ruleDocs))
-	for i, rd := range ruleDocs {
-		ruleSet[i] = rules.Rule{
-			ID:          rd.ID,
-			Type:        rd.Type,
-			Pattern:     rd.Pattern,
-			Target:      rd.Target,
-			Priority:    rd.Priority,
-			Institution: rd.Institution,
-			Account:     rd.Account,
-			Category:    rd.Category,
-		}
+	ruleSet, err := convertRuleDocs(ruleDocs)
+	if err != nil {
+		return err
 	}
 
 	// Apply categorization rules (error if <100% coverage)
@@ -284,6 +284,129 @@ func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementDa
 	return nil
 }
 
+// virtualSynchronyResult holds generated virtual Synchrony spending transactions and statements.
+type virtualSynchronyResult struct {
+	transactions []store.TransactionData
+	docIDs       []string
+	statements   []export.Statement
+}
+
+// generateVirtualSynchrony creates virtual spending transactions on synchrony/virtual
+// for each PNC->Synchrony card payment, plus virtual zero-balance statements per period.
+// Deduplicates by (date, amount) so that normalized transaction pairs don't produce
+// duplicate virtual transactions.
+//
+// Filter criteria: institution=pnc, account=5111, category=Transfer:CardPayment,
+// description contains "SYNCHRONY" (case-insensitive).
+// Output: category=Pet:Veterinarian, budget=pet.
+// These values match the current PNC/Synchrony account setup; update if account details change.
+func generateVirtualSynchrony(
+	allTxns []store.TransactionData,
+	txnDocIDs []string,
+) virtualSynchronyResult {
+	type dateAmount struct {
+		date   string
+		amount int64
+	}
+	seen := make(map[dateAmount]bool)
+	var result virtualSynchronyResult
+	periods := make(map[string]bool)
+	for i, txn := range allTxns {
+		if txn.Institution != "pnc" || txn.Account != "5111" {
+			continue
+		}
+		if txn.Category != "Transfer:CardPayment" {
+			continue
+		}
+		if !strings.Contains(strings.ToUpper(txn.Description), "SYNCHRONY") {
+			continue
+		}
+		key := dateAmount{date: txn.Timestamp.Format("2006-01-02"), amount: txn.Amount}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		period := txn.Timestamp.Format("2006-01")
+		stmtID := "synchrony-virtual-" + period
+		result.transactions = append(result.transactions, store.TransactionData{
+			Institution:   "synchrony",
+			Account:       "virtual",
+			Description:   txn.Description,
+			Amount:        txn.Amount,
+			Timestamp:     txn.Timestamp,
+			StatementID:   stmtID,
+			TransactionID: "virtual-" + txnDocIDs[i],
+			Category:      "Pet:Veterinarian",
+			Budget:        "pet",
+			Virtual:       true,
+		})
+		result.docIDs = append(result.docIDs, "virtual-"+txnDocIDs[i])
+		periods[period] = true
+	}
+	// Generate virtual statements per unique period
+	for period := range periods {
+		stmtID := "synchrony-virtual-" + period
+		result.statements = append(result.statements, export.Statement{
+			ID:          store.StatementDocID(stmtID),
+			StatementID: stmtID,
+			Institution: "synchrony",
+			Account:     "virtual",
+			Balance:     0,
+			Period:      period,
+			Virtual:     true,
+		})
+	}
+	return result
+}
+
+// computePetBudget computes a pet budget from virtual Synchrony transactions.
+// Returns nil if no virtual transactions exist.
+// Note: the returned Allowance field holds the monthly average because
+// AllowancePeriod is "monthly".
+func computePetBudget(virtualTxns []store.TransactionData) *export.Budget {
+	if len(virtualTxns) == 0 {
+		return nil
+	}
+	var total float64
+	var earliest, latest time.Time
+	for _, txn := range virtualTxns {
+		total += store.DollarAmount(txn.Amount)
+		if earliest.IsZero() || txn.Timestamp.Before(earliest) {
+			earliest = txn.Timestamp
+		}
+		if latest.IsZero() || txn.Timestamp.After(latest) {
+			latest = txn.Timestamp
+		}
+	}
+	months := latest.Sub(earliest).Hours() / (24 * 30.44) // approximate months
+	if months < 1 {
+		months = 1
+	}
+	monthlyAvg := total / months
+	return &export.Budget{
+		ID:              "pet",
+		Name:            "Pet",
+		Allowance: math.Round(monthlyAvg*100) / 100,
+		AllowancePeriod: "monthly",
+		Rollover:        "none",
+	}
+}
+
+// appendPetBudgetIfNeeded adds a pet budget to the list if virtual Synchrony
+// transactions exist and the budget is not already present.
+func appendPetBudgetIfNeeded(budgets []export.Budget, virtualTxns []store.TransactionData) []export.Budget {
+	for _, b := range budgets {
+		if b.ID == "pet" {
+			return budgets
+		}
+	}
+	pet := computePetBudget(virtualTxns)
+	if pet == nil {
+		return budgets
+	}
+	return append(budgets, *pet)
+}
+
 // runInputJSON reads an existing JSON export, recomputes categorization,
 // budget assignment, and normalization from rules, computes budget periods,
 // and writes the updated result. Category and budget from the input file are
@@ -305,17 +428,24 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	txnRules, generalExportRules := splitRules(inp.Rules)
 
 	// Convert general export rules to rules.Rule
-	ruleSet := convertExportRules(generalExportRules)
+	ruleSet, err := convertExportRules(generalExportRules)
+	if err != nil {
+		return err
+	}
 
-	// Convert transactions to store.TransactionData for categorization/budget assignment
-	allTxns := make([]store.TransactionData, len(inp.Transactions))
-	txnDocIDs := make([]string, len(inp.Transactions))
-	for i, t := range inp.Transactions {
+	// Convert transactions to store.TransactionData for categorization/budget assignment.
+	// Skip virtual transactions — they are regenerated fresh each run.
+	var allTxns []store.TransactionData
+	var txnDocIDs []string
+	for _, t := range inp.Transactions {
+		if t.Virtual {
+			continue
+		}
 		ts, err := time.Parse(time.RFC3339, t.Timestamp)
 		if err != nil {
 			return fmt.Errorf("transaction %s: invalid timestamp %q: %w", t.ID, t.Timestamp, err)
 		}
-		allTxns[i] = store.TransactionData{
+		allTxns = append(allTxns, store.TransactionData{
 			Institution:   t.Institution,
 			Account:       t.Account,
 			Description:   t.Description,
@@ -323,8 +453,8 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 			Timestamp:     ts,
 			StatementID:   t.StatementID,
 			TransactionID: t.ID,
-		}
-		txnDocIDs[i] = t.ID
+		})
+		txnDocIDs = append(txnDocIDs, t.ID)
 	}
 
 	// Apply transaction-specific rules (pre-populate category/budget)
@@ -339,6 +469,11 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 
 	// Apply general budget assignment (skips transactions assigned by transaction-specific rules)
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
+
+	// Generate virtual Synchrony spending transactions and statements
+	vsr := generateVirtualSynchrony(allTxns, txnDocIDs)
+	allTxns = append(allTxns, vsr.transactions...)
+	txnDocIDs = append(txnDocIDs, vsr.docIDs...)
 
 	// Apply normalization
 	normTxns := buildNormTxns(allTxns, txnDocIDs)
@@ -359,17 +494,27 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	budgetPeriods := computeExportPeriodsFromFull(fullTxns)
 	weeklyAggregates := computeExportWeeklyAggregatesFromFull(fullTxns)
 
-	// Compute lastTransactionDate on statements from all transactions
+	// Compute lastTransactionDate on statements from all transactions.
+	// Filter out virtual statements from prior runs.
 	maxDates := maxTransactionDates(allTxns)
-	updatedStmts := make([]export.Statement, len(inp.Statements))
-	for i, s := range inp.Statements {
-		updatedStmts[i] = s
+	var updatedStmts []export.Statement
+	for _, s := range inp.Statements {
+		if s.Virtual {
+			continue
+		}
+		updated := s
 		key := accountKey(s.Institution, s.Account)
 		if t, ok := maxDates[key]; ok {
 			v := export.FormatTimestamp(*t)
-			updatedStmts[i].LastTransactionDate = &v
+			updated.LastTransactionDate = &v
 		}
+		updatedStmts = append(updatedStmts, updated)
 	}
+	// Append virtual Synchrony statements
+	updatedStmts = append(updatedStmts, vsr.statements...)
+
+	// Append pet budget if virtual Synchrony transactions exist
+	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
 
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
@@ -378,12 +523,20 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		GroupName:           inp.GroupName,
 		Transactions:       exportTxns,
 		Statements:         updatedStmts,
-		Budgets:            inp.Budgets,
+		Budgets:            budgets,
 		BudgetPeriods:      budgetPeriods,
 		Rules:              inp.Rules,
 		NormalizationRules: inp.NormalizationRules,
 		WeeklyAggregates:   weeklyAggregates,
 	})
+}
+
+func dollarsToOptionalCents(d *float64) *int64 {
+	if d == nil {
+		return nil
+	}
+	v := int64(math.Round(*d * 100))
+	return &v
 }
 
 // splitRules separates transaction-specific rules (with TransactionID) from general rules.
@@ -398,22 +551,63 @@ func splitRules(exportRules []export.Rule) (txnRules, general []export.Rule) {
 	return txnRules, general
 }
 
+// buildRule converts dollar amounts to cents and validates min/max bounds.
+// All other fields are passed through unchanged on the input rule.
+func buildRule(r rules.Rule, minAmountDollars, maxAmountDollars *float64) (rules.Rule, error) {
+	r.MinAmount = dollarsToOptionalCents(minAmountDollars)
+	r.MaxAmount = dollarsToOptionalCents(maxAmountDollars)
+	if r.MinAmount != nil && r.MaxAmount != nil && *r.MinAmount > *r.MaxAmount {
+		return rules.Rule{}, fmt.Errorf("rule %s: minAmount (%d) > maxAmount (%d)", r.ID, *r.MinAmount, *r.MaxAmount)
+	}
+	return r, nil
+}
+
+// convertRuleDocs converts store.RuleDoc (from Firestore) to rules.Rule.
+func convertRuleDocs(docs []store.RuleDoc) ([]rules.Rule, error) {
+	ruleSet := make([]rules.Rule, len(docs))
+	for i, rd := range docs {
+		r, err := buildRule(rules.Rule{
+			ID:              rd.ID,
+			Type:            rd.Type,
+			Pattern:         rd.Pattern,
+			Target:          rd.Target,
+			Priority:        rd.Priority,
+			Institution:     rd.Institution,
+			Account:         rd.Account,
+			ExcludeCategory: rd.ExcludeCategory,
+			MatchCategory:   rd.MatchCategory,
+			Category:        rd.Category,
+		}, rd.MinAmount, rd.MaxAmount)
+		if err != nil {
+			return nil, err
+		}
+		ruleSet[i] = r
+	}
+	return ruleSet, nil
+}
+
 // convertExportRules converts export.Rule to rules.Rule for the rules engine.
-func convertExportRules(exportRules []export.Rule) []rules.Rule {
+func convertExportRules(exportRules []export.Rule) ([]rules.Rule, error) {
 	ruleSet := make([]rules.Rule, len(exportRules))
 	for i, r := range exportRules {
-		ruleSet[i] = rules.Rule{
-			ID:          r.ID,
-			Type:        r.Type,
-			Pattern:     r.Pattern,
-			Target:      r.Target,
-			Priority:    r.Priority,
-			Institution: r.Institution,
-			Account:     r.Account,
-			Category:    r.Category,
+		built, err := buildRule(rules.Rule{
+			ID:              r.ID,
+			Type:            r.Type,
+			Pattern:         r.Pattern,
+			Target:          r.Target,
+			Priority:        r.Priority,
+			Institution:     r.Institution,
+			Account:         r.Account,
+			ExcludeCategory: r.ExcludeCategory,
+			MatchCategory:   r.MatchCategory,
+			Category:        r.Category,
+		}, r.MinAmount, r.MaxAmount)
+		if err != nil {
+			return nil, err
 		}
+		ruleSet[i] = built
 	}
-	return ruleSet
+	return ruleSet, nil
 }
 
 // applyTransactionRules pre-populates Category/Budget on transactions that have
@@ -515,6 +709,7 @@ func buildExportTxns(allTxns []store.TransactionData, docIDs []string, normMap m
 			StatementID:       txn.StatementID,
 			Category:          txn.Category,
 			NormalizedPrimary: true,
+			Virtual:           txn.Virtual,
 		}
 		if txn.Budget != "" {
 			b := txn.Budget
@@ -693,6 +888,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 
 	// Build statements from dir-parsed files (maxDates computed later after merge)
 	dirStmts := buildStatementData(parsed, nil)
+	dirStmts = append(dirStmts, deriveMonthlyStatements(parsed)...)
 
 	// Build input lookup by doc ID
 	inputByID := make(map[string]export.Transaction, len(inp.Transactions))
@@ -710,6 +906,9 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
 			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			if dirDocIDs[docID] {
+				continue // already seen from another file with the same statementId
+			}
 			dirDocIDs[docID] = true
 
 			td := store.TransactionData{
@@ -734,9 +933,9 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		}
 	}
 
-	// Append input-only transactions (not in dir)
+	// Append input-only transactions (not in dir), skipping virtual transactions
 	for _, t := range inp.Transactions {
-		if dirDocIDs[t.ID] {
+		if dirDocIDs[t.ID] || t.Virtual {
 			continue
 		}
 		ts, err := time.Parse(time.RFC3339, t.Timestamp)
@@ -764,7 +963,10 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 
 	// Split rules and apply
 	txnRules, generalExportRules := splitRules(inp.Rules)
-	ruleSet := convertExportRules(generalExportRules)
+	ruleSet, err := convertExportRules(generalExportRules)
+	if err != nil {
+		return err
+	}
 
 	if err := applyTransactionRules(allTxns, allDocIDs, txnRules); err != nil {
 		return err
@@ -774,6 +976,11 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		return fmt.Errorf("categorization: %w", err)
 	}
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
+
+	// Generate virtual Synchrony spending transactions and statements
+	vsr := generateVirtualSynchrony(allTxns, allDocIDs)
+	allTxns = append(allTxns, vsr.transactions...)
+	allDocIDs = append(allDocIDs, vsr.docIDs...)
 
 	// Apply normalization
 	normTxns := buildNormTxns(allTxns, allDocIDs)
@@ -791,6 +998,11 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	// Merge statements: dir overrides by statementID, retain input-only
 	maxDates := maxTransactionDates(allTxns)
 	exportStmts := mergeStatements(dirStmts, inp.Statements, maxDates)
+	// Append virtual Synchrony statements
+	exportStmts = append(exportStmts, vsr.statements...)
+
+	// Append pet budget if virtual Synchrony transactions exist
+	budgets := appendPetBudgetIfNeeded(inp.Budgets, vsr.transactions)
 
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
@@ -799,7 +1011,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		GroupName:           groupName,
 		Transactions:       exportTxns,
 		Statements:         exportStmts,
-		Budgets:            inp.Budgets,
+		Budgets:            budgets,
 		BudgetPeriods:      budgetPeriods,
 		Rules:              inp.Rules,
 		NormalizationRules: inp.NormalizationRules,
@@ -824,15 +1036,16 @@ func mergeStatements(dirStmts []store.StatementData, inputStmts []export.Stateme
 
 	result := append([]export.Statement{}, dirExport...)
 	for _, s := range inputStmts {
-		if !dirByStmtID[s.StatementID] {
-			// Update input-only statement's LastTransactionDate from merged transactions
-			key := accountKey(s.Institution, s.Account)
-			if t, ok := maxDates[key]; ok {
-				v := export.FormatTimestamp(*t)
-				s.LastTransactionDate = &v
-			}
-			result = append(result, s)
+		if dirByStmtID[s.StatementID] || s.Virtual {
+			continue
 		}
+		// Update input-only statement's LastTransactionDate from merged transactions
+		key := accountKey(s.Institution, s.Account)
+		if t, ok := maxDates[key]; ok {
+			v := export.FormatTimestamp(*t)
+			s.LastTransactionDate = &v
+		}
+		result = append(result, s)
 	}
 	return result
 }
@@ -1060,6 +1273,97 @@ func maxTransactionDates(txns []store.TransactionData) map[string]*time.Time {
 		}
 	}
 	return m
+}
+
+// deriveMonthlyStatements generates intermediate monthly balance anchors for
+// accounts that have exactly one parsed statement file with a balance snapshot
+// but transactions spanning multiple months. For each month boundary between
+// the earliest transaction and the balance date, it derives the balance by
+// reversing transaction sums from the known balance.
+//
+// This allows computeNetWorth to track the account's balance over time instead
+// of treating it as NULL until the single statement's period.
+func deriveMonthlyStatements(parsed []parsedFile) []store.StatementData {
+	// Group parsed files by (institution, account)
+	type acctKey struct{ inst, acct string }
+	byAccount := make(map[acctKey][]parsedFile)
+	for _, pf := range parsed {
+		k := acctKey{pf.sf.Institution, pf.sf.Account}
+		byAccount[k] = append(byAccount[k], pf)
+	}
+
+	var derived []store.StatementData
+	for k, pfs := range byAccount {
+		// Only derive for accounts with exactly one statement file
+		if len(pfs) != 1 {
+			continue
+		}
+		pf := pfs[0]
+		// Skip accounts with zero balance or missing balance date
+		if pf.result.Balance == 0 || pf.result.BalanceDate.IsZero() {
+			continue
+		}
+		if len(pf.result.Transactions) == 0 {
+			continue
+		}
+
+		// Find earliest transaction date
+		earliest := pf.result.Transactions[0].Date
+		for _, t := range pf.result.Transactions[1:] {
+			if t.Date.Before(earliest) {
+				earliest = t.Date
+			}
+		}
+
+		// Compute month boundaries: first of each month from earliest through balance date
+		balDate := pf.result.BalanceDate
+		firstMonth := time.Date(earliest.Year(), earliest.Month(), 1, 0, 0, 0, 0, time.UTC)
+		balMonth := time.Date(balDate.Year(), balDate.Month(), 1, 0, 0, 0, 0, time.UTC)
+
+		// Need at least 2 distinct months to generate intermediate statements
+		if !firstMonth.Before(balMonth) {
+			continue
+		}
+
+		// For each month boundary (first of month), derive the balance by computing
+		// the sum of all transactions on or after that boundary, then:
+		//   derived_balance = known_balance + txn_sum_from_boundary_onward
+		// This reverses the effect of those transactions to get the earlier balance.
+		//
+		// Skip the balance date's own month — the original statement already covers it.
+		beforeLen := len(derived)
+		for m := firstMonth; m.Before(balMonth); m = m.AddDate(0, 1, 0) {
+			// Sum all transactions with date >= boundary (first of this month)
+			var txnSum int64
+			for _, t := range pf.result.Transactions {
+				if !t.Date.Before(m) {
+					txnSum += t.Amount
+				}
+			}
+
+			// Addition is correct: txnSum is positive for spending that reduced the balance, so adding it back recovers the earlier (higher) balance.
+			derivedBalance := pf.result.Balance + txnSum
+
+			period := m.Format("2006-01")
+			lastDay := m.AddDate(0, 1, -1)
+			bd := lastDay
+
+			stmtID := k.inst + "-" + k.acct + "-" + period
+
+			derived = append(derived, store.StatementData{
+				StatementID: stmtID,
+				Institution: k.inst,
+				Account:     k.acct,
+				Balance:     derivedBalance,
+				Period:      period,
+				BalanceDate: &bd,
+			})
+		}
+		if count := len(derived) - beforeLen; count > 0 {
+			log.Printf("derived %d intermediate balance anchors for %s/%s", count, k.inst, k.acct)
+		}
+	}
+	return derived
 }
 
 // buildStatementData converts parsed files to store.StatementData.

@@ -20,12 +20,17 @@ function createContainer(budgetId: string): HTMLElement {
   container.innerHTML = `
     <div class="budget-header">
       <span>Name</span>
-      <span>Weekly Allowance</span>
+      <span>Allowance</span>
+      <span>Period</span>
       <span>Rollover</span>
     </div>
     <div class="budget-row" data-budget-id="${budgetId}">
       <span><input type="text" class="edit-name" value="Food" aria-label="Name"></span>
-      <span><input type="number" class="edit-allowance" value="150" min="0" aria-label="Weekly allowance"></span>
+      <span><input type="number" class="edit-allowance" value="150" min="0" aria-label="Allowance"></span>
+      <span><select class="edit-period" aria-label="Period">
+        <option value="weekly" selected>Weekly</option>
+        <option value="monthly">Monthly</option>
+      </select></span>
       <span><select class="edit-rollover" aria-label="Rollover">
         <option value="none" selected>None</option>
         <option value="debt">Debt only</option>
@@ -65,7 +70,7 @@ describe("hydrateBudgetTable", () => {
     input.value = "200";
     input.dispatchEvent(new Event("blur", { bubbles: true }));
     await flush();
-    expect(mockDataSource.updateBudget).toHaveBeenCalledWith("food", { weeklyAllowance: 200 });
+    expect(mockDataSource.updateBudget).toHaveBeenCalledWith("food", { allowance: 200 });
   });
 
   it("saves rollover on change", async () => {

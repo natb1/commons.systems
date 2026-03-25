@@ -13,8 +13,10 @@ function budget(overrides: Partial<Budget> = {}): Budget {
   return {
     id: "food",
     name: "Food",
-    weeklyAllowance: 150,
+    allowance: 150,
+    allowancePeriod: "weekly",
     rollover: "none",
+    overrides: [],
     groupId: null,
     ...overrides,
   };
@@ -37,6 +39,7 @@ function txn(overrides: Partial<Transaction> = {}): Transaction {
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -113,7 +116,7 @@ describe("renderBudgets", () => {
     expect(html).toContain('class="edit-rollover"');
     expect(html).toContain('data-budget-id="food"');
     expect(html).toContain('aria-label="Name"');
-    expect(html).toContain('aria-label="Weekly allowance"');
+    expect(html).toContain('aria-label="Allowance"');
     expect(html).toContain('aria-label="Rollover"');
   });
 
@@ -132,8 +135,8 @@ describe("renderBudgets", () => {
   it("sorts budgets alphabetically by name", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        budget({ id: "vacation", name: "Vacation", weeklyAllowance: 100, rollover: "balance" }),
-        budget({ id: "food", name: "Food", weeklyAllowance: 150, rollover: "none" }),
+        budget({ id: "vacation", name: "Vacation", allowance: 100, rollover: "balance" }),
+        budget({ id: "food", name: "Food", allowance: 150, rollover: "none" }),
       ]),
     }));
     const tableStart = html.indexOf('id="budgets-table"');
@@ -141,6 +144,14 @@ describe("renderBudgets", () => {
     const foodIdx = tableHtml.indexOf("Food");
     const vacationIdx = tableHtml.indexOf("Vacation");
     expect(foodIdx).toBeLessThan(vacationIdx);
+  });
+
+  it("renders quarterly period option", async () => {
+    const html = await renderBudgets(localOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ allowancePeriod: "quarterly", groupId: "household" })]),
+    }));
+    expect(html).toContain('<option value="quarterly" selected>');
+    expect(html).toContain("Quarterly");
   });
 
   it("renders rollover select with correct selected state", async () => {
@@ -206,20 +217,28 @@ describe("renderBudgets", () => {
   it("renders metrics section with formatted currency", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        budget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 100 }),
-        budget({ id: "fun" as Budget["id"], name: "Fun", weeklyAllowance: 50 }),
+        budget({ id: "food" as Budget["id"], name: "Food", allowance: 100 }),
+        budget({ id: "fun" as Budget["id"], name: "Fun", allowance: 50 }),
       ]),
       getWeeklyAggregates: vi.fn().mockResolvedValue([
         {
+          id: "2026-02-16",
+          weekStart: Timestamp.fromDate(new Date("2026-02-16")),
+          creditTotal: 1200,
+          unbudgetedTotal: 0,
+          groupId: null,
+        },
+        {
           id: "2026-02-23",
           weekStart: Timestamp.fromDate(new Date("2026-02-23")),
-          creditTotal: 1200,
+          creditTotal: 0,
           unbudgetedTotal: 0,
           groupId: null,
         },
       ]),
     }));
     expect(html).toContain('id="budget-metrics"');
+    // 1200 / 12 = $100.00 (latest week 2026-02-23 excluded from average)
     expect(html).toContain("$100.00");
     expect(html).toContain("$150.00");
   });
@@ -227,7 +246,7 @@ describe("renderBudgets", () => {
   it("renders zero income when no credit aggregates", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        budget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 75 }),
+        budget({ id: "food" as Budget["id"], name: "Food", allowance: 75 }),
       ]),
       getWeeklyAggregates: vi.fn().mockResolvedValue([]),
     }));
@@ -238,9 +257,9 @@ describe("renderBudgets", () => {
   it("computes correct total weekly budget sum", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        budget({ id: "a" as Budget["id"], name: "A", weeklyAllowance: 100 }),
-        budget({ id: "b" as Budget["id"], name: "B", weeklyAllowance: 200 }),
-        budget({ id: "c" as Budget["id"], name: "C", weeklyAllowance: 50 }),
+        budget({ id: "a" as Budget["id"], name: "A", allowance: 100 }),
+        budget({ id: "b" as Budget["id"], name: "B", allowance: 200 }),
+        budget({ id: "c" as Budget["id"], name: "C", allowance: 50 }),
       ]),
     }));
     expect(html).toContain("$350.00");
@@ -249,7 +268,7 @@ describe("renderBudgets", () => {
   it("renders 12-Week Avg Weekly Spending metric", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([
-        budget({ id: "food" as Budget["id"], name: "Food", weeklyAllowance: 100 }),
+        budget({ id: "food" as Budget["id"], name: "Food", allowance: 100 }),
       ]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         {
@@ -272,5 +291,190 @@ describe("renderBudgets", () => {
       getBudgets: vi.fn().mockRejectedValue(new Error("connection failed")),
     }));
     expect(html).not.toContain('id="budget-metrics"');
+  });
+
+  it("header contains 12w Diff and 52w Diff columns", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget()]),
+    }));
+    expect(html).toContain("12w Diff");
+    expect(html).toContain("52w Diff");
+  });
+
+  it("diff cells show formatted currency", async () => {
+    // Two weeks needed: latest (w2) is excluded; w1 (total=100) is the completed data.
+    // allowance=150, avg12 = 100/12, diff12 = 150 - 100/12 ≈ 141.67
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 50,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain("$141.67");
+  });
+
+  it("diff cells are spans not inputs", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 50,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toMatch(/<span [^>]*>\$141\.67<\/span>/);
+    expect(html).not.toMatch(/<input[^>]*\$141\.67/);
+  });
+
+  it("surplus diff renders in green", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('color: #4caf50');
+  });
+
+  it("deficit diff renders in red", async () => {
+    // Two weeks: latest (w2) excluded. Completed w1 total=2400 → avg12=2400/12=200 > allowance=150 → deficit
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 2400,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 50,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('color: var(--error, #c00)');
+  });
+
+  it("renders overrides table when budgets have overrides", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([
+        budget({
+          overrides: [{ date: Timestamp.fromDate(new Date("2025-06-15")), balance: 42.5 }],
+        }),
+      ]),
+    }));
+    expect(html).toContain('id="overrides-table"');
+    expect(html).toContain("Balance Overrides");
+    expect(html).toContain("Food");
+    expect(html).toContain("2025-06-15");
+    expect(html).toContain("42.5");
+  });
+
+  it("renders overrides table empty when budgets exist but have no overrides", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ overrides: [] })]),
+    }));
+    expect(html).toContain('id="overrides-table"');
+    expect(html).not.toContain('class="override-row"');
+  });
+
+  it("hides overrides table when no budgets exist", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([]),
+    }));
+    expect(html).not.toContain('id="overrides-table"');
+  });
+
+  it("renders add override button for authorized users", async () => {
+    const html = await renderBudgets(localOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ groupId: "household" })]),
+    }));
+    expect(html).toContain('id="add-override"');
+  });
+
+  it("does not render add override button for unauthorized users", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget()]),
+    }));
+    expect(html).not.toContain('id="add-override"');
+  });
+
+  it("renders delete button for authorized users", async () => {
+    const html = await renderBudgets(localOptions({
+      getBudgets: vi.fn().mockResolvedValue([
+        budget({
+          groupId: "household",
+          overrides: [{ date: Timestamp.fromDate(new Date("2025-06-15")), balance: 100 }],
+        }),
+      ]),
+    }));
+    expect(html).toContain('class="delete-override"');
+  });
+
+  it("disables override inputs for unauthorized users", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([
+        budget({
+          overrides: [{ date: Timestamp.fromDate(new Date("2025-06-15")), balance: 100 }],
+        }),
+      ]),
+    }));
+    expect(html).toContain("disabled");
   });
 });

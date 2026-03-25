@@ -7,6 +7,8 @@ import (
 	"github.com/natb1/commons.systems/budget-etl/internal/store"
 )
 
+func intPtr(v int64) *int64 { return &v }
+
 func TestMatch(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -14,6 +16,7 @@ func TestMatch(t *testing.T) {
 		desc        string
 		institution string
 		account     string
+		amount      int64
 		want        bool
 	}{
 		{
@@ -64,16 +67,127 @@ func TestMatch(t *testing.T) {
 			desc: "anything", institution: "any", account: "any",
 			want: true,
 		},
+		{
+			name: "minAmount matches when amount >= min",
+			rule: Rule{Pattern: "coffee", MinAmount: intPtr(500)},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 500,
+			want:   true,
+		},
+		{
+			name: "minAmount rejects when amount < min",
+			rule: Rule{Pattern: "coffee", MinAmount: intPtr(500)},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 499,
+			want:   false,
+		},
+		{
+			name: "maxAmount matches when amount <= max",
+			rule: Rule{Pattern: "coffee", MaxAmount: intPtr(1000)},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 1000,
+			want:   true,
+		},
+		{
+			name: "maxAmount rejects when amount > max",
+			rule: Rule{Pattern: "coffee", MaxAmount: intPtr(1000)},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 1001,
+			want:   false,
+		},
+		{
+			name: "both min and max: matches within range",
+			rule: Rule{Pattern: "coffee", MinAmount: intPtr(500), MaxAmount: intPtr(1000)},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 750,
+			want:   true,
+		},
+		{
+			name: "no amount filter matches any amount",
+			rule: Rule{Pattern: "coffee"},
+			desc: "STARBUCKS COFFEE", institution: "BankOne", account: "Checking",
+			amount: 99999,
+			want:   true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.rule.Match(tt.desc, tt.institution, tt.account)
+			got := tt.rule.Match(tt.desc, tt.institution, tt.account, "", tt.amount)
 			if got != tt.want {
 				t.Errorf("Match() = %v, want %v", got, tt.want)
 			}
 		})
 	}
+
+	t.Run("matchCategory exact match", func(t *testing.T) {
+		r := Rule{Pattern: "", MatchCategory: "Food"}
+		if !r.Match("anything", "", "", "Food", 0) {
+			t.Error("expected match for exact category")
+		}
+	})
+
+	t.Run("matchCategory prefix match", func(t *testing.T) {
+		r := Rule{Pattern: "", MatchCategory: "Food"}
+		if !r.Match("anything", "", "", "Food:Coffee", 0) {
+			t.Error("expected match for category prefix")
+		}
+	})
+
+	t.Run("matchCategory rejects non-matching category", func(t *testing.T) {
+		r := Rule{Pattern: "", MatchCategory: "Food"}
+		if r.Match("anything", "", "", "Housing", 0) {
+			t.Error("expected no match for different category")
+		}
+	})
+
+	t.Run("matchCategory with pattern requires both", func(t *testing.T) {
+		r := Rule{Pattern: "starbucks", MatchCategory: "Food"}
+		if !r.Match("STARBUCKS COFFEE", "", "", "Food:Coffee", 0) {
+			t.Error("expected match when both pattern and category match")
+		}
+		if r.Match("STARBUCKS COFFEE", "", "", "Housing", 0) {
+			t.Error("expected no match when category doesn't match")
+		}
+		if r.Match("UNKNOWN", "", "", "Food:Coffee", 0) {
+			t.Error("expected no match when pattern doesn't match")
+		}
+	})
+
+	t.Run("matchCategory does not match partial prefix", func(t *testing.T) {
+		r := Rule{Pattern: "", MatchCategory: "Food"}
+		if r.Match("anything", "", "", "FoodTruck", 0) {
+			t.Error("expected no match for partial prefix without colon separator")
+		}
+	})
+
+	t.Run("excludeCategory exact match rejects", func(t *testing.T) {
+		r := Rule{Pattern: "", ExcludeCategory: "Transfer"}
+		if r.Match("anything", "", "", "Transfer", 0) {
+			t.Error("expected no match for exact excludeCategory")
+		}
+	})
+
+	t.Run("excludeCategory prefix+colon rejects", func(t *testing.T) {
+		r := Rule{Pattern: "", ExcludeCategory: "Transfer"}
+		if r.Match("anything", "", "", "Transfer:CardPayment", 0) {
+			t.Error("expected no match for excludeCategory prefix with colon")
+		}
+	})
+
+	t.Run("excludeCategory non-matching passes", func(t *testing.T) {
+		r := Rule{Pattern: "", ExcludeCategory: "Transfer"}
+		if !r.Match("anything", "", "", "Food:Coffee", 0) {
+			t.Error("expected match when category doesn't match excludeCategory")
+		}
+	})
+
+	t.Run("excludeCategory partial prefix does not reject", func(t *testing.T) {
+		r := Rule{Pattern: "", ExcludeCategory: "Transfer"}
+		if !r.Match("anything", "", "", "TransferWise", 0) {
+			t.Error("expected match for partial prefix without colon separator")
+		}
+	})
 }
 
 func TestApplyCategorization(t *testing.T) {

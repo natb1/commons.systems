@@ -158,6 +158,7 @@ type TransactionData struct {
 	TransactionID string
 	Category      string // set by categorization rules; preserved across re-imports
 	Budget        string // set by budget assignment rules; preserved across re-imports
+	Virtual       bool   // true for ETL-generated virtual transactions
 }
 
 // NormTxn is a read-only view of a transaction used by normalization rules.
@@ -313,14 +314,35 @@ func TransactionDocID(statementID, transactionID string) string {
 
 // RuleDoc holds a rule document read from Firestore.
 type RuleDoc struct {
-	ID          string
-	Type        string
-	Pattern     string
-	Target      string
-	Priority    int
-	Institution string
-	Account     string
-	Category    string
+	ID              string
+	Type            string
+	Pattern         string
+	Target          string
+	Priority        int
+	Institution     string
+	Account         string
+	MinAmount       *float64
+	MaxAmount       *float64
+	ExcludeCategory string
+	MatchCategory   string
+	Category        string
+}
+
+// optionalFloat reads an optional numeric field from a Firestore document map,
+// accepting both float64 and int64 representations. Returns nil if the field
+// is absent or null. Returns an error if the field is present but not numeric.
+func optionalFloat(d map[string]interface{}, docID, field string) (*float64, error) {
+	if v, ok := d[field].(float64); ok {
+		return &v, nil
+	}
+	if v, ok := d[field].(int64); ok {
+		f := float64(v)
+		return &f, nil
+	}
+	if d[field] != nil {
+		return nil, fmt.Errorf("rule %s: field '%s' is not a number (got %T)", docID, field, d[field])
+	}
+	return nil, nil
 }
 
 // LoadRules reads rules from budget/{env}/rules, filtered by groupId.
@@ -371,6 +393,22 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 			r.Account = v
 		} else if d["account"] != nil {
 			return nil, fmt.Errorf("rule %s: field 'account' is not a string (got %T)", doc.Ref.ID, d["account"])
+		}
+		if r.MinAmount, err = optionalFloat(d, doc.Ref.ID, "minAmount"); err != nil {
+			return nil, err
+		}
+		if r.MaxAmount, err = optionalFloat(d, doc.Ref.ID, "maxAmount"); err != nil {
+			return nil, err
+		}
+		if v, ok := d["excludeCategory"].(string); ok {
+			r.ExcludeCategory = v
+		} else if d["excludeCategory"] != nil {
+			return nil, fmt.Errorf("rule %s: field 'excludeCategory' is not a string (got %T)", doc.Ref.ID, d["excludeCategory"])
+		}
+		if v, ok := d["matchCategory"].(string); ok {
+			r.MatchCategory = v
+		} else if d["matchCategory"] != nil {
+			return nil, fmt.Errorf("rule %s: field 'matchCategory' is not a string (got %T)", doc.Ref.ID, d["matchCategory"])
 		}
 		if v, ok := d["category"].(string); ok {
 			r.Category = v
@@ -621,8 +659,8 @@ func ComputeWeeklyAggregates(txns []FullTransaction) []WeeklyAggregateResult {
 			wd.creditTotal += -net
 		}
 
-		// Unbudgeted spending: no budget, positive net
-		if txn.Budget == "" && net > 0 {
+		// Unbudgeted spending: no budget, positive net, not card payment
+		if txn.Budget == "" && net > 0 && !isCardPaymentCategory(txn.Category) {
 			wd.unbudgetedTotal += net
 		}
 	}

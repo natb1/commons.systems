@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeDerivedBalances } from "../src/balance";
-import type { Budget, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetDiffs } from "../src/balance";
+import type { BudgetDiff, PerBudgetStats } from "../src/balance";
+import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
 
 function ts(dateStr: string): Timestamp {
   const d = new Date(dateStr);
@@ -24,8 +25,10 @@ function makeBudget(overrides: Partial<Budget> = {}): Budget {
   return {
     id: "food",
     name: "Food",
-    weeklyAllowance: 150,
+    allowance: 150,
+    allowancePeriod: "weekly",
     rollover: "none",
+    overrides: [],
     groupId: null,
     ...overrides,
   };
@@ -48,6 +51,7 @@ function makeTxn(overrides: Partial<Transaction> = {}): Transaction {
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -150,7 +154,7 @@ describe("computeBudgetBalance", () => {
   it("computes balance for single period with single transaction", () => {
     const txn = makeTxn({ amount: 50 });
     const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
-    const budget = makeBudget({ weeklyAllowance: 150 });
+    const budget = makeBudget({ allowance: 150 });
     const result = computeBudgetBalance(txn, [txn], budget, [period]);
     // allowance 150 - txn 50 = 100
     expect(result).toBe(100);
@@ -160,7 +164,7 @@ describe("computeBudgetBalance", () => {
     const txn1 = makeTxn({ id: "txn-1", amount: 30, timestamp: ts("2025-01-14") });
     const txn2 = makeTxn({ id: "txn-2", amount: 50, timestamp: ts("2025-01-16") });
     const period = makePeriod({ id: "food-w2", budgetId: "food", total: 80 });
-    const budget = makeBudget({ weeklyAllowance: 150 });
+    const budget = makeBudget({ allowance: 150 });
 
     // Balance at txn1: 150 - 30 = 120
     expect(computeBudgetBalance(txn1, [txn1, txn2], budget, [period])).toBe(120);
@@ -172,7 +176,7 @@ describe("computeBudgetBalance", () => {
     const txnA = makeTxn({ id: "aaa", amount: 30, timestamp: ts("2025-01-15") });
     const txnB = makeTxn({ id: "bbb", amount: 50, timestamp: ts("2025-01-15") });
     const period = makePeriod({ id: "food-w2", budgetId: "food", total: 80 });
-    const budget = makeBudget({ weeklyAllowance: 150 });
+    const budget = makeBudget({ allowance: 150 });
 
     // aaa comes first: 150 - 30 = 120
     expect(computeBudgetBalance(txnA, [txnA, txnB], budget, [period])).toBe(120);
@@ -182,7 +186,7 @@ describe("computeBudgetBalance", () => {
 
   describe("rollover: none", () => {
     it("resets to weekly allowance each period", () => {
-      const budget = makeBudget({ weeklyAllowance: 150, rollover: "none" });
+      const budget = makeBudget({ allowance: 150, rollover: "none" });
       const periods = [
         makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 120 }),
         makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 50 }),
@@ -196,7 +200,7 @@ describe("computeBudgetBalance", () => {
 
   describe("rollover: debt", () => {
     it("carries only negative balance to next period", () => {
-      const budget = makeBudget({ weeklyAllowance: 100, rollover: "debt" });
+      const budget = makeBudget({ allowance: 100, rollover: "debt" });
       const periods = [
         makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 120 }),
         makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 10 }),
@@ -208,7 +212,7 @@ describe("computeBudgetBalance", () => {
     });
 
     it("does not carry positive balance", () => {
-      const budget = makeBudget({ weeklyAllowance: 200, rollover: "debt" });
+      const budget = makeBudget({ allowance: 200, rollover: "debt" });
       const periods = [
         makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
         makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 10 }),
@@ -222,7 +226,7 @@ describe("computeBudgetBalance", () => {
 
   describe("rollover: balance", () => {
     it("carries full balance forward", () => {
-      const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+      const budget = makeBudget({ allowance: 100, rollover: "balance" });
       const periods = [
         makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
         makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
@@ -234,7 +238,7 @@ describe("computeBudgetBalance", () => {
     });
 
     it("carries negative balance forward", () => {
-      const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+      const budget = makeBudget({ allowance: 100, rollover: "balance" });
       const periods = [
         makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 120 }),
         makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 10 }),
@@ -247,7 +251,7 @@ describe("computeBudgetBalance", () => {
   });
 
   it("handles multiple prior periods with rollover", () => {
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const budget = makeBudget({ allowance: 100, rollover: "balance" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
       makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 80 }),
@@ -261,7 +265,7 @@ describe("computeBudgetBalance", () => {
   });
 
   it("only considers transactions for the same budget", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 150 });
+    const budget = makeBudget({ id: "food", allowance: 150 });
     const period = makePeriod({ id: "food-w2", budgetId: "food" });
     const foodTxn = makeTxn({ id: "txn-food", amount: 50, budget: "food" });
     const housingTxn = makeTxn({ id: "txn-housing", amount: 200, budget: "housing" });
@@ -282,7 +286,7 @@ describe("computeBudgetBalance", () => {
   it("reimbursement reduces effective amount in balance", () => {
     const txn = makeTxn({ amount: 100, reimbursement: 50 });
     const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
-    const budget = makeBudget({ weeklyAllowance: 150 });
+    const budget = makeBudget({ allowance: 150 });
     // net = 100 * (1 - 50/100) = 50; balance = 150 - 50 = 100
     expect(computeBudgetBalance(txn, [txn], budget, [period])).toBe(100);
   });
@@ -299,14 +303,14 @@ describe("computeAllBudgetBalances", () => {
   it("computes balance for single budget and period", () => {
     const txn = makeTxn({ id: "txn-1", amount: 50 });
     const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
-    const budget = makeBudget({ weeklyAllowance: 150 });
+    const budget = makeBudget({ allowance: 150 });
     const result = computeAllBudgetBalances([txn], [budget], [period]);
     expect(result.get("txn-1")).toBe(100);
   });
 
   it("computes balances for multi-budget with rollover", () => {
-    const foodBudget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance" });
-    const vacBudget = makeBudget({ id: "vacation", weeklyAllowance: 50, rollover: "none" });
+    const foodBudget = makeBudget({ id: "food", allowance: 100, rollover: "balance" });
+    const vacBudget = makeBudget({ id: "vacation", allowance: 50, rollover: "none" });
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
       makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
@@ -327,7 +331,7 @@ describe("computeAllBudgetBalances", () => {
   });
 
   it("skips transactions in gaps between non-contiguous periods", () => {
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const budget = makeBudget({ allowance: 100, rollover: "balance" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
       makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 30 }),
@@ -341,7 +345,7 @@ describe("computeAllBudgetBalances", () => {
   });
 
   it("uses period.total (not live transaction sums) for prior-period rollover", () => {
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const budget = makeBudget({ allowance: 100, rollover: "balance" });
     const periods = [
       // total says 60, but actual transaction sums to 40 — simulating drift
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
@@ -357,7 +361,7 @@ describe("computeAllBudgetBalances", () => {
   });
 
   it("matches computeBudgetBalance cross-check", () => {
-    const budget = makeBudget({ weeklyAllowance: 100, rollover: "balance" });
+    const budget = makeBudget({ allowance: 100, rollover: "balance" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
       makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 25 }),
@@ -376,7 +380,7 @@ describe("computeAllBudgetBalances", () => {
 
   describe("normalization filtering", () => {
     it("excludes non-primary normalized transactions from balances", () => {
-      const budget = makeBudget({ weeklyAllowance: 150 });
+      const budget = makeBudget({ allowance: 150 });
       const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
       const primary = makeTxn({
         id: "txn-primary",
@@ -396,7 +400,7 @@ describe("computeAllBudgetBalances", () => {
     });
 
     it("includes primary normalized transaction with a normal balance", () => {
-      const budget = makeBudget({ weeklyAllowance: 150 });
+      const budget = makeBudget({ allowance: 150 });
       const period = makePeriod({ id: "food-w2", budgetId: "food", total: 50 });
       const primary = makeTxn({
         id: "txn-primary",
@@ -410,7 +414,7 @@ describe("computeAllBudgetBalances", () => {
     });
 
     it("includes unnormalized and primary, excludes non-primary", () => {
-      const budget = makeBudget({ weeklyAllowance: 200 });
+      const budget = makeBudget({ allowance: 200 });
       const period = makePeriod({ id: "food-w2", budgetId: "food", total: 110 });
       const unnormalized = makeTxn({
         id: "txn-unnorm",
@@ -450,7 +454,7 @@ describe("computeAllBudgetBalances", () => {
 
 describe("computePeriodBalances", () => {
   it("single budget, single period: returns correct spent and runningBalance", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 150, rollover: "none" });
+    const budget = makeBudget({ id: "food", allowance: 150, rollover: "none" });
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
     ];
@@ -464,7 +468,7 @@ describe("computePeriodBalances", () => {
   });
 
   it("multi-period with rollover none: balance resets each period", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "none" });
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "none" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
       makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
@@ -481,7 +485,7 @@ describe("computePeriodBalances", () => {
   });
 
   it("multi-period with rollover debt: only negative carries", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "debt" });
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "debt" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 120 }),
       makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 50 }),
@@ -498,7 +502,7 @@ describe("computePeriodBalances", () => {
   });
 
   it("multi-period with rollover balance: full balance carries", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "balance" });
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "balance" });
     const periods = [
       makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
       makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
@@ -515,8 +519,8 @@ describe("computePeriodBalances", () => {
   });
 
   it("multi-budget: returns separate entries per budget", () => {
-    const foodBudget = makeBudget({ id: "food", weeklyAllowance: 100, rollover: "none" });
-    const vacBudget = makeBudget({ id: "vacation", name: "Vacation", weeklyAllowance: 50, rollover: "balance" });
+    const foodBudget = makeBudget({ id: "food", allowance: 100, rollover: "none" });
+    const vacBudget = makeBudget({ id: "vacation", name: "Vacation", allowance: 50, rollover: "balance" });
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
       makePeriod({ id: "vac-w1", budgetId: "vacation", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 20 }),
@@ -536,13 +540,13 @@ describe("computePeriodBalances", () => {
   });
 
   it("empty periods: returns empty array for each budget", () => {
-    const budget = makeBudget({ id: "food", weeklyAllowance: 100 });
+    const budget = makeBudget({ id: "food", allowance: 100 });
     const result = computePeriodBalances([budget], []);
     expect(result.get("food" as any)).toEqual([]);
   });
 
   it("budget with no matching periods: returns empty array", () => {
-    const foodBudget = makeBudget({ id: "food", weeklyAllowance: 100 });
+    const foodBudget = makeBudget({ id: "food", allowance: 100 });
     const periods = [
       makePeriod({ id: "vac-w1", budgetId: "vacation", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 20 }),
     ];
@@ -612,52 +616,62 @@ describe("computeAverageWeeklyCredits", () => {
     expect(computeAverageWeeklyCredits(aggs)).toBe(0);
   });
 
-  it("single aggregate with creditTotal returns creditTotal / 12", () => {
+  it("excludes latest incomplete week from window", () => {
+    // Only 1 aggregate — it's the latest, so it's excluded → sum = 0
     const aggs = [
       makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
     ];
+    expect(computeAverageWeeklyCredits(aggs)).toBe(0);
+  });
+
+  it("includes completed weeks but not the latest", () => {
+    // Latest is 2025-03-10 (excluded), earlier week 2025-03-03 is included
+    const aggs = [
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 1200 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 600 }),
+    ];
+    // windowEnd = 2025-03-10, windowStart = 2025-03-10 - 12 weeks = 2024-12-16
+    // Only 2025-03-03 is in window → 1200 / 12 = 100
     expect(computeAverageWeeklyCredits(aggs)).toBe(100);
   });
 
-  it("multiple aggregates within window are summed then divided by 12", () => {
+  it("excludes aggregates outside 12-week window (before windowStart)", () => {
+    // Latest weekStart is 2025-03-10 → windowEnd = 2025-03-10, windowStart = 2024-12-15
+    // An aggregate at 2024-12-08 is before windowStart, excluded
     const aggs = [
-      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 600 }),
+      makeAggregate({ id: "2024-12-08", weekStart: ts("2024-12-08"), creditTotal: 9999 }),
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 1200 }),
       makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 600 }),
     ];
     expect(computeAverageWeeklyCredits(aggs)).toBe(100);
   });
 
-  it("excludes aggregates outside 12-week window (before windowStart)", () => {
-    // Latest weekStart is 2025-03-10 → windowEnd = 2025-03-17, windowStart = 2024-12-22
-    // An aggregate at 2024-12-15 is before windowStart, excluded
+  it("window is anchored to latest weekStart (exclusive end)", () => {
+    // Latest weekStart: 2025-03-10 → windowEnd = 2025-03-10
+    // windowStart = 2025-03-10 - 12 weeks = 2024-12-16
+    // Aggregate at 2024-12-16 is exactly at windowStart (inclusive)
     const aggs = [
-      makeAggregate({ id: "2024-12-15", weekStart: ts("2024-12-15"), creditTotal: 9999 }),
-      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
+      makeAggregate({ id: "2024-12-16", weekStart: ts("2024-12-16T00:00:00Z"), creditTotal: 240 }),
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 1200 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 600 }),
     ];
-    expect(computeAverageWeeklyCredits(aggs)).toBe(100);
-  });
-
-  it("window is anchored to latest weekStart + 1 week", () => {
-    // Latest weekStart: 2025-03-10 → windowEnd = 2025-03-17
-    // windowStart = 2025-03-17 - 12 weeks = 2024-12-23
-    // Aggregate at 2024-12-23 is exactly at windowStart (inclusive)
-    const aggs = [
-      makeAggregate({ id: "2024-12-23", weekStart: ts("2024-12-23T00:00:00Z"), creditTotal: 240 }),
-      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
-    ];
+    // Window: [2024-12-16, 2025-03-10) → includes 2024-12-16 (240) and 2025-03-03 (1200)
     expect(computeAverageWeeklyCredits(aggs)).toBe(120);
 
-    // Aggregate at 2024-12-22 is just before windowStart (excluded)
+    // Aggregate at 2024-12-15 is just before windowStart (excluded)
     const aggsExcluded = [
-      makeAggregate({ id: "2024-12-22", weekStart: ts("2024-12-22T23:59:59.999Z"), creditTotal: 9999 }),
-      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 1200 }),
+      makeAggregate({ id: "2024-12-15", weekStart: ts("2024-12-15T23:59:59.999Z"), creditTotal: 9999 }),
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 1200 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 600 }),
     ];
     expect(computeAverageWeeklyCredits(aggsExcluded)).toBe(100);
   });
 
   it("fractional creditTotal is handled correctly", () => {
+    // Need at least 2 aggregates; latest is excluded
     const aggs = [
-      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 500 }),
+      makeAggregate({ id: "2025-03-03", weekStart: ts("2025-03-03"), creditTotal: 500 }),
+      makeAggregate({ id: "2025-03-10", weekStart: ts("2025-03-10"), creditTotal: 100 }),
     ];
     expect(computeAverageWeeklyCredits(aggs)).toBeCloseTo(500 / 12, 10);
   });
@@ -783,8 +797,8 @@ describe("computePerBudgetTrend", () => {
 
   it("each budget gets separate series", () => {
     const budgets = [
-      makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 }),
-      makeBudget({ id: "fun", name: "Fun", weeklyAllowance: 50 }),
+      makeBudget({ id: "food", name: "Food", allowance: 100 }),
+      makeBudget({ id: "fun", name: "Fun", allowance: 50 }),
     ];
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
@@ -804,7 +818,7 @@ describe("computePerBudgetTrend", () => {
   });
 
   it("'Other' series from aggregates with unbudgetedTotal", () => {
-    const budgets = [makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 })];
+    const budgets = [makeBudget({ id: "food", name: "Food", allowance: 100 })];
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
     ];
@@ -818,7 +832,7 @@ describe("computePerBudgetTrend", () => {
   });
 
   it("no 'Other' series when unbudgetedTotal is zero", () => {
-    const budgets = [makeBudget({ id: "food", name: "Food", weeklyAllowance: 100 })];
+    const budgets = [makeBudget({ id: "food", name: "Food", allowance: 100 })];
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
     ];
@@ -836,37 +850,46 @@ describe("computeAverageWeeklySpending", () => {
     expect(computeAverageWeeklySpending([])).toBe(0);
   });
 
-  it("averages weekly totals over trailing 12 weeks", () => {
-    // Create 14 weeks of periods; only trailing 12 should be used
+  it("returns 0 for single week (only the incomplete current week)", () => {
+    const periods = [
+      makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
+    ];
+    expect(computeAverageWeeklySpending(periods)).toBe(0);
+  });
+
+  it("excludes latest incomplete week from trailing 12", () => {
+    // Create 15 weeks of periods; latest excluded, calendar 12w window from week 14
     const periods: ReturnType<typeof makePeriod>[] = [];
-    for (let i = 0; i < 14; i++) {
-      const start = new Date("2025-01-06");
-      start.setDate(start.getDate() + i * 7);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 7);
+    for (let i = 0; i < 15; i++) {
+      const start = new Date(Date.UTC(2025, 0, 6 + i * 7));
+      const end = new Date(Date.UTC(2025, 0, 13 + i * 7));
       periods.push(
         makePeriod({
           id: `food-w${i}`,
           budgetId: "food",
           periodStart: ts(start.toISOString()),
           periodEnd: ts(end.toISOString()),
-          total: i < 2 ? 999 : 100, // first 2 weeks have large totals that should be excluded
+          total: i < 2 ? 999 : 100, // first 2 weeks have large totals outside 12w window
         }),
       );
     }
     const result = computeAverageWeeklySpending(periods);
-    // Trailing 12 weeks (indices 2-13) all have total=100
-    expect(result).toBe(100);
+    // Completed = weeks 0-13 (latest week 14 excluded)
+    // Calendar 12w window from week 14: weeks 2-13 (week 2 is exactly 12 weeks before, included with <=)
+    // Weeks 2-13: 12 data weeks, all 100. Sum = 1200, avg = 1200 / 12
+    expect(result).toBeCloseTo(1200 / 12);
   });
 
-  it("fewer than 12 weeks averages over available weeks", () => {
+  it("fewer than 12 completed weeks divides by 12 (fixed window)", () => {
     const periods = [
       makePeriod({ id: "food-w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 80 }),
       makePeriod({ id: "food-w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 120 }),
+      makePeriod({ id: "food-w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 200 }),
     ];
     const result = computeAverageWeeklySpending(periods);
-    // 2 weeks: (80 + 120) / 2 = 100
-    expect(result).toBe(100);
+    // Latest week (w3) excluded, completed = w1 + w2, both within 12w of w3
+    // Sum = 80 + 120 = 200, avg = 200 / 12
+    expect(result).toBeCloseTo(200 / 12);
   });
 });
 
@@ -895,6 +918,7 @@ function makeStmt(overrides: Partial<Statement> = {}): Statement {
     balanceDate: null,
     lastTransactionDate: null,
     groupId: null,
+    virtual: false,
     ...overrides,
   };
 }
@@ -957,13 +981,13 @@ describe("computeNetWorth", () => {
       makeStmt({ id: "s1", period: "2025-01", balance: 1000 }),
       makeStmt({ id: "s2", period: "2024-12", balance: 800 }),
     ];
-    // No transactions between Dec and Jan, so derived Dec balance = 1000
-    // But statement says 800 → divergence of 200
+    // Multi-anchor: sorted chronologically, Dec (800) → Jan (1000).
+    // Derived from Dec with no transactions = 800, but Jan says 1000 → divergence.
     const result = computeNetWorth([], stmts, weeks);
     expect(result.divergences).toHaveLength(1);
-    expect(result.divergences[0].period).toBe("2024-12");
-    expect(result.divergences[0].statementBalance).toBe(800);
-    expect(result.divergences[0].derivedBalance).toBe(1000);
+    expect(result.divergences[0].period).toBe("2025-01");
+    expect(result.divergences[0].statementBalance).toBe(1000);
+    expect(result.divergences[0].derivedBalance).toBe(800);
   });
 
   it("no divergence when transaction accounts for balance change", () => {
@@ -1017,9 +1041,6 @@ describe("computeNetWorth", () => {
   });
 
   it("uses balanceDate for anchor when present", () => {
-    // Two statements with balanceDates: Dec 15 (balance=1000) and Jan 20 (balance=900).
-    // statementEffectiveMs uses balanceDate midnight UTC, so latest is Jan 20.
-    // One transaction of 100 between them explains the drop → zero divergences.
     const stmts = [
       makeStmt({ id: "s1", period: "2024-12", balance: 1000, balanceDate: "2024-12-15" }),
       makeStmt({ id: "s2", period: "2025-01", balance: 900, balanceDate: "2025-01-20" }),
@@ -1030,12 +1051,124 @@ describe("computeNetWorth", () => {
     ];
     const result = computeNetWorth(txns, stmts, weeks);
     expect(result.divergences).toHaveLength(0);
-    // Anchor is Jan 20 (latest by balanceDate). Week Jan 5 balance:
-    // anchorBalance(900) - (cumBefore(Jan5) - cumBefore(Jan20)) = 900 - (0 - 100) = 1000
     expect(result.points[0].netWorth).toBe(1000);
-    // Week Jan 12 balance: txn at Jan 10 is before Jan 12
-    // 900 - (100 - 100) = 900
     expect(result.points[1].netWorth).toBe(900);
+  });
+
+  it("marks weeks at statement boundaries as anchored", () => {
+    // Statement for 2025-01 has effectiveMs = Feb 1 (first of next month).
+    // A week starting on Feb 1 should be anchored.
+    const febWeeks = [
+      { label: "1/19", ms: new Date("2025-01-19").getTime() },
+      { label: "2/1", ms: Date.UTC(2025, 1, 1) },  // Feb 1 = anchor boundary for 2025-01 stmt
+      { label: "2/9", ms: new Date("2025-02-09").getTime() },
+    ];
+    const result = computeNetWorth([], [makeStmt({ balance: 500, period: "2025-01" })], febWeeks);
+    expect(result.points[0].isStatementAnchored).toBe(false);
+    expect(result.points[1].isStatementAnchored).toBe(true);
+    expect(result.points[2].isStatementAnchored).toBe(false);
+  });
+
+  it("two statements: both boundaries anchored, intermediate interpolated", () => {
+    const twoStmtWeeks = [
+      { label: "1/1", ms: Date.UTC(2025, 0, 1) },  // anchor for 2024-12
+      { label: "1/15", ms: Date.UTC(2025, 0, 15) }, // interpolated
+      { label: "2/1", ms: Date.UTC(2025, 1, 1) },   // anchor for 2025-01
+    ];
+    const stmts = [
+      makeStmt({ id: "s1", period: "2024-12", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-01", balance: 900 }),
+    ];
+    const result = computeNetWorth([], stmts, twoStmtWeeks);
+    expect(result.points[0].isStatementAnchored).toBe(true);
+    expect(result.points[1].isStatementAnchored).toBe(false);
+    expect(result.points[2].isStatementAnchored).toBe(true);
+  });
+
+  it("multi-account: anchored when any account has statement that week", () => {
+    const multiWeeks = [
+      { label: "1/1", ms: Date.UTC(2025, 0, 1) },  // anchor for Bank 2024-12
+      { label: "2/1", ms: Date.UTC(2025, 1, 1) },   // anchor for both Bank 2025-01 and CC 2025-01
+    ];
+    const stmts = [
+      makeStmt({ id: "s1", institution: "Bank", account: "Checking", period: "2024-12", balance: 1000 }),
+      makeStmt({ id: "s2", institution: "Bank", account: "Checking", period: "2025-01", balance: 900 }),
+      makeStmt({ id: "s3", institution: "CC", account: "Visa", period: "2025-01", balance: -500 }),
+    ];
+    const result = computeNetWorth([], stmts, multiWeeks);
+    // Jan 1: anchored (Bank has 2024-12 anchor)
+    expect(result.points[0].isStatementAnchored).toBe(true);
+    // Feb 1: anchored (both Bank and CC have 2025-01 anchor)
+    expect(result.points[1].isStatementAnchored).toBe(true);
+  });
+
+  it("multi-anchor re-anchoring eliminates drift", () => {
+    // Two statements: Dec (balance=1000) and Jan (balance=800).
+    // A "phantom" $50 spending between Dec and Jan would cause the old single-anchor
+    // approach to show drift. With multi-anchor, the Jan boundary snaps to 800.
+    const reanchorWeeks = [
+      { label: "12/15", ms: Date.UTC(2024, 11, 15) },
+      { label: "1/1", ms: Date.UTC(2025, 0, 1) },   // Dec anchor
+      { label: "1/15", ms: Date.UTC(2025, 0, 15) },
+      { label: "2/1", ms: Date.UTC(2025, 1, 1) },    // Jan anchor
+      { label: "2/15", ms: Date.UTC(2025, 1, 15) },
+    ];
+    const stmts = [
+      makeStmt({ id: "s1", period: "2024-12", balance: 1000 }),
+      makeStmt({ id: "s2", period: "2025-01", balance: 800 }),
+    ];
+    const txns = [
+      makeTxn({ id: "t1", institution: "Bank", account: "Checking", amount: 150,
+        timestamp: ts("2025-01-10"), budget: null }),
+    ];
+    const result = computeNetWorth(txns, stmts, reanchorWeeks);
+    // At Feb 1 (Jan anchor), balance should snap to 800 (the actual statement balance)
+    expect(result.points[3].netWorth).toBe(800);
+    // At Feb 15 (after Jan anchor), no more txns, stays at 800
+    expect(result.points[4].netWorth).toBe(800);
+  });
+});
+
+describe("computeCashFlow", () => {
+  it("returns empty for empty input", () => {
+    expect(computeCashFlow([])).toEqual([]);
+  });
+
+  it("returns empty for single point (need 2 to diff)", () => {
+    const points = [{ weekLabel: "1/5", weekMs: 1000, netWorth: 500, isStatementAnchored: false }];
+    expect(computeCashFlow(points)).toEqual([]);
+  });
+
+  it("computes week-over-week diffs for three points", () => {
+    const points = [
+      { weekLabel: "1/5", weekMs: 1000, netWorth: 500, isStatementAnchored: false },
+      { weekLabel: "1/12", weekMs: 2000, netWorth: 600, isStatementAnchored: true },
+      { weekLabel: "1/19", weekMs: 3000, netWorth: 550, isStatementAnchored: false },
+    ];
+    const result = computeCashFlow(points);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ weekLabel: "1/12", weekMs: 2000, cashFlow: 100, isStatementAnchored: true });
+    expect(result[1]).toEqual({ weekLabel: "1/19", weekMs: 3000, cashFlow: -50, isStatementAnchored: false });
+  });
+
+  it("carries isStatementAnchored through from source points", () => {
+    const points = [
+      { weekLabel: "1/5", weekMs: 1000, netWorth: 100, isStatementAnchored: true },
+      { weekLabel: "1/12", weekMs: 2000, netWorth: 200, isStatementAnchored: false },
+      { weekLabel: "1/19", weekMs: 3000, netWorth: 300, isStatementAnchored: true },
+    ];
+    const result = computeCashFlow(points);
+    expect(result[0].isStatementAnchored).toBe(false);
+    expect(result[1].isStatementAnchored).toBe(true);
+  });
+
+  it("produces negative cash flow when net worth decreases", () => {
+    const points = [
+      { weekLabel: "1/5", weekMs: 1000, netWorth: 1000, isStatementAnchored: false },
+      { weekLabel: "1/12", weekMs: 2000, netWorth: 800, isStatementAnchored: false },
+    ];
+    const result = computeCashFlow(points);
+    expect(result[0].cashFlow).toBe(-200);
   });
 });
 
@@ -1248,6 +1381,333 @@ describe("computeDerivedBalances", () => {
   });
 });
 
+// Shared setup for override tests:
+// Budget with allowance=100, rollover="balance"
+// 3 consecutive weekly periods: w1 (Jan 6-13), w2 (Jan 13-20), w3 (Jan 20-27)
+// Override date of Jan 13 with balance=50 (in w2)
+
+function makeOverride(dateStr: string, balance: number): BudgetOverride {
+  return { date: ts(dateStr), balance };
+}
+
+describe("findLatestOverride", () => {
+  it("returns null for empty overrides", () => {
+    expect(findLatestOverride([], ts("2025-01-15").toMillis())).toBeNull();
+  });
+
+  it("returns null when all overrides are after beforeMs", () => {
+    const overrides = [makeOverride("2025-01-20", 50), makeOverride("2025-01-27", 75)];
+    expect(findLatestOverride(overrides, ts("2025-01-15").toMillis())).toBeNull();
+  });
+
+  it("returns the only override when it is before beforeMs", () => {
+    const overrides = [makeOverride("2025-01-13", 50)];
+    const result = findLatestOverride(overrides, ts("2025-01-15").toMillis());
+    expect(result).not.toBeNull();
+    expect(result!.balance).toBe(50);
+  });
+
+  it("returns the latest override before beforeMs when there are multiple", () => {
+    const overrides = [
+      makeOverride("2025-01-06", 30),
+      makeOverride("2025-01-13", 50),
+      makeOverride("2025-01-20", 80),
+    ];
+    // beforeMs is Jan 15 — Jan 6 and Jan 13 qualify, Jan 20 does not
+    const result = findLatestOverride(overrides, ts("2025-01-15").toMillis());
+    expect(result).not.toBeNull();
+    expect(result!.balance).toBe(50);
+    expect(result!.date.toMillis()).toBe(ts("2025-01-13").toMillis());
+  });
+
+  it("returns override exactly at the beforeMs boundary (inclusive)", () => {
+    const overrides = [makeOverride("2025-01-13", 50)];
+    const result = findLatestOverride(overrides, ts("2025-01-13").toMillis());
+    expect(result).not.toBeNull();
+    expect(result!.balance).toBe(50);
+  });
+});
+
+describe("computeBudgetBalance with overrides", () => {
+  const w1 = makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 40 });
+  const w2 = makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 });
+  const w3 = makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 25 });
+  const periods = [w1, w2, w3];
+
+  it("no override: existing behavior unchanged", () => {
+    const budget = makeBudget({ allowance: 100, rollover: "balance" });
+    const txn = makeTxn({ id: "txn-1", amount: 30, timestamp: ts("2025-01-15") });
+    // w1: 0+100=100, -40(total)=60; w2: 60+100=160, -txn30=130
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(130);
+  });
+
+  it("single override in a prior period: balance starts from override", () => {
+    // Override at Jan 13 (start of w2) with balance=50 — override falls in w2
+    // but target txn is in w3, so override is "prior" to w3
+    const budget = makeBudget({ allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const txn = makeTxn({ id: "txn-1", amount: 25, timestamp: ts("2025-01-22") });
+    // Override in w2: running = 50 - w2.total(30) = 20
+    // w3: applyRollover(20, 100, "balance") = 120, -txn25 = 95
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(95);
+  });
+
+  it("override in the same period as the target transaction: replaces rollover", () => {
+    // Override at Jan 13 (w2), target txn also in w2
+    const budget = makeBudget({ allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const txn = makeTxn({ id: "txn-1", amount: 30, timestamp: ts("2025-01-15") });
+    // Override is in w2 (target period): running starts at 50, -txn30 = 20
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(20);
+  });
+
+  it("multiple overrides: latest one before the target period start is used", () => {
+    // Two overrides: Jan 6 (w1) and Jan 13 (w2). Target txn in w3.
+    // Latest override at or before start of w3 (Jan 20) is Jan 13.
+    const budget = makeBudget({
+      allowance: 100,
+      rollover: "balance",
+      overrides: [makeOverride("2025-01-06", 20), makeOverride("2025-01-13", 50)],
+    });
+    const txn = makeTxn({ id: "txn-1", amount: 25, timestamp: ts("2025-01-22") });
+    // Override at Jan 13 (w2) is used: running = 50 - w2.total(30) = 20
+    // w3: 20+100=120, -txn25 = 95
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(95);
+  });
+
+  it("override after all transactions: no effect on earlier transactions", () => {
+    // Override at Jan 27 (after w3) — target txn is in w2
+    const budget = makeBudget({ allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-27", 999)] });
+    const txn = makeTxn({ id: "txn-1", amount: 30, timestamp: ts("2025-01-15") });
+    // No applicable override for w2 target period start (Jan 13): normal behavior
+    // w1: 0+100=100, -40=60; w2: 60+100=160, -txn30=130
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(130);
+  });
+
+  it("override with rollover: none — next period resets to just allowance", () => {
+    // Override at Jan 13 (w2) with balance=200. rollover=none means w3 discards accumulated balance.
+    const budget = makeBudget({ allowance: 100, rollover: "none", overrides: [makeOverride("2025-01-13", 200)] });
+    const txn = makeTxn({ id: "txn-1", amount: 10, timestamp: ts("2025-01-22") });
+    // w2: override → running=200, -30(total)=170
+    // w3: applyRollover(170, 100, "none") = 100 (discards surplus), -txn10 = 90
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(90);
+  });
+
+  it("override with rollover: debt — next period carries only negative balance", () => {
+    // Override at Jan 13 (w2) with positive balance=200. rollover=debt carries min(running, 0).
+    const budget = makeBudget({ allowance: 100, rollover: "debt", overrides: [makeOverride("2025-01-13", 200)] });
+    const txn = makeTxn({ id: "txn-1", amount: 10, timestamp: ts("2025-01-22") });
+    // w2: override → running=200, -30(total)=170
+    // w3: applyRollover(170, 100, "debt") = min(170,0)+100 = 100 (positive balance discarded), -txn10 = 90
+    expect(computeBudgetBalance(txn, [txn], budget, periods)).toBe(90);
+  });
+
+  it("override date in gap between non-contiguous periods: silently ignored", () => {
+    // Periods w1 (Jan 6-13) and w3 (Jan 20-27) with a gap (no w2). Override at Jan 15 (in gap).
+    const gapPeriods = [w1, w3];
+    const budget = makeBudget({ allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-15", 999)] });
+    const txn = makeTxn({ id: "txn-1", amount: 10, timestamp: ts("2025-01-22") });
+    // Override at Jan 15 falls in no period (gap), so overridePeriodIdx = -1 → ignored.
+    // Normal behavior: w1: 0+100-40=60; w3: 60+100=160, -txn10 = 150
+    expect(computeBudgetBalance(txn, [txn], budget, gapPeriods)).toBe(150);
+  });
+});
+
+describe("computePeriodBalances with overrides", () => {
+  const w1 = makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 40 });
+  const w2 = makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 });
+  const w3 = makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 25 });
+
+  it("override in the first period: replaces initial balance", () => {
+    // Override at Jan 6 (start of w1) with balance=50
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-06", 50)] });
+    const result = computePeriodBalances([budget], [w1, w2, w3]);
+    const balances = result.get("food" as any)!;
+    expect(balances).toHaveLength(3);
+    // w1: override in period → running=50; accumulated = 50-40=10
+    expect(balances[0].runningBalance).toBe(10);
+    // w2: applyRollover(10, 100, "balance") = 110; 110-30=80
+    expect(balances[1].runningBalance).toBe(80);
+    // w3: applyRollover(80, 100, "balance") = 180; 180-25=155
+    expect(balances[2].runningBalance).toBe(155);
+  });
+
+  it("override in a middle period: resets accumulated balance", () => {
+    // Override at Jan 13 (start of w2) with balance=50
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const result = computePeriodBalances([budget], [w1, w2, w3]);
+    const balances = result.get("food" as any)!;
+    expect(balances).toHaveLength(3);
+    // w1: no override → applyRollover(0, 100, "balance") = 100; 100-40=60
+    expect(balances[0].runningBalance).toBe(60);
+    // w2: override in period (Jan 13 in [Jan13, Jan20)) → running=50; 50-30=20
+    expect(balances[1].runningBalance).toBe(20);
+    // w3: applyRollover(20, 100, "balance") = 120; 120-25=95
+    expect(balances[2].runningBalance).toBe(95);
+  });
+
+  it("rollover resumes normally after the override period", () => {
+    // Override only in w2; w3 should use normal rollover from w2's result
+    const budget = makeBudget({ id: "food", allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+    const w4 = makePeriod({ id: "w4", budgetId: "food", periodStart: ts("2025-01-27"), periodEnd: ts("2025-02-03"), total: 10 });
+    const result = computePeriodBalances([budget], [w1, w2, w3, w4]);
+    const balances = result.get("food" as any)!;
+    expect(balances).toHaveLength(4);
+    // w2 ends at 20 (from test above); w3: 20+100=120, -25=95; w4: 95+100=195, -10=185
+    expect(balances[3].runningBalance).toBe(185);
+  });
+});
+
+describe("computeAllBudgetBalances with overrides", () => {
+  it("override applies and cross-checks against computeBudgetBalance", () => {
+    const w1 = makePeriod({ id: "w1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 40 });
+    const w2 = makePeriod({ id: "w2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 });
+    const w3 = makePeriod({ id: "w3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 25 });
+    const periods = [w1, w2, w3];
+
+    // Override at Jan 13 (w2) with balance=50
+    const budget = makeBudget({ allowance: 100, rollover: "balance", overrides: [makeOverride("2025-01-13", 50)] });
+
+    const txn1 = makeTxn({ id: "txn-w2", amount: 30, timestamp: ts("2025-01-15") });
+    const txn2 = makeTxn({ id: "txn-w3", amount: 25, timestamp: ts("2025-01-22") });
+    const allTxns = [txn1, txn2];
+
+    const batch = computeAllBudgetBalances(allTxns, [budget], periods);
+    const single1 = computeBudgetBalance(txn1, allTxns, budget, periods);
+    const single2 = computeBudgetBalance(txn2, allTxns, budget, periods);
+
+    expect(batch.get("txn-w2")).toBe(single1);
+    expect(batch.get("txn-w3")).toBe(single2);
+
+    // Verify concrete values:
+    // txn-w2 (w2, override in period): running=50, -30=20
+    expect(batch.get("txn-w2")).toBe(20);
+    // txn-w3 (w3, override prior): running=50-30(w2.total)=20, w3: 20+100=120, -25=95
+    expect(batch.get("txn-w3")).toBe(95);
+  });
+});
+
+describe("periodAllowance", () => {
+  it("weekly: always returns full allowance", () => {
+    expect(periodAllowance(100, "weekly", null, Date.parse("2025-01-06"))).toBe(100);
+    expect(periodAllowance(100, "weekly", Date.parse("2025-01-06"), Date.parse("2025-01-13"))).toBe(100);
+  });
+
+  it("monthly: first period always gets full allowance", () => {
+    expect(periodAllowance(500, "monthly", null, Date.parse("2025-01-06"))).toBe(500);
+  });
+
+  it("monthly: returns full allowance at month boundary", () => {
+    // Jan 27 → Feb 3: different months
+    expect(periodAllowance(500, "monthly", Date.parse("2025-01-27"), Date.parse("2025-02-03"))).toBe(500);
+  });
+
+  it("monthly: returns 0 within same month", () => {
+    // Jan 6 → Jan 13: same month
+    expect(periodAllowance(500, "monthly", Date.parse("2025-01-06"), Date.parse("2025-01-13"))).toBe(0);
+  });
+
+  it("monthly: year boundary counts as month boundary", () => {
+    // Dec 29 → Jan 5: different year
+    expect(periodAllowance(500, "monthly", Date.parse("2024-12-29"), Date.parse("2025-01-05"))).toBe(500);
+  });
+
+  it("quarterly: first period gets full allowance", () => {
+    expect(periodAllowance(1200, "quarterly", null, Date.parse("2025-01-06"))).toBe(1200);
+  });
+
+  it("quarterly: returns 0 within same quarter", () => {
+    // Jan 6 → Feb 3: same Q1
+    expect(periodAllowance(1200, "quarterly", Date.parse("2025-01-06"), Date.parse("2025-02-03"))).toBe(0);
+  });
+
+  it("quarterly: cross-quarter boundary", () => {
+    // Mar 24 → Apr 7: Q1 → Q2
+    expect(periodAllowance(1200, "quarterly", Date.parse("2025-03-24"), Date.parse("2025-04-07"))).toBe(1200);
+  });
+
+  it("quarterly: cross-year boundary", () => {
+    // Dec 29 → Jan 5: Q4 → Q1
+    expect(periodAllowance(1200, "quarterly", Date.parse("2024-12-29"), Date.parse("2025-01-05"))).toBe(1200);
+  });
+});
+
+describe("weeklyEquivalent", () => {
+  it("weekly: returns allowance unchanged", () => {
+    expect(weeklyEquivalent(150, "weekly")).toBe(150);
+  });
+
+  it("monthly: converts to weekly equivalent", () => {
+    expect(weeklyEquivalent(500, "monthly")).toBeCloseTo(500 * 12 / 52, 10);
+  });
+
+  it("quarterly: converts to weekly equivalent", () => {
+    expect(weeklyEquivalent(1200, "quarterly")).toBeCloseTo(1200 * 4 / 52, 10);
+  });
+});
+
+describe("monthly allowance in computePeriodBalances", () => {
+  it("accumulates monthly allowance only at month boundaries", () => {
+    const budget = makeBudget({
+      allowance: 500,
+      allowancePeriod: "monthly",
+      rollover: "balance",
+    });
+    // 3 periods: Jan 6, Jan 13, Feb 3 — first gets 500, second gets 0, third gets 500 (new month)
+    const periods = [
+      makePeriod({ id: "p1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
+      makePeriod({ id: "p2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 50 }),
+      makePeriod({ id: "p3", budgetId: "food", periodStart: ts("2025-02-03"), periodEnd: ts("2025-02-10"), total: 200 }),
+    ];
+    const result = computePeriodBalances([budget], periods);
+    const balances = result.get("food")!;
+    // p1: rollover(0, 500, balance) = 500; 500 - 100 = 400
+    expect(balances[0].runningBalance).toBe(400);
+    // p2: rollover(400, 0, balance) = 400; 400 - 50 = 350
+    expect(balances[1].runningBalance).toBe(350);
+    // p3: rollover(350, 500, balance) = 850; 850 - 200 = 650
+    expect(balances[2].runningBalance).toBe(650);
+  });
+
+  it("weekly budget is unaffected by monthly logic", () => {
+    const budget = makeBudget({
+      allowance: 100,
+      allowancePeriod: "weekly",
+      rollover: "balance",
+    });
+    const periods = [
+      makePeriod({ id: "p1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 60 }),
+      makePeriod({ id: "p2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 30 }),
+    ];
+    const result = computePeriodBalances([budget], periods);
+    const balances = result.get("food")!;
+    // p1: 100 - 60 = 40
+    expect(balances[0].runningBalance).toBe(40);
+    // p2: 40 + 100 - 30 = 110
+    expect(balances[1].runningBalance).toBe(110);
+  });
+
+  it("monthly allowance with override interaction", () => {
+    const budget = makeBudget({
+      allowance: 500,
+      allowancePeriod: "monthly",
+      rollover: "balance",
+      overrides: [{ date: ts("2025-01-13"), balance: 200 }],
+    });
+    const periods = [
+      makePeriod({ id: "p1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
+      makePeriod({ id: "p2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 50 }),
+      makePeriod({ id: "p3", budgetId: "food", periodStart: ts("2025-02-03"), periodEnd: ts("2025-02-10"), total: 80 }),
+    ];
+    const result = computePeriodBalances([budget], periods);
+    const balances = result.get("food")!;
+    // p1: rollover(0, 500, balance) = 500; 500 - 100 = 400
+    expect(balances[0].runningBalance).toBe(400);
+    // p2: override at Jan 13 => running = 200; 200 - 50 = 150
+    expect(balances[1].runningBalance).toBe(150);
+    // p3: rollover(150, 500, balance) = 650; 650 - 80 = 570
+    expect(balances[2].runningBalance).toBe(570);
+  });
+});
+
 describe("weekStart", () => {
   it("a Monday returns the same Monday 00:00 UTC", () => {
     // 2025-01-13 is a Monday
@@ -1275,5 +1735,151 @@ describe("weekStart", () => {
     const newYear = Date.UTC(2025, 0, 1, 12, 0, 0);
     const result = weekStart(newYear);
     expect(result).toBe(Date.UTC(2024, 11, 30, 0, 0, 0, 0));
+  });
+});
+
+describe("computeBudgetDiffs", () => {
+  it("returns full allowance as diff and zero averages when no periods exist", () => {
+    const budgets = [
+      makeBudget({ id: "food", allowance: 150 }),
+      makeBudget({ id: "housing", name: "Housing", allowance: 400 }),
+    ];
+    const result = computeBudgetDiffs(budgets, []);
+    expect(result.get("food")!.diff).toEqual({ diff12: 150, diff52: 150 } satisfies BudgetDiff);
+    expect(result.get("food")!.avg).toEqual({ avg12: 0, avg52: 0 });
+    expect(result.get("housing")!.diff).toEqual({ diff12: 400, diff52: 400 } satisfies BudgetDiff);
+    expect(result.get("housing")!.avg).toEqual({ avg12: 0, avg52: 0 });
+  });
+
+  it("excludes latest week and divides by weekCount for multiple budgets", () => {
+    const budgets = [
+      makeBudget({ id: "food", allowance: 150 }),
+      makeBudget({ id: "fun", name: "Fun", allowance: 100 }),
+    ];
+
+    // 15 weeks: latest (week 14) excluded -> 14 completed weeks (0-13)
+    // Weeks 0-11: food=200/week, fun=50/week
+    // Weeks 12-13: food=100/week, fun=150/week
+    const periods: BudgetPeriod[] = [];
+    for (let i = 0; i < 15; i++) {
+      const weekSunday = new Date(Date.UTC(2025, 0, 5 + i * 7));
+      const nextSunday = new Date(Date.UTC(2025, 0, 12 + i * 7));
+      const foodTotal = i < 12 ? 200 : 100;
+      const funTotal = i < 12 ? 50 : 150;
+      periods.push(
+        makePeriod({ id: `food-w${i}`, budgetId: "food", periodStart: ts(weekSunday.toISOString()), periodEnd: ts(nextSunday.toISOString()), total: foodTotal }),
+        makePeriod({ id: `fun-w${i}`, budgetId: "fun", periodStart: ts(weekSunday.toISOString()), periodEnd: ts(nextSunday.toISOString()), total: funTotal }),
+      );
+    }
+
+    const result = computeBudgetDiffs(budgets, periods);
+
+    // food: 14 completed weeks. Last 12 = weeks 2-13 = 10*200 + 2*100 = 2200, avg = 2200/12
+    // 52-week trailing: all 14 completed = 12*200+2*100 = 2600, avg = 2600/52
+    const foodStats = result.get("food")!;
+    expect(foodStats.diff.diff12).toBeCloseTo(150 - 2200 / 12, 5);
+    expect(foodStats.diff.diff52).toBeCloseTo(150 - 2600 / 52, 5);
+    expect(foodStats.avg.avg12).toBeCloseTo(2200 / 12, 5);
+    expect(foodStats.avg.avg52).toBeCloseTo(2600 / 52, 5);
+
+    // fun: Last 12 completed = weeks 2-13 = 10*50 + 2*150 = 800, avg = 800/12
+    // 52-week trailing: all 14 completed = 12*50+2*150 = 900, avg = 900/52
+    const funStats = result.get("fun")!;
+    expect(funStats.diff.diff12).toBeCloseTo(100 - 800 / 12, 5);
+    expect(funStats.diff.diff52).toBeCloseTo(100 - 900 / 52, 5);
+    expect(funStats.avg.avg12).toBeCloseTo(800 / 12, 5);
+    expect(funStats.avg.avg52).toBeCloseTo(900 / 52, 5);
+  });
+
+  it("returns avg12 and avg52 excluding the latest incomplete week", () => {
+    const budget = makeBudget({ id: "food", name: "Food" });
+    // 5 weekly periods: latest (Feb 3) is excluded as incomplete
+    const periods = [
+      makePeriod({ id: "p1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
+      makePeriod({ id: "p2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 200 }),
+      makePeriod({ id: "p3", budgetId: "food", periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"), total: 150 }),
+      makePeriod({ id: "p4", budgetId: "food", periodStart: ts("2025-01-27"), periodEnd: ts("2025-02-03"), total: 250 }),
+      makePeriod({ id: "p5", budgetId: "food", periodStart: ts("2025-02-03"), periodEnd: ts("2025-02-10"), total: 999 }),
+    ];
+    const result = computeBudgetDiffs([budget], periods);
+    const avg = result.get("food")!.avg;
+    // Completed weeks: Jan 6-Jan 27 (4 weeks, all within 12w of latest Feb 3)
+    // avg12 = (100+200+150+250) / 12 = 700/12
+    expect(avg.avg12).toBeCloseTo(700 / 12);
+    expect(avg.avg52).toBeCloseTo(700 / 52);
+  });
+
+  it("separates averages by budget, excluding the global latest week", () => {
+    const budgets = [
+      makeBudget({ id: "food", name: "Food" }),
+      makeBudget({ id: "fun", name: "Fun" }),
+    ];
+    const periods = [
+      makePeriod({ id: "f1", budgetId: "food", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 100 }),
+      makePeriod({ id: "f2", budgetId: "food", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 200 }),
+      makePeriod({ id: "n1", budgetId: "fun", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
+      makePeriod({ id: "n2", budgetId: "fun", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 70 }),
+    ];
+    const result = computeBudgetDiffs(budgets, periods);
+    // Global latest week is Jan 13; excluded from both budgets
+    // Each has 1 completed week within 12w window, divided by 12
+    expect(result.get("food")!.avg.avg12).toBeCloseTo(100 / 12);
+    expect(result.get("fun")!.avg.avg12).toBeCloseTo(50 / 12);
+  });
+
+  it("sparse data: only includes weeks within calendar window", () => {
+    const budget = makeBudget({ id: "transport", name: "Transport" });
+    // 3 periods spanning a large gap; latest (Aug 11) excluded, leaving Jan 6 and Aug 4
+    // Jan 6 is ~30 weeks before Aug 11, so outside the 12w window but inside 52w
+    const periods = [
+      makePeriod({ id: "p1", budgetId: "transport", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 200 }),
+      makePeriod({ id: "p2", budgetId: "transport", periodStart: ts("2025-08-04"), periodEnd: ts("2025-08-11"), total: 100 }),
+      makePeriod({ id: "p3", budgetId: "transport", periodStart: ts("2025-08-11"), periodEnd: ts("2025-08-18"), total: 50 }),
+    ];
+    const result = computeBudgetDiffs([budget], periods);
+    const avg = result.get("transport")!.avg;
+    // 12w: only Aug 4 (100) is within 12 calendar weeks of Aug 11 -> 100/12
+    expect(avg.avg12).toBeCloseTo(100 / 12);
+    // 52w: both Jan 6 (200) and Aug 4 (100) are within 52 weeks -> 300/52
+    expect(avg.avg52).toBeCloseTo(300 / 52);
+  });
+
+  it("12-week calendar window excludes old data from avg12 but not avg52", () => {
+    const budget = makeBudget({ id: "food", name: "Food" });
+    // Create 15 weekly periods; latest (week 14) excluded -> 14 completed weeks (0-13)
+    const periods: ReturnType<typeof makePeriod>[] = [];
+    for (let i = 0; i < 15; i++) {
+      const start = new Date(Date.UTC(2025, 0, 6 + i * 7));
+      const end = new Date(Date.UTC(2025, 0, 13 + i * 7));
+      periods.push(makePeriod({
+        id: `p${i}`,
+        budgetId: "food",
+        periodStart: ts(start.toISOString()),
+        periodEnd: ts(end.toISOString()),
+        total: i < 2 ? 1000 : 100, // first 2 weeks high, rest low
+      }));
+    }
+    const result = computeBudgetDiffs([budget], periods);
+    const avg = result.get("food")!.avg;
+    // 12w: weeks 2-13 (12 weeks x 100) / 12 = 1200/12
+    expect(avg.avg12).toBeCloseTo(1200 / 12);
+    // 52w: all 14 completed weeks -> (2*1000 + 12*100) / 52 = 3200/52
+    expect(avg.avg52).toBeCloseTo(3200 / 52);
+  });
+
+  it("returns avg12=0 when all data is outside the 12-week window", () => {
+    const budget = makeBudget({ id: "default", name: "Default" });
+    // Data from Jan, but latest week is in Aug -- Jan data is >12 weeks old
+    const periods = [
+      makePeriod({ id: "p1", budgetId: "default", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 500 }),
+      makePeriod({ id: "p2", budgetId: "other", periodStart: ts("2025-08-04"), periodEnd: ts("2025-08-11"), total: 10 }),
+    ];
+    const budgets = [budget, makeBudget({ id: "other", name: "Other" })];
+    const result = computeBudgetDiffs(budgets, periods);
+    const avg = result.get("default")!.avg;
+    // Jan 6 is ~30 weeks before Aug 4 -> outside 12w window
+    expect(avg.avg12).toBe(0);
+    // But within 52w window -> 500/52
+    expect(avg.avg52).toBeCloseTo(500 / 52);
   });
 });

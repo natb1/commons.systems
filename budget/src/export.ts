@@ -49,8 +49,13 @@ export async function exportToJson(): Promise<string> {
     budgets: budgets.map((b) => ({
       id: b.id,
       name: b.name,
-      weeklyAllowance: b.weeklyAllowance,
+      allowance: b.allowance,
+      allowancePeriod: b.allowancePeriod,
       rollover: b.rollover,
+      overrides: (b.overrides ?? []).map(o => ({
+        date: msToIso(o.dateMs),
+        balance: o.balance,
+      })),
     })),
     budgetPeriods: budgetPeriods.map((p) => ({
       id: p.id,
@@ -69,6 +74,10 @@ export async function exportToJson(): Promise<string> {
       priority: r.priority,
       institution: nullToEmpty(r.institution),
       account: nullToEmpty(r.account),
+      ...(r.minAmount != null ? { minAmount: r.minAmount } : {}),
+      ...(r.maxAmount != null ? { maxAmount: r.maxAmount } : {}),
+      ...(r.excludeCategory ? { excludeCategory: r.excludeCategory } : {}),
+      ...(r.matchCategory ? { matchCategory: r.matchCategory } : {}),
     })),
     normalizationRules: normalizationRules.map((r) => ({
       id: r.id,

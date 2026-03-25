@@ -44,6 +44,7 @@ const idbTransactions = [
     normalizedId: null,
     normalizedPrimary: true,
     normalizedDescription: null,
+    virtual: false,
   },
 ];
 
@@ -51,8 +52,10 @@ const idbBudgets = [
   {
     id: "groceries",
     name: "Groceries",
-    weeklyAllowance: 100,
+    allowance: 100,
+    allowancePeriod: "weekly",
     rollover: "none",
+    overrides: [],
   },
 ];
 
@@ -77,6 +80,10 @@ const idbRules = [
     priority: 1,
     institution: null,
     account: null,
+    minAmount: null,
+    maxAmount: null,
+    excludeCategory: null,
+    matchCategory: null,
   },
 ];
 
@@ -103,6 +110,7 @@ const idbStatements = [
     period: "2025-06",
     balanceDate: null,
     lastTransactionDateMs: Date.parse("2025-06-10T00:00:00.000Z"),
+    virtual: false,
   },
 ];
 
@@ -175,7 +183,7 @@ describe("exportToJson", () => {
     const budget = output.budgets[0];
     expect(budget.id).toBe("groceries");
     expect(budget.name).toBe("Groceries");
-    expect(budget.weeklyAllowance).toBe(100);
+    expect(budget.allowance).toBe(100);
     expect(budget.rollover).toBe("none");
 
     const period = output.budgetPeriods[0];
@@ -272,6 +280,24 @@ describe("exportToJson", () => {
     mockGetMeta.mockResolvedValue(undefined);
 
     await expect(exportToJson()).rejects.toThrow("No local data to export. Upload a file first.");
+  });
+
+  it("round-trip preserves budget overrides", async () => {
+    const original = mockGetAll.getMockImplementation()!;
+    mockGetAll.mockImplementation((storeName: string) =>
+      storeName === "budgets"
+        ? Promise.resolve([{
+            ...idbBudgets[0],
+            overrides: [{ dateMs: Date.parse("2025-06-10T00:00:00Z"), balance: 50 }],
+          }])
+        : original(storeName),
+    );
+    const json = await exportToJson();
+    const parsed = parseUploadedJson(json);
+    const data = toParsedData(parsed);
+    expect(data.budgets[0].overrides).toHaveLength(1);
+    expect(data.budgets[0].overrides[0].dateMs).toBe(Date.parse("2025-06-10T00:00:00Z"));
+    expect(data.budgets[0].overrides[0].balance).toBe(50);
   });
 
   it("round-trip: export -> parseUploadedJson -> toParsedData produces equivalent IDB data", async () => {

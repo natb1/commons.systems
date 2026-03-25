@@ -1,6 +1,6 @@
 import * as Plot from "@observablehq/plot";
 import type { Budget, BudgetId, BudgetPeriod } from "../firestore.js";
-import { applyRollover, computePeriodBalances, toSundayEntry, type PeriodBalance } from "../balance.js";
+import { applyRollover, periodAllowance, weeklyEquivalent, computePeriodBalances, toSundayEntry, type PeriodBalance } from "../balance.js";
 import { getThemeFg, computePanelWidth, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
 export interface ChartOptions {
@@ -55,20 +55,24 @@ function buildChartData(
 
     // Walk all weeks: fill missing periods (no period record for this budget at this timestamp) with zero-spend rollover entries
     let accumulated = 0;
+    let prevWeekMs: number | null = null;
+    const weeklyAllow = weeklyEquivalent(budget.allowance, budget.allowancePeriod);
     for (const entry of weeks) {
       const pb = byMs.get(entry.ms);
       const spent = pb ? pb.spent : 0;
+      const allow = periodAllowance(budget.allowance, budget.allowancePeriod, prevWeekMs, entry.ms);
       const balance = pb
         ? pb.runningBalance
-        : applyRollover(accumulated, budget.weeklyAllowance, budget.rollover);
+        : applyRollover(accumulated, allow, budget.rollover);
       data.push({
         week: entry.label,
         budget: budget.name,
         spent,
-        allowance: budget.weeklyAllowance,
+        allowance: weeklyAllow,
         balance,
       });
       accumulated = balance;
+      prevWeekMs = entry.ms;
     }
   }
 

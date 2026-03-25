@@ -53,10 +53,16 @@
 .budget-header,
 .budget-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: 1fr minmax(5rem, 8rem) 7rem 6rem 6rem 8rem 6rem 6rem;
   gap: 0.5rem;
   padding: 0.5rem;
   align-items: center;
+}
+
+.avg-col {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .budget-header {
@@ -82,6 +88,53 @@
   border-radius: 4px;
 }
 
+/* --- Override table --- */
+
+#overrides-table {
+  margin-top: 2rem;
+}
+
+#overrides-table h3 {
+  margin-bottom: 0.5rem;
+}
+
+.override-header,
+.override-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  align-items: center;
+}
+
+.override-header {
+  font-weight: bold;
+  border-bottom: 2px solid var(--border);
+}
+
+.override-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.override-row input,
+.override-row select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.override-row input[type="date"],
+.override-row select {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+#add-override {
+  margin-top: 0.5rem;
+}
+
 /* --- Category sankey tree --- */
 
 #sankey-controls { max-width: 1200px; margin: 0 auto 0.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
@@ -105,7 +158,8 @@
 #budgets-chart [aria-label="tip"] text,
 #budgets-area-chart [aria-label="tip"] text,
 #accounts-trend-chart [aria-label="tip"] text,
-#accounts-net-worth-chart [aria-label="tip"] text { fill: #222; }
+#accounts-net-worth-chart [aria-label="tip"] text,
+#accounts-cash-flow-chart [aria-label="tip"] text { fill: #222; }
 .chart-layout {
   display: flex;
   align-items: stretch;
@@ -134,7 +188,8 @@
 
 #budgets-area-chart,
 #accounts-trend-chart,
-#accounts-net-worth-chart {
+#accounts-net-worth-chart,
+#accounts-cash-flow-chart {
   width: 100%;
   margin-bottom: 0.5rem;
 }
@@ -287,7 +342,7 @@
 @media (min-width: 768px) {
   #rules-table {
     display: grid;
-    grid-template-columns: 2fr 2fr 0.5fr 1fr 1fr 0.5fr;
+    grid-template-columns: 2fr 2fr 0.5fr 1fr 1fr 0.7fr 0.7fr 0.7fr 0.7fr 0.5fr;
     gap: 0 0.5rem;
     align-items: center;
   }
@@ -336,7 +391,7 @@
     grid-column: 3 / -1;
     grid-row: 1;
     display: grid;
-    grid-template-columns: 0.5fr 1fr 1fr 0.5fr;
+    grid-template-columns: 0.5fr 1fr 1fr 0.7fr 0.7fr 0.7fr 0.7fr 0.5fr;
     gap: 0 0.5rem;
     padding: 0;
     align-items: center;
@@ -454,4 +509,21 @@
   text-align: center;
   padding: 1rem;
   color: var(--error, #e15759);
+}
+
+/* --- Virtual transaction/account indicators --- */
+
+.virtual-badge {
+  font-size: 0.7em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  color: var(--fg);
+  opacity: 0.6;
+  margin-left: 0.5em;
+  vertical-align: middle;
+}
+
+.virtual-txn {
+  opacity: 0.75;
 }

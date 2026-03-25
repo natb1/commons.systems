@@ -35,6 +35,7 @@
       "Bash(gh run list:*)",
       "Bash(gh run watch:*)",
       "Bash(gh run view:*)",
+      "Bash(gh search:*)",
       "Bash(gh api /repos/*/issues/*:*)",
       "Bash(gh api repos/*/issues/*:*)",
       "Bash(go test:*)",

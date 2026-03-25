@@ -2,7 +2,7 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import type { Transaction, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
-import { accountKey, splitAccountKey, computeAggregateTrend, computeNetWorth, computeDerivedBalances, type AggregatePoint, type NetWorthPoint, type DerivedAccountBalance } from "../balance.js";
+import { accountKey, splitAccountKey, computeAggregateTrend, computeNetWorth, computeCashFlow, computeDerivedBalances, type AggregatePoint, type NetWorthPoint, type CashFlowPoint, type DerivedAccountBalance } from "../balance.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 interface AccountRow {
@@ -12,6 +12,7 @@ interface AccountRow {
   balance: number | null;
   derivedBalance: number | null;
   hasDiscrepancy: boolean;
+  virtual: boolean;
 }
 
 function buildAccountRows(
@@ -46,6 +47,20 @@ function buildAccountRows(
     derivedByAccount.set(accountKey(db.institution, db.account), db);
   }
 
+  // Detect virtual accounts: all statements for the account are virtual
+  const virtualAccounts = new Set<string>();
+  const accountStmtCounts = new Map<string, { total: number; virtual: number }>();
+  for (const stmt of statements) {
+    const k = accountKey(stmt.institution, stmt.account);
+    const counts = accountStmtCounts.get(k) ?? { total: 0, virtual: 0 };
+    counts.total++;
+    if (stmt.virtual) counts.virtual++;
+    accountStmtCounts.set(k, counts);
+  }
+  for (const [k, counts] of accountStmtCounts) {
+    if (counts.total > 0 && counts.total === counts.virtual) virtualAccounts.add(k);
+  }
+
   // Collect all account keys from both transactions and statements
   const allKeys = new Set<string>([...txnMaxTs.keys(), ...latestStatements.keys()]);
 
@@ -63,6 +78,7 @@ function buildAccountRows(
       balance: stmt ? stmt.balance : null,
       derivedBalance: derived ? derived.derivedBalance : null,
       hasDiscrepancy: derived ? Math.abs(derived.discrepancy) > 0.01 : false,
+      virtual: virtualAccounts.has(k),
     });
   }
 
@@ -84,9 +100,10 @@ function renderAccountsTable(rows: AccountRow[]): string {
     const balanceCell = row.balance !== null ? escapeHtml(formatCurrency(row.balance)) : "";
     const derivedCell = row.derivedBalance !== null ? escapeHtml(formatCurrency(row.derivedBalance)) : "";
     const rowClass = row.hasDiscrepancy ? ' class="discrepancy"' : "";
+    const virtualBadge = row.virtual ? ' <span class="virtual-badge">virtual</span>' : "";
     return `<tr${rowClass}>
       <td>${escapeHtml(row.institution)}</td>
-      <td>${escapeHtml(row.account)}</td>
+      <td>${escapeHtml(row.account)}${virtualBadge}</td>
       <td>${escapeHtml(formatDate(row.mostRecentTimestamp))}</td>
       <td>${balanceCell}</td>
       <td>${derivedCell}</td>
@@ -109,7 +126,7 @@ function renderAccountsTable(rows: AccountRow[]): string {
   </table>`;
 }
 
-function serializeData(data: readonly AggregatePoint[] | readonly NetWorthPoint[]): string {
+function serializeData(data: readonly AggregatePoint[] | readonly NetWorthPoint[] | readonly CashFlowPoint[]): string {
   return escapeHtml(JSON.stringify(data));
 }
 
@@ -130,12 +147,14 @@ function renderChartContainers(
   netWorthPoints: NetWorthPoint[],
   derivedBalances: DerivedAccountBalance[],
 ): string {
+  const cashFlowPoints = computeCashFlow(netWorthPoints);
   return `${renderDivergenceWarning(derivedBalances)}
     <div id="accounts-chart-controls">
       <label>Jump to: <input type="date" id="accounts-date-picker"></label>
     </div>
     <div id="accounts-trend-chart" data-aggregate-trend="${serializeData(aggregateTrend)}"></div>
-    <div id="accounts-net-worth-chart" data-net-worth="${serializeData(netWorthPoints)}"></div>`;
+    <div id="accounts-net-worth-chart" data-net-worth="${serializeData(netWorthPoints)}"></div>
+    <div id="accounts-cash-flow-chart" data-cash-flow="${serializeData(cashFlowPoints)}"></div>`;
 }
 
 export async function renderAccounts(options: RenderPageOptions): Promise<string> {

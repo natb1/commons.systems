@@ -49,7 +49,8 @@ const validInput = {
     {
       id: "groceries",
       name: "Groceries",
-      weeklyAllowance: 100,
+      allowance: 100,
+      allowancePeriod: "weekly",
       rollover: "none",
     },
   ],
@@ -73,6 +74,8 @@ const validInput = {
       priority: 1,
       institution: "",
       account: "",
+      minAmount: 10.5,
+      maxAmount: 200,
     },
   ],
   normalizationRules: [
@@ -235,6 +238,72 @@ describe("parseUploadedJson", () => {
     );
   });
 
+  it("parses budget with overrides", () => {
+    const input = {
+      ...validInput,
+      budgets: [{
+        ...validInput.budgets[0],
+        overrides: [
+          { date: "2025-06-10T00:00:00Z", balance: 50 },
+          { date: "2025-06-17T00:00:00Z", balance: 75 },
+        ],
+      }],
+    };
+    const result = parseUploadedJson(JSON.stringify(input));
+    expect(result.budgets[0].overrides).toHaveLength(2);
+    expect(result.budgets[0].overrides[0].balance).toBe(50);
+    expect(result.budgets[0].overrides[0].date.toMillis()).toBe(Date.parse("2025-06-10T00:00:00Z"));
+    expect(result.budgets[0].overrides[1].balance).toBe(75);
+  });
+
+  it("throws UploadValidationError for unsorted override dates", () => {
+    const input = {
+      ...validInput,
+      budgets: [{
+        ...validInput.budgets[0],
+        overrides: [
+          { date: "2025-06-17T00:00:00Z", balance: 75 },
+          { date: "2025-06-10T00:00:00Z", balance: 50 },
+        ],
+      }],
+    };
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(UploadValidationError);
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow("overrides not sorted by date ascending");
+  });
+
+  it("throws UploadValidationError for invalid override date", () => {
+    const input = {
+      ...validInput,
+      budgets: [{
+        ...validInput.budgets[0],
+        overrides: [{ date: "not-a-date", balance: 50 }],
+      }],
+    };
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(UploadValidationError);
+  });
+
+  it("accepts quarterly allowancePeriod", () => {
+    const input = {
+      ...validInput,
+      budgets: [{ ...validInput.budgets[0], allowancePeriod: "quarterly" }],
+    };
+    const result = parseUploadedJson(JSON.stringify(input));
+    expect(result.budgets[0].allowancePeriod).toBe("quarterly");
+  });
+
+  it("throws UploadValidationError for invalid allowancePeriod", () => {
+    const input = {
+      ...validInput,
+      budgets: [{ ...validInput.budgets[0], allowancePeriod: "biweekly" }],
+    };
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      UploadValidationError,
+    );
+    expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
+      'Invalid allowancePeriod value: "biweekly"',
+    );
+  });
+
   it("throws UploadValidationError for invalid rule type", () => {
     const input = {
       ...validInput,
@@ -274,7 +343,7 @@ describe("toParsedData", () => {
 
     expect(data.budgets[0].id).toBe("groceries");
     expect(data.budgets[0].name).toBe("Groceries");
-    expect(data.budgets[0].weeklyAllowance).toBe(100);
+    expect(data.budgets[0].allowance).toBe(100);
 
     expect(data.rules[0].type).toBe("categorization");
     expect(data.rules[0].pattern).toBe("KROGER");
