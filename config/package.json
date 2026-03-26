@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint *.js"
   },
   "exports": {

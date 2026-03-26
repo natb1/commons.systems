@@ -7,11 +7,18 @@ import {
   onAuthStateChanged as fbOnAuthStateChanged,
 } from "firebase/auth";
 import type { FirebaseApp } from "firebase/app";
-import type { Auth, NextOrObserver, Unsubscribe, User } from "firebase/auth";
+import type { User } from "firebase/auth";
 import { setupAuthEmulator } from "./emulator-auth.js";
 
 export interface FirebaseAuthOptions {
   emulatorHost?: string;
+}
+
+/** Public auth API returned by {@link createFirebaseAuth} and createAppAuth. */
+export interface AppAuth {
+  signIn(): void;
+  signOut(): Promise<void>;
+  onAuthStateChanged: (callback: (user: User | null) => void) => () => void;
 }
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
@@ -22,12 +29,16 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
     "An account with this email already exists using a different sign-in method.",
 };
 
+function isAuthError(error: unknown): error is { code: string } {
+  return typeof error === "object" && error !== null && "code" in error &&
+    typeof (error as { code: unknown }).code === "string";
+}
+
 function firebaseAuthMessage(error: unknown, fallback: string): string {
-  const code = (error as { code?: string })?.code;
-  if (code) {
-    const message = AUTH_ERROR_MESSAGES[code];
+  if (isAuthError(error)) {
+    const message = AUTH_ERROR_MESSAGES[error.code];
     if (message) return message;
-    console.warn("Unhandled Firebase auth error code:", code);
+    console.warn("Unhandled Firebase auth error code:", error.code);
   }
   return fallback;
 }
@@ -62,13 +73,10 @@ function showAuthError(message: string): void {
  * page load (user returning from GitHub OAuth or emulator picker).
  * Auth errors display a dismissible toast rather than throwing, to
  * prevent unhandled rejections from blocking app initialization.
+ * The auth/popup-closed-by-user error is intentionally dismissed without
+ * showing a toast, since it indicates normal user cancellation.
  */
-export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptions): {
-  auth: Auth;
-  signIn(): void;
-  signOut(): Promise<void>;
-  onAuthStateChanged: (nextOrObserver: NextOrObserver<User | null>) => Unsubscribe;
-} {
+export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptions): AppAuth {
   const auth = getAuth(app);
 
   if (options?.emulatorHost) {
@@ -76,7 +84,10 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
   }
 
   getRedirectResult(auth).catch((error) => {
-    if ((error as { code?: string })?.code === "auth/popup-closed-by-user") return;
+    if (isAuthError(error) && error.code === "auth/popup-closed-by-user") {
+      console.debug("Auth redirect cancelled by user");
+      return;
+    }
     console.error("Auth redirect error:", error);
     showAuthError(firebaseAuthMessage(error, "Sign-in could not be completed. Please try again."));
   });
@@ -100,7 +111,6 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
   }
 
   return {
-    auth,
     signIn,
     signOut,
     onAuthStateChanged: (nextOrObserver) =>
