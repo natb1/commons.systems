@@ -49,7 +49,7 @@ Use the Task tool to launch parallel general-purpose subagents:
 
 All run concurrently with main implementation.
 
-On completion → update state to step=4/phase=unit, return to router for dispatch to unit phase:
+On completion → update state to step=4/phase=unit, then immediately dispatch Step 4 (do not stop or summarize):
 ```bash
 .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":4,"step_label":"Unit Test Loop","phase":"unit","active_skills":["ref-memory-management","ref-pr-workflow"]}'
 ```

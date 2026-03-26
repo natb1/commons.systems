@@ -45,6 +45,8 @@ Reference only. Do not execute this workflow until directed to do so (eg., by `/
 
 Re-invoke each skill listed in `active_skills` from the issue state that is not already active. Then invoke the phase skill at the determined step. If `wiggum_step` is present, the phase skill resumes the wiggum-loop at that step instead of starting from Step 0.
 
+**Continuity rule:** Phase transitions are not stopping points. When a phase completes and the instructions say "proceed to Step N," immediately dispatch Step N without outputting a summary or waiting for user input. The only authorized stops are: (1) entering plan mode, (2) wiggum-loop evaluation steps that require user classification, and (3) Step 11 (completion).
+
 | Step | Phase | Invoke |
 |---|---|---|
 | 1, 2, 3 | core | `/ref-implement` at Step N |

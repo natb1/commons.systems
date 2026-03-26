@@ -21,4 +21,4 @@ Step 10. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Termination instructions:**
 - Invoke `/pr-workflow-termination-summary` with `PHASE_NAME="Security" FILE_PREFIX=security PR_NUM=<pr-num> NEXT_STEP=11 NEXT_PHASE=core ACTIVE_SKILLS='["ref-memory-management","ref-pr-workflow"]' CONCLUSION_TEXT="[Final assessment and next steps]" EXTRA_HEADER_FIELDS="**Reviewer**: Claude Code (via /security-review skill)\n**Outcome**: [Summary of result]" EXTRA_SECTIONS="## User Classification Decisions\n\n[For each finding:]\n- Finding 1: [title] -> [required/false positive/out of scope] - [rationale]\n..."`
-- Return to router for dispatch to core phase (Step 11)
+- Immediately proceed to Step 11 (do not stop or summarize between phases)
