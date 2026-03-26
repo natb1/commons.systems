@@ -14,10 +14,10 @@ export function renderPageNotices(options: RenderPageOptions, entityLabel: strin
 
 /**
  * Convert a page-level data loading error to user-facing HTML.
- * Rethrows programmer errors (TypeError, ReferenceError), range errors (RangeError), and data integrity errors.
+ * Rethrows programmer, range, and data integrity errors.
  */
 export function renderLoadError(error: unknown, errorId: string): string {
-  const { kind } = classifyError(error);
+  const kind = classifyError(error);
   if (kind === "programmer" || kind === "data-integrity" || kind === "range") throw error;
   const message = kind === "permission-denied"
     ? "Access denied. Please contact support."

@@ -5,26 +5,30 @@ export type ErrorKind =
   | "range"
   | "unknown";
 
-export interface ClassifiedError {
-  kind: ErrorKind;
-  original: Error;
-}
-
-export function classifyError(error: unknown): ClassifiedError {
-  const original = error instanceof Error ? error : new Error(String(error));
-
+/**
+ * Classify an error into an {@link ErrorKind} using first-match priority:
+ * programmer (TypeError/ReferenceError) > range (RangeError) >
+ * data-integrity (error.name === "DataIntegrityError") >
+ * permission-denied (error.code === "permission-denied") > unknown.
+ *
+ * DataIntegrityError is matched by name string because it is defined in
+ * app-level code and not available as a shared constructor.
+ *
+ * The "permission-denied" code matches the Firebase error code convention.
+ */
+export function classifyError(error: unknown): ErrorKind {
   if (error instanceof TypeError || error instanceof ReferenceError) {
-    return { kind: "programmer", original };
+    return "programmer";
   }
   if (error instanceof RangeError) {
-    return { kind: "range", original };
+    return "range";
   }
-  if (original.name === "DataIntegrityError") {
-    return { kind: "data-integrity", original };
+  if (error instanceof Error && error.name === "DataIntegrityError") {
+    return "data-integrity";
   }
   const code = (error as { code?: string })?.code;
   if (code === "permission-denied") {
-    return { kind: "permission-denied", original };
+    return "permission-denied";
   }
-  return { kind: "unknown", original };
+  return "unknown";
 }

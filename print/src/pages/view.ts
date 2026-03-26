@@ -48,7 +48,7 @@ export async function renderView(id: string, _user: User | null): Promise<string
     pendingUrl = url;
     return renderViewerShell(item);
   } catch (error) {
-    if (classifyError(error).kind === "data-integrity") throw error;
+    if (classifyError(error) === "data-integrity") throw error;
     reportError(new Error("Failed to load media item", { cause: error }));
     return `
       <h2>Error</h2>

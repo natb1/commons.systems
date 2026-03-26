@@ -49,7 +49,7 @@ const router = createHistoryRouter(
       trackPageView(path);
     },
     formatError: (error) => {
-      if (classifyError(error).kind === "data-integrity")
+      if (classifyError(error) === "data-integrity")
         return "A data error occurred. Please contact support.";
       return undefined;
     },

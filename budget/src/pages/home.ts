@@ -335,7 +335,7 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
     try {
       chartHtml = renderCategorySankey(transactions, budgets);
     } catch (chartError) {
-      const { kind } = classifyError(chartError);
+      const kind = classifyError(chartError);
       if (kind === "programmer" || kind === "data-integrity" || kind === "range") throw chartError;
       console.error("Chart serialization failed:", chartError);
       chartHtml = `<p class="chart-error">Chart unavailable.</p>`;

@@ -34,10 +34,10 @@ export function showInputError(el: HTMLElement, title = "Save failed \u2014 valu
 
 /**
  * Classify a save error and show the appropriate input error. Programmer errors
- * (TypeError, ReferenceError) are rethrown asynchronously to surface in devtools.
+ * are rethrown asynchronously to surface in devtools.
  */
 export function handleSaveError(el: HTMLElement, error: unknown, entity: string): void {
-  const { kind } = classifyError(error);
+  const kind = classifyError(error);
   if (deferProgrammerError(error)) return;
   if (kind === "data-integrity") {
     console.error("Data integrity error:", error);
@@ -64,10 +64,10 @@ function showActionError(el: HTMLElement, title = "Action failed"): void {
 
 /**
  * Classify an action error (button click, etc.) and show the appropriate error.
- * Programmer errors (TypeError, ReferenceError) are rethrown asynchronously.
+ * Programmer errors are rethrown asynchronously.
  */
 export function handleActionError(el: HTMLElement, error: unknown, action: string): void {
-  const { kind } = classifyError(error);
+  const kind = classifyError(error);
   if (deferProgrammerError(error)) return;
   if (kind === "data-integrity") {
     console.error("Data integrity error:", error);

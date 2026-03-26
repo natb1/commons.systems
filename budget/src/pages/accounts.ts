@@ -181,7 +181,7 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
       const { points: netWorthPoints } = computeNetWorth(transactions, statements, trendWeeks);
       chartHtml = renderChartContainers(aggregateTrend, netWorthPoints, derivedBalances);
     } catch (chartError) {
-      const { kind } = classifyError(chartError);
+      const kind = classifyError(chartError);
       if (kind === "programmer" || kind === "data-integrity" || kind === "range") {
         throw chartError;
       }

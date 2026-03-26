@@ -3,49 +3,33 @@ import { classifyError } from "../src/classify.js";
 
 describe("classifyError", () => {
   it("classifies TypeError as programmer", () => {
-    const result = classifyError(new TypeError("x is not a function"));
-    expect(result.kind).toBe("programmer");
-    expect(result.original).toBeInstanceOf(TypeError);
+    expect(classifyError(new TypeError("x is not a function"))).toBe("programmer");
   });
 
   it("classifies ReferenceError as programmer", () => {
-    const result = classifyError(new ReferenceError("x is not defined"));
-    expect(result.kind).toBe("programmer");
-    expect(result.original).toBeInstanceOf(ReferenceError);
+    expect(classifyError(new ReferenceError("x is not defined"))).toBe("programmer");
   });
 
   it("classifies RangeError as range", () => {
-    const result = classifyError(new RangeError("out of range"));
-    expect(result.kind).toBe("range");
-    expect(result.original).toBeInstanceOf(RangeError);
+    expect(classifyError(new RangeError("out of range"))).toBe("range");
   });
 
   it("classifies DataIntegrityError by name", () => {
     const error = new Error("bad data");
     error.name = "DataIntegrityError";
-    const result = classifyError(error);
-    expect(result.kind).toBe("data-integrity");
-    expect(result.original).toBe(error);
+    expect(classifyError(error)).toBe("data-integrity");
   });
 
   it("classifies permission-denied by code", () => {
     const error = Object.assign(new Error("denied"), { code: "permission-denied" });
-    const result = classifyError(error);
-    expect(result.kind).toBe("permission-denied");
-    expect(result.original).toBe(error);
+    expect(classifyError(error)).toBe("permission-denied");
   });
 
   it("classifies generic Error as unknown", () => {
-    const error = new Error("something broke");
-    const result = classifyError(error);
-    expect(result.kind).toBe("unknown");
-    expect(result.original).toBe(error);
+    expect(classifyError(new Error("something broke"))).toBe("unknown");
   });
 
-  it("wraps non-Error values", () => {
-    const result = classifyError("string error");
-    expect(result.kind).toBe("unknown");
-    expect(result.original).toBeInstanceOf(Error);
-    expect(result.original.message).toBe("string error");
+  it("classifies non-Error values as unknown", () => {
+    expect(classifyError("string error")).toBe("unknown");
   });
 });

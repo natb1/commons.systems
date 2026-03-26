@@ -158,9 +158,9 @@ async function syncPeriodOnReimbursementChange(
   }
 }
 
-/** Handle a non-programmer error from adjustBudgetPeriodTotal: log, clear balance, set tooltip. */
+/** Handle an error from adjustBudgetPeriodTotal: rethrow programmer errors, log others, clear balance, and set tooltip. */
 function handlePeriodSyncError(row: HTMLElement, error: unknown): void {
-  if (classifyError(error).kind === "programmer") throw error;
+  if (classifyError(error) === "programmer") throw error;
   console.error("Failed to update budget period totals:", error);
   clearBalanceDisplay(row);
   const balanceEl = row.querySelector(".budget-balance") as HTMLElement | null;
@@ -333,7 +333,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     } catch (error) {
       if (deferProgrammerError(error)) return;
       console.error("Failed to load older transactions:", error);
-      if (classifyError(error).kind === "data-integrity") {
+      if (classifyError(error) === "data-integrity") {
         sentinel.insertAdjacentHTML("beforebegin",
           `<div class="scroll-error">Data error — please re-upload your file.</div>`);
         sentinel.remove();
