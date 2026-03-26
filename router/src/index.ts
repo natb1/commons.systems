@@ -1,3 +1,5 @@
+import { deferProgrammerError } from "@commons-systems/errorutil/defer";
+
 export interface Route {
   readonly path: `/${string}` | RegExp;
   readonly render: (path: string) => string | Promise<string>;
@@ -44,12 +46,7 @@ function createNavigator(
     try {
       options?.onNavigate?.({ path, params });
     } catch (e) {
-      if (e instanceof TypeError || e instanceof ReferenceError) {
-        // Defer programming errors so they surface as uncaught in devtools
-        setTimeout(() => { throw e; }, 0);
-      } else {
-        reportError(e);
-      }
+      if (!deferProgrammerError(e)) reportError(e);
     }
     const route = matchRoute(routes, path);
     try {
@@ -59,14 +56,7 @@ function createNavigator(
         try {
           route.afterRender?.(outlet, path);
         } catch (afterError) {
-          if (afterError instanceof TypeError || afterError instanceof ReferenceError) {
-            // Return early so the outer catch doesn't replace rendered
-            // content with a generic error message. Defer via setTimeout
-            // so it surfaces as uncaught in devtools (rethrowing here
-            // would only reject the navigate() promise, which is void-discarded).
-            setTimeout(() => { throw afterError; }, 0);
-            return;
-          }
+          if (deferProgrammerError(afterError)) return;
           reportError(afterError);
           outlet.insertAdjacentHTML(
             "beforeend",
@@ -75,11 +65,7 @@ function createNavigator(
         }
       }
     } catch (error) {
-      if (error instanceof TypeError || error instanceof ReferenceError) {
-        setTimeout(() => { throw error; }, 0);
-      } else {
-        reportError(error);
-      }
+      if (!deferProgrammerError(error)) reportError(error);
       if (id === navigationId) {
         const message =
           options?.formatError?.(error) ??

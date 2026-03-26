@@ -14,6 +14,7 @@
   "dependencies": {
     "@commons-systems/idbutil": "*",
     "@commons-systems/analyticsutil": "*",
+    "@commons-systems/errorutil": "*",
     "@commons-systems/authutil": "*",
     "@commons-systems/firebaseutil": "*",
     "@commons-systems/firestoreutil": "*",

@@ -2,6 +2,8 @@ import { Timestamp } from "firebase/firestore";
 import { type SerializedBudgetPeriod, type TransactionId, type BudgetId, type Transaction } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
+import { classifyError } from "@commons-systems/errorutil/classify";
+import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
@@ -158,9 +160,7 @@ async function syncPeriodOnReimbursementChange(
 
 /** Handle a non-programmer error from adjustBudgetPeriodTotal: log, clear balance, set tooltip. */
 function handlePeriodSyncError(row: HTMLElement, error: unknown): void {
-  if (error instanceof TypeError || error instanceof ReferenceError) {
-    throw error;
-  }
+  if (classifyError(error).kind === "programmer") throw error;
   console.error("Failed to update budget period totals:", error);
   clearBalanceDisplay(row);
   const balanceEl = row.querySelector(".budget-balance") as HTMLElement | null;
@@ -331,12 +331,9 @@ export function hydrateTransactionTable(container: HTMLElement): void {
         observer.disconnect();
       }
     } catch (error) {
-      if (error instanceof TypeError || error instanceof ReferenceError) {
-        setTimeout(() => { throw error; }, 0);
-        return;
-      }
+      if (deferProgrammerError(error)) return;
       console.error("Failed to load older transactions:", error);
-      if (error instanceof DataIntegrityError) {
+      if (classifyError(error).kind === "data-integrity") {
         sentinel.insertAdjacentHTML("beforebegin",
           `<div class="scroll-error">Data error — please re-upload your file.</div>`);
         sentinel.remove();

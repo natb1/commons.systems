@@ -1,5 +1,5 @@
 import type { DataSource } from "../data-source.js";
-import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
+import { classifyError } from "@commons-systems/errorutil/classify";
 
 export interface RenderPageOptions {
   authorized: boolean;
@@ -17,12 +17,9 @@ export function renderPageNotices(options: RenderPageOptions, entityLabel: strin
  * Rethrows programmer errors (TypeError, ReferenceError), range errors (RangeError), and data integrity errors.
  */
 export function renderLoadError(error: unknown, errorId: string): string {
-  if (error instanceof RangeError || error instanceof DataIntegrityError
-      || error instanceof TypeError || error instanceof ReferenceError) {
-    throw error;
-  }
-  const code = (error as { code?: string })?.code;
-  const message = code === "permission-denied"
+  const { kind } = classifyError(error);
+  if (kind === "programmer" || kind === "data-integrity" || kind === "range") throw error;
+  const message = kind === "permission-denied"
     ? "Access denied. Please contact support."
     : "Could not load data. Try refreshing the page.";
   return `<p id="${errorId}">${message}</p>`;
