@@ -1,6 +1,7 @@
 import "missing.css";
 import "./style/theme.css";
 import { createHistoryRouter } from "@commons-systems/router";
+import { hydrateOnce } from "@commons-systems/router/hydrate";
 import { renderHome } from "./pages/home.js";
 import { renderBudgets } from "./pages/budgets.js";
 import { renderAccounts } from "./pages/accounts.js";
@@ -130,29 +131,17 @@ function transition(next: AppState): void {
 
 // Hydrate interactive containers (tables, chart) whenever they appear in the DOM.
 // Multiple code paths trigger renders (navigation, data source changes), so an
-// observer catches all of them. Sets dataset.hydrated to "true" on success or
-// "error" on failure to prevent retry loops.
-// Observer runs for page lifetime: each render replaces page content, so
-// containers start unhydrated and need re-initialization.
+// observer catches all of them. Observer runs for page lifetime: each render
+// replaces page content, so containers start unhydrated and need re-initialization.
 function hydrateTable(
   selector: string,
   hydrate: (el: HTMLElement) => void,
   errorLabel?: string,
 ): void {
-  const table = app.querySelector(selector) as HTMLElement | null;
-  if (!table || table.dataset.hydrated) return;
-  try {
-    hydrate(table);
-    table.dataset.hydrated = "true";
-  } catch (error) {
-    table.dataset.hydrated = "error";
-    if (error instanceof TypeError || error instanceof ReferenceError) {
-      setTimeout(() => { throw error; }, 0);
-      return;
-    }
+  hydrateOnce(app, selector, hydrate, (error, el) => {
     console.error("Hydration error:", error);
-    table.querySelectorAll("input, select").forEach((el) => {
-      (el as HTMLInputElement | HTMLSelectElement).disabled = true;
+    el.querySelectorAll("input, select").forEach((input) => {
+      (input as HTMLInputElement | HTMLSelectElement).disabled = true;
     });
     const msg = document.createElement("p");
     msg.textContent = error instanceof DataIntegrityError
@@ -160,8 +149,8 @@ function hydrateTable(
       : errorLabel
         ? `${errorLabel} is temporarily unavailable. Try refreshing the page.`
         : "Editing is temporarily unavailable. Try refreshing the page.";
-    table.appendChild(msg);
-  }
+    el.appendChild(msg);
+  });
 }
 
 const observer = new MutationObserver(() => {
