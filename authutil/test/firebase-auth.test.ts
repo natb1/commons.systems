@@ -43,9 +43,8 @@ describe("createFirebaseAuth", () => {
     mockFirebaseSignOut.mockResolvedValue(undefined);
   });
 
-  it("calls getAuth(app) and returns auth", () => {
-    const result = createFirebaseAuth(mockApp);
-    expect(result.auth).toEqual({ type: "mock-auth" });
+  it("calls getAuth(app)", () => {
+    createFirebaseAuth(mockApp);
     expect(mockGetAuth).toHaveBeenCalledWith(mockApp);
   });
 
@@ -90,6 +89,22 @@ describe("createFirebaseAuth", () => {
     );
   });
 
+  it("shows toast on signIn redirect failure", async () => {
+    const signInError = Object.assign(new Error("redirect failed"), {
+      code: "auth/network-request-failed",
+    });
+    mockSignInWithRedirect.mockRejectedValue(signInError);
+
+    const { signIn } = createFirebaseAuth(mockApp);
+    signIn();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const toast = document.querySelector(".auth-toast");
+    expect(toast).not.toBeNull();
+    expect(toast?.textContent).toContain("Network error");
+    toast?.remove();
+  });
+
   it("signOut calls firebaseSignOut", async () => {
     const { signOut } = createFirebaseAuth(mockApp);
     await signOut();
@@ -115,6 +130,27 @@ describe("createFirebaseAuth", () => {
     expect(toast).not.toBeNull();
     expect(toast?.textContent).toContain("Network error");
     toast?.remove();
+  });
+
+  it("silently ignores popup-closed-by-user redirect error", async () => {
+    const popupError = Object.assign(new Error("popup closed"), {
+      code: "auth/popup-closed-by-user",
+    });
+    let rejectFn!: (error: unknown) => void;
+    mockGetRedirectResult.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectFn = reject;
+      }),
+    );
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+    createFirebaseAuth(mockApp);
+    rejectFn(popupError);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(debugSpy).toHaveBeenCalledWith("Auth redirect cancelled by user");
+    expect(document.querySelector(".auth-toast")).toBeNull();
+    debugSpy.mockRestore();
   });
 
   it("shows toast on signOut failure and re-throws", async () => {

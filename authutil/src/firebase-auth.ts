@@ -14,6 +14,12 @@ export interface FirebaseAuthOptions {
   emulatorHost?: string;
 }
 
+export interface AppAuth {
+  signIn(): void;
+  signOut(): Promise<void>;
+  onAuthStateChanged: (nextOrObserver: NextOrObserver<User | null>) => Unsubscribe;
+}
+
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   "auth/network-request-failed": "Network error. Check your connection and try again.",
   "auth/operation-not-allowed": "GitHub sign-in is not enabled. Please contact support.",
@@ -63,12 +69,7 @@ function showAuthError(message: string): void {
  * Auth errors display a dismissible toast rather than throwing, to
  * prevent unhandled rejections from blocking app initialization.
  */
-export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptions): {
-  auth: Auth;
-  signIn(): void;
-  signOut(): Promise<void>;
-  onAuthStateChanged: (nextOrObserver: NextOrObserver<User | null>) => Unsubscribe;
-} {
+export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptions): AppAuth {
   const auth = getAuth(app);
 
   if (options?.emulatorHost) {
@@ -76,7 +77,10 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
   }
 
   getRedirectResult(auth).catch((error) => {
-    if ((error as { code?: string })?.code === "auth/popup-closed-by-user") return;
+    if ((error as { code?: string })?.code === "auth/popup-closed-by-user") {
+      console.debug("Auth redirect cancelled by user");
+      return;
+    }
     console.error("Auth redirect error:", error);
     showAuthError(firebaseAuthMessage(error, "Sign-in could not be completed. Please try again."));
   });
@@ -100,7 +104,6 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
   }
 
   return {
-    auth,
     signIn,
     signOut,
     onAuthStateChanged: (nextOrObserver) =>

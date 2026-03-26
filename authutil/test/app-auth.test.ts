@@ -40,12 +40,11 @@ describe("createAppAuth", () => {
     expect(result).toEqual({ type: "mock-auth-result" });
   });
 
-  it("returns signIn, signOut, and onAuthStateChanged", async () => {
+  it("exposes signIn, signOut, and onAuthStateChanged as the app-facing API", async () => {
     const mockSignIn = vi.fn();
     const mockSignOut = vi.fn();
     const mockOnAuthStateChanged = vi.fn();
     mockCreateFirebaseAuth.mockReturnValue({
-      auth: {},
       signIn: mockSignIn,
       signOut: mockSignOut,
       onAuthStateChanged: mockOnAuthStateChanged,
