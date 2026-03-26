@@ -1,7 +1,6 @@
 ---
 name: ref-implement
 description: Prerequisite check, planning, and implementation — Steps 1, 2, 3
-allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # PR Workflow — Implementation Phase

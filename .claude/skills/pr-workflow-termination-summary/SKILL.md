@@ -1,7 +1,6 @@
 ---
 name: pr-workflow-termination-summary
 description: Write final summary and post a PR comment when a wiggum-loop terminates
-allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # Termination Summary

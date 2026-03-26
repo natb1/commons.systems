@@ -1,7 +1,6 @@
 ---
 name: pr-workflow-progress-report
 description: Write evaluation results and post a PR comment for a wiggum-loop iteration
-allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # Progress Report
