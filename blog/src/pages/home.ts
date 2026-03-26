@@ -76,6 +76,7 @@ export function hydrateHome(
 
     try {
       let markdown = await fetchPost(post.filename);
+      if (!isOutletCurrent(outlet, container)) return;
 
       // If the markdown starts with an h1, use it as the post title (overriding
       // the Firestore title) and strip it from the body to avoid duplication.

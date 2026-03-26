@@ -5,7 +5,7 @@
  * based on the hydration trigger and whether work is async:
  *
  * 1. Synchronous one-shot — afterRender attaches listeners directly.
- *    No helper needed. (landing, fellspiral, print)
+ *    No helper needed. (print)
  *
  * 2. Idempotent observer-driven — a MutationObserver (or other repeated
  *    trigger) calls hydration for elements that may already be hydrated.
@@ -13,7 +13,7 @@
  *
  * 3. Async with staleness guard — afterRender starts async work (fetches,
  *    etc.) whose callbacks must check the outlet hasn't been re-rendered.
- *    Use isOutletCurrent before writing to the DOM. (blog)
+ *    Use isOutletCurrent before writing to the DOM. (blog, landing, fellspiral)
  */
 
 /**
