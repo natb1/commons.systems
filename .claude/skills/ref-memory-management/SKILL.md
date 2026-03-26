@@ -1,7 +1,6 @@
 ---
 name: ref-memory-management
 description: Load when planning work, writing commits, changing requirements, or editing/commenting on issues/PR
-allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # Clean Context Planning Rule

@@ -1,7 +1,6 @@
 ---
 name: ref-code-quality
 description: Code quality review loop — 7 parallel review tasks with wiggum-loop
-allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # Code Quality Review Loop
