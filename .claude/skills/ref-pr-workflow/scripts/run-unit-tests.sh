@@ -47,10 +47,14 @@ done
 # Auto-detect mode: delegate app detection to get-changed-apps.sh,
 # then check nix/rules/ci-scripts inline (those aren't app-level concerns).
 if [ "$EXPLICIT" = false ]; then
+  if ! CHANGED_APPS=$("$SCRIPTS/get-changed-apps.sh"); then
+    echo "ERROR: get-changed-apps.sh failed" >&2
+    exit 1
+  fi
   while IFS= read -r app; do
     [ -z "$app" ] && continue
     DIRTY_APPS["$app"]=1
-  done < <("$SCRIPTS/get-changed-apps.sh")
+  done <<< "$CHANGED_APPS"
 
   # Detect nix, rules, and ci-scripts changes separately
   if ! CHANGED=$(git diff --name-only origin/main...HEAD); then
@@ -70,7 +74,7 @@ fi
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
 
-# Install all dependencies once at the workspace root (skip when only running nix/rules checks)
+# Install all dependencies once at the workspace root (skip when only running nix/rules/ci-scripts checks)
 if [ ${#APP_DIRS[@]} -gt 0 ]; then
   ensure_deps
 fi

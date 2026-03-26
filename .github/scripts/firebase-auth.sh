@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Required: FIREBASE_SERVICE_ACCOUNT_JSON, GITHUB_ENV
-# Optional: FIREBASE_PROJECT_ID
+# Required: FIREBASE_SERVICE_ACCOUNT_JSON, GITHUB_ENV (writable file path; set by GitHub Actions)
+# Optional: FIREBASE_PROJECT_ID (passed through to GITHUB_ENV for downstream steps)
 set -euo pipefail
 
 if [ -z "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then

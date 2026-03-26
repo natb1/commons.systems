@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEST_TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TEST_TMPDIR"' EXIT
 
+# File-based counters because tests run in subshells (variable changes would be lost)
 PASS_FILE="${TEST_TMPDIR}/.pass_count"
 FAIL_FILE="${TEST_TMPDIR}/.fail_count"
 echo 0 > "$PASS_FILE"
@@ -139,6 +140,21 @@ echo "=== Test: auth script fails when FIREBASE_SERVICE_ACCOUNT_JSON is unset ==
   fi
 )
 
+echo ""
+echo "=== Test: auth script fails when FIREBASE_SERVICE_ACCOUNT_JSON is empty ==="
+(
+  GITHUB_ENV="${TEST_TMPDIR}/github_env_empty"
+  > "$GITHUB_ENV"
+  export GITHUB_ENV
+  export FIREBASE_SERVICE_ACCOUNT_JSON=""
+
+  if "$SCRIPT_DIR/firebase-auth.sh" 2>/dev/null; then
+    fail "auth should fail when FIREBASE_SERVICE_ACCOUNT_JSON is empty"
+  else
+    pass "auth fails when FIREBASE_SERVICE_ACCOUNT_JSON is empty"
+  fi
+)
+
 FINAL_PASS=$(cat "$PASS_FILE")
 FINAL_FAIL=$(cat "$FAIL_FILE")
 
@@ -147,7 +163,7 @@ echo "========================================"
 echo "  Results: $FINAL_PASS passed, $FINAL_FAIL failed"
 echo "========================================"
 
-EXPECTED=8
+EXPECTED=9
 ACTUAL=$(( FINAL_PASS + FINAL_FAIL ))
 if [ "$ACTUAL" -ne "$EXPECTED" ]; then
   echo "ERROR: expected $EXPECTED test results but got $ACTUAL (a test subshell may have crashed)" >&2
