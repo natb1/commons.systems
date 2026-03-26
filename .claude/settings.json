@@ -56,6 +56,7 @@
       "Bash(find:*)"
     ]
   },
+  "showClearContextOnPlanAccept": true,
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true
