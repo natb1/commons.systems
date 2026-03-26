@@ -482,3 +482,145 @@ func TestDefaultProjectID(t *testing.T) {
 		t.Error("expected error for empty project, got nil")
 	}
 }
+
+func TestPackageJSONRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	initial := &PackageJSON{
+		Name:       "my-project",
+		Private:    true,
+		Workspaces: []string{"blog", "landing"},
+	}
+
+	if err := WritePackageJSON(tmpDir, initial); err != nil {
+		t.Fatalf("write error: %v", err)
+	}
+
+	loaded, err := ReadPackageJSON(tmpDir)
+	if err != nil {
+		t.Fatalf("read error: %v", err)
+	}
+
+	if loaded.Name != "my-project" {
+		t.Errorf("expected name my-project, got %q", loaded.Name)
+	}
+	if !loaded.Private {
+		t.Error("expected private true")
+	}
+	if len(loaded.Workspaces) != 2 || loaded.Workspaces[0] != "blog" || loaded.Workspaces[1] != "landing" {
+		t.Errorf("expected [blog landing], got %v", loaded.Workspaces)
+	}
+}
+
+func TestPackageJSONPreservesUnknownFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	content := `{
+  "name": "my-project",
+  "private": true,
+  "workspaces": ["blog"],
+  "devDependencies": {
+    "vite": "^6.1.0"
+  },
+  "scripts": {
+    "build": "vite build"
+  }
+}
+`
+	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(content), 0o644)
+
+	pkg, err := ReadPackageJSON(tmpDir)
+	if err != nil {
+		t.Fatalf("read error: %v", err)
+	}
+
+	if err := WritePackageJSON(tmpDir, pkg); err != nil {
+		t.Fatalf("write error: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, "package.json"))
+	if err != nil {
+		t.Fatalf("read file error: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	if _, ok := raw["devDependencies"]; !ok {
+		t.Error("expected 'devDependencies' key to be preserved")
+	}
+	if _, ok := raw["scripts"]; !ok {
+		t.Error("expected 'scripts' key to be preserved")
+	}
+}
+
+func TestAddAndRemoveWorkspace(t *testing.T) {
+	pkg := &PackageJSON{
+		Workspaces: []string{"blog", "landing"},
+	}
+
+	if err := AddWorkspace(pkg, "demo"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pkg.Workspaces) != 3 {
+		t.Fatalf("expected 3 workspaces, got %d", len(pkg.Workspaces))
+	}
+	// Should be sorted: blog, demo, landing
+	if pkg.Workspaces[0] != "blog" || pkg.Workspaces[1] != "demo" || pkg.Workspaces[2] != "landing" {
+		t.Errorf("expected [blog demo landing], got %v", pkg.Workspaces)
+	}
+
+	removed := RemoveWorkspace(pkg, "demo")
+	if !removed {
+		t.Error("expected RemoveWorkspace to return true")
+	}
+	if len(pkg.Workspaces) != 2 {
+		t.Fatalf("expected 2 workspaces after remove, got %d", len(pkg.Workspaces))
+	}
+	if pkg.Workspaces[0] != "blog" || pkg.Workspaces[1] != "landing" {
+		t.Errorf("expected [blog landing], got %v", pkg.Workspaces)
+	}
+}
+
+func TestAddWorkspaceDuplicate(t *testing.T) {
+	pkg := &PackageJSON{
+		Workspaces: []string{"blog", "landing"},
+	}
+
+	if err := AddWorkspace(pkg, "blog"); err == nil {
+		t.Error("expected error for duplicate workspace, got nil")
+	}
+}
+
+func TestAddWorkspaceSorting(t *testing.T) {
+	pkg := &PackageJSON{
+		Workspaces: []string{"config", "landing", "style"},
+	}
+
+	if err := AddWorkspace(pkg, "blog"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := []string{"blog", "config", "landing", "style"}
+	if len(pkg.Workspaces) != len(expected) {
+		t.Fatalf("expected %d workspaces, got %d", len(expected), len(pkg.Workspaces))
+	}
+	for i, w := range expected {
+		if pkg.Workspaces[i] != w {
+			t.Errorf("workspace[%d]: expected %q, got %q", i, w, pkg.Workspaces[i])
+		}
+	}
+}
+
+func TestRemoveWorkspaceNotFound(t *testing.T) {
+	pkg := &PackageJSON{
+		Workspaces: []string{"blog", "landing"},
+	}
+
+	removed := RemoveWorkspace(pkg, "nonexistent")
+	if removed {
+		t.Error("expected RemoveWorkspace to return false for nonexistent workspace")
+	}
+	if len(pkg.Workspaces) != 2 {
+		t.Errorf("expected workspaces unchanged, got %v", pkg.Workspaces)
+	}
+}

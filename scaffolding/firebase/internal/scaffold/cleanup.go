@@ -187,6 +187,21 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 		}
 	}
 
+	// Remove app from package.json workspaces
+	if dryRun {
+		fmt.Printf("[dry-run] Would remove %q from package.json workspaces\n", appName)
+	} else {
+		fmt.Println("Removing from package.json workspaces...")
+		pkg, err := ReadPackageJSON(repoRoot)
+		if err != nil {
+			return err
+		}
+		RemoveWorkspace(pkg, appName)
+		if err := WritePackageJSON(repoRoot, pkg); err != nil {
+			return fmt.Errorf("updating package.json: %w", err)
+		}
+	}
+
 	// Remove app directory
 	if dryRun {
 		fmt.Printf("[dry-run] Would remove app directory %s/\n", appName)
