@@ -1,7 +1,6 @@
 ---
 name: ref-security
 description: Security review loop — automated scan with user classification
-allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # Security Review Loop

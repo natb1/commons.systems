@@ -29,6 +29,8 @@ jobs:
       - name: Run acceptance tests
         env:
           VITE_GITHUB_BRANCH: ${{ github.head_ref }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          VITE_RECAPTCHA_SITE_KEY: ${{ secrets.RECAPTCHA_SITE_KEY }}
         run: .claude/skills/ref-pr-workflow/scripts/run-all-acceptance-tests.sh
 
   preview-and-smoke:
@@ -55,6 +57,8 @@ jobs:
         id: deploy
         env:
           VITE_GITHUB_BRANCH: ${{ github.head_ref }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          VITE_RECAPTCHA_SITE_KEY: ${{ secrets.RECAPTCHA_SITE_KEY }}
         run: |
           set -o pipefail
           OUTPUT=$(.claude/skills/ref-pr-workflow/scripts/run-all-preview-deploy-smoke.sh "pr-${{ github.event.pull_request.number }}" | tee /dev/stderr)

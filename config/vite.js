@@ -1,6 +1,7 @@
 // App configs include firebase module deduplication and happy-dom for
 // browser-environment tests. Lib configs omit both — libraries that need
 // happy-dom should pass it as an override.
+import path from "node:path";
 import { mergeConfig } from "vite";
 import { defineConfig } from "vitest/config";
 
@@ -13,6 +14,7 @@ const firebaseDedupe = [
 ];
 
 const appBase = defineConfig({
+  envDir: path.resolve(import.meta.dirname, ".."),
   resolve: {
     dedupe: firebaseDedupe,
   },
