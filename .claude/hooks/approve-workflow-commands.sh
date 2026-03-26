@@ -23,15 +23,23 @@ fi
 
 APPROVE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"auto-approved by workflow hook"}}'
 
+# Join backslash-continuation lines into a single logical line, then reject bare
+# newlines (multiple separate commands). This allows multi-line argument lists like:
+#   script.sh \
+#     arg1 \
+#     arg2
+# while still blocking newline-separated command injection.
+JOINED=$(printf '%s' "$COMMAND" | sed -e ':a' -e '/\\$/{N;s/\\\n/ /;ba}')
+FIRST_LINE=$(printf '%s' "$JOINED" | head -n 1)
+if [ "$JOINED" != "$FIRST_LINE" ]; then
+  exit 0
+fi
+
 # Match ref-pr-workflow script as the executable (first token), not as an argument.
 # Extract the first whitespace-delimited token, strip leading shell syntax (" ' (),
 # then require the script path to end the token ($ anchor). This prevents commands
 # like "rm -rf / /abs/.claude/.../script" from matching on the argument path.
 # Denylist rejects shell metacharacters in the full command line.
-FIRST_LINE=$(printf '%s' "$COMMAND" | head -n 1)
-if [ "$COMMAND" != "$FIRST_LINE" ]; then
-  exit 0
-fi
 CMD_TOKEN=$(printf '%s' "$FIRST_LINE" | awk '{print $1}' | sed "s/^[\"'(]*//; s/[)]*$//")
 if printf '%s\n' "$CMD_TOKEN" | grep -qE '(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$' && \
    ! printf '%s\n' "$FIRST_LINE" | grep -qE '(&&|\|\||[;|`<>$])'; then

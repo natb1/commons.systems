@@ -81,6 +81,21 @@ assert_approves \
   "Bash" \
   '(/Users/n8/project/.claude/skills/ref-pr-workflow/scripts/run-lint.sh)'
 
+assert_approves \
+  "backslash-continuation multi-line args" \
+  "Bash" \
+  "$(printf '.claude/skills/ref-pr-workflow/scripts/concat-review-output.sh \\\n  tmp/output.txt \\\n  \"review:/tmp/r.txt\"')"
+
+assert_approves \
+  "absolute path with backslash-continuation" \
+  "Bash" \
+  "$(printf '/Users/n8/project/.claude/skills/ref-pr-workflow/scripts/concat-review-output.sh \\\n  tmp/output.txt \\\n  \"label1:file1\" \\\n  \"label2:file2\"')"
+
+assert_approves \
+  "single trailing backslash-continuation" \
+  "Bash" \
+  "$(printf '.claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh \\\n  323 file.txt')"
+
 # --- Passthrough cases ---
 
 assert_passthrough \
@@ -204,6 +219,21 @@ assert_passthrough \
   "or-chaining with ||" \
   "Bash" \
   ".claude/skills/ref-pr-workflow/scripts/run-lint.sh || evil-command"
+
+assert_passthrough \
+  "continuation then bare newline with evil command" \
+  "Bash" \
+  "$(printf '.claude/skills/ref-pr-workflow/scripts/run-lint.sh \\\n  arg1\nrm -rf /')"
+
+assert_passthrough \
+  "evil command after fake continuation" \
+  "Bash" \
+  "$(printf 'rm -rf / \\\n.claude/skills/ref-pr-workflow/scripts/run-lint.sh')"
+
+assert_passthrough \
+  "metacharacter in continuation arg" \
+  "Bash" \
+  "$(printf '.claude/skills/ref-pr-workflow/scripts/run-lint.sh \\\n  arg1 && evil')"
 
 assert_passthrough \
   "backtick substitution" \

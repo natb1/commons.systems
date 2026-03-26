@@ -138,6 +138,23 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 		}
 	}
 
+	// Add app to package.json workspaces
+	if dryRun {
+		fmt.Printf("[dry-run] Would add %q to package.json workspaces\n", appName)
+	} else {
+		fmt.Println("Adding to package.json workspaces...")
+		pkg, err := ReadPackageJSON(repoRoot)
+		if err != nil {
+			return err
+		}
+		if err := AddWorkspace(pkg, appName); err != nil {
+			return err
+		}
+		if err := WritePackageJSON(repoRoot, pkg); err != nil {
+			return err
+		}
+	}
+
 	fmt.Println()
 	if dryRun {
 		fmt.Println("[dry-run] App creation plan complete. No changes were made.")
