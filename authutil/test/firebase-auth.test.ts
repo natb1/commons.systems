@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockGetAuth = vi.fn();
 const mockSignInWithRedirect = vi.fn();
@@ -41,6 +41,10 @@ describe("createFirebaseAuth", () => {
     mockGetRedirectResult.mockResolvedValue(null);
     mockSignInWithRedirect.mockResolvedValue(undefined);
     mockFirebaseSignOut.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    document.querySelectorAll(".auth-toast").forEach((el) => el.remove());
   });
 
   it("calls getAuth(app)", () => {
@@ -94,6 +98,7 @@ describe("createFirebaseAuth", () => {
       code: "auth/network-request-failed",
     });
     mockSignInWithRedirect.mockRejectedValue(signInError);
+    vi.spyOn(console, "error").mockImplementation(() => {});
 
     const { signIn } = createFirebaseAuth(mockApp);
     signIn();
@@ -102,7 +107,6 @@ describe("createFirebaseAuth", () => {
     const toast = document.querySelector(".auth-toast");
     expect(toast).not.toBeNull();
     expect(toast?.textContent).toContain("Network error");
-    toast?.remove();
   });
 
   it("signOut calls firebaseSignOut", async () => {
@@ -121,6 +125,7 @@ describe("createFirebaseAuth", () => {
         rejectFn = reject;
       }),
     );
+    vi.spyOn(console, "error").mockImplementation(() => {});
 
     createFirebaseAuth(mockApp);
     rejectFn(redirectError);
@@ -129,10 +134,9 @@ describe("createFirebaseAuth", () => {
     const toast = document.querySelector(".auth-toast");
     expect(toast).not.toBeNull();
     expect(toast?.textContent).toContain("Network error");
-    toast?.remove();
   });
 
-  it("silently ignores popup-closed-by-user redirect error", async () => {
+  it("dismisses popup-closed-by-user without showing toast", async () => {
     const popupError = Object.assign(new Error("popup closed"), {
       code: "auth/popup-closed-by-user",
     });
@@ -155,12 +159,29 @@ describe("createFirebaseAuth", () => {
 
   it("shows toast on signOut failure and re-throws", async () => {
     mockFirebaseSignOut.mockRejectedValue(new Error("sign-out failed"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const { signOut } = createFirebaseAuth(mockApp);
     await expect(signOut()).rejects.toThrow("sign-out failed");
 
     const toast = document.querySelector(".auth-toast");
     expect(toast).not.toBeNull();
     expect(toast?.textContent).toContain("Sign-out failed");
-    toast?.remove();
+  });
+
+  it("deduplicates error toasts", async () => {
+    const signInError = Object.assign(new Error("redirect failed"), {
+      code: "auth/network-request-failed",
+    });
+    mockSignInWithRedirect.mockRejectedValue(signInError);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { signIn } = createFirebaseAuth(mockApp);
+    signIn();
+    await new Promise((r) => setTimeout(r, 0));
+    signIn();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const toasts = document.querySelectorAll(".auth-toast");
+    expect(toasts).toHaveLength(1);
   });
 });
