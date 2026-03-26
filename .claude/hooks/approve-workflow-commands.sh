@@ -23,20 +23,44 @@ fi
 
 APPROVE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"auto-approved by workflow hook"}}'
 
-# Match ref-pr-workflow script as the executable (first token), not as an argument.
-# Extract the first whitespace-delimited token, strip leading shell syntax (" ' (),
-# then require the script path to end the token ($ anchor). This prevents commands
-# like "rm -rf / /abs/.claude/.../script" from matching on the argument path.
-# Denylist rejects shell metacharacters in the full command line.
-FIRST_LINE=$(printf '%s' "$COMMAND" | head -n 1)
-if [ "$COMMAND" != "$FIRST_LINE" ]; then
-  exit 0
-fi
-CMD_TOKEN=$(printf '%s' "$FIRST_LINE" | awk '{print $1}' | sed "s/^[\"'(]*//; s/[)]*$//")
-if printf '%s\n' "$CMD_TOKEN" | grep -qE '(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$' && \
-   ! printf '%s\n' "$FIRST_LINE" | grep -qE '(&&|\|\||[;|`<>$])'; then
-  printf '%s\n' "$APPROVE"
+# Join backslash-continuation lines into a single logical line, then reject bare
+# newlines (multiple separate commands). This allows multi-line argument lists like:
+#   script.sh \
+#     arg1 \
+#     arg2
+# while still blocking newline-separated command injection.
+JOINED=$(printf '%s' "$COMMAND" | sed -e ':a' -e '/\\$/{N;s/\\\n/ /;ba}')
+FIRST_LINE=$(printf '%s' "$JOINED" | head -n 1)
+if [ "$JOINED" != "$FIRST_LINE" ]; then
   exit 0
 fi
 
+# Strip benign stderr suppression (2>/dev/null) before analysis, then validate
+# each ;-separated segment independently. Every segment must:
+#   1. Start with a workflow script as the first token
+#   2. Contain no dangerous shell metacharacters after stripping 2>/dev/null
+# This allows chained workflow calls like:
+#   script-a 2>/dev/null; script-b 2>/dev/null
+# while rejecting injection like:
+#   script-a; rm -rf /
+CLEANED=$(printf '%s' "$FIRST_LINE" | sed 's/ *2>\/dev\/null//g')
+
+SCRIPT_RE='(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$'
+UNSAFE_RE='(&&|\|\||[|`<>$])'
+
+IFS=';' read -ra SEGMENTS <<< "$CLEANED"
+for SEGMENT in "${SEGMENTS[@]}"; do
+  SEGMENT=$(printf '%s' "$SEGMENT" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  [ -z "$SEGMENT" ] && continue
+
+  CMD_TOKEN=$(printf '%s' "$SEGMENT" | awk '{print $1}' | sed "s/^[\"'(]*//; s/[)]*$//")
+  if ! printf '%s\n' "$CMD_TOKEN" | grep -qE "$SCRIPT_RE"; then
+    exit 0
+  fi
+  if printf '%s\n' "$SEGMENT" | grep -qE "$UNSAFE_RE"; then
+    exit 0
+  fi
+done
+
+printf '%s\n' "$APPROVE"
 exit 0

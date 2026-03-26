@@ -75,9 +75,7 @@ Before exiting plan mode, update issue state to set `wiggum_step` to 0:
 
 (Replace `...` with all existing state fields per State Persistence above.) If the state write fails, do not exit plan mode — report the error and retry up to 3 times. If all retries fail, report the failure to the user and halt.
 
-Execute plan.
-
-Return to Step 0. (Step 0, not Step 1: each iteration requires a fresh plan for the next execution cycle.)
+Execute plan, then immediately return to Step 0 without stopping. (Step 0, not Step 1: each iteration requires a fresh plan for the next execution cycle.) Do not output a summary or wait for user input between iterations — the loop is continuous.
 
 ## Step 4. Terminate
 
@@ -92,4 +90,4 @@ Step 4 does not update `wiggum_step` — it is terminal. When the caller writes 
 
 **If termination instructions are reporting-only** (no code changes), execute them directly.
 
-Return control to caller.
+Return control to caller and immediately execute the caller's next step. Do not stop or output a summary between loop termination and the next phase.
