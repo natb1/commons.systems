@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
+# Required: FIREBASE_SERVICE_ACCOUNT_JSON, GITHUB_ENV
+# Optional: FIREBASE_PROJECT_ID
 set -euo pipefail
+
+if [ -z "${FIREBASE_SERVICE_ACCOUNT_JSON:-}" ]; then
+  echo "::error::FIREBASE_SERVICE_ACCOUNT_JSON is not set or is empty" >&2
+  exit 1
+fi
 
 CREDS_FILE=$(mktemp --suffix=.json)
 echo "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$CREDS_FILE"

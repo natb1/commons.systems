@@ -38,7 +38,13 @@ echo "=== Test: auth script writes credentials and sets GITHUB_ENV vars ==="
     fail "auth did not set expected GITHUB_ENV vars"
   fi
 
+  GAC=$(grep '^GOOGLE_APPLICATION_CREDENTIALS=' "$GITHUB_ENV" | cut -d= -f2)
   CREDS_FILE=$(grep '^CREDS_FILE=' "$GITHUB_ENV" | cut -d= -f2)
+  if [ "$GAC" = "$CREDS_FILE" ]; then
+    pass "GOOGLE_APPLICATION_CREDENTIALS and CREDS_FILE point to same path"
+  else
+    fail "GOOGLE_APPLICATION_CREDENTIALS ($GAC) != CREDS_FILE ($CREDS_FILE)"
+  fi
   if [ -f "$CREDS_FILE" ] && grep -q '"project_id"' "$CREDS_FILE"; then
     pass "auth writes credentials to temp file"
   else
@@ -118,6 +124,21 @@ echo "=== Test: cleanup script succeeds when CREDS_FILE is unset ==="
   fi
 )
 
+echo ""
+echo "=== Test: auth script fails when FIREBASE_SERVICE_ACCOUNT_JSON is unset ==="
+(
+  GITHUB_ENV="${TEST_TMPDIR}/github_env_unset"
+  > "$GITHUB_ENV"
+  export GITHUB_ENV
+  unset FIREBASE_SERVICE_ACCOUNT_JSON 2>/dev/null || true
+
+  if "$SCRIPT_DIR/firebase-auth.sh" 2>/dev/null; then
+    fail "auth should fail when FIREBASE_SERVICE_ACCOUNT_JSON is unset"
+  else
+    pass "auth fails when FIREBASE_SERVICE_ACCOUNT_JSON is unset"
+  fi
+)
+
 FINAL_PASS=$(cat "$PASS_FILE")
 FINAL_FAIL=$(cat "$FAIL_FILE")
 
@@ -125,6 +146,13 @@ echo ""
 echo "========================================"
 echo "  Results: $FINAL_PASS passed, $FINAL_FAIL failed"
 echo "========================================"
+
+EXPECTED=8
+ACTUAL=$(( FINAL_PASS + FINAL_FAIL ))
+if [ "$ACTUAL" -ne "$EXPECTED" ]; then
+  echo "ERROR: expected $EXPECTED test results but got $ACTUAL (a test subshell may have crashed)" >&2
+  exit 1
+fi
 
 if [ "$FINAL_FAIL" -gt 0 ]; then
   exit 1

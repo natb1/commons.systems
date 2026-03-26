@@ -45,14 +45,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Auto-detect mode: delegate app detection to get-changed-apps.sh,
-# then check nix/rules inline (those aren't app-level concerns).
+# then check nix/rules/ci-scripts inline (those aren't app-level concerns).
 if [ "$EXPLICIT" = false ]; then
   while IFS= read -r app; do
     [ -z "$app" ] && continue
     DIRTY_APPS["$app"]=1
   done < <("$SCRIPTS/get-changed-apps.sh")
 
-  # Detect nix and rules changes separately
+  # Detect nix, rules, and ci-scripts changes separately
   if ! CHANGED=$(git diff --name-only origin/main...HEAD); then
     echo "ERROR: could not diff against origin/main" >&2
     exit 1
