@@ -131,10 +131,8 @@ function transition(next: AppState): void {
 
 // Hydrate interactive containers (tables, chart) whenever they appear in the DOM.
 // Multiple code paths trigger renders (navigation, data source changes), so an
-// observer catches all of them. hydrateOnce sets dataset.hydrated to "true" on
-// success or "error" on failure to prevent retry loops.
-// Observer runs for page lifetime: each render replaces page content, so
-// containers start unhydrated and need re-initialization.
+// observer catches all of them. Observer runs for page lifetime: each render
+// replaces page content, so containers start unhydrated and need re-initialization.
 function hydrateTable(
   selector: string,
   hydrate: (el: HTMLElement) => void,

@@ -4,8 +4,9 @@
  * afterRender runs after the router sets outlet.innerHTML. Choose a pattern
  * based on the hydration trigger and whether work is async:
  *
- * 1. Synchronous one-shot — afterRender attaches listeners directly.
- *    No helper needed. (print)
+ * 1. Synchronous one-shot — afterRender attaches listeners or initializes
+ *    components synchronously (async work, if any, is managed internally
+ *    by the component). No helper needed. (print)
  *
  * 2. Idempotent observer-driven — a MutationObserver (or other repeated
  *    trigger) calls hydration for elements that may already be hydrated.

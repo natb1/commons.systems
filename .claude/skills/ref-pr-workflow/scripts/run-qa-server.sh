@@ -227,11 +227,7 @@ VITE_ARGS+=("VITE_RECAPTCHA_SITE_KEY=emulator-recaptcha-key")
 
 # Start Vite dev server
 cd "$REPO_ROOT/$APP_DIR"
-if [ ${#VITE_ARGS[@]} -gt 0 ]; then
-  env "${VITE_ARGS[@]}" npx vite --port "${VITE_PORT}" --strictPort &
-else
-  npx vite --port "${VITE_PORT}" --strictPort &
-fi
+env "${VITE_ARGS[@]}" npx vite --port "${VITE_PORT}" --strictPort &
 VITE_PID=$!
 cd "$REPO_ROOT"
 
