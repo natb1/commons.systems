@@ -1,6 +1,7 @@
 export interface Route {
   readonly path: `/${string}` | RegExp;
   readonly render: (path: string) => string | Promise<string>;
+  /** See ./hydrate.ts for pattern selection guide (one-shot, observer-driven, async+staleness). */
   readonly afterRender?: (outlet: HTMLElement, path: string) => void;
 }
 
