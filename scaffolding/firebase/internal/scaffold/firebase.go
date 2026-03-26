@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -363,4 +364,105 @@ func RemoveHostingTarget(rc *FirebaseRC, appName string) error {
 		delete(hosting, appName)
 	}
 	return nil
+}
+
+// PackageJSON represents the root package.json file.
+type PackageJSON struct {
+	Name       string   `json:"name"`
+	Private    bool     `json:"private"`
+	Workspaces []string `json:"workspaces"`
+	// extra preserves unknown JSON keys (e.g., devDependencies) during round-trip.
+	extra map[string]json.RawMessage
+}
+
+func (p *PackageJSON) UnmarshalJSON(data []byte) error {
+	type Alias PackageJSON
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*p = PackageJSON(alias)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	delete(raw, "name")
+	delete(raw, "private")
+	delete(raw, "workspaces")
+	if len(raw) > 0 {
+		p.extra = raw
+	}
+	return nil
+}
+
+func (p PackageJSON) MarshalJSON() ([]byte, error) {
+	type Alias PackageJSON
+	data, err := json.Marshal(Alias(p))
+	if err != nil {
+		return nil, err
+	}
+	if len(p.extra) == 0 {
+		return data, nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return nil, err
+	}
+	for k, v := range p.extra {
+		obj[k] = v
+	}
+	return json.Marshal(obj)
+}
+
+func ReadPackageJSON(repoRoot string) (*PackageJSON, error) {
+	data, err := os.ReadFile(filepath.Join(repoRoot, "package.json"))
+	if err != nil {
+		return nil, fmt.Errorf("reading package.json: %w", err)
+	}
+	var pkg PackageJSON
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return nil, fmt.Errorf("parsing package.json: %w", err)
+	}
+	return &pkg, nil
+}
+
+func WritePackageJSON(repoRoot string, pkg *PackageJSON) error {
+	data, err := json.MarshalIndent(pkg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling package.json: %w", err)
+	}
+	data = append(data, '\n')
+	path := filepath.Join(repoRoot, "package.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing package.json: %w", err)
+	}
+	return nil
+}
+
+// AddWorkspace inserts name into the workspaces array in sorted order.
+// Returns an error if the workspace already exists.
+func AddWorkspace(pkg *PackageJSON, name string) error {
+	for _, w := range pkg.Workspaces {
+		if w == name {
+			return fmt.Errorf("workspace %q already exists in package.json", name)
+		}
+	}
+	pkg.Workspaces = append(pkg.Workspaces, name)
+	sort.Strings(pkg.Workspaces)
+	return nil
+}
+
+// RemoveWorkspace removes name from the workspaces array.
+// Returns true if the workspace was found and removed.
+func RemoveWorkspace(pkg *PackageJSON, name string) bool {
+	filtered := make([]string, 0, len(pkg.Workspaces))
+	for _, w := range pkg.Workspaces {
+		if w != name {
+			filtered = append(filtered, w)
+		}
+	}
+	removed := len(filtered) < len(pkg.Workspaces)
+	pkg.Workspaces = filtered
+	return removed
 }
