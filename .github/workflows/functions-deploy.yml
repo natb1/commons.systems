@@ -16,19 +16,18 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "22"
+          node-version-file: .node-version
       - name: Install dependencies
         run: npm ci
       - name: Build functions
         run: npm run -w functions build
       - name: Authenticate with Firebase
-        run: |
-          CREDS_FILE=$(mktemp --suffix=.json)
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$CREDS_FILE"
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE" >> "$GITHUB_ENV"
-          echo "CREDS_FILE=$CREDS_FILE" >> "$GITHUB_ENV"
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: .github/scripts/firebase-auth.sh
       - name: Deploy functions
-        run: npx firebase-tools deploy --only functions --force --project "${{ secrets.FIREBASE_PROJECT_ID }}"
+        run: npx firebase-tools deploy --only functions --force --project "$FIREBASE_PROJECT_ID"
       - name: Cleanup credentials
         if: always()
-        run: rm -f "$CREDS_FILE"
+        run: .github/scripts/firebase-auth-cleanup.sh
