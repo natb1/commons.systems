@@ -24,6 +24,8 @@ PREVIEW_NAMESPACE=$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")
 cd "$REPO_ROOT/$APP_DIR"
 VITE_FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" \
   VITE_GITHUB_BRANCH="${VITE_GITHUB_BRANCH:-main}" \
+  VITE_FIREBASE_API_KEY="${VITE_FIREBASE_API_KEY:?VITE_FIREBASE_API_KEY is required for preview deploys}" \
+  VITE_RECAPTCHA_SITE_KEY="${VITE_RECAPTCHA_SITE_KEY:?VITE_RECAPTCHA_SITE_KEY is required for preview deploys}" \
   npm run build
 cd "$REPO_ROOT"
 

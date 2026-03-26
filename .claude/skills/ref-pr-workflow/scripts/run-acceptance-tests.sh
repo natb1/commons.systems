@@ -74,11 +74,15 @@ if [ "$USES_STORAGE" = true ]; then
   BUILD_ARGS+=("VITE_STORAGE_EMULATOR_HOST=localhost:${STORAGE_PORT}")
 fi
 
-if [ ${#BUILD_ARGS[@]} -gt 0 ]; then
-  env "${BUILD_ARGS[@]}" npm run build
-else
-  npm run build
-fi
+# Firebase credentials — emulators don't validate these, but the client-side
+# config module (firebaseutil/src/config.ts) requires them at startup.
+BUILD_ARGS+=("VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY:-emulator-api-key}")
+BUILD_ARGS+=("VITE_RECAPTCHA_SITE_KEY=${VITE_RECAPTCHA_SITE_KEY:-emulator-recaptcha-key}")
+
+# Set GitHub branch for apps that fetch raw content from GitHub
+BUILD_ARGS+=("VITE_GITHUB_BRANCH=$(git branch --show-current)")
+
+env "${BUILD_ARGS[@]}" npm run build
 
 cd "$REPO_ROOT"
 
