@@ -7,4 +7,5 @@ export function createAppAuth(app: FirebaseApp) {
   return createFirebaseAuth(app, emulatorHost ? { emulatorHost } : undefined);
 }
 
+export type { AppAuth } from "./firebase-auth.js";
 export type { User } from "firebase/auth";
