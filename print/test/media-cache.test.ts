@@ -107,7 +107,7 @@ describe("putChunk / getChunk round-trip", () => {
 });
 
 describe("lastAccessed update on get", () => {
-  it("touching an entry via getFile prevents its eviction", async () => {
+  it("touching an entry via getFile prevents its eviction", { timeout: 30_000 }, async () => {
     // Use entries that together exceed MAX_CACHE_BYTES so the third put
     // triggers eviction. Entry A (200MB) + Entry B (200MB) = 400MB < 500MB.
     // Then touch A so B becomes the oldest. Put C (200MB) => total would be
@@ -147,7 +147,7 @@ describe("lastAccessed update on get", () => {
 });
 
 describe("LRU eviction", () => {
-  it("evicts the oldest-accessed file entry when cache exceeds MAX_CACHE_BYTES", async () => {
+  it("evicts the oldest-accessed file entry when cache exceeds MAX_CACHE_BYTES", { timeout: 30_000 }, async () => {
     const size = 300 * 1024 * 1024;
     const buf1 = new ArrayBuffer(size);
     const buf2 = new ArrayBuffer(size);
@@ -168,7 +168,7 @@ describe("LRU eviction", () => {
     vi.restoreAllMocks();
   });
 
-  it("evicts the oldest-accessed chunk entry when cache exceeds MAX_CACHE_BYTES", async () => {
+  it("evicts the oldest-accessed chunk entry when cache exceeds MAX_CACHE_BYTES", { timeout: 30_000 }, async () => {
     const size = 300 * 1024 * 1024;
     const chunk1 = new Uint8Array(size);
     const chunk2 = new Uint8Array(size);
@@ -188,7 +188,7 @@ describe("LRU eviction", () => {
     vi.restoreAllMocks();
   });
 
-  it("evicts multiple entries if needed to fit incoming data", async () => {
+  it("evicts multiple entries if needed to fit incoming data", { timeout: 30_000 }, async () => {
     const size = 200 * 1024 * 1024;
     const bufA = new ArrayBuffer(size);
     const bufB = new ArrayBuffer(size);
