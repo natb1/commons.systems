@@ -220,6 +220,11 @@ fi
 # Set GitHub branch for apps that fetch raw content from GitHub
 VITE_ARGS+=("VITE_GITHUB_BRANCH=$(git branch --show-current)")
 
+# Firebase credentials — emulators don't validate these, but the client-side
+# config module (firebaseutil/src/config.ts) requires them at startup.
+VITE_ARGS+=("VITE_FIREBASE_API_KEY=emulator-api-key")
+VITE_ARGS+=("VITE_RECAPTCHA_SITE_KEY=emulator-recaptcha-key")
+
 # Start Vite dev server
 cd "$REPO_ROOT/$APP_DIR"
 if [ ${#VITE_ARGS[@]} -gt 0 ]; then
