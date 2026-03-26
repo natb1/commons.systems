@@ -196,7 +196,9 @@ func Cleanup(repoRoot, appName string, dryRun bool) error {
 		if err != nil {
 			return err
 		}
-		RemoveWorkspace(pkg, appName)
+		if !RemoveWorkspace(pkg, appName) {
+			fmt.Printf("NOTE: workspace %q not found in package.json\n", appName)
+		}
 		if err := WritePackageJSON(repoRoot, pkg); err != nil {
 			return fmt.Errorf("updating package.json: %w", err)
 		}

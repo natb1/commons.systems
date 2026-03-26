@@ -525,7 +525,9 @@ func TestPackageJSONPreservesUnknownFields(t *testing.T) {
   }
 }
 `
-	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(content), 0o644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write error: %v", err)
+	}
 
 	pkg, err := ReadPackageJSON(tmpDir)
 	if err != nil {

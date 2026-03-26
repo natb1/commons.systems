@@ -366,7 +366,7 @@ func RemoveHostingTarget(rc *FirebaseRC, appName string) error {
 	return nil
 }
 
-// PackageJSON represents the root package.json with workspace management.
+// PackageJSON represents the root package.json file.
 type PackageJSON struct {
 	Name       string   `json:"name"`
 	Private    bool     `json:"private"`
