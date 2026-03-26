@@ -21,8 +21,9 @@ Build a specific app package:
 npm run build --prefix <pkg>
 ```
 
-This runs `tsc && vite build` per the package scripts. App packages with build scripts:
-`budget`, `fellspiral`, `landing`, `print`.
+Frontend app packages with build scripts: `budget`, `fellspiral`, `landing`, `print`.
+Some include a prerender step after `vite build`. The `functions` package also has a
+build script but uses a different pipeline (`tsx` + `tsc`, no Vite).
 
 ## Type-checking only
 
