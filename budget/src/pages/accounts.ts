@@ -185,6 +185,7 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
       if (kind === "programmer" || kind === "data-integrity" || kind === "range") {
         throw chartError;
       }
+      reportError(chartError);
       console.error("Failed to compute chart data:", chartError);
       chartHtml = renderLoadError(chartError, "chart-error");
     }

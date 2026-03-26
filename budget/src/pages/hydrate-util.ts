@@ -38,7 +38,7 @@ export function showInputError(el: HTMLElement, title = "Save failed \u2014 valu
  */
 export function handleSaveError(el: HTMLElement, error: unknown, entity: string): void {
   const kind = classifyError(error);
-  if (deferProgrammerError(error)) return;
+  if (kind === "programmer") { setTimeout(() => { throw error; }, 0); return; }
   if (kind === "data-integrity") {
     console.error("Data integrity error:", error);
     showInputError(el, "Data error \u2014 please reload");
@@ -68,7 +68,7 @@ function showActionError(el: HTMLElement, title = "Action failed"): void {
  */
 export function handleActionError(el: HTMLElement, error: unknown, action: string): void {
   const kind = classifyError(error);
-  if (deferProgrammerError(error)) return;
+  if (kind === "programmer") { setTimeout(() => { throw error; }, 0); return; }
   if (kind === "data-integrity") {
     console.error("Data integrity error:", error);
     showActionError(el, "Data error \u2014 please reload");
@@ -195,7 +195,7 @@ export function wireChartResize(
         const msg = "Chart rendering failed on resize. Try refreshing the page.";
         for (const el of errorEls) el.textContent = msg;
         console.error("Chart render failed during resize:", error);
-        setTimeout(() => { throw error; }, 0);
+        if (!deferProgrammerError(error)) reportError(error);
         return;
       }
       reattachScrollSync();

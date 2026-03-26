@@ -337,6 +337,7 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
     } catch (chartError) {
       const kind = classifyError(chartError);
       if (kind === "programmer" || kind === "data-integrity" || kind === "range") throw chartError;
+      reportError(chartError);
       console.error("Chart serialization failed:", chartError);
       chartHtml = `<p class="chart-error">Chart unavailable.</p>`;
     }

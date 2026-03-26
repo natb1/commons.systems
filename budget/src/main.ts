@@ -148,13 +148,13 @@ function hydrateTable(
     table.dataset.hydrated = "true";
   } catch (error) {
     table.dataset.hydrated = "error";
-    if (deferProgrammerError(error)) return;
+    const kind = classifyError(error);
+    if (kind === "programmer") { setTimeout(() => { throw error; }, 0); return; }
     console.error("Hydration error:", error);
     table.querySelectorAll("input, select").forEach((el) => {
       (el as HTMLInputElement | HTMLSelectElement).disabled = true;
     });
     const msg = document.createElement("p");
-    const kind = classifyError(error);
     msg.textContent = kind === "data-integrity"
       ? "A data error occurred. Please contact support."
       : errorLabel

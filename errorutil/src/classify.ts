@@ -11,8 +11,8 @@ export type ErrorKind =
  * data-integrity (error.name === "DataIntegrityError") >
  * permission-denied (error.code === "permission-denied") > unknown.
  *
- * DataIntegrityError is matched by name string because it is defined in
- * app-level code and not available as a shared constructor.
+ * DataIntegrityError is matched by name string to avoid a dependency on
+ * the firestoreutil package where it is defined.
  *
  * The "permission-denied" code matches the Firebase error code convention.
  */
