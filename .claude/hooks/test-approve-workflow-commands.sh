@@ -109,6 +109,21 @@ assert_passthrough \
   "cat .claude/skills/ref-pr-workflow/scripts/run-lint.sh"
 
 assert_passthrough \
+  "absolute script path as argument to rm" \
+  "Bash" \
+  "rm -rf / /Users/n8/.claude/skills/ref-pr-workflow/scripts/issue-primary"
+
+assert_passthrough \
+  "absolute script path as argument to chmod" \
+  "Bash" \
+  "chmod 777 /Users/n8/.claude/skills/ref-pr-workflow/scripts/issue-primary"
+
+assert_passthrough \
+  "absolute script path as argument to cp" \
+  "Bash" \
+  "cp /tmp/evil /Users/n8/.claude/skills/ref-pr-workflow/scripts/issue-primary"
+
+assert_passthrough \
   "non-Bash tool" \
   "Read" \
   ".claude/skills/ref-pr-workflow/scripts/run-lint.sh"

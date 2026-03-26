@@ -23,14 +23,17 @@ fi
 
 APPROVE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"auto-approved by workflow hook"}}'
 
-# Match ref-pr-workflow script at start of command or after "/" (worktree absolute paths).
-# Denylist rejects shell metacharacters instead of allowlisting safe chars around the path,
-# because the path prefix varies across worktrees and quoting styles.
+# Match ref-pr-workflow script as the executable (first token), not as an argument.
+# Extract the first whitespace-delimited token, strip leading shell syntax (" ' (),
+# then require the script path to end the token ($ anchor). This prevents commands
+# like "rm -rf / /abs/.claude/.../script" from matching on the argument path.
+# Denylist rejects shell metacharacters in the full command line.
 FIRST_LINE=$(printf '%s' "$COMMAND" | head -n 1)
 if [ "$COMMAND" != "$FIRST_LINE" ]; then
   exit 0
 fi
-if printf '%s\n' "$FIRST_LINE" | grep -qE '(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*( |\)|$)' && \
+CMD_TOKEN=$(printf '%s' "$FIRST_LINE" | awk '{print $1}' | sed "s/^[\"'(]*//; s/[)]*$//")
+if printf '%s\n' "$CMD_TOKEN" | grep -qE '(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$' && \
    ! printf '%s\n' "$FIRST_LINE" | grep -qE '(&&|\|\||[;|`<>$])'; then
   printf '%s\n' "$APPROVE"
   exit 0
