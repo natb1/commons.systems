@@ -1,7 +1,6 @@
 ---
 name: ref-create-pr
 description: Create draft PR closing implemented issues
-allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # PR Creation

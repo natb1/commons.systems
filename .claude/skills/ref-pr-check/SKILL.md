@@ -2,7 +2,6 @@
 name: ref-pr-check
 description: Forked verify loop with CI monitoring — runs Steps 6 and 7 in isolated context
 context: fork
-allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # Verify Loop (Forked)

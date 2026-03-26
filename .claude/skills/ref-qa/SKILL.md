@@ -1,7 +1,6 @@
 ---
 name: ref-qa
 description: QA review loop — user-driven testing with wiggum-loop
-allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # QA Review Loop
