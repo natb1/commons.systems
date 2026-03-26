@@ -1,7 +1,6 @@
 ---
 name: ref-pr-workflow
 description: Complete workflow documentation for issue implementation lifecycle — resume from any step after context loss
-allowed-tools: Bash(.claude/skills/ref-pr-workflow/scripts/*), Bash($CLAUDE_PLUGIN_ROOT/scripts/*)
 ---
 
 # Current PR Scope and Status
