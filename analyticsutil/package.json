@@ -12,6 +12,7 @@
     "lint": "eslint src/"
   },
   "peerDependencies": {
+    "@commons-systems/errorutil": "*",
     "firebase": "^12.9.0"
   }
 }

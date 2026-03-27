@@ -8,6 +8,7 @@
     "./app-context": "./src/app-context.ts"
   },
   "peerDependencies": {
+    "@commons-systems/errorutil": "*",
     "firebase": ">=12",
     "@commons-systems/analyticsutil": "*",
     "@commons-systems/firestoreutil": "*"

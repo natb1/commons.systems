@@ -1,11 +1,12 @@
 import { initializeAnalytics, logEvent } from "firebase/analytics";
 import type { FirebaseApp } from "firebase/app";
+import { classifyError } from "@commons-systems/errorutil/classify";
 
 export function initAnalyticsSafe(app: FirebaseApp): (path: string) => void {
   try {
     return initAnalytics(app);
   } catch (error) {
-    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+    if (classifyError(error) === "programmer") throw error;
     reportError(
       new Error(
         `Failed to initialize analytics (appId: ${app.options.appId}, measurementId: ${app.options.measurementId}): ${error instanceof Error ? error.message : error}`,
@@ -31,7 +32,7 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
     try {
       logEvent(analytics, "page_view", { page_path: path });
     } catch (error) {
-      if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+      if (classifyError(error) === "programmer") throw error;
       reportError(
         new Error(
           `Failed to log page view (path: ${path}): ${error instanceof Error ? error.message : error}`,
