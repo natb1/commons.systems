@@ -2,6 +2,7 @@ import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { formatUtcDate } from "../date.js";
+import { isOutletCurrent } from "@commons-systems/router/hydrate";
 import type { PostMeta } from "../post-types.js";
 
 const SCROLL_PADDING_PX = 16;
@@ -75,6 +76,7 @@ export function hydrateHome(
 
     try {
       let markdown = await fetchPost(post.filename);
+      if (!isOutletCurrent(outlet, container)) return;
 
       // If the markdown starts with an h1, use it as the post title (overriding
       // the Firestore title) and strip it from the body to avoid duplication.
@@ -90,7 +92,7 @@ export function hydrateHome(
       }
 
       const html = await marked.parse(markdown);
-      if (!outlet.contains(container)) return;
+      if (!isOutletCurrent(outlet, container)) return;
       // DOMPurify strips target attributes by default; ADD_ATTR preserves the
       // target="_blank" set by the custom link renderer above.
       contentDiv.innerHTML = DOMPurify.sanitize(html, {
@@ -98,14 +100,14 @@ export function hydrateHome(
       });
     } catch (error) {
       reportError(new Error(`Failed to load post "${post.id}": ${error instanceof Error ? error.message : error}`));
-      if (!outlet.contains(container)) return;
+      if (!isOutletCurrent(outlet, container)) return;
       contentDiv.innerHTML = "<p>Could not load post content. Try refreshing.</p>";
     }
   });
 
   if (scrollTo) {
     void Promise.allSettled(fetches).then(() => {
-      if (!outlet.contains(container)) return;
+      if (!isOutletCurrent(outlet, container)) return;
       const article = outlet.querySelector(`#post-${CSS.escape(scrollTo)}`);
       if (article) {
         const headerHeight = document.querySelector('header')?.offsetHeight ?? 0;

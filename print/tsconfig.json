@@ -1,7 +1,4 @@
 {
   "extends": "@commons-systems/config/tsconfig.app.json",
-  "compilerOptions": {
-    "target": "ES2022"
-  },
   "include": ["src"]
 }
