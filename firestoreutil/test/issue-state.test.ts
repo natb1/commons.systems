@@ -4,10 +4,11 @@ import {
   writeIssueState,
   validateIssueNumber,
   type IssueNumber,
+  type IssueState,
 } from "../src/issue-state.js";
 
 function createMockFirestore() {
-  const store = new Map<string, Record<string, unknown>>();
+  const store = new Map<string, IssueState>();
 
   const mockDoc = vi.fn((path: string) => ({
     get: vi.fn(async () => {
@@ -17,7 +18,7 @@ function createMockFirestore() {
         data: () => data,
       };
     }),
-    set: vi.fn(async (data: Record<string, unknown>) => {
+    set: vi.fn(async (data: IssueState) => {
       store.set(path, data);
     }),
   }));
@@ -97,7 +98,7 @@ describe("writeIssueState", () => {
   it("uses correct document path", async () => {
     const { db, mockDoc } = createMockFirestore();
 
-    await writeIssueState(db, issue99, { version: 1 });
+    await writeIssueState(db, issue99, { version: 1, step: 1 });
 
     expect(mockDoc).toHaveBeenCalledWith("claude-workflow/99");
   });
