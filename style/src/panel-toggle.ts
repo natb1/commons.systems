@@ -40,8 +40,8 @@ export function initPanelToggle(
       const target = e.target as HTMLElement;
       if (
         panel.classList.contains("open") &&
-        !target.closest(`#${panel.id}`) &&
-        !target.closest(`#${toggle.id}`)
+        !panel.contains(target) &&
+        !toggle.contains(target)
       ) {
         close();
       }

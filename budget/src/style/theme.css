@@ -337,7 +337,8 @@
 /* Desktop: parent grid on #rules-table, subgrid on each row.
    <summary> and .rule-details are placed on the same grid-row.
    Since <summary> can't be display:grid in Chromium (forced to list-item),
-   .rule-summary-content and .rule-details use their own explicit grids
+   .rule-summary-content (inheriting display:grid from .expand-summary) and
+   .rule-details use their own explicit grids
    with matching fr proportions for perfect column alignment. */
 @media (min-width: 768px) {
   #rules-table {

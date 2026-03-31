@@ -11,9 +11,7 @@ function setup(): {
 } {
   document.body.innerHTML = "";
   const panel = document.createElement("div");
-  panel.id = "info-panel";
   const toggle = document.createElement("button");
-  toggle.id = "panel-toggle";
   toggle.setAttribute("aria-expanded", "false");
   document.body.appendChild(panel);
   document.body.appendChild(toggle);

@@ -25,6 +25,7 @@
   transform: rotate(90deg);
 }
 
+/* Grid base for summary content. Consumers must provide grid-template-columns. */
 .expand-summary {
   display: grid;
   gap: 0.5rem;
