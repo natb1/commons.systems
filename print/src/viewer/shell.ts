@@ -112,12 +112,27 @@ export function initViewer(
   updateOrientation();
   orientationQuery.addEventListener("change", updateOrientation);
 
-  // Panel toggle
+  // Panel toggle with fullscreen
   function handleToggle() {
     const collapsed = panel.classList.toggle("collapsed");
     toggleBtn.setAttribute("aria-expanded", String(!collapsed));
+    if (collapsed) {
+      viewer.requestFullscreen().catch(() => {});
+    } else {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
   }
   toggleBtn.addEventListener("click", handleToggle);
+
+  function handleFullscreenChange() {
+    if (!document.fullscreenElement && panel.classList.contains("collapsed")) {
+      panel.classList.remove("collapsed");
+      toggleBtn.setAttribute("aria-expanded", "true");
+    }
+  }
+  document.addEventListener("fullscreenchange", handleFullscreenChange);
 
   // Position persistence: Firestore for authenticated users, localStorage otherwise.
   // Debounced to avoid writes on every sub-page turn.
@@ -426,6 +441,10 @@ export function initViewer(
     document.body.classList.remove("viewer-active");
     orientationQuery.removeEventListener("change", updateOrientation);
     toggleBtn.removeEventListener("click", handleToggle);
+    document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
     document.removeEventListener("keydown", handleKeydown);
     zoomInBtn.removeEventListener("click", handleZoomIn);
     zoomOutBtn.removeEventListener("click", handleZoomOut);
