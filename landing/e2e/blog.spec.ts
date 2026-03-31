@@ -1,17 +1,7 @@
 import { test, expect } from "@playwright/test";
 
-// Posts are fetched as raw markdown from GitHub at runtime.
-// Intercept those requests with deterministic stub content so tests
-// do not depend on network access or repository state.
-test.beforeEach(async ({ page }) => {
-  await page.route("https://raw.githubusercontent.com/**", (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname.endsWith("/landing/post/recovering-autonomy-with-coding-agents.md")) {
-      return route.fulfill({ body: "# Recovering Autonomy with Coding Agents\nThis is the post." });
-    }
-    return route.abort("connectionfailed");
-  });
-});
+// Blog post content is inlined at build time by the vite blog-posts plugin.
+// No route interception is needed -- content comes from the build output.
 
 test.describe("blog", () => {
   test("home page shows published posts", async ({ page }) => {
@@ -45,7 +35,7 @@ test.describe("blog", () => {
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
       page.locator("#post-content-recovering-autonomy-with-coding-agents"),
-    ).toContainText("This is the post.", { timeout: 30000 });
+    ).toContainText("built to my own specification", { timeout: 30000 });
   });
 
   test("post content does not show error fallback", async ({ page }) => {
