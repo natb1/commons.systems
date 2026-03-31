@@ -1,4 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
+import { logError } from "@commons-systems/errorutil/log";
 import { formatUtcDate, monthName } from "../date.js";
 import { isPublished, type PostMeta, type PublishedPost } from "../post-types.js";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.js";
@@ -174,7 +175,7 @@ function fetchAllLatestPosts(
       .fetchLatestPost()
       .then((post) => ({ entry, post }))
       .catch((err) => {
-        console.error(`Failed to fetch latest post for "${entry.id}":`, err);
+        logError(err, { operation: "fetch-latest-post", entryId: entry.id });
         return { entry, post: null };
       });
   });
@@ -226,5 +227,5 @@ export function hydrateInfoPanel(
       }
       sortBlogrollByDate(panel);
     })
-    .catch((err) => console.error("Failed to hydrate blogroll:", err));
+    .catch((err) => logError(err, { operation: "hydrate-blogroll" }));
 }

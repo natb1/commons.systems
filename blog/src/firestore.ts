@@ -4,6 +4,7 @@ import {
   nsCollectionPath,
   type Namespace,
 } from "@commons-systems/firestoreutil/namespace";
+import { logError } from "@commons-systems/errorutil/log";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 
 import type { PostMeta, PublishedPost } from "./post-types.js";
@@ -23,18 +24,18 @@ function toPostMeta(id: string, data: Record<string, unknown>): PostMeta | null 
   const previewImage = typeof data.previewImage === "string" ? data.previewImage : undefined;
   const previewDescription = typeof data.previewDescription === "string" ? data.previewDescription : undefined;
   if (!title || !filename) {
-    console.error(`Post "${id}" has missing required fields:`, data);
+    logError(new Error("Post missing required fields"), { operation: "post-validation", postId: id });
     return null;
   }
   if (published && publishedAt !== null) {
     if (isNaN(new Date(publishedAt).getTime())) {
-      console.error(`Post "${id}" has invalid publishedAt date:`, data);
+      logError(new Error("Post has invalid publishedAt date"), { operation: "post-validation", postId: id });
       return null;
     }
     return { id, title, published: true, publishedAt, filename, previewImage, previewDescription };
   }
   if (published) {
-    console.error(`Post "${id}" is published but has no publishedAt date:`, data);
+    logError(new Error("Published post has no publishedAt date"), { operation: "post-validation", postId: id });
     return null;
   }
   return { id, title, published: false, publishedAt: null, filename, previewImage, previewDescription };

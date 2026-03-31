@@ -193,8 +193,8 @@ describe("getPosts", () => {
     expect(posts[0].id).toBe("hello-world");
     expect(skippedCount).toBe(1);
     expect(consoleError).toHaveBeenCalledWith(
-      expect.stringContaining("no-title"),
-      expect.anything(),
+      "[post-validation]",
+      expect.any(Error),
     );
     consoleError.mockRestore();
   });
@@ -254,8 +254,8 @@ describe("getPosts", () => {
     expect(posts).toHaveLength(0);
     expect(skippedCount).toBe(1);
     expect(consoleError).toHaveBeenCalledWith(
-      expect.stringContaining("bad-date"),
-      expect.anything(),
+      "[post-validation]",
+      expect.any(Error),
     );
     consoleError.mockRestore();
   });
@@ -279,8 +279,8 @@ describe("getPosts", () => {
     expect(posts).toHaveLength(0);
     expect(skippedCount).toBe(1);
     expect(consoleError).toHaveBeenCalledWith(
-      expect.stringContaining("published-no-date"),
-      expect.anything(),
+      "[post-validation]",
+      expect.any(Error),
     );
     consoleError.mockRestore();
   });

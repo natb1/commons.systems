@@ -1,4 +1,5 @@
 import { classifyError } from "@commons-systems/errorutil/classify";
+import { logError } from "@commons-systems/errorutil/log";
 import { UploadValidationError } from "./upload.js";
 import {
   MAGIC, SALT_LEN, IV_LEN, HEADER_LEN, PBKDF2_ITERATIONS, KEY_LEN,
@@ -30,7 +31,7 @@ function getWorker(): Worker | null {
     worker.onmessage = (e: MessageEvent) => {
       const { id, type, data, message, isValidation } = e.data;
       const p = pending.get(id);
-      if (!p) { console.error(`crypto worker: response for unknown id ${id}`); return; }
+      if (!p) { logError(new Error("crypto worker response for unknown id"), { operation: "crypto-worker", id }); return; }
       pending.delete(id);
       if (type === "result") {
         p.resolve(data);
@@ -50,7 +51,7 @@ function getWorker(): Worker | null {
     };
     return worker;
   } catch (err) {
-    console.error("Failed to create crypto worker, falling back to main thread:", err);
+    logError(err, { operation: "crypto-worker-init" });
     return null;
   }
 }

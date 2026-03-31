@@ -4,6 +4,7 @@ import type { User } from "firebase/auth";
 
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
+import { logError } from "@commons-systems/errorutil/log";
 import { createHistoryRouter, parsePath } from "@commons-systems/router";
 import { renderHomeHtml, hydrateHome } from "@commons-systems/blog/pages/home";
 import { renderAdmin } from "@commons-systems/blog/pages/admin";
@@ -78,7 +79,7 @@ const updateInfoPanel = (): void => {
 navEl.links = [{ href: "/", label: "Home" }];
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => {
-  signOut().catch((err) => console.error("Sign-out failed:", err));
+  signOut().catch((err) => logError(err, { operation: "sign-out" }));
 });
 
 function updateNav(path: string): void {
@@ -133,7 +134,7 @@ const router = createHistoryRouter(
           return renderAdmin(currentUser, admin, lastSkippedCount);
         } catch (error) {
           if (classifyError(error) === "programmer") throw error;
-          console.error("Failed to check admin group:", error);
+          logError(error, { operation: "admin-group-check" });
           return `<h2>Admin</h2><p>Could not verify admin access. Try refreshing the page.</p>`;
         }
       },
@@ -174,6 +175,6 @@ onAuthStateChanged((user) => {
   currentUser = user;
   refreshAfterAuthChange().catch((err) => {
     if (deferProgrammerError(err)) return;
-    console.error("Failed to refresh after auth change:", err);
+    logError(err, { operation: "auth-change-refresh" });
   });
 });

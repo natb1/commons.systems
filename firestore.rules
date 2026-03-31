@@ -277,6 +277,13 @@ service cloud.firestore {
         && docId == request.auth.uid + "_" + request.resource.data.mediaId;
     }
 
+    // Error logs: write-only from clients. Admin reads via Admin SDK.
+    // Unauthenticated creates are allowed because budget has no auth.
+    match /{appName}/{env}/errors/{errorId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
     // InsertFirestoreRules inserts new rule blocks immediately above this line.
     match /{document=**} {

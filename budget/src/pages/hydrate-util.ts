@@ -1,5 +1,6 @@
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
+import { logError } from "@commons-systems/errorutil/log";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showDropdown } from "@commons-systems/style/components/autocomplete";
 
@@ -40,11 +41,11 @@ export function handleSaveError(el: HTMLElement, error: unknown, entity: string)
   const kind = classifyError(error);
   if (kind === "programmer") { setTimeout(() => { throw error; }, 0); return; }
   if (kind === "data-integrity") {
-    console.error("Data integrity error:", error);
+    logError(error, { operation: "save-data-integrity" });
     showInputError(el, "Data error \u2014 please reload");
     return;
   }
-  console.error(`Failed to save ${entity}:`, error);
+  logError(error, { operation: `save-${entity}` });
   if (kind === "permission-denied") {
     showInputError(el, "Access denied. Please contact support.");
   } else if (kind === "range") {
@@ -70,11 +71,11 @@ export function handleActionError(el: HTMLElement, error: unknown, action: strin
   const kind = classifyError(error);
   if (kind === "programmer") { setTimeout(() => { throw error; }, 0); return; }
   if (kind === "data-integrity") {
-    console.error("Data integrity error:", error);
+    logError(error, { operation: "action-data-integrity" });
     showActionError(el, "Data error \u2014 please reload");
     return;
   }
-  console.error(`Failed to ${action}:`, error);
+  logError(error, { operation: `action-${action}` });
   if (kind === "permission-denied") {
     showActionError(el, "Access denied. Please contact support.");
   } else {
@@ -194,7 +195,7 @@ export function wireChartResize(
       } catch (error) {
         const msg = "Chart rendering failed on resize. Try refreshing the page.";
         for (const el of errorEls) el.textContent = msg;
-        console.error("Chart render failed during resize:", error);
+        logError(error, { operation: "chart-resize" });
         if (!deferProgrammerError(error)) reportError(error);
         return;
       }

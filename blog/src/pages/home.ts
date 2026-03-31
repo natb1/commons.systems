@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
+import { logError } from "@commons-systems/errorutil/log";
 import { formatUtcDate } from "../date.js";
 import { isOutletCurrent } from "@commons-systems/router/hydrate";
 import type { PostMeta } from "../post-types.js";
@@ -64,7 +65,7 @@ export function hydrateHome(
 ): void {
   const container = outlet.querySelector("#posts");
   if (!container) {
-    console.error("hydrateHome: #posts container not found");
+    logError(new Error("#posts container not found"), { operation: "hydrate-home" });
     return;
   }
 
