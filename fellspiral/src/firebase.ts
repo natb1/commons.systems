@@ -7,6 +7,6 @@ export const { db, app, NAMESPACE, trackPageView, getAppCheckHeaders } = createA
   "1:1043497797028:web:2cfda4da88eb9a9e062d31",
   {
     recaptchaSiteKey: RECAPTCHA_SITE_KEY,
-    getCurrentUser: () => getAuth(app).currentUser,
+    getCurrentUser: () => getAuth().currentUser,
   },
 );
