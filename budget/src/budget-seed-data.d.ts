@@ -1,0 +1,100 @@
+declare module "virtual:budget-seed-data" {
+  interface SeedTransaction {
+    readonly id: string;
+    readonly institution: string;
+    readonly account: string;
+    readonly description: string;
+    readonly amount: number;
+    readonly note: string;
+    readonly category: string;
+    readonly reimbursement: number;
+    readonly budget: string | null;
+    readonly timestampMs: number | null;
+    readonly statementId: string | null;
+    readonly normalizedId: string | null;
+    readonly normalizedPrimary: boolean;
+    readonly normalizedDescription: string | null;
+    readonly virtual: boolean;
+  }
+
+  interface SeedBudgetOverride {
+    readonly dateMs: number | null;
+    readonly balance: number;
+  }
+
+  interface SeedBudget {
+    readonly id: string;
+    readonly name: string;
+    readonly allowance: number;
+    readonly allowancePeriod: "weekly" | "monthly" | "quarterly";
+    readonly rollover: "none" | "debt" | "balance";
+    readonly overrides: SeedBudgetOverride[];
+  }
+
+  interface SeedBudgetPeriod {
+    readonly id: string;
+    readonly budgetId: string;
+    readonly periodStartMs: number;
+    readonly periodEndMs: number;
+    readonly total: number;
+    readonly count: number;
+    readonly categoryBreakdown: Record<string, number>;
+  }
+
+  interface SeedRule {
+    readonly id: string;
+    readonly type: "categorization" | "budget_assignment";
+    readonly pattern: string;
+    readonly target: string;
+    readonly priority: number;
+    readonly institution: string | null;
+    readonly account: string | null;
+    readonly minAmount: number | null;
+    readonly maxAmount: number | null;
+    readonly excludeCategory: string | null;
+    readonly matchCategory: string | null;
+  }
+
+  interface SeedNormalizationRule {
+    readonly id: string;
+    readonly pattern: string;
+    readonly patternType: string | null;
+    readonly canonicalDescription: string;
+    readonly dateWindowDays: number;
+    readonly institution: string | null;
+    readonly account: string | null;
+    readonly priority: number;
+  }
+
+  interface SeedStatement {
+    readonly id: string;
+    readonly statementId: string;
+    readonly institution: string;
+    readonly account: string;
+    readonly balance: number;
+    readonly period: string;
+    readonly balanceDate: string | null;
+    readonly lastTransactionDateMs: number | null;
+    readonly virtual: boolean;
+  }
+
+  interface SeedWeeklyAggregate {
+    readonly id: string;
+    readonly weekStartMs: number;
+    readonly creditTotal: number;
+    readonly unbudgetedTotal: number;
+  }
+
+  interface SeedData {
+    readonly transactions: SeedTransaction[];
+    readonly budgets: SeedBudget[];
+    readonly budgetPeriods: SeedBudgetPeriod[];
+    readonly rules: SeedRule[];
+    readonly normalizationRules: SeedNormalizationRule[];
+    readonly statements: SeedStatement[];
+    readonly weeklyAggregates: SeedWeeklyAggregate[];
+  }
+
+  const seedData: SeedData;
+  export default seedData;
+}

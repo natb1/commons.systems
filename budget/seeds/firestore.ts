@@ -20,8 +20,9 @@ type TransactionSeedData = Omit<Transaction, "id" | "timestamp" | "budget" | "st
   groupId: string | null;
 };
 
-/** Seed budgets add `memberEmails` for security rules (not present in the client Budget type) */
-type BudgetSeedData = Omit<Budget, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
+/** Seed budgets add `memberEmails` for security rules (not present in the client Budget type).
+ *  Overrides are omitted — Firestore defaults to [] when the field is absent. */
+type BudgetSeedData = Omit<Budget, "id" | "groupId" | "overrides"> & { memberEmails: string[]; groupId: string | null };
 
 /** Seed budget periods use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client BudgetPeriod type) */
 type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "periodEnd" | "budgetId" | "groupId"> & {
@@ -35,7 +36,7 @@ type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "periodEnd
 /** Seed rules include `memberEmails` for security rules and `groupId` for query filtering */
 type RuleSeedData = Omit<Rule, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
 
-type NormalizationRuleSeedData = Omit<NormalizationRule, "id"> & { memberEmails: string[] };
+type NormalizationRuleSeedData = Omit<NormalizationRule, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
 
 /** Seed statements use plain string for statementId (not branded), Date instead of Timestamp for lastTransactionDate, require groupId (non-nullable), and add memberEmails for security rules. */
 type StatementSeedData = Omit<Statement, "id" | "statementId" | "groupId" | "lastTransactionDate"> & { statementId: string; groupId: string; memberEmails: string[]; lastTransactionDate: Date | null };

@@ -17,15 +17,7 @@ import type {
   GroupId,
   AllowancePeriod,
 } from "./firestore.js";
-import {
-  getTransactions as fsGetTransactions,
-  getStatements as fsGetStatements,
-  getBudgets as fsGetBudgets,
-  getBudgetPeriods as fsGetBudgetPeriods,
-  getRules as fsGetRules,
-  getNormalizationRules as fsGetNormalizationRules,
-  getWeeklyAggregates as fsGetWeeklyAggregates,
-} from "./firestore.js";
+import seedData from "virtual:budget-seed-data";
 import { getAll, get, put, deleteRecord } from "./idb.js";
 import type { IdbTransaction, IdbStatement, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
 
@@ -68,7 +60,24 @@ export interface DataSource {
 
 export class FirestoreSeedDataSource implements DataSource {
   async getTransactions(query?: TransactionQuery): Promise<Transaction[]> {
-    const all = await fsGetTransactions(null);
+    const all: Transaction[] = seedData.transactions.map((t) => ({
+      id: t.id as TransactionId,
+      institution: t.institution,
+      account: t.account,
+      description: t.description,
+      amount: t.amount,
+      note: t.note,
+      category: t.category,
+      reimbursement: t.reimbursement,
+      budget: (t.budget || null) as BudgetId | null,
+      timestamp: t.timestampMs != null ? Timestamp.fromMillis(t.timestampMs) : null,
+      statementId: (t.statementId || null) as StatementId | null,
+      groupId: null as GroupId | null,
+      normalizedId: t.normalizedId,
+      normalizedPrimary: t.normalizedPrimary,
+      normalizedDescription: t.normalizedDescription,
+      virtual: t.virtual,
+    }));
     if (!query) return all;
     const sinceMs = query.since?.toMillis();
     const beforeMs = query.before?.toMillis();
@@ -86,22 +95,82 @@ export class FirestoreSeedDataSource implements DataSource {
     });
   }
   async getStatements(): Promise<Statement[]> {
-    return fsGetStatements(null);
+    return seedData.statements.map((s) => ({
+      id: s.id,
+      statementId: s.statementId as StatementId,
+      institution: s.institution,
+      account: s.account,
+      balance: s.balance,
+      period: s.period,
+      balanceDate: s.balanceDate,
+      lastTransactionDate: s.lastTransactionDateMs != null ? Timestamp.fromMillis(s.lastTransactionDateMs) : null,
+      groupId: null as GroupId | null,
+      virtual: s.virtual,
+    }));
   }
   async getBudgets(): Promise<Budget[]> {
-    return fsGetBudgets(null);
+    return seedData.budgets.map((b) => ({
+      id: b.id as BudgetId,
+      name: b.name,
+      allowance: b.allowance,
+      allowancePeriod: b.allowancePeriod,
+      rollover: b.rollover,
+      overrides: b.overrides.map((o) => ({
+        date: Timestamp.fromMillis(o.dateMs!),
+        balance: o.balance,
+      })),
+      groupId: null as GroupId | null,
+    }));
   }
   async getBudgetPeriods(): Promise<BudgetPeriod[]> {
-    return fsGetBudgetPeriods(null);
+    return seedData.budgetPeriods.map((p) => ({
+      id: p.id as BudgetPeriodId,
+      budgetId: p.budgetId as BudgetId,
+      periodStart: Timestamp.fromMillis(p.periodStartMs),
+      periodEnd: Timestamp.fromMillis(p.periodEndMs),
+      total: p.total,
+      count: p.count,
+      categoryBreakdown: p.categoryBreakdown,
+      groupId: null as GroupId | null,
+    }));
   }
   async getRules(): Promise<Rule[]> {
-    return fsGetRules(null);
+    return seedData.rules.map((r) => ({
+      id: r.id as RuleId,
+      type: r.type,
+      pattern: r.pattern,
+      target: r.target,
+      priority: r.priority,
+      institution: r.institution,
+      account: r.account,
+      minAmount: r.minAmount,
+      maxAmount: r.maxAmount,
+      excludeCategory: r.excludeCategory,
+      matchCategory: r.matchCategory,
+      groupId: null as GroupId | null,
+    }));
   }
   async getNormalizationRules(): Promise<NormalizationRule[]> {
-    return fsGetNormalizationRules(null);
+    return seedData.normalizationRules.map((r) => ({
+      id: r.id,
+      pattern: r.pattern,
+      patternType: r.patternType,
+      canonicalDescription: r.canonicalDescription,
+      dateWindowDays: r.dateWindowDays,
+      institution: r.institution,
+      account: r.account,
+      priority: r.priority,
+      groupId: null as GroupId | null,
+    }));
   }
   async getWeeklyAggregates(): Promise<WeeklyAggregate[]> {
-    return fsGetWeeklyAggregates(null);
+    return seedData.weeklyAggregates.map((a) => ({
+      id: a.id,
+      weekStart: Timestamp.fromMillis(a.weekStartMs),
+      creditTotal: a.creditTotal,
+      unbudgetedTotal: a.unbudgetedTotal,
+      groupId: null as GroupId | null,
+    }));
   }
   async updateTransaction(): Promise<void> {
     throw new Error("Seed data is read-only");
