@@ -21,7 +21,7 @@ export function renderRow(rule: Rule, editable: boolean): string {
 
   return `<details class="expand-row rule-row" data-rule-type="${escapeHtml(rule.type)}"${idAttr}>
     <summary>
-      <div class="rule-summary-content">
+      <div class="expand-summary rule-summary-content">
         <span>${patternCell}</span>
         <span>${targetCell}</span>
       </div>
@@ -52,7 +52,7 @@ export function renderNormalizationRow(rule: NormalizationRule, editable: boolea
 
   return `<details class="expand-row rule-row" data-rule-type="normalization"${idAttr}>
     <summary>
-      <div class="rule-summary-content">
+      <div class="expand-summary rule-summary-content">
         <span>${patternCell}</span>
         <span>${canonicalCell}</span>
       </div>
