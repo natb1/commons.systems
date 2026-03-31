@@ -1,0 +1,11 @@
+@import "@commons-systems/style/default.css";
+
+:root {
+  color-scheme: dark;
+}
+
+.cc-badge {
+  width: 117px;
+  height: 41px;
+  vertical-align: middle;
+}
