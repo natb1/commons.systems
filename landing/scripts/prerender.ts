@@ -5,7 +5,7 @@ import appSeed from "../seeds/firestore.js";
 
 const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
 
-prerenderPosts({
+await prerenderPosts({
   siteUrl: "https://commons.systems",
   titleSuffix: "commons.systems",
   distDir,

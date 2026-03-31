@@ -2,12 +2,11 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { LinkSection, InfoPanelData } from "./components/info-panel.js";
-import type { BlogRollEntry } from "./blog-roll/types.js";
-import type { PostMeta, PublishedPost } from "./post-types.js";
+import type { InfoPanelData } from "./components/info-panel.js";
+import type { PostMeta } from "./post-types.js";
 import { renderInfoPanel } from "./components/info-panel.js";
-import { createMarked } from "./marked-config.js";
-import { formatUtcDate } from "./date.js";
+import { createMarked, extractH1 } from "./marked-config.js";
+import { renderArticle, type PostContent } from "./pages/home.js";
 
 export interface NavLink {
   readonly href: string;
@@ -24,26 +23,6 @@ export interface PrerenderConfig {
   infoPanel: Omit<InfoPanelData, "topPosts">;
 }
 
-function extractH1(markdown: string): { title: string; body: string } | null {
-  const match = markdown.match(/^#\s+(.+)/);
-  if (!match) return null;
-  return { title: match[1], body: markdown.replace(/^#\s+.+\n?/, "") };
-}
-
-function renderArticle(
-  id: string,
-  title: string,
-  publishedAt: string,
-  contentHtml: string,
-): string {
-  const safeId = escapeHtml(id);
-  return `<article id="post-${safeId}">
-        <h2><a href="/post/${safeId}" class="post-link"><span class="link-icon" aria-hidden="true">&#x1F517; </span><span class="post-title">${escapeHtml(title)}</span></a></h2>
-        <time datetime="${escapeHtml(publishedAt)}">${escapeHtml(formatUtcDate(publishedAt))}</time>
-        <div id="post-content-${safeId}" data-hydrated>${contentHtml}</div>
-      </article>`;
-}
-
 function renderNavHtml(links: NavLink[]): string {
   const anchors = links
     .map((l) => `<a href="${escapeHtml(l.href)}">${escapeHtml(l.label)}</a>`)
@@ -51,19 +30,18 @@ function renderNavHtml(links: NavLink[]): string {
   return `<span class="nav-links">${anchors}</span>`;
 }
 
-interface ParsedPost {
-  id: string;
-  title: string;
-  publishedAt: string;
+interface RenderedPost {
+  meta: PostMeta & { published: true };
   articleHtml: string;
 }
 
-function parseAndRenderPosts(
+async function parseAndRenderPosts(
   published: Array<{ id: string; data: Record<string, unknown> }>,
   postDir: string,
   marked: ReturnType<typeof createMarked>,
-): ParsedPost[] {
-  return published.map((doc) => {
+): Promise<RenderedPost[]> {
+  const results: RenderedPost[] = [];
+  for (const doc of published) {
     const data = doc.data;
     const filename = data.filename as string;
     const markdown = readFileSync(join(postDir, filename), "utf-8");
@@ -71,15 +49,23 @@ function parseAndRenderPosts(
     const h1 = extractH1(markdown);
     const title = h1 ? h1.title : (data.title as string);
     const body = h1 ? h1.body : markdown;
-    const contentHtml = marked.parse(body) as string;
+    const html = await marked.parse(body);
+    const content: PostContent = { html, title: h1 ? h1.title : null };
 
-    return {
+    const meta: PostMeta & { published: true } = {
       id: doc.id,
       title,
+      published: true,
       publishedAt: data.publishedAt as string,
-      articleHtml: renderArticle(doc.id, title, data.publishedAt as string, contentHtml),
+      filename,
     };
-  });
+
+    results.push({
+      meta,
+      articleHtml: renderArticle(meta, "/post/", content),
+    });
+  }
+  return results;
 }
 
 function injectMain(html: string, articlesHtml: string): string {
@@ -119,7 +105,7 @@ function injectNav(html: string, navHtml: string): string {
 // This function mirrors those OG tags in static HTML for crawlers, and
 // additionally sets <meta name="description"> and rewrites <title> — neither of
 // which the client-side module handles.
-export function prerenderPosts(config: PrerenderConfig): void {
+export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const { siteUrl, titleSuffix, distDir, seed, postDir, navLinks, infoPanel } = config;
 
   const template = readFileSync(join(distDir, "index.html"), "utf-8");
@@ -139,9 +125,15 @@ export function prerenderPosts(config: PrerenderConfig): void {
     if (typeof data.title !== "string") {
       throw new Error(`Post "${doc.id}" is missing a title`);
     }
+    if (typeof data.filename !== "string") {
+      throw new Error(`Post "${doc.id}" is missing a filename`);
+    }
+    if (typeof data.publishedAt !== "string") {
+      throw new Error(`Post "${doc.id}" is missing a publishedAt`);
+    }
   }
 
-  const parsed = parseAndRenderPosts(
+  const parsed = await parseAndRenderPosts(
     publishedDocs.map((d) => ({ id: d.id, data: d.data as Record<string, unknown> })),
     postDir,
     marked,
@@ -149,21 +141,11 @@ export function prerenderPosts(config: PrerenderConfig): void {
 
   // Sort by date descending for the home page
   const sorted = [...parsed].sort(
-    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+    (a, b) => new Date(b.meta.publishedAt).getTime() - new Date(a.meta.publishedAt).getTime(),
   );
 
-  // Build info panel HTML using published posts as topPosts
-  const topPosts: PostMeta[] = sorted.map((p) => {
-    const doc = publishedDocs.find((d) => d.id === p.id)!;
-    const data = doc.data as Record<string, unknown>;
-    return {
-      id: p.id,
-      title: p.title,
-      published: true as const,
-      publishedAt: p.publishedAt,
-      filename: data.filename as string,
-    };
-  });
+  // Build info panel HTML with all published posts as the archive listing
+  const topPosts: PostMeta[] = sorted.map((p) => p.meta);
   const panelHtml = renderInfoPanel({ ...infoPanel, topPosts });
   const navHtml = renderNavHtml(navLinks);
 
@@ -206,7 +188,7 @@ export function prerenderPosts(config: PrerenderConfig): void {
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
     // Inject single-post content, info panel, and nav
-    const post = parsed.find((p) => p.id === id)!;
+    const post = parsed.find((p) => p.meta.id === id)!;
     html = injectMain(html, post.articleHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);

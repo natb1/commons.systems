@@ -61,7 +61,7 @@ function makeConfig(overrides: Partial<PrerenderConfig> = {}): PrerenderConfig {
 }
 
 function mockReadFileSync(postDir: string, markdownByFilename: Record<string, string>) {
-  return (path: string | URL, encoding?: string) => {
+  return (path: string | URL) => {
     const p = String(path);
     if (p.endsWith("index.html")) return TEMPLATE;
     for (const [filename, content] of Object.entries(markdownByFilename)) {
@@ -81,8 +81,8 @@ describe("prerenderPosts", () => {
     vi.mocked(fs.mkdirSync).mockImplementation(() => undefined as unknown as string);
   });
 
-  it("generates OG tags for a post with description and image", () => {
-    prerenderPosts(makeConfig());
+  it("generates OG tags for a post with description and image", async () => {
+    await prerenderPosts(makeConfig());
 
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
@@ -97,12 +97,12 @@ describe("prerenderPosts", () => {
     expect(html).toContain('<meta property="og:image" content="https://example.com/hello.jpg">');
   });
 
-  it("omits og:image when previewImage is absent", () => {
+  it("omits og:image when previewImage is absent", async () => {
     const config = makeConfig();
     const doc = config.seed.collections[0].documents[0];
     delete (doc.data as Record<string, unknown>).previewImage;
 
-    prerenderPosts(config);
+    await prerenderPosts(config);
 
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
@@ -112,13 +112,13 @@ describe("prerenderPosts", () => {
     expect(html).toContain('<meta property="og:description"');
   });
 
-  it("omits description tags when previewDescription is absent", () => {
+  it("omits description tags when previewDescription is absent", async () => {
     const config = makeConfig();
     const doc = config.seed.collections[0].documents[0];
     delete (doc.data as Record<string, unknown>).previewDescription;
     delete (doc.data as Record<string, unknown>).previewImage;
 
-    prerenderPosts(config);
+    await prerenderPosts(config);
 
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
@@ -130,8 +130,8 @@ describe("prerenderPosts", () => {
     expect(html).toContain('<meta property="og:title"');
   });
 
-  it("rewrites title tag with post title and suffix", () => {
-    prerenderPosts(makeConfig());
+  it("rewrites title tag with post title and suffix", async () => {
+    await prerenderPosts(makeConfig());
 
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
@@ -141,7 +141,7 @@ describe("prerenderPosts", () => {
     expect(html).not.toContain("<title>My Blog</title>");
   });
 
-  it("skips unpublished posts", () => {
+  it("skips unpublished posts", async () => {
     const config = makeConfig();
     config.seed.collections[0].documents.push({
       id: "draft-post",
@@ -153,7 +153,7 @@ describe("prerenderPosts", () => {
       },
     });
 
-    prerenderPosts(config);
+    await prerenderPosts(config);
 
     // Root index.html + one per-post page = 2 writes
     expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
@@ -161,43 +161,43 @@ describe("prerenderPosts", () => {
     expect(paths.some((p) => p.includes("draft-post"))).toBe(false);
   });
 
-  it("throws when posts collection is missing", () => {
+  it("throws when posts collection is missing", async () => {
     const config = makeConfig({ seed: { collections: [] } });
-    expect(() => prerenderPosts(config)).toThrow("No 'posts' collection found");
+    await expect(prerenderPosts(config)).rejects.toThrow("No 'posts' collection found");
   });
 
-  it("throws when published post is missing a title", () => {
+  it("throws when published post is missing a title", async () => {
     const config = makeConfig();
     delete (config.seed.collections[0].documents[0].data as Record<string, unknown>).title;
 
-    expect(() => prerenderPosts(config)).toThrow('missing a title');
+    await expect(prerenderPosts(config)).rejects.toThrow('missing a title');
   });
 
-  it("throws when </head> marker is missing from template", () => {
+  it("throws when </head> marker is missing from template", async () => {
     vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
       if (String(path).endsWith("index.html"))
         return '<html><body><app-nav id="nav"></app-nav><main id="app"></main><aside id="info-panel" class="sidebar"></aside></body></html>';
       return MARKDOWN_HELLO;
     }) as typeof fs.readFileSync);
-    expect(() => prerenderPosts(makeConfig())).toThrow("</head> marker not found");
+    await expect(prerenderPosts(makeConfig())).rejects.toThrow("</head> marker not found");
   });
 
-  it("throws when <title> tag is missing from template", () => {
+  it("throws when <title> tag is missing from template", async () => {
     vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
       if (String(path).endsWith("index.html"))
         return '<html><head></head><body><app-nav id="nav"></app-nav><main id="app"></main><aside id="info-panel" class="sidebar"></aside></body></html>';
       return MARKDOWN_HELLO;
     }) as typeof fs.readFileSync);
-    expect(() => prerenderPosts(makeConfig())).toThrow("<title> tag not found");
+    await expect(prerenderPosts(makeConfig())).rejects.toThrow("<title> tag not found");
   });
 
-  it("escapes HTML in title and description", () => {
+  it("escapes HTML in title and description", async () => {
     const config = makeConfig();
     const doc = config.seed.collections[0].documents[0];
     (doc.data as Record<string, unknown>).title = 'Say "Hello" & <Goodbye>';
     (doc.data as Record<string, unknown>).previewDescription = 'A <script>alert("xss")</script> post';
 
-    prerenderPosts(config);
+    await prerenderPosts(config);
 
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
@@ -208,8 +208,8 @@ describe("prerenderPosts", () => {
     expect(html).not.toContain("<script>");
   });
 
-  it("creates output directory with recursive flag", () => {
-    prerenderPosts(makeConfig());
+  it("creates output directory with recursive flag", async () => {
+    await prerenderPosts(makeConfig());
 
     expect(fs.mkdirSync).toHaveBeenCalledWith(
       expect.stringContaining("post/hello-world"),
@@ -217,8 +217,8 @@ describe("prerenderPosts", () => {
     );
   });
 
-  it("injects rendered article with data-hydrated into per-post HTML", () => {
-    prerenderPosts(makeConfig());
+  it("injects rendered article with data-hydrated into per-post HTML", async () => {
+    await prerenderPosts(makeConfig());
 
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
@@ -230,7 +230,7 @@ describe("prerenderPosts", () => {
     expect(html).toContain("hello world");
   });
 
-  it("injects all published posts into root index.html", () => {
+  it("injects all published posts into root index.html", async () => {
     const config = makeConfig();
     config.seed.collections[0].documents.push({
       id: "second-post",
@@ -249,7 +249,7 @@ describe("prerenderPosts", () => {
       }) as typeof fs.readFileSync,
     );
 
-    prerenderPosts(config);
+    await prerenderPosts(config);
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
@@ -265,8 +265,8 @@ describe("prerenderPosts", () => {
     expect(firstIdx).toBeLessThan(secondIdx);
   });
 
-  it("injects info panel into aside element", () => {
-    prerenderPosts(makeConfig());
+  it("injects info panel into aside element", async () => {
+    await prerenderPosts(makeConfig());
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
@@ -280,8 +280,8 @@ describe("prerenderPosts", () => {
     expect(html).not.toContain('<aside id="info-panel" class="sidebar"></aside>');
   });
 
-  it("extracts h1 from markdown as post title", () => {
-    prerenderPosts(makeConfig());
+  it("extracts h1 from markdown as post title", async () => {
+    await prerenderPosts(makeConfig());
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
@@ -291,12 +291,12 @@ describe("prerenderPosts", () => {
     expect(html).toContain("Hello World Title");
   });
 
-  it("uses seed title when markdown has no h1", () => {
+  it("uses seed title when markdown has no h1", async () => {
     vi.mocked(fs.readFileSync).mockImplementation(
       mockReadFileSync("/posts", { "hello-world.md": MARKDOWN_NO_H1 }) as typeof fs.readFileSync,
     );
 
-    prerenderPosts(makeConfig());
+    await prerenderPosts(makeConfig());
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
@@ -305,8 +305,8 @@ describe("prerenderPosts", () => {
     expect(html).toContain("Hello World");
   });
 
-  it("injects nav links into app-nav element", () => {
-    prerenderPosts(makeConfig());
+  it("injects nav links into app-nav element", async () => {
+    await prerenderPosts(makeConfig());
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
@@ -317,8 +317,8 @@ describe("prerenderPosts", () => {
     expect(html).not.toContain('<app-nav id="nav"></app-nav>');
   });
 
-  it("writes root index.html with content", () => {
-    prerenderPosts(makeConfig());
+  it("writes root index.html with content", async () => {
+    await prerenderPosts(makeConfig());
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
@@ -328,8 +328,8 @@ describe("prerenderPosts", () => {
     expect(html).toContain('<main id="app"><div id="posts">');
   });
 
-  it("renders archive section with posts in info panel", () => {
-    prerenderPosts(makeConfig());
+  it("renders archive section with posts in info panel", async () => {
+    await prerenderPosts(makeConfig());
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",

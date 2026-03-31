@@ -14,7 +14,7 @@ const SCROLL_PADDING_PX = 16;
 
 const marked = createMarked();
 
-function renderArticle(p: PostMeta, postLinkPrefix: string, content?: PostContent): string {
+export function renderArticle(p: PostMeta, postLinkPrefix: string, content?: PostContent): string {
   const safeId = escapeHtml(p.id);
   const displayTitle = content?.title ?? p.title;
   const dateHtml = p.publishedAt

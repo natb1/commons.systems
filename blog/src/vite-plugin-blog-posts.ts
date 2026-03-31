@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Marked } from "marked";
-import { escapeHtml } from "@commons-systems/htmlutil";
 import type { Plugin } from "vite";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { PublishedPost } from "./post-types.js";
+import type { PostContent } from "./pages/home.js";
+import { createMarked, extractH1 } from "./marked-config.js";
+
+export type { PostContent };
 
 export interface BlogPostsPluginConfig {
   seed: Pick<SeedSpec, "collections">;
@@ -13,16 +15,12 @@ export interface BlogPostsPluginConfig {
   readFile?: (path: string) => string;
 }
 
-export interface PostContent {
-  html: string;
-  title: string | null;
-}
-
 const CONTENT_MODULE_ID = "virtual:blog-post-content";
 const RESOLVED_CONTENT_ID = "\0" + CONTENT_MODULE_ID;
 const METADATA_MODULE_ID = "virtual:blog-post-metadata";
 const RESOLVED_METADATA_ID = "\0" + METADATA_MODULE_ID;
 
+/** Vite plugin that reads seed data and markdown at build time, producing virtual modules with pre-rendered HTML and metadata for published blog posts. */
 export function blogPostsPlugin(config: BlogPostsPluginConfig): Plugin {
   const readFile = config.readFile ?? ((path: string) => readFileSync(path, "utf-8"));
   let contentMap: Record<string, PostContent> = {};
@@ -31,16 +29,7 @@ export function blogPostsPlugin(config: BlogPostsPluginConfig): Plugin {
   return {
     name: "blog-posts",
     async buildStart() {
-      const marked = new Marked({
-        renderer: {
-          html: () => "",
-          link({ href, text, title }) {
-            const safeHref = escapeHtml(href);
-            const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
-            return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
-          },
-        },
-      });
+      const marked = createMarked();
       const postsCollection = config.seed.collections.find(
         (c) => c.name === "posts",
       );
@@ -52,12 +41,21 @@ export function blogPostsPlugin(config: BlogPostsPluginConfig): Plugin {
       for (const doc of postsCollection.documents) {
         const data = doc.data as Record<string, unknown>;
         if (data.published !== true) continue;
+        if (typeof data.title !== "string") {
+          throw new Error(`[blog-posts] Post "${doc.id}" is missing a title`);
+        }
+        if (typeof data.filename !== "string") {
+          throw new Error(`[blog-posts] Post "${doc.id}" is missing a filename`);
+        }
+        if (typeof data.publishedAt !== "string") {
+          throw new Error(`[blog-posts] Post "${doc.id}" is missing a publishedAt`);
+        }
         published.push({
           id: doc.id,
-          title: data.title as string,
+          title: data.title,
           published: true,
-          publishedAt: data.publishedAt as string,
-          filename: data.filename as string,
+          publishedAt: data.publishedAt,
+          filename: data.filename,
           previewImage: data.previewImage as string | undefined,
           previewDescription: data.previewDescription as string | undefined,
         });
@@ -71,14 +69,11 @@ export function blogPostsPlugin(config: BlogPostsPluginConfig): Plugin {
         const filePath = join(config.postDir, post.filename);
         let markdown = readFile(filePath);
 
-        const h1Match = markdown.match(/^#\s+(.+)/);
-        let title: string | null = null;
-        if (h1Match) {
-          title = h1Match[1];
-          markdown = markdown.replace(/^#\s+.+\n?/, "");
-        }
+        const h1 = extractH1(markdown);
+        const title = h1 ? h1.title : null;
+        const body = h1 ? h1.body : markdown;
 
-        const html = await marked.parse(markdown);
+        const html = await marked.parse(body);
         results[post.id] = { html, title };
       }
 
