@@ -137,6 +137,7 @@ export function initViewer(
     toggleBtn.setAttribute("aria-expanded", String(!collapsed));
     if (collapsed) {
       createTapZones();
+      // Best-effort: fullscreen is unavailable on some platforms (e.g. iPhone Safari)
       viewer.requestFullscreen().catch(() => {});
     } else {
       removeTapZones();

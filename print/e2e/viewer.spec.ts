@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("viewer", () => {
-  // Seed items (by addedAt desc):
+  // Public seed items (by addedAt desc):
   //   1. "Little Nemo..." (test-image-archive, image-archive, 5 images)
   //   2. "Republic" (plato-republic, PDF, 3 pages)
   //   3. "Phaedrus" (plato-phaedrus, PDF, 1 page)
@@ -9,7 +9,6 @@ test.describe("viewer", () => {
   //
   // Navigate to Republic (3 pages) for navigation testing:
   //   page.goto("/view/plato-republic")
-  // Or navigate via library by clicking the first .media-view link.
 
   test("viewer loads for PDF item", async ({ page }) => {
     await page.goto("/view/plato-republic");

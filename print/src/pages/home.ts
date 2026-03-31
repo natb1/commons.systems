@@ -41,6 +41,7 @@ async function handleDownload(button: HTMLButtonElement): Promise<void> {
   button.disabled = true;
   try {
     const url = await getMediaDownloadUrl(storagePath);
+    // Anchor-click download: window.open is blocked by iOS Safari after an async gap
     const a = document.createElement("a");
     a.href = url;
     a.download = "";
