@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Test suite for issue-state-read and issue-state-write scripts.
 # Usage: FIRESTORE_EMULATOR_HOST=localhost:8080 ./test-issue-state-scripts.sh
-# Requires: Firestore emulator running, npx tsx available
+# Requires: Firestore emulator running, npx tsx available, jq
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"

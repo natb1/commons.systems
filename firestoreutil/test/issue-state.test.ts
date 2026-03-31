@@ -1,38 +1,64 @@
 import { describe, it, expect, vi } from "vitest";
-import { readIssueState, writeIssueState } from "../src/issue-state.js";
+import {
+  readIssueState,
+  writeIssueState,
+  validateIssueNumber,
+  type IssueNumber,
+} from "../src/issue-state.js";
 
 function createMockFirestore() {
   const store = new Map<string, Record<string, unknown>>();
 
-  const mockSet = vi.fn(async (data: Record<string, unknown>) => {
-    const path = mockDoc.mock.lastCall![0] as string;
-    store.set(path, data);
-  });
-
-  const mockGet = vi.fn(async () => {
-    const path = mockDoc.mock.lastCall![0] as string;
-    const data = store.get(path);
-    return {
-      exists: data !== undefined,
-      data: () => data,
-    };
-  });
-
-  const mockDoc = vi.fn((_path: string) => ({
-    get: mockGet,
-    set: mockSet,
+  const mockDoc = vi.fn((path: string) => ({
+    get: vi.fn(async () => {
+      const data = store.get(path);
+      return {
+        exists: data !== undefined,
+        data: () => data,
+      };
+    }),
+    set: vi.fn(async (data: Record<string, unknown>) => {
+      store.set(path, data);
+    }),
   }));
 
   const db = { doc: mockDoc } as unknown as import("firebase-admin/firestore").Firestore;
 
-  return { db, mockDoc, mockGet, mockSet, store };
+  return { db, mockDoc, store };
 }
 
+describe("validateIssueNumber", () => {
+  it("accepts positive integers", () => {
+    expect(validateIssueNumber(1)).toBe(1);
+    expect(validateIssueNumber(42)).toBe(42);
+    expect(validateIssueNumber(354)).toBe(354);
+  });
+
+  it("rejects zero", () => {
+    expect(() => validateIssueNumber(0)).toThrow("positive integer");
+  });
+
+  it("rejects negative numbers", () => {
+    expect(() => validateIssueNumber(-1)).toThrow("positive integer");
+  });
+
+  it("rejects NaN", () => {
+    expect(() => validateIssueNumber(NaN)).toThrow("positive integer");
+  });
+
+  it("rejects non-integer", () => {
+    expect(() => validateIssueNumber(1.5)).toThrow("positive integer");
+  });
+});
+
 describe("readIssueState", () => {
+  const issue42 = 42 as IssueNumber;
+  const issue354 = 354 as IssueNumber;
+
   it("returns null for missing document", async () => {
     const { db } = createMockFirestore();
 
-    const result = await readIssueState(db, 42);
+    const result = await readIssueState(db, issue42);
 
     expect(result).toBeNull();
   });
@@ -41,7 +67,7 @@ describe("readIssueState", () => {
     const { db, store } = createMockFirestore();
     store.set("claude-workflow/42", { version: 1, step: 3, phase: "core" });
 
-    const result = await readIssueState(db, 42);
+    const result = await readIssueState(db, issue42);
 
     expect(result).toEqual({ version: 1, step: 3, phase: "core" });
   });
@@ -49,26 +75,29 @@ describe("readIssueState", () => {
   it("uses correct document path", async () => {
     const { db, mockDoc } = createMockFirestore();
 
-    await readIssueState(db, 354);
+    await readIssueState(db, issue354);
 
     expect(mockDoc).toHaveBeenCalledWith("claude-workflow/354");
   });
 });
 
 describe("writeIssueState", () => {
-  it("calls set with the state object", async () => {
-    const { db, mockSet } = createMockFirestore();
+  const issue42 = 42 as IssueNumber;
+  const issue99 = 99 as IssueNumber;
+
+  it("persists the state object", async () => {
+    const { db, store } = createMockFirestore();
     const state = { version: 1, step: 6, phase: "verify" };
 
-    await writeIssueState(db, 42, state);
+    await writeIssueState(db, issue42, state);
 
-    expect(mockSet).toHaveBeenCalledWith(state);
+    expect(store.get("claude-workflow/42")).toEqual(state);
   });
 
   it("uses correct document path", async () => {
     const { db, mockDoc } = createMockFirestore();
 
-    await writeIssueState(db, 99, { version: 1 });
+    await writeIssueState(db, issue99, { version: 1 });
 
     expect(mockDoc).toHaveBeenCalledWith("claude-workflow/99");
   });
@@ -76,10 +105,10 @@ describe("writeIssueState", () => {
   it("overwrites previous state", async () => {
     const { db } = createMockFirestore();
 
-    await writeIssueState(db, 42, { version: 1, step: 3 });
-    await writeIssueState(db, 42, { version: 1, step: 6 });
+    await writeIssueState(db, issue42, { version: 1, step: 3 });
+    await writeIssueState(db, issue42, { version: 1, step: 6 });
 
-    const result = await readIssueState(db, 42);
+    const result = await readIssueState(db, issue42);
     expect(result).toEqual({ version: 1, step: 6 });
   });
 });
@@ -95,8 +124,8 @@ describe("round-trip", () => {
       active_skills: ["ref-memory-management", "ref-pr-workflow"],
     };
 
-    await writeIssueState(db, 42, state);
-    const result = await readIssueState(db, 42);
+    await writeIssueState(db, 42 as IssueNumber, state);
+    const result = await readIssueState(db, 42 as IssueNumber);
 
     expect(result).toEqual(state);
   });

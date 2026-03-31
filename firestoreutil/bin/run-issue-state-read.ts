@@ -1,5 +1,5 @@
 import { initFirebaseAdmin } from "../src/init.js";
-import { readIssueState } from "../src/issue-state.js";
+import { readIssueState, validateIssueNumber } from "../src/issue-state.js";
 
 const issueArg = process.argv[2];
 if (!issueArg || !/^[1-9][0-9]*$/.test(issueArg)) {
@@ -8,10 +8,17 @@ if (!issueArg || !/^[1-9][0-9]*$/.test(issueArg)) {
   );
   process.exit(1);
 }
-const issueNumber = Number(issueArg);
+const issueNumber = validateIssueNumber(Number(issueArg));
 
-const db = await initFirebaseAdmin();
-const state = await readIssueState(db, issueNumber);
+let state: Record<string, unknown> | null;
+try {
+  const db = await initFirebaseAdmin();
+  state = await readIssueState(db, issueNumber);
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`error: failed to read state for issue #${issueNumber}: ${message}`);
+  process.exit(1);
+}
 
 if (state === null) {
   console.error(`error: no state found for issue #${issueNumber}`);

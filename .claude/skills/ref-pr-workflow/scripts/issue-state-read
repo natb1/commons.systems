@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read pr-workflow state from Firestore.
 # Usage: issue-state-read <issue-number>
-# Exit 0 + JSON on stdout if valid; exit 1 on missing/error.
+# Exit 0 + JSON on stdout if found; exit 1 on missing/error.
 set -euo pipefail
 
 ISSUE_NUM="${1:-}"

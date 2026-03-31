@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { initFirebaseAdmin } from "../src/init.js";
-import { writeIssueState } from "../src/issue-state.js";
+import { writeIssueState, validateIssueNumber } from "../src/issue-state.js";
 
 const issueArg = process.argv[2];
 if (!issueArg || !/^[1-9][0-9]*$/.test(issueArg)) {
@@ -9,7 +9,7 @@ if (!issueArg || !/^[1-9][0-9]*$/.test(issueArg)) {
   );
   process.exit(1);
 }
-const issueNumber = Number(issueArg);
+const issueNumber = validateIssueNumber(Number(issueArg));
 
 let jsonInput = process.argv[3] ?? "";
 if (!jsonInput) {
@@ -20,13 +20,26 @@ if (!jsonInput) {
   process.exit(1);
 }
 
-let state: Record<string, unknown>;
+let parsed: unknown;
 try {
-  state = JSON.parse(jsonInput) as Record<string, unknown>;
-} catch {
-  console.error("error: invalid JSON state");
+  parsed = JSON.parse(jsonInput);
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`error: invalid JSON state: ${message}`);
   process.exit(1);
 }
 
-const db = await initFirebaseAdmin();
-await writeIssueState(db, issueNumber, state);
+if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+  console.error("error: JSON state must be an object");
+  process.exit(1);
+}
+const state = parsed as Record<string, unknown>;
+
+try {
+  const db = await initFirebaseAdmin();
+  await writeIssueState(db, issueNumber, state);
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`error: failed to write state for issue #${issueNumber}: ${message}`);
+  process.exit(1);
+}

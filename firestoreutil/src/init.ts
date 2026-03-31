@@ -1,4 +1,9 @@
-import { initializeApp, cert, type ServiceAccount } from "firebase-admin/app";
+import {
+  getApps,
+  initializeApp,
+  cert,
+  type ServiceAccount,
+} from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
 /**
@@ -7,9 +12,13 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
  * Auth strategy (checked in order):
  * 1. FIRESTORE_EMULATOR_HOST set -> emulator mode, no credentials
  * 2. GOOGLE_APPLICATION_CREDENTIALS set -> service account JSON file
- * 3. Neither set -> Application Default Credentials (gcloud auth application-default login)
+ * 3. Neither set -> Firebase Admin default credential resolution
  */
 export async function initFirebaseAdmin(): Promise<Firestore> {
+  if (getApps().length > 0) {
+    return getFirestore();
+  }
+
   const projectId = process.env.FIREBASE_PROJECT_ID ?? "commons-systems";
   const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
 
@@ -18,11 +27,22 @@ export async function initFirebaseAdmin(): Promise<Firestore> {
   } else {
     const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
     if (serviceAccountPath) {
-      const serviceAccount = (
-        await import(serviceAccountPath, { with: { type: "json" } })
-      ).default as ServiceAccount;
+      let serviceAccount: ServiceAccount;
+      try {
+        serviceAccount = (
+          await import(serviceAccountPath, { with: { type: "json" } })
+        ).default as ServiceAccount;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `failed to load service account from ${serviceAccountPath}: ${message}`,
+        );
+      }
       initializeApp({ credential: cert(serviceAccount) });
     } else {
+      console.warn(
+        "warn: no GOOGLE_APPLICATION_CREDENTIALS set, falling back to Application Default Credentials",
+      );
       initializeApp({ projectId });
     }
   }
