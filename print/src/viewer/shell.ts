@@ -112,13 +112,34 @@ export function initViewer(
   updateOrientation();
   orientationQuery.addEventListener("change", updateOrientation);
 
+  // Tap zones for touch navigation when panel is collapsed
+  const viewerContent = viewer.querySelector(".viewer-content") as HTMLElement;
+
+  function createTapZones(): void {
+    if (viewerContent.querySelector(".tap-zone")) return;
+    const prev = document.createElement("div");
+    prev.className = "tap-zone tap-zone-prev";
+    prev.addEventListener("click", () => { goPrev().catch(handleNavError); });
+    const next = document.createElement("div");
+    next.className = "tap-zone tap-zone-next";
+    next.addEventListener("click", () => { goNext().catch(handleNavError); });
+    viewerContent.appendChild(prev);
+    viewerContent.appendChild(next);
+  }
+
+  function removeTapZones(): void {
+    viewerContent.querySelectorAll(".tap-zone").forEach((el) => el.remove());
+  }
+
   // Panel toggle with fullscreen
   function handleToggle() {
     const collapsed = panel.classList.toggle("collapsed");
     toggleBtn.setAttribute("aria-expanded", String(!collapsed));
     if (collapsed) {
+      createTapZones();
       viewer.requestFullscreen().catch(() => {});
     } else {
+      removeTapZones();
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       }
@@ -130,6 +151,7 @@ export function initViewer(
     if (!document.fullscreenElement && panel.classList.contains("collapsed")) {
       panel.classList.remove("collapsed");
       toggleBtn.setAttribute("aria-expanded", "true");
+      removeTapZones();
     }
   }
   document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -442,6 +464,7 @@ export function initViewer(
     orientationQuery.removeEventListener("change", updateOrientation);
     toggleBtn.removeEventListener("click", handleToggle);
     document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    removeTapZones();
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }

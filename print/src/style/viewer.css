@@ -40,6 +40,26 @@ body.viewer-active {
   overflow: hidden;
   min-width: 0;
   min-height: 0;
+  position: relative;
+}
+
+/* Touch tap zones for collapsed-panel navigation */
+.tap-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 10;
+  touch-action: manipulation;
+}
+
+.tap-zone-prev {
+  left: 0;
+  width: 50%;
+}
+
+.tap-zone-next {
+  right: 0;
+  width: 50%;
 }
 
 .viewer-canvas-wrap {
