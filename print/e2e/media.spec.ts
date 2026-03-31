@@ -7,9 +7,9 @@ test.describe("media", () => {
     await expect(page.locator("#media-error")).toHaveCount(0);
   });
 
-  test("public media listing shows 4 items", async ({ page }) => {
+  test("public media listing shows 3 items", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("#media-list .media-item")).toHaveCount(4, { timeout: 10000 });
+    await expect(page.locator("#media-list .media-item")).toHaveCount(3, { timeout: 10000 });
   });
 
   test("titles are visible", async ({ page }) => {

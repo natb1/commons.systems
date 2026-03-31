@@ -1,11 +1,14 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("viewer", () => {
-  // The seed data has 4 public items sorted by addedAt desc:
+  // The library shows 3 public non-test items. The test-image-archive
+  // (testOnly: true) is hidden from the library but accessible by direct URL.
+  //
+  // Seed items (by addedAt desc):
   //   1. "Republic" (plato-republic, PDF, 3 pages)
   //   2. "Phaedrus" (plato-phaedrus, PDF, 1 page)
   //   3. "Confessions..." (gutenberg-3296, EPUB)
-  //   4. "Little Nemo in Slumberland (pages 1-5)" (test-image-archive, image-archive, 5 images)
+  //   4. "Little Nemo..." (test-image-archive, image-archive, 5 images, testOnly)
   //
   // Navigate to Republic (3 pages) for navigation testing:
   //   page.goto("/view/plato-republic")
@@ -156,6 +159,62 @@ test.describe("viewer", () => {
       "data-orientation",
       "portrait",
     );
+  });
+
+  test("tap zones visible when collapsed and trigger navigation", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "mobile only");
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-position")).toContainText("1 / 3");
+
+    // Collapse the panel
+    await page.locator(".viewer-panel-toggle").click();
+    await expect(page.locator(".viewer-panel-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+
+    // Tap zones should appear
+    await expect(page.locator(".tap-zone-prev")).toBeAttached();
+    await expect(page.locator(".tap-zone-next")).toBeAttached();
+
+    // Tap next to go to page 2
+    await page.locator(".tap-zone-next").click();
+    await expect(page.locator(".viewer-position")).toContainText("2 / 3");
+
+    // Tap prev to go back to page 1
+    await page.locator(".tap-zone-prev").click();
+    await expect(page.locator(".viewer-position")).toContainText("1 / 3");
+  });
+
+  test("tap zones removed when panel expands", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "mobile only");
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+
+    // Collapse to create tap zones
+    await page.locator(".viewer-panel-toggle").click();
+    await expect(page.locator(".viewer-panel-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    await expect(page.locator(".tap-zone-prev")).toBeAttached();
+    await expect(page.locator(".tap-zone-next")).toBeAttached();
+
+    // Expand panel again
+    await page.locator(".viewer-panel-toggle").click();
+    await expect(page.locator(".viewer-panel-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    // Tap zones should be removed
+    await expect(page.locator(".tap-zone-prev")).not.toBeAttached();
+    await expect(page.locator(".tap-zone-next")).not.toBeAttached();
   });
 
   test("viewer loads for EPUB item", async ({ page }) => {
