@@ -49,6 +49,7 @@
       "Bash(npx tsx:*)",
       "Bash(npx vite:*)",
       "Bash(npx vitest:*)",
+      "Bash(echo:*)",
       "Bash(ls:*)",
       "Bash(lsof:*)",
       "Bash(head:*)",

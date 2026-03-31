@@ -21,19 +21,19 @@
   overflow-wrap: break-word;
 }
 
-.txn-header,
-.txn-summary-content {
+.txn-header {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr auto;
   gap: 0.5rem;
   padding: 0.5rem;
   align-items: center;
-}
-
-.txn-header {
   font-weight: bold;
   border-bottom: 2px solid var(--border);
   padding-left: 1.5rem;
+}
+
+.txn-summary-content {
+  grid-template-columns: 2fr 1fr 1fr auto;
 }
 
 .txn-summary-content .amount {
@@ -337,7 +337,8 @@
 /* Desktop: parent grid on #rules-table, subgrid on each row.
    <summary> and .rule-details are placed on the same grid-row.
    Since <summary> can't be display:grid in Chromium (forced to list-item),
-   .rule-summary-content and .rule-details use their own explicit grids
+   .rule-summary-content (inheriting display:grid from .expand-summary) and
+   .rule-details use their own explicit grids
    with matching fr proportions for perfect column alignment. */
 @media (min-width: 768px) {
   #rules-table {
@@ -383,9 +384,9 @@
   .rule-row > summary::-webkit-details-marker { display: none; }
   .rule-row > summary::before { display: none; }
   .rule-row > summary > .rule-summary-content {
-    display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0 0.5rem;
+    padding: 0;
   }
   .rule-row > .rule-details {
     grid-column: 3 / -1;
@@ -417,11 +418,7 @@
     display: none;
   }
   .rule-summary-content {
-    display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
-    padding: 0.5rem;
-    align-items: center;
   }
   .rule-details {
     display: grid;
