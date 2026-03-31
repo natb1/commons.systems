@@ -41,7 +41,13 @@ async function handleDownload(button: HTMLButtonElement): Promise<void> {
   button.disabled = true;
   try {
     const url = await getMediaDownloadUrl(storagePath);
-    window.open(url, "_blank");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   } catch (error) {
     console.error("Failed to get download URL:", error);
     const mediaItem = button.closest(".media-item");
