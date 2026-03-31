@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Test suite for load-context script.
 # Usage: ./test-load-context.sh
-# Requires: jq (used by issue-state-read, which Test 4 exercises)
+# Requires: jq
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"

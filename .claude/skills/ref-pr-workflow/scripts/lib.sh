@@ -6,7 +6,7 @@ export FIREBASE_PROJECT_ID="commons-systems"
 # Resolve the issue number from an argument or the current branch name.
 # Args: $1 = issue number (optional; derived from branch if omitted)
 # Output: prints the issue number to stdout
-# Exits 1 if no issue number can be determined.
+# Returns 1 if no issue number can be determined.
 resolve_issue_number() {
   local num="${1:-}"
   if [[ -z "$num" ]]; then
@@ -14,6 +14,10 @@ resolve_issue_number() {
   fi
   if [[ -z "$num" ]]; then
     echo "error: branch name does not start with an issue number and no argument provided" >&2
+    return 1
+  fi
+  if [[ ! "$num" =~ ^[1-9][0-9]*$ ]]; then
+    echo "error: invalid issue number: $num (must be a positive integer)" >&2
     return 1
   fi
   echo "$num"
