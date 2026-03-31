@@ -1,0 +1,10 @@
+{
+  "name": "@commons-systems/rules-test",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "npx firebase-tools emulators:exec --only firestore,storage --project demo-commons-rules-test 'npx vitest run'",
+    "test:watch": "vitest"
+  }
+}

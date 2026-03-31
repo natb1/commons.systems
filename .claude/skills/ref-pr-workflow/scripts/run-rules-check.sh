@@ -10,6 +10,6 @@ echo "Checking Firestore rules syntax..."
 # The payload command (echo) is a no-op; validation is a side effect of startup.
 # --project dummy avoids needing a real Firebase project ID for local syntax checks.
 npx firebase-tools emulators:exec \
-  --only firestore \
+  --only firestore,storage \
   --project dummy \
   'echo "Firestore rules syntax OK"'
