@@ -3,7 +3,7 @@ import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./re
 import type { Transaction, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
 import { accountKey, splitAccountKey, computeAggregateTrend, computeNetWorth, computeCashFlow, computeDerivedBalances, type AggregatePoint, type NetWorthPoint, type CashFlowPoint, type DerivedAccountBalance } from "../balance.js";
-import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
+import { classifyError } from "@commons-systems/errorutil/classify";
 
 interface AccountRow {
   institution: string;
@@ -181,10 +181,11 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
       const { points: netWorthPoints } = computeNetWorth(transactions, statements, trendWeeks);
       chartHtml = renderChartContainers(aggregateTrend, netWorthPoints, derivedBalances);
     } catch (chartError) {
-      if (chartError instanceof TypeError || chartError instanceof ReferenceError
-          || chartError instanceof DataIntegrityError || chartError instanceof RangeError) {
+      const kind = classifyError(chartError);
+      if (kind === "programmer" || kind === "data-integrity" || kind === "range") {
         throw chartError;
       }
+      reportError(chartError);
       console.error("Failed to compute chart data:", chartError);
       chartHtml = renderLoadError(chartError, "chart-error");
     }

@@ -1,3 +1,5 @@
+import { deferProgrammerError } from "@commons-systems/errorutil/defer";
+
 /*
  * Hydration pattern selection guide
  * ==================================
@@ -20,9 +22,9 @@
 /**
  * Run `hydrate(el)` only if `el` exists and has not already been hydrated.
  * Sets `el.dataset.hydrated` to "true" on success, "error" on failure.
- * TypeError and ReferenceError are deferred as uncaught errors (same convention
- * as the router's afterRender handling). Other errors are passed to `onError`
- * if provided, or reported via `reportError`.
+ * Programmer errors are deferred as uncaught errors (same convention as the
+ * router's afterRender handling). Other errors are passed to `onError` if
+ * provided, or reported via `reportError`.
  */
 export function hydrateOnce(
   root: ParentNode,
@@ -37,10 +39,7 @@ export function hydrateOnce(
     el.dataset.hydrated = "true";
   } catch (error) {
     el.dataset.hydrated = "error";
-    if (error instanceof TypeError || error instanceof ReferenceError) {
-      setTimeout(() => { throw error; }, 0);
-      return;
-    }
+    if (deferProgrammerError(error)) return;
     if (onError) {
       onError(error, el);
     } else {

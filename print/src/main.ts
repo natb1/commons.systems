@@ -1,7 +1,7 @@
 import "missing.css";
 import "./style/theme.css";
 import { createHistoryRouter } from "@commons-systems/router";
-import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
+import { classifyError } from "@commons-systems/errorutil/classify";
 import { renderHome, afterRenderHome } from "./pages/home.js";
 import { renderView, afterRenderView, cleanupView } from "./pages/view.js";
 import { renderAbout } from "./pages/about.js";
@@ -49,7 +49,7 @@ const router = createHistoryRouter(
       trackPageView(path);
     },
     formatError: (error) => {
-      if (error instanceof DataIntegrityError)
+      if (classifyError(error) === "data-integrity")
         return "A data error occurred. Please contact support.";
       return undefined;
     },

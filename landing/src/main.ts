@@ -2,6 +2,8 @@ import "missing.css";
 import "./style/theme.css";
 import type { User } from "firebase/auth";
 
+import { classifyError } from "@commons-systems/errorutil/classify";
+import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { createHistoryRouter, parsePath } from "@commons-systems/router";
 import { renderHomeHtml, hydrateHome } from "@commons-systems/blog/pages/home";
 import { renderAdmin } from "@commons-systems/blog/pages/admin";
@@ -84,13 +86,10 @@ async function loadPosts(): Promise<string> {
     lastSkippedCount = result.skippedCount;
     return renderHomeHtml(cachedPosts, "/post/");
   } catch (error) {
-    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+    const kind = classifyError(error);
+    if (kind === "programmer") throw error;
     reportError(new Error(`Failed to load posts: ${error instanceof Error ? error.message : error}`));
-    const isPermissionDenied =
-      error instanceof Error &&
-      "code" in error &&
-      (error as { code: string }).code === "permission-denied";
-    const msg = isPermissionDenied
+    const msg = kind === "permission-denied"
       ? "Permission denied loading posts."
       : "Could not load posts. Try refreshing the page.";
     return `
@@ -122,7 +121,7 @@ const router = createHistoryRouter(
           const admin = await isInGroup(db, NAMESPACE, currentUser, ADMIN_GROUP_ID);
           return renderAdmin(currentUser, admin, lastSkippedCount);
         } catch (error) {
-          if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+          if (classifyError(error) === "programmer") throw error;
           console.error("Failed to check admin group:", error);
           return `<h2>Admin</h2><p>Could not verify admin access. Try refreshing the page.</p>`;
         }
@@ -183,10 +182,7 @@ onAuthStateChanged((user) => {
   if (user?.uid === currentUser?.uid) return;
   currentUser = user;
   refreshAfterAuthChange().catch((err) => {
-    if (err instanceof TypeError || err instanceof ReferenceError) {
-      setTimeout(() => { throw err; }, 0);
-      return;
-    }
+    if (deferProgrammerError(err)) return;
     console.error("Failed to refresh after auth change:", err);
   });
 });

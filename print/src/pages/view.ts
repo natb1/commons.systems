@@ -1,5 +1,5 @@
 import type { User } from "../auth.js";
-import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
+import { classifyError } from "@commons-systems/errorutil/classify";
 import { getMediaItem } from "../firestore.js";
 import { getMediaDownloadUrl } from "../storage.js";
 import type { MediaItem } from "../types.js";
@@ -48,7 +48,7 @@ export async function renderView(id: string, _user: User | null): Promise<string
     pendingUrl = url;
     return renderViewerShell(item);
   } catch (error) {
-    if (error instanceof DataIntegrityError) throw error;
+    if (classifyError(error) === "data-integrity") throw error;
     reportError(new Error("Failed to load media item", { cause: error }));
     return `
       <h2>Error</h2>

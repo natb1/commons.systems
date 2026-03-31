@@ -15,7 +15,8 @@ import { hydrateBudgetTable, hydrateBudgetChart, hydrateOverridesTable } from ".
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { hydrateAccountsCharts } from "./pages/accounts-hydrate.js";
 import { trackPageView } from "./firebase.js";
-import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
+import { classifyError } from "@commons-systems/errorutil/classify";
+import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { parseUploadedJson, toParsedData, UploadValidationError } from "./upload.js";
 import { storeParsedData, clearAll, getMeta } from "./idb.js";
 import { FirestoreSeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
@@ -115,7 +116,8 @@ const router = createHistoryRouter(
   {
     onNavigate: ({ path }) => trackPageView(path),
     formatError: (error) => {
-      if (error instanceof DataIntegrityError || error instanceof RangeError)
+      const kind = classifyError(error);
+      if (kind === "data-integrity" || kind === "range")
         return "A data error occurred. Please contact support.";
       return undefined;
     },
@@ -139,12 +141,13 @@ function hydrateTable(
   errorLabel?: string,
 ): void {
   hydrateOnce(app, selector, hydrate, (error, el) => {
+    const kind = classifyError(error);
     console.error("Hydration error:", error);
     el.querySelectorAll("input, select").forEach((input) => {
       (input as HTMLInputElement | HTMLSelectElement).disabled = true;
     });
     const msg = document.createElement("p");
-    msg.textContent = error instanceof DataIntegrityError
+    msg.textContent = kind === "data-integrity"
       ? "A data error occurred. Please contact support."
       : errorLabel
         ? `${errorLabel} is temporarily unavailable. Try refreshing the page.`
@@ -245,7 +248,7 @@ async function handleFileUpload(file: File): Promise<void> {
       showNavError(error.message);
       return;
     }
-    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+    if (classifyError(error) === "programmer") throw error;
     console.error("Upload failed:", error);
     showNavError("Upload failed. Please try again.");
   }
@@ -255,10 +258,7 @@ uploadInput.addEventListener("change", () => {
   const file = uploadInput.files?.[0];
   if (file) {
     handleFileUpload(file).catch((error) => {
-      if (error instanceof TypeError || error instanceof ReferenceError) {
-        setTimeout(() => { throw error; }, 0);
-        return;
-      }
+      if (deferProgrammerError(error)) return;
       console.error("Unhandled upload error:", error);
     });
   }
@@ -295,7 +295,7 @@ exportButton.addEventListener("click", async () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } catch (error) {
-    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+    if (classifyError(error) === "programmer") throw error;
     console.error("Export failed:", error);
     showNavError(error instanceof Error ? error.message : "Export failed. Please try again.");
   }
@@ -307,7 +307,7 @@ clearButton.addEventListener("click", async () => {
     importPassword = null;
     transition({ source: "seed" });
   } catch (error) {
-    if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+    if (classifyError(error) === "programmer") throw error;
     console.error("Failed to clear data:", error);
     showNavError("Failed to clear data. Try closing other tabs or refreshing the page.");
   }
@@ -324,7 +324,7 @@ async function initialize(): Promise<void> {
 }
 
 initialize().catch((error) => {
-  if (error instanceof TypeError || error instanceof ReferenceError) throw error;
+  if (classifyError(error) === "programmer") throw error;
   console.error("Initialization error:", error);
   showNavError("Could not load saved data. You may need to re-upload your file.");
   transition({ source: "seed" });

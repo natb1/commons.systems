@@ -5,6 +5,7 @@ import { type Transaction, type TransactionId, type Budget, type BudgetPeriod, t
 import { computeAllBudgetBalances, computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import type { TransactionQuery } from "../data-source.js";
 
+import { classifyError } from "@commons-systems/errorutil/classify";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { uniqueSorted } from "./hydrate-util.js";
 import type { SerializedChartTransaction } from "./home-chart.js";
@@ -334,8 +335,9 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
     try {
       chartHtml = renderCategorySankey(transactions, budgets);
     } catch (chartError) {
-      if (chartError instanceof TypeError || chartError instanceof ReferenceError
-          || chartError instanceof DataIntegrityError || chartError instanceof RangeError) throw chartError;
+      const kind = classifyError(chartError);
+      if (kind === "programmer" || kind === "data-integrity" || kind === "range") throw chartError;
+      reportError(chartError);
       console.error("Chart serialization failed:", chartError);
       chartHtml = `<p class="chart-error">Chart unavailable.</p>`;
     }

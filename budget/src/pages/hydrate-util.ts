@@ -1,3 +1,5 @@
+import { classifyError } from "@commons-systems/errorutil/classify";
+import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { showDropdown } from "@commons-systems/style/components/autocomplete";
 
@@ -32,23 +34,20 @@ export function showInputError(el: HTMLElement, title = "Save failed \u2014 valu
 
 /**
  * Classify a save error and show the appropriate input error. Programmer errors
- * (TypeError, ReferenceError) are rethrown asynchronously to surface in devtools.
+ * are rethrown asynchronously to surface in devtools.
  */
 export function handleSaveError(el: HTMLElement, error: unknown, entity: string): void {
-  if (error instanceof TypeError || error instanceof ReferenceError) {
-    setTimeout(() => { throw error; }, 0);
-    return;
-  }
-  if (error instanceof DataIntegrityError) {
+  const kind = classifyError(error);
+  if (kind === "programmer") { setTimeout(() => { throw error; }, 0); return; }
+  if (kind === "data-integrity") {
     console.error("Data integrity error:", error);
     showInputError(el, "Data error \u2014 please reload");
     return;
   }
   console.error(`Failed to save ${entity}:`, error);
-  const code = (error as { code?: string })?.code;
-  if (code === "permission-denied") {
+  if (kind === "permission-denied") {
     showInputError(el, "Access denied. Please contact support.");
-  } else if (error instanceof RangeError) {
+  } else if (kind === "range") {
     showInputError(el, "Value out of range");
   } else {
     showInputError(el);
@@ -65,21 +64,18 @@ function showActionError(el: HTMLElement, title = "Action failed"): void {
 
 /**
  * Classify an action error (button click, etc.) and show the appropriate error.
- * Programmer errors (TypeError, ReferenceError) are rethrown asynchronously.
+ * Programmer errors are rethrown asynchronously.
  */
 export function handleActionError(el: HTMLElement, error: unknown, action: string): void {
-  if (error instanceof TypeError || error instanceof ReferenceError) {
-    setTimeout(() => { throw error; }, 0);
-    return;
-  }
-  if (error instanceof DataIntegrityError) {
+  const kind = classifyError(error);
+  if (kind === "programmer") { setTimeout(() => { throw error; }, 0); return; }
+  if (kind === "data-integrity") {
     console.error("Data integrity error:", error);
     showActionError(el, "Data error \u2014 please reload");
     return;
   }
   console.error(`Failed to ${action}:`, error);
-  const code = (error as { code?: string })?.code;
-  if (code === "permission-denied") {
+  if (kind === "permission-denied") {
     showActionError(el, "Access denied. Please contact support.");
   } else {
     showActionError(el, `${action.charAt(0).toUpperCase() + action.slice(1)} failed`);
@@ -199,7 +195,7 @@ export function wireChartResize(
         const msg = "Chart rendering failed on resize. Try refreshing the page.";
         for (const el of errorEls) el.textContent = msg;
         console.error("Chart render failed during resize:", error);
-        setTimeout(() => { throw error; }, 0);
+        if (!deferProgrammerError(error)) reportError(error);
         return;
       }
       reattachScrollSync();

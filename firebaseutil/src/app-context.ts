@@ -9,6 +9,7 @@ import type { FirebaseApp } from "firebase/app";
 import type { Firestore } from "firebase/firestore";
 import type { AppCheck } from "firebase/app-check";
 import type { FirebaseStorage } from "firebase/storage";
+import { classifyError } from "@commons-systems/errorutil/classify";
 import { firebaseConfig } from "./config.js";
 import {
   validateNamespace,
@@ -123,7 +124,7 @@ export function createAppContext(
           isTokenAutoRefreshEnabled: true,
         });
       } catch (err) {
-        if (err instanceof TypeError || err instanceof ReferenceError) throw err;
+        if (classifyError(err) === "programmer") throw err;
         // Ad-blockers and CSP policies can block reCAPTCHA scripts, causing initializeAppCheck
         // to throw. Graceful degradation is intentional: the app loads without AppCheck, and
         // server-side enforcement rejects requests without valid AppCheck tokens with 401.
@@ -139,7 +140,7 @@ export function createAppContext(
           const { token } = await getToken(resolvedAppCheck);
           return { "X-Firebase-AppCheck": token };
         } catch (err) {
-          if (err instanceof TypeError || err instanceof ReferenceError) throw err;
+          if (classifyError(err) === "programmer") throw err;
           console.error("AppCheck token acquisition failed:", err);
           return {};
         }

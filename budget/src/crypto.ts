@@ -1,3 +1,4 @@
+import { classifyError } from "@commons-systems/errorutil/classify";
 import { UploadValidationError } from "./upload.js";
 import {
   MAGIC, SALT_LEN, IV_LEN, HEADER_LEN, PBKDF2_ITERATIONS, KEY_LEN,
@@ -86,7 +87,7 @@ export async function decrypt(data: ArrayBuffer, password: string): Promise<stri
   try {
     return await decryptData(crypto.subtle, data, password);
   } catch (err) {
-    if (err instanceof TypeError || err instanceof ReferenceError) throw err;
+    if (classifyError(err) === "programmer") throw err;
     if (err instanceof Error && err.name === "OperationError") {
       throw new UploadValidationError("Wrong password or corrupted file.");
     }
