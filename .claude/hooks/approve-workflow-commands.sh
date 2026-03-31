@@ -35,15 +35,15 @@ if [ "$JOINED" != "$FIRST_LINE" ]; then
   exit 0
 fi
 
-# Strip benign stderr suppression (2>/dev/null) before analysis, then validate
+# Strip benign stderr redirects (2>/dev/null, 2>&1) before analysis, then validate
 # each ;-separated segment independently. Every segment must:
 #   1. Start with a workflow script as the first token
-#   2. Contain no dangerous shell metacharacters after stripping 2>/dev/null
+#   2. Contain no dangerous shell metacharacters after stripping stderr redirects
 # This allows chained workflow calls like:
-#   script-a 2>/dev/null; script-b 2>/dev/null
+#   script-a 2>/dev/null; script-b 2>&1
 # while rejecting injection like:
 #   script-a; rm -rf /
-CLEANED=$(printf '%s' "$FIRST_LINE" | sed 's/ *2>\/dev\/null//g')
+CLEANED=$(printf '%s' "$FIRST_LINE" | sed 's/ *2>[/&][a-z1-9]*//g')
 
 SCRIPT_RE='(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$'
 UNSAFE_RE='(&&|\|\||[|`<>$])'
