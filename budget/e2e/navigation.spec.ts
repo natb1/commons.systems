@@ -31,12 +31,12 @@ test.describe("navigation", () => {
 
   test("home page shows Budgets heading @smoke", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("main h2")).toHaveText("Budgets");
+    await expect(page.locator("main h2", { hasText: "Budgets" })).toBeVisible();
   });
 
   test("clicking transactions nav link shows Transactions heading @smoke", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("main h2")).toHaveText("Budgets", { timeout: 10000 });
+    await expect(page.locator("main h2", { hasText: "Budgets" })).toBeVisible({ timeout: 10000 });
     await page.click('app-nav a[href="/transactions"]');
     await expect(page.locator("main h2")).toHaveText("Transactions");
   });
@@ -45,7 +45,7 @@ test.describe("navigation", () => {
     await page.goto("/transactions");
     await expect(page.locator("main h2")).toHaveText("Transactions");
     await page.click('app-nav a[href="/"]');
-    await expect(page.locator("main h2")).toHaveText("Budgets");
+    await expect(page.locator("main h2", { hasText: "Budgets" })).toBeVisible();
   });
 
   test("direct URL to /transactions loads transactions page", async ({ page }) => {
@@ -55,7 +55,7 @@ test.describe("navigation", () => {
 
   test("clicking accounts nav link shows Accounts heading @smoke", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("main h2")).toHaveText("Budgets", { timeout: 10000 });
+    await expect(page.locator("main h2", { hasText: "Budgets" })).toBeVisible({ timeout: 10000 });
     await page.click('app-nav a[href="/accounts"]');
     await expect(page.locator("main h2")).toHaveText("Accounts");
   });
@@ -74,6 +74,6 @@ test.describe("navigation", () => {
 
   test("unknown path falls back to home page", async ({ page }) => {
     await page.goto("/nonexistent");
-    await expect(page.locator("main h2")).toHaveText("Budgets");
+    await expect(page.locator("main h2", { hasText: "Budgets" })).toBeVisible();
   });
 });

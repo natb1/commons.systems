@@ -1,5 +1,6 @@
 @import "@commons-systems/style/default.css";
 @import "@commons-systems/style/expandable-row.css";
+@import "./hero.css";
 
 :root {
   color-scheme: dark;

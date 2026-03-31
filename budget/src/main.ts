@@ -14,6 +14,7 @@ import { hydrateCategorySankey } from "./pages/home-chart.js";
 import { hydrateBudgetTable, hydrateBudgetChart, hydrateOverridesTable } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { hydrateAccountsCharts } from "./pages/accounts-hydrate.js";
+import { hydrateHero } from "./pages/hero-hydrate.js";
 import { trackPageView } from "./firebase.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -157,6 +158,7 @@ function hydrateTable(
 }
 
 const observer = new MutationObserver(() => {
+  hydrateOnce(app, "#hero", hydrateHero);
   hydrateTable("#category-sankey", hydrateCategorySankey, "Chart rendering");
   hydrateTable("#transactions-table", hydrateTransactionTable);
   hydrateTable("#budgets-chart", hydrateBudgetChart);
