@@ -278,8 +278,9 @@ service cloud.firestore {
     }
 
     // Groups are readable only by their members (email-based membership).
-    // Uses resource.data directly instead of get() because getUserGroups
-    // performs a list query that Firestore cannot resolve with get() calls.
+    // Uses resource.data directly instead of isGroupMember() because getUserGroups
+    // performs a list query (where + getDocs) and Firestore cannot resolve get()
+    // calls at query planning time for list queries.
     match /audio/{env}/groups/{groupId} {
       allow read: if request.auth != null && request.auth.token.email in resource.data.members;
       allow write: if false;
