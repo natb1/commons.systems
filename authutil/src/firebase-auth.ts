@@ -107,7 +107,6 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
     return firebaseSignOut(auth).catch((error) => {
       logError(error, { operation: "sign-out" });
       showAuthError("Sign-out failed. Please try again.");
-      throw error;
     });
   }
 

@@ -3,7 +3,6 @@ import "./style/theme.css";
 import { createHistoryRouter } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
-import { renderNotes } from "./pages/notes.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
@@ -18,7 +17,6 @@ if (!app) throw new Error("#app element not found");
 navEl.links = [
   { href: "/", label: "Home" },
   { href: "/about", label: "About" },
-  { href: "/notes", label: "Notes" },
 ];
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => void signOut());
@@ -35,7 +33,6 @@ const router = createHistoryRouter(
   [
     { path: "/", render: renderHome },
     { path: "/about", render: renderAbout },
-    { path: "/notes", render: renderNotes },
   ],
   { onNavigate: ({ path }) => trackPageView(path) },
 );

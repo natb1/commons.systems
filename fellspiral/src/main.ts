@@ -78,9 +78,7 @@ const updateInfoPanel = (): void => {
 
 navEl.links = [{ href: "/", label: "Home" }];
 navEl.addEventListener("sign-in", () => signIn());
-navEl.addEventListener("sign-out", () => {
-  signOut().catch((err) => logError(err, { operation: "sign-out" }));
-});
+navEl.addEventListener("sign-out", () => void signOut());
 
 function updateNav(path: string): void {
   navEl.showAuth = path === "/admin";

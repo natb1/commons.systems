@@ -5,6 +5,9 @@
   "targets": {
     "commons-systems": {
       "hosting": {
+        "audio": [
+          "cs-audio-ac47"
+        ],
         "budget": [
           "cs-budget-f920"
         ],
