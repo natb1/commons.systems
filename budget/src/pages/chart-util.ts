@@ -30,9 +30,7 @@ export function renderAxisSvg(options: {
 }
 
 export function getThemeFg(container: HTMLElement): string {
-  const fg = getComputedStyle(container).getPropertyValue("--fg").trim();
-  if (!fg) throw new Error("Missing required CSS custom property --fg");
-  return fg;
+  return getComputedStyle(container).getPropertyValue("--fg").trim() || "#e0e0e0";
 }
 
 export function computePanelWidth(budgetCount: number): number {
