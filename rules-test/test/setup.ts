@@ -1,12 +1,14 @@
 import {
   initializeTestEnvironment,
+  assertSucceeds,
+  assertFails,
   type RulesTestEnvironment,
   type RulesTestContext,
 } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterEach } from "vitest";
-import { doc, setDoc, setLogLevel } from "firebase/firestore";
+import { afterEach, beforeAll, beforeEach, describe, it } from "vitest";
+import { doc, getDoc, setDoc, setLogLevel } from "firebase/firestore";
 
 // Suppress Firestore client-side warnings about permission-denied (expected in tests)
 setLogLevel("error");
@@ -77,12 +79,143 @@ export async function adminUploadStorage(
 
 /**
  * Register afterEach to clear emulator data between tests.
- * No afterAll cleanup needed — emulators:exec tears down the emulator process.
+ * No afterAll cleanup needed — the emulator process lifecycle is managed
+ * externally (emulators:exec in CI, manual start in dev).
  */
 export function setupCleanup(): void {
   afterEach(async () => {
     const env = await getTestEnv();
-    await env.clearFirestore();
-    await env.clearStorage();
+    await Promise.all([env.clearFirestore(), env.clearStorage()]);
+  });
+}
+
+/**
+ * Shared describe block for `{app}/{env}/groups/{groupId}` collections.
+ * Tests member-only read access and write-denied rules.
+ */
+export function describeGroupsCollection(appName: string): void {
+  const ENV = "test";
+
+  describe(`${appName} groups`, () => {
+    let env: RulesTestEnvironment;
+
+    beforeAll(async () => {
+      env = await getTestEnv();
+    });
+
+    setupCleanup();
+
+    beforeEach(async () => {
+      await adminSetDoc(env, `${appName}/${ENV}/groups/group1`, {
+        members: ["member@test.com"],
+      });
+    });
+
+    it("allows group member to read", async () => {
+      const ctx = authenticatedContext(env, "member@test.com");
+      const db = ctx.firestore();
+      await assertSucceeds(
+        getDoc(doc(db, `${appName}/${ENV}/groups/group1`)),
+      );
+    });
+
+    it("denies non-member read", async () => {
+      const ctx = authenticatedContext(env, "stranger@test.com");
+      const db = ctx.firestore();
+      await assertFails(
+        getDoc(doc(db, `${appName}/${ENV}/groups/group1`)),
+      );
+    });
+
+    it("denies unauthenticated read", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertFails(
+        getDoc(doc(db, `${appName}/${ENV}/groups/group1`)),
+      );
+    });
+
+    it("denies write", async () => {
+      const ctx = authenticatedContext(env, "member@test.com");
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `${appName}/${ENV}/groups/group1`), { members: [] }),
+      );
+    });
+  });
+}
+
+/**
+ * Shared describe block for `{app}/{env}/media/{docId}` collections.
+ * Tests public-domain read, member-only private read, and write-denied rules.
+ */
+export function describeMediaCollection(appName: string): void {
+  const ENV = "test";
+
+  describe(`${appName} media`, () => {
+    let env: RulesTestEnvironment;
+
+    beforeAll(async () => {
+      env = await getTestEnv();
+    });
+
+    setupCleanup();
+
+    beforeEach(async () => {
+      await adminSetDoc(env, `${appName}/${ENV}/media/public1`, {
+        publicDomain: true,
+        title: "Public Book",
+        memberEmails: ["member@test.com"],
+      });
+      await adminSetDoc(env, `${appName}/${ENV}/media/private1`, {
+        publicDomain: false,
+        title: "Private Book",
+        memberEmails: ["member@test.com"],
+      });
+    });
+
+    it("allows unauthenticated read of public domain media", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertSucceeds(
+        getDoc(doc(db, `${appName}/${ENV}/media/public1`)),
+      );
+    });
+
+    it("allows member read of private media", async () => {
+      const ctx = authenticatedContext(env, "member@test.com");
+      const db = ctx.firestore();
+      await assertSucceeds(
+        getDoc(doc(db, `${appName}/${ENV}/media/private1`)),
+      );
+    });
+
+    it("denies non-member read of private media", async () => {
+      const ctx = authenticatedContext(env, "stranger@test.com");
+      const db = ctx.firestore();
+      await assertFails(
+        getDoc(doc(db, `${appName}/${ENV}/media/private1`)),
+      );
+    });
+
+    it("denies unauthenticated read of private media", async () => {
+      const ctx = unauthenticatedContext(env);
+      const db = ctx.firestore();
+      await assertFails(
+        getDoc(doc(db, `${appName}/${ENV}/media/private1`)),
+      );
+    });
+
+    it("denies write", async () => {
+      const ctx = authenticatedContext(env, "member@test.com");
+      const db = ctx.firestore();
+      await assertFails(
+        setDoc(doc(db, `${appName}/${ENV}/media/new1`), {
+          publicDomain: true,
+          title: "New",
+          memberEmails: [],
+        }),
+      );
+    });
   });
 }

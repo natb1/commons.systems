@@ -8,51 +8,12 @@ import {
   unauthenticatedContext,
   adminSetDoc,
   setupCleanup,
+  describeGroupsCollection,
 } from "../setup.js";
 
 const ENV = "test";
 
-describe("landing groups", () => {
-  let env: RulesTestEnvironment;
-
-  beforeAll(async () => {
-    env = await getTestEnv();
-  });
-
-  setupCleanup();
-
-  beforeEach(async () => {
-    await adminSetDoc(env, `landing/${ENV}/groups/group1`, {
-      members: ["member@test.com", "other@test.com"],
-    });
-  });
-
-  it("allows group member to read", async () => {
-    const ctx = authenticatedContext(env, "member@test.com");
-    const db = ctx.firestore();
-    await assertSucceeds(getDoc(doc(db, `landing/${ENV}/groups/group1`)));
-  });
-
-  it("denies non-member read", async () => {
-    const ctx = authenticatedContext(env, "stranger@test.com");
-    const db = ctx.firestore();
-    await assertFails(getDoc(doc(db, `landing/${ENV}/groups/group1`)));
-  });
-
-  it("denies unauthenticated read", async () => {
-    const ctx = unauthenticatedContext(env);
-    const db = ctx.firestore();
-    await assertFails(getDoc(doc(db, `landing/${ENV}/groups/group1`)));
-  });
-
-  it("denies write", async () => {
-    const ctx = authenticatedContext(env, "member@test.com");
-    const db = ctx.firestore();
-    await assertFails(
-      setDoc(doc(db, `landing/${ENV}/groups/group1`), { members: [] }),
-    );
-  });
-});
+describeGroupsCollection("landing");
 
 describe("landing posts", () => {
   let env: RulesTestEnvironment;

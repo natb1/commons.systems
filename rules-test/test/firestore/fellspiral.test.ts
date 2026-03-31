@@ -8,57 +8,12 @@ import {
   unauthenticatedContext,
   adminSetDoc,
   setupCleanup,
+  describeGroupsCollection,
 } from "../setup.js";
 
 const ENV = "test";
 
-describe("fellspiral groups", () => {
-  let env: RulesTestEnvironment;
-
-  beforeAll(async () => {
-    env = await getTestEnv();
-  });
-
-  setupCleanup();
-
-  beforeEach(async () => {
-    await adminSetDoc(env, `fellspiral/${ENV}/groups/group1`, {
-      members: ["member@test.com"],
-    });
-  });
-
-  it("allows group member to read", async () => {
-    const ctx = authenticatedContext(env, "member@test.com");
-    const db = ctx.firestore();
-    await assertSucceeds(
-      getDoc(doc(db, `fellspiral/${ENV}/groups/group1`)),
-    );
-  });
-
-  it("denies non-member read", async () => {
-    const ctx = authenticatedContext(env, "stranger@test.com");
-    const db = ctx.firestore();
-    await assertFails(
-      getDoc(doc(db, `fellspiral/${ENV}/groups/group1`)),
-    );
-  });
-
-  it("denies unauthenticated read", async () => {
-    const ctx = unauthenticatedContext(env);
-    const db = ctx.firestore();
-    await assertFails(
-      getDoc(doc(db, `fellspiral/${ENV}/groups/group1`)),
-    );
-  });
-
-  it("denies write", async () => {
-    const ctx = authenticatedContext(env, "member@test.com");
-    const db = ctx.firestore();
-    await assertFails(
-      setDoc(doc(db, `fellspiral/${ENV}/groups/group1`), { members: [] }),
-    );
-  });
-});
+describeGroupsCollection("fellspiral");
 
 describe("fellspiral posts", () => {
   let env: RulesTestEnvironment;

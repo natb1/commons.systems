@@ -4,124 +4,17 @@ import type { RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import {
   getTestEnv,
-  authenticatedContext,
   unauthenticatedContext,
   adminSetDoc,
   setupCleanup,
+  describeGroupsCollection,
+  describeMediaCollection,
 } from "../setup.js";
 
 const ENV = "test";
 
-describe("print media", () => {
-  let env: RulesTestEnvironment;
-
-  beforeAll(async () => {
-    env = await getTestEnv();
-  });
-
-  setupCleanup();
-
-  beforeEach(async () => {
-    await adminSetDoc(env, `print/${ENV}/media/public1`, {
-      publicDomain: true,
-      title: "Public Book",
-      memberEmails: ["member@test.com"],
-    });
-    await adminSetDoc(env, `print/${ENV}/media/private1`, {
-      publicDomain: false,
-      title: "Private Book",
-      memberEmails: ["member@test.com"],
-    });
-  });
-
-  it("allows unauthenticated read of public domain media", async () => {
-    const ctx = unauthenticatedContext(env);
-    const db = ctx.firestore();
-    await assertSucceeds(
-      getDoc(doc(db, `print/${ENV}/media/public1`)),
-    );
-  });
-
-  it("allows member read of private media", async () => {
-    const ctx = authenticatedContext(env, "member@test.com");
-    const db = ctx.firestore();
-    await assertSucceeds(
-      getDoc(doc(db, `print/${ENV}/media/private1`)),
-    );
-  });
-
-  it("denies non-member read of private media", async () => {
-    const ctx = authenticatedContext(env, "stranger@test.com");
-    const db = ctx.firestore();
-    await assertFails(
-      getDoc(doc(db, `print/${ENV}/media/private1`)),
-    );
-  });
-
-  it("denies unauthenticated read of private media", async () => {
-    const ctx = unauthenticatedContext(env);
-    const db = ctx.firestore();
-    await assertFails(
-      getDoc(doc(db, `print/${ENV}/media/private1`)),
-    );
-  });
-
-  it("denies write", async () => {
-    const ctx = authenticatedContext(env, "member@test.com");
-    const db = ctx.firestore();
-    await assertFails(
-      setDoc(doc(db, `print/${ENV}/media/new1`), {
-        publicDomain: true,
-        title: "New",
-        memberEmails: [],
-      }),
-    );
-  });
-});
-
-describe("print groups", () => {
-  let env: RulesTestEnvironment;
-
-  beforeAll(async () => {
-    env = await getTestEnv();
-  });
-
-  setupCleanup();
-
-  beforeEach(async () => {
-    await adminSetDoc(env, `print/${ENV}/groups/group1`, {
-      members: ["member@test.com"],
-    });
-  });
-
-  it("allows group member to read", async () => {
-    const ctx = authenticatedContext(env, "member@test.com");
-    const db = ctx.firestore();
-    await assertSucceeds(
-      getDoc(doc(db, `print/${ENV}/groups/group1`)),
-    );
-  });
-
-  it("denies non-member read", async () => {
-    const ctx = authenticatedContext(env, "stranger@test.com");
-    const db = ctx.firestore();
-    await assertFails(getDoc(doc(db, `print/${ENV}/groups/group1`)));
-  });
-
-  it("denies unauthenticated read", async () => {
-    const ctx = unauthenticatedContext(env);
-    const db = ctx.firestore();
-    await assertFails(getDoc(doc(db, `print/${ENV}/groups/group1`)));
-  });
-
-  it("denies write", async () => {
-    const ctx = authenticatedContext(env, "member@test.com");
-    const db = ctx.firestore();
-    await assertFails(
-      setDoc(doc(db, `print/${ENV}/groups/group1`), { members: [] }),
-    );
-  });
-});
+describeMediaCollection("print");
+describeGroupsCollection("print");
 
 describe("print reading-position", () => {
   let env: RulesTestEnvironment;
