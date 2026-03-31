@@ -60,6 +60,7 @@ function toMediaItem(id: string, data: Record<string, unknown>): MediaItem {
     storagePath: requireString(data.storagePath, "storagePath"),
     groupId: optionalString(data.groupId, "groupId"),
     memberEmails: requireStringArray(data.memberEmails, "memberEmails"),
+    testOnly: data.testOnly === true,
     addedAt: requireIso8601(data.addedAt, "addedAt"),
   };
 }
@@ -69,15 +70,17 @@ export async function getPublicMedia(): Promise<MediaItem[]> {
   const q = query(collection(db, path), where("publicDomain", "==", true));
   const snapshot = await getDocs(q);
   const items = snapshot.docs.map((docSnap) => toMediaItem(docSnap.id, docSnap.data()));
-  items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
-  return items;
+  const filtered = items.filter((item) => !item.testOnly);
+  filtered.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
+  return filtered;
 }
 
 export async function getUserMedia(email: string): Promise<MediaItem[]> {
   const path = nsCollectionPath(NAMESPACE, "media");
   const q = query(collection(db, path), where("memberEmails", "array-contains", email));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((docSnap) => toMediaItem(docSnap.id, docSnap.data()));
+  const items = snapshot.docs.map((docSnap) => toMediaItem(docSnap.id, docSnap.data()));
+  return items.filter((item) => !item.testOnly);
 }
 
 export async function getAllAccessibleMedia(email: string): Promise<MediaItem[]> {
