@@ -9,7 +9,7 @@ The purpose of this conversation is to create and manage a PR with the following
 - Current branch: !`git rev-parse --abbrev-ref HEAD`
 - Commit log: !`git log origin/main..HEAD --format="commit %H%nAuthor: %an <%ae>%nDate: %ad%n%n%s%n%n%b"`
 
-Before proceeding, run via Bash with `dangerouslyDisableSandbox: true`:
+Before proceeding, run via Bash with `dangerouslyDisableSandbox: true` (gh requires sandbox disabled for TLS):
 `.claude/skills/ref-pr-workflow/scripts/load-context`
 
 # Dependencies

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Test suite for load-context script.
 # Usage: ./test-load-context.sh
-# Requires: jq (transitive — used by issue-state-read, not by this test directly)
+# Requires: jq (used by issue-state-read, which Test 4 exercises)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
@@ -16,7 +16,7 @@ setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/stub" "$TMPDIR_TEST/repo"
 
-  for script in load-context issue-primary issue-blocking issue-sub-issues issue-parent issue-siblings issue-state-read; do
+  for script in lib.sh load-context issue-primary issue-blocking issue-sub-issues issue-parent issue-siblings issue-state-read; do
     cp "$SCRIPT_DIR/$script" "$TMPDIR_TEST/$script"
     chmod +x "$TMPDIR_TEST/$script"
   done
@@ -50,7 +50,10 @@ STUB
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 case "$1" in
   "pr")
-    if [ -f "$STUB_DIR/pr-view.json" ]; then
+    if [ -f "$STUB_DIR/pr-error.txt" ]; then
+      cat "$STUB_DIR/pr-error.txt" >&2
+      exit 1
+    elif [ -f "$STUB_DIR/pr-view.json" ]; then
       cat "$STUB_DIR/pr-view.json"
     else
       echo "no pull requests found" >&2
@@ -87,7 +90,7 @@ case "$1" in
     path="$2"
     case "$path" in
       */dependencies/blocked_by|*/sub_issues)
-        echo ""
+        echo "[]"
         ;;
       */parent)
         echo "No parent issue found" >&2
@@ -201,6 +204,17 @@ exit_code=0
 output=$("$TMPDIR_TEST/load-context" 2>&1) || exit_code=$?
 assert_eq "exits 0 without state" "0" "$exit_code"
 assert_contains "shows No state" "No state" "$output"
+teardown
+
+echo "Test 6: gh pr view non-'no PR' failure propagates error"
+setup
+echo "42-my-feature" > "$TMPDIR_TEST/stub/branch-name.txt"
+echo "GraphQL: authentication required" > "$TMPDIR_TEST/stub/pr-error.txt"
+exit_code=0
+stderr=$("$TMPDIR_TEST/load-context" 2>&1 >/dev/null) || exit_code=$?
+assert_eq "exits 1 on PR error" "1" "$exit_code"
+assert_contains "error mentions PR failure" "failed to fetch PR status" "$stderr"
+assert_contains "error includes original message" "authentication required" "$stderr"
 teardown
 
 echo ""

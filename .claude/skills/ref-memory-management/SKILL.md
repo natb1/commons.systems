@@ -30,7 +30,7 @@ This script consolidates all context types into a single invocation:
 
 Full = `title, body, comments, number, state`. Summary = `title, number, state`. Consumers that need additional fields (e.g., `ref-ready` uses `labels, assignees, projectItems` for evaluation) extend the base set.
 
-Individual scripts remain in `.claude/skills/ref-pr-workflow/scripts/` for standalone use.
+Individual scripts remain in `.claude/skills/ref-pr-workflow/scripts/` for standalone use. Each accepts an optional issue number argument; otherwise it derives the number from the branch name.
 
 # Issue State Rule
 

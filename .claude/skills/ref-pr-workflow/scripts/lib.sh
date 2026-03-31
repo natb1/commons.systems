@@ -3,6 +3,49 @@
 
 export FIREBASE_PROJECT_ID="commons-systems"
 
+# Resolve the issue number from an argument or the current branch name.
+# Args: $1 = issue number (optional; derived from branch if omitted)
+# Output: prints the issue number to stdout
+# Exits 1 if no issue number can be determined.
+resolve_issue_number() {
+  local num="${1:-}"
+  if [[ -z "$num" ]]; then
+    num=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[1-9][0-9]*' || true)
+  fi
+  if [[ -z "$num" ]]; then
+    echo "error: branch name does not start with an issue number and no argument provided" >&2
+    return 1
+  fi
+  echo "$num"
+}
+
+# Call gh api and validate the response is a JSON array before applying a jq filter.
+# Args: $1 = API path (e.g. "/repos/{owner}/{repo}/issues/42/sub_issues")
+#        $2 = jq filter to apply to each element (e.g. '.[].number')
+# Output: filtered results, one per line
+# Exits 1 with error if API returns a non-array (e.g., error object).
+gh_api_array() {
+  local path="$1"
+  local filter="$2"
+  local raw
+  raw=$(gh api "$path") || {
+    echo "error: gh api call failed for $path" >&2
+    return 1
+  }
+  printf '%s\n' "$raw" | jq -e 'if type == "array" then . else error("expected array, got " + type) end' > /dev/null 2>&1 || {
+    echo "error: API response for $path is not a JSON array" >&2
+    return 1
+  }
+  local result
+  result=$(printf '%s\n' "$raw" | jq -r "$filter") || {
+    echo "error: jq filter failed for $path" >&2
+    return 1
+  }
+  if [[ -n "$result" ]]; then
+    printf '%s\n' "$result"
+  fi
+}
+
 # Detect what Firebase features the app uses.
 # Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE, USES_FUNCTIONS
 # Args: $1 = path to app src/ directory, $2 = repo root, $3 = app name

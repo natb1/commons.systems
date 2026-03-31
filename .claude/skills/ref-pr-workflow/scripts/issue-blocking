@@ -1,18 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ISSUE_NUM="${1:-}"
-if [[ -z "$ISSUE_NUM" ]]; then
-  ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[1-9][0-9]*' || true)
-fi
-if [[ -z "$ISSUE_NUM" ]]; then
-  echo "error: branch name does not start with an issue number and no argument provided" >&2
-  exit 1
-fi
-BLOCKERS=$(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number')
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+ISSUE_NUM=$(resolve_issue_number "${1:-}")
+BLOCKERS=$(gh_api_array "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" '.[].number')
 for dep in $BLOCKERS; do
-  if [[ ! "$dep" =~ ^[0-9]+$ ]]; then
-    echo "error: unexpected blocker value: $dep" >&2
-    exit 1
-  fi
   gh issue view "$dep" --json title,body,comments,number,state
 done
