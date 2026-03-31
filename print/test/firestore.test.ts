@@ -206,6 +206,7 @@ describe("getPublicMedia", () => {
     await expect(getPublicMedia()).rejects.toThrow(DataIntegrityError);
     await expect(getPublicMedia()).rejects.toThrow("Invalid ISO 8601 date");
   });
+
 });
 
 describe("getUserMedia", () => {
@@ -250,6 +251,7 @@ describe("getUserMedia", () => {
     expect(items[0].id).toBe("user-doc-1");
     expect(items[0].publicDomain).toBe(false);
   });
+
 });
 
 describe("getAllAccessibleMedia", () => {
@@ -412,4 +414,5 @@ describe("getMediaItem", () => {
       DataIntegrityError,
     );
   });
+
 });

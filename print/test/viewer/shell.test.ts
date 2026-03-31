@@ -589,3 +589,191 @@ describe("initViewer spread mode", () => {
     expect(canvasWrap.style.transform).toBe(`scale(${1.2 ** 2})`);
   });
 });
+
+describe("initViewer fullscreen and tap zones", () => {
+  let outlet: HTMLElement;
+  let mockRequestFullscreen: ReturnType<typeof vi.fn>;
+  let mockExitFullscreen: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    outlet = document.createElement("div");
+    outlet.innerHTML = renderViewerShell(makeMediaItem());
+    localStorage.clear();
+    if (typeof globalThis.reportError !== "function") {
+      globalThis.reportError = () => {};
+    }
+    vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+
+    mockRequestFullscreen = vi.fn().mockResolvedValue(undefined);
+    mockExitFullscreen = vi.fn().mockResolvedValue(undefined);
+    HTMLElement.prototype.requestFullscreen = mockRequestFullscreen;
+    document.exitFullscreen = mockExitFullscreen;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.mocked(globalThis.reportError).mockRestore();
+    // Reset fullscreenElement to null
+    Object.defineProperty(document, "fullscreenElement", {
+      value: null,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  async function flushInit(): Promise<void> {
+    for (let i = 0; i < 20; i++) {
+      await Promise.resolve();
+    }
+  }
+
+  it("calls requestFullscreen when panel is collapsed", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
+    toggleBtn.click();
+
+    expect(mockRequestFullscreen).toHaveBeenCalled();
+  });
+
+  it("calls exitFullscreen when panel is expanded from collapsed state", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
+
+    // Collapse
+    toggleBtn.click();
+
+    // Simulate browser entering fullscreen
+    Object.defineProperty(document, "fullscreenElement", {
+      value: outlet.querySelector(".viewer"),
+      writable: true,
+      configurable: true,
+    });
+
+    // Expand
+    toggleBtn.click();
+
+    expect(mockExitFullscreen).toHaveBeenCalled();
+  });
+
+  it("syncs panel to expanded when user exits fullscreen externally", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
+    const panel = outlet.querySelector(".viewer-panel") as HTMLElement;
+
+    // Collapse panel
+    toggleBtn.click();
+    expect(panel.classList.contains("collapsed")).toBe(true);
+
+    // Simulate user pressing Esc to exit fullscreen
+    Object.defineProperty(document, "fullscreenElement", {
+      value: null,
+      writable: true,
+      configurable: true,
+    });
+    document.dispatchEvent(new Event("fullscreenchange"));
+
+    expect(panel.classList.contains("collapsed")).toBe(false);
+    expect(toggleBtn.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("creates tap zones when panel is collapsed", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
+    toggleBtn.click();
+
+    const prevZone = outlet.querySelector(".tap-zone-prev");
+    const nextZone = outlet.querySelector(".tap-zone-next");
+    expect(prevZone).not.toBeNull();
+    expect(nextZone).not.toBeNull();
+  });
+
+  it("removes tap zones when panel is expanded", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
+
+    // Collapse
+    toggleBtn.click();
+    expect(outlet.querySelector(".tap-zone-prev")).not.toBeNull();
+
+    // Expand
+    toggleBtn.click();
+
+    expect(outlet.querySelector(".tap-zone-prev")).toBeNull();
+    expect(outlet.querySelector(".tap-zone-next")).toBeNull();
+  });
+
+  it("removes tap zones when user exits fullscreen externally", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
+
+    // Collapse to create tap zones
+    toggleBtn.click();
+    expect(outlet.querySelector(".tap-zone-prev")).not.toBeNull();
+
+    // Exit fullscreen externally
+    Object.defineProperty(document, "fullscreenElement", {
+      value: null,
+      writable: true,
+      configurable: true,
+    });
+    document.dispatchEvent(new Event("fullscreenchange"));
+
+    expect(outlet.querySelector(".tap-zone-prev")).toBeNull();
+    expect(outlet.querySelector(".tap-zone-next")).toBeNull();
+  });
+
+  it("tap zone click on next advances the page", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
+    toggleBtn.click();
+
+    const nextZone = outlet.querySelector(".tap-zone-next") as HTMLElement;
+    nextZone.click();
+    await flushInit();
+
+    expect(renderer.next).toHaveBeenCalled();
+  });
+
+  it("tap zone click on prev goes to previous page", async () => {
+    const renderer = makeMockRenderer();
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    // Navigate forward first so prev is possible
+    const nextBtn = outlet.querySelector(".viewer-next") as HTMLButtonElement;
+    nextBtn.click();
+    await flushInit();
+
+    const toggleBtn = outlet.querySelector(".viewer-panel-toggle") as HTMLButtonElement;
+    toggleBtn.click();
+
+    const prevZone = outlet.querySelector(".tap-zone-prev") as HTMLElement;
+    prevZone.click();
+    await flushInit();
+
+    expect(renderer.prev).toHaveBeenCalled();
+  });
+});

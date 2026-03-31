@@ -184,7 +184,7 @@ describe("renderHome", () => {
     }));
     expect(html).toContain('class="expand-row txn-row"');
     expect(html).toContain('class="txn-summary"');
-    expect(html).toContain('class="txn-summary-content"');
+    expect(html).toContain('class="expand-summary txn-summary-content"');
     expect(html).toContain('class="expand-details txn-details"');
     expect(html).toContain("Bank A");
     expect(html).toContain("Checking");
@@ -687,7 +687,7 @@ describe("renderHome", () => {
         ]),
       }));
       expect(html).toContain("Canonical Desc");
-      const summaryStart = html.indexOf('class="txn-summary-content"');
+      const summaryStart = html.indexOf('class="expand-summary txn-summary-content"');
       const summaryEnd = html.indexOf("</summary>");
       const summarySlice = html.slice(summaryStart, summaryEnd);
       expect(summarySlice).toContain("Canonical Desc");
