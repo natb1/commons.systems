@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Test suite for load-context script.
 # Usage: ./test-load-context.sh
-# Requires: jq
+# Requires: jq (transitive — used by issue-state-read, not by this test directly)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
@@ -16,16 +16,13 @@ setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/stub" "$TMPDIR_TEST/repo"
 
-  # Copy all scripts under test into temp dir (load-context uses SCRIPT_DIR to find siblings)
   for script in load-context issue-primary issue-blocking issue-sub-issues issue-parent issue-siblings issue-state-read; do
     cp "$SCRIPT_DIR/$script" "$TMPDIR_TEST/$script"
     chmod +x "$TMPDIR_TEST/$script"
   done
 
-  # Create README in fake repo root
   echo "# Test README" > "$TMPDIR_TEST/repo/README.md"
 
-  # Create git stub
   cat > "$TMPDIR_TEST/bin/git" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -48,7 +45,6 @@ esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/git"
 
-  # Create gh stub
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"

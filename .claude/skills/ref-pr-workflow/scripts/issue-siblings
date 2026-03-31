@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+' || true)
+ISSUE_NUM="${1:-}"
 if [[ -z "$ISSUE_NUM" ]]; then
-  echo "error: branch name does not start with an issue number" >&2
+  ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[1-9][0-9]*' || true)
+fi
+if [[ -z "$ISSUE_NUM" ]]; then
+  echo "error: branch name does not start with an issue number and no argument provided" >&2
   exit 1
 fi
 PARENT=$(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/parent" --jq '.number' 2>&1) || {
