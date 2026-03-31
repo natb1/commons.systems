@@ -12,19 +12,25 @@ When creating any plan (issue implementation, review, security review, or ad hoc
 
 # Issue Context Loading
 
-When loading issue context (at session start, after context loss, or when a skill requests issue data), load these content types for the branch's primary issue:
+When loading issue context (at session start, after context loss, or when a skill requests issue data), run:
+`.claude/skills/ref-pr-workflow/scripts/load-context`
 
-| Content type | Detail level | Script |
-|---|---|---|
-| **Primary issue** | Full | `issue-primary` |
-| **Blockers** | Full for each blocking issue | `issue-blocking` |
-| **Sub-issues** | Full for each sub-issue | `issue-sub-issues` |
-| **Parent issue** (if primary is a sub-issue) | Full | `issue-parent` |
-| **Sibling issues** (if primary is a sub-issue) | Full for open siblings; Summary for closed | `issue-siblings` |
+This script consolidates all context types into a single invocation:
+
+| Content type | Detail level |
+|---|---|
+| **PR status** | Full |
+| **Primary issue** | Full |
+| **Blockers** | Full for each blocking issue |
+| **Sub-issues** | Full for each sub-issue |
+| **Parent issue** (if primary is a sub-issue) | Full |
+| **Sibling issues** (if primary is a sub-issue) | Full for open siblings; Summary for closed |
+| **Issue state** | JSON if present |
+| **README** | Root README.md |
 
 Full = `title, body, comments, number, state`. Summary = `title, number, state`. Consumers that need additional fields (e.g., `ref-ready` uses `labels, assignees, projectItems` for evaluation) extend the base set.
 
-Scripts are in `.claude/skills/ref-pr-workflow/scripts/`. All derive the issue number from the current branch name.
+Individual scripts remain in `.claude/skills/ref-pr-workflow/scripts/` for standalone use. Each accepts an optional issue number argument; otherwise it derives the number from the branch name.
 
 # Issue State Rule
 
