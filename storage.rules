@@ -9,6 +9,14 @@ service firebase.storage {
          || resource.metadata["member_2"] == request.auth.token.email));
       allow write: if false;
     }
+    match /audio/{env}/media/{fileName} {
+      allow read: if resource.metadata["publicDomain"] == "true"
+        || (request.auth != null && (
+            resource.metadata["member_0"] == request.auth.token.email
+         || resource.metadata["member_1"] == request.auth.token.email
+         || resource.metadata["member_2"] == request.auth.token.email));
+      allow write: if false;
+    }
     match /{allPaths=**} {
       allow read, write: if false;
     }

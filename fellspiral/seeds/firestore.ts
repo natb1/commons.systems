@@ -1,6 +1,7 @@
 import type { SeedDocument, SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { Group } from "@commons-systems/authutil/groups";
 import type { PostMeta } from "@commons-systems/blog/post-types";
+import { TEST_USER } from "@commons-systems/authutil/seed";
 
 type GroupSeedData = Omit<Group, "id"> & { members: string[] };
 export type PostSeedData = Omit<PostMeta, "id">;
@@ -39,7 +40,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
       documents: [
         {
           id: "admin",
-          data: { name: "admin", members: ["test@example.com"] } satisfies GroupSeedData,
+          data: { name: "admin", members: [TEST_USER.email] } satisfies GroupSeedData,
         },
       ],
     },

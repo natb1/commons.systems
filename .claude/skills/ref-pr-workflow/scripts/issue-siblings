@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+' || true)
-if [[ -z "$ISSUE_NUM" ]]; then
-  echo "error: branch name does not start with an issue number" >&2
-  exit 1
-fi
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+ISSUE_NUM=$(resolve_issue_number "${1:-}")
 PARENT=$(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/parent" --jq '.number' 2>&1) || {
   if [[ "$PARENT" == *"404"* ]] || [[ "$PARENT" == *"No parent issue found"* ]]; then
     exit 0
@@ -16,13 +13,9 @@ if [[ ! "$PARENT" =~ ^[0-9]+$ ]]; then
   echo "error: unexpected parent API response: $PARENT" >&2
   exit 1
 fi
-SIBLINGS_TSV=$(gh api "/repos/{owner}/{repo}/issues/$PARENT/sub_issues" --jq '.[] | [.number, .state] | @tsv')
+SIBLINGS_TSV=$(gh_api_array "/repos/{owner}/{repo}/issues/$PARENT/sub_issues" '.[] | [.number, .state] | @tsv')
 while IFS=$'\t' read -r sib state; do
   if [[ -z "$sib" ]]; then continue; fi
-  if [[ ! "$sib" =~ ^[0-9]+$ ]]; then
-    echo "error: unexpected sibling issue value: $sib" >&2
-    exit 1
-  fi
   if [[ "$sib" = "$ISSUE_NUM" ]]; then continue; fi
   if [[ "$state" = "open" ]]; then
     gh issue view "$sib" --json title,body,comments,number,state

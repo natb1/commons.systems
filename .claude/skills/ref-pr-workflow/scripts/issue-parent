@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+' || true)
-if [[ -z "$ISSUE_NUM" ]]; then
-  echo "error: branch name does not start with an issue number" >&2
-  exit 1
-fi
+source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+ISSUE_NUM=$(resolve_issue_number "${1:-}")
 PARENT=$(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/parent" --jq '.number' 2>&1) || {
   if [[ "$PARENT" == *"404"* ]] || [[ "$PARENT" == *"No parent issue found"* ]]; then
     exit 0
