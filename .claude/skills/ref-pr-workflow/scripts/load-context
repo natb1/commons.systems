@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Load all PR workflow context for the current branch's issue.
+# Usage: load-context [<issue-number>]
+# Derives issue number from branch name if not provided.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+ISSUE_NUM="${1:-}"
+if [[ -z "$ISSUE_NUM" ]]; then
+  ISSUE_NUM=$(git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+' || true)
+fi
+if [[ -z "$ISSUE_NUM" ]]; then
+  echo "error: branch name does not start with an issue number and no argument provided" >&2
+  exit 1
+fi
+
+echo "## PR Status"
+gh pr view --json title,body,comments,number,state 2>/dev/null || echo "No PR"
+
+echo ""
+echo "## Primary Issue"
+gh issue view "$ISSUE_NUM" --json title,body,comments,number,state
+
+echo ""
+echo "## Blocking Issues"
+BLOCKERS=$(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/dependencies/blocked_by" --jq '.[].number') || true
+for dep in $BLOCKERS; do
+  if [[ ! "$dep" =~ ^[0-9]+$ ]]; then
+    echo "error: unexpected blocker value: $dep" >&2
+    exit 1
+  fi
+  gh issue view "$dep" --json title,body,comments,number,state
+done
+
+echo ""
+echo "## Sub-issues"
+SUBS=$(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/sub_issues" --jq '.[].number') || true
+for sub in $SUBS; do
+  if [[ ! "$sub" =~ ^[0-9]+$ ]]; then
+    echo "error: unexpected sub-issue value: $sub" >&2
+    exit 1
+  fi
+  gh issue view "$sub" --json title,body,comments,number,state
+done
+
+echo ""
+echo "## Parent Issue"
+PARENT=$(gh api "/repos/{owner}/{repo}/issues/$ISSUE_NUM/parent" --jq '.number' 2>&1) || {
+  if [[ "$PARENT" == *"404"* ]] || [[ "$PARENT" == *"No parent issue found"* ]]; then
+    PARENT=""
+  else
+    echo "error: failed to fetch parent for issue #$ISSUE_NUM: $PARENT" >&2
+    exit 1
+  fi
+}
+if [[ -n "$PARENT" ]]; then
+  if [[ ! "$PARENT" =~ ^[0-9]+$ ]]; then
+    echo "error: unexpected parent API response: $PARENT" >&2
+    exit 1
+  fi
+  gh issue view "$PARENT" --json title,body,comments,number,state
+
+  echo ""
+  echo "## Sibling Issues"
+  SIBLINGS_TSV=$(gh api "/repos/{owner}/{repo}/issues/$PARENT/sub_issues" --jq '.[] | [.number, .state] | @tsv')
+  while IFS=$'\t' read -r sib state; do
+    if [[ -z "$sib" ]]; then continue; fi
+    if [[ ! "$sib" =~ ^[0-9]+$ ]]; then
+      echo "error: unexpected sibling issue value: $sib" >&2
+      exit 1
+    fi
+    if [[ "$sib" = "$ISSUE_NUM" ]]; then continue; fi
+    if [[ "$state" = "open" ]]; then
+      gh issue view "$sib" --json title,body,comments,number,state
+    else
+      gh issue view "$sib" --json title,number,state
+    fi
+  done <<< "$SIBLINGS_TSV"
+else
+  echo ""
+  echo "## Sibling Issues"
+fi
+
+echo ""
+echo "## Issue State"
+"$SCRIPT_DIR/issue-state-read" "$ISSUE_NUM" || echo "No state"
+
+echo ""
+echo "## README"
+cat "$REPO_ROOT/README.md"
