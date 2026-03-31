@@ -19,6 +19,6 @@ fi
 if echo "$CHANGED" | grep -qE '^(nix/|flake\.nix$|flake\.lock$)'; then
   echo "nix=true" >> "$GITHUB_OUTPUT"
 fi
-if echo "$CHANGED" | grep -qx 'firestore.rules'; then
+if echo "$CHANGED" | grep -qE '^(firestore\.rules$|storage\.rules$|rules-test/)'; then
   echo "rules=true" >> "$GITHUB_OUTPUT"
 fi
