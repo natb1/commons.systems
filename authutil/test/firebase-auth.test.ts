@@ -157,11 +157,11 @@ describe("createFirebaseAuth", () => {
     debugSpy.mockRestore();
   });
 
-  it("shows toast on signOut failure and re-throws", async () => {
+  it("shows toast on signOut failure without re-throwing", async () => {
     mockFirebaseSignOut.mockRejectedValue(new Error("sign-out failed"));
     vi.spyOn(console, "error").mockImplementation(() => {});
     const { signOut } = createFirebaseAuth(mockApp);
-    await expect(signOut()).rejects.toThrow("sign-out failed");
+    await signOut();
 
     const toast = document.querySelector(".auth-toast");
     expect(toast).not.toBeNull();

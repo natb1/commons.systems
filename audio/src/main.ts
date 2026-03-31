@@ -6,6 +6,7 @@ import { renderAbout } from "./pages/about.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
+import type { User } from "firebase/auth";
 import { trackPageView } from "./firebase.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
@@ -18,11 +19,9 @@ navEl.links = [
   { href: "/about", label: "About" },
 ];
 navEl.addEventListener("sign-in", () => signIn());
-navEl.addEventListener("sign-out", () => {
-  signOut().catch((err) => console.error("Sign-out failed:", err));
-});
+navEl.addEventListener("sign-out", () => void signOut());
 
-function updateNav(user: import("firebase/auth").User | null): void {
+function updateNav(user: User | null): void {
   navEl.user = user;
 }
 

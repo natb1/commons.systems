@@ -1,4 +1,5 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
+import { TEST_USER } from "@commons-systems/authutil/seed";
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
@@ -10,7 +11,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
           id: "editors",
           data: {
             name: "editors",
-            members: ["test@example.com"],
+            members: [TEST_USER.email],
           },
         },
       ],
