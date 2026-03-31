@@ -9,6 +9,8 @@ import { renderHomeHtml, hydrateHome } from "@commons-systems/blog/pages/home";
 import { renderAdmin } from "@commons-systems/blog/pages/admin";
 import { renderInfoPanel, hydrateInfoPanel } from "@commons-systems/blog/components/info-panel";
 
+import buildTimeContent from "virtual:blog-post-content";
+import buildTimeMetadata from "virtual:blog-post-metadata";
 import { createFetchPost } from "@commons-systems/blog/github";
 import { updateOgMeta } from "@commons-systems/blog/og-meta";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
@@ -80,11 +82,17 @@ toggle.addEventListener("click", () => {
 });
 
 async function loadPosts(): Promise<string> {
+  if (currentUser === null) {
+    cachedPosts = buildTimeMetadata;
+    lastSkippedCount = 0;
+    return renderHomeHtml(cachedPosts, "/post/", buildTimeContent);
+  }
+
   try {
     const result = await getPosts(db, NAMESPACE, currentUser);
     cachedPosts = result.posts;
     lastSkippedCount = result.skippedCount;
-    return renderHomeHtml(cachedPosts, "/post/");
+    return renderHomeHtml(cachedPosts, "/post/", buildTimeContent);
   } catch (error) {
     const kind = classifyError(error);
     if (kind === "programmer") throw error;

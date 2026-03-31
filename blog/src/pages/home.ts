@@ -1,28 +1,22 @@
 import DOMPurify from "dompurify";
-import { Marked } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { formatUtcDate } from "../date.js";
+import { createMarked } from "../marked-config.js";
 import { isOutletCurrent } from "@commons-systems/router/hydrate";
 import type { PostMeta } from "../post-types.js";
 
+export interface PostContent {
+  html: string;
+  title: string | null;
+}
+
 const SCROLL_PADDING_PX = 16;
 
-// Local instance strips raw HTML from markdown (defense-in-depth; DOMPurify sanitizes below).
-// Post-body links open in new tabs to keep readers on the blog page; rel="noopener noreferrer"
-// prevents reverse tabnapping.
-const marked = new Marked({
-  renderer: {
-    html: () => "",
-    link({ href, text, title }) {
-      const safeHref = escapeHtml(href);
-      const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
-      return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
-    },
-  },
-});
+const marked = createMarked();
 
-function renderArticle(p: PostMeta, postLinkPrefix: string): string {
+function renderArticle(p: PostMeta, postLinkPrefix: string, content?: PostContent): string {
   const safeId = escapeHtml(p.id);
+  const displayTitle = content?.title ?? p.title;
   const dateHtml = p.publishedAt
     ? `<time datetime="${escapeHtml(p.publishedAt)}">${escapeHtml(formatUtcDate(p.publishedAt))}</time>`
     : "";
@@ -31,15 +25,22 @@ function renderArticle(p: PostMeta, postLinkPrefix: string): string {
     : ` <span class="draft-badge">[draft]</span>`;
   const linkHtml =
     `<a href="${postLinkPrefix}${safeId}" class="post-link">` +
-    `<span class="link-icon" aria-hidden="true">&#x1F517; </span><span class="post-title">${escapeHtml(p.title)}</span></a>`;
+    `<span class="link-icon" aria-hidden="true">&#x1F517; </span><span class="post-title">${escapeHtml(displayTitle)}</span></a>`;
+  const contentHtml = content
+    ? `<div id="post-content-${safeId}" data-hydrated>${content.html}</div>`
+    : `<div id="post-content-${safeId}"><p>Loading...</p></div>`;
   return `<article id="post-${safeId}">
         <h2>${linkHtml}${draftBadge}</h2>
         ${dateHtml}
-        <div id="post-content-${safeId}"><p>Loading...</p></div>
+        ${contentHtml}
       </article>`;
 }
 
-export function renderHomeHtml(posts: PostMeta[], postLinkPrefix = "/post/"): string {
+export function renderHomeHtml(
+  posts: PostMeta[],
+  postLinkPrefix = "/post/",
+  contentMap?: Record<string, PostContent>,
+): string {
   if (posts.length === 0) {
     return `
     <h2>Home</h2>
@@ -47,7 +48,9 @@ export function renderHomeHtml(posts: PostMeta[], postLinkPrefix = "/post/"): st
   `;
   }
 
-  const articles = posts.map((p) => renderArticle(p, postLinkPrefix)).join("\n      <hr>\n      ");
+  const articles = posts
+    .map((p) => renderArticle(p, postLinkPrefix, contentMap?.[p.id]))
+    .join("\n      <hr>\n      ");
 
   return `
     <div id="posts">
@@ -73,6 +76,7 @@ export function hydrateHome(
       `#post-content-${CSS.escape(post.id)}`,
     );
     if (!contentDiv) return;
+    if (contentDiv.hasAttribute("data-hydrated")) return;
 
     try {
       let markdown = await fetchPost(post.filename);
