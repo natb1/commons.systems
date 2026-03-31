@@ -5,12 +5,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+source "$SCRIPT_DIR/test-helpers.sh"
 READ_SCRIPT="$SCRIPT_DIR/issue-state-read"
 WRITE_SCRIPT="$SCRIPT_DIR/issue-state-write"
-
-PASS=0
-FAIL=0
-TOTAL=0
 
 # Verify emulator is running
 if [ -z "${FIRESTORE_EMULATOR_HOST:-}" ]; then
@@ -23,34 +20,6 @@ if ! curl -sf "http://${FIRESTORE_EMULATOR_HOST}/" > /dev/null 2>&1; then
   echo "Start it with: npx firebase emulators:start --only firestore" >&2
   exit 1
 fi
-
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  TOTAL=$((TOTAL + 1))
-  if [ "$expected" = "$actual" ]; then
-    PASS=$((PASS + 1))
-    echo "  PASS: $label"
-  else
-    FAIL=$((FAIL + 1))
-    echo "  FAIL: $label"
-    echo "    expected: $expected"
-    echo "    actual:   $actual"
-  fi
-}
-
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  TOTAL=$((TOTAL + 1))
-  if echo "$haystack" | grep -qF -- "$needle"; then
-    PASS=$((PASS + 1))
-    echo "  PASS: $label"
-  else
-    FAIL=$((FAIL + 1))
-    echo "  FAIL: $label"
-    echo "    expected to contain: $needle"
-    echo "    actual: $haystack"
-  fi
-}
 
 # Use unique issue numbers per test to avoid interference (90000+ range)
 ISSUE_BASE=90000
@@ -122,11 +91,4 @@ assert_eq "complex: array has 3 elements" "3" "$skills"
 wiggum=$(echo "$output" | jq -r '.wiggum_step')
 assert_eq "complex: wiggum_step preserved" "2" "$wiggum"
 
-echo ""
-echo "================================"
-echo "Results: $PASS/$TOTAL passed, $FAIL failed"
-echo "================================"
-
-if [ "$FAIL" -gt 0 ]; then
-  exit 1
-fi
+report_results
