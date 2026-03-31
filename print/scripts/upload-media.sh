@@ -147,6 +147,9 @@ else
   META_ARGS+=(-h "x-goog-meta-publicDomain:false")
   META_ARGS+=(-h "x-goog-meta-groupId:${GROUP_ID}")
 fi
+for i in "${!EMAILS[@]}"; do
+  META_ARGS+=(-h "x-goog-meta-member_${i}:${EMAILS[$i]}")
+done
 gsutil "${META_ARGS[@]}" cp "$FILE_PATH" "$GCS_DEST"
 
 # Verify GCS upload
