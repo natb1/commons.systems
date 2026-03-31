@@ -5,12 +5,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+source "$SCRIPT_DIR/test-helpers.sh"
 READ_SCRIPT="$SCRIPT_DIR/issue-state-read"
 WRITE_SCRIPT="$SCRIPT_DIR/issue-state-write"
 
-PASS=0
-FAIL=0
-TOTAL=0
 SAVED_PATH=""
 
 setup() {
@@ -111,34 +109,6 @@ teardown() {
   export PATH="$SAVED_PATH"
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
-
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  TOTAL=$((TOTAL + 1))
-  if [ "$expected" = "$actual" ]; then
-    PASS=$((PASS + 1))
-    echo "  PASS: $label"
-  else
-    FAIL=$((FAIL + 1))
-    echo "  FAIL: $label"
-    echo "    expected: $expected"
-    echo "    actual:   $actual"
-  fi
-}
-
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  TOTAL=$((TOTAL + 1))
-  if echo "$haystack" | grep -qF -- "$needle"; then
-    PASS=$((PASS + 1))
-    echo "  PASS: $label"
-  else
-    FAIL=$((FAIL + 1))
-    echo "  FAIL: $label"
-    echo "    expected to contain: $needle"
-    echo "    actual: $haystack"
-  fi
-}
 
 # --- issue-state-read tests ---
 
@@ -365,11 +335,4 @@ pr=$(echo "$output" | jq -r '.pr_number')
 assert_eq "round-trip pr_number" "87" "$pr"
 teardown
 
-echo ""
-echo "================================"
-echo "Results: $PASS/$TOTAL passed, $FAIL failed"
-echo "================================"
-
-if [ "$FAIL" -gt 0 ]; then
-  exit 1
-fi
+report_results
