@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.describe("budgets", () => {
   test("Firestore connectivity @smoke", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("main h2", { hasText: "Budgets" })).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("main > h2", { hasText: "Budgets" })).toBeVisible({ timeout: 30000 });
     await expect(page.locator("#budgets-error")).toHaveCount(0);
     await expect(page.locator("#budgets-chart")).toBeVisible();
     await expect(page.locator("#budgets-chart svg").first()).toBeVisible({ timeout: 10000 });

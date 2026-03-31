@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.describe("transactions", () => {
   test("Firestore connectivity @smoke", async ({ page }) => {
     await page.goto("/transactions");
-    await expect(page.locator("main h2")).toHaveText("Transactions", { timeout: 30000 });
+    await expect(page.locator("main > h2")).toHaveText("Transactions", { timeout: 30000 });
     await expect(page.locator("#transactions-error")).toHaveCount(0);
   });
 

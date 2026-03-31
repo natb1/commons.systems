@@ -16,7 +16,7 @@ test.describe("rules", () => {
 
   test("Firestore connectivity @smoke", async ({ page }) => {
     await page.goto("/rules");
-    await expect(page.locator("main h2")).toHaveText("Rules", { timeout: 30000 });
+    await expect(page.locator("main > h2")).toHaveText("Rules", { timeout: 30000 });
     await expect(page.locator("#rules-error")).toHaveCount(0);
   });
 
@@ -125,13 +125,13 @@ test.describe("rules", () => {
 
   test("clicking rules nav link navigates to rules page", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("main h2")).toHaveText("Budgets");
+    await expect(page.locator("main > h2")).toHaveText("Budgets");
     await page.click('app-nav a[href="/rules"]');
-    await expect(page.locator("main h2")).toHaveText("Rules");
+    await expect(page.locator("main > h2")).toHaveText("Rules");
   });
 
   test("direct URL to /rules loads rules page", async ({ page }) => {
     await page.goto("/rules");
-    await expect(page.locator("main h2")).toHaveText("Rules");
+    await expect(page.locator("main > h2")).toHaveText("Rules");
   });
 });
