@@ -105,7 +105,7 @@ function renderRow(opts: RenderRowOptions): string {
 
   return `<details class="expand-row txn-row${virtualClass}"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.netAmountAttr}${p.budgetNameAttr}>
     <summary class="txn-summary">
-      <div class="txn-summary-content">
+      <div class="expand-summary txn-summary-content">
         <span>${virtualBadge}${escapeHtml(txn.description)}</span>
         <span>${p.noteCell}</span>
         <span>${p.categoryCell}</span>
@@ -143,7 +143,7 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
 
   return `<details class="expand-row txn-row normalized-group"${p.txnIdAttr}${p.amountAttr}${p.budgetIdAttr}${p.timestampAttr}${p.reimbursementAttr}${p.categoryAttr}${p.netAmountAttr}${p.budgetNameAttr}>
     <summary class="txn-summary">
-      <div class="txn-summary-content">
+      <div class="expand-summary txn-summary-content">
         <span>${escapeHtml(description)}</span>
         <span>${p.noteCell}</span>
         <span>${p.categoryCell}</span>

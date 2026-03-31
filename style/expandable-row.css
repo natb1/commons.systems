@@ -25,6 +25,13 @@
   transform: rotate(90deg);
 }
 
+.expand-summary {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  align-items: center;
+}
+
 .expand-row .expand-details {
   padding: 0.5rem 1rem 1rem;
 }

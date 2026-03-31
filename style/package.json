@@ -8,7 +8,8 @@
     "./layout.css": "./layout.css",
     "./components/nav": "./src/components/nav.ts",
     "./components/autocomplete": "./src/components/autocomplete.ts",
-    "./expandable-row.css": "./expandable-row.css"
+    "./expandable-row.css": "./expandable-row.css",
+    "./panel-toggle": "./src/panel-toggle.ts"
   },
   "peerDependencies": {
     "@commons-systems/htmlutil": "*"
