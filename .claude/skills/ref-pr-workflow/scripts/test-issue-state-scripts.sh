@@ -5,12 +5,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+source "$SCRIPT_DIR/test-helpers.sh"
 READ_SCRIPT="$SCRIPT_DIR/issue-state-read"
 WRITE_SCRIPT="$SCRIPT_DIR/issue-state-write"
 
-PASS=0
-FAIL=0
-TOTAL=0
 SAVED_PATH=""
 
 setup() {
@@ -112,34 +110,6 @@ teardown() {
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  TOTAL=$((TOTAL + 1))
-  if [ "$expected" = "$actual" ]; then
-    PASS=$((PASS + 1))
-    echo "  PASS: $label"
-  else
-    FAIL=$((FAIL + 1))
-    echo "  FAIL: $label"
-    echo "    expected: $expected"
-    echo "    actual:   $actual"
-  fi
-}
-
-assert_contains() {
-  local label="$1" needle="$2" haystack="$3"
-  TOTAL=$((TOTAL + 1))
-  if echo "$haystack" | grep -qF -- "$needle"; then
-    PASS=$((PASS + 1))
-    echo "  PASS: $label"
-  else
-    FAIL=$((FAIL + 1))
-    echo "  FAIL: $label"
-    echo "    expected to contain: $needle"
-    echo "    actual: $haystack"
-  fi
-}
-
 # --- issue-state-read tests ---
 
 echo "Test 1: read valid state block"
@@ -234,7 +204,7 @@ cat > "$TMPDIR_TEST/stub/issue-body.txt" <<'EOF'
 Original issue description.
 EOF
 exit_code=0
-"$WRITE_T" 42 '{"version":1,"step":3,"phase":"core"}' 2>&1 || exit_code=$?
+"$WRITE_T" 42 '{"version":1,"step":3,"phase":"core","active_skills":["ref-memory-management"]}' 2>&1 || exit_code=$?
 assert_eq "exits 0 on append write" "0" "$exit_code"
 body=$(cat "$TMPDIR_TEST/stub/issue-body.txt")
 assert_contains "body contains original text" "Original issue description." "$body"
@@ -261,7 +231,7 @@ Issue description.
 More text after state.
 EOF
 exit_code=0
-"$WRITE_T" 42 '{"version":1,"step":6,"phase":"verify"}' 2>&1 || exit_code=$?
+"$WRITE_T" 42 '{"version":1,"step":6,"phase":"verify","active_skills":["ref-memory-management"]}' 2>&1 || exit_code=$?
 assert_eq "exits 0 on replace write" "0" "$exit_code"
 body=$(cat "$TMPDIR_TEST/stub/issue-body.txt")
 assert_contains "body still has description" "Issue description." "$body"
@@ -275,7 +245,7 @@ setup
 cat > "$TMPDIR_TEST/stub/issue-body.txt" <<'EOF'
 Issue description.
 EOF
-STATE='{"version":1,"step":4,"phase":"unit"}'
+STATE='{"version":1,"step":4,"phase":"unit","active_skills":["ref-memory-management"]}'
 "$WRITE_T" 42 "$STATE" 2>/dev/null
 body1=$(cat "$TMPDIR_TEST/stub/issue-body.txt")
 "$WRITE_T" 42 "$STATE" 2>/dev/null
@@ -300,7 +270,7 @@ Paragraph one.
 
 More content here.
 EOF
-"$WRITE_T" 42 '{"version":1,"step":9,"phase":"review"}' 2>/dev/null
+"$WRITE_T" 42 '{"version":1,"step":9,"phase":"code-quality","active_skills":["ref-memory-management"]}' 2>/dev/null
 body=$(cat "$TMPDIR_TEST/stub/issue-body.txt")
 assert_contains "preserves title" "# Issue Title" "$body"
 assert_contains "preserves paragraph" "Paragraph one." "$body"
@@ -315,7 +285,7 @@ cat > "$TMPDIR_TEST/stub/issue-body.txt" <<'EOF'
 Issue with "quotes", $dollars, and `backticks`.
 EOF
 exit_code=0
-"$WRITE_T" 42 '{"version":1,"step":2,"step_label":"Planning Phase"}' 2>&1 || exit_code=$?
+"$WRITE_T" 42 '{"version":1,"step":2,"step_label":"Planning Phase","phase":"core","active_skills":["ref-memory-management"]}' 2>&1 || exit_code=$?
 assert_eq "exits 0 with special chars" "0" "$exit_code"
 body=$(cat "$TMPDIR_TEST/stub/issue-body.txt")
 assert_contains "preserves quotes" '"quotes"' "$body"
@@ -329,7 +299,7 @@ cat > "$TMPDIR_TEST/stub/issue-body.txt" <<'EOF'
 Original body.
 EOF
 exit_code=0
-echo '{"version":1,"step":5,"phase":"core"}' | "$WRITE_T" 42 2>&1 || exit_code=$?
+echo '{"version":1,"step":5,"phase":"core","active_skills":["ref-memory-management"]}' | "$WRITE_T" 42 2>&1 || exit_code=$?
 assert_eq "exits 0 on stdin input" "0" "$exit_code"
 body=$(cat "$TMPDIR_TEST/stub/issue-body.txt")
 assert_contains "body has step from stdin" '"step": 5' "$body"
@@ -352,7 +322,7 @@ setup
 cat > "$TMPDIR_TEST/stub/issue-body.txt" <<'EOF'
 Description.
 EOF
-STATE='{"version":1,"step":7,"step_label":"Smoke Test Loop","phase":"verify","pr_number":87}'
+STATE='{"version":1,"step":7,"step_label":"Smoke Test Loop","phase":"verify","active_skills":["ref-memory-management"],"pr_number":87}'
 "$WRITE_T" 42 "$STATE" 2>/dev/null
 exit_code=0
 output=$("$READ_T" 42) || exit_code=$?
@@ -365,11 +335,4 @@ pr=$(echo "$output" | jq -r '.pr_number')
 assert_eq "round-trip pr_number" "87" "$pr"
 teardown
 
-echo ""
-echo "================================"
-echo "Results: $PASS/$TOTAL passed, $FAIL failed"
-echo "================================"
-
-if [ "$FAIL" -gt 0 ]; then
-  exit 1
-fi
+report_results

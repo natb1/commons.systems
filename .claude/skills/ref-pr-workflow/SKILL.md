@@ -9,13 +9,8 @@ The purpose of this conversation is to create and manage a PR with the following
 - Current branch: !`git rev-parse --abbrev-ref HEAD`
 - Commit log: !`git log origin/main..HEAD --format="commit %H%nAuthor: %an <%ae>%nDate: %ad%n%n%s%n%n%b"`
 
-Before proceeding, run these commands via Bash with `dangerouslyDisableSandbox: true` (`gh` requires sandbox disabled for TLS):
-1. PR status: `gh pr view --json title,body,comments,number,state 2>/dev/null || echo "No PR"`
-2. Primary issue: `.claude/skills/ref-pr-workflow/scripts/issue-primary`
-3. Blocking issues: `.claude/skills/ref-pr-workflow/scripts/issue-blocking`
-4. Sub-issues: `.claude/skills/ref-pr-workflow/scripts/issue-sub-issues`
-5. Parent issue: `.claude/skills/ref-pr-workflow/scripts/issue-parent`
-6. Sibling issues: `.claude/skills/ref-pr-workflow/scripts/issue-siblings`
+Before proceeding, run via Bash with `dangerouslyDisableSandbox: true` (gh requires sandbox disabled for TLS):
+`.claude/skills/ref-pr-workflow/scripts/load-context`
 
 # Dependencies
 Invoke `/ref-memory-management` if not already active.
