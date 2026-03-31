@@ -3,11 +3,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/test-helpers.sh"
 SCRIPT="$SCRIPT_DIR/concat-review-output.sh"
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 TMP_DIR="$REPO_ROOT/tmp/test-concat-review"
-PASS=0
-FAIL=0
 
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
@@ -17,28 +16,16 @@ setup() {
   mkdir -p "$TMP_DIR"
 }
 
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  if [ "$expected" = "$actual" ]; then
-    echo "PASS: $label"
-    PASS=$((PASS + 1))
-  else
-    echo "FAIL: $label"
-    echo "  expected: $(echo "$expected" | head -5)"
-    echo "  actual:   $(echo "$actual" | head -5)"
-    FAIL=$((FAIL + 1))
-  fi
-}
-
 assert_file_contains() {
   local label="$1" file="$2" pattern="$3"
+  TOTAL=$((TOTAL + 1))
   if grep -qF "$pattern" "$file"; then
-    echo "PASS: $label"
+    echo "  PASS: $label"
     PASS=$((PASS + 1))
   else
-    echo "FAIL: $label — pattern not found: $pattern"
-    echo "  file contents:"
-    head -10 "$file" | sed 's/^/    /'
+    echo "  FAIL: $label — pattern not found: $pattern"
+    echo "    file contents:"
+    head -10 "$file" | sed 's/^/      /'
     FAIL=$((FAIL + 1))
   fi
 }
@@ -46,11 +33,12 @@ assert_file_contains() {
 assert_exit_nonzero() {
   local label="$1"
   shift
+  TOTAL=$((TOTAL + 1))
   if "$@" 2>/dev/null; then
-    echo "FAIL: $label — expected non-zero exit"
+    echo "  FAIL: $label — expected non-zero exit"
     FAIL=$((FAIL + 1))
   else
-    echo "PASS: $label"
+    echo "  PASS: $label"
     PASS=$((PASS + 1))
   fi
 }
@@ -157,6 +145,4 @@ test_only_output_file
 test_first_section_no_leading_newlines
 test_all_seven_labels
 
-echo ""
-echo "Results: $PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ] || exit 1
+report_results
