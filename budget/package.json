@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && tsx scripts/prerender.ts",
+    "build": "tsc && vite build && tsx scripts/prerender.ts && vitest run test/smoke/prerender.smoke.test.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
