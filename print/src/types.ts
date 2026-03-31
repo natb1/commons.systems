@@ -11,6 +11,5 @@ export interface MediaItem {
   readonly storagePath: string;
   readonly groupId: string | null;
   readonly memberEmails: readonly string[];
-  readonly testOnly: boolean;
   readonly addedAt: string;
 }

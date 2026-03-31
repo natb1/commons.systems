@@ -103,7 +103,6 @@ describe("getPublicMedia", () => {
         storagePath: "media/doc-2.pdf",
         groupId: null,
         memberEmails: ["user@example.com"],
-        testOnly: false,
         addedAt: "2026-01-02T00:00:00Z",
       },
       {
@@ -116,7 +115,6 @@ describe("getPublicMedia", () => {
         storagePath: "media/doc-1.pdf",
         groupId: null,
         memberEmails: ["user@example.com"],
-        testOnly: false,
         addedAt: "2026-01-01T00:00:00Z",
       },
     ]);
@@ -209,42 +207,6 @@ describe("getPublicMedia", () => {
     await expect(getPublicMedia()).rejects.toThrow("Invalid ISO 8601 date");
   });
 
-  it("filters out items with testOnly: true", async () => {
-    mockGetDocs.mockResolvedValue({
-      docs: [
-        validMediaDoc("normal-doc"),
-        validMediaDoc("test-doc", { testOnly: true }),
-      ],
-    });
-
-    const items = await getPublicMedia();
-
-    expect(items).toHaveLength(1);
-    expect(items[0].id).toBe("normal-doc");
-  });
-
-  it("includes items where testOnly is absent (defaults to false)", async () => {
-    const docWithoutTestOnly = {
-      id: "no-test-field",
-      data: () => ({
-        title: "No testOnly field",
-        mediaType: "pdf",
-        tags: { genre: "nonfiction" },
-        publicDomain: true,
-        sourceNotes: "Public domain source",
-        storagePath: "media/no-test-field.pdf",
-        groupId: null,
-        memberEmails: ["user@example.com"],
-        addedAt: "2026-01-01T00:00:00Z",
-      }),
-    };
-    mockGetDocs.mockResolvedValue({ docs: [docWithoutTestOnly] });
-
-    const items = await getPublicMedia();
-
-    expect(items).toHaveLength(1);
-    expect(items[0].testOnly).toBe(false);
-  });
 });
 
 describe("getUserMedia", () => {
@@ -290,19 +252,6 @@ describe("getUserMedia", () => {
     expect(items[0].publicDomain).toBe(false);
   });
 
-  it("filters out items with testOnly: true", async () => {
-    mockGetDocs.mockResolvedValue({
-      docs: [
-        validMediaDoc("user-normal", { publicDomain: false }),
-        validMediaDoc("user-test", { publicDomain: false, testOnly: true }),
-      ],
-    });
-
-    const items = await getUserMedia("user@example.com");
-
-    expect(items).toHaveLength(1);
-    expect(items[0].id).toBe("user-normal");
-  });
 });
 
 describe("getAllAccessibleMedia", () => {
@@ -426,7 +375,6 @@ describe("getMediaItem", () => {
       storagePath: "media/doc-1.pdf",
       groupId: null,
       memberEmails: ["user@example.com"],
-      testOnly: false,
       addedAt: "2026-01-01T00:00:00Z",
     });
   });
@@ -467,18 +415,4 @@ describe("getMediaItem", () => {
     );
   });
 
-  it("returns testOnly items without filtering", async () => {
-    const docData = validMediaDoc("test-item", { testOnly: true });
-    mockGetDoc.mockResolvedValue({
-      exists: () => true,
-      id: docData.id,
-      data: docData.data,
-    });
-
-    const result = await getMediaItem("test-item");
-
-    expect(result).not.toBeNull();
-    expect(result!.id).toBe("test-item");
-    expect(result!.testOnly).toBe(true);
-  });
 });

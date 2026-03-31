@@ -28,7 +28,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             storagePath: "media/pg3296-images-3.epub",
             groupId: null,
             memberEmails: [],
-            testOnly: false,
+
             addedAt: "2026-01-15T00:00:00Z",
           } satisfies MediaSeedData,
         },
@@ -43,7 +43,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             storagePath: "media/phaedrus-david-horan-translation-7-nov-25.pdf",
             groupId: null,
             memberEmails: [],
-            testOnly: false,
+
             addedAt: "2026-01-16T00:00:00Z",
           } satisfies MediaSeedData,
         },
@@ -58,7 +58,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             storagePath: "media/republic-i-to-x-david-horan-translation-22-nov-25.pdf",
             groupId: null,
             memberEmails: [],
-            testOnly: false,
+
             addedAt: "2026-01-17T00:00:00Z",
           } satisfies MediaSeedData,
         },
@@ -79,7 +79,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             storagePath: "media/test-image-archive.cbz",
             groupId: null,
             memberEmails: [],
-            testOnly: true,
+
             addedAt: "2026-01-19T00:00:00Z",
           } satisfies MediaSeedData,
         },
@@ -94,7 +94,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             storagePath: "media/test-private-item.pdf",
             groupId: "test-group",
             memberEmails: ["test@example.com"],
-            testOnly: true,
+
             addedAt: "2026-01-18T00:00:00Z",
           } satisfies MediaSeedData,
         },

@@ -1,14 +1,11 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("viewer", () => {
-  // The library shows 3 public non-test items. The test-image-archive
-  // (testOnly: true) is hidden from the library but accessible by direct URL.
-  //
   // Seed items (by addedAt desc):
-  //   1. "Republic" (plato-republic, PDF, 3 pages)
-  //   2. "Phaedrus" (plato-phaedrus, PDF, 1 page)
-  //   3. "Confessions..." (gutenberg-3296, EPUB)
-  //   4. "Little Nemo..." (test-image-archive, image-archive, 5 images, testOnly)
+  //   1. "Little Nemo..." (test-image-archive, image-archive, 5 images)
+  //   2. "Republic" (plato-republic, PDF, 3 pages)
+  //   3. "Phaedrus" (plato-phaedrus, PDF, 1 page)
+  //   4. "Confessions..." (gutenberg-3296, EPUB)
   //
   // Navigate to Republic (3 pages) for navigation testing:
   //   page.goto("/view/plato-republic")

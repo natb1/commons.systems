@@ -31,7 +31,6 @@ function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
     storagePath: "media/test-book.pdf",
     groupId: null,
     memberEmails: ["user@example.com"],
-    testOnly: false,
     addedAt: "2026-01-15T00:00:00Z",
     ...overrides,
   };

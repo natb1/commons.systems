@@ -15,10 +15,10 @@ test.describe("auth", () => {
     await expect(page.locator("#user-display")).toContainText("Test User");
   });
 
-  test("private items visible after login (3 total)", async ({ page }) => {
+  test("private items visible after login (5 total)", async ({ page }) => {
     await page.goto("/");
     await signIn(page);
-    await expect(page.locator("#media-list .media-item")).toHaveCount(3, { timeout: 10000 });
+    await expect(page.locator("#media-list .media-item")).toHaveCount(5, { timeout: 10000 });
   });
 
   test("public notice hidden after login", async ({ page }) => {
@@ -39,6 +39,6 @@ test.describe("auth", () => {
   test("public media visible without auth", async ({ page }) => {
     await page.goto("/");
     const items = page.locator("#media-list .media-item");
-    await expect(items).toHaveCount(3, { timeout: 10000 });
+    await expect(items).toHaveCount(4, { timeout: 10000 });
   });
 });
