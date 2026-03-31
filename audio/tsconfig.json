@@ -1,0 +1,4 @@
+{
+  "extends": "@commons-systems/config/tsconfig.app.json",
+  "include": ["src"]
+}
