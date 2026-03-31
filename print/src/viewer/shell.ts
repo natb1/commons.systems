@@ -112,12 +112,50 @@ export function initViewer(
   updateOrientation();
   orientationQuery.addEventListener("change", updateOrientation);
 
-  // Panel toggle
+  // Tap zones for touch navigation when panel is collapsed
+  const viewerContent = viewer.querySelector(".viewer-content") as HTMLElement;
+
+  function createTapZones(): void {
+    if (viewerContent.querySelector(".tap-zone")) return;
+    const prev = document.createElement("div");
+    prev.className = "tap-zone tap-zone-prev";
+    prev.addEventListener("click", () => { goPrev().catch(handleNavError); });
+    const next = document.createElement("div");
+    next.className = "tap-zone tap-zone-next";
+    next.addEventListener("click", () => { goNext().catch(handleNavError); });
+    viewerContent.appendChild(prev);
+    viewerContent.appendChild(next);
+  }
+
+  function removeTapZones(): void {
+    viewerContent.querySelectorAll(".tap-zone").forEach((el) => el.remove());
+  }
+
+  // Panel toggle with fullscreen
   function handleToggle() {
     const collapsed = panel.classList.toggle("collapsed");
     toggleBtn.setAttribute("aria-expanded", String(!collapsed));
+    if (collapsed) {
+      createTapZones();
+      // Best-effort: fullscreen is unavailable on some platforms (e.g. iPhone Safari)
+      viewer.requestFullscreen().catch(() => {});
+    } else {
+      removeTapZones();
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
   }
   toggleBtn.addEventListener("click", handleToggle);
+
+  function handleFullscreenChange() {
+    if (!document.fullscreenElement && panel.classList.contains("collapsed")) {
+      panel.classList.remove("collapsed");
+      toggleBtn.setAttribute("aria-expanded", "true");
+      removeTapZones();
+    }
+  }
+  document.addEventListener("fullscreenchange", handleFullscreenChange);
 
   // Position persistence: Firestore for authenticated users, localStorage otherwise.
   // Debounced to avoid writes on every sub-page turn.
@@ -426,6 +464,11 @@ export function initViewer(
     document.body.classList.remove("viewer-active");
     orientationQuery.removeEventListener("change", updateOrientation);
     toggleBtn.removeEventListener("click", handleToggle);
+    document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    removeTapZones();
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
     document.removeEventListener("keydown", handleKeydown);
     zoomInBtn.removeEventListener("click", handleZoomIn);
     zoomOutBtn.removeEventListener("click", handleZoomOut);

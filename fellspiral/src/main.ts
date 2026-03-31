@@ -12,6 +12,7 @@ import { renderInfoPanel, hydrateInfoPanel, type LinkSection } from "@commons-sy
 import { createFetchPost } from "@commons-systems/blog/github";
 import { updateOgMeta } from "@commons-systems/blog/og-meta";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
+import { initPanelToggle } from "@commons-systems/style/panel-toggle";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
@@ -87,10 +88,7 @@ function updateNav(path: string): void {
 
 const toggle = document.getElementById("panel-toggle");
 if (!toggle) throw new Error("#panel-toggle element not found");
-toggle.addEventListener("click", () => {
-  const isOpen = infoPanel.classList.toggle("open");
-  toggle.setAttribute("aria-expanded", String(isOpen));
-});
+initPanelToggle(infoPanel, toggle);
 
 async function loadPosts(): Promise<string> {
   try {
@@ -149,30 +147,10 @@ const router = createHistoryRouter(
   },
 );
 
-const closePanel = (): void => {
-  infoPanel.classList.remove("open");
-  toggle.setAttribute("aria-expanded", "false");
-}
-
 document.addEventListener("click", (e) => {
   const target = e.target as HTMLElement;
-
   if (target.closest('a[href="/"]')) {
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  if (
-    infoPanel.classList.contains("open") &&
-    !target.closest("#info-panel") &&
-    !target.closest("#panel-toggle")
-  ) {
-    closePanel();
-  }
-});
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && infoPanel.classList.contains("open")) {
-    closePanel();
   }
 });
 
