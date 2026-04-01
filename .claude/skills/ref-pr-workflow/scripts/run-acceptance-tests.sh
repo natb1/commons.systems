@@ -260,7 +260,7 @@ if [ "$USES_STORAGE" = true ]; then
   STORAGE_SEED="$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts"
   if [ -f "$STORAGE_SEED" ]; then
     echo "Seeding Storage..."
-    STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" npx tsx "$STORAGE_SEED"
+    STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${EMULATOR_PROJECT_ID}.firebasestorage.app" npx tsx "$STORAGE_SEED"
   fi
 fi
 
