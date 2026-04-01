@@ -296,9 +296,10 @@ service cloud.firestore {
 
     // Error logs: write-only from clients. Admin reads via Admin SDK.
     // Unauthenticated creates are allowed so error telemetry works regardless
-    // of auth state. Field validation requires message (string, max 10KB),
-    // operation (string, max 200 chars), and timestamp (timestamp).
-    // Optional stack field capped at 50KB. Total fields capped at 15.
+    // of auth state. Type-validated fields: message (string, max 10KB),
+    // operation (string, max 200 chars), timestamp (timestamp), and optional
+    // stack (string, max 50KB). Other fields (kind, code, userAgent, url, uid,
+    // email, extras) pass through unchecked. Total fields capped at 15.
     function isValidErrorLog() {
       return request.resource.data.keys().hasAll(["message", "operation", "timestamp"])
         && request.resource.data.keys().size() <= 15

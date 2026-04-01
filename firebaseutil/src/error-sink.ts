@@ -16,9 +16,10 @@ export interface ErrorSinkOptions {
   getCurrentUser?: () => ErrorSinkUser | null;
 }
 
-// Keys written to the Firestore document from structured fields (message, stack,
-// code, etc.). Context entries with these names are dropped so caller-provided
-// extras cannot overwrite canonical error values like the original Error message.
+// Keys written to the Firestore document from structured fields. Context entries
+// with these names are dropped so caller-provided extras cannot overwrite canonical
+// error values like the original Error message. operation and kind are included
+// for safety even though they are always written from structured fields.
 const RESERVED_KEYS = new Set(["operation", "kind", "message", "stack", "code", "timestamp", "userAgent", "url", "uid", "email"]);
 
 export function createFirestoreErrorSink(options: ErrorSinkOptions): ErrorSink {
@@ -26,7 +27,8 @@ export function createFirestoreErrorSink(options: ErrorSinkOptions): ErrorSink {
   const errorsPath = nsCollectionPath(namespace, "errors");
 
   // Rate-limit Firestore writes: max 50 per 60-second window.
-  // console.error still fires via logError regardless of throttle.
+  // console.error is always written by logError before reaching this sink,
+  // so throttled errors still appear in the console.
   let recentWrites = 0;
   let windowStart = 0;
   let rateLimitWarned = false;
