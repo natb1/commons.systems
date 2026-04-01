@@ -4,7 +4,7 @@ import type { Plugin } from "vite";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { PublishedPost } from "./post-types.js";
 import type { PostContent } from "./pages/home.js";
-import { createMarked, extractH1 } from "./marked-config.js";
+import { createMarked, extractH1 } from "./marked-config.ts";
 
 export type { PostContent };
 
@@ -67,7 +67,7 @@ export function blogPostsPlugin(config: BlogPostsPluginConfig): Plugin {
       const results: Record<string, PostContent> = {};
       for (const post of published) {
         const filePath = join(config.postDir, post.filename);
-        let markdown = readFile(filePath);
+        const markdown = readFile(filePath);
 
         const h1 = extractH1(markdown);
         const title = h1 ? h1.title : null;
