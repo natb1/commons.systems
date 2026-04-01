@@ -1,5 +1,4 @@
-import { initializeApp, cert, type ServiceAccount } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { initFirebaseAdmin } from "../src/init.js";
 import { seed, type SeedSpec, type SeedOptions } from "../src/seed.js";
 import { validateNamespace } from "../src/namespace.js";
 
@@ -33,30 +32,8 @@ try {
   process.exit(1);
 }
 
-const projectId = process.env.FIREBASE_PROJECT_ID ?? "commons-systems";
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
-
-if (emulatorHost) {
-  // When using the emulator, initialize without credentials
-  initializeApp({ projectId });
-} else {
-  // Production: use application default credentials or service account
-  const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (serviceAccountPath) {
-    const serviceAccount = (
-      await import(serviceAccountPath, { with: { type: "json" } })
-    ).default as ServiceAccount;
-    initializeApp({ credential: cert(serviceAccount) });
-  } else {
-    console.warn(
-      "No GOOGLE_APPLICATION_CREDENTIALS set — using application default credentials. " +
-        "Ensure ADC is configured (e.g. via `gcloud auth application-default login`).",
-    );
-    initializeApp({ projectId });
-  }
-}
-
-const db = getFirestore();
+const db = await initFirebaseAdmin();
 const validatedNamespace = validateNamespace(namespace);
 const spec: SeedSpec = { ...appSeed, namespace: validatedNamespace };
 const seedOptions: SeedOptions = {

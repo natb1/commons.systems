@@ -4,6 +4,12 @@ export interface AuthUser {
   displayName: string;
 }
 
+export const TEST_USER: AuthUser = {
+  localId: "test-github-user",
+  email: "test@example.com",
+  displayName: "Test User",
+};
+
 export async function seedAuthUser(
   emulatorHost: string,
   user: AuthUser,

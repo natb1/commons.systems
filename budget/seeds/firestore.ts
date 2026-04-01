@@ -3,6 +3,7 @@
 // which converts Date objects to Timestamps on write.
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { Transaction, Statement, Budget, BudgetPeriod, Rule, NormalizationRule, WeeklyAggregate } from "../src/firestore.js";
+import { TEST_USER } from "@commons-systems/authutil/seed";
 import type { Group } from "@commons-systems/authutil/groups";
 
 /** Seed groups include `members` (used in queries and security rules, omitted from the authutil Group type) */
@@ -57,7 +58,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
       allowancePeriod: "weekly",
       rollover: "none",
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies BudgetSeedData,
   },
   {
@@ -68,7 +69,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
       allowancePeriod: "monthly",
       rollover: "debt",
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies BudgetSeedData,
   },
   {
@@ -79,7 +80,7 @@ const budgetDocs: { id: string; data: BudgetSeedData }[] = [
       allowancePeriod: "weekly",
       rollover: "balance",
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies BudgetSeedData,
   },
 ];
@@ -114,7 +115,7 @@ function period(
       count,
       categoryBreakdown,
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies BudgetPeriodSeedData,
   };
 }
@@ -213,7 +214,7 @@ function txn(
       timestamp: new Date(dateStr),
       statementId: `stmt-${stmtMonth}`,
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
       normalizedId: null,
       normalizedPrimary: true,
       normalizedDescription: null,
@@ -427,7 +428,7 @@ const seedTransactionDocs = [
       timestamp: new Date("2025-01-22"),
       statementId: "stmt-2025-01",
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
       normalizedId: "norm-group-1",
       normalizedPrimary: true,
       normalizedDescription: "Cafe Nero",
@@ -448,7 +449,7 @@ const seedTransactionDocs = [
       timestamp: new Date("2025-01-22"),
       statementId: "stmt-2025-02",
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
       normalizedId: "norm-group-1",
       normalizedPrimary: false,
       normalizedDescription: "Cafe Nero",
@@ -472,7 +473,7 @@ const seedRuleDocs: { id: string; data: RuleSeedData }[] = [
       excludeCategory: null,
       matchCategory: null,
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies RuleSeedData,
   },
   {
@@ -489,7 +490,7 @@ const seedRuleDocs: { id: string; data: RuleSeedData }[] = [
       excludeCategory: null,
       matchCategory: null,
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies RuleSeedData,
   },
   {
@@ -506,7 +507,7 @@ const seedRuleDocs: { id: string; data: RuleSeedData }[] = [
       excludeCategory: null,
       matchCategory: null,
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies RuleSeedData,
   },
   {
@@ -523,7 +524,7 @@ const seedRuleDocs: { id: string; data: RuleSeedData }[] = [
       excludeCategory: null,
       matchCategory: null,
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies RuleSeedData,
   },
   {
@@ -540,7 +541,7 @@ const seedRuleDocs: { id: string; data: RuleSeedData }[] = [
       excludeCategory: null,
       matchCategory: null,
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies RuleSeedData,
   },
   {
@@ -557,7 +558,7 @@ const seedRuleDocs: { id: string; data: RuleSeedData }[] = [
       excludeCategory: null,
       matchCategory: null,
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies RuleSeedData,
   },
 ];
@@ -575,7 +576,7 @@ const seedNormalizationRuleDocs: { id: string; data: NormalizationRuleSeedData }
       account: null,
       priority: 10,
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies NormalizationRuleSeedData,
   },
   {
@@ -590,7 +591,7 @@ const seedNormalizationRuleDocs: { id: string; data: NormalizationRuleSeedData }
       account: null,
       priority: 20,
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
     } satisfies NormalizationRuleSeedData,
   },
 ];
@@ -607,7 +608,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       balanceDate: null,
       lastTransactionDate: new Date("2025-02-19"),
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
       virtual: false,
     } satisfies StatementSeedData,
   },
@@ -622,7 +623,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       balanceDate: null,
       lastTransactionDate: new Date("2025-02-19"),
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
       virtual: false,
     } satisfies StatementSeedData,
   },
@@ -637,7 +638,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       balanceDate: null,
       lastTransactionDate: new Date("2025-02-20"),
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
       virtual: false,
     } satisfies StatementSeedData,
   },
@@ -652,7 +653,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       balanceDate: null,
       lastTransactionDate: new Date("2025-02-20"),
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
       virtual: false,
     } satisfies StatementSeedData,
   },
@@ -667,7 +668,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       balanceDate: null,
       lastTransactionDate: new Date("2025-02-21"),
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
       virtual: false,
     } satisfies StatementSeedData,
   },
@@ -682,7 +683,7 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
       balanceDate: null,
       lastTransactionDate: new Date("2025-02-21"),
       groupId: "household",
-      memberEmails: ["test@example.com"],
+      memberEmails: [TEST_USER.email],
       virtual: false,
     } satisfies StatementSeedData,
   },
@@ -695,25 +696,25 @@ const seedStatementDocs: { id: string; data: StatementSeedData }[] = [
 // Only weeks with non-zero creditTotal or unbudgetedTotal are included.
 const weeklyAggregateDocs: { id: string; data: WeeklyAggregateSeedData }[] = [
   // Biweekly paycheck weeks (each $2400 credit)
-  { id: "household-2024-10-07", data: { weekStart: new Date("2024-10-07"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
-  { id: "household-2024-10-21", data: { weekStart: new Date("2024-10-21"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
-  { id: "household-2024-11-04", data: { weekStart: new Date("2024-11-04"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
-  { id: "household-2024-11-18", data: { weekStart: new Date("2024-11-18"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
-  { id: "household-2024-12-02", data: { weekStart: new Date("2024-12-02"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
-  { id: "household-2024-12-16", data: { weekStart: new Date("2024-12-16"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
-  { id: "household-2024-12-30", data: { weekStart: new Date("2024-12-30"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2024-10-07", data: { weekStart: new Date("2024-10-07"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: [TEST_USER.email] } },
+  { id: "household-2024-10-21", data: { weekStart: new Date("2024-10-21"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: [TEST_USER.email] } },
+  { id: "household-2024-11-04", data: { weekStart: new Date("2024-11-04"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: [TEST_USER.email] } },
+  { id: "household-2024-11-18", data: { weekStart: new Date("2024-11-18"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: [TEST_USER.email] } },
+  { id: "household-2024-12-02", data: { weekStart: new Date("2024-12-02"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: [TEST_USER.email] } },
+  { id: "household-2024-12-16", data: { weekStart: new Date("2024-12-16"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: [TEST_USER.email] } },
+  { id: "household-2024-12-30", data: { weekStart: new Date("2024-12-30"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: [TEST_USER.email] } },
   // Credit: $500 freelance. Card payment excluded from unbudgeted.
-  { id: "household-2025-01-06", data: { weekStart: new Date("2025-01-06"), creditTotal: 500, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2025-01-06", data: { weekStart: new Date("2025-01-06"), creditTotal: 500, unbudgetedTotal: 0, groupId: "household", memberEmails: [TEST_USER.email] } },
   // Paycheck $2400 + parking $8 unbudgeted
-  { id: "household-2025-01-13", data: { weekStart: new Date("2025-01-13"), creditTotal: 2400, unbudgetedTotal: 8, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2025-01-13", data: { weekStart: new Date("2025-01-13"), creditTotal: 2400, unbudgetedTotal: 8, groupId: "household", memberEmails: [TEST_USER.email] } },
   // Paycheck $2400
-  { id: "household-2025-01-27", data: { weekStart: new Date("2025-01-27"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2025-01-27", data: { weekStart: new Date("2025-01-27"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: [TEST_USER.email] } },
   // Dry cleaner $22 unbudgeted
-  { id: "household-2025-02-03", data: { weekStart: new Date("2025-02-03"), creditTotal: 0, unbudgetedTotal: 22, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2025-02-03", data: { weekStart: new Date("2025-02-03"), creditTotal: 0, unbudgetedTotal: 22, groupId: "household", memberEmails: [TEST_USER.email] } },
   // Credit: $2400 paycheck. Card payments excluded from unbudgeted.
-  { id: "household-2025-02-10", data: { weekStart: new Date("2025-02-10"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2025-02-10", data: { weekStart: new Date("2025-02-10"), creditTotal: 2400, unbudgetedTotal: 0, groupId: "household", memberEmails: [TEST_USER.email] } },
   // Pharmacy $15.50 unbudgeted
-  { id: "household-2025-02-17", data: { weekStart: new Date("2025-02-17"), creditTotal: 0, unbudgetedTotal: 15.50, groupId: "household", memberEmails: ["test@example.com"] } },
+  { id: "household-2025-02-17", data: { weekStart: new Date("2025-02-17"), creditTotal: 0, unbudgetedTotal: 15.50, groupId: "household", memberEmails: [TEST_USER.email] } },
 ];
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
@@ -726,7 +727,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
           id: "household",
           data: {
             name: "household",
-            members: ["test@example.com"],
+            members: [TEST_USER.email],
           } satisfies GroupSeedData,
         },
       ],
@@ -754,7 +755,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-02-10"),
             statementId: "stmt-2025-02",
             groupId: "household",
-            memberEmails: ["test@example.com"],
+            memberEmails: [TEST_USER.email],
             normalizedId: null,
             normalizedPrimary: true,
             normalizedDescription: null,
@@ -775,7 +776,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             timestamp: new Date("2025-02-15"),
             statementId: null,
             groupId: "household",
-            memberEmails: ["test@example.com"],
+            memberEmails: [TEST_USER.email],
             normalizedId: null,
             normalizedPrimary: true,
             normalizedDescription: null,

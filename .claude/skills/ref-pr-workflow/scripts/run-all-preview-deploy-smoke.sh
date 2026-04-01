@@ -43,13 +43,27 @@ while IFS= read -r app; do
 
   PREVIEW_COMMENT+="- **$app**: $PREVIEW_URL"$'\n'
 
-  # Run smoke tests against preview URL
+  # Run smoke tests against preview URL (retry once with channel reset on failure)
   echo "=== Smoke tests: $app ==="
   if "$SCRIPT_DIR/run-smoke-tests.sh" "$app" "$PREVIEW_URL"; then
     echo "PASS: $app smoke tests"
   else
-    echo "FAIL: $app smoke tests" >&2
-    FAILURES+=("$app:smoke")
+    echo "Smoke test failed — resetting channel and retrying..." >&2
+    HOSTING_SITE=$(get_hosting_site "$REPO_ROOT" "$app")
+    delete_preview_channel "$CHANNEL_ID" "$HOSTING_SITE"
+    RETRY_OUTPUT=$("$SCRIPT_DIR/run-preview-deploy.sh" "$app" "$CHANNEL_ID" 2>&1 | tee /dev/stderr) || {
+      echo "FAIL: $app retry deploy" >&2
+      FAILURES+=("$app:smoke")
+      continue
+    }
+    PREVIEW_URL=$(echo "$RETRY_OUTPUT" | grep '^PREVIEW_URL=' | cut -d= -f2-)
+    echo "=== Smoke tests (retry): $app ==="
+    if "$SCRIPT_DIR/run-smoke-tests.sh" "$app" "$PREVIEW_URL"; then
+      echo "PASS: $app smoke tests (retry)"
+    else
+      echo "FAIL: $app smoke tests" >&2
+      FAILURES+=("$app:smoke")
+    fi
   fi
 done <<< "$CHANGED_APPS"
 

@@ -1,5 +1,6 @@
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { MediaItem } from "../src/types.js";
+import { TEST_USER } from "@commons-systems/authutil/seed";
 
 type MediaSeedData = Omit<MediaItem, "id">;
 
@@ -93,7 +94,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             sourceNotes: "Test-only private item for emulator testing",
             storagePath: "media/test-private-item.pdf",
             groupId: "test-group",
-            memberEmails: ["test@example.com"],
+            memberEmails: [TEST_USER.email],
 
             addedAt: "2026-01-18T00:00:00Z",
           } satisfies MediaSeedData,
@@ -108,7 +109,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
           id: "test-group",
           data: {
             name: "test-group",
-            members: ["test@example.com"],
+            members: [TEST_USER.email],
           },
         },
       ],

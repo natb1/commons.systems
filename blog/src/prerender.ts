@@ -2,42 +2,166 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
+import type { InfoPanelData } from "./components/info-panel.js";
+import type { PostMeta } from "./post-types.js";
+import { renderInfoPanel } from "./components/info-panel.js";
+import { createMarked, extractH1 } from "./marked-config.js";
+import { renderArticle, type PostContent } from "./pages/home.js";
+
+export interface NavLink {
+  readonly href: string;
+  readonly label: string;
+}
 
 export interface PrerenderConfig {
   siteUrl: string;
   titleSuffix: string;
   distDir: string;
   seed: Pick<SeedSpec, "collections">;
+  postDir: string;
+  navLinks: NavLink[];
+  infoPanel: Omit<InfoPanelData, "topPosts">;
 }
 
-// Build-time function that generates per-post HTML files with OG metadata tags.
-// Reads the post catalog from seed data and injects OG tags into copies of the
-// SPA's index.html, enabling link previews for crawlers that don't execute JS.
+function renderNavHtml(links: NavLink[]): string {
+  const anchors = links
+    .map((l) => `<a href="${escapeHtml(l.href)}">${escapeHtml(l.label)}</a>`)
+    .join("");
+  return `<span class="nav-links">${anchors}</span>`;
+}
+
+interface RenderedPost {
+  meta: PostMeta & { published: true };
+  articleHtml: string;
+}
+
+async function parseAndRenderPosts(
+  published: Array<{ id: string; data: Record<string, unknown> }>,
+  postDir: string,
+  marked: ReturnType<typeof createMarked>,
+): Promise<RenderedPost[]> {
+  const results: RenderedPost[] = [];
+  for (const doc of published) {
+    const data = doc.data;
+    const filename = data.filename as string;
+    const markdown = readFileSync(join(postDir, filename), "utf-8");
+
+    const h1 = extractH1(markdown);
+    const title = h1 ? h1.title : (data.title as string);
+    const body = h1 ? h1.body : markdown;
+    const html = await marked.parse(body);
+    const content: PostContent = { html, title: h1 ? h1.title : null };
+
+    const meta: PostMeta & { published: true } = {
+      id: doc.id,
+      title,
+      published: true,
+      publishedAt: data.publishedAt as string,
+      filename,
+    };
+
+    results.push({
+      meta,
+      articleHtml: renderArticle(meta, "/post/", content),
+    });
+  }
+  return results;
+}
+
+function injectMain(html: string, articlesHtml: string): string {
+  const result = html.replace(
+    /<main id="app">.*?<\/main>/s,
+    `<main id="app"><div id="posts">${articlesHtml}</div></main>`,
+  );
+  if (result === html) throw new Error('<main id="app"> marker not found in template');
+  return result;
+}
+
+function injectInfoPanel(html: string, panelHtml: string): string {
+  const result = html.replace(
+    /<aside id="info-panel" class="sidebar">.*?<\/aside>/s,
+    `<aside id="info-panel" class="sidebar">${panelHtml}</aside>`,
+  );
+  if (result === html) throw new Error('<aside id="info-panel"> marker not found in template');
+  return result;
+}
+
+function injectNav(html: string, navHtml: string): string {
+  const result = html.replace(
+    /<app-nav id="nav">.*?<\/app-nav>/s,
+    `<app-nav id="nav">${navHtml}</app-nav>`,
+  );
+  if (result === html) throw new Error('<app-nav id="nav"> marker not found in template');
+  return result;
+}
+
+// Build-time function that generates per-post HTML files with OG metadata tags
+// and injects rendered blog content, info panel, and nav into static HTML.
+// Reads the post catalog from seed data and markdown files, enabling crawlers
+// to see full content without executing JS.
 //
 // The client-side counterpart (blog/src/og-meta.ts) manages og:title,
 // og:description, og:image, og:type, and og:url dynamically for SPA navigation.
 // This function mirrors those OG tags in static HTML for crawlers, and
 // additionally sets <meta name="description"> and rewrites <title> — neither of
 // which the client-side module handles.
-export function prerenderPosts(config: PrerenderConfig): void {
-  const { siteUrl, titleSuffix, distDir, seed } = config;
+export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
+  const { siteUrl, titleSuffix, distDir, seed, postDir, navLinks, infoPanel } = config;
 
   const template = readFileSync(join(distDir, "index.html"), "utf-8");
+  const marked = createMarked();
 
   const postsCollection = seed.collections.find((c) => c.name === "posts");
   if (!postsCollection) {
     throw new Error("No 'posts' collection found in seed data");
   }
 
-  for (const doc of postsCollection.documents) {
-    const data = doc.data as Record<string, unknown>;
-    if (data.published !== true) continue;
+  const publishedDocs = postsCollection.documents.filter(
+    (doc) => (doc.data as Record<string, unknown>).published === true,
+  );
 
-    const id = doc.id;
+  for (const doc of publishedDocs) {
+    const data = doc.data as Record<string, unknown>;
     if (typeof data.title !== "string") {
-      throw new Error(`Post "${id}" is missing a title`);
+      throw new Error(`Post "${doc.id}" is missing a title`);
     }
-    const title = data.title;
+    if (typeof data.filename !== "string") {
+      throw new Error(`Post "${doc.id}" is missing a filename`);
+    }
+    if (typeof data.publishedAt !== "string") {
+      throw new Error(`Post "${doc.id}" is missing a publishedAt`);
+    }
+  }
+
+  const parsed = await parseAndRenderPosts(
+    publishedDocs.map((d) => ({ id: d.id, data: d.data as Record<string, unknown> })),
+    postDir,
+    marked,
+  );
+
+  // Sort by date descending for the home page
+  const sorted = [...parsed].sort(
+    (a, b) => new Date(b.meta.publishedAt).getTime() - new Date(a.meta.publishedAt).getTime(),
+  );
+
+  // Build info panel HTML with all published posts as the archive listing
+  const topPosts: PostMeta[] = sorted.map((p) => p.meta);
+  const panelHtml = renderInfoPanel({ ...infoPanel, topPosts });
+  const navHtml = renderNavHtml(navLinks);
+
+  // Inject content into root index.html (all posts)
+  const allArticlesHtml = sorted.map((p) => p.articleHtml).join("\n      <hr>\n      ");
+  let rootHtml = injectMain(template, allArticlesHtml);
+  rootHtml = injectInfoPanel(rootHtml, panelHtml);
+  rootHtml = injectNav(rootHtml, navHtml);
+  writeFileSync(join(distDir, "index.html"), rootHtml);
+  console.log("Pre-rendered: /index.html");
+
+  // Generate per-post pages with OG tags and single-post content
+  for (const doc of publishedDocs) {
+    const data = doc.data as Record<string, unknown>;
+    const id = doc.id;
+    const title = data.title as string;
     const description = typeof data.previewDescription === "string" ? data.previewDescription : undefined;
     const image = typeof data.previewImage === "string" ? data.previewImage : undefined;
 
@@ -62,6 +186,12 @@ export function prerenderPosts(config: PrerenderConfig): void {
     const beforeTitle = html;
     html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)} | ${escapeHtml(titleSuffix)}</title>`);
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
+
+    // Inject single-post content, info panel, and nav
+    const post = parsed.find((p) => p.meta.id === id)!;
+    html = injectMain(html, post.articleHtml);
+    html = injectInfoPanel(html, panelHtml);
+    html = injectNav(html, navHtml);
 
     const outDir = join(distDir, "post", id);
     mkdirSync(outDir, { recursive: true });
