@@ -27,7 +27,6 @@ export function hydrateHero(el: HTMLElement): void {
     });
   });
 
-  // Inline chip cross-references: buttons with data-opens activate the target panel
   el.addEventListener("click", (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(
       "button.inline-chip[data-opens]",
