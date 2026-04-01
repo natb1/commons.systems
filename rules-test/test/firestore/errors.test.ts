@@ -59,7 +59,8 @@ describe("error logs", () => {
       it("denies create missing required message field", async () => {
         const ctx = unauthenticatedContext(env);
         const db = ctx.firestore();
-        const { message: _, ...noMessage } = validErrorDoc();
+        const noMessage = validErrorDoc();
+        delete (noMessage as Record<string, unknown>).message;
         await assertFails(
           setDoc(doc(db, `${appName}/${ENV}/errors/err3`), noMessage),
         );
@@ -68,7 +69,8 @@ describe("error logs", () => {
       it("denies create missing required operation field", async () => {
         const ctx = unauthenticatedContext(env);
         const db = ctx.firestore();
-        const { operation: _, ...noOp } = validErrorDoc();
+        const noOp = validErrorDoc();
+        delete (noOp as Record<string, unknown>).operation;
         await assertFails(
           setDoc(doc(db, `${appName}/${ENV}/errors/err4`), noOp),
         );
@@ -77,7 +79,8 @@ describe("error logs", () => {
       it("denies create missing required timestamp field", async () => {
         const ctx = unauthenticatedContext(env);
         const db = ctx.firestore();
-        const { timestamp: _, ...noTs } = validErrorDoc();
+        const noTs = validErrorDoc();
+        delete (noTs as Record<string, unknown>).timestamp;
         await assertFails(
           setDoc(doc(db, `${appName}/${ENV}/errors/err5`), noTs),
         );

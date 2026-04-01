@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Plugin } from "vite";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { PublishedPost } from "./post-types.js";
-import { createMarked, getPublishedFromSeed, renderPostContents, type PostContent } from "./marked-config.js";
+import { createMarked, getPublishedFromSeed, renderPostContents, type PostContent } from "./marked-config.ts";
 
 export type { PostContent };
 

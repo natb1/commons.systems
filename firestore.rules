@@ -308,7 +308,7 @@ service cloud.firestore {
         && request.resource.data.operation is string
         && request.resource.data.operation.size() <= 200
         && request.resource.data.timestamp is timestamp
-        && (!("stack" in request.resource.data) || (request.resource.data.stack is string && request.resource.data.stack.size() <= 50000));
+        && (!("stack" in request.resource.data) || request.resource.data.stack == null || (request.resource.data.stack is string && request.resource.data.stack.size() <= 50000));
     }
     match /budget/{env}/errors/{errorId} {
       allow create: if isValidErrorLog();
