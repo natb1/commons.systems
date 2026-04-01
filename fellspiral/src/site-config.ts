@@ -1,8 +1,5 @@
 import type { LinkSection } from "@commons-systems/blog/components/info-panel";
 import type { NavLink } from "@commons-systems/blog/prerender";
-import { BLOG_ROLL_ENTRIES } from "./blog-roll/config.js";
-
-export { BLOG_ROLL_ENTRIES };
 
 export const NAV_LINKS: NavLink[] = [{ href: "/", label: "Home" }];
 
