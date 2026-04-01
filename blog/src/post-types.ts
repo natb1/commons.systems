@@ -10,7 +10,7 @@ export function isPublished(p: PostMeta): p is PublishedPost {
   return p.published;
 }
 
-/** Extract published posts from seed data, validating required fields. */
+/** Extract published posts from seed data. Throws if any published post is missing title, filename, or publishedAt. */
 export function validatePublishedPosts(seed: Pick<SeedSpec, "collections">): PublishedPost[] {
   const postsCollection = seed.collections.find((c) => c.name === "posts");
   if (!postsCollection) {
