@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Plugin } from "vite";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import { validatePublishedPosts, type PublishedPost } from "./post-types.js";
-import type { PostContent } from "./pages/home.js";
-import { createMarked, extractH1 } from "./marked-config.js";
+import { validatePublishedPosts, type PublishedPost } from "./post-types.ts";
+import type { PostContent } from "./pages/home.ts";
+import { createMarked, extractH1 } from "./marked-config.ts";
 
 export type { PostContent };
 

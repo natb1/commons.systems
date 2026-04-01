@@ -2,11 +2,11 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { InfoPanelData } from "./components/info-panel.js";
-import { validatePublishedPosts, type PostMeta } from "./post-types.js";
-import { renderInfoPanel } from "./components/info-panel.js";
-import { createMarked, extractH1 } from "./marked-config.js";
-import { renderArticle, type PostContent } from "./pages/home.js";
+import type { InfoPanelData } from "./components/info-panel.ts";
+import { validatePublishedPosts, type PostMeta } from "./post-types.ts";
+import { renderInfoPanel } from "./components/info-panel.ts";
+import { createMarked, extractH1 } from "./marked-config.ts";
+import { renderArticle, type PostContent } from "./pages/home.ts";
 
 export interface NavLink {
   readonly href: string;

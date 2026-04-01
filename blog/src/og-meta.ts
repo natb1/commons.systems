@@ -1,6 +1,6 @@
 // Client-side OG tag management for SPA navigation. Build-time counterpart
 // (blog/src/prerender.ts) generates static copies for crawlers.
-import type { PostMeta } from "./post-types.js";
+import type { PostMeta } from "./post-types.ts";
 
 const OG_PROPERTIES = ["og:title", "og:description", "og:image", "og:type", "og:url"] as const;
 

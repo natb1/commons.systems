@@ -1,4 +1,4 @@
-import type { LatestPost } from "./types.js";
+import type { LatestPost } from "./types.ts";
 
 function parseAtomFeed(doc: Document): LatestPost | null {
   const entry = doc.querySelector("feed > entry");
