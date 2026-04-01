@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Plugin } from "vite";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { PublishedPost } from "./post-types.js";
-import type { PostContent } from "./pages/home.js";
+import { validatePublishedPosts, type PublishedPost } from "./post-types.ts";
+import type { PostContent } from "./pages/home.ts";
 import { createMarked, extractH1 } from "./marked-config.ts";
 
 export type { PostContent };
@@ -30,37 +30,7 @@ export function blogPostsPlugin(config: BlogPostsPluginConfig): Plugin {
     name: "blog-posts",
     async buildStart() {
       const marked = createMarked();
-      const postsCollection = config.seed.collections.find(
-        (c) => c.name === "posts",
-      );
-      if (!postsCollection) {
-        throw new Error("[blog-posts] No 'posts' collection found in seed data");
-      }
-
-      const published: PublishedPost[] = [];
-      for (const doc of postsCollection.documents) {
-        const data = doc.data as Record<string, unknown>;
-        if (data.published !== true) continue;
-        if (typeof data.title !== "string") {
-          throw new Error(`[blog-posts] Post "${doc.id}" is missing a title`);
-        }
-        if (typeof data.filename !== "string") {
-          throw new Error(`[blog-posts] Post "${doc.id}" is missing a filename`);
-        }
-        if (typeof data.publishedAt !== "string") {
-          throw new Error(`[blog-posts] Post "${doc.id}" is missing a publishedAt`);
-        }
-        published.push({
-          id: doc.id,
-          title: data.title,
-          published: true,
-          publishedAt: data.publishedAt,
-          filename: data.filename,
-          previewImage: data.previewImage as string | undefined,
-          previewDescription: data.previewDescription as string | undefined,
-        });
-      }
-
+      const published = validatePublishedPosts(config.seed);
       published.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
       metadata = published;
 

@@ -77,7 +77,7 @@ while IFS= read -r file; do
   [ -z "$file" ] && continue
   top_dir="${file%%/*}"
   case "$file" in
-    .claude/skills/ref-pr-workflow/scripts/*|firebase.json|firestore.rules|storage.rules|package.json|package-lock.json)
+    firebase.json|firestore.rules|storage.rules|package.json|package-lock.json)
       # Global triggers: root dependency changes affect all workspace resolution
       for app in "${!ALL_APPS[@]}"; do
         DIRTY_APPS["$app"]=1

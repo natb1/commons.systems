@@ -2,11 +2,11 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { InfoPanelData } from "./components/info-panel.js";
-import type { PostMeta } from "./post-types.js";
-import { renderInfoPanel } from "./components/info-panel.js";
-import { createMarked, extractH1 } from "./marked-config.js";
-import { renderArticle, type PostContent } from "./pages/home.js";
+import type { InfoPanelData } from "./components/info-panel.ts";
+import { validatePublishedPosts, type PostMeta } from "./post-types.ts";
+import { renderInfoPanel } from "./components/info-panel.ts";
+import { createMarked, extractH1 } from "./marked-config.ts";
+import { renderArticle, type PostContent } from "./pages/home.ts";
 
 export interface NavLink {
   readonly href: string;
@@ -111,30 +111,10 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const template = readFileSync(join(distDir, "index.html"), "utf-8");
   const marked = createMarked();
 
-  const postsCollection = seed.collections.find((c) => c.name === "posts");
-  if (!postsCollection) {
-    throw new Error("No 'posts' collection found in seed data");
-  }
-
-  const publishedDocs = postsCollection.documents.filter(
-    (doc) => (doc.data as Record<string, unknown>).published === true,
-  );
-
-  for (const doc of publishedDocs) {
-    const data = doc.data as Record<string, unknown>;
-    if (typeof data.title !== "string") {
-      throw new Error(`Post "${doc.id}" is missing a title`);
-    }
-    if (typeof data.filename !== "string") {
-      throw new Error(`Post "${doc.id}" is missing a filename`);
-    }
-    if (typeof data.publishedAt !== "string") {
-      throw new Error(`Post "${doc.id}" is missing a publishedAt`);
-    }
-  }
+  const published = validatePublishedPosts(seed);
 
   const parsed = await parseAndRenderPosts(
-    publishedDocs.map((d) => ({ id: d.id, data: d.data as Record<string, unknown> })),
+    published.map((p) => ({ id: p.id, data: p as unknown as Record<string, unknown> })),
     postDir,
     marked,
   );
@@ -158,12 +138,11 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   console.log("Pre-rendered: /index.html");
 
   // Generate per-post pages with OG tags and single-post content
-  for (const doc of publishedDocs) {
-    const data = doc.data as Record<string, unknown>;
-    const id = doc.id;
-    const title = data.title as string;
-    const description = typeof data.previewDescription === "string" ? data.previewDescription : undefined;
-    const image = typeof data.previewImage === "string" ? data.previewImage : undefined;
+  for (const pub of published) {
+    const id = pub.id;
+    const title = pub.title;
+    const description = pub.previewDescription;
+    const image = pub.previewImage;
 
     const ogTags = [
       `<meta property="og:title" content="${escapeHtml(title)}">`,
@@ -188,7 +167,8 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
     // Inject single-post content, info panel, and nav
-    const post = parsed.find((p) => p.meta.id === id)!;
+    const post = parsed.find((p) => p.meta.id === id);
+    if (!post) throw new Error(`Rendered post not found for id "${id}"`);
     html = injectMain(html, post.articleHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);

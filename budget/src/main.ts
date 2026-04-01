@@ -14,6 +14,8 @@ import { hydrateCategorySankey } from "./pages/home-chart.js";
 import { hydrateBudgetTable, hydrateBudgetChart, hydrateOverridesTable } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { hydrateAccountsCharts } from "./pages/accounts-hydrate.js";
+import { mountHero } from "@commons-systems/style/hero";
+import { renderHero } from "./pages/hero.js";
 import { trackPageView } from "./firebase.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -28,6 +30,10 @@ const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app") as HTMLElement;
 if (!app) throw new Error("#app element not found");
+
+const heroContainer = document.getElementById("hero-container") as HTMLElement;
+if (!heroContainer) throw new Error("#hero-container element not found");
+mountHero(heroContainer, renderHero);
 
 export type AppState =
   | { source: "seed" }
@@ -126,6 +132,7 @@ const router = createHistoryRouter(
 
 function transition(next: AppState): void {
   state = next;
+  heroContainer.hidden = next.source === "local";
   updateNav();
   clearNavError();
   router.navigate();

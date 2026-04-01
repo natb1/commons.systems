@@ -1,5 +1,5 @@
 import type { Plugin } from "vite";
-import type { LatestPost } from "./types.js";
+import type { LatestPost } from "./types.ts";
 
 export interface FeedConfig {
   id: string;
