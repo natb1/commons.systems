@@ -10,18 +10,17 @@ import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "firebase/auth";
 import { trackPageView } from "./firebase.js";
 import { renderHero } from "./pages/hero.js";
-import { hydrateHero } from "@commons-systems/style/hero";
+import { mountHero } from "@commons-systems/style/hero";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
+// Hero section — rendered once into its own container above #app
 const heroContainer = document.getElementById("hero-container") as HTMLElement;
 if (!heroContainer) throw new Error("#hero-container element not found");
-heroContainer.innerHTML = renderHero();
-const heroEl = document.getElementById("hero");
-if (heroEl) hydrateHero(heroEl);
+mountHero(heroContainer, renderHero);
 
 navEl.links = [
   { href: "/", label: "Home" },

@@ -14,8 +14,7 @@ vi.mock("../src/pages/budgets-hydrate.js", () => ({ hydrateBudgetTable: vi.fn(),
 vi.mock("../src/pages/rules.js", () => ({ renderRules: vi.fn().mockResolvedValue("<div>rules</div>") }));
 vi.mock("../src/pages/rules-hydrate.js", () => ({ hydrateRulesTable: vi.fn() }));
 vi.mock("../src/pages/hero.js", () => ({ renderHero: vi.fn().mockReturnValue("<div>hero</div>") }));
-vi.mock("../src/pages/hero-hydrate.js", () => ({ hydrateHero: vi.fn() }));
-vi.mock("@commons-systems/style/hero", () => ({ hydrateHero: vi.fn() }));
+vi.mock("@commons-systems/style/hero", () => ({ hydrateHero: vi.fn(), mountHero: vi.fn() }));
 vi.mock("@commons-systems/style/components/autocomplete", () => ({
   showDropdown: vi.fn(),
   removeDropdown: vi.fn(),

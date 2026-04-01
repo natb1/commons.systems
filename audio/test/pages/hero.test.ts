@@ -37,4 +37,10 @@ describe("renderHero", () => {
     const dts = html.match(/<dt>/g);
     expect(dts).toHaveLength(2);
   });
+
+  it("chips reference their panels via data-panel", () => {
+    expect(html).toContain('data-panel="panel-listen"');
+    expect(html).toContain('data-panel="panel-format"');
+    expect(html).toContain('data-panel="panel-host"');
+  });
 });

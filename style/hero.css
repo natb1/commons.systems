@@ -187,6 +187,11 @@
   margin: 0.25rem 0 0;
 }
 
+#hero-container {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
 /* --- Responsive --- */
 
 @media (max-width: 767px) {

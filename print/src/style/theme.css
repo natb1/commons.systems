@@ -2,11 +2,6 @@
 @import "@commons-systems/style/hero.css";
 @import "./viewer.css";
 
-#hero-container {
-  margin-top: 1rem;
-  margin-bottom: 1rem;
-}
-
 :root {
   color-scheme: dark;
 }

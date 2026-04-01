@@ -14,7 +14,7 @@ import { hydrateCategorySankey } from "./pages/home-chart.js";
 import { hydrateBudgetTable, hydrateBudgetChart, hydrateOverridesTable } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { hydrateAccountsCharts } from "./pages/accounts-hydrate.js";
-import { hydrateHero } from "./pages/hero-hydrate.js";
+import { mountHero } from "@commons-systems/style/hero";
 import { renderHero } from "./pages/hero.js";
 import { trackPageView } from "./firebase.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
@@ -34,9 +34,7 @@ if (!app) throw new Error("#app element not found");
 // Hero section — rendered once into its own container above #app
 const heroContainer = document.getElementById("hero-container") as HTMLElement;
 if (!heroContainer) throw new Error("#hero-container element not found");
-heroContainer.innerHTML = renderHero();
-const heroEl = document.getElementById("hero");
-if (heroEl) hydrateHero(heroEl);
+mountHero(heroContainer, renderHero);
 
 export type AppState =
   | { source: "seed" }

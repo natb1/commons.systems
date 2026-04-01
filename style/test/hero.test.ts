@@ -1,6 +1,8 @@
-// @vitest-environment happy-dom
+/**
+ * @vitest-environment happy-dom
+ */
 import { describe, it, expect, afterEach } from "vitest";
-import { hydrateHero } from "@commons-systems/style/hero";
+import { hydrateHero } from "../src/hero";
 
 function buildHeroDOM(): HTMLElement {
   const el = document.createElement("div");
@@ -29,8 +31,8 @@ describe("hydrateHero", () => {
     hydrateHero(el);
 
     const [chipA, chipB] = el.querySelectorAll<HTMLButtonElement>("button.hero-chip");
-    const panelA = document.getElementById("panel-a")!;
-    const panelB = document.getElementById("panel-b")!;
+    const panelA = el.querySelector<HTMLElement>("#panel-a")!;
+    const panelB = el.querySelector<HTMLElement>("#panel-b")!;
 
     chipA.click();
     expect(panelA.hidden).toBe(false);
@@ -52,7 +54,7 @@ describe("hydrateHero", () => {
     hydrateHero(el);
 
     const chipA = el.querySelector<HTMLButtonElement>("button.hero-chip")!;
-    const panelA = document.getElementById("panel-a")!;
+    const panelA = el.querySelector<HTMLElement>("#panel-a")!;
 
     chipA.click();
     expect(panelA.hidden).toBe(false);
@@ -72,8 +74,8 @@ describe("hydrateHero", () => {
     const inlineBtn = el.querySelector<HTMLButtonElement>("button.inline-chip")!;
     inlineBtn.click();
 
-    expect(document.getElementById("panel-a")!.hidden).toBe(false);
-    expect(document.getElementById("panel-b")!.hidden).toBe(true);
+    expect(el.querySelector<HTMLElement>("#panel-a")!.hidden).toBe(false);
+    expect(el.querySelector<HTMLElement>("#panel-b")!.hidden).toBe(true);
   });
 
   it("does not throw when inline chip target does not exist", () => {

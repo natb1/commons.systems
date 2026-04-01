@@ -15,7 +15,7 @@ export function hydrateHero(el: HTMLElement): void {
   chips.forEach((chip) => {
     chip.addEventListener("click", () => {
       const panelId = chip.dataset.panel!;
-      const panel = document.getElementById(panelId);
+      const panel = el.querySelector<HTMLElement>(`#${panelId}`);
       if (panel && !panel.hidden) {
         // Toggle off if already open
         panel.hidden = true;
@@ -27,7 +27,7 @@ export function hydrateHero(el: HTMLElement): void {
     });
   });
 
-  // Inline chip cross-references (e.g., "Create a new statement parser" link)
+  // Inline chip cross-references: buttons with data-opens activate the target panel
   el.addEventListener("click", (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(
       "button.inline-chip[data-opens]",
@@ -36,4 +36,15 @@ export function hydrateHero(el: HTMLElement): void {
     const targetId = btn.dataset.opens;
     if (targetId) showPanel(targetId);
   });
+}
+
+export function mountHero(
+  container: HTMLElement,
+  renderFn: () => string,
+): HTMLElement {
+  container.innerHTML = renderFn();
+  const heroEl = container.querySelector<HTMLElement>("#hero");
+  if (!heroEl) throw new Error("#hero element not found");
+  hydrateHero(heroEl);
+  return heroEl;
 }

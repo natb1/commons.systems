@@ -11,6 +11,7 @@
     "./expandable-row.css": "./expandable-row.css",
     "./panel-toggle": "./src/panel-toggle.ts",
     "./hero": "./src/hero.ts",
+    "./hero-render": "./src/hero-render.ts",
     "./hero.css": "./hero.css"
   },
   "peerDependencies": {
