@@ -9,7 +9,9 @@
     "./components/nav": "./src/components/nav.ts",
     "./components/autocomplete": "./src/components/autocomplete.ts",
     "./expandable-row.css": "./expandable-row.css",
-    "./panel-toggle": "./src/panel-toggle.ts"
+    "./panel-toggle": "./src/panel-toggle.ts",
+    "./hero": "./src/hero.ts",
+    "./hero.css": "./hero.css"
   },
   "peerDependencies": {
     "@commons-systems/htmlutil": "*"

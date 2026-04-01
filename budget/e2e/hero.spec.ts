@@ -6,9 +6,9 @@ test.describe("hero", () => {
     await expect(page.locator("#hero")).toBeVisible();
   });
 
-  test("hero not present on transactions page", async ({ page }) => {
+  test("hero visible on all pages", async ({ page }) => {
     await page.goto("/transactions");
-    await expect(page.locator("#hero")).toHaveCount(0);
+    await expect(page.locator("#hero")).toBeVisible();
   });
 
   test("displays headline and subtext", async ({ page }) => {
@@ -17,50 +17,52 @@ test.describe("hero", () => {
     await expect(page.locator("#hero .hero-subtext")).toBeVisible();
   });
 
-  test("chip accordion opens panel on click", async ({ page }) => {
+  test("clicking a chip shows its panel below", async ({ page }) => {
     await page.goto("/");
-    const firstChip = page.locator(".hero-chip").first();
-    await firstChip.click();
-    await expect(page.locator(".hero-chip-detail").first()).toHaveAttribute("open");
+    await page.locator(".hero-chip").first().click();
+    await expect(page.locator("#panel-analyze")).toBeVisible();
   });
 
-  test("chip accordion closes other panels", async ({ page }) => {
+  test("clicking a second chip hides the first panel", async ({ page }) => {
     await page.goto("/");
-    const chips = page.locator(".hero-chip");
-    await chips.first().click();
-    await expect(page.locator(".hero-chip-detail").first()).toHaveAttribute("open");
+    await page.locator(".hero-chip").first().click();
+    await expect(page.locator("#panel-analyze")).toBeVisible();
 
-    await chips.nth(1).click();
-    await expect(page.locator(".hero-chip-detail").first()).not.toHaveAttribute("open");
-    await expect(page.locator(".hero-chip-detail").nth(1)).toHaveAttribute("open");
+    await page.locator(".hero-chip").nth(1).click();
+    await expect(page.locator("#panel-analyze")).toBeHidden();
+    await expect(page.locator("#panel-parser")).toBeVisible();
+  });
+
+  test("clicking an active chip hides its panel", async ({ page }) => {
+    await page.goto("/");
+    await page.locator(".hero-chip").first().click();
+    await expect(page.locator("#panel-analyze")).toBeVisible();
+
+    await page.locator(".hero-chip").first().click();
+    await expect(page.locator("#panel-analyze")).toBeHidden();
   });
 
   test("inline chip opens parser panel", async ({ page }) => {
     await page.goto("/");
     await page.locator(".hero-chip").first().click();
-    await expect(page.locator(".hero-chip-detail").first()).toHaveAttribute("open");
-
     await page.locator(".inline-chip").click();
-    await expect(page.locator("#chip-parser")).toHaveAttribute("open");
+    await expect(page.locator("#panel-parser")).toBeVisible();
+    await expect(page.locator("#panel-analyze")).toBeHidden();
   });
 
-  test("FAQ entries expand independently", async ({ page }) => {
+  test("FAQ expands and collapses", async ({ page }) => {
     await page.goto("/");
-    const faqItems = page.locator(".hero-faq-item");
-    await faqItems.first().locator("summary").click();
-    await faqItems.nth(1).locator("summary").click();
+    const faq = page.locator(".hero-faq");
+    await faq.locator("summary").click();
+    await expect(faq).toHaveAttribute("open");
 
-    await expect(faqItems.first()).toHaveAttribute("open");
-    await expect(faqItems.nth(1)).toHaveAttribute("open");
+    await faq.locator("summary").click();
+    await expect(faq).not.toHaveAttribute("open");
   });
 
-  test("FAQ entry can be collapsed", async ({ page }) => {
+  test("FAQ contains questions", async ({ page }) => {
     await page.goto("/");
-    const firstFaq = page.locator(".hero-faq-item").first();
-    await firstFaq.locator("summary").click();
-    await expect(firstFaq).toHaveAttribute("open");
-
-    await firstFaq.locator("summary").click();
-    await expect(firstFaq).not.toHaveAttribute("open");
+    await page.locator(".hero-faq summary").click();
+    await expect(page.locator(".hero-faq-body dt")).toHaveCount(2);
   });
 });

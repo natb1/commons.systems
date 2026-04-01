@@ -1,6 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { renderHero } from "./hero.js";
 import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod } from "../firestore.js";
 import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetDiffs, computePerBudgetTrend, weeklyEquivalent, periodEquivalent, type PerBudgetPoint, type PerBudgetStats } from "../balance.js";
 import { formatCurrency } from "../format.js";
@@ -249,7 +248,6 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
   }
 
   return `
-    ${renderHero()}
     <h2>Budgets</h2>
     ${renderPageNotices(options, "budgets")}
     ${chartHtml}

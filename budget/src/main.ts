@@ -15,6 +15,7 @@ import { hydrateBudgetTable, hydrateBudgetChart, hydrateOverridesTable } from ".
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { hydrateAccountsCharts } from "./pages/accounts-hydrate.js";
 import { hydrateHero } from "./pages/hero-hydrate.js";
+import { renderHero } from "./pages/hero.js";
 import { trackPageView } from "./firebase.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -29,6 +30,13 @@ const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app") as HTMLElement;
 if (!app) throw new Error("#app element not found");
+
+// Hero section — rendered once into its own container above #app
+const heroContainer = document.getElementById("hero-container") as HTMLElement;
+if (!heroContainer) throw new Error("#hero-container element not found");
+heroContainer.innerHTML = renderHero();
+const heroEl = document.getElementById("hero");
+if (heroEl) hydrateHero(heroEl);
 
 export type AppState =
   | { source: "seed" }
@@ -127,6 +135,7 @@ const router = createHistoryRouter(
 
 function transition(next: AppState): void {
   state = next;
+  heroContainer.hidden = next.source === "local";
   updateNav();
   clearNavError();
   router.navigate();
@@ -158,7 +167,6 @@ function hydrateTable(
 }
 
 const observer = new MutationObserver(() => {
-  hydrateOnce(app, "#hero", hydrateHero);
   hydrateTable("#category-sankey", hydrateCategorySankey, "Chart rendering");
   hydrateTable("#transactions-table", hydrateTransactionTable);
   hydrateTable("#budgets-chart", hydrateBudgetChart);

@@ -13,6 +13,9 @@ vi.mock("../src/pages/budgets.js", () => ({ renderBudgets: vi.fn().mockResolvedV
 vi.mock("../src/pages/budgets-hydrate.js", () => ({ hydrateBudgetTable: vi.fn(), hydrateBudgetChart: vi.fn() }));
 vi.mock("../src/pages/rules.js", () => ({ renderRules: vi.fn().mockResolvedValue("<div>rules</div>") }));
 vi.mock("../src/pages/rules-hydrate.js", () => ({ hydrateRulesTable: vi.fn() }));
+vi.mock("../src/pages/hero.js", () => ({ renderHero: vi.fn().mockReturnValue("<div>hero</div>") }));
+vi.mock("../src/pages/hero-hydrate.js", () => ({ hydrateHero: vi.fn() }));
+vi.mock("@commons-systems/style/hero", () => ({ hydrateHero: vi.fn() }));
 vi.mock("@commons-systems/style/components/autocomplete", () => ({
   showDropdown: vi.fn(),
   removeDropdown: vi.fn(),
@@ -53,7 +56,7 @@ vi.mock("../src/active-data-source.js", () => ({
 }));
 
 // Set up DOM elements before dynamic import
-document.body.innerHTML = '<div id="nav"><span class="nav-auth"></span></div><div id="app"></div>';
+document.body.innerHTML = '<div id="nav"><span class="nav-auth"></span></div><div id="hero-container"></div><div id="app"></div>';
 
 type AppState = import("../src/main").AppState;
 
@@ -70,12 +73,12 @@ describe("main module", () => {
     expect(localState.source).toBe("local");
   });
 
-  it("transitions to seed state when no local data exists", async () => {
+  it("transitions to seed state when no local data exists — hero visible", async () => {
     mockGetMeta.mockResolvedValue(undefined);
 
     // Reset module cache and re-import to trigger initialization
     vi.resetModules();
-    document.body.innerHTML = '<div id="nav"><span class="nav-auth"></span></div><div id="app"></div>';
+    document.body.innerHTML = '<div id="nav"><span class="nav-auth"></span></div><div id="hero-container"></div><div id="app"></div>';
 
     // Re-declare all mocks since resetModules clears them
     vi.mock("@commons-systems/router", () => ({
@@ -116,9 +119,11 @@ describe("main module", () => {
     await new Promise(r => setTimeout(r, 0));
 
     expect(mockGetMeta).toHaveBeenCalled();
+    const heroContainer = document.getElementById("hero-container")!;
+    expect(heroContainer.hidden).toBe(false);
   });
 
-  it("transitions to local state when meta exists", async () => {
+  it("transitions to local state when meta exists — hero hidden", async () => {
     mockGetMeta.mockResolvedValue({
       key: "upload",
       groupName: "household",
@@ -127,7 +132,7 @@ describe("main module", () => {
     });
 
     vi.resetModules();
-    document.body.innerHTML = '<div id="nav"><span class="nav-auth"></span></div><div id="app"></div>';
+    document.body.innerHTML = '<div id="nav"><span class="nav-auth"></span></div><div id="hero-container"></div><div id="app"></div>';
 
     vi.mock("@commons-systems/router", () => ({
       createHistoryRouter: () => ({ navigate: vi.fn(), destroy: vi.fn(), showTerminalError: vi.fn() }),
@@ -167,5 +172,7 @@ describe("main module", () => {
     await new Promise(r => setTimeout(r, 0));
 
     expect(mockGetMeta).toHaveBeenCalled();
+    const heroContainer = document.getElementById("hero-container")!;
+    expect(heroContainer.hidden).toBe(true);
   });
 });

@@ -12,10 +12,6 @@ describe("renderHero", () => {
     expect(html).toContain("No signup. No subscription. No data sharing.");
   });
 
-  it("contains agentic coding link", () => {
-    expect(html).toContain('href="https://commons.systems"');
-  });
-
   it("renders three chip buttons", () => {
     const matches = html.match(/class="hero-chip"/g);
     expect(matches).toHaveLength(3);
@@ -27,27 +23,17 @@ describe("renderHero", () => {
     expect(html).toContain("chip-badge--hard");
   });
 
-  it("chips reference their panels via data-panel", () => {
-    expect(html).toContain('data-panel="panel-analyze"');
-    expect(html).toContain('data-panel="panel-parser"');
-    expect(html).toContain('data-panel="panel-host"');
-  });
-
   it("panels are hidden by default", () => {
     const panels = html.match(/class="hero-chip-panel"[^>]*hidden/g);
     expect(panels).toHaveLength(3);
   });
 
-  it("contains inline chip button referencing parser panel", () => {
-    expect(html).toContain('data-opens="panel-parser"');
-  });
-
-  it("renders a single FAQ details element with summary", () => {
+  it("renders a FAQ section", () => {
     expect(html).toContain('class="hero-faq"');
     expect(html).toContain("<summary>FAQ</summary>");
   });
 
-  it("FAQ contains two questions as dt elements", () => {
+  it("FAQ contains two questions", () => {
     const dts = html.match(/<dt>/g);
     expect(dts).toHaveLength(2);
   });

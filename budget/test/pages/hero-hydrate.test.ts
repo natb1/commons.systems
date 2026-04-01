@@ -2,40 +2,83 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { hydrateHero } from "../../src/pages/hero-hydrate";
 
+function buildHeroDOM(): HTMLElement {
+  const el = document.createElement("div");
+  el.innerHTML = `
+    <div class="hero-chip-row">
+      <button type="button" class="hero-chip" data-panel="panel-a" aria-expanded="false">A</button>
+      <button type="button" class="hero-chip" data-panel="panel-b" aria-expanded="false">B</button>
+    </div>
+    <div class="hero-chip-panel" id="panel-a" hidden>Panel A</div>
+    <div class="hero-chip-panel" id="panel-b" hidden>
+      <button type="button" class="inline-chip" data-opens="panel-a">Go to A</button>
+      Panel B
+    </div>
+  `;
+  document.body.appendChild(el);
+  return el;
+}
+
 describe("hydrateHero", () => {
   afterEach(() => {
     document.body.innerHTML = "";
   });
 
-  it("clicking inline chip button opens the target details element", () => {
-    const container = document.createElement("div");
-    container.innerHTML = `
-      <button type="button" class="inline-chip" data-opens="chip-parser">Open</button>
-      <details id="chip-parser"><summary>Parser</summary><p>Content</p></details>
-    `;
-    document.body.appendChild(container);
+  it("clicking a chip shows its panel and hides others", () => {
+    const el = buildHeroDOM();
+    hydrateHero(el);
 
-    const target = document.getElementById("chip-parser") as HTMLDetailsElement;
-    expect(target.open).toBe(false);
+    const [chipA, chipB] = el.querySelectorAll<HTMLButtonElement>("button.hero-chip");
+    const panelA = document.getElementById("panel-a")!;
+    const panelB = document.getElementById("panel-b")!;
 
-    hydrateHero(container);
+    chipA.click();
+    expect(panelA.hidden).toBe(false);
+    expect(panelB.hidden).toBe(true);
+    expect(chipA.getAttribute("aria-expanded")).toBe("true");
 
-    const button = container.querySelector("button[data-opens]") as HTMLButtonElement;
-    button.click();
-
-    expect(target.open).toBe(true);
+    chipB.click();
+    expect(panelA.hidden).toBe(true);
+    expect(panelB.hidden).toBe(false);
+    expect(chipA.getAttribute("aria-expanded")).toBe("false");
+    expect(chipB.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("does not throw when target element does not exist", () => {
-    const container = document.createElement("div");
-    container.innerHTML = `
-      <button type="button" class="inline-chip" data-opens="nonexistent">Open</button>
-    `;
-    document.body.appendChild(container);
+  it("clicking an active chip toggles it off", () => {
+    const el = buildHeroDOM();
+    hydrateHero(el);
 
-    hydrateHero(container);
+    const chipA = el.querySelector<HTMLButtonElement>("button.hero-chip")!;
+    const panelA = document.getElementById("panel-a")!;
 
-    const button = container.querySelector("button[data-opens]") as HTMLButtonElement;
-    expect(() => button.click()).not.toThrow();
+    chipA.click();
+    expect(panelA.hidden).toBe(false);
+
+    chipA.click();
+    expect(panelA.hidden).toBe(true);
+    expect(chipA.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("inline chip opens the referenced panel", () => {
+    const el = buildHeroDOM();
+    hydrateHero(el);
+
+    // First open panel B so the inline chip is visible
+    el.querySelectorAll<HTMLButtonElement>("button.hero-chip")[1].click();
+    const inlineBtn = el.querySelector<HTMLButtonElement>("button.inline-chip")!;
+    inlineBtn.click();
+
+    expect(document.getElementById("panel-a")!.hidden).toBe(false);
+    expect(document.getElementById("panel-b")!.hidden).toBe(true);
+  });
+
+  it("does not throw when inline chip target does not exist", () => {
+    const el = document.createElement("div");
+    el.innerHTML = `<button type="button" class="inline-chip" data-opens="nonexistent">Open</button>`;
+    document.body.appendChild(el);
+    hydrateHero(el);
+
+    const btn = el.querySelector<HTMLButtonElement>("button.inline-chip")!;
+    expect(() => btn.click()).not.toThrow();
   });
 });
