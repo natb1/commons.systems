@@ -58,6 +58,13 @@ Use flags that accept a directory instead:
 - `npx vitest run --root print` (vitest `--root` flag)
 - For tests, deploys, QA: use the wrapper scripts which handle directory context
 
+### Avoid `git -C /path`
+
+`git -C /path add` doesn't match rules like `Bash(git add:*)`.
+
+Ensure you are in the worktree directory before running git commands so they
+match existing `allowedTools` patterns.
+
 ### Avoid inline env var prefixes
 
 `VAR=value command` breaks prefix matching.
