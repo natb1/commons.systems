@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# PreToolUse hook: auto-approve workflow script commands.
+# PreToolUse hook: auto-approve workflow script and allowedTools commands.
 # Reads tool input JSON from stdin. Returns JSON permissionDecision of "allow"
-# when the command invokes a ref-pr-workflow script.
+# when every command segment is a ref-pr-workflow script or an allowedTools command.
 # Exits 0 with no output for unrecognized commands (passthrough).
 #
 # errexit (-e) is intentionally omitted — hook failures must not block the user.
 # Errors are logged to stderr; unrecognized commands pass through silently.
 set -uo pipefail
-trap 'echo "[approve-workflow-commands] WARNING: unexpected error on line $LINENO" >&2; exit 0' ERR
+trap 'echo "[approve-workflow-commands] WARNING: unexpected error on line $LINENO (exit $?)" >&2; exit 0' ERR
 
 PARSED=$(jq -r '"\(.tool_name // empty)\t\(.tool_input.command // empty)"' 2>/dev/null) || {
   echo "[approve-workflow-commands] WARNING: failed to parse input" >&2
@@ -48,19 +48,30 @@ fi
 CLEANED=$(printf '%s' "$FIRST_LINE" | sed 's/ *2>[/&][a-z1-9]*//g')
 
 SCRIPT_RE='(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$'
-UNSAFE_RE='(&&|\|\||[`<>$])'
+UNSAFE_RE='[`<>$]'
 
-# Build list of allowed command basenames from settings.json Bash(cmd:*) entries.
-# Falls back to empty (no piped commands approved beyond workflow scripts) on failure.
+# Reject && and || before splitting on | (IFS='|' would split || into empty segments,
+# making the \|\| pattern in UNSAFE_RE dead code).
+if printf '%s\n' "$CLEANED" | grep -qE '(&&|\|\|)'; then
+  exit 0
+fi
+
+# Build list of allowed commands from settings.json Bash(cmd:*) entries.
+# Only single-word commands are included — multi-word prefixes like "gh issue view"
+# cannot match pipe-stage tokens (awk extracts only the first word).
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 SETTINGS_DIR="$HOOK_DIR/.."
 ALLOWED_CMDS=()
 for _SETTINGS_FILE in "$SETTINGS_DIR/settings.json" "$SETTINGS_DIR/settings.local.json"; do
   if [ -f "$_SETTINGS_FILE" ]; then
+    _JQ_OUT=$(jq -r '.permissions.allow[]? // empty' "$_SETTINGS_FILE" 2>/dev/null) || {
+      echo "[approve-workflow-commands] WARNING: failed to parse $_SETTINGS_FILE" >&2
+      continue
+    }
     while IFS= read -r _CMD; do
+      [[ "$_CMD" == *" "* ]] && continue
       [ -n "$_CMD" ] && ALLOWED_CMDS+=("$_CMD")
-    done < <(jq -r '.permissions.allow[]? // empty' "$_SETTINGS_FILE" 2>/dev/null \
-      | sed -n 's/^Bash(\([^:)]*\):\*).*/\1/p' | sort -u)
+    done < <(printf '%s\n' "$_JQ_OUT" | sed -n 's/^Bash(\([^:)]*\):\*).*/\1/p' | sort -u)
   fi
 done
 

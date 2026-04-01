@@ -251,6 +251,11 @@ assert_passthrough \
   ".claude/skills/ref-pr-workflow/scripts/run-lint.sh || evil-command"
 
 assert_passthrough \
+  "or-chaining || between two allowed commands" \
+  "Bash" \
+  "echo hello || head /etc/passwd"
+
+assert_passthrough \
   "continuation then bare newline with evil command" \
   "Bash" \
   "$(printf '.claude/skills/ref-pr-workflow/scripts/run-lint.sh \\\n  arg1\nrm -rf /')"
