@@ -15,6 +15,8 @@
     "./blog-roll/fallback-strategy": "./src/blog-roll/fallback-strategy.ts",
     "./blog-roll/feed-registry": "./src/blog-roll/feed-registry.ts",
     "./blog-roll/vite-plugin-feed-fetch": "./src/blog-roll/vite-plugin-feed-fetch.ts",
+    "./marked-config": "./src/marked-config.ts",
+    "./vite-plugin-blog-posts": "./src/vite-plugin-blog-posts.ts",
     "./pages/home": "./src/pages/home.ts",
     "./pages/admin": "./src/pages/admin.ts",
     "./og-meta": "./src/og-meta.ts",

@@ -11,6 +11,7 @@ vi.mock("marked", () => ({
 }));
 
 import { renderHomeHtml, hydrateHome } from "../../src/pages/home";
+import type { PostContent } from "../../src/pages/home";
 import type { PostMeta } from "../../src/post-types";
 
 const publishedPost: PostMeta = {
@@ -95,6 +96,40 @@ describe("renderHomeHtml", () => {
     const html = renderHomeHtml([publishedPost], "/post/");
     expect(html).toContain('href="/post/hello-world"');
     expect(html).not.toContain("#/post/");
+  });
+
+  it("inlines content HTML with data-hydrated when contentMap is provided", () => {
+    const contentMap: Record<string, PostContent> = {
+      "hello-world": { html: "<p>Pre-rendered body</p>", title: "Hello World" },
+    };
+    const html = renderHomeHtml([publishedPost], "/post/", contentMap);
+    expect(html).toContain("<p>Pre-rendered body</p>");
+    expect(html).toContain("data-hydrated");
+    expect(html).not.toContain("Loading...");
+  });
+
+  it("uses contentMap title over post metadata title when provided", () => {
+    const contentMap: Record<string, PostContent> = {
+      "hello-world": { html: "<p>Body</p>", title: "Override Title" },
+    };
+    const html = renderHomeHtml([publishedPost], "/post/", contentMap);
+    expect(html).toContain('<span class="post-title">Override Title</span>');
+  });
+
+  it("falls back to metadata title when contentMap title is null", () => {
+    const contentMap: Record<string, PostContent> = {
+      "hello-world": { html: "<p>Body</p>", title: null },
+    };
+    const html = renderHomeHtml([publishedPost], "/post/", contentMap);
+    expect(html).toContain('<span class="post-title">Hello World</span>');
+  });
+
+  it("renders Loading placeholder for posts not in contentMap", () => {
+    const contentMap: Record<string, PostContent> = {
+      "some-other-post": { html: "<p>Other</p>", title: "Other" },
+    };
+    const html = renderHomeHtml([publishedPost], "/post/", contentMap);
+    expect(html).toContain("Loading...");
   });
 });
 
@@ -235,5 +270,27 @@ describe("hydrateHome", () => {
       scrollSpy.mockRestore();
       document.body.removeChild(header);
     }
+  });
+
+  it("skips fetch for posts with data-hydrated attribute", async () => {
+    const contentMap: Record<string, PostContent> = {
+      "hello-world": { html: "<p>Pre-rendered</p>", title: "Hello World" },
+    };
+    outlet.innerHTML = renderHomeHtml([publishedPost], "/post/", contentMap);
+    mockFetchPost.mockResolvedValue("# Hello");
+
+    hydrateHome(outlet, [publishedPost], mockFetchPost);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockFetchPost).not.toHaveBeenCalled();
+  });
+
+  it("still fetches for posts without data-hydrated attribute", async () => {
+    outlet.innerHTML = renderHomeHtml([publishedPost]);
+    mockFetchPost.mockResolvedValue("# Hello");
+
+    hydrateHome(outlet, [publishedPost], mockFetchPost);
+    await vi.waitFor(() => {
+      expect(mockFetchPost).toHaveBeenCalledWith("hello-world.md");
+    });
   });
 });

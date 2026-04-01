@@ -1,20 +1,7 @@
 import { test, expect } from "@playwright/test";
 
-// Posts are fetched as raw markdown from GitHub at runtime.
-// Intercept those requests with deterministic stub content so tests
-// do not depend on network access or repository state.
-test.beforeEach(async ({ page }) => {
-  await page.route("https://raw.githubusercontent.com/**", (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname.endsWith("/fellspiral/post/scenes-from-a-hat.md")) {
-      return route.fulfill({ body: "# Scenes from a Hat\nThis is the post." });
-    }
-    if (url.pathname.endsWith("/fellspiral/post/disciplinary-review-operations.md")) {
-      return route.fulfill({ body: "# Disciplinary Review Operations\nThis is the post." });
-    }
-    return route.abort("connectionfailed");
-  });
-});
+// Blog post content is inlined at build time by the vite blog-posts plugin.
+// No route interception is needed -- content comes from the build output.
 
 test.describe("blog", () => {
   test("post slug route renders posts container @smoke", async ({ page }) => {
@@ -57,7 +44,7 @@ test.describe("blog", () => {
     await page.waitForSelector("#posts", { timeout: 30000 });
     await expect(
       page.locator("#post-content-scenes-from-a-hat"),
-    ).toContainText("This is the post.", { timeout: 30000 });
+    ).toContainText("Like many American millennials", { timeout: 30000 });
   });
 
   // datetime must match publishedAt in fellspiral/seeds/firestore.ts

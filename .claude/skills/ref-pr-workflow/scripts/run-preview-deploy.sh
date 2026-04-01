@@ -29,11 +29,7 @@ VITE_FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" \
   npm run build
 cd "$REPO_ROOT"
 
-# Delete existing channel if present
-echo "Cleaning up existing preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
-delete_preview_channel "$CHANNEL_ID" "$HOSTING_SITE"
-
-# Deploy new hosting channel (uses deploy target from .firebaserc)
+# Deploy hosting channel — reuses existing channel if present (uses deploy target from .firebaserc)
 echo "Deploying to preview channel '$CHANNEL_ID' on site '$HOSTING_SITE'..."
 DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
   --only "$APP_NAME" \
