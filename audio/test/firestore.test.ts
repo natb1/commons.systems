@@ -205,7 +205,7 @@ describe("getPublicMedia", () => {
     });
 
     await expect(getPublicMedia()).rejects.toThrow(DataIntegrityError);
-    await expect(getPublicMedia()).rejects.toThrow("Invalid ISO 8601 date");
+    await expect(getPublicMedia()).rejects.toThrow("Expected UTC ISO 8601 date");
   });
 
   it("throws DataIntegrityError for negative duration", async () => {

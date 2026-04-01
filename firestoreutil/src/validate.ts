@@ -42,3 +42,23 @@ export function optionalNumber(value: unknown, field: string): number | null {
   }
   return value;
 }
+
+export function requireStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new DataIntegrityError(`Expected array for ${field}, got ${typeof value}`);
+  }
+  return value.map((item, i) => {
+    if (typeof item !== "string") {
+      throw new DataIntegrityError(`Expected string at ${field}[${i}], got ${typeof item}`);
+    }
+    return item;
+  });
+}
+
+export function requireIso8601(value: unknown, field: string): string {
+  const s = requireString(value, field);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(s)) {
+    throw new DataIntegrityError(`Expected UTC ISO 8601 date for ${field}: "${s}"`);
+  }
+  return s;
+}

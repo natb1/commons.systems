@@ -1,6 +1,5 @@
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
-import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
-import { requireString, requireBoolean, requireNonNegativeNumber, optionalString, optionalNumber } from "@commons-systems/firestoreutil/validate";
+import { requireString, requireBoolean, requireNonNegativeNumber, optionalString, optionalNumber, requireStringArray, requireIso8601 } from "@commons-systems/firestoreutil/validate";
+import { createMediaQueries } from "@commons-systems/firestoreutil/media-queries";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
@@ -13,26 +12,6 @@ function requireAudioFormat(value: unknown): AudioFormat {
     throw new DataIntegrityError(`Invalid audio format: "${s}"`);
   }
   return s as AudioFormat;
-}
-
-function requireStringArray(value: unknown, field: string): string[] {
-  if (!Array.isArray(value)) {
-    throw new DataIntegrityError(`Expected array for ${field}, got ${typeof value}`);
-  }
-  return value.map((item, i) => {
-    if (typeof item !== "string") {
-      throw new DataIntegrityError(`Expected string at ${field}[${i}], got ${typeof item}`);
-    }
-    return item;
-  });
-}
-
-function requireIso8601(value: unknown, field: string): string {
-  const s = requireString(value, field);
-  if (!/^\d{4}-\d{2}-\d{2}T/.test(s) || isNaN(Date.parse(s))) {
-    throw new DataIntegrityError(`Invalid ISO 8601 date for ${field}: "${s}"`);
-  }
-  return s;
 }
 
 function toAudioItem(id: string, data: Record<string, unknown>): AudioItem {
@@ -55,44 +34,5 @@ function toAudioItem(id: string, data: Record<string, unknown>): AudioItem {
   };
 }
 
-export async function getPublicMedia(): Promise<AudioItem[]> {
-  const path = nsCollectionPath(NAMESPACE, "media");
-  const q = query(collection(db, path), where("publicDomain", "==", true));
-  const snapshot = await getDocs(q);
-  const items = snapshot.docs.map((docSnap) => toAudioItem(docSnap.id, docSnap.data()));
-  items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
-  return items;
-}
-
-export async function getUserMedia(email: string): Promise<AudioItem[]> {
-  const path = nsCollectionPath(NAMESPACE, "media");
-  const q = query(collection(db, path), where("memberEmails", "array-contains", email));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((docSnap) => toAudioItem(docSnap.id, docSnap.data()));
-}
-
-export async function getAllAccessibleMedia(email: string): Promise<AudioItem[]> {
-  const [publicItems, userItems] = await Promise.all([
-    getPublicMedia(),
-    getUserMedia(email),
-  ]);
-
-  const seen = new Set<string>();
-  const merged: AudioItem[] = [];
-  for (const item of [...publicItems, ...userItems]) {
-    if (!seen.has(item.id)) {
-      seen.add(item.id);
-      merged.push(item);
-    }
-  }
-
-  merged.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
-  return merged;
-}
-
-export async function getMediaItem(id: string): Promise<AudioItem | null> {
-  const path = nsCollectionPath(NAMESPACE, "media");
-  const docSnap = await getDoc(doc(db, path, id));
-  if (!docSnap.exists()) return null;
-  return toAudioItem(docSnap.id, docSnap.data());
-}
+export const { getPublicMedia, getUserMedia, getAllAccessibleMedia, getMediaItem } =
+  createMediaQueries(db, NAMESPACE, "media", toAudioItem);

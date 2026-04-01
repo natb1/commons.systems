@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Upload an audio file to GCS and create the corresponding Firestore document.
-# Parses ID3 tags via ffprobe to populate metadata fields automatically.
+# Parses audio metadata via ffprobe to populate metadata fields automatically.
 # Targets the commons-systems production project and bucket. No dry-run or staging mode.
 # Usage: upload-media.sh <file> [--public | --group <groupId>]
 set -euo pipefail
@@ -9,6 +9,10 @@ BUCKET="gs://commons-systems.firebasestorage.app"
 PROJECT="commons-systems"
 COLLECTION_PATH="audio/prod/media"
 GROUPS_PATH="audio/prod/groups"
+
+CLEANUP_FILES=()
+cleanup() { rm -f "${CLEANUP_FILES[@]}"; }
+trap cleanup EXIT
 
 usage() {
   cat >&2 <<EOF
@@ -89,12 +93,19 @@ else
 fi
 
 # Extract metadata via ffprobe
-echo "Parsing ID3 tags..."
+echo "Parsing audio metadata..."
 PROBE_JSON="$(ffprobe -v quiet -print_format json -show_format "$FILE_PATH")"
+
+if ! echo "$PROBE_JSON" | jq -e '.format' >/dev/null 2>&1; then
+  echo "error: ffprobe returned no format data for ${FILE_PATH}" >&2
+  echo "The file may be corrupt or not a recognized audio format." >&2
+  exit 1
+fi
 
 TITLE="$(echo "$PROBE_JSON" | jq -r '.format.tags.title // empty')"
 if [ -z "$TITLE" ]; then
   TITLE="${FILENAME%.*}"
+  echo "warning: no title tag found, using filename: ${TITLE}" >&2
 fi
 
 ARTIST="$(echo "$PROBE_JSON" | jq -r '.format.tags.artist // empty')"
@@ -111,9 +122,6 @@ fi
 RAW_TRACK="$(echo "$PROBE_JSON" | jq -r '.format.tags.track // empty')"
 if [ -n "$RAW_TRACK" ]; then
   TRACK_NUMBER="$(echo "$RAW_TRACK" | sed 's|/.*||' | grep -o '[0-9]*' | head -1)"
-  if [ -z "$TRACK_NUMBER" ]; then
-    TRACK_NUMBER=""
-  fi
 else
   TRACK_NUMBER=""
 fi
@@ -125,9 +133,6 @@ if [ -z "$RAW_DATE" ]; then
 fi
 if [ -n "$RAW_DATE" ]; then
   YEAR="$(echo "$RAW_DATE" | grep -o '[0-9]\{4\}' | head -1)"
-  if [ -z "$YEAR" ]; then
-    YEAR=""
-  fi
 else
   YEAR=""
 fi
@@ -152,7 +157,7 @@ EMAILS=()
 if [ -n "$GROUP_ID" ]; then
   GROUPS_URL="https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${GROUPS_PATH}/${GROUP_ID}"
   GROUP_RESP_FILE=$(mktemp)
-  trap 'rm -f "$GROUP_RESP_FILE"' EXIT
+  CLEANUP_FILES+=("$GROUP_RESP_FILE")
   GROUP_HTTP=$(curl -sS -o "$GROUP_RESP_FILE" -w '%{http_code}' "$GROUPS_URL" \
     --config <(echo "header = \"Authorization: Bearer ${TOKEN}\""))
 
@@ -162,8 +167,6 @@ if [ -n "$GROUP_ID" ]; then
   fi
 
   GROUP_DOC=$(cat "$GROUP_RESP_FILE")
-  rm -f "$GROUP_RESP_FILE"
-  trap - EXIT
 
   MEMBER_LIST=$(echo "$GROUP_DOC" | jq -r '.fields.members.arrayValue.values[]?.stringValue // empty')
   if [ -z "$MEMBER_LIST" ]; then
@@ -280,7 +283,7 @@ FIRESTORE_BODY=$(jq -n \
 FIRESTORE_URL="https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${COLLECTION_PATH}"
 
 RESP_FILE=$(mktemp)
-trap 'rm -f "$RESP_FILE"' EXIT
+CLEANUP_FILES+=("$RESP_FILE")
 HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w '%{http_code}' -X POST "$FIRESTORE_URL" \
   --config <(echo "header = \"Authorization: Bearer ${TOKEN}\"") \
   -H "Content-Type: application/json" \

@@ -4,14 +4,11 @@ import { TEST_USER } from "@commons-systems/authutil/seed";
 
 type AudioSeedData = Omit<AudioItem, "id">;
 
-// Production media upload is handled by audio/scripts/upload-media.sh.
-// Emulator seeding is automated via seeds/run-storage-seed.ts.
+// The media collection is intentionally non-convergent: prod seed deploys
+// upsert these documents but will not delete private items added via
+// audio/scripts/upload-media.sh or manual Firestore writes.
 //
-// Usage: audio/scripts/upload-media.sh <file> [--public | --group <groupId>]
-// See the script for details on ID3 tag parsing and Firestore document creation.
-//
-// Private media documents and groups are managed manually (not in this seed).
-// The media collection is non-convergent so prod deploys won't delete private items.
+// Emulator storage objects are seeded separately via seeds/run-storage-seed.ts.
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [

@@ -10,7 +10,8 @@
     "./delete-namespace": "./src/delete-namespace.ts",
     "./errors": "./src/errors.ts",
     "./validate": "./src/validate.ts",
-    "./brand": "./src/brand.ts"
+    "./brand": "./src/brand.ts",
+    "./media-queries": "./src/media-queries.ts"
   },
   "scripts": {
     "test": "vitest run",

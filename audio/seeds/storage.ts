@@ -1,3 +1,5 @@
+import { TEST_USER } from "@commons-systems/authutil/seed";
+
 export interface StorageSeedItem {
   path: string;
   content: Buffer;
@@ -5,7 +7,7 @@ export interface StorageSeedItem {
 }
 
 // Generates a minimal valid WAV file (RIFF/WAVE) with silence.
-// 8 kHz, mono, 8-bit unsigned PCM. ~8 KB per second of audio.
+// 8 kHz, mono, 8-bit unsigned PCM. 8000 bytes per second of audio.
 function makeWav(durationSeconds: number): Buffer {
   const sampleRate = 8000;
   const numSamples = sampleRate * durationSeconds;
@@ -39,8 +41,10 @@ function makeWav(durationSeconds: number): Buffer {
 }
 
 const publicMeta = { publicDomain: "true" };
-const testPrivateMeta = { publicDomain: "false", member_0: "test@example.com" };
+const testPrivateMeta = { publicDomain: "false", member_0: TEST_USER.email };
 
+// Seed content is WAV regardless of file extension — the storage emulator
+// does not validate audio content, so WAV bytes serve as placeholders.
 const storageSeed: StorageSeedItem[] = [
   {
     path: "audio/prod/media/musopen-beethoven-moonlight.mp3",

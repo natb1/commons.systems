@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { requireString, requireNumber, requireNonNegativeNumber, requireBoolean, optionalString, optionalNumber } from "../src/validate.js";
+import { requireString, requireNumber, requireNonNegativeNumber, requireBoolean, optionalString, optionalNumber, requireStringArray, requireIso8601 } from "../src/validate.js";
 import { DataIntegrityError } from "../src/errors.js";
 
 describe("requireString", () => {
@@ -92,5 +92,44 @@ describe("optionalNumber", () => {
   it("throws for non-finite number", () => {
     expect(() => optionalNumber(NaN, "field")).toThrow(DataIntegrityError);
     expect(() => optionalNumber(Infinity, "field")).toThrow(DataIntegrityError);
+  });
+});
+
+describe("requireStringArray", () => {
+  it("returns empty array", () => {
+    expect(requireStringArray([], "field")).toEqual([]);
+  });
+  it("returns array of strings", () => {
+    expect(requireStringArray(["a", "b"], "field")).toEqual(["a", "b"]);
+  });
+  it("throws for non-array", () => {
+    expect(() => requireStringArray("not-array", "field")).toThrow(DataIntegrityError);
+    expect(() => requireStringArray(null, "field")).toThrow(DataIntegrityError);
+    expect(() => requireStringArray(42, "field")).toThrow(DataIntegrityError);
+  });
+  it("throws for array with non-string element", () => {
+    expect(() => requireStringArray(["a", 42], "field")).toThrow(DataIntegrityError);
+    expect(() => requireStringArray([null], "field")).toThrow(DataIntegrityError);
+  });
+});
+
+describe("requireIso8601", () => {
+  it("returns valid UTC ISO 8601 date", () => {
+    expect(requireIso8601("2026-03-01T00:00:00Z", "field")).toBe("2026-03-01T00:00:00Z");
+  });
+  it("accepts fractional seconds", () => {
+    expect(requireIso8601("2026-03-01T12:30:00.123Z", "field")).toBe("2026-03-01T12:30:00.123Z");
+  });
+  it("throws for non-UTC ISO 8601", () => {
+    expect(() => requireIso8601("2026-03-01T00:00:00+05:00", "field")).toThrow(DataIntegrityError);
+  });
+  it("throws for date-only string", () => {
+    expect(() => requireIso8601("2026-03-01", "field")).toThrow(DataIntegrityError);
+  });
+  it("throws for non-string", () => {
+    expect(() => requireIso8601(42, "field")).toThrow(DataIntegrityError);
+  });
+  it("throws for invalid date format", () => {
+    expect(() => requireIso8601("not-a-date", "field")).toThrow(DataIntegrityError);
   });
 });

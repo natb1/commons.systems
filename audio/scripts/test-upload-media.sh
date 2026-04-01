@@ -19,9 +19,8 @@ setup() {
   # Create a test audio file (content irrelevant since ffprobe is stubbed)
   echo "fake audio" > "$TMPDIR_TEST/stub/test-song.mp3"
 
-  # ffprobe stub: returns JSON with ID3 tags
+  # ffprobe stub: returns JSON with audio metadata
   # Override behavior by writing to $STUB_DIR/ffprobe-mode:
-  #   "missing-title"  -> omit title tag
   #   "track-slash"    -> track "3/12" format
   #   "missing-optional" -> no track, no date, no title
   cat > "$TMPDIR_TEST/bin/ffprobe" <<'STUB'
@@ -33,11 +32,6 @@ if [ -f "$STUB_DIR/ffprobe-mode" ]; then
 fi
 
 case "$MODE" in
-  missing-title)
-    cat <<'JSON'
-{"format":{"duration":"245.5","tags":{"artist":"Test Artist","album":"Test Album","track":"1","genre":"Rock","date":"2020"}}}
-JSON
-    ;;
   track-slash)
     cat <<'JSON'
 {"format":{"duration":"180.0","tags":{"title":"Track Three","artist":"Slash Artist","album":"Slash Album","track":"3/12","genre":"Jazz","date":"2019-05-10"}}}
@@ -311,10 +305,11 @@ assert_contains "Firestore trackNumber is 3" '"integerValue": "3"' "$curl_body"
 assert_contains "Firestore year is 2019" '"integerValue": "2019"' "$curl_body"
 teardown
 
-echo "Test 12: missing optional tags -> null fields, filename fallback for title"
+echo "Test 12: missing optional tags -> null fields, filename fallback for title with warning"
 setup
 echo "missing-optional" > "$TMPDIR_TEST/stub/ffprobe-mode"
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-song.mp3" --public 2>&1)
+assert_contains "title fallback warning" "warning: no title tag found, using filename: test-song" "$output"
 curl_body=$(cat "$TMPDIR_TEST/stub/curl-body.json")
 assert_contains "Firestore title falls back to filename" '"stringValue": "test-song"' "$curl_body"
 assert_contains "Firestore trackNumber is null" '"nullValue": null' "$curl_body"
