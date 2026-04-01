@@ -58,6 +58,21 @@ function requireReimbursement(value: unknown): number {
   return n;
 }
 
+function requireAllowancePeriod(value: unknown): "weekly" | "monthly" | "quarterly" {
+  if (value === "weekly" || value === "monthly" || value === "quarterly") return value;
+  throw new Error(`Expected allowancePeriod to be "weekly" | "monthly" | "quarterly", got ${JSON.stringify(value)}`);
+}
+
+function requireRollover(value: unknown): "none" | "debt" | "balance" {
+  if (value === "none" || value === "debt" || value === "balance") return value;
+  throw new Error(`Expected rollover to be "none" | "debt" | "balance", got ${JSON.stringify(value)}`);
+}
+
+function requireRuleType(value: unknown): "categorization" | "budget_assignment" {
+  if (value === "categorization" || value === "budget_assignment") return value;
+  throw new Error(`Expected rule type to be "categorization" | "budget_assignment", got ${JSON.stringify(value)}`);
+}
+
 export function serializeSeedData(): SeedData {
   const transactions: SeedTransaction[] = findCollection("seed-transactions").map(({ id, data: raw }) => {
     const d = raw as unknown as TransactionSeedData;
@@ -87,15 +102,15 @@ export function serializeSeedData(): SeedData {
     const overrides: SeedBudgetOverride[] = Array.isArray(raw.overrides)
       ? (raw.overrides as { date: unknown; balance: number }[]).map((o) => ({
           dateMs: requireMs(o.date, "overrides.date"),
-          balance: o.balance,
+          balance: requireNumber(o.balance, "overrides.balance"),
         }))
       : [];
     return {
       id,
       name,
       allowance: requireNonNegativeNumber(d.allowance, "allowance"),
-      allowancePeriod: d.allowancePeriod,
-      rollover: d.rollover,
+      allowancePeriod: requireAllowancePeriod(d.allowancePeriod),
+      rollover: requireRollover(d.rollover),
       overrides,
     };
   });
@@ -117,7 +132,7 @@ export function serializeSeedData(): SeedData {
     const d = raw as unknown as RuleSeedData;
     return {
       id,
-      type: d.type,
+      type: requireRuleType(d.type),
       pattern: requireString(d.pattern, "pattern"),
       target: requireString(d.target, "target"),
       priority: requireNumber(d.priority, "priority"),

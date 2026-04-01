@@ -22,7 +22,7 @@ export type TransactionSeedData = Omit<Transaction, "id" | "timestamp" | "budget
 };
 
 /** Seed budgets add `memberEmails` for security rules (not present in the client Budget type).
- *  Overrides are omitted — the client read path defaults missing overrides to []. */
+ *  Overrides are omitted — both the client read path and the build-time seed serializer default missing overrides to []. */
 export type BudgetSeedData = Omit<Budget, "id" | "groupId" | "overrides"> & { memberEmails: string[]; groupId: string | null };
 
 /** Seed budget periods use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client BudgetPeriod type) */

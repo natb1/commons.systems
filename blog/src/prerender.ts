@@ -3,10 +3,11 @@ import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { InfoPanelData } from "./components/info-panel.js";
-import type { PostMeta } from "./post-types.js";
+import type { PostMeta, PublishedPost } from "./post-types.js";
 import { renderInfoPanel } from "./components/info-panel.js";
 import { createMarked, extractH1 } from "./marked-config.js";
 import { renderArticle, type PostContent } from "./pages/home.js";
+import { findPostsCollection, extractPublishedPosts } from "./seed-posts.js";
 
 export interface NavLink {
   readonly href: string;
@@ -31,34 +32,26 @@ function renderNavHtml(links: NavLink[]): string {
 }
 
 interface RenderedPost {
-  meta: PostMeta & { published: true };
+  meta: PublishedPost;
   articleHtml: string;
 }
 
 async function parseAndRenderPosts(
-  published: Array<{ id: string; data: Record<string, unknown> }>,
+  published: PublishedPost[],
   postDir: string,
   marked: ReturnType<typeof createMarked>,
 ): Promise<RenderedPost[]> {
   const results: RenderedPost[] = [];
-  for (const doc of published) {
-    const data = doc.data;
-    const filename = data.filename as string;
-    const markdown = readFileSync(join(postDir, filename), "utf-8");
+  for (const post of published) {
+    const markdown = readFileSync(join(postDir, post.filename), "utf-8");
 
     const h1 = extractH1(markdown);
-    const title = h1 ? h1.title : (data.title as string);
+    const title = h1 ? h1.title : post.title;
     const body = h1 ? h1.body : markdown;
     const html = await marked.parse(body);
     const content: PostContent = { html, title: h1 ? h1.title : null };
 
-    const meta: PostMeta & { published: true } = {
-      id: doc.id,
-      title,
-      published: true,
-      publishedAt: data.publishedAt as string,
-      filename,
-    };
+    const meta: PublishedPost = { ...post, title };
 
     results.push({
       meta,
@@ -111,35 +104,13 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const template = readFileSync(join(distDir, "index.html"), "utf-8");
   const marked = createMarked();
 
-  const postsCollection = seed.collections.find((c) => c.name === "posts");
-  if (!postsCollection) {
-    throw new Error("No 'posts' collection found in seed data");
-  }
+  const postsCollection = findPostsCollection(seed.collections);
+  const published = extractPublishedPosts(postsCollection);
 
-  const publishedDocs = postsCollection.documents.filter(
-    (doc) => (doc.data as Record<string, unknown>).published === true,
-  );
+  const parsed = await parseAndRenderPosts(published, postDir, marked);
 
-  for (const doc of publishedDocs) {
-    const data = doc.data as Record<string, unknown>;
-    if (typeof data.title !== "string") {
-      throw new Error(`Post "${doc.id}" is missing a title`);
-    }
-    if (typeof data.filename !== "string") {
-      throw new Error(`Post "${doc.id}" is missing a filename`);
-    }
-    if (typeof data.publishedAt !== "string") {
-      throw new Error(`Post "${doc.id}" is missing a publishedAt`);
-    }
-  }
-
-  const parsed = await parseAndRenderPosts(
-    publishedDocs.map((d) => ({ id: d.id, data: d.data as Record<string, unknown> })),
-    postDir,
-    marked,
-  );
-
-  // Sort by date descending for the home page
+  // Sort by date descending for the home page (extractPublishedPosts sorts by
+  // publishedAt string comparison; re-sort by parsed Date for correctness)
   const sorted = [...parsed].sort(
     (a, b) => new Date(b.meta.publishedAt).getTime() - new Date(a.meta.publishedAt).getTime(),
   );
@@ -158,12 +129,8 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   console.log("Pre-rendered: /index.html");
 
   // Generate per-post pages with OG tags and single-post content
-  for (const doc of publishedDocs) {
-    const data = doc.data as Record<string, unknown>;
-    const id = doc.id;
-    const title = data.title as string;
-    const description = typeof data.previewDescription === "string" ? data.previewDescription : undefined;
-    const image = typeof data.previewImage === "string" ? data.previewImage : undefined;
+  for (const post of published) {
+    const { id, title, previewDescription: description, previewImage: image } = post;
 
     const ogTags = [
       `<meta property="og:title" content="${escapeHtml(title)}">`,
@@ -188,8 +155,8 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
     // Inject single-post content, info panel, and nav
-    const post = parsed.find((p) => p.meta.id === id)!;
-    html = injectMain(html, post.articleHtml);
+    const rendered = parsed.find((p) => p.meta.id === id)!;
+    html = injectMain(html, rendered.articleHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
 

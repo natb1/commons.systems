@@ -10,6 +10,12 @@ function rowRuleId(el: HTMLElement): RuleId | null {
   return (row.dataset.ruleId ?? null) as RuleId | null;
 }
 
+function rowNormalizationRuleId(el: HTMLElement): NormalizationRuleId | null {
+  const row = el.closest(".rule-row");
+  if (!(row instanceof HTMLElement)) return null;
+  return (row.dataset.ruleId ?? null) as NormalizationRuleId | null;
+}
+
 export function hydrateRulesTable(container: HTMLElement): void {
   registerAutocompleteListeners();
 
@@ -88,7 +94,8 @@ export function hydrateRulesTable(container: HTMLElement): void {
     try {
       const ds = getActiveDataSource();
       if (isNormalizationRow(target)) {
-        const nruleId = ruleId as unknown as NormalizationRuleId;
+        const nruleId = rowNormalizationRuleId(target);
+        if (!nruleId) return;
         if (target.classList.contains("edit-pattern")) {
           await ds.updateNormalizationRule(nruleId, { pattern: target.value });
         } else if (target.classList.contains("edit-canonical")) {
@@ -149,7 +156,9 @@ export function hydrateRulesTable(container: HTMLElement): void {
       try {
         const ds = getActiveDataSource();
         if (isNormalizationRow(target)) {
-          await ds.deleteNormalizationRule(ruleId as unknown as NormalizationRuleId);
+          const nruleId = rowNormalizationRuleId(target);
+          if (!nruleId) return;
+          await ds.deleteNormalizationRule(nruleId);
         } else {
           await ds.deleteRule(ruleId);
         }
