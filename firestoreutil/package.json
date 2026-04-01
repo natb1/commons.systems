@@ -11,6 +11,7 @@
     "./errors": "./src/errors.ts",
     "./validate": "./src/validate.ts",
     "./brand": "./src/brand.ts",
+    "./media-queries": "./src/media-queries.ts",
     "./init": "./src/init.ts",
     "./issue-state": "./src/issue-state.ts"
   },
