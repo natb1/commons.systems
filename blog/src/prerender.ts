@@ -2,11 +2,11 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { InfoPanelData } from "./components/info-panel.js";
-import type { PostMeta } from "./post-types.js";
-import { renderInfoPanel } from "./components/info-panel.js";
-import { createMarked, getPublishedFromSeed, renderPostContents } from "./marked-config.js";
-import { renderArticle } from "./pages/home.js";
+import type { InfoPanelData } from "./components/info-panel.ts";
+import { validatePublishedPosts, type PostMeta } from "./post-types.ts";
+import { renderInfoPanel } from "./components/info-panel.ts";
+import { createMarked, renderPostContents } from "./marked-config.ts";
+import { renderArticle } from "./pages/home.ts";
 
 export interface NavLink {
   readonly href: string;
@@ -78,7 +78,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const template = readFileSync(join(distDir, "index.html"), "utf-8");
   const marked = createMarked();
 
-  const published = getPublishedFromSeed(seed);
+  const published = validatePublishedPosts(seed);
 
   const contentMap = await renderPostContents(
     published,

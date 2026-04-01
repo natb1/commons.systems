@@ -1,8 +1,8 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
-import { formatUtcDate, monthName } from "../date.js";
-import { isPublished, type PostMeta, type PublishedPost } from "../post-types.js";
-import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.js";
+import { formatUtcDate, monthName } from "../date.ts";
+import { isPublished, type PostMeta, type PublishedPost } from "../post-types.ts";
+import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.ts";
 
 export interface LinkSection {
   heading?: string;

@@ -1,5 +1,5 @@
-import type { BlogRollStrategy, LatestPost } from "./types.js";
-import { parseXml } from "./parse-feed.js";
+import type { BlogRollStrategy, LatestPost } from "./types.ts";
+import { parseXml } from "./parse-feed.ts";
 
 export class AtomStrategy implements BlogRollStrategy {
   constructor(

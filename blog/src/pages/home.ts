@@ -1,10 +1,10 @@
 import DOMPurify from "dompurify";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
-import { formatUtcDate } from "../date.js";
-import { createMarked, extractH1, type PostContent } from "../marked-config.js";
+import { formatUtcDate } from "../date.ts";
+import { createMarked, extractH1, type PostContent } from "../marked-config.ts";
 import { isOutletCurrent } from "@commons-systems/router/hydrate";
-import type { PostMeta } from "../post-types.js";
+import type { PostMeta } from "../post-types.ts";
 
 export type { PostContent };
 

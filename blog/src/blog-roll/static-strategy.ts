@@ -1,4 +1,4 @@
-import type { BlogRollStrategy, LatestPost } from "./types.js";
+import type { BlogRollStrategy, LatestPost } from "./types.ts";
 
 export class StaticStrategy implements BlogRollStrategy {
   constructor(private post: LatestPost | null) {}

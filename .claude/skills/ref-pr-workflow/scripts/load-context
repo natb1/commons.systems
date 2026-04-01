@@ -15,7 +15,8 @@ echo "## PR Status"
 STDERR_FILE=$(mktemp) || { echo "error: could not create temp file" >&2; exit 1; }
 trap 'rm -f "$STDERR_FILE"' EXIT
 PR_EXIT=0
-PR_OUTPUT=$(gh pr view --json title,body,comments,number,state 2>"$STDERR_FILE") || PR_EXIT=$?
+BRANCH=$(git branch --show-current) || { echo "error: could not determine current branch" >&2; exit 1; }
+PR_OUTPUT=$(gh pr view "$BRANCH" --json title,body,comments,number,state 2>"$STDERR_FILE") || PR_EXIT=$?
 if [[ "$PR_EXIT" -ne 0 ]]; then
   PR_STDERR=$(cat "$STDERR_FILE")
   if echo "$PR_STDERR" | grep -qi "no pull requests found"; then

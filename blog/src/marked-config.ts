@@ -1,7 +1,6 @@
 import { Marked } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
-import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { PublishedPost } from "./post-types.js";
+import type { PublishedPost } from "./post-types.ts";
 
 // Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
 // and opens post-body links in new tabs with rel="noopener noreferrer" to prevent
@@ -28,42 +27,6 @@ export function extractH1(markdown: string): { title: string; body: string } | n
   const match = markdown.match(/^#\s+(.+)/);
   if (!match) return null;
   return { title: match[1], body: markdown.replace(/^#\s+.+\n?/, "") };
-}
-
-/** Validate and extract published posts from seed data. Throws on missing fields. */
-export function getPublishedFromSeed(
-  seed: Pick<SeedSpec, "collections">,
-  errorPrefix = "",
-): PublishedPost[] {
-  const postsCollection = seed.collections.find((c) => c.name === "posts");
-  if (!postsCollection) {
-    throw new Error(`${errorPrefix}No 'posts' collection found in seed data`);
-  }
-
-  const published: PublishedPost[] = [];
-  for (const doc of postsCollection.documents) {
-    const data = doc.data as Record<string, unknown>;
-    if (data.published !== true) continue;
-    if (typeof data.title !== "string") {
-      throw new Error(`${errorPrefix}Post "${doc.id}" is missing a title`);
-    }
-    if (typeof data.filename !== "string") {
-      throw new Error(`${errorPrefix}Post "${doc.id}" is missing a filename`);
-    }
-    if (typeof data.publishedAt !== "string") {
-      throw new Error(`${errorPrefix}Post "${doc.id}" is missing a publishedAt`);
-    }
-    published.push({
-      id: doc.id,
-      title: data.title,
-      published: true,
-      publishedAt: data.publishedAt,
-      filename: data.filename,
-      previewImage: data.previewImage as string | undefined,
-      previewDescription: data.previewDescription as string | undefined,
-    });
-  }
-  return published;
 }
 
 export interface PostContent {
