@@ -158,6 +158,7 @@ async function refreshAfterAuthChange(): Promise<void> {
 onAuthStateChanged((user) => {
   if (user?.uid === currentUser?.uid) return;
   currentUser = user;
+  // Intentional silent degradation — user sees stale content rather than an error.
   refreshAfterAuthChange().catch((err) => {
     if (deferProgrammerError(err)) return;
     logError(err, { operation: "auth-change-refresh" });

@@ -280,6 +280,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       const chartTxns = serializeChartTransactions(txns, budgetIdToName);
       document.dispatchEvent(new CustomEvent(TRANSACTIONS_APPENDED_EVENT, { detail: chartTxns }));
     } catch (chartError) {
+      // Intentional silent degradation — user sees stale content rather than an error.
       logError(chartError, { operation: "update-chart-scroll" });
     }
   }

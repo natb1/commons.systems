@@ -9,7 +9,10 @@ export interface ErrorContext {
   [key: string]: unknown;
 }
 
-export type ErrorSink = (error: unknown, context: ErrorContext) => void;
+/** ErrorContext after logError enrichment — `kind` is guaranteed present. */
+export type EnrichedErrorContext = ErrorContext & { kind: ErrorKind };
+
+export type ErrorSink = (error: unknown, context: EnrichedErrorContext) => void;
 
 let sink: ErrorSink | undefined;
 
@@ -20,11 +23,11 @@ export function registerErrorSink(s: ErrorSink): void {
 /**
  * Log an error with structured context. Always writes to console.error for
  * local visibility, then forwards to the registered sink (e.g., Firestore)
- * if one exists. Sink failures are silently caught — console.error is the
- * guaranteed fallback.
+ * if one exists. Synchronous sink failures are caught here. Async sinks
+ * must handle their own rejections — logError does not await.
  */
 export function logError(error: unknown, context: ErrorContext): void {
-  const enriched: ErrorContext = {
+  const enriched: EnrichedErrorContext = {
     ...context,
     kind: context.kind ?? classifyError(error),
   };
@@ -35,7 +38,9 @@ export function logError(error: unknown, context: ErrorContext): void {
     try {
       sink(error, enriched);
     } catch {
-      // Sink failure must never propagate — console.error above already captured the error.
+      // Synchronous sink failure must never propagate — console.error above
+      // already captured the error. Async sinks handle their own rejections
+      // via .catch().
     }
   }
 }

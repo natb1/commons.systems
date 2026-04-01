@@ -64,7 +64,7 @@ export interface StorageModule {
 export interface AppContextOptions {
   recaptchaSiteKey?: string;
   storageModule?: StorageModule;
-  /** Returns the current user for error logging. Omit for apps without auth. */
+  /** Optional; error logs omit user info when not provided. */
   getCurrentUser?: ErrorSinkOptions["getCurrentUser"];
 }
 
@@ -177,6 +177,7 @@ export function createAppContext(
   }
   const NAMESPACE = validateNamespace(envNamespace || `${appName}/prod`);
 
+  // Errors logged before this point (e.g., appcheck-init) go to console only.
   registerErrorSink(
     createFirestoreErrorSink({
       db,

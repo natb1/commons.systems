@@ -227,5 +227,6 @@ export function hydrateInfoPanel(
       }
       sortBlogrollByDate(panel);
     })
+    // Intentional silent degradation — user sees stale content rather than an error.
     .catch((err) => logError(err, { operation: "hydrate-blogroll" }));
 }
