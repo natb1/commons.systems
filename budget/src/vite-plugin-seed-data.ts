@@ -1,5 +1,5 @@
 import type { Plugin } from "vite";
-import appSeed from "../seeds/firestore.js";
+import { findCollection } from "../seeds/find-collection.js";
 
 const VIRTUAL_MODULE_ID = "virtual:budget-seed-data";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
@@ -8,12 +8,6 @@ function toMs(d: unknown): number | null {
   if (d instanceof Date) return d.getTime();
   if (d != null && typeof d === "object" && "toMillis" in d) return (d as { toMillis(): number }).toMillis();
   return null;
-}
-
-function findCollection(name: string): { id: string; data: Record<string, unknown> }[] {
-  const col = appSeed.collections.find((c) => c.name === name);
-  if (!col) throw new Error(`Seed collection "${name}" not found`);
-  return col.documents as { id: string; data: Record<string, unknown> }[];
 }
 
 function stripFields(data: Record<string, unknown>, ...keys: string[]): Record<string, unknown> {

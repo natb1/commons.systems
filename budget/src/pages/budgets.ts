@@ -1,4 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
+import type { DataSource } from "../data-source.js";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod, type WeeklyAggregate } from "../firestore.js";
 import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetDiffs, computePerBudgetTrend, weeklyEquivalent, periodEquivalent, type PerBudgetPoint, type PerBudgetStats } from "../balance.js";
@@ -228,7 +229,7 @@ export function renderBudgetsContent(
   const budgetStats = computeBudgetDiffs(budgets, periods);
   const tableHtml = renderBudgetTable(budgets, authorized, budgetStats);
   const overridesHtml = budgets.length > 0 ? renderOverridesTable(budgets, authorized) : "";
-  const noticeHtml = authorized ? "" : `<p id="seed-data-notice">Viewing example data. Load a data file to see your budgets.</p>`;
+  const noticeHtml = renderPageNotices({ authorized, groupName: "", dataSource: {} as DataSource }, "budgets");
 
   return `
     <h2>Budgets</h2>
@@ -243,12 +244,9 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
   const { authorized, dataSource } = options;
   try {
     const [budgets, periods, weeklyAggregates] = await Promise.all([
-      dataSource.getBudgets()
-        .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
-      dataSource.getBudgetPeriods()
-        .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
-      dataSource.getWeeklyAggregates()
-        .catch((e) => { console.error("Failed to load weekly aggregates:", e); throw e; }),
+      dataSource.getBudgets(),
+      dataSource.getBudgetPeriods(),
+      dataSource.getWeeklyAggregates(),
     ]);
     return renderBudgetsContent(budgets, periods, weeklyAggregates, authorized);
   } catch (error) {

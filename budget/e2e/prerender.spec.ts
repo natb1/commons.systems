@@ -31,7 +31,6 @@ test.describe("prerender", () => {
       expect(html).toContain("<h2>Budgets</h2>");
       expect(html).toContain('id="budgets-table"');
       expect(html).toContain('id="seed-data-notice"');
-      // main#app should wrap the content
       expect(html).toMatch(/<main id="app">[\s\S]*<h2>Budgets<\/h2>/);
     });
   });

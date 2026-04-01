@@ -25,132 +25,10 @@ vi.mock("../src/firestore.js", () => ({
   getNormalizationRules: vi.fn(),
 }));
 
-vi.mock("virtual:budget-seed-data", () => ({
-  default: {
-    transactions: [
-      {
-        id: "seed-txn-1",
-        institution: "TestBank",
-        account: "Checking",
-        description: "GROCERY STORE",
-        amount: 45.67,
-        note: "",
-        category: "Food",
-        reimbursement: 0,
-        budget: "food",
-        timestampMs: 1700000000000,
-        statementId: "stmt-1",
-        normalizedId: null,
-        normalizedPrimary: true,
-        normalizedDescription: null,
-        virtual: false,
-      },
-      {
-        id: "seed-txn-2",
-        institution: "TestBank",
-        account: "Checking",
-        description: "GAS STATION",
-        amount: 30.00,
-        note: "",
-        category: "Transport",
-        reimbursement: 0,
-        budget: null,
-        timestampMs: 1700100000000,
-        statementId: null,
-        normalizedId: null,
-        normalizedPrimary: true,
-        normalizedDescription: null,
-        virtual: false,
-      },
-      {
-        id: "seed-txn-null-ts",
-        institution: "TestBank",
-        account: "Checking",
-        description: "UNKNOWN",
-        amount: 10.00,
-        note: "",
-        category: "Other",
-        reimbursement: 0,
-        budget: null,
-        timestampMs: null,
-        statementId: null,
-        normalizedId: null,
-        normalizedPrimary: true,
-        normalizedDescription: null,
-        virtual: false,
-      },
-    ],
-    budgets: [
-      {
-        id: "food",
-        name: "Food",
-        allowance: 150,
-        allowancePeriod: "weekly",
-        rollover: "none",
-        overrides: [{ dateMs: 1699900000000, balance: 200 }],
-      },
-    ],
-    budgetPeriods: [
-      {
-        id: "bp-seed-1",
-        budgetId: "food",
-        periodStartMs: 1699900000000,
-        periodEndMs: 1700504800000,
-        total: 45.67,
-        count: 1,
-        categoryBreakdown: { Food: 45.67 },
-      },
-    ],
-    rules: [
-      {
-        id: "rule-1",
-        type: "categorization",
-        pattern: "GROCERY",
-        target: "Food",
-        priority: 1,
-        institution: null,
-        account: null,
-        minAmount: null,
-        maxAmount: null,
-        excludeCategory: null,
-        matchCategory: null,
-      },
-    ],
-    normalizationRules: [
-      {
-        id: "nrule-1",
-        pattern: "GROCERY.*",
-        patternType: null,
-        canonicalDescription: "GROCERY STORE",
-        dateWindowDays: 7,
-        institution: null,
-        account: null,
-        priority: 1,
-      },
-    ],
-    statements: [
-      {
-        id: "stmt-doc-1",
-        statementId: "stmt-1",
-        institution: "TestBank",
-        account: "Checking",
-        balance: 1000,
-        period: "2023-11",
-        balanceDate: "2023-11-30",
-        lastTransactionDateMs: 1700000000000,
-        virtual: false,
-      },
-    ],
-    weeklyAggregates: [
-      {
-        id: "2023-11-13",
-        weekStartMs: 1699833600000,
-        creditTotal: 500,
-        unbudgetedTotal: 75,
-      },
-    ],
-  },
-}));
+vi.mock("virtual:budget-seed-data", async () => {
+  const { SEED_DATA_MOCK } = await import("./fixtures/seed-data-mock");
+  return { default: SEED_DATA_MOCK };
+});
 
 import { Timestamp } from "firebase/firestore";
 import { storeParsedData, closeDb } from "../src/idb";
@@ -415,7 +293,6 @@ describe("FirestoreSeedDataSource", () => {
     expect(txns[0].description).toBe("GROCERY STORE");
     expect(txns[0].timestamp).not.toBeNull();
     expect(txns[0].timestamp!.toMillis()).toBe(1700000000000);
-    // groupId is always null for seed data
     expect(txns[0].groupId).toBeNull();
   });
 

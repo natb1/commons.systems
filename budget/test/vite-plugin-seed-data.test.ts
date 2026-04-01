@@ -23,8 +23,6 @@ describe("budgetSeedDataPlugin", () => {
     return (plugin.load as (id: string) => string | undefined)(id);
   }
 
-  // Run buildStart once for all tests — the seed data is deterministic.
-  // Cast to Plugin to access hook functions directly.
   plugin = budgetSeedDataPlugin();
   (plugin.buildStart as () => void)();
   const resolvedId = resolveId("virtual:budget-seed-data");

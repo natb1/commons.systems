@@ -23,6 +23,7 @@ import { FirestoreSeedDataSource, IdbDataSource, type DataSource } from "./data-
 import { setActiveDataSource } from "./active-data-source.js";
 import { exportToJson } from "./export.js";
 import { isEncrypted, decrypt, encrypt } from "./crypto.js";
+import { NAV_LINKS } from "./nav-links.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -36,7 +37,7 @@ export type AppState =
 let state: AppState = { source: "seed" };
 let importPassword: string | null = null;
 
-navEl.links = [{ href: "/", label: "budgets" }, { href: "/transactions", label: "transactions" }, { href: "/accounts", label: "accounts" }, { href: "/rules", label: "rules" }];
+navEl.links = NAV_LINKS;
 navEl.showAuth = false;
 
 // File upload UI

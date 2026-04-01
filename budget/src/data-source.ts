@@ -116,7 +116,7 @@ export class FirestoreSeedDataSource implements DataSource {
       allowancePeriod: b.allowancePeriod,
       rollover: b.rollover,
       overrides: b.overrides.map((o) => ({
-        date: Timestamp.fromMillis(o.dateMs!),
+        date: Timestamp.fromMillis(o.dateMs),
         balance: o.balance,
       })),
       groupId: null as GroupId | null,

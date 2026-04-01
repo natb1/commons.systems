@@ -18,7 +18,7 @@ declare module "virtual:budget-seed-data" {
   }
 
   interface SeedBudgetOverride {
-    readonly dateMs: number | null;
+    readonly dateMs: number;
     readonly balance: number;
   }
 
