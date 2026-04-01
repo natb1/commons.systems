@@ -19,6 +19,9 @@ fi
 if echo "$CHANGED" | grep -qE '^(nix/|flake\.nix$|flake\.lock$)'; then
   echo "nix=true" >> "$GITHUB_OUTPUT"
 fi
-if echo "$CHANGED" | grep -qx 'firestore.rules'; then
+# rules-test needs Java 21 for Firebase emulators. Set rules=true when rules-test
+# would be detected as dirty: direct changes, or any global trigger from
+# get-changed-apps.sh (those mark ALL workspaces dirty, including rules-test).
+if echo "$CHANGED" | grep -qE '^(firestore\.rules$|storage\.rules$|rules-test/|\.claude/skills/ref-pr-workflow/scripts/|firebase\.json$|package\.json$|package-lock\.json$)'; then
   echo "rules=true" >> "$GITHUB_OUTPUT"
 fi
