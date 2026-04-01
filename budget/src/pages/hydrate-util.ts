@@ -185,6 +185,7 @@ export function wireChartResize(
     }
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      if (!container.isConnected) { observer.disconnect(); return; }
       const wrappers = getWrappers();
       const scrollRatio = wrappers.length > 0 && wrappers[0].scrollWidth > 0
         ? wrappers[0].scrollLeft / wrappers[0].scrollWidth
