@@ -30,7 +30,10 @@ if ! command -v realpath &>/dev/null; then
   exit 1
 fi
 _ALLOWED="${POST_PR_ALLOWED_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)/tmp}"
-_ALLOWED=$(realpath "$_ALLOWED" 2>/dev/null) || _ALLOWED=""
+_ALLOWED=$(realpath "$_ALLOWED" 2>/dev/null) || {
+  echo "error: could not resolve allowed directory: ${POST_PR_ALLOWED_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)/tmp}" >&2
+  exit 1
+}
 if [ -n "${_ALLOWED}" ]; then
   _REAL_OUT=$(realpath "$OUTPUT_FILE")
   if [[ "${_REAL_OUT}" != "${_ALLOWED}"/* ]]; then

@@ -130,7 +130,7 @@ if [ "$RUN_CI_SCRIPTS" = true ]; then
   fi
 fi
 
-# Run PR workflow script tests (exclude test-issue-state-scripts.sh which requires Firestore emulator)
+# Run PR workflow script tests (skip test-helpers.sh and test-issue-state-scripts.sh which requires Firestore emulator)
 if [ "$RUN_PR_SCRIPTS" = true ]; then
   echo "=== PR workflow script tests ==="
   PR_SCRIPT_FAIL=false

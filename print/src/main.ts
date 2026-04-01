@@ -18,7 +18,6 @@ if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 
-// Hero section — rendered once into its own container above #app
 const heroContainer = document.getElementById("hero-container") as HTMLElement;
 if (!heroContainer) throw new Error("#hero-container element not found");
 mountHero(heroContainer, renderHero);
