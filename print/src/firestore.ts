@@ -1,31 +1,10 @@
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
-import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
-import { requireString, requireBoolean, optionalString } from "@commons-systems/firestoreutil/validate";
+import { requireString, requireBoolean, optionalString, requireOneOf, requireStringArray, requireIso8601 } from "@commons-systems/firestoreutil/validate";
+import { createMediaQueries } from "@commons-systems/firestoreutil/media-queries";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { MEDIA_TYPES } from "./types.js";
-import type { MediaItem, MediaType } from "./types.js";
-
-function requireMediaType(value: unknown): MediaType {
-  const s = requireString(value, "mediaType");
-  if (!(MEDIA_TYPES as readonly string[]).includes(s)) {
-    throw new DataIntegrityError(`Invalid mediaType: "${s}"`);
-  }
-  return s as MediaType;
-}
-
-function requireStringArray(value: unknown, field: string): string[] {
-  if (!Array.isArray(value)) {
-    throw new DataIntegrityError(`Expected array for ${field}, got ${typeof value}`);
-  }
-  return value.map((item, i) => {
-    if (typeof item !== "string") {
-      throw new DataIntegrityError(`Expected string at ${field}[${i}], got ${typeof item}`);
-    }
-    return item;
-  });
-}
+import type { MediaItem } from "./types.js";
 
 function requireTags(value: unknown): Record<string, string> {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -41,19 +20,11 @@ function requireTags(value: unknown): Record<string, string> {
   return result;
 }
 
-function requireIso8601(value: unknown, field: string): string {
-  const s = requireString(value, field);
-  if (!/^\d{4}-\d{2}-\d{2}T/.test(s) || isNaN(Date.parse(s))) {
-    throw new DataIntegrityError(`Invalid ISO 8601 date for ${field}: "${s}"`);
-  }
-  return s;
-}
-
 function toMediaItem(id: string, data: Record<string, unknown>): MediaItem {
   return {
     id,
     title: requireString(data.title, "title"),
-    mediaType: requireMediaType(data.mediaType),
+    mediaType: requireOneOf(data.mediaType, MEDIA_TYPES, "mediaType"),
     tags: requireTags(data.tags),
     publicDomain: requireBoolean(data.publicDomain, "publicDomain"),
     sourceNotes: requireString(data.sourceNotes, "sourceNotes"),
@@ -64,45 +35,5 @@ function toMediaItem(id: string, data: Record<string, unknown>): MediaItem {
   };
 }
 
-export async function getPublicMedia(): Promise<MediaItem[]> {
-  const path = nsCollectionPath(NAMESPACE, "media");
-  const q = query(collection(db, path), where("publicDomain", "==", true));
-  const snapshot = await getDocs(q);
-  const items = snapshot.docs.map((docSnap) => toMediaItem(docSnap.id, docSnap.data()));
-  items.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
-  return items;
-}
-
-export async function getUserMedia(email: string): Promise<MediaItem[]> {
-  const path = nsCollectionPath(NAMESPACE, "media");
-  const q = query(collection(db, path), where("memberEmails", "array-contains", email));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((docSnap) => toMediaItem(docSnap.id, docSnap.data()));
-}
-
-export async function getAllAccessibleMedia(email: string): Promise<MediaItem[]> {
-  const [publicItems, userItems] = await Promise.all([
-    getPublicMedia(),
-    getUserMedia(email),
-  ]);
-
-  // Deduplicate by id (a public-domain item might also appear in user's memberEmails)
-  const seen = new Set<string>();
-  const merged: MediaItem[] = [];
-  for (const item of [...publicItems, ...userItems]) {
-    if (!seen.has(item.id)) {
-      seen.add(item.id);
-      merged.push(item);
-    }
-  }
-
-  merged.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
-  return merged;
-}
-
-export async function getMediaItem(id: string): Promise<MediaItem | null> {
-  const path = nsCollectionPath(NAMESPACE, "media");
-  const docSnap = await getDoc(doc(db, path, id));
-  if (!docSnap.exists()) return null;
-  return toMediaItem(docSnap.id, docSnap.data());
-}
+export const { getPublicMedia, getUserMedia, getAllAccessibleMedia, getMediaItem } =
+  createMediaQueries(db, NAMESPACE, "media", toMediaItem);

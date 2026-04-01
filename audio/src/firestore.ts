@@ -1,4 +1,29 @@
-import { db, NAMESPACE } from "./firebase.js";
-import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
+import { requireString, requireBoolean, requireNonNegativeNumber, optionalString, optionalNumber, requireOneOf, requireStringArray, requireIso8601 } from "@commons-systems/firestoreutil/validate";
+import { createMediaQueries } from "@commons-systems/firestoreutil/media-queries";
 
-export { db, NAMESPACE, nsCollectionPath };
+import { db, NAMESPACE } from "./firebase.js";
+import { AUDIO_FORMATS } from "./types.js";
+import type { AudioItem } from "./types.js";
+
+function toAudioItem(id: string, data: Record<string, unknown>): AudioItem {
+  return {
+    id,
+    title: requireString(data.title, "title"),
+    artist: requireString(data.artist, "artist"),
+    album: requireString(data.album, "album"),
+    trackNumber: optionalNumber(data.trackNumber, "trackNumber"),
+    genre: requireString(data.genre, "genre"),
+    year: optionalNumber(data.year, "year"),
+    duration: requireNonNegativeNumber(data.duration, "duration"),
+    format: requireOneOf(data.format, AUDIO_FORMATS, "format"),
+    publicDomain: requireBoolean(data.publicDomain, "publicDomain"),
+    sourceNotes: requireString(data.sourceNotes, "sourceNotes"),
+    storagePath: requireString(data.storagePath, "storagePath"),
+    groupId: optionalString(data.groupId, "groupId"),
+    memberEmails: requireStringArray(data.memberEmails, "memberEmails"),
+    addedAt: requireIso8601(data.addedAt, "addedAt"),
+  };
+}
+
+export const { getPublicMedia, getUserMedia, getAllAccessibleMedia, getMediaItem } =
+  createMediaQueries(db, NAMESPACE, "media", toAudioItem);
