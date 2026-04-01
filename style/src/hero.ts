@@ -15,9 +15,8 @@ export function hydrateHero(el: HTMLElement): void {
   chips.forEach((chip) => {
     chip.addEventListener("click", () => {
       const panelId = chip.dataset.panel!;
-      const panel = el.querySelector<HTMLElement>(`#${panelId}`);
+      const panel = Array.from(panels).find((p) => p.id === panelId);
       if (panel && !panel.hidden) {
-        // Toggle off if already open
         panel.hidden = true;
         chip.setAttribute("aria-expanded", "false");
         chip.classList.remove("hero-chip--active");
