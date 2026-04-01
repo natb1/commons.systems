@@ -30,7 +30,13 @@ function toMs(d: unknown): number | null {
   return null;
 }
 
-function serializeSeedData(): SeedData {
+function requireMs(d: unknown, field: string): number {
+  const ms = toMs(d);
+  if (ms === null) throw new Error(`Expected Date or Timestamp for ${field}, got ${d}`);
+  return ms;
+}
+
+export function serializeSeedData(): SeedData {
   const transactions: SeedTransaction[] = findCollection("seed-transactions").map(({ id, data: raw }) => {
     const d = raw as unknown as TransactionSeedData;
     return {
@@ -56,7 +62,7 @@ function serializeSeedData(): SeedData {
     const d = raw as unknown as BudgetSeedData;
     const overrides: SeedBudgetOverride[] = Array.isArray(raw.overrides)
       ? (raw.overrides as { date: unknown; balance: number }[]).map((o) => ({
-          dateMs: toMs(o.date) as number,
+          dateMs: requireMs(o.date, "overrides.date"),
           balance: o.balance,
         }))
       : [];
@@ -75,8 +81,8 @@ function serializeSeedData(): SeedData {
     return {
       id,
       budgetId: d.budgetId,
-      periodStartMs: toMs(d.periodStart) as number,
-      periodEndMs: toMs(d.periodEnd) as number,
+      periodStartMs: requireMs(d.periodStart, "periodStart"),
+      periodEndMs: requireMs(d.periodEnd, "periodEnd"),
       total: d.total,
       count: d.count,
       categoryBreakdown: d.categoryBreakdown,
@@ -133,7 +139,7 @@ function serializeSeedData(): SeedData {
     const d = raw as unknown as WeeklyAggregateSeedData;
     return {
       id,
-      weekStartMs: toMs(d.weekStart) as number,
+      weekStartMs: requireMs(d.weekStart, "weekStart"),
       creditTotal: d.creditTotal,
       unbudgetedTotal: d.unbudgetedTotal,
     };

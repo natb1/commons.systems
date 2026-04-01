@@ -12,6 +12,7 @@ import type {
   BudgetId,
   BudgetPeriodId,
   RuleId,
+  NormalizationRuleId,
   GroupId,
   Rollover,
   AllowancePeriod,
@@ -286,7 +287,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
 
   const normalizationRules: NormalizationRule[] = (raw.normalizationRules ?? []).map(
     (r: RawNormalizationRule, i: number) => ({
-      id: requireId(r.id, "normalizationRule", i),
+      id: requireId(r.id, "normalizationRule", i) as NormalizationRuleId,
       pattern: r.pattern ?? "",
       patternType: emptyToNull(r.patternType ?? ""),
       canonicalDescription: r.canonicalDescription ?? "",

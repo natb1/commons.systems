@@ -37,6 +37,7 @@ export type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "pe
 /** Seed rules include `memberEmails` for security rules and `groupId` for query filtering */
 export type RuleSeedData = Omit<Rule, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
 
+/** Seed normalization rules include `memberEmails` for security rules and `groupId` for query filtering */
 export type NormalizationRuleSeedData = Omit<NormalizationRule, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
 
 /** Seed statements use plain string for statementId (not branded), Date instead of Timestamp for lastTransactionDate, require groupId (non-nullable), and add memberEmails for security rules. */

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { budgetSeedDataPlugin } from "../src/vite-plugin-seed-data";
 import type { Plugin } from "vite";
 
@@ -15,6 +15,7 @@ const EXPECTED_COLLECTIONS = [
 describe("budgetSeedDataPlugin", () => {
   let plugin: Plugin;
   let moduleCode: string | undefined;
+  let resolvedId: string | undefined;
 
   function resolveId(id: string): string | undefined {
     return (plugin.resolveId as (id: string) => string | undefined)(id);
@@ -23,10 +24,12 @@ describe("budgetSeedDataPlugin", () => {
     return (plugin.load as (id: string) => string | undefined)(id);
   }
 
-  plugin = budgetSeedDataPlugin();
-  (plugin.buildStart as () => void)();
-  const resolvedId = resolveId("virtual:budget-seed-data");
-  moduleCode = resolvedId ? load(resolvedId) : undefined;
+  beforeAll(() => {
+    plugin = budgetSeedDataPlugin();
+    (plugin.buildStart as () => void)();
+    resolvedId = resolveId("virtual:budget-seed-data");
+    moduleCode = resolvedId ? load(resolvedId) : undefined;
+  });
 
   it("resolves the virtual module ID", () => {
     expect(resolvedId).toBeDefined();

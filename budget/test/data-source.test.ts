@@ -276,6 +276,7 @@ describe("SeedDataSource", () => {
     const ds = new SeedDataSource();
     await expect(ds.updateTransaction()).rejects.toThrow("Seed data is read-only");
     await expect(ds.updateBudget()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.updateBudgetOverrides()).rejects.toThrow("Seed data is read-only");
     await expect(ds.adjustBudgetPeriodTotal()).rejects.toThrow("Seed data is read-only");
     await expect(ds.createRule()).rejects.toThrow("Seed data is read-only");
     await expect(ds.updateRule()).rejects.toThrow("Seed data is read-only");

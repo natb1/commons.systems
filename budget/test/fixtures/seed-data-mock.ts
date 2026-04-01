@@ -1,3 +1,5 @@
+import type { SeedData } from "virtual:budget-seed-data";
+
 export const SEED_DATA_MOCK = {
   transactions: [
     {
@@ -121,4 +123,4 @@ export const SEED_DATA_MOCK = {
       unbudgetedTotal: 75,
     },
   ],
-};
+} satisfies SeedData;

@@ -1,4 +1,4 @@
-import { type RuleType, type Rule, type RuleId } from "../firestore.js";
+import { type RuleType, type Rule, type RuleId, type NormalizationRuleId } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { renderRow, renderNormalizationRow } from "./rules.js";
 import { removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
@@ -88,18 +88,19 @@ export function hydrateRulesTable(container: HTMLElement): void {
     try {
       const ds = getActiveDataSource();
       if (isNormalizationRow(target)) {
+        const nruleId = ruleId as unknown as NormalizationRuleId;
         if (target.classList.contains("edit-pattern")) {
-          await ds.updateNormalizationRule(ruleId, { pattern: target.value });
+          await ds.updateNormalizationRule(nruleId, { pattern: target.value });
         } else if (target.classList.contains("edit-canonical")) {
-          await ds.updateNormalizationRule(ruleId, { canonicalDescription: target.value });
+          await ds.updateNormalizationRule(nruleId, { canonicalDescription: target.value });
         } else if (target.classList.contains("edit-priority")) {
           const priority = Number(target.value);
           if (!Number.isFinite(priority)) { showInputError(target, "Priority must be a number"); return; }
-          await ds.updateNormalizationRule(ruleId, { priority });
+          await ds.updateNormalizationRule(nruleId, { priority });
         } else if (target.classList.contains("edit-date-window")) {
           const days = Number(target.value);
           if (!Number.isFinite(days) || days < 0) { showInputError(target, "Date window must be a non-negative number"); return; }
-          await ds.updateNormalizationRule(ruleId, { dateWindowDays: days });
+          await ds.updateNormalizationRule(nruleId, { dateWindowDays: days });
         } else {
           return;
         }
@@ -148,7 +149,7 @@ export function hydrateRulesTable(container: HTMLElement): void {
       try {
         const ds = getActiveDataSource();
         if (isNormalizationRow(target)) {
-          await ds.deleteNormalizationRule(ruleId);
+          await ds.deleteNormalizationRule(ruleId as unknown as NormalizationRuleId);
         } else {
           await ds.deleteRule(ruleId);
         }
