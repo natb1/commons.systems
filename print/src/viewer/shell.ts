@@ -143,7 +143,7 @@ export function initViewer(
       removeTapZones();
       if (document.fullscreenElement) {
         // Best-effort: may reject if not in fullscreen or API unsupported
-      document.exitFullscreen().catch(() => {});
+        document.exitFullscreen().catch(() => {});
       }
     }
   }
