@@ -1,0 +1,4 @@
+{
+  "extends": "@commons-systems/config/tsconfig.lib.json",
+  "include": ["test"]
+}

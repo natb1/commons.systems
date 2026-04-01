@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# Write pr-workflow state to the primary issue body.
+# Write pr-workflow state to Firestore.
 # Usage: issue-state-write <issue-number> [json-state]
 # If json-state is omitted, reads from stdin.
-# Replaces content between <!-- pr-workflow-state --> markers, or appends if absent.
-# Idempotent: same input produces same body.
 set -euo pipefail
 
 ISSUE_NUM="${1:-}"
@@ -14,107 +12,10 @@ if [ -z "$ISSUE_NUM" ] || ! [[ "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 
-# Read JSON from arg or stdin
-if [ -z "$JSON_INPUT" ]; then
-  JSON_INPUT=$(cat)
-fi
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 
-if [ -z "$JSON_INPUT" ]; then
-  echo "error: no JSON state provided" >&2
-  exit 1
-fi
-
-# Validate and pretty-print
-PRETTY_JSON=$(printf '%s\n' "$JSON_INPUT" | jq .) || {
-  echo "error: invalid JSON state" >&2
-  exit 1
-}
-
-# Schema validation
-VALID_PHASES='["core","unit","verify","qa","code-quality","security"]'
-SCHEMA_ERROR=$(printf '%s\n' "$PRETTY_JSON" | jq -r --argjson phases "$VALID_PHASES" '
-  def check:
-    if .version != 1 then "version must be 1, got \(.version)"
-    elif (.step | type) != "number" or .step < 1 or .step > 11 or (.step | floor) != .step then "step must be integer 1-11, got \(.step)"
-    elif (.phase | IN($phases[])) | not then "phase must be one of \($phases), got \(.phase)"
-    elif (.active_skills | type) != "array" then "active_skills must be an array"
-    elif (has("wiggum_step") != has("wiggum_step_label")) then "wiggum_step and wiggum_step_label must appear together or not at all"
-    else empty
-    end;
-  check // empty
-') || {
-  echo "error: schema validation jq failed" >&2
-  exit 1
-}
-if [[ -n "$SCHEMA_ERROR" ]]; then
-  echo "error: invalid state schema: $SCHEMA_ERROR" >&2
-  exit 1
-fi
-
-# Build state block
-STATE_BLOCK="<!-- pr-workflow-state -->
-\`\`\`json
-${PRETTY_JSON}
-\`\`\`
-<!-- /pr-workflow-state -->"
-
-# Fetch current body
-BODY=$(gh issue view "$ISSUE_NUM" --json body --jq '.body') || {
-  echo "error: failed to fetch issue #${ISSUE_NUM}" >&2
-  exit 1
-}
-
-# Replace or append
-HAS_OPEN=false
-HAS_CLOSE=false
-printf '%s\n' "$BODY" | grep -q '<!-- pr-workflow-state -->' && HAS_OPEN=true
-printf '%s\n' "$BODY" | grep -q '<!-- /pr-workflow-state -->' && HAS_CLOSE=true
-
-if [ "$HAS_OPEN" = true ] && [ "$HAS_CLOSE" = true ]; then
-  # Replace the entire block including markers using awk skip-flag pattern
-  NEW_BODY=$(printf '%s\n' "$BODY" | awk -v block="$STATE_BLOCK" '
-    /<!-- pr-workflow-state -->/ { print block; skip=1; next }
-    /<!-- \/pr-workflow-state -->/ { skip=0; next }
-    !skip { print }
-  ')
-  if [ -z "$NEW_BODY" ]; then
-    echo "error: awk replacement produced empty body for issue #${ISSUE_NUM}, refusing to write" >&2
-    exit 1
-  fi
-elif [ "$HAS_OPEN" = true ]; then
-  echo "error: opening pr-workflow-state marker found but closing marker missing in issue #${ISSUE_NUM}" >&2
-  echo "error: refusing to write to avoid data loss" >&2
-  exit 1
-elif [ "$HAS_CLOSE" = true ]; then
-  echo "error: closing pr-workflow-state marker found but opening marker missing in issue #${ISSUE_NUM}" >&2
-  echo "error: refusing to write to avoid data loss" >&2
-  exit 1
+if [ -n "$JSON_INPUT" ]; then
+  exec npx tsx "$REPO_ROOT/firestoreutil/bin/run-issue-state-write.ts" "$ISSUE_NUM" "$JSON_INPUT"
 else
-  # Append state block at end of body
-  if [ -n "$BODY" ]; then
-    NEW_BODY="${BODY}
-
-${STATE_BLOCK}"
-  else
-    NEW_BODY="$STATE_BLOCK"
-  fi
+  exec npx tsx "$REPO_ROOT/firestoreutil/bin/run-issue-state-write.ts" "$ISSUE_NUM"
 fi
-
-# Write via gh api using temp file to avoid shell quoting issues
-TMPFILE=""
-trap '[ -n "${TMPFILE}" ] && rm -f "${TMPFILE}"' EXIT
-TMPFILE=$(mktemp) || { echo "error: could not create temporary file" >&2; exit 1; }
-printf '%s\n' "$NEW_BODY" > "$TMPFILE"
-
-# Determine repo
-if ! REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner); then
-  echo "error: could not determine repository name (see gh error above)" >&2
-  exit 1
-fi
-
-gh api "repos/${REPO}/issues/${ISSUE_NUM}" \
-  --method PATCH \
-  --field body=@"${TMPFILE}" > /dev/null || {
-  echo "error: failed to update issue #${ISSUE_NUM}" >&2
-  exit 1
-}

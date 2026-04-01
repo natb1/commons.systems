@@ -48,7 +48,7 @@ DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy "$CHANNEL_ID" \
 # Seed Firestore (idempotent — uses doc.set() with fixed IDs)
 if [ "$USES_FIRESTORE" = true ]; then
   echo "Seeding Firestore (namespace: ${PREVIEW_NAMESPACE})..."
-  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" npx tsx firestoreutil/bin/run-seed.ts
+  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="$PREVIEW_NAMESPACE" SEED_TEST_ONLY=true npx tsx firestoreutil/bin/run-seed.ts
 fi
 
 # Extract preview URL from deploy output
