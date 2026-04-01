@@ -12,6 +12,7 @@ declare -A DIRTY_APPS
 RUN_NIX=false
 RUN_RULES=false
 RUN_CI_SCRIPTS=false
+RUN_PR_SCRIPTS=false
 EXPLICIT=false
 
 while [[ $# -gt 0 ]]; do
@@ -37,8 +38,13 @@ while [[ $# -gt 0 ]]; do
       EXPLICIT=true
       shift
       ;;
+    --pr-scripts)
+      RUN_PR_SCRIPTS=true
+      EXPLICIT=true
+      shift
+      ;;
     *)
-      echo "Usage: run-unit-tests.sh [--app <dir>] [--nix] [--rules] [--ci-scripts]" >&2
+      echo "Usage: run-unit-tests.sh [--app <dir>] [--nix] [--rules] [--ci-scripts] [--pr-scripts]" >&2
       exit 1
       ;;
   esac
@@ -67,6 +73,7 @@ if [ "$EXPLICIT" = false ]; then
       nix/*|flake.nix|flake.lock) RUN_NIX=true ;;
       firestore.rules) RUN_RULES=true ;;
       .github/scripts/*) RUN_CI_SCRIPTS=true ;;
+      .claude/skills/ref-pr-workflow/scripts/*) RUN_PR_SCRIPTS=true ;;
     esac
   done <<< "$CHANGED"
 fi
@@ -123,7 +130,28 @@ if [ "$RUN_CI_SCRIPTS" = true ]; then
   fi
 fi
 
-if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_CI_SCRIPTS" = false ]; then
+# Run PR workflow script tests (exclude test-issue-state-scripts.sh which requires Firestore emulator)
+if [ "$RUN_PR_SCRIPTS" = true ]; then
+  echo "=== PR workflow script tests ==="
+  PR_SCRIPT_FAIL=false
+  for test_script in "$SCRIPTS"/test-*.sh; do
+    name=$(basename "$test_script")
+    [[ "$name" == "test-helpers.sh" ]] && continue
+    [[ "$name" == "test-issue-state-scripts.sh" ]] && continue
+    echo "--- $name ---"
+    if "$test_script"; then
+      echo "PASS: $name"
+    else
+      echo "FAIL: $name" >&2
+      PR_SCRIPT_FAIL=true
+    fi
+  done
+  if [ "$PR_SCRIPT_FAIL" = true ]; then
+    FAILURES+=(pr-scripts)
+  fi
+fi
+
+if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_CI_SCRIPTS" = false ] && [ "$RUN_PR_SCRIPTS" = false ]; then
   echo "No test suites matched changed files. Nothing to check."
   exit 0
 fi
