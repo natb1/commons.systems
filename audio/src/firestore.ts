@@ -1,18 +1,9 @@
-import { requireString, requireBoolean, requireNonNegativeNumber, optionalString, optionalNumber, requireStringArray, requireIso8601 } from "@commons-systems/firestoreutil/validate";
+import { requireString, requireBoolean, requireNonNegativeNumber, optionalString, optionalNumber, requireOneOf, requireStringArray, requireIso8601 } from "@commons-systems/firestoreutil/validate";
 import { createMediaQueries } from "@commons-systems/firestoreutil/media-queries";
 
 import { db, NAMESPACE } from "./firebase.js";
-import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { AUDIO_FORMATS } from "./types.js";
-import type { AudioItem, AudioFormat } from "./types.js";
-
-function requireAudioFormat(value: unknown): AudioFormat {
-  const s = requireString(value, "format");
-  if (!(AUDIO_FORMATS as readonly string[]).includes(s)) {
-    throw new DataIntegrityError(`Invalid audio format: "${s}"`);
-  }
-  return s as AudioFormat;
-}
+import type { AudioItem } from "./types.js";
 
 function toAudioItem(id: string, data: Record<string, unknown>): AudioItem {
   return {
@@ -24,7 +15,7 @@ function toAudioItem(id: string, data: Record<string, unknown>): AudioItem {
     genre: requireString(data.genre, "genre"),
     year: optionalNumber(data.year, "year"),
     duration: requireNonNegativeNumber(data.duration, "duration"),
-    format: requireAudioFormat(data.format),
+    format: requireOneOf(data.format, AUDIO_FORMATS, "format"),
     publicDomain: requireBoolean(data.publicDomain, "publicDomain"),
     sourceNotes: requireString(data.sourceNotes, "sourceNotes"),
     storagePath: requireString(data.storagePath, "storagePath"),

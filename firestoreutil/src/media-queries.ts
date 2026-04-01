@@ -9,8 +9,9 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
   collectionName: string,
   toItem: (id: string, data: Record<string, unknown>) => T,
 ) {
+  const path = nsCollectionPath(namespace, collectionName);
+
   async function getPublicMedia(): Promise<T[]> {
-    const path = nsCollectionPath(namespace, collectionName);
     const q = query(collection(db, path), where("publicDomain", "==", true));
     const snapshot = await getDocs(q);
     const items = snapshot.docs.map((docSnap) => toItem(docSnap.id, docSnap.data()));
@@ -19,7 +20,6 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
   }
 
   async function getUserMedia(email: string): Promise<T[]> {
-    const path = nsCollectionPath(namespace, collectionName);
     const q = query(collection(db, path), where("memberEmails", "array-contains", email));
     const snapshot = await getDocs(q);
     return snapshot.docs.map((docSnap) => toItem(docSnap.id, docSnap.data()));
@@ -45,7 +45,6 @@ export function createMediaQueries<T extends { id: string; addedAt: string }>(
   }
 
   async function getMediaItem(id: string): Promise<T | null> {
-    const path = nsCollectionPath(namespace, collectionName);
     const docSnap = await getDoc(doc(db, path, id));
     if (!docSnap.exists()) return null;
     return toItem(docSnap.id, docSnap.data());

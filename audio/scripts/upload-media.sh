@@ -47,7 +47,6 @@ if [ ! -f "$FILE_PATH" ]; then
   exit 1
 fi
 
-# Validate audio file extension
 FILENAME="$(basename "$FILE_PATH")"
 EXT="${FILENAME##*.}"
 EXT_LOWER="$(echo "$EXT" | tr '[:upper:]' '[:lower:]')"
@@ -64,7 +63,6 @@ case "$EXT_LOWER" in
     ;;
 esac
 
-# Parse mode: --public or --group <groupId>
 PUBLIC=false
 GROUP_ID=""
 
@@ -92,7 +90,6 @@ else
   usage
 fi
 
-# Extract metadata via ffprobe
 echo "Parsing audio metadata..."
 PROBE_JSON="$(ffprobe -v quiet -print_format json -show_format "$FILE_PATH")"
 
@@ -126,7 +123,7 @@ else
   TRACK_NUMBER=""
 fi
 
-# Parse year (extract 4-digit year from date tag)
+# Parse year (extract 4-digit year from date or TDRC tag)
 RAW_DATE="$(echo "$PROBE_JSON" | jq -r '.format.tags.date // empty')"
 if [ -z "$RAW_DATE" ]; then
   RAW_DATE="$(echo "$PROBE_JSON" | jq -r '.format.tags.TDRC // empty')"
@@ -146,13 +143,11 @@ echo "  Year: ${YEAR:-<none>}"
 echo "  Duration: ${DURATION}s"
 echo "  Format: ${FORMAT}"
 
-# Get auth token early
 if ! TOKEN="$(gcloud auth print-access-token 2>&1)"; then
   echo "error: failed to get auth token. Run 'gcloud auth login' first." >&2
   exit 1
 fi
 
-# Resolve group members if in group mode
 EMAILS=()
 if [ -n "$GROUP_ID" ]; then
   GROUPS_URL="https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${GROUPS_PATH}/${GROUP_ID}"
@@ -182,7 +177,6 @@ fi
 GCS_DEST="${BUCKET}/${COLLECTION_PATH}/${FILENAME}"
 ADDED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-# Check for existing object at destination
 if STAT_OUTPUT=$(gsutil stat "$GCS_DEST" 2>&1); then
   echo "error: object already exists at ${GCS_DEST}" >&2
   echo "Rename the file or remove the existing object: gsutil rm ${GCS_DEST}" >&2
@@ -194,7 +188,6 @@ if ! echo "$STAT_OUTPUT" | grep -q "No URLs matched"; then
   exit 1
 fi
 
-# Upload file to GCS with metadata
 echo ""
 echo "Uploading ${FILENAME} to GCS..."
 META_ARGS=()
@@ -209,37 +202,31 @@ for i in "${!EMAILS[@]}"; do
 done
 gsutil "${META_ARGS[@]}" cp "$FILE_PATH" "$GCS_DEST"
 
-# Verify GCS upload
 echo ""
 echo "=== GCS Object ==="
 gsutil stat "$GCS_DEST"
 
-# Build Firestore document JSON
 echo ""
 echo "Creating Firestore document..."
 
-# Build memberEmails array
 if [ ${#EMAILS[@]} -eq 0 ]; then
   MEMBER_JSON="[]"
 else
   MEMBER_JSON=$(printf '%s\n' "${EMAILS[@]}" | jq -R '{ stringValue: . }' | jq -s '.')
 fi
 
-# Build groupId field
 if [ -n "$GROUP_ID" ]; then
   GROUP_JSON=$(jq -n --arg gid "$GROUP_ID" '{ stringValue: $gid }')
 else
   GROUP_JSON='{ "nullValue": null }'
 fi
 
-# Build trackNumber field
 if [ -n "$TRACK_NUMBER" ]; then
   TRACK_JSON=$(jq -n --arg t "$TRACK_NUMBER" '{ integerValue: $t }')
 else
   TRACK_JSON='{ "nullValue": null }'
 fi
 
-# Build year field
 if [ -n "$YEAR" ]; then
   YEAR_JSON=$(jq -n --arg y "$YEAR" '{ integerValue: $y }')
 else

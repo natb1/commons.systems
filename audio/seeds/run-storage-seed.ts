@@ -1,3 +1,4 @@
+import type { StorageSeedItem } from "./storage.js";
 import storageSeed from "./storage.js";
 
 const host = process.env.STORAGE_EMULATOR_HOST;
@@ -6,28 +7,21 @@ if (!host) {
   process.exit(1);
 }
 
-const bucket = process.env.STORAGE_BUCKET ?? "commons-systems.firebasestorage.app";
+const bucket = process.env.STORAGE_BUCKET;
+if (!bucket) {
+  console.error("STORAGE_BUCKET required");
+  process.exit(1);
+}
+const boundary = "----SeedBoundary";
 
-for (const item of storageSeed) {
-  const boundary = "----SeedBoundary";
+async function uploadItem(item: StorageSeedItem): Promise<void> {
   const metadataJson = JSON.stringify({ name: item.path, metadata: item.metadata });
 
-  const metadataPart =
-    `--${boundary}\r\n` +
-    `Content-Type: application/json\r\n\r\n` +
-    `${metadataJson}\r\n`;
-
-  const contentHeader =
-    `--${boundary}\r\n` +
-    `Content-Type: application/octet-stream\r\n\r\n`;
-
-  const trailer = `\r\n--${boundary}--\r\n`;
-
   const body = Buffer.concat([
-    Buffer.from(metadataPart),
-    Buffer.from(contentHeader),
+    Buffer.from(`--${boundary}\r\nContent-Type: application/json\r\n\r\n${metadataJson}\r\n`),
+    Buffer.from(`--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`),
     item.content,
-    Buffer.from(trailer),
+    Buffer.from(`\r\n--${boundary}--\r\n`),
   ]);
 
   const url = `http://${host}/upload/storage/v1/b/${bucket}/o?uploadType=multipart`;
@@ -43,5 +37,7 @@ for (const item of storageSeed) {
     throw new Error(`Failed to upload ${item.path}: ${res.status} ${text}`);
   }
 }
+
+await Promise.all(storageSeed.map(uploadItem));
 
 console.log(`Seeded ${storageSeed.length} storage objects.`);

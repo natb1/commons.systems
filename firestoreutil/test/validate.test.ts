@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { requireString, requireNumber, requireNonNegativeNumber, requireBoolean, optionalString, optionalNumber, requireStringArray, requireIso8601 } from "../src/validate.js";
+import { requireString, requireNumber, requireNonNegativeNumber, requireBoolean, optionalString, optionalNumber, requireOneOf, requireStringArray, requireIso8601 } from "../src/validate.js";
 import { DataIntegrityError } from "../src/errors.js";
 
 describe("requireString", () => {
@@ -92,6 +92,21 @@ describe("optionalNumber", () => {
   it("throws for non-finite number", () => {
     expect(() => optionalNumber(NaN, "field")).toThrow(DataIntegrityError);
     expect(() => optionalNumber(Infinity, "field")).toThrow(DataIntegrityError);
+  });
+});
+
+describe("requireOneOf", () => {
+  const allowed = ["mp3", "flac", "wav"] as const;
+  it("returns the value when it matches", () => {
+    expect(requireOneOf("mp3", allowed, "format")).toBe("mp3");
+    expect(requireOneOf("wav", allowed, "format")).toBe("wav");
+  });
+  it("throws for value not in allowed list", () => {
+    expect(() => requireOneOf("aac", allowed, "format")).toThrow(DataIntegrityError);
+    expect(() => requireOneOf("aac", allowed, "format")).toThrow('Invalid format: "aac"');
+  });
+  it("throws for non-string", () => {
+    expect(() => requireOneOf(42, allowed, "format")).toThrow(DataIntegrityError);
   });
 });
 

@@ -1,18 +1,10 @@
-import { requireString, requireBoolean, optionalString, requireStringArray, requireIso8601 } from "@commons-systems/firestoreutil/validate";
+import { requireString, requireBoolean, optionalString, requireOneOf, requireStringArray, requireIso8601 } from "@commons-systems/firestoreutil/validate";
 import { createMediaQueries } from "@commons-systems/firestoreutil/media-queries";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { MEDIA_TYPES } from "./types.js";
-import type { MediaItem, MediaType } from "./types.js";
-
-function requireMediaType(value: unknown): MediaType {
-  const s = requireString(value, "mediaType");
-  if (!(MEDIA_TYPES as readonly string[]).includes(s)) {
-    throw new DataIntegrityError(`Invalid mediaType: "${s}"`);
-  }
-  return s as MediaType;
-}
+import type { MediaItem } from "./types.js";
 
 function requireTags(value: unknown): Record<string, string> {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -32,7 +24,7 @@ function toMediaItem(id: string, data: Record<string, unknown>): MediaItem {
   return {
     id,
     title: requireString(data.title, "title"),
-    mediaType: requireMediaType(data.mediaType),
+    mediaType: requireOneOf(data.mediaType, MEDIA_TYPES, "mediaType"),
     tags: requireTags(data.tags),
     publicDomain: requireBoolean(data.publicDomain, "publicDomain"),
     sourceNotes: requireString(data.sourceNotes, "sourceNotes"),

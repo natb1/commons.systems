@@ -43,6 +43,14 @@ export function optionalNumber(value: unknown, field: string): number | null {
   return value;
 }
 
+export function requireOneOf<T extends string>(value: unknown, allowed: readonly T[], field: string): T {
+  const s = requireString(value, field);
+  if (!(allowed as readonly string[]).includes(s)) {
+    throw new DataIntegrityError(`Invalid ${field}: "${s}"`);
+  }
+  return s as T;
+}
+
 export function requireStringArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value)) {
     throw new DataIntegrityError(`Expected array for ${field}, got ${typeof value}`);
