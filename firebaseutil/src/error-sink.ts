@@ -16,8 +16,9 @@ export interface ErrorSinkOptions {
   getCurrentUser?: () => ErrorSinkUser | null;
 }
 
-// Keys written to the Firestore document from structured fields.
-// Context entries with these names are dropped to prevent overwrites.
+// Keys written to the Firestore document from structured fields (message, stack,
+// code, etc.). Context entries with these names are dropped so caller-provided
+// extras cannot overwrite canonical error values like the original Error message.
 const RESERVED_KEYS = new Set(["operation", "kind", "message", "stack", "code", "timestamp", "userAgent", "url", "uid", "email"]);
 
 export function createFirestoreErrorSink(options: ErrorSinkOptions): ErrorSink {
@@ -29,15 +30,21 @@ export function createFirestoreErrorSink(options: ErrorSinkOptions): ErrorSink {
   let recentWrites = 0;
   let windowStart = 0;
   let rateLimitWarned = false;
+  let suppressedCount = 0;
 
   return (error: unknown, context: EnrichedErrorContext): void => {
     const now = Date.now();
     if (now - windowStart > 60_000) {
+      if (suppressedCount > 0) {
+        console.warn(`Firestore error sink: ${suppressedCount} errors suppressed in previous window`);
+      }
       recentWrites = 0;
       windowStart = now;
       rateLimitWarned = false;
+      suppressedCount = 0;
     }
     if (recentWrites >= 50) {
+      suppressedCount++;
       if (!rateLimitWarned) {
         console.warn("Firestore error sink: rate limit reached (50 writes/60s), suppressing further writes");
         rateLimitWarned = true;

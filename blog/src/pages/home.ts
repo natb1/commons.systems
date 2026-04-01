@@ -2,14 +2,11 @@ import DOMPurify from "dompurify";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
 import { formatUtcDate } from "../date.js";
-import { createMarked } from "../marked-config.js";
+import { createMarked, extractH1, type PostContent } from "../marked-config.js";
 import { isOutletCurrent } from "@commons-systems/router/hydrate";
 import type { PostMeta } from "../post-types.js";
 
-export interface PostContent {
-  html: string;
-  title: string | null;
-}
+export type { PostContent };
 
 const SCROLL_PADDING_PX = 16;
 
@@ -80,23 +77,20 @@ export function hydrateHome(
     if (contentDiv.hasAttribute("data-hydrated")) return;
 
     try {
-      let markdown = await fetchPost(post.filename);
+      const markdown = await fetchPost(post.filename);
       if (!isOutletCurrent(outlet, container)) return;
 
-      // If the markdown starts with an h1, use it as the post title (overriding
-      // the Firestore title) and strip it from the body to avoid duplication.
-      const h1Match = markdown.match(/^#\s+(.+)/);
-      if (h1Match) {
-        markdown = markdown.replace(/^#\s+.+\n?/, "");
+      const h1 = extractH1(markdown);
+      if (h1) {
         const titleSpan = outlet.querySelector<HTMLElement>(
           `#post-${CSS.escape(post.id)} h2 .post-title`,
         );
         if (titleSpan) {
-          titleSpan.textContent = h1Match[1];
+          titleSpan.textContent = h1.title;
         }
       }
 
-      const html = await marked.parse(markdown);
+      const html = await marked.parse(h1 ? h1.body : markdown);
       if (!isOutletCurrent(outlet, container)) return;
       // DOMPurify strips target attributes by default; ADD_ATTR preserves the
       // target="_blank" set by the custom link renderer above.
@@ -104,7 +98,7 @@ export function hydrateHome(
         ADD_ATTR: ["target"],
       });
     } catch (error) {
-      reportError(new Error(`Failed to load post "${post.id}": ${error instanceof Error ? error.message : error}`));
+      logError(error, { operation: "fetch-post", postId: post.id });
       if (!isOutletCurrent(outlet, container)) return;
       contentDiv.innerHTML = "<p>Could not load post content. Try refreshing.</p>";
     }

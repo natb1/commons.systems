@@ -4,7 +4,7 @@ import type { ErrorSink } from "../src/log.js";
 
 describe("logError", () => {
   beforeEach(() => {
-    registerErrorSink(undefined as unknown as ErrorSink);
+    registerErrorSink(undefined);
     vi.restoreAllMocks();
   });
 

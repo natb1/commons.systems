@@ -1,0 +1,24 @@
+import type { LinkSection } from "@commons-systems/blog/components/info-panel";
+import type { NavLink } from "@commons-systems/blog/prerender";
+import { BLOG_ROLL_ENTRIES } from "./blog-roll/config.js";
+
+export { BLOG_ROLL_ENTRIES };
+
+export const NAV_LINKS: NavLink[] = [{ href: "/", label: "Home" }];
+
+export const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
+  {
+    links: [
+      { label: "itch.io", url: "https://natethenoob.itch.io" },
+      { label: "No Land Beyond", subtitle: "Find a Local Game in Baltimore", url: "https://discord.gg/MxXHfyY3" },
+    ],
+  },
+  {
+    heading: "Games I'm Playing",
+    links: [
+      { label: "Mythic Bastionland", url: "https://chrismcdee.itch.io/mythic-bastionland" },
+      { label: "ALIEN", url: "https://freeleaguepublishing.com/games/alien/" },
+      { label: "Cairn", url: "https://cairnrpg.com/" },
+    ],
+  },
+];

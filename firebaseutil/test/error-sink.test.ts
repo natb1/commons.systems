@@ -147,6 +147,25 @@ describe("createFirestoreErrorSink", () => {
     expect(rateLimitWarnings).toHaveLength(1);
   });
 
+  it("logs suppressed count when window resets", () => {
+    const sink = createFirestoreErrorSink(makeOptions());
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // Fill the window
+    for (let i = 0; i < 55; i++) {
+      sink(new Error(`error ${i}`), makeContext());
+    }
+
+    // Advance past the 60s window
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 61_000);
+    sink(new Error("after window"), makeContext());
+
+    const suppressedWarnings = warnSpy.mock.calls.filter(
+      (call) => typeof call[0] === "string" && (call[0] as string).includes("5 errors suppressed"),
+    );
+    expect(suppressedWarnings).toHaveLength(1);
+  });
+
   it("warns on Firestore write failure", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     mockAddDoc.mockRejectedValueOnce(new Error("firestore down"));

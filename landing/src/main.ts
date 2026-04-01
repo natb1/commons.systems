@@ -19,6 +19,7 @@ import { initPanelToggle } from "@commons-systems/style/panel-toggle";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
+import { INFO_PANEL_LINK_SECTIONS } from "./site-config.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView } from "./firebase.js";
@@ -46,10 +47,6 @@ let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("landing/post");
 const RSS_CONFIG = { title: "commons.systems", siteUrl: "https://commons.systems" };
-const INFO_PANEL_LINK_SECTIONS = [
-  { heading: "Links", links: [{ label: "Source", url: "https://github.com/natb1/commons.systems" }] },
-];
-
 const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
 

@@ -3,8 +3,7 @@ import { join } from "node:path";
 import type { Plugin } from "vite";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { PublishedPost } from "./post-types.js";
-import type { PostContent } from "./pages/home.js";
-import { createMarked, extractH1 } from "./marked-config.ts";
+import { createMarked, getPublishedFromSeed, renderPostContents, type PostContent } from "./marked-config.js";
 
 export type { PostContent };
 
@@ -30,54 +29,16 @@ export function blogPostsPlugin(config: BlogPostsPluginConfig): Plugin {
     name: "blog-posts",
     async buildStart() {
       const marked = createMarked();
-      const postsCollection = config.seed.collections.find(
-        (c) => c.name === "posts",
-      );
-      if (!postsCollection) {
-        throw new Error("[blog-posts] No 'posts' collection found in seed data");
-      }
-
-      const published: PublishedPost[] = [];
-      for (const doc of postsCollection.documents) {
-        const data = doc.data as Record<string, unknown>;
-        if (data.published !== true) continue;
-        if (typeof data.title !== "string") {
-          throw new Error(`[blog-posts] Post "${doc.id}" is missing a title`);
-        }
-        if (typeof data.filename !== "string") {
-          throw new Error(`[blog-posts] Post "${doc.id}" is missing a filename`);
-        }
-        if (typeof data.publishedAt !== "string") {
-          throw new Error(`[blog-posts] Post "${doc.id}" is missing a publishedAt`);
-        }
-        published.push({
-          id: doc.id,
-          title: data.title,
-          published: true,
-          publishedAt: data.publishedAt,
-          filename: data.filename,
-          previewImage: data.previewImage as string | undefined,
-          previewDescription: data.previewDescription as string | undefined,
-        });
-      }
+      const published = getPublishedFromSeed(config.seed, "[blog-posts] ");
 
       published.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
       metadata = published;
 
-      const results: Record<string, PostContent> = {};
-      for (const post of published) {
-        const filePath = join(config.postDir, post.filename);
-        const markdown = readFile(filePath);
-
-        const h1 = extractH1(markdown);
-        const title = h1 ? h1.title : null;
-        const body = h1 ? h1.body : markdown;
-
-        const html = await marked.parse(body);
-        results[post.id] = { html, title };
-      }
-
-      contentMap = results;
+      contentMap = await renderPostContents(
+        published,
+        (filename) => readFile(join(config.postDir, filename)),
+        marked,
+      );
     },
     resolveId(id) {
       if (id === CONTENT_MODULE_ID) return RESOLVED_CONTENT_ID;

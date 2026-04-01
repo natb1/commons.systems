@@ -16,7 +16,7 @@ export type ErrorSink = (error: unknown, context: EnrichedErrorContext) => void;
 
 let sink: ErrorSink | undefined;
 
-export function registerErrorSink(s: ErrorSink): void {
+export function registerErrorSink(s: ErrorSink | undefined): void {
   sink = s;
 }
 
@@ -24,7 +24,8 @@ export function registerErrorSink(s: ErrorSink): void {
  * Log an error with structured context. Always writes to console.error for
  * local visibility, then forwards to the registered sink (e.g., Firestore)
  * if one exists. Synchronous sink failures are caught here. Async sinks
- * must handle their own rejections — logError does not await.
+ * must handle their own rejections (which TypeScript allows despite the
+ * void return type) — logError does not await.
  */
 export function logError(error: unknown, context: ErrorContext): void {
   const enriched: EnrichedErrorContext = {

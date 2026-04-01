@@ -8,7 +8,7 @@ import { logError } from "@commons-systems/errorutil/log";
 import { createHistoryRouter, parsePath } from "@commons-systems/router";
 import { renderHomeHtml, hydrateHome } from "@commons-systems/blog/pages/home";
 import { renderAdmin } from "@commons-systems/blog/pages/admin";
-import { renderInfoPanel, hydrateInfoPanel, type LinkSection } from "@commons-systems/blog/components/info-panel";
+import { renderInfoPanel, hydrateInfoPanel } from "@commons-systems/blog/components/info-panel";
 
 import buildTimeContent from "virtual:blog-post-content";
 import buildTimeMetadata from "virtual:blog-post-metadata";
@@ -18,7 +18,8 @@ import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
 import { initPanelToggle } from "@commons-systems/style/panel-toggle";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
-import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
+import { createStrategies } from "./blog-roll/config.js";
+import { BLOG_ROLL_ENTRIES, INFO_PANEL_LINK_SECTIONS } from "./site-config.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView } from "./firebase.js";
@@ -46,23 +47,6 @@ let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("fellspiral/post");
 const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://fellspiral.commons.systems" };
-const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
-  {
-    links: [
-      { label: "itch.io", url: "https://natethenoob.itch.io" },
-      { label: "No Land Beyond", subtitle: "Find a Local Game in Baltimore", url: "https://discord.gg/MxXHfyY3" },
-    ],
-  },
-  {
-    heading: "Games I'm Playing",
-    links: [
-      { label: "Mythic Bastionland", url: "https://chrismcdee.itch.io/mythic-bastionland" },
-      { label: "ALIEN", url: "https://freeleaguepublishing.com/games/alien/" },
-      { label: "Cairn", url: "https://cairnrpg.com/" },
-    ],
-  },
-];
-
 const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
 
