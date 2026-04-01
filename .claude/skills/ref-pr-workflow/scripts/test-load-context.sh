@@ -14,10 +14,24 @@ setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/stub" "$TMPDIR_TEST/repo"
 
-  for script in lib.sh load-context issue-primary issue-blocking issue-sub-issues issue-parent issue-siblings issue-state-read; do
+  for script in lib.sh load-context issue-primary issue-blocking issue-sub-issues issue-parent issue-siblings; do
     cp "$SCRIPT_DIR/$script" "$TMPDIR_TEST/$script"
     chmod +x "$TMPDIR_TEST/$script"
   done
+
+  # Stub issue-state-read: returns stub JSON if present, otherwise exits 1 with expected message
+  cat > "$TMPDIR_TEST/issue-state-read" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)/stub"
+ISSUE_NUM="${1:-}"
+if [ -f "$STUB_DIR/issue-state.json" ]; then
+  cat "$STUB_DIR/issue-state.json"
+else
+  echo "no pr-workflow-state markers found" >&2
+  exit 1
+fi
+STUB
+  chmod +x "$TMPDIR_TEST/issue-state-read"
 
   echo "# Test README" > "$TMPDIR_TEST/repo/README.md"
 
@@ -25,7 +39,7 @@ setup() {
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 case "$*" in
-  "rev-parse --abbrev-ref HEAD")
+  "rev-parse --abbrev-ref HEAD"|"branch --show-current")
     if [ -f "$STUB_DIR/branch-name.txt" ]; then
       cat "$STUB_DIR/branch-name.txt"
     else
@@ -152,15 +166,7 @@ teardown
 echo "Test 4: issue state shown when present"
 setup
 echo "42-my-feature" > "$TMPDIR_TEST/stub/branch-name.txt"
-cat > "$TMPDIR_TEST/stub/issue-42-body.txt" <<'EOF'
-Issue body.
-
-<!-- pr-workflow-state -->
-```json
-{"version":1,"step":3,"phase":"core"}
-```
-<!-- /pr-workflow-state -->
-EOF
+echo '{"version":1,"step":3,"phase":"core"}' > "$TMPDIR_TEST/stub/issue-state.json"
 exit_code=0
 output=$("$TMPDIR_TEST/load-context" 2>&1) || exit_code=$?
 assert_eq "exits 0 with state" "0" "$exit_code"

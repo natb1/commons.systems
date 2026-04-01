@@ -6,9 +6,9 @@ import {
 } from "@commons-systems/firestoreutil/namespace";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 
-import type { PostMeta, PublishedPost } from "./post-types.js";
+import type { PostMeta, PublishedPost } from "./post-types.ts";
 export type { PostMeta, PublishedPost };
-export { isPublished } from "./post-types.js";
+export { isPublished } from "./post-types.ts";
 
 export interface GetPostsResult {
   posts: PostMeta[];

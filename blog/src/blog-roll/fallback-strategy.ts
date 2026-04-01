@@ -1,4 +1,4 @@
-import type { BlogRollStrategy, LatestPost } from "./types.js";
+import type { BlogRollStrategy, LatestPost } from "./types.ts";
 
 export class FallbackStrategy implements BlogRollStrategy {
   constructor(

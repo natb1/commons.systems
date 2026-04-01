@@ -169,7 +169,7 @@ echo "=== Test: cleanup kills orphans from deleted worktree ==="
   ORPHAN_PID=$!
 
   project_id="$(get_emulator_project_id)"
-  pid_file="${TEST_TMPDIR}/pids-${project_id}-deleted-wt.json"
+  pid_file="${TEST_TMPDIR}/pids-${project_id}-wt-deleted.json"
 
   # Use a nonexistent worktree path — simulates deleted worktree
   cat > "$pid_file" <<EOF
