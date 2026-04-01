@@ -40,7 +40,7 @@ fi
 #   1. Start with a workflow script OR a command from the allowedTools list
 #   2. Contain no dangerous shell metacharacters after stripping stderr redirects
 # This allows piped and chained commands like:
-#   script-a 2>&1 | head -200
+#   script-a 2>&1 | head -200  (head must be in allowedTools)
 #   script-a 2>/dev/null; script-b 2>&1
 # while rejecting injection like:
 #   script-a | malicious-command
@@ -50,15 +50,17 @@ CLEANED=$(printf '%s' "$FIRST_LINE" | sed 's/ *2>[/&][a-z1-9]*//g')
 SCRIPT_RE='(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$'
 UNSAFE_RE='[`<>$]'
 
-# Reject && and || before splitting on | (IFS='|' would split || into empty segments,
-# making the \|\| pattern in UNSAFE_RE dead code).
+# Reject && and || before splitting on | — IFS='|' splits || into empty segments
+# that get skipped, which would approve both sides independently without enforcing
+# sequential-only execution.
 if printf '%s\n' "$CLEANED" | grep -qE '(&&|\|\|)'; then
   exit 0
 fi
 
 # Build list of allowed commands from settings.json Bash(cmd:*) entries.
 # Only single-word commands are included — multi-word prefixes like "gh issue view"
-# cannot match pipe-stage tokens (awk extracts only the first word).
+# are skipped because CMD_TOKEN extraction yields only the first word, which would
+# never equal the full multi-word entry in the allowlist comparison.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 SETTINGS_DIR="$HOOK_DIR/.."
 ALLOWED_CMDS=()

@@ -134,7 +134,7 @@ assert_passthrough \
   ".claude/skills/some-other-skill/scripts/run-lint.sh"
 
 assert_approves \
-  "echo is in allowedTools (script path as argument is irrelevant)" \
+  "echo is in allowedTools (argument contains no unsafe metacharacters)" \
   "Bash" \
   "echo .claude/skills/ref-pr-workflow/scripts/run-lint.sh"
 
