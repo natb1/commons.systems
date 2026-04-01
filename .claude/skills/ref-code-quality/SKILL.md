@@ -18,6 +18,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
   7. **`pr-review-toolkit:type-design-analyzer`** — Launch a Task with `subagent_type: "pr-review-toolkit:type-design-analyzer"`.
 - All 7 tasks MUST be launched in a single message (parallel execution) with `run_in_background: true`
 - Wait for all 7 tasks to complete using TaskOutput with `block: true` before proceeding. Note each task's `output_file` path.
+- If any task (e.g., `/simplify`) edits files directly during its run, keep those changes — do not revert them. Treat the edits as pre-applied findings that still go through the normal evaluation and approval flow. If the user later classifies a pre-applied finding as out-of-scope or false positive, revert it at that point.
 - If any task other than `/review` fails to launch, log a warning but continue — `/review` results alone are sufficient to proceed
 - Construct `tmp/codequality-output-<N>.txt` by calling the concat script — do NOT use the Write tool or re-output verbatim content:
   ```bash
