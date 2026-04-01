@@ -61,7 +61,7 @@ export class SeedDataSource implements DataSource {
     const filtered = filterByTimestamp(
       seedData.transactions, query?.since?.toMillis(), query?.before?.toMillis(),
     );
-    return filtered.map(t => toTransaction(t));
+    return filtered.map(toTransaction);
   }
   async getStatements(): Promise<Statement[]> {
     return seedData.statements.map(toStatement);

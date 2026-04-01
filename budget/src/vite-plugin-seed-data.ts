@@ -36,18 +36,40 @@ function requireMs(d: unknown, field: string): number {
   return ms;
 }
 
+function requireString(value: unknown, field: string): string {
+  if (typeof value !== "string") throw new Error(`Expected string for ${field}, got ${typeof value}`);
+  return value;
+}
+
+function requireNumber(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`Expected finite number for ${field}, got ${value}`);
+  return value;
+}
+
+function requireNonNegativeNumber(value: unknown, field: string): number {
+  const n = requireNumber(value, field);
+  if (n < 0) throw new Error(`Expected non-negative number for ${field}, got ${n}`);
+  return n;
+}
+
+function requireReimbursement(value: unknown): number {
+  const n = requireNumber(value, "reimbursement");
+  if (n < 0 || n > 100) throw new RangeError(`reimbursement must be between 0 and 100, got ${n}`);
+  return n;
+}
+
 export function serializeSeedData(): SeedData {
   const transactions: SeedTransaction[] = findCollection("seed-transactions").map(({ id, data: raw }) => {
     const d = raw as unknown as TransactionSeedData;
     return {
       id,
-      institution: d.institution,
-      account: d.account,
-      description: d.description,
-      amount: d.amount,
-      note: d.note,
-      category: d.category,
-      reimbursement: d.reimbursement,
+      institution: requireString(d.institution, "institution"),
+      account: requireString(d.account, "account"),
+      description: requireString(d.description, "description"),
+      amount: requireNumber(d.amount, "amount"),
+      note: requireString(d.note, "note"),
+      category: requireString(d.category, "category"),
+      reimbursement: requireReimbursement(d.reimbursement),
       budget: d.budget ?? null,
       timestampMs: toMs(d.timestamp),
       statementId: d.statementId ?? null,
@@ -60,6 +82,8 @@ export function serializeSeedData(): SeedData {
 
   const budgets: SeedBudget[] = findCollection("seed-budgets").map(({ id, data: raw }) => {
     const d = raw as unknown as BudgetSeedData;
+    const name = requireString(d.name, "name");
+    if (!name) throw new Error("Budget name must be non-empty");
     const overrides: SeedBudgetOverride[] = Array.isArray(raw.overrides)
       ? (raw.overrides as { date: unknown; balance: number }[]).map((o) => ({
           dateMs: requireMs(o.date, "overrides.date"),
@@ -68,8 +92,8 @@ export function serializeSeedData(): SeedData {
       : [];
     return {
       id,
-      name: d.name,
-      allowance: d.allowance,
+      name,
+      allowance: requireNonNegativeNumber(d.allowance, "allowance"),
       allowancePeriod: d.allowancePeriod,
       rollover: d.rollover,
       overrides,
@@ -83,8 +107,8 @@ export function serializeSeedData(): SeedData {
       budgetId: d.budgetId,
       periodStartMs: requireMs(d.periodStart, "periodStart"),
       periodEndMs: requireMs(d.periodEnd, "periodEnd"),
-      total: d.total,
-      count: d.count,
+      total: requireNumber(d.total, "total"),
+      count: requireNumber(d.count, "count"),
       categoryBreakdown: d.categoryBreakdown,
     };
   });
@@ -94,9 +118,9 @@ export function serializeSeedData(): SeedData {
     return {
       id,
       type: d.type,
-      pattern: d.pattern,
-      target: d.target,
-      priority: d.priority,
+      pattern: requireString(d.pattern, "pattern"),
+      target: requireString(d.target, "target"),
+      priority: requireNumber(d.priority, "priority"),
       institution: d.institution,
       account: d.account,
       minAmount: d.minAmount,
@@ -110,13 +134,13 @@ export function serializeSeedData(): SeedData {
     const d = raw as unknown as NormalizationRuleSeedData;
     return {
       id,
-      pattern: d.pattern,
+      pattern: requireString(d.pattern, "pattern"),
       patternType: d.patternType,
-      canonicalDescription: d.canonicalDescription,
+      canonicalDescription: requireString(d.canonicalDescription, "canonicalDescription"),
       dateWindowDays: d.dateWindowDays,
       institution: d.institution,
       account: d.account,
-      priority: d.priority,
+      priority: requireNumber(d.priority, "priority"),
     };
   });
 
@@ -124,11 +148,11 @@ export function serializeSeedData(): SeedData {
     const d = raw as unknown as StatementSeedData;
     return {
       id,
-      statementId: d.statementId,
-      institution: d.institution,
-      account: d.account,
-      balance: d.balance,
-      period: d.period,
+      statementId: requireString(d.statementId, "statementId"),
+      institution: requireString(d.institution, "institution"),
+      account: requireString(d.account, "account"),
+      balance: requireNumber(d.balance, "balance"),
+      period: requireString(d.period, "period"),
       balanceDate: d.balanceDate ?? null,
       lastTransactionDateMs: toMs(d.lastTransactionDate),
       virtual: d.virtual,
@@ -140,8 +164,8 @@ export function serializeSeedData(): SeedData {
     return {
       id,
       weekStartMs: requireMs(d.weekStart, "weekStart"),
-      creditTotal: d.creditTotal,
-      unbudgetedTotal: d.unbudgetedTotal,
+      creditTotal: requireNumber(d.creditTotal, "creditTotal"),
+      unbudgetedTotal: requireNumber(d.unbudgetedTotal, "unbudgetedTotal"),
     };
   });
 

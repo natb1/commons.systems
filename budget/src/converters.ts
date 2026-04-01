@@ -143,8 +143,6 @@ export function filterByTimestamp<T extends { timestampMs: number | null }>(
     }
     if (beforeMs !== undefined) {
       if (row.timestampMs !== null && row.timestampMs >= beforeMs) return false;
-      // When both since and before are set, exclude null-timestamp rows (the since block above handles since-only queries)
-      if (row.timestampMs === null && sinceMs !== undefined) return false;
     }
     return true;
   });

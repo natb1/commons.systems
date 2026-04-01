@@ -39,8 +39,8 @@ function makeBudget(overrides: Partial<Budget> & { id: string; name: string }): 
 
 function makePeriod(overrides: Partial<BudgetPeriod> & { id: string; budgetId: string }): BudgetPeriod {
   return {
-    periodStart: Timestamp.fromMillis(1705190400000), // 2025-01-14
-    periodEnd: Timestamp.fromMillis(1705795200000),   // 2025-01-21
+    periodStart: Timestamp.fromMillis(1705190400000), // 2024-01-14
+    periodEnd: Timestamp.fromMillis(1705795200000),   // 2024-01-21
     total: 50,
     count: 3,
     categoryBreakdown: {},
