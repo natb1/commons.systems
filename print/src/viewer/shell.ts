@@ -142,6 +142,7 @@ export function initViewer(
     } else {
       removeTapZones();
       if (document.fullscreenElement) {
+        // Best-effort: may reject if not in fullscreen or API unsupported
         document.exitFullscreen().catch(() => {});
       }
     }
@@ -467,6 +468,7 @@ export function initViewer(
     document.removeEventListener("fullscreenchange", handleFullscreenChange);
     removeTapZones();
     if (document.fullscreenElement) {
+      // Best-effort cleanup: suppress errors during teardown
       document.exitFullscreen().catch(() => {});
     }
     document.removeEventListener("keydown", handleKeydown);
