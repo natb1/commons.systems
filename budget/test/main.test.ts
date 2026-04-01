@@ -44,7 +44,7 @@ vi.mock("../src/upload.js", () => ({
 }));
 
 vi.mock("../src/data-source.js", () => ({
-  FirestoreSeedDataSource: class { getTransactions() { return []; } },
+  SeedDataSource: class { getTransactions() { return []; } },
   IdbDataSource: class { getTransactions() { return []; } },
 }));
 
@@ -104,7 +104,7 @@ describe("main module", () => {
       UploadValidationError: class extends Error { constructor(msg: string) { super(msg); this.name = "UploadValidationError"; } },
     }));
     vi.mock("../src/data-source.js", () => ({
-      FirestoreSeedDataSource: class {}, IdbDataSource: class {},
+      SeedDataSource: class {}, IdbDataSource: class {},
     }));
     vi.mock("../src/active-data-source.js", () => ({
       setActiveDataSource: vi.fn(),
@@ -155,7 +155,7 @@ describe("main module", () => {
       UploadValidationError: class extends Error { constructor(msg: string) { super(msg); this.name = "UploadValidationError"; } },
     }));
     vi.mock("../src/data-source.js", () => ({
-      FirestoreSeedDataSource: class {}, IdbDataSource: class {},
+      SeedDataSource: class {}, IdbDataSource: class {},
     }));
     vi.mock("../src/active-data-source.js", () => ({
       setActiveDataSource: vi.fn(),

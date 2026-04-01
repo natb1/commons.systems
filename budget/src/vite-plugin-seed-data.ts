@@ -1,5 +1,25 @@
 import type { Plugin } from "vite";
 import { findCollection } from "../seeds/find-collection.js";
+import type {
+  TransactionSeedData,
+  BudgetSeedData,
+  BudgetPeriodSeedData,
+  RuleSeedData,
+  NormalizationRuleSeedData,
+  StatementSeedData,
+  WeeklyAggregateSeedData,
+} from "../seeds/firestore.js";
+import type {
+  SeedData,
+  SeedTransaction,
+  SeedBudget,
+  SeedBudgetOverride,
+  SeedBudgetPeriod,
+  SeedRule,
+  SeedNormalizationRule,
+  SeedStatement,
+  SeedWeeklyAggregate,
+} from "virtual:budget-seed-data";
 
 const VIRTUAL_MODULE_ID = "virtual:budget-seed-data";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
@@ -10,72 +30,116 @@ function toMs(d: unknown): number | null {
   return null;
 }
 
-function stripFields(data: Record<string, unknown>, ...keys: string[]): Record<string, unknown> {
-  const copy = { ...data };
-  for (const key of keys) delete copy[key];
-  return copy;
-}
-
-function serializeSeedData(): string {
-  const transactions = findCollection("seed-transactions").map(({ id, data }) => {
-    const d = stripFields(data, "memberEmails", "groupId");
-    return { ...d, id, timestampMs: toMs(d.timestamp), timestamp: undefined };
+function serializeSeedData(): SeedData {
+  const transactions: SeedTransaction[] = findCollection("seed-transactions").map(({ id, data: raw }) => {
+    const d = raw as unknown as TransactionSeedData;
+    return {
+      id,
+      institution: d.institution,
+      account: d.account,
+      description: d.description,
+      amount: d.amount,
+      note: d.note,
+      category: d.category,
+      reimbursement: d.reimbursement,
+      budget: d.budget ?? null,
+      timestampMs: toMs(d.timestamp),
+      statementId: d.statementId ?? null,
+      normalizedId: d.normalizedId,
+      normalizedPrimary: d.normalizedPrimary,
+      normalizedDescription: d.normalizedDescription,
+      virtual: d.virtual,
+    };
   });
 
-  const budgets = findCollection("seed-budgets").map(({ id, data }) => {
-    const d = stripFields(data, "memberEmails", "groupId");
-    const overrides = Array.isArray(d.overrides)
-      ? (d.overrides as { date: unknown; balance: number }[]).map((o) => ({
-          dateMs: toMs(o.date),
+  const budgets: SeedBudget[] = findCollection("seed-budgets").map(({ id, data: raw }) => {
+    const d = raw as unknown as BudgetSeedData;
+    const overrides: SeedBudgetOverride[] = Array.isArray(raw.overrides)
+      ? (raw.overrides as { date: unknown; balance: number }[]).map((o) => ({
+          dateMs: toMs(o.date) as number,
           balance: o.balance,
         }))
       : [];
-    return { ...d, id, overrides };
-  });
-
-  const budgetPeriods = findCollection("seed-budget-periods").map(({ id, data }) => {
-    const d = stripFields(data, "memberEmails", "groupId");
     return {
-      ...d,
       id,
-      periodStartMs: toMs(d.periodStart),
-      periodEndMs: toMs(d.periodEnd),
-      periodStart: undefined,
-      periodEnd: undefined,
+      name: d.name,
+      allowance: d.allowance,
+      allowancePeriod: d.allowancePeriod,
+      rollover: d.rollover,
+      overrides,
     };
   });
 
-  const rules = findCollection("seed-rules").map(({ id, data }) => {
-    const d = stripFields(data, "memberEmails", "groupId");
-    return { ...d, id };
-  });
-
-  const normalizationRules = findCollection("seed-normalization-rules").map(({ id, data }) => {
-    const d = stripFields(data, "memberEmails", "groupId");
-    return { ...d, id };
-  });
-
-  const statements = findCollection("seed-statements").map(({ id, data }) => {
-    const d = stripFields(data, "memberEmails", "groupId");
+  const budgetPeriods: SeedBudgetPeriod[] = findCollection("seed-budget-periods").map(({ id, data: raw }) => {
+    const d = raw as unknown as BudgetPeriodSeedData;
     return {
-      ...d,
       id,
+      budgetId: d.budgetId,
+      periodStartMs: toMs(d.periodStart) as number,
+      periodEndMs: toMs(d.periodEnd) as number,
+      total: d.total,
+      count: d.count,
+      categoryBreakdown: d.categoryBreakdown,
+    };
+  });
+
+  const rules: SeedRule[] = findCollection("seed-rules").map(({ id, data: raw }) => {
+    const d = raw as unknown as RuleSeedData;
+    return {
+      id,
+      type: d.type,
+      pattern: d.pattern,
+      target: d.target,
+      priority: d.priority,
+      institution: d.institution,
+      account: d.account,
+      minAmount: d.minAmount,
+      maxAmount: d.maxAmount,
+      excludeCategory: d.excludeCategory,
+      matchCategory: d.matchCategory,
+    };
+  });
+
+  const normalizationRules: SeedNormalizationRule[] = findCollection("seed-normalization-rules").map(({ id, data: raw }) => {
+    const d = raw as unknown as NormalizationRuleSeedData;
+    return {
+      id,
+      pattern: d.pattern,
+      patternType: d.patternType,
+      canonicalDescription: d.canonicalDescription,
+      dateWindowDays: d.dateWindowDays,
+      institution: d.institution,
+      account: d.account,
+      priority: d.priority,
+    };
+  });
+
+  const statements: SeedStatement[] = findCollection("seed-statements").map(({ id, data: raw }) => {
+    const d = raw as unknown as StatementSeedData;
+    return {
+      id,
+      statementId: d.statementId,
+      institution: d.institution,
+      account: d.account,
+      balance: d.balance,
+      period: d.period,
+      balanceDate: d.balanceDate ?? null,
       lastTransactionDateMs: toMs(d.lastTransactionDate),
-      lastTransactionDate: undefined,
+      virtual: d.virtual,
     };
   });
 
-  const weeklyAggregates = findCollection("seed-weekly-aggregates").map(({ id, data }) => {
-    const d = stripFields(data, "memberEmails", "groupId");
+  const weeklyAggregates: SeedWeeklyAggregate[] = findCollection("seed-weekly-aggregates").map(({ id, data: raw }) => {
+    const d = raw as unknown as WeeklyAggregateSeedData;
     return {
-      ...d,
       id,
-      weekStartMs: toMs(d.weekStart),
-      weekStart: undefined,
+      weekStartMs: toMs(d.weekStart) as number,
+      creditTotal: d.creditTotal,
+      unbudgetedTotal: d.unbudgetedTotal,
     };
   });
 
-  return JSON.stringify({
+  return {
     transactions,
     budgets,
     budgetPeriods,
@@ -83,7 +147,7 @@ function serializeSeedData(): string {
     normalizationRules,
     statements,
     weeklyAggregates,
-  });
+  };
 }
 
 export function budgetSeedDataPlugin(): Plugin {
@@ -93,7 +157,7 @@ export function budgetSeedDataPlugin(): Plugin {
     name: "budget-seed-data",
     buildStart() {
       const data = serializeSeedData();
-      moduleCode = `export default ${data};`;
+      moduleCode = `export default ${JSON.stringify(data)};`;
     },
     resolveId(id) {
       if (id === VIRTUAL_MODULE_ID) return RESOLVED_VIRTUAL_MODULE_ID;

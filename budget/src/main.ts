@@ -19,7 +19,7 @@ import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { parseUploadedJson, toParsedData, UploadValidationError } from "./upload.js";
 import { storeParsedData, clearAll, getMeta } from "./idb.js";
-import { FirestoreSeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
+import { SeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
 import { setActiveDataSource } from "./active-data-source.js";
 import { exportToJson } from "./export.js";
 import { isEncrypted, decrypt, encrypt } from "./crypto.js";
@@ -37,7 +37,7 @@ export type AppState =
 let state: AppState = { source: "seed" };
 let importPassword: string | null = null;
 
-navEl.links = NAV_LINKS;
+navEl.links = [...NAV_LINKS];
 navEl.showAuth = false;
 
 // File upload UI
@@ -93,7 +93,7 @@ function createDataSource(): DataSource {
   if (state.source === "local") {
     return new IdbDataSource();
   }
-  return new FirestoreSeedDataSource();
+  return new SeedDataSource();
 }
 
 function renderOptions(): RenderPageOptions {

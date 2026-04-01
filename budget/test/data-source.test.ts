@@ -32,7 +32,7 @@ vi.mock("virtual:budget-seed-data", async () => {
 
 import { Timestamp } from "firebase/firestore";
 import { storeParsedData, closeDb } from "../src/idb";
-import { IdbDataSource, FirestoreSeedDataSource } from "../src/data-source";
+import { IdbDataSource, SeedDataSource } from "../src/data-source";
 import type { TransactionId, BudgetPeriodId, RuleId } from "../src/firestore";
 import { makeParsedData } from "./helpers";
 
@@ -271,9 +271,9 @@ describe("IdbDataSource", () => {
   });
 });
 
-describe("FirestoreSeedDataSource", () => {
+describe("SeedDataSource", () => {
   it("rejects with 'Seed data is read-only' for write methods", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     await expect(ds.updateTransaction()).rejects.toThrow("Seed data is read-only");
     await expect(ds.updateBudget()).rejects.toThrow("Seed data is read-only");
     await expect(ds.adjustBudgetPeriodTotal()).rejects.toThrow("Seed data is read-only");
@@ -286,7 +286,7 @@ describe("FirestoreSeedDataSource", () => {
   });
 
   it("getTransactions returns all seed transactions with Timestamp objects", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     const txns = await ds.getTransactions();
     expect(txns).toHaveLength(3);
     expect(txns[0].id).toBe("seed-txn-1");
@@ -297,7 +297,7 @@ describe("FirestoreSeedDataSource", () => {
   });
 
   it("getTransactions with since filter excludes earlier and null timestamps", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     const txns = await ds.getTransactions({ since: Timestamp.fromMillis(1700050000000) });
     const ids = txns.map(t => t.id);
     expect(ids).toContain("seed-txn-2");
@@ -306,7 +306,7 @@ describe("FirestoreSeedDataSource", () => {
   });
 
   it("getTransactions with before filter excludes later timestamps, includes nulls", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     const txns = await ds.getTransactions({ before: Timestamp.fromMillis(1700050000000) });
     const ids = txns.map(t => t.id);
     expect(ids).toContain("seed-txn-1");
@@ -315,7 +315,7 @@ describe("FirestoreSeedDataSource", () => {
   });
 
   it("getTransactions with since + before returns range, excludes nulls", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     const txns = await ds.getTransactions({
       since: Timestamp.fromMillis(1700000000000),
       before: Timestamp.fromMillis(1700100000000),
@@ -325,7 +325,7 @@ describe("FirestoreSeedDataSource", () => {
   });
 
   it("getBudgets returns seed budgets with Timestamp overrides", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     const budgets = await ds.getBudgets();
     expect(budgets).toHaveLength(1);
     expect(budgets[0].id).toBe("food");
@@ -338,7 +338,7 @@ describe("FirestoreSeedDataSource", () => {
   });
 
   it("getBudgetPeriods returns seed periods with Timestamp objects", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     const periods = await ds.getBudgetPeriods();
     expect(periods).toHaveLength(1);
     expect(periods[0].id).toBe("bp-seed-1");
@@ -349,7 +349,7 @@ describe("FirestoreSeedDataSource", () => {
   });
 
   it("getRules returns seed rules", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     const rules = await ds.getRules();
     expect(rules).toHaveLength(1);
     expect(rules[0].id).toBe("rule-1");
@@ -358,7 +358,7 @@ describe("FirestoreSeedDataSource", () => {
   });
 
   it("getNormalizationRules returns seed normalization rules", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     const rules = await ds.getNormalizationRules();
     expect(rules).toHaveLength(1);
     expect(rules[0].id).toBe("nrule-1");
@@ -367,7 +367,7 @@ describe("FirestoreSeedDataSource", () => {
   });
 
   it("getStatements returns seed statements with Timestamp objects", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     const stmts = await ds.getStatements();
     expect(stmts).toHaveLength(1);
     expect(stmts[0].statementId).toBe("stmt-1");
@@ -377,7 +377,7 @@ describe("FirestoreSeedDataSource", () => {
   });
 
   it("getWeeklyAggregates returns seed aggregates with Timestamp objects", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     const aggs = await ds.getWeeklyAggregates();
     expect(aggs).toHaveLength(1);
     expect(aggs[0].id).toBe("2023-11-13");

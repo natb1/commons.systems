@@ -47,7 +47,6 @@ describe("budgetSeedDataPlugin", () => {
   });
 
   describe("serialized seed data", () => {
-    // Parse the JSON from "export default <json>;"
     let data: Record<string, unknown[]>;
 
     it("is valid JSON parseable from the module code", () => {

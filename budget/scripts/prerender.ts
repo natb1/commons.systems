@@ -2,12 +2,13 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { findCollection } from "../seeds/find-collection.js";
 import { renderBudgetsContent } from "../src/pages/budgets.js";
+import { NAV_LINKS } from "../src/nav-links.js";
 import type { Budget, BudgetPeriod, WeeklyAggregate, BudgetId, BudgetPeriodId, GroupId } from "../src/firestore.js";
 
 const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
 const indexPath = join(distDir, "index.html");
 
-// Minimal Timestamp shim for build-time rendering (similar purpose to test/helpers.ts:MockTimestamp)
+// Minimal Timestamp shim for build-time rendering
 class BuildTimestamp {
   constructor(private readonly ms: number) {}
   toMillis(): number { return this.ms; }
@@ -55,8 +56,6 @@ function buildWeeklyAggregates(): WeeklyAggregate[] {
     groupId: null as GroupId | null,
   }));
 }
-
-import { NAV_LINKS } from "../src/nav-links.js";
 
 const navLinksInner = NAV_LINKS.map(l => `<a href="${l.href}">${l.label}</a>`).join("\n     ");
 const navHtml = `<app-nav id="nav"><span class="nav-links">\n     ${navLinksInner}\n   </span></app-nav>`;

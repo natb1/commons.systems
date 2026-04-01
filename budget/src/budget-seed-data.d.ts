@@ -1,5 +1,5 @@
 declare module "virtual:budget-seed-data" {
-  interface SeedTransaction {
+  export interface SeedTransaction {
     readonly id: string;
     readonly institution: string;
     readonly account: string;
@@ -17,12 +17,12 @@ declare module "virtual:budget-seed-data" {
     readonly virtual: boolean;
   }
 
-  interface SeedBudgetOverride {
+  export interface SeedBudgetOverride {
     readonly dateMs: number;
     readonly balance: number;
   }
 
-  interface SeedBudget {
+  export interface SeedBudget {
     readonly id: string;
     readonly name: string;
     readonly allowance: number;
@@ -31,7 +31,7 @@ declare module "virtual:budget-seed-data" {
     readonly overrides: SeedBudgetOverride[];
   }
 
-  interface SeedBudgetPeriod {
+  export interface SeedBudgetPeriod {
     readonly id: string;
     readonly budgetId: string;
     readonly periodStartMs: number;
@@ -41,7 +41,7 @@ declare module "virtual:budget-seed-data" {
     readonly categoryBreakdown: Record<string, number>;
   }
 
-  interface SeedRule {
+  export interface SeedRule {
     readonly id: string;
     readonly type: "categorization" | "budget_assignment";
     readonly pattern: string;
@@ -55,7 +55,7 @@ declare module "virtual:budget-seed-data" {
     readonly matchCategory: string | null;
   }
 
-  interface SeedNormalizationRule {
+  export interface SeedNormalizationRule {
     readonly id: string;
     readonly pattern: string;
     readonly patternType: string | null;
@@ -66,7 +66,7 @@ declare module "virtual:budget-seed-data" {
     readonly priority: number;
   }
 
-  interface SeedStatement {
+  export interface SeedStatement {
     readonly id: string;
     readonly statementId: string;
     readonly institution: string;
@@ -78,14 +78,14 @@ declare module "virtual:budget-seed-data" {
     readonly virtual: boolean;
   }
 
-  interface SeedWeeklyAggregate {
+  export interface SeedWeeklyAggregate {
     readonly id: string;
     readonly weekStartMs: number;
     readonly creditTotal: number;
     readonly unbudgetedTotal: number;
   }
 
-  interface SeedData {
+  export interface SeedData {
     readonly transactions: SeedTransaction[];
     readonly budgets: SeedBudget[];
     readonly budgetPeriods: SeedBudgetPeriod[];

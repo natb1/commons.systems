@@ -115,7 +115,6 @@ describe("renderBudgetsContent", () => {
 
   it("renders editable inputs when authorized", () => {
     const html = renderBudgetsContent(budgets, periods, weeklyAggregates, true);
-    // Authorized rows should not have disabled attribute on name inputs
     const nameInputMatch = html.match(/<input type="text" class="edit-name"[^>]*>/g);
     expect(nameInputMatch).not.toBeNull();
     for (const match of nameInputMatch!) {

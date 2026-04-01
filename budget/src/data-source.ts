@@ -58,7 +58,7 @@ export interface DataSource {
   deleteNormalizationRule(id: string): Promise<void>;
 }
 
-export class FirestoreSeedDataSource implements DataSource {
+export class SeedDataSource implements DataSource {
   async getTransactions(query?: TransactionQuery): Promise<Transaction[]> {
     const all: Transaction[] = seedData.transactions.map((t) => ({
       id: t.id as TransactionId,
@@ -342,7 +342,7 @@ export class IdbDataSource implements DataSource {
       }
       if (beforeMs !== undefined) {
         if (row.timestampMs !== null && row.timestampMs >= beforeMs) return false;
-        // Exclude null-timestamp rows when since is present (already caught by since check above for non-before queries)
+        // When both since and before are set, exclude null-timestamp rows (the since block above handles since-only queries)
         if (row.timestampMs === null && sinceMs !== undefined) return false;
       }
       return true;

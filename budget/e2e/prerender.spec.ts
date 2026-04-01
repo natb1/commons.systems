@@ -56,11 +56,9 @@ test.describe("prerender", () => {
       await page.goto("/");
       await expect(page.locator("app-nav .nav-links")).toBeVisible();
 
-      // Navigate to transactions
       await page.click('app-nav a[href="/transactions"]');
       await expect(page.locator("main h2")).toHaveText("Transactions");
 
-      // Navigate back to budgets
       await page.click('app-nav a[href="/"]');
       await expect(page.locator("main h2")).toHaveText("Budgets");
       await expect(page.locator("#budgets-table")).toBeVisible();
@@ -74,7 +72,6 @@ test.describe("prerender", () => {
       await expect(page.locator("#transactions-table")).toBeVisible({ timeout: 10000 });
       await expect(page.locator("#seed-data-notice")).toHaveCount(0);
 
-      // Navigate to budgets and verify re-render with uploaded data
       await page.click('app-nav a[href="/"]');
       await expect(page.locator("main h2")).toHaveText("Budgets");
       await expect(page.locator("#budgets-table")).toBeVisible();
