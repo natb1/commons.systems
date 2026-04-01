@@ -175,6 +175,7 @@ function fetchAllLatestPosts(
       .fetchLatestPost()
       .then((post) => ({ entry, post }))
       .catch((err) => {
+        // Silent degradation: show entry without latest post on fetch failure.
         logError(err, { operation: "fetch-latest-post", entryId: entry.id });
         return { entry, post: null };
       });

@@ -37,10 +37,8 @@ export function logError(error: unknown, context: ErrorContext): void {
   if (sink) {
     try {
       sink(error, enriched);
-    } catch {
-      // Synchronous sink failure must never propagate — console.error above
-      // already captured the error. Async sinks handle their own rejections
-      // via .catch().
+    } catch (sinkErr) {
+      console.warn("Error sink threw synchronously", sinkErr);
     }
   }
 }

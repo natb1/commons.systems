@@ -295,9 +295,52 @@ service cloud.firestore {
     }
 
     // Error logs: write-only from clients. Admin reads via Admin SDK.
-    // Unauthenticated creates are allowed because budget has no auth.
-    match /{appName}/{env}/errors/{errorId} {
-      allow create: if true;
+    // Unauthenticated creates are allowed so error telemetry works regardless
+    // of auth state. Field validation requires message (string), operation
+    // (string), and timestamp (timestamp).
+    match /budget/{env}/errors/{errorId} {
+      allow create: if request.resource.data.keys().hasAll(["message", "operation", "timestamp"])
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 10000
+        && request.resource.data.operation is string
+        && request.resource.data.operation.size() <= 200
+        && request.resource.data.timestamp is timestamp;
+      allow read, update, delete: if false;
+    }
+    match /landing/{env}/errors/{errorId} {
+      allow create: if request.resource.data.keys().hasAll(["message", "operation", "timestamp"])
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 10000
+        && request.resource.data.operation is string
+        && request.resource.data.operation.size() <= 200
+        && request.resource.data.timestamp is timestamp;
+      allow read, update, delete: if false;
+    }
+    match /fellspiral/{env}/errors/{errorId} {
+      allow create: if request.resource.data.keys().hasAll(["message", "operation", "timestamp"])
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 10000
+        && request.resource.data.operation is string
+        && request.resource.data.operation.size() <= 200
+        && request.resource.data.timestamp is timestamp;
+      allow read, update, delete: if false;
+    }
+    match /print/{env}/errors/{errorId} {
+      allow create: if request.resource.data.keys().hasAll(["message", "operation", "timestamp"])
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 10000
+        && request.resource.data.operation is string
+        && request.resource.data.operation.size() <= 200
+        && request.resource.data.timestamp is timestamp;
+      allow read, update, delete: if false;
+    }
+    match /audio/{env}/errors/{errorId} {
+      allow create: if request.resource.data.keys().hasAll(["message", "operation", "timestamp"])
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 10000
+        && request.resource.data.operation is string
+        && request.resource.data.operation.size() <= 200
+        && request.resource.data.timestamp is timestamp;
       allow read, update, delete: if false;
     }
 

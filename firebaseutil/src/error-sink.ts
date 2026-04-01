@@ -20,22 +20,30 @@ export interface ErrorSinkOptions {
 // Context entries with these names are dropped to prevent overwrites.
 const RESERVED_KEYS = new Set(["operation", "kind", "message", "stack", "code", "timestamp", "userAgent", "url", "uid", "email"]);
 
-// Rate-limit Firestore writes: max 50 per 60-second window.
-// Console.error still fires via logError regardless of throttle.
-let recentWrites = 0;
-let windowStart = 0;
-
 export function createFirestoreErrorSink(options: ErrorSinkOptions): ErrorSink {
   const { db, namespace, getCurrentUser } = options;
   const errorsPath = nsCollectionPath(namespace, "errors");
+
+  // Rate-limit Firestore writes: max 50 per 60-second window.
+  // console.error still fires via logError regardless of throttle.
+  let recentWrites = 0;
+  let windowStart = 0;
+  let rateLimitWarned = false;
 
   return (error: unknown, context: EnrichedErrorContext): void => {
     const now = Date.now();
     if (now - windowStart > 60_000) {
       recentWrites = 0;
       windowStart = now;
+      rateLimitWarned = false;
     }
-    if (recentWrites >= 50) return;
+    if (recentWrites >= 50) {
+      if (!rateLimitWarned) {
+        console.warn("Firestore error sink: rate limit reached (50 writes/60s), suppressing further writes");
+        rateLimitWarned = true;
+      }
+      return;
+    }
     recentWrites++;
     const user = getCurrentUser?.() ?? null;
     const doc: Record<string, unknown> = {
@@ -58,6 +66,8 @@ export function createFirestoreErrorSink(options: ErrorSinkOptions): ErrorSink {
     }
 
     // Fire-and-forget. Never await — error logging must not block the caller.
-    addDoc(collection(db, errorsPath), doc).catch(() => {});
+    addDoc(collection(db, errorsPath), doc).catch((e) => {
+      console.warn("Firestore error sink: failed to write error document", e);
+    });
   };
 }

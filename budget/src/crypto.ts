@@ -51,6 +51,7 @@ function getWorker(): Worker | null {
     };
     return worker;
   } catch (err) {
+    // Silent degradation: fall back to main-thread crypto if worker init fails.
     logError(err, { operation: "crypto-worker-init" });
     return null;
   }
