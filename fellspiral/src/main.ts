@@ -110,7 +110,7 @@ const router = createHistoryRouter(
       path: /^\/(?:post\/.*)?$/,
       render: () => loadPosts(),
       afterRender: (outlet, path) => {
-        const slug = path.startsWith("/post/") ? path.slice(6).replace(/\/$/, "") : undefined;
+        const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
         updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined);
         updateInfoPanel();

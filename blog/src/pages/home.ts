@@ -113,8 +113,8 @@ export function hydrateHome(
       // Images above the target article may still be loading when content is
       // first rendered into the DOM. Each image load shifts layout and
       // invalidates the scroll offset. Rather than computing a one-shot scroll
-      // position that becomes stale, re-scroll on every preceding image load
-      // event so the article stays near the viewport top.
+      // position that becomes stale, re-scroll on every preceding image load or
+      // error event so the article stays near the viewport top.
       const doScroll = (): void => {
         if (!isOutletCurrent(outlet, container)) return;
         const headerHeight = document.querySelector('header')?.offsetHeight ?? 0;

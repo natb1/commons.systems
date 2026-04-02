@@ -85,7 +85,7 @@ function createNavigator(
 
 export function parsePath(): { path: string; params: URLSearchParams } {
   return {
-    path: location.pathname,
+    path: location.pathname.replace(/\/$/, "") || "/",
     params: new URLSearchParams(location.search),
   };
 }

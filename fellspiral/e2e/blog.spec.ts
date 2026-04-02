@@ -39,6 +39,23 @@ test.describe("blog", () => {
       .toBeLessThanOrEqual(250);
   });
 
+  test("trailing-slash post URL scrolls to post", async ({ page }) => {
+    await page.goto("/post/scenes-from-a-hat/");
+    await page.waitForSelector("#posts", { timeout: 30000 });
+    await expect(page.locator("#post-scenes-from-a-hat")).toBeVisible();
+
+    const article = page.locator("#post-scenes-from-a-hat");
+    await expect
+      .poll(
+        async () => {
+          const box = await article.boundingBox();
+          return box?.y ?? Infinity;
+        },
+        { timeout: 5000 },
+      )
+      .toBeLessThanOrEqual(250);
+  });
+
   test("post content renders markdown as HTML", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
