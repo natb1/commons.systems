@@ -1,7 +1,7 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod } from "../firestore.js";
+import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod, type WeeklyAggregate } from "../firestore.js";
 import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetDiffs, computePerBudgetTrend, weeklyEquivalent, periodEquivalent, type PerBudgetPoint, type PerBudgetStats } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { toISODate } from "./hydrate-util.js";
@@ -216,12 +216,32 @@ function renderOverridesTable(budgets: Budget[], authorized: boolean): string {
   </div>`;
 }
 
+export function renderBudgetsContent(
+  budgets: Budget[], periods: BudgetPeriod[], weeklyAggregates: WeeklyAggregate[],
+  authorized: boolean,
+): string {
+  const averageWeeklyCredits = computeAverageWeeklyCredits(weeklyAggregates);
+  const totalWeeklyBudget = budgets.reduce((s, b) => s + weeklyEquivalent(b.allowance, b.allowancePeriod), 0);
+  const averageWeeklySpending = computeAverageWeeklySpending(periods);
+  const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
+  const perBudgetTrend = computePerBudgetTrend(budgets, periods, weeklyAggregates);
+  const chartHtml = renderChartContainer(budgets, periods, metricsHtml, perBudgetTrend, averageWeeklyCredits);
+  const budgetStats = computeBudgetDiffs(budgets, periods);
+  const tableHtml = renderBudgetTable(budgets, authorized, budgetStats);
+  const overridesHtml = budgets.length > 0 ? renderOverridesTable(budgets, authorized) : "";
+  const noticeHtml = renderPageNotices({ authorized }, "budgets");
+
+  return `
+    <h2>Budgets</h2>
+    ${noticeHtml}
+    ${chartHtml}
+    ${tableHtml}
+    ${overridesHtml}
+  `;
+}
+
 export async function renderBudgets(options: RenderPageOptions): Promise<string> {
   const { authorized, dataSource } = options;
-
-  let tableHtml: string;
-  let overridesHtml = "";
-  let chartHtml = "";
   try {
     const [budgets, periods, weeklyAggregates] = await Promise.all([
       dataSource.getBudgets()
@@ -231,28 +251,12 @@ export async function renderBudgets(options: RenderPageOptions): Promise<string>
       dataSource.getWeeklyAggregates()
         .catch((e) => { logError(e, { operation: "load-aggregates" }); throw e; }),
     ]);
-    const averageWeeklyCredits = computeAverageWeeklyCredits(weeklyAggregates);
-    const totalWeeklyBudget = budgets.reduce((s, b) => s + weeklyEquivalent(b.allowance, b.allowancePeriod), 0);
-    const averageWeeklySpending = computeAverageWeeklySpending(periods);
-    const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
-    const perBudgetTrend = computePerBudgetTrend(budgets, periods, weeklyAggregates);
-    chartHtml = renderChartContainer(budgets, periods, metricsHtml, perBudgetTrend, averageWeeklyCredits);
-    const budgetStats = computeBudgetDiffs(budgets, periods);
-    tableHtml = renderBudgetTable(budgets, authorized, budgetStats);
-    if (budgets.length > 0) {
-      overridesHtml = renderOverridesTable(budgets, authorized);
-    }
+    return renderBudgetsContent(budgets, periods, weeklyAggregates, authorized);
   } catch (error) {
-    chartHtml = "";
-    overridesHtml = "";
-    tableHtml = renderLoadError(error, "budgets-error");
-  }
-
-  return `
+    return `
     <h2>Budgets</h2>
     ${renderPageNotices(options, "budgets")}
-    ${chartHtml}
-    ${tableHtml}
-    ${overridesHtml}
+    ${renderLoadError(error, "budgets-error")}
   `;
+  }
 }

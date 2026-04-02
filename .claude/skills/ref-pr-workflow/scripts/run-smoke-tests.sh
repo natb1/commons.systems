@@ -18,16 +18,25 @@ cd "$REPO_ROOT/$APP_DIR"
 # Wait for Firebase CDN to serve the deployed content
 echo "Waiting for preview to become available at $BASE_URL..."
 READY=false
-for i in $(seq 1 30); do
-  STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL")
-  if [[ "$STATUS" == "200" ]] && curl -s "$BASE_URL" | grep -q '<script type="module"'; then
+TMPHTML=$(mktemp)
+trap 'rm -f "$TMPHTML"' EXIT
+for i in $(seq 1 60); do
+  STATUS=$(curl -s -o "$TMPHTML" -w '%{http_code}' "$BASE_URL")
+  if [[ "$STATUS" != "200" ]]; then
+    echo "  [$i] HTTP $STATUS (waiting for 200)..."
+  elif grep -q '<script type="module"' "$TMPHTML"; then
     echo "Preview is ready."
     READY=true
     break
+  else
+    echo "  [$i] HTTP 200 but missing script tag ($(wc -c < "$TMPHTML") bytes)"
+    if [ "$i" -le 3 ]; then
+      head -20 "$TMPHTML" >&2
+    fi
   fi
-  if [ "$i" -eq 30 ]; then
-    echo "ERROR: Preview at $BASE_URL did not serve expected content after 60s (last HTTP status: $STATUS)" >&2
-    curl -s "$BASE_URL" | head -20 >&2
+  if [ "$i" -eq 60 ]; then
+    echo "ERROR: Preview at $BASE_URL did not serve expected content after 120s (last HTTP status: $STATUS)" >&2
+    head -20 "$TMPHTML" >&2
     exit 1
   fi
   sleep 2

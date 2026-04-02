@@ -46,7 +46,7 @@ vi.mock("../src/upload.js", () => ({
 }));
 
 vi.mock("../src/data-source.js", () => ({
-  FirestoreSeedDataSource: class { getTransactions() { return []; } },
+  SeedDataSource: class { getTransactions() { return []; } },
   IdbDataSource: class { getTransactions() { return []; } },
 }));
 
