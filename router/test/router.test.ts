@@ -7,6 +7,18 @@ describe("parsePath", () => {
     expect(result.path).toBe("/");
     expect([...result.params]).toEqual([]);
   });
+
+  it("strips trailing slash from pathname", () => {
+    history.pushState({}, "", "/post/hello-world/");
+    const result = parsePath();
+    expect(result.path).toBe("/post/hello-world");
+  });
+
+  it("preserves root path when pathname is just /", () => {
+    history.pushState({}, "", "/");
+    const result = parsePath();
+    expect(result.path).toBe("/");
+  });
 });
 
 describe("createHistoryRouter", () => {

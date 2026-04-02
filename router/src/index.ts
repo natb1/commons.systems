@@ -85,7 +85,8 @@ function createNavigator(
 
 export function parsePath(): { path: string; params: URLSearchParams } {
   return {
-    path: location.pathname,
+    // Strip trailing slash so "/post/slug/" matches route "/post/:slug"
+    path: location.pathname.replace(/\/$/, "") || "/",
     params: new URLSearchParams(location.search),
   };
 }

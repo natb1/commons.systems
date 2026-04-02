@@ -23,7 +23,7 @@ test.describe("info panel — desktop", () => {
     const panel = page.locator("#info-panel");
     await expect(panel.locator("h3", { hasText: "Find Me" })).toHaveCount(0);
     await expect(panel.locator('a[href="https://natethenoob.itch.io"]')).toBeVisible();
-    const nlbLink = panel.locator('a[href="https://discord.gg/MxXHfyY3"]');
+    const nlbLink = panel.locator('a[href="https://discord.gg/sFHXtyF"]');
     await expect(nlbLink).toBeVisible();
     await expect(nlbLink.locator(".link-subtitle")).toHaveText("Find a Local Game in Baltimore");
   });
