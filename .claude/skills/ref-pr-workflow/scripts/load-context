@@ -54,7 +54,7 @@ STATE_EXIT=0
 STATE_OUTPUT=$("$SCRIPT_DIR/issue-state-read" "$ISSUE_NUM" 2>"$STDERR_FILE") || STATE_EXIT=$?
 if [[ "$STATE_EXIT" -ne 0 ]]; then
   STATE_STDERR=$(cat "$STDERR_FILE")
-  if echo "$STATE_STDERR" | grep -qE "no state found"; then
+  if echo "$STATE_STDERR" | grep -qE "no pr-workflow-state markers|has an empty body|state block is empty"; then
     STATE_OUTPUT="No state"
   else
     echo "error: issue-state-read failed (exit $STATE_EXIT): $STATE_STDERR" >&2
