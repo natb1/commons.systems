@@ -79,6 +79,41 @@ VITE_GITHUB_BRANCH="75-prototype-print-viewer" npm run build --prefix print
 .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh print
 ```
 
+### Avoid double quotes spanning newlines in heredoc commit messages
+
+The `allowedTools` glob matcher does naive quote-tracking on command strings.
+When a heredoc body contains a balanced `"..."` pair followed by another `"`
+that opens on one line and closes on the next, the matcher misreads the inner
+closing `"` as ending the outer command delimiter — causing the rest of the
+command to fall outside the pattern match and triggering a permission prompt.
+
+```bash
+# Bad — "irrelevant" balances the matcher's quote state, then "contains
+# opens on this line and closes on the next, confusing the matcher
+git commit -m "$(cat <<'EOF'
+Fix "irrelevant" to "contains
+  no metacharacters"
+EOF
+)"
+```
+
+Workaround: avoid double quotes in commit message heredocs. Use single quotes
+or rephrase to keep quoted text on a single line.
+
+```bash
+# Good — single quotes avoid the matcher bug
+git commit -m "$(cat <<'EOF'
+Fix 'irrelevant' to 'contains no metacharacters'
+EOF
+)"
+
+# Good — quoted text stays on one line
+git commit -m "$(cat <<'EOF'
+Fix "irrelevant" to "contains no metacharacters"
+EOF
+)"
+```
+
 ### CI polling
 
 `sleep && gh run view` loops create repeated permission prompts. Use `gh run watch`
