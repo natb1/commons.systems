@@ -8,11 +8,17 @@ import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "firebase/auth";
 import { trackPageView } from "./firebase.js";
+import { renderHero } from "./pages/hero.js";
+import { mountHero } from "@commons-systems/style/hero";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
+
+const heroContainer = document.getElementById("hero-container") as HTMLElement;
+if (!heroContainer) throw new Error("#hero-container element not found");
+mountHero(heroContainer, renderHero);
 
 navEl.links = [
   { href: "/", label: "Home" },
@@ -39,5 +45,6 @@ const router = createHistoryRouter(
 
 onAuthStateChanged((user) => {
   updateNav(user);
+  heroContainer.hidden = user !== null;
   router.navigate();
 });

@@ -2,10 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Plugin } from "vite";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { PublishedPost } from "./post-types.js";
-import type { PostContent } from "./pages/home.js";
+import { validatePublishedPosts, type PublishedPost } from "./post-types.ts";
+import type { PostContent } from "./pages/home.ts";
 import { createMarked, extractH1 } from "./marked-config.ts";
-import { findPostsCollection, extractPublishedPosts } from "./seed-posts.ts";
 
 export type { PostContent };
 
@@ -31,8 +30,8 @@ export function blogPostsPlugin(config: BlogPostsPluginConfig): Plugin {
     name: "blog-posts",
     async buildStart() {
       const marked = createMarked();
-      const postsCollection = findPostsCollection(config.seed.collections);
-      const published = extractPublishedPosts(postsCollection);
+      const published = validatePublishedPosts(config.seed);
+      published.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
       metadata = published;
 
       const results: Record<string, PostContent> = {};

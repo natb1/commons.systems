@@ -1,4 +1,5 @@
 @import "@commons-systems/style/default.css";
+@import "@commons-systems/style/hero.css";
 @import "./viewer.css";
 
 :root {

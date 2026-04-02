@@ -96,6 +96,26 @@ assert_approves \
   "Bash" \
   "$(printf '.claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh \\\n  323 file.txt')"
 
+assert_approves \
+  "pipe workflow script to allowed command (head)" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/load-context 350 2>&1 | head -200"
+
+assert_approves \
+  "pipe workflow script to allowed command (tail)" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/load-context 350 | tail -5"
+
+assert_approves \
+  "pipe allowed command to allowed command" \
+  "Bash" \
+  "head -20 file.txt | tail -5"
+
+assert_approves \
+  "semicolon then pipe" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/issue-primary 350; .claude/skills/ref-pr-workflow/scripts/load-context 350 | head -20"
+
 # --- Passthrough cases ---
 
 assert_passthrough \
@@ -113,8 +133,8 @@ assert_passthrough \
   "Bash" \
   ".claude/skills/some-other-skill/scripts/run-lint.sh"
 
-assert_passthrough \
-  "echo referencing script path (not execution)" \
+assert_approves \
+  "echo is in allowedTools (argument contains no unsafe metacharacters)" \
   "Bash" \
   "echo .claude/skills/ref-pr-workflow/scripts/run-lint.sh"
 
@@ -149,9 +169,9 @@ assert_passthrough \
   ""
 
 assert_passthrough \
-  "unrelated command" \
+  "unrelated command not in allowedTools" \
   "Bash" \
-  "ls -la"
+  "curl http://example.com"
 
 # --- Security edge cases ---
 
@@ -176,9 +196,19 @@ assert_passthrough \
   ".claude/skills/ref-pr-workflow/scripts/run-lint.sh && rm -rf /"
 
 assert_passthrough \
-  "pipe to another command" \
+  "pipe to unapproved command" \
   "Bash" \
   ".claude/skills/ref-pr-workflow/scripts/run-lint.sh | malicious-command"
+
+assert_passthrough \
+  "pipe from allowed to unapproved command" \
+  "Bash" \
+  "head -20 file.txt | malicious-command"
+
+assert_passthrough \
+  "pipe to rm (not in allowedTools)" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh | rm -rf /"
 
 assert_passthrough \
   "semicolon chaining" \
@@ -219,6 +249,11 @@ assert_passthrough \
   "or-chaining with ||" \
   "Bash" \
   ".claude/skills/ref-pr-workflow/scripts/run-lint.sh || evil-command"
+
+assert_passthrough \
+  "or-chaining || between two allowed commands" \
+  "Bash" \
+  "echo hello || head /etc/passwd"
 
 assert_passthrough \
   "continuation then bare newline with evil command" \

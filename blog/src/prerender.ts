@@ -2,12 +2,11 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { InfoPanelData } from "./components/info-panel.js";
-import type { PostMeta, PublishedPost } from "./post-types.js";
-import { renderInfoPanel } from "./components/info-panel.js";
-import { createMarked, extractH1 } from "./marked-config.js";
-import { renderArticle, type PostContent } from "./pages/home.js";
-import { findPostsCollection, extractPublishedPosts } from "./seed-posts.js";
+import type { InfoPanelData } from "./components/info-panel.ts";
+import { validatePublishedPosts, type PostMeta } from "./post-types.ts";
+import { renderInfoPanel } from "./components/info-panel.ts";
+import { createMarked, extractH1 } from "./marked-config.ts";
+import { renderArticle, type PostContent } from "./pages/home.ts";
 
 export interface NavLink {
   readonly href: string;
@@ -32,26 +31,34 @@ function renderNavHtml(links: NavLink[]): string {
 }
 
 interface RenderedPost {
-  meta: PublishedPost;
+  meta: PostMeta & { published: true };
   articleHtml: string;
 }
 
 async function parseAndRenderPosts(
-  published: PublishedPost[],
+  published: Array<{ id: string; data: Record<string, unknown> }>,
   postDir: string,
   marked: ReturnType<typeof createMarked>,
 ): Promise<RenderedPost[]> {
   const results: RenderedPost[] = [];
-  for (const post of published) {
-    const markdown = readFileSync(join(postDir, post.filename), "utf-8");
+  for (const doc of published) {
+    const data = doc.data;
+    const filename = data.filename as string;
+    const markdown = readFileSync(join(postDir, filename), "utf-8");
 
     const h1 = extractH1(markdown);
-    const title = h1 ? h1.title : post.title;
+    const title = h1 ? h1.title : (data.title as string);
     const body = h1 ? h1.body : markdown;
     const html = await marked.parse(body);
     const content: PostContent = { html, title: h1 ? h1.title : null };
 
-    const meta: PublishedPost = { ...post, title };
+    const meta: PostMeta & { published: true } = {
+      id: doc.id,
+      title,
+      published: true,
+      publishedAt: data.publishedAt as string,
+      filename,
+    };
 
     results.push({
       meta,
@@ -104,13 +111,15 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const template = readFileSync(join(distDir, "index.html"), "utf-8");
   const marked = createMarked();
 
-  const postsCollection = findPostsCollection(seed.collections);
-  const published = extractPublishedPosts(postsCollection);
+  const published = validatePublishedPosts(seed);
 
-  const parsed = await parseAndRenderPosts(published, postDir, marked);
+  const parsed = await parseAndRenderPosts(
+    published.map((p) => ({ id: p.id, data: p as unknown as Record<string, unknown> })),
+    postDir,
+    marked,
+  );
 
-  // Sort by date descending for the home page (extractPublishedPosts sorts by
-  // publishedAt string comparison; re-sort by parsed Date for correctness)
+  // Sort by date descending for the home page
   const sorted = [...parsed].sort(
     (a, b) => new Date(b.meta.publishedAt).getTime() - new Date(a.meta.publishedAt).getTime(),
   );
@@ -129,8 +138,11 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   console.log("Pre-rendered: /index.html");
 
   // Generate per-post pages with OG tags and single-post content
-  for (const post of published) {
-    const { id, title, previewDescription: description, previewImage: image } = post;
+  for (const pub of published) {
+    const id = pub.id;
+    const title = pub.title;
+    const description = pub.previewDescription;
+    const image = pub.previewImage;
 
     const ogTags = [
       `<meta property="og:title" content="${escapeHtml(title)}">`,
@@ -155,8 +167,9 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
     // Inject single-post content, info panel, and nav
-    const rendered = parsed.find((p) => p.meta.id === id)!;
-    html = injectMain(html, rendered.articleHtml);
+    const post = parsed.find((p) => p.meta.id === id);
+    if (!post) throw new Error(`Rendered post not found for id "${id}"`);
+    html = injectMain(html, post.articleHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
 
