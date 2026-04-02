@@ -7,7 +7,7 @@ export const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
   {
     links: [
       { label: "itch.io", url: "https://natethenoob.itch.io" },
-      { label: "No Land Beyond", subtitle: "Find a Local Game in Baltimore", url: "https://discord.gg/MxXHfyY3" },
+      { label: "No Land Beyond", subtitle: "Find a Local Game in Baltimore", url: "https://discord.gg/sFHXtyF" },
     ],
   },
   {
