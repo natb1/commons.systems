@@ -1,4 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
+import { logError } from "@commons-systems/errorutil/log";
 import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
@@ -35,7 +36,7 @@ function renderMediaList(items: MediaItem[]): string {
 async function handleDownload(button: HTMLButtonElement): Promise<void> {
   const storagePath = button.dataset.path;
   if (!storagePath) {
-    console.error("Download button missing data-path attribute");
+    logError(new Error("Download button missing data-path attribute"), { operation: "download-button" });
     return;
   }
   button.disabled = true;
@@ -50,7 +51,7 @@ async function handleDownload(button: HTMLButtonElement): Promise<void> {
     a.click();
     document.body.removeChild(a);
   } catch (error) {
-    console.error("Failed to get download URL:", error);
+    logError(error, { operation: "download-url" });
     const mediaItem = button.closest(".media-item");
     if (mediaItem) {
       const existing = mediaItem.querySelector(".download-error");
@@ -76,7 +77,7 @@ export async function renderHome(user: User | null): Promise<string> {
     mediaHtml = renderMediaList(items);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
-    console.error("Failed to load media:", error);
+    logError(error, { operation: "load-media" });
     mediaHtml = '<p id="media-error">Could not load media library.</p>';
   }
 
@@ -96,7 +97,7 @@ export function afterRenderHome(outlet: HTMLElement): void {
     const button = (e.target as HTMLElement).closest(".media-download") as HTMLButtonElement | null;
     if (button) {
       e.preventDefault();
-      handleDownload(button).catch(console.error);
+      handleDownload(button).catch((err) => logError(err, { operation: "download" }));
     }
   });
 }

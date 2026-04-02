@@ -294,6 +294,43 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Error logs: write-only from clients. Admin reads via Admin SDK.
+    // Unauthenticated creates are allowed so error telemetry works regardless
+    // of auth state. Type-validated fields: message (string, max 10KB),
+    // operation (string, max 200 chars), timestamp (timestamp), and optional
+    // stack (string, max 50KB). Other fields (kind, code, userAgent, url, uid,
+    // email, extras) pass through unchecked. Total fields capped at 15.
+    function isValidErrorLog() {
+      return request.resource.data.keys().hasAll(["message", "operation", "timestamp"])
+        && request.resource.data.keys().size() <= 15
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 10000
+        && request.resource.data.operation is string
+        && request.resource.data.operation.size() <= 200
+        && request.resource.data.timestamp is timestamp
+        && (!("stack" in request.resource.data) || request.resource.data.stack == null || (request.resource.data.stack is string && request.resource.data.stack.size() <= 50000));
+    }
+    match /budget/{env}/errors/{errorId} {
+      allow create: if isValidErrorLog();
+      allow read, update, delete: if false;
+    }
+    match /landing/{env}/errors/{errorId} {
+      allow create: if isValidErrorLog();
+      allow read, update, delete: if false;
+    }
+    match /fellspiral/{env}/errors/{errorId} {
+      allow create: if isValidErrorLog();
+      allow read, update, delete: if false;
+    }
+    match /print/{env}/errors/{errorId} {
+      allow create: if isValidErrorLog();
+      allow read, update, delete: if false;
+    }
+    match /audio/{env}/errors/{errorId} {
+      allow create: if isValidErrorLog();
+      allow read, update, delete: if false;
+    }
+
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.
     // InsertFirestoreRules inserts new rule blocks immediately above this line.
     match /{document=**} {

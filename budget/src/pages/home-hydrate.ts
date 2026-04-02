@@ -4,6 +4,7 @@ import { getActiveDataSource } from "../active-data-source.js";
 import { computeNetAmount, MS_PER_WEEK, weekStart } from "../balance.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
+import { logError } from "@commons-systems/errorutil/log";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/style/components/autocomplete";
 import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
@@ -161,7 +162,7 @@ async function syncPeriodOnReimbursementChange(
 /** Handle an error from adjustBudgetPeriodTotal: rethrow programmer errors, log others, clear balance, and set tooltip. */
 function handlePeriodSyncError(row: HTMLElement, error: unknown): void {
   if (classifyError(error) === "programmer") throw error;
-  console.error("Failed to update budget period totals:", error);
+  logError(error, { operation: "update-period-totals" });
   clearBalanceDisplay(row);
   const balanceEl = row.querySelector(".budget-balance") as HTMLElement | null;
   if (balanceEl) balanceEl.title = "Budget totals may be incorrect. Re-upload your data file to correct them.";
@@ -279,7 +280,8 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       const chartTxns = serializeChartTransactions(txns, budgetIdToName);
       document.dispatchEvent(new CustomEvent(TRANSACTIONS_APPENDED_EVENT, { detail: chartTxns }));
     } catch (chartError) {
-      console.error("Failed to update chart with scroll-loaded transactions:", chartError);
+      // Intentional silent degradation — chart misses this transaction batch rather than showing an error.
+      logError(chartError, { operation: "update-chart-scroll" });
     }
   }
 
@@ -332,7 +334,7 @@ export function hydrateTransactionTable(container: HTMLElement): void {
       }
     } catch (error) {
       if (deferProgrammerError(error)) return;
-      console.error("Failed to load older transactions:", error);
+      logError(error, { operation: "load-older-transactions" });
       if (classifyError(error) === "data-integrity") {
         sentinel.insertAdjacentHTML("beforebegin",
           `<div class="scroll-error">Data error — please re-upload your file.</div>`);

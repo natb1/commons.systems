@@ -19,6 +19,7 @@ import { renderHero } from "./pages/hero.js";
 import { trackPageView } from "./firebase.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
+import { logError } from "@commons-systems/errorutil/log";
 import { parseUploadedJson, toParsedData, UploadValidationError } from "./upload.js";
 import { storeParsedData, clearAll, getMeta } from "./idb.js";
 import { FirestoreSeedDataSource, IdbDataSource, type DataSource } from "./data-source.js";
@@ -149,7 +150,7 @@ function hydrateTable(
 ): void {
   hydrateOnce(app, selector, hydrate, (error, el) => {
     const kind = classifyError(error);
-    console.error("Hydration error:", error);
+    logError(error, { operation: "hydration" });
     el.querySelectorAll("input, select").forEach((input) => {
       (input as HTMLInputElement | HTMLSelectElement).disabled = true;
     });
@@ -256,7 +257,7 @@ async function handleFileUpload(file: File): Promise<void> {
       return;
     }
     if (classifyError(error) === "programmer") throw error;
-    console.error("Upload failed:", error);
+    logError(error, { operation: "upload" });
     showNavError("Upload failed. Please try again.");
   }
 }
@@ -266,7 +267,7 @@ uploadInput.addEventListener("change", () => {
   if (file) {
     handleFileUpload(file).catch((error) => {
       if (deferProgrammerError(error)) return;
-      console.error("Unhandled upload error:", error);
+      logError(error, { operation: "upload" });
     });
   }
   // Reset so the same file can be re-uploaded
@@ -303,7 +304,7 @@ exportButton.addEventListener("click", async () => {
     URL.revokeObjectURL(url);
   } catch (error) {
     if (classifyError(error) === "programmer") throw error;
-    console.error("Export failed:", error);
+    logError(error, { operation: "export" });
     showNavError(error instanceof Error ? error.message : "Export failed. Please try again.");
   }
 });
@@ -315,7 +316,7 @@ clearButton.addEventListener("click", async () => {
     transition({ source: "seed" });
   } catch (error) {
     if (classifyError(error) === "programmer") throw error;
-    console.error("Failed to clear data:", error);
+    logError(error, { operation: "clear-data" });
     showNavError("Failed to clear data. Try closing other tabs or refreshing the page.");
   }
 });
@@ -332,7 +333,7 @@ async function initialize(): Promise<void> {
 
 initialize().catch((error) => {
   if (classifyError(error) === "programmer") throw error;
-  console.error("Initialization error:", error);
+  logError(error, { operation: "initialization" });
   showNavError("Could not load saved data. You may need to re-upload your file.");
   transition({ source: "seed" });
 });

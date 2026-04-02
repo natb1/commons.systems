@@ -4,6 +4,7 @@ import type { Transaction, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
 import { accountKey, splitAccountKey, computeAggregateTrend, computeNetWorth, computeCashFlow, computeDerivedBalances, type AggregatePoint, type NetWorthPoint, type CashFlowPoint, type DerivedAccountBalance } from "../balance.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
+import { logError } from "@commons-systems/errorutil/log";
 
 interface AccountRow {
   institution: string;
@@ -165,11 +166,11 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
   try {
     const [transactions, statements, periods] = await Promise.all([
       dataSource.getTransactions()
-        .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
+        .catch((e) => { logError(e, { operation: "load-transactions" }); throw e; }),
       dataSource.getStatements()
-        .catch((e) => { console.error("Failed to load statements:", e); throw e; }),
+        .catch((e) => { logError(e, { operation: "load-statements" }); throw e; }),
       dataSource.getBudgetPeriods()
-        .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
+        .catch((e) => { logError(e, { operation: "load-periods" }); throw e; }),
     ]);
     const derivedBalances = computeDerivedBalances(transactions, statements);
     const rows = buildAccountRows(transactions, statements, derivedBalances);
@@ -186,7 +187,7 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
         throw chartError;
       }
       reportError(chartError);
-      console.error("Failed to compute chart data:", chartError);
+      logError(chartError, { operation: "compute-chart" });
       chartHtml = renderLoadError(chartError, "chart-error");
     }
   } catch (error) {
