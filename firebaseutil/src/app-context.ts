@@ -10,12 +10,14 @@ import type { Firestore } from "firebase/firestore";
 import type { AppCheck } from "firebase/app-check";
 import type { FirebaseStorage } from "firebase/storage";
 import { classifyError } from "@commons-systems/errorutil/classify";
+import { logError, registerErrorSink } from "@commons-systems/errorutil/log";
 import { firebaseConfig } from "./config.js";
 import {
   validateNamespace,
   type Namespace,
 } from "@commons-systems/firestoreutil/namespace";
 import { initAnalyticsSafe } from "@commons-systems/analyticsutil";
+import { createFirestoreErrorSink, type ErrorSinkOptions } from "./error-sink.js";
 
 export interface AppContextBase {
   app: FirebaseApp;
@@ -62,6 +64,8 @@ export interface StorageModule {
 export interface AppContextOptions {
   recaptchaSiteKey?: string;
   storageModule?: StorageModule;
+  /** Optional; error logs omit user info when not provided. */
+  getCurrentUser?: ErrorSinkOptions["getCurrentUser"];
 }
 
 /**
@@ -128,7 +132,7 @@ export function createAppContext(
         // Ad-blockers and CSP policies can block reCAPTCHA scripts, causing initializeAppCheck
         // to throw. Graceful degradation is intentional: the app loads without AppCheck, and
         // server-side enforcement rejects requests without valid AppCheck tokens with 401.
-        console.error("AppCheck initialization failed:", err);
+        logError(err, { operation: "appcheck-init" });
       }
     }
   }
@@ -141,7 +145,7 @@ export function createAppContext(
           return { "X-Firebase-AppCheck": token };
         } catch (err) {
           if (classifyError(err) === "programmer") throw err;
-          console.error("AppCheck token acquisition failed:", err);
+          logError(err, { operation: "appcheck-token" });
           return {};
         }
       }
@@ -172,6 +176,15 @@ export function createAppContext(
     );
   }
   const NAMESPACE = validateNamespace(envNamespace || `${appName}/prod`);
+
+  // Errors logged before this point (e.g., appcheck-init) go to console only.
+  registerErrorSink(
+    createFirestoreErrorSink({
+      db,
+      namespace: NAMESPACE,
+      getCurrentUser: options?.getCurrentUser,
+    }),
+  );
 
   const trackPageView = initAnalyticsSafe(app);
 

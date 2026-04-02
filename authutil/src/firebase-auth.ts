@@ -8,6 +8,7 @@ import {
 } from "firebase/auth";
 import type { FirebaseApp } from "firebase/app";
 import type { User } from "firebase/auth";
+import { logError } from "@commons-systems/errorutil/log";
 import { setupAuthEmulator } from "./emulator-auth.js";
 
 export interface FirebaseAuthOptions {
@@ -88,7 +89,7 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
       console.debug("Auth redirect cancelled by user");
       return;
     }
-    console.error("Auth redirect error:", error);
+    logError(error, { operation: "auth-redirect" });
     showAuthError(firebaseAuthMessage(error, "Sign-in could not be completed. Please try again."));
   });
 
@@ -97,14 +98,14 @@ export function createFirebaseAuth(app: FirebaseApp, options?: FirebaseAuthOptio
 
   function signIn(): void {
     signInWithRedirect(auth, provider).catch((error) => {
-      console.error("Sign-in redirect failed:", error);
+      logError(error, { operation: "sign-in-redirect" });
       showAuthError(firebaseAuthMessage(error, "Sign-in failed. Please try again."));
     });
   }
 
   function signOut(): Promise<void> {
     return firebaseSignOut(auth).catch((error) => {
-      console.error("Sign-out failed:", error);
+      logError(error, { operation: "sign-out" });
       showAuthError("Sign-out failed. Please try again.");
     });
   }

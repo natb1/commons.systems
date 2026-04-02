@@ -165,7 +165,7 @@ describe("hydrateTransactionTable", () => {
     await flush();
     expect(input.value).toBe("original note");
     expect(input.title).toContain("Save failed");
-    expect(console.error).toHaveBeenCalledWith("Failed to save transaction:", expect.any(Error));
+    expect(console.error).toHaveBeenCalledWith("[save-transaction]", expect.any(Error));
   });
 
   it("adds save-error class on failure", async () => {
@@ -328,7 +328,7 @@ describe("hydrateTransactionTable", () => {
       expect(mockDataSource.updateTransaction).toHaveBeenCalled();
       expect(mockDataSource.adjustBudgetPeriodTotal).not.toHaveBeenCalled();
       expect(console.error).toHaveBeenCalledWith(
-        "Data integrity error:",
+        "[save-data-integrity]",
         expect.objectContaining({ message: expect.stringContaining("Cannot update period totals") }),
       );
       expect(input.classList.contains("save-error")).toBe(true);
@@ -398,7 +398,7 @@ describe("hydrateTransactionTable", () => {
       await flush();
 
       expect(mockDataSource.updateTransaction).toHaveBeenCalledWith("txn-1", { budget: "budget-vacation" });
-      expect(console.error).toHaveBeenCalledWith("Failed to update budget period totals:", expect.any(Error));
+      expect(console.error).toHaveBeenCalledWith("[update-period-totals]", expect.any(Error));
       const row = container.querySelector(".txn-row") as HTMLElement;
       expect(row.dataset.budgetId).toBe("budget-vacation");
     });

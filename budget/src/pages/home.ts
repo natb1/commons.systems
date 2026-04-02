@@ -6,6 +6,7 @@ import { computeAllBudgetBalances, computeNetAmount, MS_PER_WEEK, weekStart } fr
 import type { TransactionQuery } from "../data-source.js";
 
 import { classifyError } from "@commons-systems/errorutil/classify";
+import { logError } from "@commons-systems/errorutil/log";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { uniqueSorted } from "./hydrate-util.js";
 import type { SerializedChartTransaction } from "./home-chart.js";
@@ -325,11 +326,11 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
   try {
     const [transactions, budgets, budgetPeriods] = await Promise.all([
       dataSource.getTransactions(txnQuery)
-        .catch((e) => { console.error("Failed to load transactions:", e); throw e; }),
+        .catch((e) => { logError(e, { operation: "load-transactions" }); throw e; }),
       dataSource.getBudgets()
-        .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
+        .catch((e) => { logError(e, { operation: "load-budgets" }); throw e; }),
       dataSource.getBudgetPeriods()
-        .catch((e) => { console.error("Failed to load budget periods:", e); throw e; }),
+        .catch((e) => { logError(e, { operation: "load-budget-periods" }); throw e; }),
     ]);
     transactions.sort(compareByTimestampDesc);
     try {
@@ -338,7 +339,7 @@ export async function renderHome(options: RenderPageOptions): Promise<string> {
       const kind = classifyError(chartError);
       if (kind === "programmer" || kind === "data-integrity" || kind === "range") throw chartError;
       reportError(chartError);
-      console.error("Chart serialization failed:", chartError);
+      logError(chartError, { operation: "chart-serialization" });
       chartHtml = `<p class="chart-error">Chart unavailable.</p>`;
     }
     tableHtml = renderTransactionTable(transactions, authorized, groupName, budgets, budgetPeriods, sinceMs);

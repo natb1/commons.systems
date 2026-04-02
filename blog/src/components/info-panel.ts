@@ -1,4 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
+import { logError } from "@commons-systems/errorutil/log";
 import { formatUtcDate, monthName } from "../date.ts";
 import { isPublished, type PostMeta, type PublishedPost } from "../post-types.ts";
 import type { BlogRollEntry, BlogRollStrategy, LatestPost } from "../blog-roll/types.ts";
@@ -174,7 +175,8 @@ function fetchAllLatestPosts(
       .fetchLatestPost()
       .then((post) => ({ entry, post }))
       .catch((err) => {
-        console.error(`Failed to fetch latest post for "${entry.id}":`, err);
+        // Silent degradation: show entry without latest post on fetch failure.
+        logError(err, { operation: "fetch-latest-post", entryId: entry.id });
         return { entry, post: null };
       });
   });
@@ -226,5 +228,6 @@ export function hydrateInfoPanel(
       }
       sortBlogrollByDate(panel);
     })
-    .catch((err) => console.error("Failed to hydrate blogroll:", err));
+    // Intentional silent degradation — user sees stale content rather than an error.
+    .catch((err) => logError(err, { operation: "hydrate-blogroll" }));
 }

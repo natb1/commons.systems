@@ -16,6 +16,9 @@ vi.mock("firebase/firestore", () => ({
   initializeFirestore: vi.fn(() => mockDb),
   persistentLocalCache: vi.fn(() => mockLocalCache),
   connectFirestoreEmulator: vi.fn(),
+  collection: vi.fn(),
+  addDoc: vi.fn(() => Promise.resolve()),
+  Timestamp: { now: vi.fn() },
 }));
 
 vi.mock("firebase/storage", () => ({
@@ -31,6 +34,12 @@ vi.mock("firebase/app-check", () => ({
 
 vi.mock("@commons-systems/firestoreutil/namespace", () => ({
   validateNamespace: vi.fn((ns: string) => ns),
+  nsCollectionPath: vi.fn((ns: string, col: string) => `${ns}/${col}`),
+}));
+
+vi.mock("@commons-systems/errorutil/log", () => ({
+  logError: vi.fn(),
+  registerErrorSink: vi.fn(),
 }));
 
 vi.mock("@commons-systems/analyticsutil", () => ({
@@ -297,16 +306,15 @@ describe("createAppContext", () => {
     mocks.initializeAppCheck.mockImplementation(() => {
       throw new Error("blocked by ad blocker");
     });
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { logError } = await import("@commons-systems/errorutil/log");
 
     const ctx = createAppContext("myapp", "app-id-123", { recaptchaSiteKey: "test-key" });
 
     expect(ctx.getAppCheckHeaders).toBeUndefined();
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "AppCheck initialization failed:",
+    expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
+      { operation: "appcheck-init" },
     );
-    consoleSpy.mockRestore();
   });
 
   it("getAppCheckHeaders returns empty object when getToken fails", async () => {
@@ -314,18 +322,17 @@ describe("createAppContext", () => {
     const mocks = await loadMocks();
     mocks.initializeAppCheck.mockReturnValue(mockAppCheck);
     mocks.getToken.mockRejectedValue(new Error("reCAPTCHA challenge failed"));
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { logError } = await import("@commons-systems/errorutil/log");
 
     const ctx = createAppContext("myapp", "app-id-123", { recaptchaSiteKey: "test-key" });
 
     expect(ctx.getAppCheckHeaders).toBeTypeOf("function");
     const headers = await ctx.getAppCheckHeaders!();
     expect(headers).toEqual({});
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "AppCheck token acquisition failed:",
+    expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
+      { operation: "appcheck-token" },
     );
-    consoleSpy.mockRestore();
   });
 
   it("includes getAppCheckHeaders in storage context", async () => {

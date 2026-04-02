@@ -5,8 +5,8 @@ import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { InfoPanelData } from "./components/info-panel.ts";
 import { validatePublishedPosts, type PostMeta } from "./post-types.ts";
 import { renderInfoPanel } from "./components/info-panel.ts";
-import { createMarked, extractH1 } from "./marked-config.ts";
-import { renderArticle, type PostContent } from "./pages/home.ts";
+import { createMarked, renderPostContents } from "./marked-config.ts";
+import { renderArticle } from "./pages/home.ts";
 
 export interface NavLink {
   readonly href: string;
@@ -33,39 +33,6 @@ function renderNavHtml(links: NavLink[]): string {
 interface RenderedPost {
   meta: PostMeta & { published: true };
   articleHtml: string;
-}
-
-async function parseAndRenderPosts(
-  published: Array<{ id: string; data: Record<string, unknown> }>,
-  postDir: string,
-  marked: ReturnType<typeof createMarked>,
-): Promise<RenderedPost[]> {
-  const results: RenderedPost[] = [];
-  for (const doc of published) {
-    const data = doc.data;
-    const filename = data.filename as string;
-    const markdown = readFileSync(join(postDir, filename), "utf-8");
-
-    const h1 = extractH1(markdown);
-    const title = h1 ? h1.title : (data.title as string);
-    const body = h1 ? h1.body : markdown;
-    const html = await marked.parse(body);
-    const content: PostContent = { html, title: h1 ? h1.title : null };
-
-    const meta: PostMeta & { published: true } = {
-      id: doc.id,
-      title,
-      published: true,
-      publishedAt: data.publishedAt as string,
-      filename,
-    };
-
-    results.push({
-      meta,
-      articleHtml: renderArticle(meta, "/post/", content),
-    });
-  }
-  return results;
 }
 
 function injectMain(html: string, articlesHtml: string): string {
@@ -113,23 +80,25 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
 
   const published = validatePublishedPosts(seed);
 
-  const parsed = await parseAndRenderPosts(
-    published.map((p) => ({ id: p.id, data: p as unknown as Record<string, unknown> })),
-    postDir,
+  const contentMap = await renderPostContents(
+    published,
+    (filename) => readFileSync(join(postDir, filename), "utf-8"),
     marked,
   );
 
-  // Sort by date descending for the home page
-  const sorted = [...parsed].sort(
+  const rendered: RenderedPost[] = published.map((meta) => ({
+    meta,
+    articleHtml: renderArticle(meta, "/post/", contentMap[meta.id]),
+  }));
+
+  const sorted = [...rendered].sort(
     (a, b) => new Date(b.meta.publishedAt).getTime() - new Date(a.meta.publishedAt).getTime(),
   );
 
-  // Build info panel HTML with all published posts as the archive listing
   const topPosts: PostMeta[] = sorted.map((p) => p.meta);
   const panelHtml = renderInfoPanel({ ...infoPanel, topPosts });
   const navHtml = renderNavHtml(navLinks);
 
-  // Inject content into root index.html (all posts)
   const allArticlesHtml = sorted.map((p) => p.articleHtml).join("\n      <hr>\n      ");
   let rootHtml = injectMain(template, allArticlesHtml);
   rootHtml = injectInfoPanel(rootHtml, panelHtml);
@@ -137,12 +106,13 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   writeFileSync(join(distDir, "index.html"), rootHtml);
   console.log("Pre-rendered: /index.html");
 
-  // Generate per-post pages with OG tags and single-post content
-  for (const pub of published) {
-    const id = pub.id;
-    const title = pub.title;
-    const description = pub.previewDescription;
-    const image = pub.previewImage;
+  const renderedById = new Map(rendered.map((r) => [r.meta.id, r]));
+
+  for (const meta of published) {
+    const id = meta.id;
+    const title = meta.title;
+    const description = meta.previewDescription;
+    const image = meta.previewImage;
 
     const ogTags = [
       `<meta property="og:title" content="${escapeHtml(title)}">`,
@@ -166,9 +136,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)} | ${escapeHtml(titleSuffix)}</title>`);
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
-    // Inject single-post content, info panel, and nav
-    const post = parsed.find((p) => p.meta.id === id);
-    if (!post) throw new Error(`Rendered post not found for id "${id}"`);
+    const post = renderedById.get(id)!;
     html = injectMain(html, post.articleHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);

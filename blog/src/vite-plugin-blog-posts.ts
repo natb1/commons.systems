@@ -3,8 +3,7 @@ import { join } from "node:path";
 import type { Plugin } from "vite";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import { validatePublishedPosts, type PublishedPost } from "./post-types.ts";
-import type { PostContent } from "./pages/home.ts";
-import { createMarked, extractH1 } from "./marked-config.ts";
+import { createMarked, renderPostContents, type PostContent } from "./marked-config.ts";
 
 export type { PostContent };
 
@@ -34,20 +33,11 @@ export function blogPostsPlugin(config: BlogPostsPluginConfig): Plugin {
       published.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
       metadata = published;
 
-      const results: Record<string, PostContent> = {};
-      for (const post of published) {
-        const filePath = join(config.postDir, post.filename);
-        const markdown = readFile(filePath);
-
-        const h1 = extractH1(markdown);
-        const title = h1 ? h1.title : null;
-        const body = h1 ? h1.body : markdown;
-
-        const html = await marked.parse(body);
-        results[post.id] = { html, title };
-      }
-
-      contentMap = results;
+      contentMap = await renderPostContents(
+        published,
+        (filename) => readFile(join(config.postDir, filename)),
+        marked,
+      );
     },
     resolveId(id) {
       if (id === CONTENT_MODULE_ID) return RESOLVED_CONTENT_ID;

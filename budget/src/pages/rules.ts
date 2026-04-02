@@ -1,4 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
+import { logError } from "@commons-systems/errorutil/log";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Rule, type NormalizationRule } from "../firestore.js";
 import { uniqueSorted } from "./hydrate-util.js";
@@ -134,11 +135,11 @@ export async function renderRules(options: RenderPageOptions): Promise<string> {
   try {
     const [rules, budgets, normalizationRules] = await Promise.all([
       dataSource.getRules()
-        .catch((e) => { console.error("Failed to load rules:", e); throw e; }),
+        .catch((e) => { logError(e, { operation: "load-rules" }); throw e; }),
       dataSource.getBudgets()
-        .catch((e) => { console.error("Failed to load budgets:", e); throw e; }),
+        .catch((e) => { logError(e, { operation: "load-budgets" }); throw e; }),
       dataSource.getNormalizationRules()
-        .catch((e) => { console.error("Failed to load normalization rules:", e); throw e; }),
+        .catch((e) => { logError(e, { operation: "load-normalization-rules" }); throw e; }),
     ]);
     const budgetNames = budgets.map(b => b.name);
     const categoryTargets = uniqueSorted(rules.filter(r => r.type === "categorization").map(r => r.target));
