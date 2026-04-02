@@ -185,6 +185,9 @@ export function wireChartResize(
     }
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      // Re-check after debounce: the router may have replaced outlet.innerHTML
+      // during the 150ms wait, disconnecting this container from the document.
+      // getComputedStyle on a disconnected element returns empty custom properties.
       if (!container.isConnected) { observer.disconnect(); return; }
       const wrappers = getWrappers();
       const scrollRatio = wrappers.length > 0 && wrappers[0].scrollWidth > 0
