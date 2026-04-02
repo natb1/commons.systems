@@ -105,35 +105,34 @@ export function hydrateHome(
   });
 
   if (scrollTo) {
-    void Promise.allSettled(fetches).then(async () => {
+    void Promise.allSettled(fetches).then(() => {
       if (!isOutletCurrent(outlet, container)) return;
       const article = outlet.querySelector(`#post-${CSS.escape(scrollTo)}`);
       if (!article) return;
 
-      // Wait for images above the target article to load so the layout is
-      // stable before calculating scroll position. Without this, images that
-      // haven't loaded yet have zero height, causing the scroll target to
-      // shift downward after they expand.
+      // Images above the target article may still be loading when content is
+      // first rendered into the DOM. Each image load shifts layout and
+      // invalidates the scroll offset. Rather than computing a one-shot scroll
+      // position that becomes stale, re-scroll on every preceding image load
+      // event so the article stays near the viewport top.
+      const doScroll = (): void => {
+        if (!isOutletCurrent(outlet, container)) return;
+        const headerHeight = document.querySelector('header')?.offsetHeight ?? 0;
+        const y = article.getBoundingClientRect().top + window.scrollY - headerHeight - SCROLL_PADDING_PX;
+        window.scrollTo({ top: Math.max(0, y), behavior: "instant" });
+      };
+
+      doScroll();
+
       const imgs = Array.from(container.querySelectorAll("img")).filter(
         (img) =>
+          !img.complete &&
           !!(article.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_PRECEDING),
       );
-      await Promise.all(
-        imgs
-          .filter((img) => !img.complete)
-          .map(
-            (img) =>
-              new Promise<void>((resolve) => {
-                img.addEventListener("load", () => resolve(), { once: true });
-                img.addEventListener("error", () => resolve(), { once: true });
-              }),
-          ),
-      );
-      if (!isOutletCurrent(outlet, container)) return;
-
-      const headerHeight = document.querySelector('header')?.offsetHeight ?? 0;
-      const y = article.getBoundingClientRect().top + window.scrollY - headerHeight - SCROLL_PADDING_PX;
-      window.scrollTo({ top: Math.max(0, y), behavior: "instant" });
+      for (const img of imgs) {
+        img.addEventListener("load", doScroll, { once: true });
+        img.addEventListener("error", doScroll, { once: true });
+      }
     });
   }
 }
