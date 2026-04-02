@@ -1,5 +1,5 @@
 # The Surreal: Returning to the Darkness
-![](~/Desktop/GWFHbts-3.webp)
+![](./GWFHbts-3.webp)
 
 In my last year at college my preferred means of procrastinating was trying to understand art - reading Gombrich, and listening to classical music. I purchased my wife a Dali print - "Woman with a Flower Head".
 
@@ -12,6 +12,7 @@ My wife had a different reaction. She loved it without question. She understood 
 ---
 
 ## Key: The Darkness
+![](./blog post image.jpg)
 
 The magic of the surface world does not penetrate the depths of this darkness. By following this map, each level of the darkness can be escaped, but at a cost. The gods demand a member of your company will be left behind at each level (they do not care whom, or why).
 
