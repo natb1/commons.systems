@@ -3,6 +3,7 @@ import { computeNetAmount, isCardPaymentCategory, MS_PER_WEEK, weekStart } from 
 import { formatCurrency } from "../format.js";
 import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
 import { parseJsonArray, makeDebounced } from "./hydrate-util.js";
+import { getThemeFg } from "./chart-util.js";
 
 export type ChartMode = "spending" | "credits";
 
@@ -295,7 +296,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   endSlider.value = String(currentEndWeekIdx);
   endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
 
-  const fg = getComputedStyle(container).getPropertyValue("--fg").trim() || "#e0e0e0";
+  const fg = getThemeFg(container);
 
   function render(): void {
     const containerWidth = container.clientWidth;

@@ -13,7 +13,7 @@ type GroupSeedData = Omit<Group, "id"> & { members: string[] };
  *  not consumed through the typed client read path. This applies to all seed types below. */
 
 /** Seed transactions use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client Transaction type). */
-type TransactionSeedData = Omit<Transaction, "id" | "timestamp" | "budget" | "statementId" | "groupId"> & {
+export type TransactionSeedData = Omit<Transaction, "id" | "timestamp" | "budget" | "statementId" | "groupId"> & {
   timestamp: Date;
   memberEmails: string[];
   budget: string | null;
@@ -21,11 +21,12 @@ type TransactionSeedData = Omit<Transaction, "id" | "timestamp" | "budget" | "st
   groupId: string | null;
 };
 
-/** Seed budgets add `memberEmails` for security rules (not present in the client Budget type) */
-type BudgetSeedData = Omit<Budget, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
+/** Seed budgets add `memberEmails` for security rules (not present in the client Budget type).
+ *  Overrides are omitted — both the client read path and the build-time seed serializer default missing overrides to []. */
+export type BudgetSeedData = Omit<Budget, "id" | "groupId" | "overrides"> & { memberEmails: string[]; groupId: string | null };
 
 /** Seed budget periods use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client BudgetPeriod type) */
-type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "periodEnd" | "budgetId" | "groupId"> & {
+export type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "periodEnd" | "budgetId" | "groupId"> & {
   periodStart: Date;
   periodEnd: Date;
   memberEmails: string[];
@@ -34,15 +35,16 @@ type BudgetPeriodSeedData = Omit<BudgetPeriod, "id" | "periodStart" | "periodEnd
 };
 
 /** Seed rules include `memberEmails` for security rules and `groupId` for query filtering */
-type RuleSeedData = Omit<Rule, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
+export type RuleSeedData = Omit<Rule, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
 
-type NormalizationRuleSeedData = Omit<NormalizationRule, "id"> & { memberEmails: string[] };
+/** Seed normalization rules include `memberEmails` for security rules and `groupId` for query filtering */
+export type NormalizationRuleSeedData = Omit<NormalizationRule, "id" | "groupId"> & { memberEmails: string[]; groupId: string | null };
 
 /** Seed statements use plain string for statementId (not branded), Date instead of Timestamp for lastTransactionDate, require groupId (non-nullable), and add memberEmails for security rules. */
-type StatementSeedData = Omit<Statement, "id" | "statementId" | "groupId" | "lastTransactionDate"> & { statementId: string; groupId: string; memberEmails: string[]; lastTransactionDate: Date | null };
+export type StatementSeedData = Omit<Statement, "id" | "statementId" | "groupId" | "lastTransactionDate"> & { statementId: string; groupId: string; memberEmails: string[]; lastTransactionDate: Date | null };
 
 /** Seed weekly aggregates use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client WeeklyAggregate type) */
-type WeeklyAggregateSeedData = Omit<WeeklyAggregate, "id" | "weekStart" | "groupId"> & {
+export type WeeklyAggregateSeedData = Omit<WeeklyAggregate, "id" | "weekStart" | "groupId"> & {
   weekStart: Date;
   memberEmails: string[];
   groupId: string | null;
