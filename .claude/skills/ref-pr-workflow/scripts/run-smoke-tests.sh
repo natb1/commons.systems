@@ -20,10 +20,14 @@ echo "Waiting for preview to become available at $BASE_URL..."
 READY=false
 for i in $(seq 1 60); do
   STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL")
-  if [[ "$STATUS" == "200" ]] && curl -s "$BASE_URL" | grep -q '<script type="module"'; then
+  if [[ "$STATUS" != "200" ]]; then
+    echo "  [$i] HTTP $STATUS (waiting for 200)..."
+  elif curl -s "$BASE_URL" | grep -q '<script type="module"'; then
     echo "Preview is ready."
     READY=true
     break
+  else
+    echo "  [$i] HTTP 200 but missing script tag"
   fi
   if [ "$i" -eq 60 ]; then
     echo "ERROR: Preview at $BASE_URL did not serve expected content after 120s (last HTTP status: $STATUS)" >&2
