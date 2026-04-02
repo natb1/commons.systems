@@ -5,7 +5,7 @@ In my last year at college my preferred means of procrastinating was trying to u
 
 I only knew the image from the printer's website, and between the quality of the image online and the quality of my early LCD display, the pencil sketched portrait of a man on one knee was not visible until the piece arrived for me to see in real life. The pencil sketched man unnerved me. 
 
-I knew how to read art the way I learned from Gombrich: what technique was used to create the art? What was the artist's intention? What was the artist's cultural context and state of mind? What does the art evoke in me? Applying this analysis to the unexpected background subject got me nowhere. Did I just print a notebook doodle on a canvas? What does this mean for my taste in art? Certainly it doesn't change the sentiment of the work. What does it mean about me that I see this unfinished man with unease, like a mistake?
+I knew how to read art the way I learned from Gombrich: what technique was used to create the art? What was the intention, the cultural context, the state of mind? What does the art evoke in me? Applying this analysis to the unexpected background subject got me nowhere. Did I just print a notebook doodle on a canvas? What does this mean for my taste in art? What does it mean about me that I see this unfinished man with unease, like a mistake?
 
 My wife had a different reaction. She loved it without question. She understood Dali in a way that I could not. Interacting with Dali isn't about how the light of the work affects you. It's about descending into your own darkness and confronting what you have left behind.
 
@@ -22,7 +22,7 @@ The magic of the surface world does not penetrate the depths of this darkness. B
 > - Players run pet companions after their character is lost.
 > - Play this as a duet with the player running all 5 characters.
 
-1. **A banquet hall** with high ceilings and crystal chandeliers. Floor to ceiling widows frame an endless starry landscape. Finely dressed gentle-people chat over soothing music (Satie). Whatever you speak to them about, they find it incredibly interesting. A long table overflows with fine food and features fountains of wine. There is no reason to ever leave, and you are forbidden from doing so by the other guests within.
+1. **A banquet hall** with high ceilings and crystal chandeliers. Floor to ceiling widows frame an endless starry landscape. Finely dressed gentle-people chat over soothing music (Satie). Whatever you speak to them about, they find it *so incredibly interesting*. A long table overflows with fine food and features fountains of wine. There is no reason to ever leave, and you are forbidden from doing so by the other guests within.
 2. **Pneumatic works** release loud whistles of hot steam at irregular intervals. You escape the previous room through a tight crevice in the machinery. Navigating the machine from the inside is treacherous. Each misstep threatens entrapment within the works. Only careful investigation reveals the path out. Investigation also reveals the function of the machine - to give life to the theater of the banquet hall (1).
 3. **Vast dark caverns** house the pneumatic works (2). Outside the machinery the caverns are occupied by monsters that wander the darkness - the void is thick with the echo of their cries. Upon interrogation the company will learn that each is a lost adventurer, consumed by some part of themselves.
     > d6 cavern wanderers 
@@ -32,7 +32,7 @@ The magic of the surface world does not penetrate the depths of this darkness. B
     > 4. Consumed by hatred: This sentient flame cannot be extinguished. Attempting to do so will only make it spread like an oil fire.
     > 5. Consumed by fear: A screaming goat. Will speak to you from a distance (in screams). Flees on approach, faints if you catch it.
     > 6. Consumed by shame: A simple, spiteful goblin impedes your progress. Defeat the goblin and all other beasts are summoned to your location.
-4. The **Foreman's station** is occupied by a visage that mirrors any character that attempts to escape to the surface. The visage guards the surface with force. On return, any fallen character will guard the descent.
+4. The **Foreman's station** is occupied by a visage that mirrors any one character that attempts to escape to the surface. The visage guards the surface with force. On return, any fallen character will guard the descent.
 
 ### Magic Items Found on the Surface
 Upon reaching the surface and availing yourself of the magic to be found there, you find yourself either alone, or in conflict with the gods.
