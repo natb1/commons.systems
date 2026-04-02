@@ -1,0 +1,45 @@
+.audio-row .expand-summary {
+  grid-template-columns: 1fr auto auto;
+}
+
+.audio-row .artist,
+.audio-row .album {
+  color: var(--muted);
+}
+
+.audio-row .album {
+  font-style: italic;
+}
+
+#media-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#now-playing {
+  margin-bottom: 1rem;
+}
+
+.now-playing-title {
+  font-weight: bold;
+  margin: 0;
+}
+
+.now-playing-artist,
+.now-playing-album {
+  color: var(--muted);
+  margin: 0;
+}
+
+.now-playing-empty {
+  color: var(--muted);
+}
+
+.now-playing-error {
+  color: var(--danger, #c00);
+}
+
+#audio-player {
+  width: 100%;
+}
