@@ -43,4 +43,14 @@ describe("seed/post sync", () => {
       publishedAt: "2026-03-15T00:00:00Z",
     });
   });
+
+  it("the-surreal has correct metadata", () => {
+    const doc = postDocuments.find((d) => d.id === "the-surreal");
+    expect(doc).toBeDefined();
+    expect(doc!.data).toMatchObject({
+      publishedAt: "2026-04-02T00:00:00Z",
+      previewImage: "/woman-with-a-flower-head.webp",
+    });
+    expect(doc!.data.previewDescription).toContain("Gombrich");
+  });
 });

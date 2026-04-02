@@ -11,7 +11,10 @@ test.describe("build-time blog content", () => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
 
-    // Both published posts should have visible content
+    // All published posts should have visible content
+    await expect(
+      page.locator("#post-content-the-surreal"),
+    ).toBeVisible();
     await expect(
       page.locator("#post-content-scenes-from-a-hat"),
     ).toBeVisible();
@@ -20,6 +23,9 @@ test.describe("build-time blog content", () => {
     ).toBeVisible();
 
     // No "Loading..." placeholders should remain
+    await expect(
+      page.locator("#post-content-the-surreal"),
+    ).not.toContainText("Loading...");
     await expect(
       page.locator("#post-content-scenes-from-a-hat"),
     ).not.toContainText("Loading...");
@@ -48,6 +54,9 @@ test.describe("build-time blog content", () => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
 
+    await expect(
+      page.locator("#post-content-the-surreal"),
+    ).toHaveAttribute("data-hydrated");
     await expect(
       page.locator("#post-content-scenes-from-a-hat"),
     ).toHaveAttribute("data-hydrated");

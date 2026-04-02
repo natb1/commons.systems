@@ -15,7 +15,7 @@ test.describe("blog", () => {
     await page.waitForSelector("#posts", { timeout: 30000 });
     const posts = page.locator("#posts article");
     expect(await posts.count()).toBeGreaterThanOrEqual(1);
-    await expect(posts.first()).toContainText("Scenes from a Hat");
+    await expect(posts.first()).toContainText("The Surreal");
   });
 
   test("post URL scrolls to post in home page", async ({ page }) => {
