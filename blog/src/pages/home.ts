@@ -105,14 +105,35 @@ export function hydrateHome(
   });
 
   if (scrollTo) {
-    void Promise.allSettled(fetches).then(() => {
+    void Promise.allSettled(fetches).then(async () => {
       if (!isOutletCurrent(outlet, container)) return;
       const article = outlet.querySelector(`#post-${CSS.escape(scrollTo)}`);
-      if (article) {
-        const headerHeight = document.querySelector('header')?.offsetHeight ?? 0;
-        const y = article.getBoundingClientRect().top + window.scrollY - headerHeight - SCROLL_PADDING_PX;
-        window.scrollTo({ top: Math.max(0, y), behavior: "instant" });
-      }
+      if (!article) return;
+
+      // Wait for images above the target article to load so the layout is
+      // stable before calculating scroll position. Without this, images that
+      // haven't loaded yet have zero height, causing the scroll target to
+      // shift downward after they expand.
+      const imgs = Array.from(container.querySelectorAll("img")).filter(
+        (img) =>
+          !!(article.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_PRECEDING),
+      );
+      await Promise.all(
+        imgs
+          .filter((img) => !img.complete)
+          .map(
+            (img) =>
+              new Promise<void>((resolve) => {
+                img.addEventListener("load", () => resolve(), { once: true });
+                img.addEventListener("error", () => resolve(), { once: true });
+              }),
+          ),
+      );
+      if (!isOutletCurrent(outlet, container)) return;
+
+      const headerHeight = document.querySelector('header')?.offsetHeight ?? 0;
+      const y = article.getBoundingClientRect().top + window.scrollY - headerHeight - SCROLL_PADDING_PX;
+      window.scrollTo({ top: Math.max(0, y), behavior: "instant" });
     });
   }
 }
