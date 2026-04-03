@@ -51,6 +51,10 @@ test.describe("theme", () => {
   test("does not make external font requests", async ({ page }) => {
     const externalFontRequests: string[] = [];
     page.on("request", (req) => {
+      // Only track main-frame requests. Firebase Auth loads a hidden iframe
+      // (__/auth/iframe) whose identity toolkit fetches Roboto from gstatic;
+      // that is third-party infrastructure, not our site fonts.
+      if (req.frame() !== page.mainFrame()) return;
       const url = req.url();
       if (
         url.includes("fonts.googleapis.com") ||
