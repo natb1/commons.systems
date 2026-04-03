@@ -66,7 +66,7 @@ test.describe("home page content", () => {
       timeout: 10000,
     });
     await checkbox.uncheck();
-    await expect(page.locator(".playlist-empty")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("#playlist-queue li")).toHaveCount(0, { timeout: 5000 });
   });
 
   test("multiple checked tracks show ordered queue", async ({ page }) => {
