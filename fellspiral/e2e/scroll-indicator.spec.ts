@@ -12,6 +12,7 @@ test.describe("scroll indicator", () => {
     const initialBox = await track.boundingBox();
     expect(initialBox).not.toBeNull();
 
+    // Arbitrary width different from default, still above the 768px desktop breakpoint
     await page.setViewportSize({ width: 933, height: 744 });
     await page.waitForTimeout(200);
 

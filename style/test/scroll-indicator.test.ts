@@ -95,6 +95,16 @@ describe("initScrollIndicator", () => {
     expect(container.classList.contains("sidebar-overflow-bottom")).toBe(false);
   });
 
+  it("teardown stops listening to window resize", () => {
+    const { container, teardown } = setup();
+    Object.defineProperty(container, "scrollHeight", { value: 500, configurable: true });
+    Object.defineProperty(container, "clientHeight", { value: 200, configurable: true });
+    container.dispatchEvent(new Event("scroll"));
+    teardown();
+    window.dispatchEvent(new Event("resize"));
+    expect(document.querySelector(".sidebar-scroll-track")).toBeNull();
+  });
+
   it("cleans up when container disconnects", () => {
     const { container } = setup();
     container.remove();
