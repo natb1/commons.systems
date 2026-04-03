@@ -31,7 +31,7 @@ describe("seed/post sync", () => {
     expect(doc).toBeDefined();
     expect(doc!.data).toMatchObject({
       publishedAt: "2026-03-14T00:00:00Z",
-      previewImage: "/alienurn.jpg",
+      previewImage: "/alienurn.webp",
     });
     expect(doc!.data.previewDescription).toContain("Sassy Diaz");
   });
@@ -49,7 +49,7 @@ describe("seed/post sync", () => {
     expect(doc).toBeDefined();
     expect(doc!.data).toMatchObject({
       publishedAt: "2026-04-02T00:00:00Z",
-      previewImage: "/blog-map-color.jpg",
+      previewImage: "/blog-map-color.webp",
     });
     expect(doc!.data.previewDescription).toContain("each level of the darkness");
   });

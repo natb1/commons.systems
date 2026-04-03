@@ -12,7 +12,7 @@ My wife had a different reaction. She loved it without question. She understood 
 ---
 
 ## Key: The Darkness
-![](/blog-map-color.jpg)
+![](/blog-map-color.webp)
 
 *[Amanda Lee Franck](http://comradery.co/amandalee) via [Prismatic Wasteland](https://www.prismaticwasteland.com/blog/bandwagon-the-map-is-not-the-territory-but-it-is-the-topic). DISCLAIMER: this blog post is a statement of where the art took me, not a statement on the actual genre of the art.*
 
