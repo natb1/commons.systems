@@ -78,6 +78,8 @@ if [ "$EXPLICIT" = false ]; then
   done <<< "$CHANGED"
 fi
 
+# Filter rules-test: it requires Firebase emulators and is not a vitest workspace project
+unset 'DIRTY_APPS[rules-test]'
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
 
@@ -97,7 +99,7 @@ if [ ${#APP_DIRS[@]} -gt 0 ]; then
     echo "PASS: ${APP_DIRS[*]}"
   else
     echo "FAIL: ${APP_DIRS[*]}" >&2
-    FAILURES+=("${APP_DIRS[@]}")
+    FAILURES+=("vitest(${APP_DIRS[*]})")
   fi
 fi
 
