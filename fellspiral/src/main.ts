@@ -23,7 +23,8 @@ import { createStrategies, BLOG_ROLL_ENTRIES } from "./blog-roll/config.js";
 import { INFO_PANEL_LINK_SECTIONS } from "./site-config.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
-import { db, NAMESPACE, trackPageView } from "./firebase.js";
+import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
+import buildTimeFeeds from "virtual:blog-roll-feeds";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -59,6 +60,7 @@ const updateInfoPanel = (): void => {
     rssFeedUrl: "/feed.xml",
     opmlUrl: "/blogroll.opml",
     postLinkPrefix: "/post/",
+    buildTimeFeeds,
   });
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
   teardownScroll?.();
@@ -173,3 +175,18 @@ onAuthStateChanged((user) => {
     logError(err, { operation: "auth-change-refresh" });
   });
 });
+
+// Defer App Check / reCAPTCHA initialization until after first paint to keep the
+// 744KB reCAPTCHA script off the critical path. Build-time feed data is already
+// rendered in the blogroll; once App Check is ready, re-hydrate with live data.
+const deferredAppCheckInit = async () => {
+  if (!initAppCheck) return;
+  await initAppCheck();
+  hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
+};
+
+if ("requestIdleCallback" in window) {
+  requestIdleCallback(() => void deferredAppCheckInit());
+} else {
+  setTimeout(() => void deferredAppCheckInit(), 0);
+}

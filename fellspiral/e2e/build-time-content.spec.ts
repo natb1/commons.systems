@@ -81,6 +81,23 @@ test.describe("build-time blog content", () => {
     expect(githubRequests).toHaveLength(0);
   });
 
+  test("blogroll entries have build-time feed data on initial render @smoke", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForSelector("main h2", { timeout: 30000 });
+    const panel = page.locator("#info-panel");
+    const latestSpans = panel.locator(".blogroll-entry .blogroll-latest");
+
+    // All blogroll-latest spans should be populated from build-time feed data
+    // without waiting for runtime hydration or App Check initialization.
+    const count = await latestSpans.count();
+    expect(count).toBeGreaterThanOrEqual(1);
+    for (let i = 0; i < count; i++) {
+      await expect(latestSpans.nth(i)).not.toHaveText("");
+    }
+  });
+
   test("inlined content includes text from the markdown source", async ({
     page,
   }) => {

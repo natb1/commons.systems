@@ -25,6 +25,7 @@ export interface AppContextBase {
   NAMESPACE: Namespace;
   trackPageView: (path: string) => void;
   getAppCheckHeaders?: () => Promise<Record<string, string>>;
+  initAppCheck?: () => Promise<void>;
 }
 
 export interface AppContextWithStorage extends AppContextBase {
@@ -63,6 +64,10 @@ export interface StorageModule {
 
 export interface AppContextOptions {
   recaptchaSiteKey?: string;
+  /** Defer App Check initialization until `initAppCheck()` is called. When true,
+   *  `getAppCheckHeaders` is always a function (returns `{}` until init completes)
+   *  and `initAppCheck` is returned on the context. */
+  deferAppCheck?: boolean;
   storageModule?: StorageModule;
   /** Optional; error logs omit user info when not provided. */
   getCurrentUser?: ErrorSinkOptions["getCurrentUser"];
@@ -107,49 +112,65 @@ export function createAppContext(
 
   const firestoreEmulatorHost = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST;
 
-  let appCheck: AppCheck | undefined;
-  if (options?.recaptchaSiteKey !== undefined) {
-    if (options.recaptchaSiteKey === "") {
-      throw new Error(
-        "recaptchaSiteKey must not be empty — configure it in Firebase Console > App Check",
-      );
+  if (options?.recaptchaSiteKey !== undefined && options.recaptchaSiteKey === "") {
+    throw new Error(
+      "recaptchaSiteKey must not be empty — configure it in Firebase Console > App Check",
+    );
+  }
+
+  const shouldSkipAppCheck = !options?.recaptchaSiteKey || !!firestoreEmulatorHost;
+
+  function doInitAppCheck(): AppCheck | undefined {
+    if (shouldSkipAppCheck) return undefined;
+    const debugToken = import.meta.env.VITE_APP_CHECK_DEBUG_TOKEN;
+    if (debugToken) {
+      (self as unknown as Record<string, unknown>).FIREBASE_APPCHECK_DEBUG_TOKEN =
+        debugToken;
     }
-    // AppCheck is skipped when running against the Firestore emulator — the emulator
-    // does not verify tokens, so AppCheck initialization is unnecessary.
-    if (!firestoreEmulatorHost) {
-      const debugToken = import.meta.env.VITE_APP_CHECK_DEBUG_TOKEN;
-      if (debugToken) {
-        (self as unknown as Record<string, unknown>).FIREBASE_APPCHECK_DEBUG_TOKEN =
-          debugToken;
-      }
-      try {
-        appCheck = initializeAppCheck(app, {
-          provider: new ReCaptchaEnterpriseProvider(options.recaptchaSiteKey),
-          isTokenAutoRefreshEnabled: true,
-        });
-      } catch (err) {
-        if (classifyError(err) === "programmer") throw err;
-        // Ad-blockers and CSP policies can block reCAPTCHA scripts, causing initializeAppCheck
-        // to throw. Graceful degradation is intentional: the app loads without AppCheck, and
-        // server-side enforcement rejects requests without valid AppCheck tokens with 401.
-        logError(err, { operation: "appcheck-init" });
-      }
+    try {
+      return initializeAppCheck(app, {
+        provider: new ReCaptchaEnterpriseProvider(options!.recaptchaSiteKey!),
+        isTokenAutoRefreshEnabled: true,
+      });
+    } catch (err) {
+      if (classifyError(err) === "programmer") throw err;
+      // Ad-blockers and CSP policies can block reCAPTCHA scripts, causing initializeAppCheck
+      // to throw. Graceful degradation is intentional: the app loads without AppCheck, and
+      // server-side enforcement rejects requests without valid AppCheck tokens with 401.
+      logError(err, { operation: "appcheck-init" });
+      return undefined;
     }
   }
 
-  const resolvedAppCheck = appCheck;
-  const getAppCheckHeaders = resolvedAppCheck
-    ? async (): Promise<Record<string, string>> => {
-        try {
-          const { token } = await getToken(resolvedAppCheck);
-          return { "X-Firebase-AppCheck": token };
-        } catch (err) {
-          if (classifyError(err) === "programmer") throw err;
-          logError(err, { operation: "appcheck-token" });
-          return {};
+  let resolvedAppCheck: AppCheck | undefined;
+  let initAppCheck: (() => Promise<void>) | undefined;
+
+  if (options?.deferAppCheck && options.recaptchaSiteKey) {
+    // Deferred mode: getAppCheckHeaders is always a function (returns {} until
+    // initAppCheck() is called), so callers that capture the reference at module
+    // init time get a working function that upgrades in place.
+    initAppCheck = async () => {
+      if (resolvedAppCheck) return;
+      resolvedAppCheck = doInitAppCheck();
+    };
+  } else {
+    resolvedAppCheck = doInitAppCheck();
+  }
+
+  const getAppCheckHeaders =
+    resolvedAppCheck || options?.deferAppCheck
+      ? async (): Promise<Record<string, string>> => {
+          if (!resolvedAppCheck) return {};
+          try {
+            const { token } = await getToken(resolvedAppCheck);
+            return { "X-Firebase-AppCheck": token };
+          } catch (err) {
+            if (classifyError(err) === "programmer") throw err;
+            logError(err, { operation: "appcheck-token" });
+            return {};
+          }
         }
-      }
-    : undefined;
+      : undefined;
 
   // Persistent local cache (IndexedDB) is skipped for the emulator — it destroys
   // Playwright's execution context during navigation, breaking acceptance tests.
@@ -203,8 +224,8 @@ export function createAppContext(
     // Storage paths always use prod — media binaries are not duplicated per preview branch.
     const STORAGE_NAMESPACE = validateNamespace(`${appName}/prod`);
 
-    return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, storage, STORAGE_NAMESPACE };
+    return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, initAppCheck, storage, STORAGE_NAMESPACE };
   }
 
-  return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders };
+  return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, initAppCheck };
 }

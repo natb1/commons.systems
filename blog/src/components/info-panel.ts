@@ -16,6 +16,7 @@ export interface InfoPanelData {
   rssFeedUrl?: string;
   opmlUrl?: string;
   postLinkPrefix?: string;
+  buildTimeFeeds?: Record<string, LatestPost | null>;
 }
 
 function groupByYearMonth(
@@ -129,16 +130,20 @@ export function renderInfoPanel(data: InfoPanelData): string {
     : "";
 
   const blogRollHtml = data.blogRoll
-    .map(
-      (b) =>
-        `<li data-blogroll-id="${escapeHtml(b.id)}">
-        <a class="blogroll-entry" id="blogroll-entry-${escapeHtml(b.id)}" href="${escapeHtml(b.url)}" target="_blank" rel="noopener">
+    .map((b) => {
+      const buildPost = data.buildTimeFeeds?.[b.id];
+      const latestText = buildPost?.title ? escapeHtml(buildPost.title) : "";
+      const dateText = buildPost?.publishedAt ? formatUtcDate(buildPost.publishedAt, "short") : "";
+      const dateIso = buildPost?.publishedAt ? ` data-iso="${escapeHtml(buildPost.publishedAt)}"` : "";
+      const entryHref = buildPost?.url ? escapeHtml(buildPost.url) : escapeHtml(b.url);
+      return `<li data-blogroll-id="${escapeHtml(b.id)}">
+        <a class="blogroll-entry" id="blogroll-entry-${escapeHtml(b.id)}" href="${entryHref}" target="_blank" rel="noopener">
           <span class="blogroll-name">${escapeHtml(b.name)}</span>
-          <span class="blogroll-latest" id="blogroll-latest-${escapeHtml(b.id)}"></span>
-          <span class="blogroll-date" id="blogroll-date-${escapeHtml(b.id)}"></span>
+          <span class="blogroll-latest" id="blogroll-latest-${escapeHtml(b.id)}">${latestText}</span>
+          <span class="blogroll-date" id="blogroll-date-${escapeHtml(b.id)}"${dateIso}>${dateText}</span>
         </a>
-      </li>`,
-    )
+      </li>`;
+    })
     .join("");
 
   return `
