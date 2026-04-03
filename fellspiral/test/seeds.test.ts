@@ -49,8 +49,8 @@ describe("seed/post sync", () => {
     expect(doc).toBeDefined();
     expect(doc!.data).toMatchObject({
       publishedAt: "2026-04-02T00:00:00Z",
-      previewImage: "/woman-with-a-flower-head.webp",
+      previewImage: "/blog-map-color.jpg",
     });
-    expect(doc!.data.previewDescription).toContain("Gombrich");
+    expect(doc!.data.previewDescription).toContain("each level of the darkness");
   });
 });

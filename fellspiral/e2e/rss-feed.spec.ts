@@ -17,6 +17,8 @@ test.describe("rss feed", () => {
     expect(xml).toContain('<docs>');
     expect(xml).toContain('<generator>commons.systems</generator>');
     expect(xml).toContain('isPermaLink="true"');
+    expect(xml).toContain('<enclosure url=');
+    expect(xml).toContain('type="image/');
   });
 
   test("home page has RSS autodiscovery tag", async ({ page }) => {

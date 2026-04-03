@@ -14,6 +14,8 @@ My wife had a different reaction. She loved it without question. She understood 
 ## Key: The Darkness
 ![](/blog-map-color.jpg)
 
+*[Amanda Lee Franck](http://comradery.co/amandalee) via [Prismatic Wasteland](https://www.prismaticwasteland.com/blog/bandwagon-the-map-is-not-the-territory-but-it-is-the-topic). DISCLAIMER: this blog post is a statement of where the art took me, not a statement on the actual genre of the art.*
+
 The magic of the surface world does not penetrate the depths of this darkness. By following this map, each level of the darkness can be escaped, but at a cost. The gods demand a member of your company will be left behind at each level (they do not care whom, or why).
 
 > Play Notes:
