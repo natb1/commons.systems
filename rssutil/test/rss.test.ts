@@ -192,4 +192,30 @@ describe("generateRssXml", () => {
     const xml = generateRssXml(withWebp, config);
     expect(xml).toContain('type="image/webp"');
   });
+
+  it("detects jpeg content type for .jpeg extension", () => {
+    const withJpeg: RssPost[] = [
+      { id: "jpeg-post", title: "JPEG Post", previewImage: "/photo.jpeg" },
+    ];
+    const xml = generateRssXml(withJpeg, config);
+    expect(xml).toContain('type="image/jpeg"');
+  });
+
+  it("throws on unrecognized image extension", () => {
+    const withGif: RssPost[] = [
+      { id: "gif-post", title: "GIF Post", previewImage: "/anim.gif" },
+    ];
+    expect(() => generateRssXml(withGif, config)).toThrow(
+      'Unsupported image extension for RSS enclosure: "/anim.gif"',
+    );
+  });
+
+  it("throws when previewImage is not root-relative", () => {
+    const withAbsolute: RssPost[] = [
+      { id: "abs-post", title: "Abs Post", previewImage: "https://example.com/img.jpg" },
+    ];
+    expect(() => generateRssXml(withAbsolute, config)).toThrow(
+      'previewImage must be a root-relative path, got: "https://example.com/img.jpg"',
+    );
+  });
 });

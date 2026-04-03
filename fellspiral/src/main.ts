@@ -41,6 +41,7 @@ new ResizeObserver(([entry]) => {
   );
 }).observe(header);
 
+let teardownScroll: (() => void) | undefined;
 let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
 let lastSkippedCount = 0;
@@ -60,7 +61,8 @@ const updateInfoPanel = (): void => {
     postLinkPrefix: "/post/",
   });
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
-  initScrollIndicator(infoPanel);
+  teardownScroll?.();
+  teardownScroll = initScrollIndicator(infoPanel);
   lastRenderedPosts = cachedPosts;
 }
 
