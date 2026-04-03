@@ -75,6 +75,26 @@ describe("initScrollIndicator", () => {
     expect(container.classList.contains("sidebar-overflow-top")).toBe(false);
   });
 
+  it("adds both overflow classes when scrolled to middle", () => {
+    const { container } = setup();
+    Object.defineProperty(container, "scrollHeight", { value: 500, configurable: true });
+    Object.defineProperty(container, "clientHeight", { value: 200, configurable: true });
+    Object.defineProperty(container, "scrollTop", { value: 100, configurable: true });
+    container.dispatchEvent(new Event("scroll"));
+    expect(container.classList.contains("sidebar-overflow-top")).toBe(true);
+    expect(container.classList.contains("sidebar-overflow-bottom")).toBe(true);
+  });
+
+  it("removes sidebar-overflow-bottom when scrolled to bottom", () => {
+    const { container } = setup();
+    Object.defineProperty(container, "scrollHeight", { value: 500, configurable: true });
+    Object.defineProperty(container, "clientHeight", { value: 200, configurable: true });
+    Object.defineProperty(container, "scrollTop", { value: 300, configurable: true });
+    container.dispatchEvent(new Event("scroll"));
+    expect(container.classList.contains("sidebar-overflow-top")).toBe(true);
+    expect(container.classList.contains("sidebar-overflow-bottom")).toBe(false);
+  });
+
   it("cleans up when container disconnects", () => {
     const { container } = setup();
     container.remove();
