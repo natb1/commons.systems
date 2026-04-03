@@ -78,6 +78,11 @@ if [ "$EXPLICIT" = false ]; then
   done <<< "$CHANGED"
 fi
 
+# Filter rules-test: requires Firebase emulators, excluded from vitest workspace config
+if [ "$EXPLICIT" = true ] && [[ -n "${DIRTY_APPS[rules-test]+x}" ]]; then
+  echo "Warning: rules-test requires Firebase emulators; skipping from vitest run" >&2
+fi
+unset 'DIRTY_APPS[rules-test]'
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
 
@@ -86,16 +91,20 @@ if [ ${#APP_DIRS[@]} -gt 0 ]; then
   ensure_deps
 fi
 
-# Run app unit tests
-for dir in "${APP_DIRS[@]}"; do
-  echo "=== Unit tests: $dir ==="
-  if (cd "$REPO_ROOT" && npm run -w "$dir" test); then
-    echo "PASS: $dir"
+# Run app unit tests via vitest workspace projects
+if [ ${#APP_DIRS[@]} -gt 0 ]; then
+  echo "=== Unit tests: ${APP_DIRS[*]} ==="
+  PROJECT_ARGS=()
+  for dir in "${APP_DIRS[@]}"; do
+    PROJECT_ARGS+=(--project "$dir")
+  done
+  if npx vitest run "${PROJECT_ARGS[@]}" --root "$REPO_ROOT"; then
+    echo "PASS: ${APP_DIRS[*]}"
   else
-    echo "FAIL: $dir" >&2
-    FAILURES+=("$dir")
+    echo "FAIL: ${APP_DIRS[*]}" >&2
+    FAILURES+=("vitest(${APP_DIRS[*]})")
   fi
-done
+fi
 
 # Run nix flake check
 if [ "$RUN_NIX" = true ]; then
@@ -130,7 +139,7 @@ if [ "$RUN_CI_SCRIPTS" = true ]; then
   fi
 fi
 
-# Run PR workflow script tests (skip test-helpers.sh and test-issue-state-scripts.sh which requires Firestore emulator)
+# Run PR workflow script tests (skip test-helpers.sh -- sourced library, not a test; skip test-issue-state-scripts.sh -- requires Firestore emulator)
 if [ "$RUN_PR_SCRIPTS" = true ]; then
   echo "=== PR workflow script tests ==="
   PR_SCRIPT_FAIL=false
