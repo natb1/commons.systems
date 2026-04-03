@@ -18,6 +18,12 @@ const appBase = defineConfig({
   resolve: {
     dedupe: firebaseDedupe,
   },
+  build: {
+    target: "es2022",
+  },
+  esbuild: {
+    legalComments: "none",
+  },
   test: {
     environment: "happy-dom",
     include: ["test/**/*.test.ts"],
