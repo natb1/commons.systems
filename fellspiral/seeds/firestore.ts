@@ -37,9 +37,9 @@ export const postDocuments: SeedDocument<PostSeedData>[] = [
       published: true,
       publishedAt: "2026-04-02T00:00:00Z",
       filename: "the-surreal.md",
-      previewImage: "/woman-with-a-flower-head.webp",
+      previewImage: "/blog-map-color.jpg",
       previewDescription:
-        "In my last year at college my preferred means of procrastinating was trying to understand art - reading Gombrich, and listening to classical music.",
+        "By following this map, each level of the darkness can be escaped, but at a cost.",
     },
   },
 ];

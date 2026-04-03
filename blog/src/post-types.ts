@@ -30,14 +30,20 @@ export function validatePublishedPosts(seed: Pick<SeedSpec, "collections">): Pub
     if (typeof data.publishedAt !== "string") {
       throw new Error(`Post "${doc.id}" is missing a publishedAt`);
     }
+    if (data.previewImage !== undefined && typeof data.previewImage !== "string") {
+      throw new Error(`Post "${doc.id}" has non-string previewImage`);
+    }
+    if (data.previewDescription !== undefined && typeof data.previewDescription !== "string") {
+      throw new Error(`Post "${doc.id}" has non-string previewDescription`);
+    }
     published.push({
       id: doc.id,
       title: data.title,
       published: true,
       publishedAt: data.publishedAt,
       filename: data.filename,
-      previewImage: data.previewImage as string | undefined,
-      previewDescription: data.previewDescription as string | undefined,
+      previewImage: data.previewImage,
+      previewDescription: data.previewDescription,
     });
   }
 

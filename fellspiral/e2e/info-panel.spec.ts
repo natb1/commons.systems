@@ -37,16 +37,17 @@ test.describe("info panel — desktop", () => {
     await expect(panel.locator('a[href="https://chrismcdee.itch.io/mythic-bastionland"]')).toBeVisible();
     await expect(panel.locator('a[href="https://freeleaguepublishing.com/games/alien/"]')).toBeVisible();
     await expect(panel.locator('a[href="https://cairnrpg.com/"]')).toBeVisible();
+    await expect(panel.locator('a[href="https://shop.hauntedtable.games/"]')).toBeVisible();
   });
 
-  test("shows blogroll with two entries", async ({ page }, testInfo) => {
+  test("shows blogroll with three entries", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop");
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
     const panel = page.locator("#info-panel");
     await expect(panel.locator("h3", { hasText: "Blogroll" })).toBeVisible();
     const blogrollItems = panel.locator(".blogroll-entry");
-    await expect(blogrollItems).toHaveCount(2);
+    await expect(blogrollItems).toHaveCount(3);
   });
 
   test("blogroll entries have populated latest post content @smoke", async ({ page }, testInfo) => {

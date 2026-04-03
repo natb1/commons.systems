@@ -16,6 +16,7 @@ import { createFetchPost } from "@commons-systems/blog/github";
 import { updateOgMeta } from "@commons-systems/blog/og-meta";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
 import { initPanelToggle } from "@commons-systems/style/panel-toggle";
+import { initScrollIndicator } from "@commons-systems/style/scroll-indicator";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { createStrategies, BLOG_ROLL_ENTRIES } from "./blog-roll/config.js";
@@ -40,6 +41,7 @@ new ResizeObserver(([entry]) => {
   );
 }).observe(header);
 
+let teardownScroll: (() => void) | undefined;
 let currentUser: User | null = null;
 let cachedPosts: PostMeta[] = [];
 let lastSkippedCount = 0;
@@ -59,6 +61,8 @@ const updateInfoPanel = (): void => {
     postLinkPrefix: "/post/",
   });
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
+  teardownScroll?.();
+  teardownScroll = initScrollIndicator(infoPanel);
   lastRenderedPosts = cachedPosts;
 }
 
