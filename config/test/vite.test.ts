@@ -19,9 +19,9 @@ describe("createAppConfig", () => {
     expect(config.build?.target).toBe("es2022");
   });
 
-  it("writes legal comments to a separate file", () => {
+  it("strips legal comments from bundles", () => {
     const config = createAppConfig();
-    expect(config.esbuild?.legalComments).toBe("linked");
+    expect(config.esbuild?.legalComments).toBe("none");
   });
 
   it("includes test file pattern", () => {

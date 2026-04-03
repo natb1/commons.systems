@@ -19,14 +19,13 @@ const appBase = defineConfig({
     dedupe: firebaseDedupe,
   },
   build: {
-    // Higher target than Vite default ('modules'/ES2020) — fewer syntax
-    // transforms during minification, producing smaller bundles.
+    // Higher target than Vite default ('modules') — fewer syntax transforms
+    // during minification, producing smaller bundles.
     target: "es2022",
   },
   esbuild: {
-    // Write third-party @license/@preserve banners to a separate .LEGAL.txt
-    // file instead of inlining them in the bundle.
-    legalComments: "linked",
+    // Strip third-party @license/@preserve banners from the bundle.
+    legalComments: "none",
   },
   test: {
     environment: "happy-dom",
