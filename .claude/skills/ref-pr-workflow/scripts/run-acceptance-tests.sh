@@ -29,7 +29,7 @@ fi
 
 cd "$REPO_ROOT"
 
-cleanup_all_stale_processes
+cleanup_stale_worktree_processes
 cleanup_stale_hub
 
 detect_features "$REPO_ROOT/$APP_DIR/src/" "$REPO_ROOT" "$APP_NAME"
@@ -142,14 +142,12 @@ CONFIG_JSON="$CONFIG_JSON, \"emulators\": $EMULATORS_JSON}"
 
 echo "$CONFIG_JSON" > "$TEMP_FIREBASE_JSON"
 
-# Cleanup on exit: kill emulator, remove stale hub and temp config files
-EMULATOR_PID=""
+# Capture worktree path now — working directory may change before trap fires, causing git rev-parse to fail
+WT_PATH="$(git rev-parse --show-toplevel)"
+
+# Cleanup on exit: kill all processes for this worktree, remove stale hub and temp config
 cleanup() {
-  if [ -n "$EMULATOR_PID" ]; then
-    kill_tree "$EMULATOR_PID"
-    wait "$EMULATOR_PID" 2>/dev/null || true
-  fi
-  remove_pid_file || echo "WARNING: remove_pid_file failed" >&2
+  kill_worktree_processes "$WT_PATH" || echo "WARNING: kill_worktree_processes failed" >&2
   cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
   rm -f "$TEMP_FIREBASE_JSON"
 }
@@ -183,10 +181,6 @@ if [ -n "$EMULATOR_NAMESPACE" ]; then
 fi
 
 npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
-EMULATOR_PID=$!
-
-# Record child PIDs for orphan cleanup
-write_pid_file "${EMULATOR_PID}:node"
 
 # Poll until hosting emulator serves content.
 # Timeout allows headroom for slow CI (npx download + emulator startup can take 30-60s).
