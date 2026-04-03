@@ -47,4 +47,35 @@ test.describe("theme", () => {
 
     expect(h1Font).toContain("Uncial Antiqua");
   });
+
+  test("does not make external font requests", async ({ page }) => {
+    const externalFontRequests: string[] = [];
+    page.on("request", (req) => {
+      const url = req.url();
+      if (
+        url.includes("fonts.googleapis.com") ||
+        url.includes("fonts.gstatic.com")
+      ) {
+        externalFontRequests.push(url);
+      }
+    });
+    await page.goto("/");
+    expect(externalFontRequests).toEqual([]);
+  });
+
+  test("self-hosted fonts are loaded", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    const fontsLoaded = await page.evaluate(async () => {
+      await document.fonts.ready;
+      return {
+        ebGaramond: document.fonts.check('16px "EB Garamond"'),
+        uncialAntiqua: document.fonts.check('16px "Uncial Antiqua"'),
+      };
+    });
+
+    expect(fontsLoaded.ebGaramond).toBe(true);
+    expect(fontsLoaded.uncialAntiqua).toBe(true);
+  });
 });
