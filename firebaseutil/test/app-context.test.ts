@@ -335,6 +335,83 @@ describe("createAppContext", () => {
     );
   });
 
+  describe("deferAppCheck", () => {
+    it("getAppCheckHeaders is a function that returns {} before initAppCheck is called", async () => {
+      const { createAppContext } = await loadModule();
+
+      const ctx = createAppContext("myapp", "app-id-123", {
+        recaptchaSiteKey: "test-key",
+        deferAppCheck: true,
+      });
+
+      expect(ctx.getAppCheckHeaders).toBeTypeOf("function");
+      expect(ctx.initAppCheck).toBeTypeOf("function");
+      const headers = await ctx.getAppCheckHeaders!();
+      expect(headers).toEqual({});
+    });
+
+    it("getAppCheckHeaders returns token header after initAppCheck resolves", async () => {
+      const { createAppContext } = await loadModule();
+      const mocks = await loadMocks();
+      mocks.initializeAppCheck.mockReturnValue(mockAppCheck);
+      mocks.getToken.mockResolvedValue({ token: "test-token" });
+
+      const ctx = createAppContext("myapp", "app-id-123", {
+        recaptchaSiteKey: "test-key",
+        deferAppCheck: true,
+      });
+
+      expect(mocks.initializeAppCheck).not.toHaveBeenCalled();
+
+      await ctx.initAppCheck!();
+
+      expect(mocks.initializeAppCheck).toHaveBeenCalledTimes(1);
+      const headers = await ctx.getAppCheckHeaders!();
+      expect(headers).toEqual({ "X-Firebase-AppCheck": "test-token" });
+    });
+
+    it("initAppCheck is idempotent — second call does not re-initialize", async () => {
+      const { createAppContext } = await loadModule();
+      const mocks = await loadMocks();
+      mocks.initializeAppCheck.mockReturnValue(mockAppCheck);
+
+      const ctx = createAppContext("myapp", "app-id-123", {
+        recaptchaSiteKey: "test-key",
+        deferAppCheck: true,
+      });
+
+      await ctx.initAppCheck!();
+      await ctx.initAppCheck!();
+
+      expect(mocks.initializeAppCheck).toHaveBeenCalledTimes(1);
+    });
+
+    it("initAppCheck is undefined when deferAppCheck is not set", async () => {
+      const { createAppContext } = await loadModule();
+
+      const ctx = createAppContext("myapp", "app-id-123", {
+        recaptchaSiteKey: "test-key",
+      });
+
+      expect(ctx.initAppCheck).toBeUndefined();
+    });
+
+    it("initAppCheck is undefined when deferAppCheck is true but no recaptchaSiteKey", async () => {
+      const { createAppContext } = await loadModule();
+
+      const ctx = createAppContext("myapp", "app-id-123", {
+        deferAppCheck: true,
+      });
+
+      expect(ctx.initAppCheck).toBeUndefined();
+      // getAppCheckHeaders is still a function (returns {} always) so callers
+      // that capture the reference at module init time get a safe no-op.
+      expect(ctx.getAppCheckHeaders).toBeTypeOf("function");
+      const headers = await ctx.getAppCheckHeaders!();
+      expect(headers).toEqual({});
+    });
+  });
+
   it("includes getAppCheckHeaders in storage context", async () => {
     const { createAppContext } = await loadModule();
     const mocks = await loadMocks();
