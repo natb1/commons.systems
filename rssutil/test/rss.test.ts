@@ -201,12 +201,20 @@ describe("generateRssXml", () => {
     expect(xml).toContain('type="image/jpeg"');
   });
 
-  it("throws on unrecognized image extension", () => {
+  it("detects gif content type for .gif extension", () => {
     const withGif: RssPost[] = [
       { id: "gif-post", title: "GIF Post", previewImage: "/anim.gif" },
     ];
-    expect(() => generateRssXml(withGif, config)).toThrow(
-      'Unsupported image extension for RSS enclosure: "/anim.gif"',
+    const xml = generateRssXml(withGif, config);
+    expect(xml).toContain('type="image/gif"');
+  });
+
+  it("throws on unrecognized image extension", () => {
+    const withBmp: RssPost[] = [
+      { id: "bmp-post", title: "BMP Post", previewImage: "/image.bmp" },
+    ];
+    expect(() => generateRssXml(withBmp, config)).toThrow(
+      'Unsupported image extension for RSS enclosure: "/image.bmp"',
     );
   });
 
