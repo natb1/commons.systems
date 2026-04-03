@@ -16,8 +16,10 @@ export const IMAGE_DIMENSIONS = {
 //
 // The image renderer adds width/height attributes from IMAGE_DIMENSIONS,
 // fetchpriority="high" on the first image (LCP element), and loading="lazy"
-// on all subsequent images. The counter is per-instance, so each call site
-// (vite plugin, prerender, client hydration) gets independent tracking.
+// on all subsequent images. The counter is per-Marked-instance: vite plugin
+// and prerender each create their own instance. Client hydration (home.ts)
+// shares a single module-level instance but skips prerendered posts via
+// data-hydrated, so the counter is only used for non-prerendered content.
 //
 // Build-time paths (prerender, vite plugin) rely on the `html: () => ""` renderer
 // to strip raw HTML. The client additionally runs DOMPurify (see pages/home.ts).
@@ -37,7 +39,7 @@ export function createMarked(): Marked {
       image({ href, text }) {
         const safeHref = escapeHtml(href);
         const alt = text ? escapeHtml(text) : "";
-        const dims = IMAGE_DIMENSIONS[href as keyof typeof IMAGE_DIMENSIONS];
+        const dims = (IMAGE_DIMENSIONS as Record<string, { width: number; height: number }>)[href];
         if (!dims) {
           throw new Error(`Image "${href}" not found in IMAGE_DIMENSIONS. Add its dimensions to marked-config.ts.`);
         }

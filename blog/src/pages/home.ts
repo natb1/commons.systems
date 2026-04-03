@@ -92,10 +92,10 @@ export function hydrateHome(
 
       const html = await marked.parse(h1 ? h1.body : markdown);
       if (!isOutletCurrent(outlet, container)) return;
-      // DOMPurify strips non-standard and certain standard attributes by default;
-      // ADD_ATTR preserves target="_blank" from the link renderer and the image
-      // attributes (fetchpriority, loading, width, height) from the image renderer
-      // in marked-config.ts.
+      // DOMPurify strips non-standard attributes by default; ADD_ATTR preserves
+      // target="_blank" from the link renderer and fetchpriority/loading from the
+      // image renderer in marked-config.ts. width/height are standard <img>
+      // attributes preserved by default but included here for documentation.
       contentDiv.innerHTML = DOMPurify.sanitize(html, {
         ADD_ATTR: ["target", "fetchpriority", "loading", "width", "height"],
       });
