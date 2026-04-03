@@ -9,9 +9,9 @@ async function expectLightBackground(page: Page) {
   const match = bg.match(/\d+/g)?.map(Number);
   expect(match, `background-color returned unexpected format: "${bg}"`).not.toBeNull();
   expect(match!.length).toBeGreaterThanOrEqual(3);
-  expect(match[0]).toBeGreaterThan(180);
-  expect(match[1]).toBeGreaterThan(180);
-  expect(match[2]).toBeGreaterThan(180);
+  expect(match![0]).toBeGreaterThan(180);
+  expect(match![1]).toBeGreaterThan(180);
+  expect(match![2]).toBeGreaterThan(180);
 }
 
 test.describe("theme", () => {
@@ -46,5 +46,21 @@ test.describe("theme", () => {
     });
 
     expect(h1Font).toContain("Uncial Antiqua");
+  });
+
+  test("self-hosted fonts are loaded", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    const fontsLoaded = await page.evaluate(async () => {
+      await document.fonts.ready;
+      return {
+        ebGaramond: document.fonts.check('16px "EB Garamond"'),
+        uncialAntiqua: document.fonts.check('16px "Uncial Antiqua"'),
+      };
+    });
+
+    expect(fontsLoaded.ebGaramond).toBe(true);
+    expect(fontsLoaded.uncialAntiqua).toBe(true);
   });
 });
