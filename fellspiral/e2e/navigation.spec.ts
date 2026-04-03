@@ -67,4 +67,12 @@ test.describe("navigation", () => {
     await page.waitForSelector("main h2", { timeout: 30000 });
     await expect(page.locator("main")).toContainText("Scenes from a Hat");
   });
+
+  test("scroll indicator track exists on desktop @smoke", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "desktop only");
+    await page.goto("/");
+    await page.waitForSelector("main h2", { timeout: 30000 });
+    const track = page.locator(".sidebar-scroll-track");
+    await expect(track).toBeVisible();
+  });
 });
