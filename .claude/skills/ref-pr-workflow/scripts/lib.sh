@@ -299,10 +299,18 @@ kill_worktree_processes() {
 }
 
 # Kill processes belonging to worktrees that no longer exist.
-# Finds all processes with a /worktrees/ path in their args, extracts the
-# worktree path, and kills those not in the active worktree set.
-# Assumes /worktrees/ in process args refers to git worktree directories under this repo.
+# Scopes the search to this repo's worktree directory (derived from git
+# common dir) to avoid killing processes from unrelated repositories.
 cleanup_stale_worktree_processes() {
+  # Derive this repo's worktree container path from git common dir
+  local git_common_dir worktree_root
+  git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || {
+    echo "WARNING: git rev-parse --git-common-dir failed; skipping stale cleanup" >&2
+    return 0
+  }
+  # Resolve to absolute path; worktrees live as siblings of the git common dir
+  worktree_root="$(cd "$git_common_dir/.." && pwd)/worktrees"
+
   # Build set of active worktree paths
   local active_paths=""
   local line
@@ -319,9 +327,9 @@ cleanup_stale_worktree_processes() {
     return 0
   fi
 
-  # Find all PIDs with /worktrees/ in their command args
+  # Find PIDs with this repo's worktree root in their command args
   local pids
-  pids=$(pgrep -f '/worktrees/' 2>/dev/null) || true
+  pids=$(pgrep -f "$worktree_root/" 2>/dev/null) || true
   [ -z "$pids" ] && return 0
 
   local exclude_pids

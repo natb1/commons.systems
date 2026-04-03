@@ -147,7 +147,9 @@ echo "=== Test: cleanup_stale_worktree_processes kills stale, keeps active ==="
 (
   source "$SCRIPT_DIR/lib.sh"
   REAL_WT="$(git rev-parse --show-toplevel)"
-  STALE_WT="/fake/worktrees/deleted-$$"
+  # Stale path must be under this repo's worktree root so the repo-scoped
+  # pgrep in cleanup_stale_worktree_processes finds it
+  STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/worktrees/deleted-$$"
 
   # Process from a real active worktree
   perl -e 'sleep 300' -- "$REAL_WT/sentinel" &
