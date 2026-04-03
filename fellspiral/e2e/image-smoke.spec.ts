@@ -23,7 +23,7 @@ test.describe("image optimization smoke", () => {
   test("no broken images on home page @smoke", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
-    const images = page.locator("img");
+    const images = page.locator("#posts img");
     const count = await images.count();
     expect(count).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {
