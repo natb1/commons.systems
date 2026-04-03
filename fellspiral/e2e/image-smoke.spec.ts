@@ -28,6 +28,7 @@ test.describe("image optimization smoke", () => {
     expect(count).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {
       const img = images.nth(i);
+      await img.scrollIntoViewIfNeeded();
       await expect(img).not.toHaveJSProperty("naturalWidth", 0);
     }
   });
