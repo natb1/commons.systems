@@ -229,6 +229,104 @@ describe("renderInfoPanel", () => {
     expect(html).toContain('class="blogroll-date"');
   });
 
+  describe("buildTimeFeeds", () => {
+    it("populates blogroll-latest span with the post title", () => {
+      const html = renderInfoPanel({
+        ...defaultData(),
+        buildTimeFeeds: {
+          "test-blog": {
+            title: "Latest from Test",
+            url: "https://example.com/latest",
+            publishedAt: "2026-03-01T00:00:00Z",
+          },
+        },
+      });
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      const latest = container.querySelector("#blogroll-latest-test-blog");
+      expect(latest!.textContent).toBe("Latest from Test");
+    });
+
+    it("populates blogroll-date span with formatted date and data-iso attribute", () => {
+      const html = renderInfoPanel({
+        ...defaultData(),
+        buildTimeFeeds: {
+          "test-blog": {
+            title: "Latest from Test",
+            url: "https://example.com/latest",
+            publishedAt: "2026-03-01T00:00:00Z",
+          },
+        },
+      });
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      const dateSpan = container.querySelector("#blogroll-date-test-blog");
+      expect(dateSpan!.textContent).toBe("Mar 1, 2026");
+      expect(dateSpan!.getAttribute("data-iso")).toBe("2026-03-01T00:00:00Z");
+    });
+
+    it("updates the entry href to the post URL", () => {
+      const html = renderInfoPanel({
+        ...defaultData(),
+        buildTimeFeeds: {
+          "test-blog": {
+            title: "Latest from Test",
+            url: "https://example.com/latest",
+            publishedAt: "2026-03-01T00:00:00Z",
+          },
+        },
+      });
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      const entryLink = container.querySelector("#blogroll-entry-test-blog");
+      expect(entryLink!.getAttribute("href")).toBe("https://example.com/latest");
+    });
+
+    it("renders empty placeholders without buildTimeFeeds (backwards compat)", () => {
+      const html = renderInfoPanel(defaultData());
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      const latest = container.querySelector("#blogroll-latest-test-blog");
+      expect(latest!.textContent).toBe("");
+      const dateSpan = container.querySelector("#blogroll-date-test-blog");
+      expect(dateSpan!.textContent).toBe("");
+      expect(dateSpan!.hasAttribute("data-iso")).toBe(false);
+      const entryLink = container.querySelector("#blogroll-entry-test-blog");
+      expect(entryLink!.getAttribute("href")).toBe("https://example.com");
+    });
+
+    it("renders empty placeholder for entry with no matching feed data", () => {
+      const entries: BlogRollEntry[] = [
+        { id: "has-feed", name: "Has Feed", url: "https://has.com" },
+        { id: "no-feed", name: "No Feed", url: "https://no.com" },
+      ];
+      const html = renderInfoPanel({
+        linkSections: mockLinkSections,
+        topPosts: mockPosts,
+        blogRoll: entries,
+        buildTimeFeeds: {
+          "has-feed": {
+            title: "Feed Post",
+            url: "https://has.com/post",
+            publishedAt: "2026-03-01T00:00:00Z",
+          },
+        },
+      });
+      const container = document.createElement("div");
+      container.innerHTML = html;
+
+      // Entry with feed data is populated
+      expect(container.querySelector("#blogroll-latest-has-feed")!.textContent).toBe("Feed Post");
+      expect(container.querySelector("#blogroll-entry-has-feed")!.getAttribute("href")).toBe("https://has.com/post");
+
+      // Entry without feed data has empty placeholders
+      expect(container.querySelector("#blogroll-latest-no-feed")!.textContent).toBe("");
+      expect(container.querySelector("#blogroll-date-no-feed")!.textContent).toBe("");
+      expect(container.querySelector("#blogroll-date-no-feed")!.hasAttribute("data-iso")).toBe(false);
+      expect(container.querySelector("#blogroll-entry-no-feed")!.getAttribute("href")).toBe("https://no.com");
+    });
+  });
+
   describe("archive (pinned date)", () => {
     beforeEach(() => {
       vi.useFakeTimers();

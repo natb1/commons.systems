@@ -151,16 +151,55 @@ get_tmpdir() {
   node -e "process.stdout.write(require('os').tmpdir())"
 }
 
-# Kill a process and all its descendants.
-# Args: $1 = PID to kill
-kill_tree() {
-  local pid="${1:?kill_tree requires a PID argument}"
+# Build a space-delimited exclusion set of the current process and all its
+# ancestors up to PID 1. Used to avoid self-termination in kill functions.
+# Output: string like " 1234 567 " (leading/trailing spaces for substring match)
+_ancestor_pids() {
+  local result=" $$ "
+  local ancestor=$$
+  while [ "$ancestor" -gt 1 ]; do
+    ancestor=$(ps -o ppid= -p "$ancestor" 2>/dev/null | tr -d ' ') || break
+    [ -z "$ancestor" ] && break
+    result+="$ancestor "
+  done
+  printf '%s' "$result"
+}
+
+# Collect all PIDs in a process tree (depth-first, children before parent).
+# Args: $1 = root PID
+# Output: one PID per line, leaves first (children listed before their parent)
+_collect_tree_pids() {
+  local pid="$1"
   local children
   children=$(pgrep -P "$pid" 2>/dev/null) || true
   for child in $children; do
-    kill_tree "$child"
+    _collect_tree_pids "$child"
   done
-  kill "$pid" 2>/dev/null || true
+  echo "$pid"
+}
+
+# Kill a process and all its descendants.
+# Sends SIGTERM first, then escalates to SIGKILL after a 2-second grace period.
+# Args: $1 = PID to kill
+kill_tree() {
+  local pid="${1:?kill_tree requires a PID argument}"
+  local pids
+  pids=$(_collect_tree_pids "$pid")
+  [ -z "$pids" ] && return 0
+
+  # SIGTERM pass
+  local p
+  for p in $pids; do
+    kill "$p" 2>/dev/null || true
+  done
+
+  # Grace period, then SIGKILL survivors
+  sleep 2
+  for p in $pids; do
+    if kill -0 "$p" 2>/dev/null; then
+      kill -9 "$p" 2>/dev/null || true
+    fi
+  done
 }
 
 # Print the hosting site ID for an app from .firebaserc deploy targets.
@@ -216,7 +255,7 @@ delete_preview_channel() {
 
 # Remove the emulator hub file if the PID recorded in it is dead.
 # Uses worktree-scoped project ID so each worktree manages its own hub file.
-# (PID recycling could theoretically cause a false positive but is negligible in practice.)
+# (If the PID is recycled by an unrelated process, kill -0 succeeds and the stale hub file is preserved. This is negligible in practice.)
 cleanup_stale_hub() {
   local tmpdir
   tmpdir="$(get_tmpdir)"
@@ -233,110 +272,86 @@ cleanup_stale_hub() {
   fi
 }
 
-# Write a PID file recording child processes for orphan cleanup.
-# The file is scoped to the current worktree via get_emulator_project_id().
-# Args: pairs of pid:command_name (e.g., "12345:node" "12346:java")
-#   command_name must match `ps -o comm=` output for that PID (used to guard PID recycling)
-write_pid_file() {
-  local tmpdir
-  tmpdir="$(get_tmpdir)"
-  local project_id
-  project_id="$(get_emulator_project_id)"
-  local worktree_path
-  worktree_path="$(git rev-parse --show-toplevel)"
+# Kill all processes whose command-line args contain the given worktree path.
+# Uses fixed-string substring matching on process args.
+# Excludes the current process and its ancestors to avoid self-termination.
+# Args: $1 = absolute worktree path (e.g., output of `git rev-parse --show-toplevel`)
+kill_worktree_processes() {
+  local wt_path="${1:?kill_worktree_processes requires a worktree path}"
 
-  local pid_file="${tmpdir}/pids-${project_id}.json"
-  local jq_args=(--argjson hub_pid "$$" --arg worktree_path "$worktree_path")
-  local jq_filter='{hub_pid: $hub_pid, worktree_path: $worktree_path, processes: ['
-  local i=0
-  for entry in "$@"; do
-    local pid="${entry%%:*}"
-    local cmd="${entry#*:}"
-    jq_args+=(--argjson "pid$i" "$pid" --arg "cmd$i" "$cmd")
-    [ $i -gt 0 ] && jq_filter+=","
-    jq_filter+="{\"pid\": \$pid${i}, \"cmd\": \$cmd${i}}"
-    i=$((i + 1))
-  done
-  jq_filter+=']}'
-  jq -n "${jq_args[@]}" "$jq_filter" > "$pid_file"
-}
+  local ps_output pids
+  ps_output=$(ps -axo pid=,args= 2>/dev/null) || true
+  pids=$(printf '%s\n' "$ps_output" | grep -F "$wt_path/" | awk '{print $1}') || true
+  [ -z "$pids" ] && return 0
 
-# Remove the PID file for the current worktree.
-# Called during normal trap cleanup.
-remove_pid_file() {
-  local tmpdir
-  tmpdir="$(get_tmpdir)"
-  local project_id
-  project_id="$(get_emulator_project_id)"
-  rm -f "${tmpdir}/pids-${project_id}.json"
-}
+  local exclude_pids
+  exclude_pids=$(_ancestor_pids)
 
-# Scan all PID files for the project and clean up orphaned processes.
-# Orphans arise from two cases:
-#   1. The owning worktree directory was deleted
-#   2. The parent script PID is dead but child processes survived
-# Skips PID files whose parent script is still alive (active server in another worktree).
-cleanup_all_stale_processes() {
-  local tmpdir
-  tmpdir="$(get_tmpdir)"
-
-  # Use base FIREBASE_PROJECT_ID (not worktree-scoped) to scan PID files from all worktrees
-  local pid_file
-  for pid_file in "${tmpdir}"/pids-${FIREBASE_PROJECT_ID}.json "${tmpdir}"/pids-${FIREBASE_PROJECT_ID}-wt-*.json; do
-    [ -f "$pid_file" ] || continue
-    local worktree_path hub_pid
-    local header
-    header=$(jq -r '[.worktree_path // "", .hub_pid // ""] | join("\t")' "$pid_file" 2>/dev/null) || {
-      echo "WARNING: failed to parse PID file $pid_file, skipping" >&2
+  local pid
+  for pid in $pids; do
+    if [[ "$exclude_pids" == *" $pid "* ]]; then
       continue
-    }
-    worktree_path="${header%%	*}"
-    hub_pid="${header#*	}"
-
-    local is_orphan=false
-    if [ -n "$worktree_path" ] && [ ! -d "$worktree_path" ]; then
-      echo "Orphan detected: worktree deleted ($worktree_path)"
-      is_orphan=true
-    elif [ -n "$hub_pid" ] && ! kill -0 "$hub_pid" 2>/dev/null; then
-      echo "Orphan detected: hub PID $hub_pid is dead"
-      is_orphan=true
     fi
+    kill -0 "$pid" 2>/dev/null || continue
+    echo "Killing worktree process: PID $pid"
+    kill_tree "$pid"
+  done
+}
 
-    if [ "$is_orphan" = true ]; then
-      # Extract all pid:cmd pairs in one jq call (tab-separated, newline-delimited)
-      local proc_entries
-      proc_entries=$(jq -r '.processes[] | [.pid, .cmd] | join("\t")' "$pid_file" 2>/dev/null) || {
-        echo "WARNING: failed to extract processes from $pid_file, orphaned processes may need manual cleanup" >&2
-        proc_entries=""
-      }
+# Kill processes belonging to worktrees that no longer exist.
+# Scopes the search to this repo's worktree directory (derived from git
+# common dir) to avoid killing processes from unrelated repositories.
+cleanup_stale_worktree_processes() {
+  # Derive this repo's worktree container path from git common dir
+  local git_common_dir worktree_root
+  git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || {
+    echo "WARNING: git rev-parse --git-common-dir failed; skipping stale cleanup" >&2
+    return 0
+  }
+  # Resolve to absolute path; worktrees live as siblings of the git common dir
+  worktree_root="$(cd "$git_common_dir/.." && pwd)/worktrees"
 
-      local line
-      while IFS= read -r line; do
-        [ -z "$line" ] && continue
-        local proc_pid proc_cmd actual_cmd
-        proc_pid="${line%%	*}"
-        proc_cmd="${line#*	}"
+  # Build set of active worktree paths
+  local active_paths=""
+  local line
+  while IFS= read -r line; do
+    case "$line" in
+      worktree\ *)
+        active_paths+="${line#worktree } "
+        ;;
+    esac
+  done < <(git worktree list --porcelain 2>/dev/null)
 
-        # Verify command name matches before killing (guards PID recycling)
-        actual_cmd=$(ps -p "$proc_pid" -o comm= 2>/dev/null) || actual_cmd=""
-        if [ -n "$actual_cmd" ] && [ "$actual_cmd" = "$proc_cmd" ]; then
-          echo "Killing orphaned process: PID $proc_pid ($proc_cmd)"
-          kill_tree "$proc_pid"
-        elif [ -n "$actual_cmd" ]; then
-          echo "Skipping PID $proc_pid: expected $proc_cmd but found $actual_cmd (PID recycled)"
-        fi
-      done <<< "$proc_entries"
+  if [ -z "$active_paths" ]; then
+    echo "WARNING: git worktree list returned no entries; skipping stale cleanup" >&2
+    return 0
+  fi
 
-      rm -f "$pid_file"
+  # Find PIDs with this repo's worktree root in their command args
+  local pids
+  pids=$(pgrep -f "$worktree_root/" 2>/dev/null) || true
+  [ -z "$pids" ] && return 0
 
-      local project_id
-      project_id="${pid_file##*/pids-}"
-      project_id="${project_id%.json}"
-      local hub_file="${tmpdir}/hub-${project_id}.json"
-      if [ -f "$hub_file" ]; then
-        echo "Removing stale hub file: $hub_file"
-        rm -f "$hub_file"
-      fi
+  local exclude_pids
+  exclude_pids=$(_ancestor_pids)
+
+  local pid
+  for pid in $pids; do
+    [[ "$exclude_pids" == *" $pid "* ]] && continue
+
+    # Extract the worktree path from this process's command line
+    local cmdline
+    cmdline=$(ps -o args= -p "$pid" 2>/dev/null) || continue
+
+    local wt_path
+    wt_path=$(printf '%s' "$cmdline" | grep -oE '/[^ ]*worktrees/[^/ ]+' | head -1) || continue
+    [ -z "$wt_path" ] && continue
+
+    # Kill only if this worktree path is not in the active set
+    if [[ "$active_paths" != *"$wt_path "* ]]; then
+      kill -0 "$pid" 2>/dev/null || continue
+      echo "Stale worktree process: PID $pid (worktree: $wt_path)"
+      kill_tree "$pid"
     fi
   done
 }

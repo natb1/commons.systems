@@ -4,6 +4,9 @@ function imageContentType(path: string): string {
   if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
   if (path.endsWith(".png")) return "image/png";
   if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".avif")) return "image/avif";
+  if (path.endsWith(".svg")) return "image/svg+xml";
+  if (path.endsWith(".gif")) return "image/gif";
   throw new Error(`Unsupported image extension for RSS enclosure: "${path}"`);
 }
 
