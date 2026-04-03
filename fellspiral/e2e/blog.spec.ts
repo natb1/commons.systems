@@ -15,7 +15,7 @@ test.describe("blog", () => {
     await page.waitForSelector("#posts", { timeout: 30000 });
     const posts = page.locator("#posts article");
     expect(await posts.count()).toBeGreaterThanOrEqual(1);
-    await expect(posts.first()).toContainText("Scenes from a Hat");
+    await expect(posts.first()).toContainText("The Surreal");
   });
 
   test("post URL scrolls to post in home page", async ({ page }) => {
@@ -27,6 +27,23 @@ test.describe("blog", () => {
     ).toBeVisible();
 
     // Wait for content to load and scroll to complete, then verify the article is near the viewport top.
+    const article = page.locator("#post-scenes-from-a-hat");
+    await expect
+      .poll(
+        async () => {
+          const box = await article.boundingBox();
+          return box?.y ?? Infinity;
+        },
+        { timeout: 5000 },
+      )
+      .toBeLessThanOrEqual(250);
+  });
+
+  test("trailing-slash post URL scrolls to post", async ({ page }) => {
+    await page.goto("/post/scenes-from-a-hat/");
+    await page.waitForSelector("#posts", { timeout: 30000 });
+    await expect(page.locator("#post-scenes-from-a-hat")).toBeVisible();
+
     const article = page.locator("#post-scenes-from-a-hat");
     await expect
       .poll(
