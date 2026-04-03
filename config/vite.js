@@ -18,6 +18,15 @@ const appBase = defineConfig({
   resolve: {
     dedupe: firebaseDedupe,
   },
+  build: {
+    // Higher target than Vite default ('modules') — fewer syntax transforms
+    // during minification, producing smaller bundles.
+    target: "es2022",
+  },
+  esbuild: {
+    // Strip third-party @license/@preserve banners from the bundle.
+    legalComments: "none",
+  },
   test: {
     environment: "happy-dom",
     include: ["test/**/*.test.ts"],

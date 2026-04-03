@@ -8,7 +8,7 @@ Fuck that guy. Fuck this pervasive hot cross buns bullshit. Fuck the sophists an
 
 ---
 
-![](/alienurn.jpg)
+![](/alienurn.webp)
 
 TRANSMISSION
 - Outer Rim Command: Disciplinary Review Operations

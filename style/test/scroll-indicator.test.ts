@@ -49,7 +49,6 @@ describe("initScrollIndicator", () => {
 
   it("hides track when content does not overflow", () => {
     const { container } = setup();
-    // scrollHeight === clientHeight means no overflow
     Object.defineProperty(container, "scrollHeight", { value: 100, configurable: true });
     Object.defineProperty(container, "clientHeight", { value: 100, configurable: true });
     container.dispatchEvent(new Event("scroll"));
