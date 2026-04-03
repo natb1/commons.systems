@@ -64,9 +64,9 @@ export interface StorageModule {
 
 export interface AppContextOptions {
   recaptchaSiteKey?: string;
-  /** Defer App Check initialization until `initAppCheck()` is called. When true,
-   *  `getAppCheckHeaders` is always a function (returns `{}` until init completes)
-   *  and `initAppCheck` is returned on the context. */
+  /** Defer App Check initialization until `initAppCheck()` is called. When true
+   *  and `recaptchaSiteKey` is provided, `getAppCheckHeaders` is always a function
+   *  (returns `{}` until init completes) and `initAppCheck` is returned on the context. */
   deferAppCheck?: boolean;
   storageModule?: StorageModule;
   /** Optional; error logs omit user info when not provided. */
@@ -149,8 +149,10 @@ export function createAppContext(
     // Deferred mode: getAppCheckHeaders is always a function (returns {} until
     // initAppCheck() is called), so callers that capture the reference at module
     // init time get a working function that upgrades in place.
+    let initialized = false;
     initAppCheck = async () => {
-      if (resolvedAppCheck) return;
+      if (initialized) return;
+      initialized = true;
       resolvedAppCheck = doInitAppCheck();
     };
   } else {

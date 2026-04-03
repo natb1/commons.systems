@@ -172,7 +172,7 @@ function fetchAllLatestPosts(
   return blogRoll.map((entry) => {
     const strategy = strategies.get(entry.id);
     if (!strategy) {
-      console.warn(`No strategy found for blog roll entry "${entry.id}"`);
+      logError(new Error(`No strategy found for blog roll entry "${entry.id}"`), { operation: "fetch-latest-post", entryId: entry.id });
       return Promise.resolve({ entry, post: null });
     }
 
@@ -233,6 +233,6 @@ export function hydrateInfoPanel(
       }
       sortBlogrollByDate(panel);
     })
-    // Intentional silent degradation — user sees stale content rather than an error.
+    // Intentional silent degradation — user sees build-time content rather than an error.
     .catch((err) => logError(err, { operation: "hydrate-blogroll" }));
 }
