@@ -95,7 +95,7 @@ export function hydrateHome(
       // DOMPurify strips target attributes by default; ADD_ATTR preserves the
       // target="_blank" set by the custom link renderer above.
       contentDiv.innerHTML = DOMPurify.sanitize(html, {
-        ADD_ATTR: ["target"],
+        ADD_ATTR: ["target", "fetchpriority", "loading", "width", "height"],
       });
     } catch (error) {
       logError(error, { operation: "fetch-post", postId: post.id });

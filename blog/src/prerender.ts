@@ -79,6 +79,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const marked = createMarked();
 
   const published = validatePublishedPosts(seed);
+  published.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 
   const contentMap = await renderPostContents(
     published,
