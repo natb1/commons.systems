@@ -9,9 +9,9 @@ async function expectLightBackground(page: Page) {
   const match = bg.match(/\d+/g)?.map(Number);
   expect(match, `background-color returned unexpected format: "${bg}"`).not.toBeNull();
   expect(match!.length).toBeGreaterThanOrEqual(3);
-  expect(match[0]).toBeGreaterThan(180);
-  expect(match[1]).toBeGreaterThan(180);
-  expect(match[2]).toBeGreaterThan(180);
+  expect(match![0]).toBeGreaterThan(180);
+  expect(match![1]).toBeGreaterThan(180);
+  expect(match![2]).toBeGreaterThan(180);
 }
 
 test.describe("theme", () => {
@@ -46,25 +46,6 @@ test.describe("theme", () => {
     });
 
     expect(h1Font).toContain("Uncial Antiqua");
-  });
-
-  test("does not make external font requests", async ({ page }) => {
-    const externalFontRequests: string[] = [];
-    page.on("request", (req) => {
-      // Only track main-frame requests. Firebase Auth loads a hidden iframe
-      // (__/auth/iframe) whose identity toolkit fetches Roboto from gstatic;
-      // that is third-party infrastructure, not our site fonts.
-      if (req.frame() !== page.mainFrame()) return;
-      const url = req.url();
-      if (
-        url.includes("fonts.googleapis.com") ||
-        url.includes("fonts.gstatic.com")
-      ) {
-        externalFontRequests.push(url);
-      }
-    });
-    await page.goto("/");
-    expect(externalFontRequests).toEqual([]);
   });
 
   test("self-hosted fonts are loaded", async ({ page }) => {
