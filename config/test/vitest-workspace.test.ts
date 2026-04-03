@@ -5,12 +5,12 @@ import { describe, it, expect } from "vitest";
 const root = resolve(import.meta.dirname, "../..");
 const rootPkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf-8"));
 
-const { workspaceDirs } = await import(resolve(root, "vitest.workspace.ts"));
-const workspaceConfig: Array<{ test: { name: string; root: string } }> = (
-  await import(resolve(root, "vitest.workspace.ts"))
-).default;
+const mod = await import(resolve(root, "vitest.config.ts"));
+const { workspaceDirs } = mod;
+const workspaceConfig: Array<{ test: { name: string; root: string } }> =
+  mod.default.test.projects;
 
-describe("vitest.workspace.ts", () => {
+describe("vitest.config.ts", () => {
   it("excludes rules-test", () => {
     expect(workspaceDirs).not.toContain("rules-test");
   });

@@ -78,7 +78,10 @@ if [ "$EXPLICIT" = false ]; then
   done <<< "$CHANGED"
 fi
 
-# Filter rules-test: it requires Firebase emulators and is not a vitest workspace project
+# Filter rules-test: requires Firebase emulators, excluded from vitest workspace config
+if [ "$EXPLICIT" = true ] && [[ -n "${DIRTY_APPS[rules-test]+x}" ]]; then
+  echo "Warning: rules-test requires Firebase emulators; skipping from vitest run" >&2
+fi
 unset 'DIRTY_APPS[rules-test]'
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
@@ -136,7 +139,7 @@ if [ "$RUN_CI_SCRIPTS" = true ]; then
   fi
 fi
 
-# Run PR workflow script tests (skip test-helpers.sh and test-issue-state-scripts.sh which requires Firestore emulator)
+# Run PR workflow script tests (skip test-helpers.sh -- sourced library, not a test; skip test-issue-state-scripts.sh -- requires Firestore emulator)
 if [ "$RUN_PR_SCRIPTS" = true ]; then
   echo "=== PR workflow script tests ==="
   PR_SCRIPT_FAIL=false
