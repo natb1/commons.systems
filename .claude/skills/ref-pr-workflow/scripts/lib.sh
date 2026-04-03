@@ -153,7 +153,7 @@ get_tmpdir() {
 
 # Build a space-delimited exclusion set of the current process and all its
 # ancestors up to PID 1. Used to avoid self-termination in kill functions.
-# Output: string like " 123 456 1 " (leading/trailing spaces for substring match)
+# Output: string like " 1234 567 " (leading/trailing spaces for substring match)
 _ancestor_pids() {
   local result=" $$ "
   local ancestor=$$
@@ -167,7 +167,7 @@ _ancestor_pids() {
 
 # Collect all PIDs in a process tree (depth-first, children before parent).
 # Args: $1 = root PID
-# Output: one PID per line, leaves first (children receive signals before their parent)
+# Output: one PID per line, leaves first (children listed before their parent)
 _collect_tree_pids() {
   local pid="$1"
   local children
@@ -255,7 +255,7 @@ delete_preview_channel() {
 
 # Remove the emulator hub file if the PID recorded in it is dead.
 # Uses worktree-scoped project ID so each worktree manages its own hub file.
-# (PID recycling could theoretically prevent cleanup — the hub file would be kept — but this is negligible in practice.)
+# (If the PID is recycled by an unrelated process, kill -0 succeeds and the stale hub file is preserved. This is negligible in practice.)
 cleanup_stale_hub() {
   local tmpdir
   tmpdir="$(get_tmpdir)"
@@ -273,6 +273,7 @@ cleanup_stale_hub() {
 }
 
 # Kill all processes whose command-line args contain the given worktree path.
+# Uses fixed-string substring matching on process args.
 # Excludes the current process and its ancestors to avoid self-termination.
 # Args: $1 = absolute worktree path (e.g., output of `git rev-parse --show-toplevel`)
 kill_worktree_processes() {
@@ -280,7 +281,7 @@ kill_worktree_processes() {
 
   local ps_output pids
   ps_output=$(ps -axo pid=,args= 2>/dev/null) || true
-  pids=$(printf '%s\n' "$ps_output" | grep -F "$wt_path" | awk '{print $1}') || true
+  pids=$(printf '%s\n' "$ps_output" | grep -F "$wt_path/" | awk '{print $1}') || true
   [ -z "$pids" ] && return 0
 
   local exclude_pids
@@ -340,6 +341,7 @@ cleanup_stale_worktree_processes() {
 
     # Kill only if this worktree path is not in the active set
     if [[ "$active_paths" != *"$wt_path "* ]]; then
+      kill -0 "$pid" 2>/dev/null || continue
       echo "Stale worktree process: PID $pid (worktree: $wt_path)"
       kill_tree "$pid"
     fi

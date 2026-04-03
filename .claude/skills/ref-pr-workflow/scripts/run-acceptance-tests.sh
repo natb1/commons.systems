@@ -140,12 +140,12 @@ CONFIG_JSON="$CONFIG_JSON, \"emulators\": $EMULATORS_JSON}"
 
 echo "$CONFIG_JSON" > "$TEMP_FIREBASE_JSON"
 
-# Capture worktree path now — git may not be available during trap cleanup
+# Capture worktree path now — working directory may change before trap fires, causing git rev-parse to fail
 WT_PATH="$(git rev-parse --show-toplevel)"
 
 # Cleanup on exit: kill all processes for this worktree, remove stale hub and temp config
 cleanup() {
-  kill_worktree_processes "$WT_PATH"
+  kill_worktree_processes "$WT_PATH" || echo "WARNING: kill_worktree_processes failed" >&2
   cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
   rm -f "$TEMP_FIREBASE_JSON"
 }
