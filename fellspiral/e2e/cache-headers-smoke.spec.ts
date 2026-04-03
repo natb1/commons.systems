@@ -15,12 +15,13 @@ test.describe("cache headers smoke", () => {
       if (!el) return null;
       return el.getAttribute("src") ?? el.getAttribute("href");
     });
-    expect(assetUrl).not.toBeNull();
+    expect(assetUrl, "No script[src^='/assets/'] or stylesheet[href^='/assets/'] found on page").not.toBeNull();
 
     const assetResponse = await page.goto(assetUrl!);
     expect(assetResponse).not.toBeNull();
     expect(assetResponse!.status()).toBe(200);
-    const cacheControl = assetResponse!.headers()["cache-control"] ?? "";
+    const cacheControl = assetResponse!.headers()["cache-control"];
+    expect(cacheControl, "cache-control header missing from asset response").toBeDefined();
     expect(cacheControl).toContain("public, max-age=31536000, immutable");
   });
 
@@ -30,16 +31,17 @@ test.describe("cache headers smoke", () => {
     expect(response!.status()).toBe(200);
 
     const imageUrl = await page.evaluate(() => {
-      const img = document.querySelector("img[src]");
+      const img = document.querySelector('img[src^="/"]');
       if (!img) return null;
       return img.getAttribute("src");
     });
-    expect(imageUrl).not.toBeNull();
+    expect(imageUrl, "No <img src='/...'> element found on page").not.toBeNull();
 
     const imageResponse = await page.goto(imageUrl!);
     expect(imageResponse).not.toBeNull();
     expect(imageResponse!.status()).toBe(200);
-    const cacheControl = imageResponse!.headers()["cache-control"] ?? "";
-    expect(cacheControl).toContain("public, max-age=86400");
+    const imgCacheControl = imageResponse!.headers()["cache-control"];
+    expect(imgCacheControl, "cache-control header missing from image response").toBeDefined();
+    expect(imgCacheControl).toContain("public, max-age=86400");
   });
 });
