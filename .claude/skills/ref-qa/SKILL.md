@@ -32,7 +32,7 @@ Step 8. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
   - **Expected**: what success looks like
   ```
   Include key behaviors to verify, edge cases, and expected outcomes.
-- Write the QA testing plan to `tmp/qa-plan-<N>.txt`
+- The QA testing plan is part of the wiggum-loop plan (written in plan mode at Step 0) — do not write it to a temp file
 
 **Claude-driven browser demo** (after writing QA plan):
 
@@ -69,7 +69,7 @@ Claude walks through the QA plan one item at a time in the user's browser. For e
 - Keep the QA server running for the user to retest
 
 **Progress report instructions:**
-- Invoke `/pr-workflow-progress-report` with `FILE_PREFIX=qa PR_NUM=<pr-num> ITERATION=<N>`, using `qa-plan-<N>.txt` as the output file
+- Invoke `/pr-workflow-progress-report` with `FILE_PREFIX=qa PR_NUM=<pr-num> ITERATION=<N>` (no output file — the QA plan lives in plan mode, not a temp file)
 
 **Termination instructions:**
 - Stop the QA server (`run-qa-server.sh`) if started: kill the background Task
