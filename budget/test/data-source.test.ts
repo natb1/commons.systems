@@ -25,9 +25,14 @@ vi.mock("../src/firestore.js", () => ({
   getNormalizationRules: vi.fn(),
 }));
 
+vi.mock("virtual:budget-seed-data", async () => {
+  const { SEED_DATA_MOCK } = await import("./fixtures/seed-data-mock");
+  return { default: SEED_DATA_MOCK };
+});
+
 import { Timestamp } from "firebase/firestore";
 import { storeParsedData, closeDb } from "../src/idb";
-import { IdbDataSource, FirestoreSeedDataSource } from "../src/data-source";
+import { IdbDataSource, SeedDataSource } from "../src/data-source";
 import type { TransactionId, BudgetPeriodId, RuleId } from "../src/firestore";
 import { makeParsedData } from "./helpers";
 
@@ -266,11 +271,12 @@ describe("IdbDataSource", () => {
   });
 });
 
-describe("FirestoreSeedDataSource", () => {
+describe("SeedDataSource", () => {
   it("rejects with 'Seed data is read-only' for write methods", async () => {
-    const ds = new FirestoreSeedDataSource();
+    const ds = new SeedDataSource();
     await expect(ds.updateTransaction()).rejects.toThrow("Seed data is read-only");
     await expect(ds.updateBudget()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.updateBudgetOverrides()).rejects.toThrow("Seed data is read-only");
     await expect(ds.adjustBudgetPeriodTotal()).rejects.toThrow("Seed data is read-only");
     await expect(ds.createRule()).rejects.toThrow("Seed data is read-only");
     await expect(ds.updateRule()).rejects.toThrow("Seed data is read-only");
@@ -278,5 +284,107 @@ describe("FirestoreSeedDataSource", () => {
     await expect(ds.createNormalizationRule()).rejects.toThrow("Seed data is read-only");
     await expect(ds.updateNormalizationRule()).rejects.toThrow("Seed data is read-only");
     await expect(ds.deleteNormalizationRule()).rejects.toThrow("Seed data is read-only");
+  });
+
+  it("getTransactions returns all seed transactions with Timestamp objects", async () => {
+    const ds = new SeedDataSource();
+    const txns = await ds.getTransactions();
+    expect(txns).toHaveLength(3);
+    expect(txns[0].id).toBe("seed-txn-1");
+    expect(txns[0].description).toBe("GROCERY STORE");
+    expect(txns[0].timestamp).not.toBeNull();
+    expect(txns[0].timestamp!.toMillis()).toBe(1700000000000);
+    expect(txns[0].groupId).toBeNull();
+  });
+
+  it("getTransactions with since filter excludes earlier and null timestamps", async () => {
+    const ds = new SeedDataSource();
+    const txns = await ds.getTransactions({ since: Timestamp.fromMillis(1700050000000) });
+    const ids = txns.map(t => t.id);
+    expect(ids).toContain("seed-txn-2");
+    expect(ids).not.toContain("seed-txn-1");
+    expect(ids).not.toContain("seed-txn-null-ts");
+  });
+
+  it("getTransactions with before filter excludes later timestamps, includes nulls", async () => {
+    const ds = new SeedDataSource();
+    const txns = await ds.getTransactions({ before: Timestamp.fromMillis(1700050000000) });
+    const ids = txns.map(t => t.id);
+    expect(ids).toContain("seed-txn-1");
+    expect(ids).toContain("seed-txn-null-ts");
+    expect(ids).not.toContain("seed-txn-2");
+  });
+
+  it("getTransactions with since + before returns range, excludes nulls", async () => {
+    const ds = new SeedDataSource();
+    const txns = await ds.getTransactions({
+      since: Timestamp.fromMillis(1700000000000),
+      before: Timestamp.fromMillis(1700100000000),
+    });
+    const ids = txns.map(t => t.id);
+    expect(ids).toEqual(["seed-txn-1"]);
+  });
+
+  it("getBudgets returns seed budgets with Timestamp overrides", async () => {
+    const ds = new SeedDataSource();
+    const budgets = await ds.getBudgets();
+    expect(budgets).toHaveLength(1);
+    expect(budgets[0].id).toBe("food");
+    expect(budgets[0].name).toBe("Food");
+    expect(budgets[0].allowance).toBe(150);
+    expect(budgets[0].overrides).toHaveLength(1);
+    expect(budgets[0].overrides[0].date.toMillis()).toBe(1699900000000);
+    expect(budgets[0].overrides[0].balance).toBe(200);
+    expect(budgets[0].groupId).toBeNull();
+  });
+
+  it("getBudgetPeriods returns seed periods with Timestamp objects", async () => {
+    const ds = new SeedDataSource();
+    const periods = await ds.getBudgetPeriods();
+    expect(periods).toHaveLength(1);
+    expect(periods[0].id).toBe("bp-seed-1");
+    expect(periods[0].periodStart.toMillis()).toBe(1699900000000);
+    expect(periods[0].periodEnd.toMillis()).toBe(1700504800000);
+    expect(periods[0].total).toBe(45.67);
+    expect(periods[0].groupId).toBeNull();
+  });
+
+  it("getRules returns seed rules", async () => {
+    const ds = new SeedDataSource();
+    const rules = await ds.getRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe("rule-1");
+    expect(rules[0].pattern).toBe("GROCERY");
+    expect(rules[0].groupId).toBeNull();
+  });
+
+  it("getNormalizationRules returns seed normalization rules", async () => {
+    const ds = new SeedDataSource();
+    const rules = await ds.getNormalizationRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe("nrule-1");
+    expect(rules[0].canonicalDescription).toBe("GROCERY STORE");
+    expect(rules[0].groupId).toBeNull();
+  });
+
+  it("getStatements returns seed statements with Timestamp objects", async () => {
+    const ds = new SeedDataSource();
+    const stmts = await ds.getStatements();
+    expect(stmts).toHaveLength(1);
+    expect(stmts[0].statementId).toBe("stmt-1");
+    expect(stmts[0].lastTransactionDate).not.toBeNull();
+    expect(stmts[0].lastTransactionDate!.toMillis()).toBe(1700000000000);
+    expect(stmts[0].groupId).toBeNull();
+  });
+
+  it("getWeeklyAggregates returns seed aggregates with Timestamp objects", async () => {
+    const ds = new SeedDataSource();
+    const aggs = await ds.getWeeklyAggregates();
+    expect(aggs).toHaveLength(1);
+    expect(aggs[0].id).toBe("2023-11-13");
+    expect(aggs[0].weekStart.toMillis()).toBe(1699833600000);
+    expect(aggs[0].creditTotal).toBe(500);
+    expect(aggs[0].unbudgetedTotal).toBe(75);
+    expect(aggs[0].groupId).toBeNull();
   });
 });

@@ -2,4 +2,5 @@
 export const ALLOWED_FEED_URLS: ReadonlySet<string> = new Set([
   "https://www.bastionland.com/feeds/posts/default",
   "https://newschoolrevolution.com/feed/",
+  "https://www.prismaticwasteland.com/?format=rss",
 ]);

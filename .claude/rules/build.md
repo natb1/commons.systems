@@ -2,13 +2,10 @@
 
 This is an npm workspace. All packages share dependencies installed at the workspace root.
 
-## Install dependencies first
+## Dependencies
 
-Before any build or type-check, ensure dependencies exist at the workspace root:
-
-```bash
-[ -d node_modules ] || npm ci
-```
+Dependencies are installed automatically by direnv when entering a worktree (via `.envrc`).
+Wrapper scripts also call `ensure_deps()` as a safety net.
 
 Never run `npm install --prefix <pkg>` for individual packages — workspace dependencies
 (`@commons-systems/*`) are not on the npm registry and will fail with E404.

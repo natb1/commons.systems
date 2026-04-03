@@ -163,4 +163,59 @@ describe("generateRssXml", () => {
   it("throws when config.feedUrl is empty", () => {
     expect(() => generateRssXml(posts, { ...config, feedUrl: "" })).toThrow("RssConfig.feedUrl is required");
   });
+
+  it("includes enclosure when previewImage is present", () => {
+    const withImage: RssPost[] = [
+      { id: "img-post", title: "Image Post", previewImage: "/blog-map.jpg" },
+    ];
+    const xml = generateRssXml(withImage, config);
+    expect(xml).toContain('<enclosure url="https://commons.systems/blog-map.jpg" type="image/jpeg" length="0" />');
+  });
+
+  it("omits enclosure when previewImage is absent", () => {
+    const xml = generateRssXml(posts, config);
+    expect(xml).not.toContain("<enclosure");
+  });
+
+  it("detects png content type for .png images", () => {
+    const withPng: RssPost[] = [
+      { id: "png-post", title: "PNG Post", previewImage: "/tile.png" },
+    ];
+    const xml = generateRssXml(withPng, config);
+    expect(xml).toContain('type="image/png"');
+  });
+
+  it("detects webp content type for .webp images", () => {
+    const withWebp: RssPost[] = [
+      { id: "webp-post", title: "WebP Post", previewImage: "/photo.webp" },
+    ];
+    const xml = generateRssXml(withWebp, config);
+    expect(xml).toContain('type="image/webp"');
+  });
+
+  it("detects jpeg content type for .jpeg extension", () => {
+    const withJpeg: RssPost[] = [
+      { id: "jpeg-post", title: "JPEG Post", previewImage: "/photo.jpeg" },
+    ];
+    const xml = generateRssXml(withJpeg, config);
+    expect(xml).toContain('type="image/jpeg"');
+  });
+
+  it("throws on unrecognized image extension", () => {
+    const withGif: RssPost[] = [
+      { id: "gif-post", title: "GIF Post", previewImage: "/anim.gif" },
+    ];
+    expect(() => generateRssXml(withGif, config)).toThrow(
+      'Unsupported image extension for RSS enclosure: "/anim.gif"',
+    );
+  });
+
+  it("throws when previewImage is not root-relative", () => {
+    const withAbsolute: RssPost[] = [
+      { id: "abs-post", title: "Abs Post", previewImage: "https://example.com/img.jpg" },
+    ];
+    expect(() => generateRssXml(withAbsolute, config)).toThrow(
+      'previewImage must be a root-relative path, got: "https://example.com/img.jpg"',
+    );
+  });
 });

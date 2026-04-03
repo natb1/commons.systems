@@ -1,10 +1,18 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 
+function imageContentType(path: string): string {
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".webp")) return "image/webp";
+  throw new Error(`Unsupported image extension for RSS enclosure: "${path}"`);
+}
+
 export interface RssPost {
   id: string;
   title: string;
   publishedAt?: string;
   previewDescription?: string;
+  previewImage?: string;
 }
 
 export interface RssConfig {
@@ -42,10 +50,18 @@ export function generateRssXml(posts: RssPost[], config: RssConfig): string {
       const descTag = p.previewDescription
         ? `\n      <description>${escapeHtml(p.previewDescription)}</description>`
         : "";
+      let enclosureTag = "";
+      if (p.previewImage) {
+        if (!p.previewImage.startsWith("/")) {
+          throw new Error(`previewImage must be a root-relative path, got: "${p.previewImage}"`);
+        }
+        // length="0": file size unknown at build time; RSS aggregators tolerate this
+        enclosureTag = `\n      <enclosure url="${escapeHtml(config.siteUrl)}${escapeHtml(p.previewImage)}" type="${imageContentType(p.previewImage)}" length="0" />`;
+      }
       return `    <item>
       <title>${escapeHtml(p.title)}</title>
       <link>${postUrl}</link>
-      <guid isPermaLink="true">${postUrl}</guid>${pubDateTag}${descTag}
+      <guid isPermaLink="true">${postUrl}</guid>${pubDateTag}${descTag}${enclosureTag}
     </item>`;
     })
     .join("\n");

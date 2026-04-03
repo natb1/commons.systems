@@ -37,6 +37,7 @@ export function buildFeedXml(config: FeedXmlConfig): string {
       title: data.title,
       publishedAt: typeof data.publishedAt === "string" ? data.publishedAt : undefined,
       previewDescription: typeof data.previewDescription === "string" ? data.previewDescription : undefined,
+      previewImage: typeof data.previewImage === "string" ? data.previewImage : undefined,
     });
   }
 

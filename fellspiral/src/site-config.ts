@@ -7,7 +7,7 @@ export const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
   {
     links: [
       { label: "itch.io", url: "https://natethenoob.itch.io" },
-      { label: "No Land Beyond", subtitle: "Find a Local Game in Baltimore", url: "https://discord.gg/MxXHfyY3" },
+      { label: "No Land Beyond", subtitle: "Find a Local Game in Baltimore", url: "https://discord.gg/sFHXtyF" },
     ],
   },
   {
@@ -16,6 +16,7 @@ export const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
       { label: "Mythic Bastionland", url: "https://chrismcdee.itch.io/mythic-bastionland" },
       { label: "ALIEN", url: "https://freeleaguepublishing.com/games/alien/" },
       { label: "Cairn", url: "https://cairnrpg.com/" },
+      { label: "Triangle Agency", url: "https://shop.hauntedtable.games/" },
     ],
   },
 ];

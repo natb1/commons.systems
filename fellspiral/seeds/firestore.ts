@@ -30,6 +30,18 @@ export const postDocuments: SeedDocument<PostSeedData>[] = [
       previewDescription: "d10 Scenes from Armadillo Crag: On approaching any landmark near Armadillo crag, roll 2 scenes from this table.",
     },
   },
+  {
+    id: "the-surreal",
+    data: {
+      title: "The Surreal: Returning to the Darkness",
+      published: true,
+      publishedAt: "2026-04-02T00:00:00Z",
+      filename: "the-surreal.md",
+      previewImage: "/blog-map-color.jpg",
+      previewDescription:
+        "By following this map, each level of the darkness can be escaped, but at a cost.",
+    },
+  },
 ];
 
 const appSeed: Omit<SeedSpec, "namespace"> = {

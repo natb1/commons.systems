@@ -7,7 +7,7 @@ export interface RenderPageOptions {
   dataSource: DataSource;
 }
 
-export function renderPageNotices(options: RenderPageOptions, entityLabel: string): string {
+export function renderPageNotices(options: { authorized: boolean }, entityLabel: string): string {
   if (options.authorized) return "";
   return `<p id="seed-data-notice">Viewing example data. Load a data file to see your ${entityLabel}.</p>`;
 }
