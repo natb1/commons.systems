@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Unit tests for PID file cleanup functions in lib.sh
+# Unit tests for worktree-path process cleanup functions in lib.sh
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
@@ -28,233 +28,202 @@ fail() {
 cd "$REPO_ROOT"
 source "$SCRIPT_DIR/lib.sh"
 
-echo "=== Test: write_pid_file creates correct JSON ==="
+echo "=== Test: kill_worktree_processes finds and kills by path ==="
 (
   source "$SCRIPT_DIR/lib.sh"
-  get_tmpdir() { printf '%s' "$TEST_TMPDIR"; }
+  TEST_WT="/fake/worktrees/test-kill-$$"
 
-  sleep 300 &
-  SLEEP_PID=$!
-  trap 'kill $SLEEP_PID 2>/dev/null || true' EXIT
-
-  write_pid_file "${SLEEP_PID}:sleep"
-
-  project_id="$(get_emulator_project_id)"
-  pid_file="${TEST_TMPDIR}/pids-${project_id}.json"
-
-  if [ ! -f "$pid_file" ]; then
-    fail "PID file not created"
-    exit 1
-  fi
-
-  hub_pid=$(jq -r '.hub_pid' "$pid_file")
-  worktree_path=$(jq -r '.worktree_path' "$pid_file")
-  proc_pid=$(jq -r '.processes[0].pid' "$pid_file")
-  proc_cmd=$(jq -r '.processes[0].cmd' "$pid_file")
-
-  if [ "$hub_pid" = "$$" ] && [ "$worktree_path" = "$(git rev-parse --show-toplevel)" ] && \
-     [ "$proc_pid" = "$SLEEP_PID" ] && [ "$proc_cmd" = "sleep" ]; then
-    pass "write_pid_file creates correct JSON"
-  else
-    fail "write_pid_file JSON incorrect (hub_pid=$hub_pid, proc_pid=$proc_pid, proc_cmd=$proc_cmd)"
-  fi
-
-  kill "$SLEEP_PID" 2>/dev/null || true
-  rm -f "$pid_file"
-)
-
-echo ""
-echo "=== Test: write_pid_file with multiple processes ==="
-(
-  source "$SCRIPT_DIR/lib.sh"
-  get_tmpdir() { printf '%s' "$TEST_TMPDIR"; }
-
-  sleep 300 &
+  # Spawn processes with the fake worktree path in their args
+  perl -e 'sleep 300' -- "$TEST_WT/sentinel1" &
   PID1=$!
-  sleep 300 &
+  perl -e 'sleep 300' -- "$TEST_WT/sentinel2" &
   PID2=$!
-  trap 'kill $PID1 $PID2 2>/dev/null || true' EXIT
+  trap 'kill -9 $PID1 $PID2 2>/dev/null || true' EXIT
+  sleep 0.3
 
-  write_pid_file "${PID1}:node" "${PID2}:java"
+  kill_worktree_processes "$TEST_WT"
 
-  project_id="$(get_emulator_project_id)"
-  pid_file="${TEST_TMPDIR}/pids-${project_id}.json"
+  alive=0
+  kill -0 "$PID1" 2>/dev/null && alive=$((alive + 1))
+  kill -0 "$PID2" 2>/dev/null && alive=$((alive + 1))
 
-  count=$(jq '.processes | length' "$pid_file")
-  if [ "$count" = "2" ]; then
-    pass "write_pid_file records multiple processes"
+  if [ "$alive" -eq 0 ]; then
+    pass "kill_worktree_processes kills matching processes"
   else
-    fail "expected 2 processes, got $count"
-  fi
-
-  kill "$PID1" "$PID2" 2>/dev/null || true
-  rm -f "$pid_file"
-)
-
-echo ""
-echo "=== Test: remove_pid_file cleans up ==="
-(
-  source "$SCRIPT_DIR/lib.sh"
-  get_tmpdir() { printf '%s' "$TEST_TMPDIR"; }
-
-  sleep 300 &
-  SLEEP_PID=$!
-  trap 'kill $SLEEP_PID 2>/dev/null || true' EXIT
-
-  write_pid_file "${SLEEP_PID}:sleep"
-
-  project_id="$(get_emulator_project_id)"
-  pid_file="${TEST_TMPDIR}/pids-${project_id}.json"
-
-  if [ ! -f "$pid_file" ]; then
-    fail "PID file not created for remove test"
-    exit 1
-  fi
-
-  remove_pid_file
-
-  if [ ! -f "$pid_file" ]; then
-    pass "remove_pid_file removes the file"
-  else
-    fail "PID file still exists after remove_pid_file"
-  fi
-
-  kill "$SLEEP_PID" 2>/dev/null || true
-)
-
-echo ""
-echo "=== Test: cleanup kills orphans from dead parent ==="
-(
-  source "$SCRIPT_DIR/lib.sh"
-  get_tmpdir() { printf '%s' "$TEST_TMPDIR"; }
-
-  sleep 300 &
-  ORPHAN_PID=$!
-
-  project_id="$(get_emulator_project_id)"
-  pid_file="${TEST_TMPDIR}/pids-${project_id}.json"
-  worktree_path="$(git rev-parse --show-toplevel)"
-
-  # PID 1999999 should not exist — simulates dead hub
-  cat > "$pid_file" <<EOF
-{"hub_pid": 1999999, "worktree_path": "$worktree_path", "processes": [{"pid": $ORPHAN_PID, "cmd": "sleep"}]}
-EOF
-
-  cleanup_all_stale_processes
-
-  sleep 0.2
-
-  if kill -0 "$ORPHAN_PID" 2>/dev/null; then
-    fail "orphaned process $ORPHAN_PID still alive after cleanup"
-    kill "$ORPHAN_PID" 2>/dev/null || true
-  else
-    pass "cleanup kills orphan from dead parent"
-  fi
-
-  if [ ! -f "$pid_file" ]; then
-    pass "cleanup removes PID file for dead parent"
-  else
-    fail "PID file still exists after cleanup"
-    rm -f "$pid_file"
+    fail "kill_worktree_processes left $alive processes alive"
+    kill -9 "$PID1" "$PID2" 2>/dev/null || true
   fi
 )
 
 echo ""
-echo "=== Test: cleanup kills orphans from deleted worktree ==="
+echo "=== Test: kill_worktree_processes ignores other worktree processes ==="
 (
   source "$SCRIPT_DIR/lib.sh"
-  get_tmpdir() { printf '%s' "$TEST_TMPDIR"; }
+  TARGET_WT="/fake/worktrees/target-$$"
+  OTHER_WT="/fake/worktrees/other-$$"
 
-  sleep 300 &
-  ORPHAN_PID=$!
+  perl -e 'sleep 300' -- "$TARGET_WT/sentinel" &
+  TARGET_PID=$!
+  perl -e 'sleep 300' -- "$OTHER_WT/sentinel" &
+  OTHER_PID=$!
+  trap 'kill -9 $TARGET_PID $OTHER_PID 2>/dev/null || true' EXIT
+  sleep 0.3
 
-  project_id="$(get_emulator_project_id)"
-  pid_file="${TEST_TMPDIR}/pids-${project_id}-wt-deleted.json"
+  kill_worktree_processes "$TARGET_WT"
 
-  # Use a nonexistent worktree path — simulates deleted worktree
-  cat > "$pid_file" <<EOF
-{"hub_pid": $$, "worktree_path": "/nonexistent/worktree/path", "processes": [{"pid": $ORPHAN_PID, "cmd": "sleep"}]}
-EOF
+  target_alive=false
+  other_alive=false
+  kill -0 "$TARGET_PID" 2>/dev/null && target_alive=true
+  kill -0 "$OTHER_PID" 2>/dev/null && other_alive=true
 
-  cleanup_all_stale_processes
-
-  sleep 0.2
-
-  if kill -0 "$ORPHAN_PID" 2>/dev/null; then
-    fail "orphaned process $ORPHAN_PID still alive after deleted-worktree cleanup"
-    kill "$ORPHAN_PID" 2>/dev/null || true
+  if [ "$target_alive" = false ] && [ "$other_alive" = true ]; then
+    pass "kill_worktree_processes only kills matching path"
   else
-    pass "cleanup kills orphan from deleted worktree"
+    fail "target alive=$target_alive (want false), other alive=$other_alive (want true)"
   fi
 
-  if [ ! -f "$pid_file" ]; then
-    pass "cleanup removes PID file for deleted worktree"
+  kill -9 "$TARGET_PID" "$OTHER_PID" 2>/dev/null || true
+)
+
+echo ""
+echo "=== Test: kill_tree escalates to SIGKILL ==="
+(
+  source "$SCRIPT_DIR/lib.sh"
+
+  # Spawn a process that traps SIGTERM (refuses to die)
+  bash -c 'trap "" TERM; sleep 300' &
+  STUBBORN_PID=$!
+  trap 'kill -9 $STUBBORN_PID 2>/dev/null || true' EXIT
+  sleep 0.3
+
+  kill_tree "$STUBBORN_PID"
+  # kill_tree sleeps 2s internally, then SIGKILLs. Give a small buffer.
+  sleep 0.5
+
+  if kill -0 "$STUBBORN_PID" 2>/dev/null; then
+    fail "kill_tree did not SIGKILL stubborn process"
+    kill -9 "$STUBBORN_PID" 2>/dev/null || true
   else
-    fail "PID file still exists after deleted-worktree cleanup"
-    rm -f "$pid_file"
+    pass "kill_tree escalates to SIGKILL for stubborn processes"
   fi
 )
 
 echo ""
-echo "=== Test: cleanup skips active processes with live hub ==="
+echo "=== Test: kill_tree kills descendants ==="
 (
   source "$SCRIPT_DIR/lib.sh"
-  get_tmpdir() { printf '%s' "$TEST_TMPDIR"; }
 
-  sleep 300 &
-  LIVE_PID=$!
-  trap 'kill $LIVE_PID 2>/dev/null || true' EXIT
+  # Spawn a parent with a child
+  bash -c 'sleep 300 & wait' &
+  PARENT_PID=$!
+  sleep 0.3
 
-  project_id="$(get_emulator_project_id)"
-  pid_file="${TEST_TMPDIR}/pids-${project_id}-live.json"
-  worktree_path="$(git rev-parse --show-toplevel)"
+  # Find the child sleep process
+  CHILD_PID=$(pgrep -P "$PARENT_PID" 2>/dev/null | head -1) || true
+  trap 'kill -9 $PARENT_PID $CHILD_PID 2>/dev/null || true' EXIT
 
-  # Use current PID ($$) as hub — it's alive, worktree exists
-  cat > "$pid_file" <<EOF
-{"hub_pid": $$, "worktree_path": "$worktree_path", "processes": [{"pid": $LIVE_PID, "cmd": "sleep"}]}
-EOF
-
-  cleanup_all_stale_processes
-
-  if kill -0 "$LIVE_PID" 2>/dev/null; then
-    pass "cleanup skips active process with live hub"
+  if [ -z "$CHILD_PID" ]; then
+    fail "could not find child process for kill_tree descendant test"
   else
-    fail "cleanup killed a process that should have been skipped"
-  fi
+    kill_tree "$PARENT_PID"
+    sleep 0.5
 
-  kill "$LIVE_PID" 2>/dev/null || true
-  rm -f "$pid_file"
+    parent_dead=true
+    child_dead=true
+    kill -0 "$PARENT_PID" 2>/dev/null && parent_dead=false
+    kill -0 "$CHILD_PID" 2>/dev/null && child_dead=false
+
+    if [ "$parent_dead" = true ] && [ "$child_dead" = true ]; then
+      pass "kill_tree kills parent and descendants"
+    else
+      fail "parent dead=$parent_dead, child dead=$child_dead (both should be true)"
+      kill -9 "$PARENT_PID" "$CHILD_PID" 2>/dev/null || true
+    fi
+  fi
 )
 
 echo ""
-echo "=== Test: command name mismatch guards PID recycling ==="
+echo "=== Test: cleanup_stale_worktree_processes kills stale, keeps active ==="
+(
+  source "$SCRIPT_DIR/lib.sh"
+  REAL_WT="$(git rev-parse --show-toplevel)"
+  STALE_WT="/fake/worktrees/deleted-$$"
+
+  # Process from a real active worktree
+  perl -e 'sleep 300' -- "$REAL_WT/sentinel" &
+  ACTIVE_PID=$!
+  # Process from a stale (non-existent) worktree
+  perl -e 'sleep 300' -- "$STALE_WT/sentinel" &
+  STALE_PID=$!
+  trap 'kill -9 $ACTIVE_PID $STALE_PID 2>/dev/null || true' EXIT
+  sleep 0.3
+
+  cleanup_stale_worktree_processes
+
+  active_alive=false
+  stale_alive=false
+  kill -0 "$ACTIVE_PID" 2>/dev/null && active_alive=true
+  kill -0 "$STALE_PID" 2>/dev/null && stale_alive=true
+
+  if [ "$active_alive" = true ]; then
+    pass "cleanup keeps active worktree process alive"
+  else
+    fail "cleanup killed active worktree process"
+  fi
+
+  if [ "$stale_alive" = false ]; then
+    pass "cleanup kills stale worktree process"
+  else
+    fail "cleanup left stale worktree process alive"
+    kill -9 "$STALE_PID" 2>/dev/null || true
+  fi
+
+  kill -9 "$ACTIVE_PID" 2>/dev/null || true
+)
+
+echo ""
+echo "=== Test: cleanup_stale_hub removes stale hub file ==="
 (
   source "$SCRIPT_DIR/lib.sh"
   get_tmpdir() { printf '%s' "$TEST_TMPDIR"; }
 
-  sleep 300 &
-  SAFE_PID=$!
-  trap 'kill $SAFE_PID 2>/dev/null || true' EXIT
+  project_id="$(get_emulator_project_id)"
+  hub_file="${TEST_TMPDIR}/hub-${project_id}.json"
+
+  # Create a hub file with a dead PID
+  echo '{"pid": 1999999}' > "$hub_file"
+
+  cleanup_stale_hub
+
+  if [ ! -f "$hub_file" ]; then
+    pass "cleanup_stale_hub removes stale hub file"
+  else
+    fail "cleanup_stale_hub did not remove stale hub file"
+    rm -f "$hub_file"
+  fi
+)
+
+echo ""
+echo "=== Test: cleanup_stale_hub keeps live hub file ==="
+(
+  source "$SCRIPT_DIR/lib.sh"
+  get_tmpdir() { printf '%s' "$TEST_TMPDIR"; }
 
   project_id="$(get_emulator_project_id)"
-  pid_file="${TEST_TMPDIR}/pids-${project_id}-mismatch.json"
-  worktree_path="$(git rev-parse --show-toplevel)"
+  hub_file="${TEST_TMPDIR}/hub-${project_id}.json"
 
-  # PID file claims this is "not_sleep" but it's actually "sleep"
-  cat > "$pid_file" <<EOF
-{"hub_pid": 1999999, "worktree_path": "$worktree_path", "processes": [{"pid": $SAFE_PID, "cmd": "not_sleep"}]}
-EOF
+  # Create a hub file with a live PID (current process)
+  echo "{\"pid\": $$}" > "$hub_file"
 
-  cleanup_all_stale_processes
+  cleanup_stale_hub
 
-  if kill -0 "$SAFE_PID" 2>/dev/null; then
-    pass "command name mismatch prevents killing recycled PID"
+  if [ -f "$hub_file" ]; then
+    pass "cleanup_stale_hub keeps live hub file"
   else
-    fail "cleanup killed a process despite command name mismatch"
+    fail "cleanup_stale_hub removed a live hub file"
   fi
 
-  kill "$SAFE_PID" 2>/dev/null || true
-  rm -f "$pid_file"
+  rm -f "$hub_file"
 )
 
 FINAL_PASS=$(cat "$PASS_FILE")

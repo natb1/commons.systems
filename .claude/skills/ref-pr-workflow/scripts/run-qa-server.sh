@@ -13,7 +13,7 @@ source "$SCRIPT_DIR/lib.sh"
 APP_NAME=$(get_app_name "$APP_DIR")
 EMULATOR_PROJECT_ID=$(get_emulator_project_id)
 
-cleanup_all_stale_processes
+cleanup_stale_worktree_processes
 cleanup_stale_hub
 
 ensure_deps
@@ -104,21 +104,15 @@ CONFIG_JSON="$CONFIG_JSON\"emulators\": $EMULATORS_JSON}"
 
 echo "$CONFIG_JSON" > "$TEMP_FIREBASE_JSON"
 
-# Cleanup on exit: kill Vite + emulators, remove stale hub and temp config files
+# Cleanup on exit: kill all processes for this worktree, remove stale hub and temp config
 EMULATOR_PID=""
 VITE_PID=""
 cleanup() {
   echo ""
   echo "Shutting down..."
-  if [ -n "$VITE_PID" ]; then
-    kill_tree "$VITE_PID"
-    wait "$VITE_PID" 2>/dev/null || true
-  fi
-  if [ -n "$EMULATOR_PID" ]; then
-    kill_tree "$EMULATOR_PID"
-    wait "$EMULATOR_PID" 2>/dev/null || true
-  fi
-  remove_pid_file || echo "WARNING: remove_pid_file failed" >&2
+  local wt_path
+  wt_path="$(git rev-parse --show-toplevel)"
+  kill_worktree_processes "$wt_path"
   cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
   rm -f "$TEMP_FIREBASE_JSON"
   echo "QA server stopped."
@@ -230,13 +224,6 @@ cd "$REPO_ROOT/$APP_DIR"
 env "${VITE_ARGS[@]}" npx vite --port "${VITE_PORT}" --strictPort &
 VITE_PID=$!
 cd "$REPO_ROOT"
-
-# Record child PIDs for orphan cleanup.
-# Both vite and firebase-tools run as "node" per `ps -o comm=`.
-PID_ARGS=()
-if [ -n "$EMULATOR_PID" ]; then PID_ARGS+=("${EMULATOR_PID}:node"); fi
-PID_ARGS+=("${VITE_PID}:node")
-write_pid_file "${PID_ARGS[@]}"
 
 # Poll until Vite is serving
 ELAPSED=0
