@@ -54,6 +54,7 @@ export function initScrollIndicator(container: HTMLElement): () => void {
     ro.disconnect();
     container.removeEventListener("scroll", update);
     window.removeEventListener("scroll", update);
+    window.removeEventListener("resize", update);
     track.remove();
   }
 
@@ -61,6 +62,7 @@ export function initScrollIndicator(container: HTMLElement): () => void {
   ro.observe(container);
   container.addEventListener("scroll", update, { passive: true });
   window.addEventListener("scroll", update, { passive: true });
+  window.addEventListener("resize", update, { passive: true });
   update();
 
   return teardown;

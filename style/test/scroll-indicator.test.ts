@@ -102,4 +102,28 @@ describe("initScrollIndicator", () => {
     container.dispatchEvent(new Event("scroll"));
     expect(document.querySelector(".sidebar-scroll-track")).toBeNull();
   });
+
+  it("repositions track on window resize", () => {
+    const { container } = setup();
+    Object.defineProperty(container, "scrollHeight", { value: 500, configurable: true });
+    Object.defineProperty(container, "clientHeight", { value: 200, configurable: true });
+    Object.defineProperty(container, "scrollTop", { value: 0, configurable: true });
+
+    container.getBoundingClientRect = () => ({
+      top: 0, left: 0, right: 300, bottom: 200, width: 300, height: 200,
+      x: 0, y: 0, toJSON() {},
+    });
+    container.dispatchEvent(new Event("scroll"));
+
+    const track = document.querySelector(".sidebar-scroll-track") as HTMLElement;
+    const initialLeft = track.style.left;
+
+    container.getBoundingClientRect = () => ({
+      top: 0, left: 0, right: 250, bottom: 200, width: 250, height: 200,
+      x: 0, y: 0, toJSON() {},
+    });
+    window.dispatchEvent(new Event("resize"));
+
+    expect(track.style.left).not.toBe(initialLeft);
+  });
 });
