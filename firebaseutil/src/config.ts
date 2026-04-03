@@ -19,7 +19,7 @@ export const firebaseConfig = {
     typeof location !== "undefined" && !location.hostname.includes("--")
       ? location.hostname
       : "commons-systems.firebaseapp.com",
-  storageBucket: "commons-systems.firebasestorage.app",
+  storageBucket: `${import.meta.env.VITE_FIREBASE_PROJECT_ID ?? "commons-systems"}.firebasestorage.app`,
 } satisfies FirebaseOptions;
 
 /** reCAPTCHA Enterprise site key for Firebase AppCheck (shared across all apps in this project). */

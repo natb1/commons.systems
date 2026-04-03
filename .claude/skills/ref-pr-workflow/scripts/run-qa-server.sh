@@ -199,7 +199,7 @@ fi
 # Seed storage emulator (if used and seed script exists)
 if [ "$USES_STORAGE" = true ] && [ -f "$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts" ]; then
   echo "Seeding storage emulator..."
-  STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${FIREBASE_PROJECT_ID}.firebasestorage.app" npx tsx "$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts"
+  STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${EMULATOR_PROJECT_ID}.firebasestorage.app" npx tsx "$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts"
 fi
 
 VITE_ARGS=()

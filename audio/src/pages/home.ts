@@ -15,6 +15,7 @@ function renderRow(item: AudioItem): string {
   return `<details class="expand-row audio-row" data-id="${escapeHtml(item.id)}" data-storage-path="${escapeHtml(item.storagePath)}" data-title="${escapeHtml(item.title)}" data-artist="${escapeHtml(item.artist)}" data-album="${escapeHtml(item.album)}">
     <summary>
       <div class="expand-summary">
+        <label class="queue-checkbox"><input type="checkbox" data-queue-toggle aria-label="Add ${escapeHtml(item.title)} to queue" /></label>
         <span class="title">${escapeHtml(item.title)}</span>
         <span class="artist">${escapeHtml(item.artist)}</span>
         <span class="album">${escapeHtml(item.album)}</span>
@@ -68,21 +69,39 @@ export function afterRenderHome(
   outlet: HTMLElement,
   player: PlayerHandle,
 ): void {
-  outlet.addEventListener("click", (e) => {
-    const summary = (e.target as HTMLElement).closest(
-      ".audio-row > summary",
+  // Sync checkbox state for any tracks already queued
+  for (const row of outlet.querySelectorAll<HTMLElement>(".audio-row")) {
+    const id = row.dataset.id;
+    if (!id) continue;
+    const checkbox = row.querySelector<HTMLInputElement>(
+      "input[data-queue-toggle]",
     );
-    if (!summary) return;
+    if (checkbox) checkbox.checked = player.isQueued(id);
+  }
 
-    const row = summary.closest(".audio-row") as HTMLElement | null;
+  // Checkbox click: add/remove from queue, prevent details toggle
+  outlet.addEventListener("click", (e) => {
+    const checkbox = (e.target as HTMLElement).closest(
+      "input[data-queue-toggle]",
+    ) as HTMLInputElement | null;
+    if (!checkbox) return;
+
+    e.stopPropagation();
+
+    const row = checkbox.closest(".audio-row") as HTMLElement | null;
     if (!row) return;
 
+    const id = row.dataset.id;
     const storagePath = row.dataset.storagePath;
     const title = row.dataset.title;
     const artist = row.dataset.artist;
     const album = row.dataset.album;
-    if (!storagePath || !title || !artist || !album) return;
+    if (!id || !storagePath || !title || !artist || !album) return;
 
-    player.play({ title, artist, album, storagePath });
+    if (checkbox.checked) {
+      player.add({ id, title, artist, album, storagePath });
+    } else {
+      player.remove(id);
+    }
   });
 }

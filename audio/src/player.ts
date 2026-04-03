@@ -3,6 +3,7 @@ import { logError } from "@commons-systems/errorutil/log";
 import { getMediaDownloadUrl } from "./storage.js";
 
 export interface PlayRequest {
+  readonly id: string;
   readonly title: string;
   readonly artist: string;
   readonly album: string;
@@ -10,7 +11,9 @@ export interface PlayRequest {
 }
 
 export interface PlayerHandle {
-  play(item: PlayRequest): void;
+  add(item: PlayRequest): void;
+  remove(id: string): void;
+  isQueued(id: string): boolean;
   destroy(): void;
 }
 
@@ -22,43 +25,106 @@ export function formatDuration(seconds: number): string {
 
 export function initPlayer(
   audioEl: HTMLAudioElement,
-  nowPlayingEl: HTMLElement,
+  playlistEl: HTMLElement,
 ): PlayerHandle {
-  function renderNowPlaying(item: PlayRequest): void {
-    nowPlayingEl.innerHTML = `
-      <p class="now-playing-title">${escapeHtml(item.title)}</p>
-      <p class="now-playing-artist">${escapeHtml(item.artist)}</p>
-      <p class="now-playing-album">${escapeHtml(item.album)}</p>
-    `;
+  const queue: PlayRequest[] = [];
+  let currentIndex = -1;
+
+  function renderPlaylist(): void {
+    if (queue.length === 0) {
+      playlistEl.innerHTML =
+        '<p class="playlist-empty">Add tracks to queue</p>';
+      return;
+    }
+    const items = queue
+      .map(
+        (item, i) =>
+          `<li${i === currentIndex ? ' aria-current="true" class="playlist-active"' : ""}>${escapeHtml(item.title)} — ${escapeHtml(item.artist)}</li>`,
+      )
+      .join("");
+    playlistEl.innerHTML = `<ol id="playlist-queue">${items}</ol>`;
   }
 
-  function showError(): void {
-    nowPlayingEl.innerHTML =
-      '<p class="now-playing-error">Could not load track.</p>';
+  function playTrack(index: number): void {
+    const item = queue[index];
+    if (!item) return;
+    currentIndex = index;
+    renderPlaylist();
+    getMediaDownloadUrl(item.storagePath)
+      .then((url) => {
+        audioEl.src = url;
+        audioEl.play().catch((err) =>
+          logError(err, { operation: "audio-play" }),
+        );
+      })
+      .catch((err) => {
+        logError(err, { operation: "audio-download-url" });
+      });
   }
+
+  function stop(): void {
+    currentIndex = -1;
+    audioEl.pause();
+    audioEl.removeAttribute("src");
+    audioEl.load();
+    renderPlaylist();
+  }
+
+  function onEnded(): void {
+    if (currentIndex < 0) return;
+    const nextIndex = currentIndex + 1;
+    if (nextIndex < queue.length) {
+      playTrack(nextIndex);
+    } else {
+      stop();
+    }
+  }
+
+  audioEl.addEventListener("ended", onEnded);
+  renderPlaylist();
 
   return {
-    play(item: PlayRequest): void {
-      renderNowPlaying(item);
-      getMediaDownloadUrl(item.storagePath)
-        .then((url) => {
-          audioEl.src = url;
-          audioEl.play().catch((err) =>
-            logError(err, { operation: "audio-play" }),
-          );
-        })
-        .catch((err) => {
-          logError(err, { operation: "audio-download-url" });
-          showError();
-        });
+    add(item: PlayRequest): void {
+      if (queue.some((q) => q.id === item.id)) return;
+      queue.push(item);
+      if (currentIndex < 0) {
+        playTrack(queue.length - 1);
+      } else {
+        renderPlaylist();
+      }
+    },
+
+    remove(id: string): void {
+      const idx = queue.findIndex((q) => q.id === id);
+      if (idx < 0) return;
+      const wasPlaying = idx === currentIndex;
+      queue.splice(idx, 1);
+      if (queue.length === 0) {
+        stop();
+      } else if (wasPlaying) {
+        const nextIndex = idx < queue.length ? idx : 0;
+        playTrack(nextIndex);
+      } else if (idx < currentIndex) {
+        currentIndex--;
+        renderPlaylist();
+      } else {
+        renderPlaylist();
+      }
+    },
+
+    isQueued(id: string): boolean {
+      return queue.some((q) => q.id === id);
     },
 
     destroy(): void {
+      audioEl.removeEventListener("ended", onEnded);
       audioEl.pause();
       audioEl.removeAttribute("src");
       audioEl.load();
-      nowPlayingEl.innerHTML =
-        '<p class="now-playing-empty">Select a track to play</p>';
+      queue.length = 0;
+      currentIndex = -1;
+      playlistEl.innerHTML =
+        '<p class="playlist-empty">Add tracks to queue</p>';
     },
   };
 }

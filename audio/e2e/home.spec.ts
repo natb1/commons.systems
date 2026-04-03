@@ -39,18 +39,43 @@ test.describe("home page content", () => {
     await expect(row.locator(".expand-details dl")).toBeVisible();
   });
 
-  test("play interaction updates now-playing and audio src", async ({
+  test("queue interaction: checkbox adds to playlist and sets audio src", async ({
     page,
   }) => {
     await page.goto("/");
     await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
     const row = page.locator(".audio-row").first();
     const title = await row.getAttribute("data-title");
-    await row.locator("summary").click();
+    const checkbox = row.locator("input[data-queue-toggle]");
+    await checkbox.check();
     await expect(page.locator("#now-playing")).toContainText(title!, {
       timeout: 10000,
     });
     await expect(page.locator("#audio-player")).toHaveAttribute("src", /.+/, {
+      timeout: 10000,
+    });
+  });
+
+  test("uncheck removes track from playlist", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
+    const row = page.locator(".audio-row").first();
+    const checkbox = row.locator("input[data-queue-toggle]");
+    await checkbox.check();
+    await expect(page.locator("#playlist-queue li")).toHaveCount(1, {
+      timeout: 10000,
+    });
+    await checkbox.uncheck();
+    await expect(page.locator(".playlist-empty")).toBeVisible({ timeout: 5000 });
+  });
+
+  test("multiple checked tracks show ordered queue", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
+    const rows = page.locator(".audio-row");
+    await rows.nth(0).locator("input[data-queue-toggle]").check();
+    await rows.nth(1).locator("input[data-queue-toggle]").check();
+    await expect(page.locator("#playlist-queue li")).toHaveCount(2, {
       timeout: 10000,
     });
   });

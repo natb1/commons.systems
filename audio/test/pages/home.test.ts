@@ -45,6 +45,20 @@ function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
   };
 }
 
+function makeMockPlayer(): PlayerHandle & {
+  add: ReturnType<typeof vi.fn>;
+  remove: ReturnType<typeof vi.fn>;
+  isQueued: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn>;
+} {
+  return {
+    add: vi.fn(),
+    remove: vi.fn(),
+    isQueued: vi.fn().mockReturnValue(false),
+    destroy: vi.fn(),
+  };
+}
+
 describe("renderHome", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -117,6 +131,16 @@ describe("renderHome", () => {
     expect(html).toContain('data-album="Album A"');
   });
 
+  it("renders checkbox in each row", async () => {
+    mockGetPublicMedia.mockResolvedValue([makeAudioItem()]);
+
+    const html = await renderHome(null);
+
+    expect(html).toContain('data-queue-toggle');
+    expect(html).toContain('class="queue-checkbox"');
+    expect(html).toContain('aria-label="Add Test Title to queue"');
+  });
+
   it("renders expanded details with genre, year, duration, format, source", async () => {
     const item = makeAudioItem({
       genre: "Jazz",
@@ -159,23 +183,26 @@ describe("renderHome", () => {
 });
 
 describe("afterRenderHome", () => {
-  it("calls player.play when an audio-row summary is clicked", () => {
+  it("calls player.add when checkbox is checked", () => {
     const outlet = document.createElement("div");
     outlet.innerHTML = `
       <details class="expand-row audio-row" data-id="x1" data-storage-path="media/x1.mp3" data-title="Track" data-artist="Art" data-album="Alb">
-        <summary><div class="expand-summary"><span class="title">Track</span></div></summary>
+        <summary><div class="expand-summary">
+          <label class="queue-checkbox"><input type="checkbox" data-queue-toggle /></label>
+          <span class="title">Track</span>
+        </div></summary>
       </details>
     `;
 
-    const mockPlay = vi.fn();
-    const player: PlayerHandle = { play: mockPlay, destroy: vi.fn() };
-
+    const player = makeMockPlayer();
     afterRenderHome(outlet, player);
 
-    const summary = outlet.querySelector("summary")!;
-    summary.click();
+    const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
+    // .click() toggles checked state in jsdom: false → true
+    checkbox.click();
 
-    expect(mockPlay).toHaveBeenCalledWith({
+    expect(player.add).toHaveBeenCalledWith({
+      id: "x1",
       title: "Track",
       artist: "Art",
       album: "Alb",
@@ -183,17 +210,79 @@ describe("afterRenderHome", () => {
     });
   });
 
-  it("does not call player.play when clicking outside a summary", () => {
+  it("calls player.remove when checkbox is unchecked", () => {
+    const outlet = document.createElement("div");
+    outlet.innerHTML = `
+      <details class="expand-row audio-row" data-id="x1" data-storage-path="media/x1.mp3" data-title="Track" data-artist="Art" data-album="Alb">
+        <summary><div class="expand-summary">
+          <label class="queue-checkbox"><input type="checkbox" data-queue-toggle /></label>
+          <span class="title">Track</span>
+        </div></summary>
+      </details>
+    `;
+
+    const player = makeMockPlayer();
+    player.isQueued.mockReturnValue(true);
+    afterRenderHome(outlet, player);
+
+    const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
+    // .click() toggles checked state in jsdom: true → false (starts checked via HTML attribute)
+    checkbox.click();
+
+    expect(player.remove).toHaveBeenCalledWith("x1");
+  });
+
+  it("does not call player methods when clicking summary outside checkbox", () => {
+    const outlet = document.createElement("div");
+    outlet.innerHTML = `
+      <details class="expand-row audio-row" data-id="x1" data-storage-path="media/x1.mp3" data-title="Track" data-artist="Art" data-album="Alb">
+        <summary><div class="expand-summary">
+          <label class="queue-checkbox"><input type="checkbox" data-queue-toggle /></label>
+          <span class="title">Track</span>
+        </div></summary>
+      </details>
+    `;
+
+    const player = makeMockPlayer();
+    afterRenderHome(outlet, player);
+
+    const title = outlet.querySelector(".title")!;
+    (title as HTMLElement).click();
+
+    expect(player.add).not.toHaveBeenCalled();
+    expect(player.remove).not.toHaveBeenCalled();
+  });
+
+  it("does not call player when clicking outside a row", () => {
     const outlet = document.createElement("div");
     outlet.innerHTML = '<p>Not a row</p>';
 
-    const mockPlay = vi.fn();
-    const player: PlayerHandle = { play: mockPlay, destroy: vi.fn() };
-
+    const player = makeMockPlayer();
     afterRenderHome(outlet, player);
 
     outlet.querySelector("p")!.click();
 
-    expect(mockPlay).not.toHaveBeenCalled();
+    expect(player.add).not.toHaveBeenCalled();
+    expect(player.remove).not.toHaveBeenCalled();
+  });
+
+  it("syncs checkbox state on render for queued tracks", () => {
+    const outlet = document.createElement("div");
+    outlet.innerHTML = `
+      <details class="expand-row audio-row" data-id="x1" data-storage-path="media/x1.mp3" data-title="Track" data-artist="Art" data-album="Alb">
+        <summary><div class="expand-summary">
+          <label class="queue-checkbox"><input type="checkbox" data-queue-toggle /></label>
+          <span class="title">Track</span>
+        </div></summary>
+      </details>
+    `;
+
+    const player = makeMockPlayer();
+    player.isQueued.mockReturnValue(true);
+    afterRenderHome(outlet, player);
+
+    const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
+    expect(checkbox.checked).toBe(true);
+    expect(player.isQueued).toHaveBeenCalledWith("x1");
   });
 });
