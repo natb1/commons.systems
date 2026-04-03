@@ -22,8 +22,8 @@ Step 8. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
      ```bash
      .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh <app-dir> <url>
      ```
-  4. If smoke tests fail → fix issues and re-run before involving the user
-  5. Once smoke tests pass, proceed to write the QA testing plan
+  5. If smoke tests fail → fix issues and re-run before involving the user
+  6. Once smoke tests pass, proceed to write the QA testing plan
 - Write a comprehensive QA testing plan with structured checklist items:
   ```
   ## 1. <Title>
