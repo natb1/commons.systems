@@ -104,15 +104,14 @@ CONFIG_JSON="$CONFIG_JSON\"emulators\": $EMULATORS_JSON}"
 
 echo "$CONFIG_JSON" > "$TEMP_FIREBASE_JSON"
 
+# Capture worktree path now — git may not be available during trap cleanup
+WT_PATH="$(git rev-parse --show-toplevel)"
+
 # Cleanup on exit: kill all processes for this worktree, remove stale hub and temp config
-EMULATOR_PID=""
-VITE_PID=""
 cleanup() {
   echo ""
   echo "Shutting down..."
-  local wt_path
-  wt_path="$(git rev-parse --show-toplevel)"
-  kill_worktree_processes "$wt_path"
+  kill_worktree_processes "$WT_PATH"
   cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
   rm -f "$TEMP_FIREBASE_JSON"
   echo "QA server stopped."
@@ -129,7 +128,6 @@ fi
 if [ -n "$EMULATOR_LIST" ]; then
   FIRESTORE_NAMESPACE="$NAMESPACE" \
   npx firebase-tools emulators:start --only "$EMULATOR_LIST" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
-  EMULATOR_PID=$!
 fi
 
 TIMEOUT=30
@@ -222,7 +220,6 @@ VITE_ARGS+=("VITE_RECAPTCHA_SITE_KEY=emulator-recaptcha-key")
 # Start Vite dev server
 cd "$REPO_ROOT/$APP_DIR"
 env "${VITE_ARGS[@]}" npx vite --port "${VITE_PORT}" --strictPort &
-VITE_PID=$!
 cd "$REPO_ROOT"
 
 # Poll until Vite is serving

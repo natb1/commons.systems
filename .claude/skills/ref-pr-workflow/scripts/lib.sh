@@ -151,9 +151,23 @@ get_tmpdir() {
   node -e "process.stdout.write(require('os').tmpdir())"
 }
 
+# Build a space-delimited exclusion set of the current process and all its
+# ancestors up to PID 1. Used to avoid self-termination in kill functions.
+# Output: string like " 123 456 1 " (leading/trailing spaces for substring match)
+_ancestor_pids() {
+  local result=" $$ "
+  local ancestor=$$
+  while [ "$ancestor" -gt 1 ]; do
+    ancestor=$(ps -o ppid= -p "$ancestor" 2>/dev/null | tr -d ' ') || break
+    [ -z "$ancestor" ] && break
+    result+="$ancestor "
+  done
+  printf '%s' "$result"
+}
+
 # Collect all PIDs in a process tree (depth-first, children before parent).
 # Args: $1 = root PID
-# Output: one PID per line, leaves first
+# Output: one PID per line, leaves first (children receive signals before their parent)
 _collect_tree_pids() {
   local pid="$1"
   local children
@@ -241,7 +255,7 @@ delete_preview_channel() {
 
 # Remove the emulator hub file if the PID recorded in it is dead.
 # Uses worktree-scoped project ID so each worktree manages its own hub file.
-# (PID recycling could theoretically cause a false positive but is negligible in practice.)
+# (PID recycling could theoretically prevent cleanup — the hub file would be kept — but this is negligible in practice.)
 cleanup_stale_hub() {
   local tmpdir
   tmpdir="$(get_tmpdir)"
@@ -264,24 +278,20 @@ cleanup_stale_hub() {
 kill_worktree_processes() {
   local wt_path="${1:?kill_worktree_processes requires a worktree path}"
 
-  local pids
-  pids=$(pgrep -f "$wt_path" 2>/dev/null) || true
+  local ps_output pids
+  ps_output=$(ps -axo pid=,args= 2>/dev/null) || true
+  pids=$(printf '%s\n' "$ps_output" | grep -F "$wt_path" | awk '{print $1}') || true
   [ -z "$pids" ] && return 0
 
-  # Build exclusion set: self + all ancestors up to PID 1
-  local exclude_pids=" $$ "
-  local ancestor=$$
-  while [ "$ancestor" -gt 1 ]; do
-    ancestor=$(ps -o ppid= -p "$ancestor" 2>/dev/null | tr -d ' ') || break
-    [ -z "$ancestor" ] && break
-    exclude_pids+="$ancestor "
-  done
+  local exclude_pids
+  exclude_pids=$(_ancestor_pids)
 
   local pid
   for pid in $pids; do
     if [[ "$exclude_pids" == *" $pid "* ]]; then
       continue
     fi
+    kill -0 "$pid" 2>/dev/null || continue
     echo "Killing worktree process: PID $pid"
     kill_tree "$pid"
   done
@@ -290,6 +300,7 @@ kill_worktree_processes() {
 # Kill processes belonging to worktrees that no longer exist.
 # Finds all processes with a /worktrees/ path in their args, extracts the
 # worktree path, and kills those not in the active worktree set.
+# Assumes /worktrees/ in process args refers to git worktree directories under this repo.
 cleanup_stale_worktree_processes() {
   # Build set of active worktree paths
   local active_paths=""
@@ -302,19 +313,18 @@ cleanup_stale_worktree_processes() {
     esac
   done < <(git worktree list --porcelain 2>/dev/null)
 
+  if [ -z "$active_paths" ]; then
+    echo "WARNING: git worktree list returned no entries; skipping stale cleanup" >&2
+    return 0
+  fi
+
   # Find all PIDs with /worktrees/ in their command args
   local pids
   pids=$(pgrep -f '/worktrees/' 2>/dev/null) || true
   [ -z "$pids" ] && return 0
 
-  # Build exclusion set: self + ancestors
-  local exclude_pids=" $$ "
-  local ancestor=$$
-  while [ "$ancestor" -gt 1 ]; do
-    ancestor=$(ps -o ppid= -p "$ancestor" 2>/dev/null | tr -d ' ') || break
-    [ -z "$ancestor" ] && break
-    exclude_pids+="$ancestor "
-  done
+  local exclude_pids
+  exclude_pids=$(_ancestor_pids)
 
   local pid
   for pid in $pids; do

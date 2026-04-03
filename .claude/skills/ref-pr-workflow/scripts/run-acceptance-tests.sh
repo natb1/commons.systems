@@ -140,12 +140,12 @@ CONFIG_JSON="$CONFIG_JSON, \"emulators\": $EMULATORS_JSON}"
 
 echo "$CONFIG_JSON" > "$TEMP_FIREBASE_JSON"
 
+# Capture worktree path now — git may not be available during trap cleanup
+WT_PATH="$(git rev-parse --show-toplevel)"
+
 # Cleanup on exit: kill all processes for this worktree, remove stale hub and temp config
-EMULATOR_PID=""
 cleanup() {
-  local wt_path
-  wt_path="$(git rev-parse --show-toplevel)"
-  kill_worktree_processes "$wt_path"
+  kill_worktree_processes "$WT_PATH"
   cleanup_stale_hub || echo "WARNING: cleanup_stale_hub failed" >&2
   rm -f "$TEMP_FIREBASE_JSON"
 }
@@ -179,7 +179,6 @@ if [ -n "$EMULATOR_NAMESPACE" ]; then
 fi
 
 npx firebase-tools emulators:start --only "$EMULATORS" --config "$TEMP_FIREBASE_JSON" --project "$EMULATOR_PROJECT_ID" &
-EMULATOR_PID=$!
 
 # Poll until hosting emulator serves content.
 # Timeout allows headroom for slow CI (npx download + emulator startup can take 30-60s).
