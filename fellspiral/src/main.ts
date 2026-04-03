@@ -177,8 +177,8 @@ onAuthStateChanged((user) => {
 });
 
 // Defer App Check / reCAPTCHA initialization until the main thread is idle to keep the
-// 744KB reCAPTCHA script off the critical path. Build-time feed data is already
-// rendered in the blogroll; once App Check is ready, re-hydrate with live data.
+// reCAPTCHA script off the critical path. Build-time feed data is already rendered in
+// the blogroll; once App Check is ready, re-hydrate with live data.
 const deferredAppCheckInit = async () => {
   if (!initAppCheck) return;
   await initAppCheck();
