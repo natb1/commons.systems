@@ -11,7 +11,7 @@ function requireEnv(name: string): string {
 }
 
 export const firebaseConfig = {
-  projectId: "commons-systems",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? "commons-systems",
   apiKey: requireEnv("VITE_FIREBASE_API_KEY"),
   authDomain:
     // Preview channel hostnames contain "--" (e.g., "pr-42--site.web.app") and must

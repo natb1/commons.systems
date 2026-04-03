@@ -42,4 +42,5 @@
 
 #audio-player {
   width: 100%;
+  min-height: 54px; /* Chrome collapses <audio> to 0px when src is empty */
 }

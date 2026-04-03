@@ -74,6 +74,8 @@ if [ "$USES_STORAGE" = true ]; then
   BUILD_ARGS+=("VITE_STORAGE_EMULATOR_HOST=localhost:${STORAGE_PORT}")
 fi
 
+BUILD_ARGS+=("VITE_FIREBASE_PROJECT_ID=${EMULATOR_PROJECT_ID}")
+
 # Firebase credentials — emulators don't validate these, but the client-side
 # config module (firebaseutil/src/config.ts) requires them at startup.
 BUILD_ARGS+=("VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY:-emulator-api-key}")
@@ -217,6 +219,7 @@ if [ "$USES_FIRESTORE" = true ]; then
   # Seed Firestore
   echo "Seeding Firestore..."
   APP_NAME="$APP_NAME" \
+  FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" \
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
   FIRESTORE_NAMESPACE="${EMULATOR_NAMESPACE}" \
   SEED_TEST_ONLY=true \
@@ -260,7 +263,7 @@ if [ "$USES_STORAGE" = true ]; then
   STORAGE_SEED="$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts"
   if [ -f "$STORAGE_SEED" ]; then
     echo "Seeding Storage..."
-    STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${EMULATOR_PROJECT_ID}.firebasestorage.app" npx tsx "$STORAGE_SEED"
+    STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${FIREBASE_PROJECT_ID}.firebasestorage.app" SEED_TEST_ONLY=true npx tsx "$STORAGE_SEED"
   fi
 fi
 

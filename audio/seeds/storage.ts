@@ -2,8 +2,10 @@ import { TEST_USER } from "@commons-systems/authutil/seed";
 
 export interface StorageSeedItem {
   path: string;
-  content: Buffer;
   metadata: Record<string, string>;
+  content?: Buffer;
+  sourceUrl?: string;
+  testOnly?: boolean;
 }
 
 // Generates a minimal valid WAV file (RIFF/WAVE) with silence.
@@ -43,33 +45,36 @@ function makeWav(durationSeconds: number): Buffer {
 const publicMeta = { publicDomain: "true" };
 const testPrivateMeta = { publicDomain: "false", member_0: TEST_USER.email };
 
-// Seed content is WAV regardless of file extension — the storage emulator
-// does not validate audio content, so WAV bytes serve as placeholders.
+// Public domain items fetch real audio from Internet Archive at seed time.
+// Test items use synthetic WAV stubs — the storage emulator does not
+// validate audio content.
 const storageSeed: StorageSeedItem[] = [
   {
     path: "audio/prod/media/musopen-beethoven-moonlight.mp3",
-    content: makeWav(1),
+    sourceUrl: "https://archive.org/download/geniesduclassique_vol2no05/04%20Beethoven_%20Piano%20Sonata%20%2314%20In%20C%20Sharp%20Minor%2C%20Op.%2027_2%2C%20_Moonlight_%20-%201.%20Adagio%20Sostenuto.mp3",
     metadata: publicMeta,
   },
   {
     path: "audio/prod/media/musopen-bach-cello-suite-1.mp3",
-    content: makeWav(1),
+    sourceUrl: "https://archive.org/download/01No.1InGBwv10071.PreludeModerato/01%20No.1%20In%20G%20Bwv%201007_%201.%20Prelude%20%28Moderato%29.mp3",
     metadata: publicMeta,
   },
   {
     path: "audio/prod/media/musopen-chopin-nocturne-op9-2.mp3",
-    content: makeWav(1),
+    sourceUrl: "https://archive.org/download/musopen-chopin/Nocturne%20Op.%209%20no.%202%20in%20E%20flat%20major.mp3",
     metadata: publicMeta,
   },
   {
     path: "audio/prod/media/test-audio-public.wav",
     content: makeWav(1),
     metadata: publicMeta,
+    testOnly: true,
   },
   {
     path: "audio/prod/media/test-audio-private.wav",
     content: makeWav(1),
     metadata: testPrivateMeta,
+    testOnly: true,
   },
 ];
 

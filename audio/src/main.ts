@@ -21,6 +21,7 @@ if (!app) throw new Error("#app element not found");
 
 const heroContainer = document.getElementById("hero-container") as HTMLElement;
 if (!heroContainer) throw new Error("#hero-container element not found");
+heroContainer.hidden = true;
 mountHero(heroContainer, renderHero);
 
 const playerPanel = document.getElementById("player-panel") as HTMLElement;
@@ -69,6 +70,5 @@ const router = createHistoryRouter(
 onAuthStateChanged((user) => {
   currentUser = user;
   navEl.user = user;
-  heroContainer.hidden = user !== null;
   router.navigate();
 });
