@@ -78,8 +78,9 @@ if [ "$EXPLICIT" = false ]; then
   done <<< "$CHANGED"
 fi
 
-# Filter rules-test: requires Firebase emulators, excluded from vitest workspace config
-if [ "$EXPLICIT" = true ] && [[ -n "${DIRTY_APPS[rules-test]+x}" ]]; then
+# Filter rules-test: requires Firebase emulators (not supported by vitest run);
+# also excluded from vitest workspace projects in vitest.config.ts
+if [[ -n "${DIRTY_APPS[rules-test]+x}" ]]; then
   echo "Warning: rules-test requires Firebase emulators; skipping from vitest run" >&2
 fi
 unset 'DIRTY_APPS[rules-test]'
