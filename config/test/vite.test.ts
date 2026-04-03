@@ -14,6 +14,16 @@ describe("createAppConfig", () => {
     expect(config.test?.environment).toBe("happy-dom");
   });
 
+  it("sets build target to es2022", () => {
+    const config = createAppConfig();
+    expect(config.build?.target).toBe("es2022");
+  });
+
+  it("writes legal comments to a separate file", () => {
+    const config = createAppConfig();
+    expect(config.esbuild?.legalComments).toBe("linked");
+  });
+
   it("includes test file pattern", () => {
     const config = createAppConfig();
     expect(config.test?.include).toContain("test/**/*.test.ts");
