@@ -86,16 +86,20 @@ if [ ${#APP_DIRS[@]} -gt 0 ]; then
   ensure_deps
 fi
 
-# Run app unit tests
-for dir in "${APP_DIRS[@]}"; do
-  echo "=== Unit tests: $dir ==="
-  if (cd "$REPO_ROOT" && npm run -w "$dir" test); then
-    echo "PASS: $dir"
+# Run app unit tests via vitest workspace projects
+if [ ${#APP_DIRS[@]} -gt 0 ]; then
+  echo "=== Unit tests: ${APP_DIRS[*]} ==="
+  PROJECT_ARGS=()
+  for dir in "${APP_DIRS[@]}"; do
+    PROJECT_ARGS+=(--project "$dir")
+  done
+  if npx vitest run "${PROJECT_ARGS[@]}" --root "$REPO_ROOT"; then
+    echo "PASS: ${APP_DIRS[*]}"
   else
-    echo "FAIL: $dir" >&2
-    FAILURES+=("$dir")
+    echo "FAIL: ${APP_DIRS[*]}" >&2
+    FAILURES+=("${APP_DIRS[@]}")
   fi
-done
+fi
 
 # Run nix flake check
 if [ "$RUN_NIX" = true ]; then
