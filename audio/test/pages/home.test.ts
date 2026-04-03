@@ -226,7 +226,7 @@ describe("afterRenderHome", () => {
     afterRenderHome(outlet, player);
 
     const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
-    // .click() toggles checked state in jsdom: true → false (starts checked via HTML attribute)
+    // afterRenderHome set checked=true via isQueued mock; .click() toggles to false
     checkbox.click();
 
     expect(player.remove).toHaveBeenCalledWith("x1");

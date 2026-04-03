@@ -1,5 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
+import { classifyError } from "@commons-systems/errorutil/classify";
 import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
@@ -50,6 +51,7 @@ export async function renderHome(user: User | null): Promise<string> {
     mediaHtml = renderMediaList(items);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
+    if (classifyError(error) === "programmer") throw error;
     logError(error, { operation: "load-media" });
     mediaHtml = '<p id="media-error">Could not load audio library.</p>';
   }
@@ -96,7 +98,13 @@ export function afterRenderHome(
     const title = row.dataset.title;
     const artist = row.dataset.artist;
     const album = row.dataset.album;
-    if (!id || !storagePath || !title || !artist || !album) return;
+    if (!id || !storagePath || !title || !artist || !album) {
+      logError(new Error("Queue toggle: missing data attributes on audio row"), {
+        operation: "queue-toggle",
+      });
+      checkbox.checked = !checkbox.checked;
+      return;
+    }
 
     if (checkbox.checked) {
       player.add({ id, title, artist, album, storagePath });

@@ -185,18 +185,13 @@ const deferredAppCheckInit = async () => {
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
 };
 
+const onInitError = (err: unknown) => {
+  if (deferProgrammerError(err)) return;
+  logError(err, { operation: "deferred-appcheck-init" });
+};
+
 if ("requestIdleCallback" in window) {
-  requestIdleCallback(() => {
-    deferredAppCheckInit().catch((err) => {
-      if (deferProgrammerError(err)) return;
-      logError(err, { operation: "deferred-appcheck-init" });
-    });
-  });
+  requestIdleCallback(() => { deferredAppCheckInit().catch(onInitError); });
 } else {
-  setTimeout(() => {
-    deferredAppCheckInit().catch((err) => {
-      if (deferProgrammerError(err)) return;
-      logError(err, { operation: "deferred-appcheck-init" });
-    });
-  }, 0);
+  setTimeout(() => { deferredAppCheckInit().catch(onInitError); }, 0);
 }

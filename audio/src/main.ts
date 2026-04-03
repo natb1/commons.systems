@@ -9,8 +9,6 @@ import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
 import { trackPageView } from "./firebase.js";
-import { renderHero } from "./pages/hero.js";
-import { mountHero } from "@commons-systems/style/hero";
 import { initPanelToggle } from "@commons-systems/style/panel-toggle";
 import { initPlayer } from "./player.js";
 
@@ -18,11 +16,6 @@ const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
 const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
-
-const heroContainer = document.getElementById("hero-container") as HTMLElement;
-if (!heroContainer) throw new Error("#hero-container element not found");
-heroContainer.hidden = true;
-mountHero(heroContainer, renderHero);
 
 const playerPanel = document.getElementById("player-panel") as HTMLElement;
 if (!playerPanel) throw new Error("#player-panel element not found");

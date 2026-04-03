@@ -5,8 +5,8 @@ import { TEST_USER } from "@commons-systems/authutil/seed";
 type AudioSeedData = Omit<AudioItem, "id">;
 
 // The media collection is intentionally non-convergent: prod seed deploys
-// upsert these documents but will not delete private items added via
-// audio/scripts/upload-media.sh or manual Firestore writes.
+// upsert these documents but will not delete items added via manual Firestore
+// writes.
 //
 // Emulator storage objects are seeded separately via seeds/run-storage-seed.ts.
 

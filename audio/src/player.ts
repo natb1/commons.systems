@@ -23,6 +23,8 @@ export function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+const EMPTY_QUEUE_HTML = '<p class="playlist-empty">Add tracks to queue</p>';
+
 export function initPlayer(
   audioEl: HTMLAudioElement,
   playlistEl: HTMLElement,
@@ -32,8 +34,7 @@ export function initPlayer(
 
   function renderPlaylist(): void {
     if (queue.length === 0) {
-      playlistEl.innerHTML =
-        '<p class="playlist-empty">Add tracks to queue</p>';
+      playlistEl.innerHTML = EMPTY_QUEUE_HTML;
       return;
     }
     const items = queue
@@ -47,7 +48,7 @@ export function initPlayer(
 
   function playTrack(index: number): void {
     const item = queue[index];
-    if (!item) return;
+    if (!item) throw new Error(`playTrack: index ${index} out of range (queue length ${queue.length})`);
     currentIndex = index;
     renderPlaylist();
     getMediaDownloadUrl(item.storagePath)
@@ -58,7 +59,13 @@ export function initPlayer(
         );
       })
       .catch((err) => {
-        logError(err, { operation: "audio-download-url" });
+        logError(err, { operation: "audio-download-url", storagePath: item.storagePath });
+        const nextIndex = index + 1;
+        if (nextIndex < queue.length) {
+          playTrack(nextIndex);
+        } else {
+          stop();
+        }
       });
   }
 
@@ -118,13 +125,8 @@ export function initPlayer(
 
     destroy(): void {
       audioEl.removeEventListener("ended", onEnded);
-      audioEl.pause();
-      audioEl.removeAttribute("src");
-      audioEl.load();
       queue.length = 0;
-      currentIndex = -1;
-      playlistEl.innerHTML =
-        '<p class="playlist-empty">Add tracks to queue</p>';
+      stop();
     },
   };
 }

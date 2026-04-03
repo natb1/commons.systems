@@ -102,7 +102,6 @@ describe("initPlayer", () => {
 
       expect(playlistEl.querySelectorAll("#playlist-queue li")).toHaveLength(2);
       expect(playlistEl.textContent).toContain("Song Two");
-      // play should not have been called again
       expect(audioEl.play).toHaveBeenCalledTimes(1);
     });
 
