@@ -163,4 +163,33 @@ describe("generateRssXml", () => {
   it("throws when config.feedUrl is empty", () => {
     expect(() => generateRssXml(posts, { ...config, feedUrl: "" })).toThrow("RssConfig.feedUrl is required");
   });
+
+  it("includes enclosure when previewImage is present", () => {
+    const withImage: RssPost[] = [
+      { id: "img-post", title: "Image Post", previewImage: "/blog-map.jpg" },
+    ];
+    const xml = generateRssXml(withImage, config);
+    expect(xml).toContain('<enclosure url="https://commons.systems/blog-map.jpg" type="image/jpeg" length="0" />');
+  });
+
+  it("omits enclosure when previewImage is absent", () => {
+    const xml = generateRssXml(posts, config);
+    expect(xml).not.toContain("<enclosure");
+  });
+
+  it("detects png content type for .png images", () => {
+    const withPng: RssPost[] = [
+      { id: "png-post", title: "PNG Post", previewImage: "/tile.png" },
+    ];
+    const xml = generateRssXml(withPng, config);
+    expect(xml).toContain('type="image/png"');
+  });
+
+  it("detects webp content type for .webp images", () => {
+    const withWebp: RssPost[] = [
+      { id: "webp-post", title: "WebP Post", previewImage: "/photo.webp" },
+    ];
+    const xml = generateRssXml(withWebp, config);
+    expect(xml).toContain('type="image/webp"');
+  });
 });

@@ -5,6 +5,7 @@ export interface RssPost {
   title: string;
   publishedAt?: string;
   previewDescription?: string;
+  previewImage?: string;
 }
 
 export interface RssConfig {
@@ -42,10 +43,13 @@ export function generateRssXml(posts: RssPost[], config: RssConfig): string {
       const descTag = p.previewDescription
         ? `\n      <description>${escapeHtml(p.previewDescription)}</description>`
         : "";
+      const enclosureTag = p.previewImage
+        ? `\n      <enclosure url="${escapeHtml(config.siteUrl)}${escapeHtml(p.previewImage)}" type="image/${p.previewImage.endsWith(".png") ? "png" : p.previewImage.endsWith(".webp") ? "webp" : "jpeg"}" length="0" />`
+        : "";
       return `    <item>
       <title>${escapeHtml(p.title)}</title>
       <link>${postUrl}</link>
-      <guid isPermaLink="true">${postUrl}</guid>${pubDateTag}${descTag}
+      <guid isPermaLink="true">${postUrl}</guid>${pubDateTag}${descTag}${enclosureTag}
     </item>`;
     })
     .join("\n");
