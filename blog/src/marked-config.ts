@@ -3,12 +3,12 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import type { PublishedPost } from "./post-types.ts";
 
 /** Known image dimensions (width × height) for blog images served from public/. */
-export const IMAGE_DIMENSIONS: Record<string, { width: number; height: number }> = {
+export const IMAGE_DIMENSIONS = {
   "/woman-with-a-flower-head.webp": { width: 1600, height: 900 },
   "/blog-map-color.webp": { width: 1600, height: 1267 },
   "/tile10-armadillo-crag.webp": { width: 782, height: 812 },
   "/alienurn.webp": { width: 1920, height: 1080 },
-};
+} as const satisfies Record<string, { width: number; height: number }>;
 
 // Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
 // and opens post-body links in new tabs with rel="noopener noreferrer" to prevent
@@ -37,14 +37,15 @@ export function createMarked(): Marked {
       image({ href, text }) {
         const safeHref = escapeHtml(href);
         const alt = text ? escapeHtml(text) : "";
-        const dims = IMAGE_DIMENSIONS[href];
-        const widthAttr = dims ? ` width="${dims.width}"` : "";
-        const heightAttr = dims ? ` height="${dims.height}"` : "";
+        const dims = IMAGE_DIMENSIONS[href as keyof typeof IMAGE_DIMENSIONS];
+        if (!dims) {
+          throw new Error(`Image "${href}" not found in IMAGE_DIMENSIONS. Add its dimensions to marked-config.ts.`);
+        }
         const loadAttr = imageIndex === 0
           ? ' fetchpriority="high"'
           : ' loading="lazy"';
         imageIndex++;
-        return `<img src="${safeHref}" alt="${alt}"${widthAttr}${heightAttr}${loadAttr}>`;
+        return `<img src="${safeHref}" alt="${alt}" width="${dims.width}" height="${dims.height}"${loadAttr}>`;
       },
     },
   });

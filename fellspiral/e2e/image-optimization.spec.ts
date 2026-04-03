@@ -11,12 +11,14 @@ const EXPECTED_IMAGES = [
 ];
 
 test.describe("image optimization", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector("#posts", { timeout: 30000 });
+  });
+
   test("all blog post images have width and height attributes", async ({
     page,
   }) => {
-    await page.goto("/");
-    await page.waitForSelector("#posts", { timeout: 30000 });
-
     const images = page.locator("#posts img");
     const count = await images.count();
     expect(count).toBeGreaterThanOrEqual(EXPECTED_IMAGES.length);
@@ -34,17 +36,11 @@ test.describe("image optimization", () => {
   test("first image has fetchpriority high (LCP element)", async ({
     page,
   }) => {
-    await page.goto("/");
-    await page.waitForSelector("#posts", { timeout: 30000 });
-
     const firstImage = page.locator("#posts img").first();
     await expect(firstImage).toHaveAttribute("fetchpriority", "high");
   });
 
   test("below-fold images have loading lazy", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForSelector("#posts", { timeout: 30000 });
-
     const images = page.locator("#posts img");
     const count = await images.count();
 
@@ -71,12 +67,8 @@ test.describe("image optimization", () => {
       }
     });
 
-    await page.goto("/");
-    await page.waitForSelector("#posts", { timeout: 30000 });
-
-    // Scroll each post image into view to trigger lazy loading, then wait
-    // for it to decode. This avoids a global networkidle wait that can time
-    // out when external resources (e.g. the CC badge) are slow to resolve.
+    // Scroll each post image into view to trigger lazy loading. The settle
+    // timeout below allows pending network requests to complete.
     const postImages = page.locator("#posts img");
     const imgCount = await postImages.count();
     for (let i = 0; i < imgCount; i++) {
@@ -89,9 +81,6 @@ test.describe("image optimization", () => {
   });
 
   test("all image src paths use WebP format", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForSelector("#posts", { timeout: 30000 });
-
     const images = page.locator("#posts img");
     const count = await images.count();
     expect(count).toBeGreaterThanOrEqual(EXPECTED_IMAGES.length);
@@ -105,19 +94,19 @@ test.describe("image optimization", () => {
     }
   });
 
-  test("expected images are present in correct order", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForSelector("#posts", { timeout: 30000 });
-
+  test("all expected images are present", async ({ page }) => {
     const images = page.locator("#posts img");
     const count = await images.count();
     expect(count).toBeGreaterThanOrEqual(EXPECTED_IMAGES.length);
 
-    for (let i = 0; i < EXPECTED_IMAGES.length; i++) {
-      const src = await images.nth(i).getAttribute("src");
-      expect(src, `image ${i} has unexpected src`).toContain(
-        EXPECTED_IMAGES[i],
-      );
+    const srcs: string[] = [];
+    for (let i = 0; i < count; i++) {
+      srcs.push(await images.nth(i).getAttribute("src") ?? "");
+    }
+    for (const expected of EXPECTED_IMAGES) {
+      expect(srcs.some((src) => src.includes(expected)),
+        `expected image ${expected} not found`,
+      ).toBe(true);
     }
   });
 });

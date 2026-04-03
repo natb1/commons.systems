@@ -92,15 +92,11 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     articleHtml: renderArticle(meta, "/post/", contentMap[meta.id]),
   }));
 
-  const sorted = [...rendered].sort(
-    (a, b) => new Date(b.meta.publishedAt).getTime() - new Date(a.meta.publishedAt).getTime(),
-  );
-
-  const topPosts: PostMeta[] = sorted.map((p) => p.meta);
+  const topPosts: PostMeta[] = rendered.map((p) => p.meta);
   const panelHtml = renderInfoPanel({ ...infoPanel, topPosts });
   const navHtml = renderNavHtml(navLinks);
 
-  const allArticlesHtml = sorted.map((p) => p.articleHtml).join("\n      <hr>\n      ");
+  const allArticlesHtml = rendered.map((p) => p.articleHtml).join("\n      <hr>\n      ");
   let rootHtml = injectMain(template, allArticlesHtml);
   rootHtml = injectInfoPanel(rootHtml, panelHtml);
   rootHtml = injectNav(rootHtml, navHtml);

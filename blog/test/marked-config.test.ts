@@ -28,16 +28,11 @@ describe("image renderer", () => {
     expect(imgs[1]).not.toContain("fetchpriority");
   });
 
-  it("renders unknown image paths without width/height", async () => {
+  it("throws for unknown image paths", () => {
     const marked = createMarked();
-    // consume first image so the unknown one gets loading="lazy"
-    const html = await marked.parse(
-      "![first](/woman-with-a-flower-head.webp)\n\n![unknown](/unknown.webp)",
-    );
-    const imgs = html.match(/<img [^>]+>/g)!;
-    expect(imgs[1]).not.toContain("width=");
-    expect(imgs[1]).not.toContain("height=");
-    expect(imgs[1]).toContain('loading="lazy"');
+    expect(() =>
+      marked.parse("![unknown](/unknown.webp)"),
+    ).toThrow("not found in IMAGE_DIMENSIONS");
   });
 
   it("escapes HTML in alt text", async () => {
@@ -68,7 +63,7 @@ describe("image renderer", () => {
 
 describe("IMAGE_DIMENSIONS", () => {
   it("contains entries for all known blog images", () => {
-    expect(Object.keys(IMAGE_DIMENSIONS).length).toBeGreaterThanOrEqual(4);
+    expect(Object.keys(IMAGE_DIMENSIONS).length).toBe(4);
     expect(IMAGE_DIMENSIONS["/woman-with-a-flower-head.webp"]).toEqual({
       width: 1600,
       height: 900,
