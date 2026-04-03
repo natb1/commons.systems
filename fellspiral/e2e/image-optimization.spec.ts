@@ -74,9 +74,16 @@ test.describe("image optimization", () => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
 
-    // Scroll to the bottom to trigger lazy-loaded images
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await page.waitForLoadState("networkidle");
+    // Scroll each post image into view to trigger lazy loading, then wait
+    // for it to decode. This avoids a global networkidle wait that can time
+    // out when external resources (e.g. the CC badge) are slow to resolve.
+    const postImages = page.locator("#posts img");
+    const imgCount = await postImages.count();
+    for (let i = 0; i < imgCount; i++) {
+      await postImages.nth(i).scrollIntoViewIfNeeded();
+    }
+    // Allow a short settle for any remaining network activity on post images
+    await page.waitForTimeout(2000);
 
     expect(failedImages, "Some images failed to load").toHaveLength(0);
   });
