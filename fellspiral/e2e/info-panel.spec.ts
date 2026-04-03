@@ -37,6 +37,7 @@ test.describe("info panel — desktop", () => {
     await expect(panel.locator('a[href="https://chrismcdee.itch.io/mythic-bastionland"]')).toBeVisible();
     await expect(panel.locator('a[href="https://freeleaguepublishing.com/games/alien/"]')).toBeVisible();
     await expect(panel.locator('a[href="https://cairnrpg.com/"]')).toBeVisible();
+    await expect(panel.locator('a[href="https://shop.hauntedtable.games/"]')).toBeVisible();
   });
 
   test("shows blogroll with three entries", async ({ page }, testInfo) => {

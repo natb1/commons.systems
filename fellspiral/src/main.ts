@@ -16,6 +16,7 @@ import { createFetchPost } from "@commons-systems/blog/github";
 import { updateOgMeta } from "@commons-systems/blog/og-meta";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
 import { initPanelToggle } from "@commons-systems/style/panel-toggle";
+import { initScrollIndicator } from "@commons-systems/style/scroll-indicator";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { createStrategies, BLOG_ROLL_ENTRIES } from "./blog-roll/config.js";
@@ -59,6 +60,7 @@ const updateInfoPanel = (): void => {
     postLinkPrefix: "/post/",
   });
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
+  initScrollIndicator(infoPanel);
   lastRenderedPosts = cachedPosts;
 }
 

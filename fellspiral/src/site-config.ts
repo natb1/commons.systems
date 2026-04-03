@@ -16,6 +16,7 @@ export const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
       { label: "Mythic Bastionland", url: "https://chrismcdee.itch.io/mythic-bastionland" },
       { label: "ALIEN", url: "https://freeleaguepublishing.com/games/alien/" },
       { label: "Cairn", url: "https://cairnrpg.com/" },
+      { label: "Triangle Agency", url: "https://shop.hauntedtable.games/" },
     ],
   },
 ];
