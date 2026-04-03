@@ -1,6 +1,6 @@
 ---
 name: ref-qa
-description: QA review loop — user-driven testing with wiggum-loop
+description: QA review loop — Claude browser exploration + user-driven testing with wiggum-loop
 ---
 
 # QA Review Loop
@@ -24,14 +24,40 @@ Step 8. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
      ```
   4. If smoke tests fail → fix issues and re-run before involving the user
   5. Once smoke tests pass, proceed to write the QA testing plan
-- Write a comprehensive QA testing plan including:
-  - Key behaviors to verify
-  - Test steps for each behavior
-  - Edge cases to test
-  - Expected outcomes
+- Write a comprehensive QA testing plan with structured checklist items:
+  ```
+  ## 1. <Title>
+  - **URL path**: <relative path or "current">
+  - **Steps**: numbered action descriptions
+  - **Expected**: what success looks like
+  ```
+  Include key behaviors to verify, edge cases, and expected outcomes.
 - Write the QA testing plan to `tmp/qa-plan-<N>.txt`
-- Present the plan and App URL (if applicable) to the user
-- **CRITICAL**: The user performs the actual testing (not Claude)
+
+**Claude-driven browser exploration** (after writing QA plan, before presenting to user):
+
+1. Load chrome tools via `ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp")`
+   - If ToolSearch fails or tools are unavailable → skip entire exploration, note "Chrome extension unavailable" in results, fall through to user-driven phase
+2. Create a new tab via `tabs_create_mcp`, capture `tabId`
+3. Navigate to the App URL
+4. Suppress JS dialogs: use `javascript_tool` to override `window.alert`, `window.confirm`, `window.prompt` with no-ops
+5. Clear baselines: `read_console_messages` and `read_network_requests` with `clear: true`
+6. Start GIF recording: `gif_creator` with `action: "start_recording"`, take initial screenshot
+7. For each QA plan checklist item:
+   - Navigate to the item's URL path (if not "current")
+   - Execute steps using `computer` (click/type/scroll), `form_input`, `navigate`
+   - Capture extra GIF frames before and after actions for smooth playback
+   - Collect evidence: `get_page_text` to verify expected outcome, `read_console_messages` with `pattern` filter for errors, `read_network_requests` checking for 4xx/5xx
+   - Determine PASS/FAIL/SKIP per item
+   - On interaction failure: retry once, then mark SKIP and continue
+   - If 3 consecutive SKIPs: stop exploration early
+   - Stay on the QA App URL domain — do not follow external links
+8. Stop GIF recording: `gif_creator` with `action: "stop_recording"`, export to `tmp/qa-walkthrough-<N>.gif`
+9. Write results to `tmp/qa-browser-results-<N>.txt` with per-item status (PASS/FAIL/SKIP), console errors, network failures, and summary counts
+
+**Present to user:**
+- Present QA plan + browser exploration results summary + GIF filename + App URL
+- **CRITICAL**: The user performs additional testing — subjective/taste checks Claude cannot assess
 - Wait for the user to test and report results
 
 **Evaluation instructions:**
@@ -41,6 +67,7 @@ Step 8. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 **Iterate instructions:**
 - Fix all issues reported by the user
 - Re-run acceptance tests after fixes to verify no regressions
+- Re-run browser exploration on affected checklist items to verify fixes before presenting to user for retest
 - Keep the QA server running for the user to retest
 
 **Progress report instructions:**
@@ -48,5 +75,5 @@ Step 8. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Termination instructions:**
 - Stop the QA server (`run-qa-server.sh`) if started: kill the background Task
-- Invoke `/pr-workflow-termination-summary` with `PHASE_NAME="QA" FILE_PREFIX=qa PR_NUM=<pr-num> NEXT_STEP=9 NEXT_PHASE=code-quality ACTIVE_SKILLS='["ref-memory-management","ref-pr-workflow","ref-code-quality"]' CONCLUSION_TEXT="All test cases passed. PR approved for code quality review." EXTRA_HEADER_FIELDS="**Reviewer**: [User name from git config]\n**Tested By**: Human QA with Claude Code facilitation" EXTRA_SECTIONS="## QA Summary\n\n- Total test cycles: [N]\n- Key behaviors verified: [list]\n- Edge cases tested: [list]\n- Total issues found and resolved: [N]"`
+- Invoke `/pr-workflow-termination-summary` with `PHASE_NAME="QA" FILE_PREFIX=qa PR_NUM=<pr-num> NEXT_STEP=9 NEXT_PHASE=code-quality ACTIVE_SKILLS='["ref-memory-management","ref-pr-workflow","ref-code-quality"]' CONCLUSION_TEXT="All test cases passed. PR approved for code quality review." EXTRA_HEADER_FIELDS="**Reviewer**: [User name from git config]\n**Tested By**: Claude browser exploration + Human QA" EXTRA_SECTIONS="## QA Summary\n\n- Total test cycles: [N]\n- Key behaviors verified: [list]\n- Edge cases tested: [list]\n- Total issues found and resolved: [N]\n\n## Browser Exploration Summary\n\n- Items explored: [N]\n- Pass: [N] / Fail: [N] / Skip: [N]\n- GIF recordings: [filenames]"`
 - Immediately proceed to Step 9 (do not stop or summarize between phases)
