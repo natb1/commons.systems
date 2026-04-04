@@ -18,7 +18,7 @@ for (const img of BLOG_IMAGES) {
     try {
       await sharp(inputPath)
         .resize(width)
-        .webp({ quality: 80 })
+        .webp({ quality: 15, effort: 6 })
         .toFile(outputPath);
     } catch (err) {
       throw new Error(`Failed to generate ${img.baseName}-${width}w.webp from ${img.original}`, { cause: err });
