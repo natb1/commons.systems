@@ -1,9 +1,9 @@
 export interface ImageConfig {
-  baseName: string;
-  original: string;
-  fullWidth: number;
-  fullHeight: number;
-  responsiveWidths: number[];
+  readonly baseName: string;
+  readonly original: string;
+  readonly fullWidth: number;
+  readonly fullHeight: number;
+  readonly responsiveWidths: readonly number[];
 }
 
 export const BLOG_IMAGES: ImageConfig[] = [

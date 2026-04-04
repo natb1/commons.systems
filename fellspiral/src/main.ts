@@ -174,10 +174,13 @@ onAuthStateChanged((user) => {
     if (deferProgrammerError(err)) return;
     logError(err, { operation: "auth-change-refresh" });
   });
+}).catch((err) => {
+  if (deferProgrammerError(err)) return;
+  logError(err, { operation: "auth-init" });
 });
 
 // Defer App Check / reCAPTCHA initialization until first user interaction to keep the
-// 742KB reCAPTCHA script completely off the critical path. Build-time feed data is
+// large reCAPTCHA script completely off the critical path. Build-time feed data is
 // already rendered in the blogroll; once App Check is ready, re-hydrate with live data.
 const deferredAppCheckInit = async () => {
   if (!initAppCheck) return;

@@ -71,7 +71,6 @@ export function afterRenderHome(
   outlet: HTMLElement,
   player: PlayerHandle,
 ): void {
-  // Sync checkbox state for any tracks already queued
   for (const row of outlet.querySelectorAll<HTMLElement>(".audio-row")) {
     const id = row.dataset.id;
     if (!id) continue;
@@ -81,7 +80,6 @@ export function afterRenderHome(
     if (checkbox) checkbox.checked = player.isQueued(id);
   }
 
-  // Checkbox click: add/remove from queue, prevent details toggle
   outlet.addEventListener("click", (e) => {
     const checkbox = (e.target as HTMLElement).closest(
       "input[data-queue-toggle]",

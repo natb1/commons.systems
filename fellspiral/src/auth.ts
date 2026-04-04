@@ -1,4 +1,5 @@
 import type { User } from "firebase/auth";
+import { logError } from "@commons-systems/errorutil/log";
 import { app, registerGetAuth } from "./firebase.js";
 
 async function loadAuth() {
@@ -10,7 +11,10 @@ async function loadAuth() {
   return createAppAuth(app);
 }
 
-const authReady = loadAuth();
+const authReady = loadAuth().catch((err) => {
+  logError(err, { operation: "auth-chunk-load" });
+  throw err;
+});
 
 export async function signIn(): Promise<void> {
   (await authReady).signIn();

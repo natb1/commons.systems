@@ -7,7 +7,11 @@ if (!host) {
   process.exit(1);
 }
 
-const bucket = process.env.STORAGE_BUCKET ?? "commons-systems.firebasestorage.app";
+const bucket = process.env.STORAGE_BUCKET;
+if (!bucket) {
+  console.error("STORAGE_BUCKET required");
+  process.exit(1);
+}
 const includeTestOnly = process.env.SEED_TEST_ONLY === "true";
 const boundary = "----SeedBoundary";
 

@@ -22,7 +22,9 @@ export class FallbackStrategy implements BlogRollStrategy {
     }
     if (result) return result;
     if (this.fallbackData) {
-      console.warn("FallbackStrategy: primary returned null, using build-time data");
+      logError(new Error("FallbackStrategy: primary returned null, using build-time data"), {
+        operation: "fallback-strategy-null-primary",
+      });
     }
     return this.fallbackData;
   }
