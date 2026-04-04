@@ -49,7 +49,10 @@ test.describe("cache headers smoke", () => {
     const fontResponse = await request.get(
       "/fonts/eb-garamond-latin-400-normal.woff2",
     );
-    expect(fontResponse.status()).toBe(200);
+    expect(
+      fontResponse.status(),
+      "font file /fonts/eb-garamond-latin-400-normal.woff2 not found -- verify the font path still exists in the build output",
+    ).toBe(200);
     const fontCacheControl = fontResponse.headers()["cache-control"];
     expect(
       fontCacheControl,
