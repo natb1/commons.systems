@@ -6,7 +6,7 @@ export interface ImageConfig {
   readonly responsiveWidths: readonly number[];
 }
 
-export const BLOG_IMAGES: ImageConfig[] = [
+export const BLOG_IMAGES: readonly ImageConfig[] = [
   { baseName: "blog-map-color", original: "blog-map-color.jpg", fullWidth: 1600, fullHeight: 1267, responsiveWidths: [400, 800] },
   { baseName: "woman-with-a-flower-head", original: "woman-with-a-flower-head.webp", fullWidth: 1600, fullHeight: 900, responsiveWidths: [400, 800] },
   { baseName: "alienurn", original: "alienurn.jpg", fullWidth: 1920, fullHeight: 1080, responsiveWidths: [400, 800] },

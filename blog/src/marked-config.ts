@@ -57,7 +57,7 @@ export function createMarked(): Marked {
         // sizes: empirically matched to blog.css / fellspiral layout.css.
         // Desktop: main column capped at ~49rem, narrower on small desktops.
         // Mobile: full viewport minus page padding and filigree borders.
-        const sizesAttr = ' sizes="(min-width: 768px) min(49rem, calc(100vw - 19.5rem)), calc(100vw - 2rem - 24px)"';
+        const sizesAttr = ' sizes="(min-width: 768px) min(49rem, calc(100vw - 22.5rem - 24px)), calc(100vw - 5rem - 24px)"';
         return `<img src="${safeHref}" alt="${alt}" width="${dims.width}" height="${dims.height}"${srcsetAttr}${sizesAttr}${loadAttr}>`;
       },
     },

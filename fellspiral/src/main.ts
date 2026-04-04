@@ -96,7 +96,7 @@ async function loadPosts(): Promise<string> {
   } catch (error) {
     const kind = classifyError(error);
     if (kind === "programmer") throw error;
-    reportError(new Error(`Failed to load posts: ${error instanceof Error ? error.message : error}`));
+    logError(error, { operation: "load-posts" });
     const msg = kind === "permission-denied"
       ? "Permission denied loading posts."
       : "Could not load posts. Try refreshing the page.";

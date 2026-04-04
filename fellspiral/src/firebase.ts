@@ -12,6 +12,7 @@ const getCurrentUser = (): { uid: string; email: string | null } | null => {
 
 /** Called by auth.ts after firebase/auth is loaded to enable getCurrentUser. */
 export function registerGetAuth(getAuth: () => import("firebase/auth").Auth): void {
+  if (cachedGetAuth) throw new Error("registerGetAuth called more than once");
   cachedGetAuth = getAuth;
 }
 

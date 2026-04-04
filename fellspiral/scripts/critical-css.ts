@@ -22,6 +22,8 @@ for await (const entry of glob("**/*.html", { cwd: distDir })) {
   htmlFiles.push(join(distDir, entry));
 }
 
+if (htmlFiles.length === 0) throw new Error(`No HTML files found in ${distDir}`);
+
 for (const file of htmlFiles) {
   const html = await readFile(file, "utf-8");
   let inlined = await critters.process(html);

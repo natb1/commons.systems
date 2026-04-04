@@ -7,7 +7,7 @@ async function loadAuth() {
     import("@commons-systems/authutil/app-auth"),
     import("firebase/auth"),
   ]);
-  registerGetAuth(() => getAuth());
+  registerGetAuth(getAuth);
   return createAppAuth(app);
 }
 
@@ -17,7 +17,7 @@ const authReady = loadAuth().catch((err) => {
 });
 
 export async function signIn(): Promise<void> {
-  (await authReady).signIn();
+  await (await authReady).signIn();
 }
 
 export async function signOut(): Promise<void> {
