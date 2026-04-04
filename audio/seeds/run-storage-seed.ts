@@ -7,7 +7,11 @@ if (!host) {
   process.exit(1);
 }
 
-const bucket = process.env.STORAGE_BUCKET ?? "commons-systems.firebasestorage.app";
+const bucket = process.env.STORAGE_BUCKET;
+if (!bucket) {
+  console.error("STORAGE_BUCKET required");
+  process.exit(1);
+}
 // SEED_TEST_ONLY serves dual purpose: includes test-only items AND forces stub
 // content (synthetic WAVs) for all items, enabling fast deterministic seeding.
 const includeTestOnly = process.env.SEED_TEST_ONLY === "true";

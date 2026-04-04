@@ -107,8 +107,6 @@ export function afterRenderHome(
     if (checkbox) checkbox.checked = player.isQueued(id);
   }
 
-  // Remove previous click listener before adding a new one (the outlet element
-  // persists across router navigations, so without cleanup listeners accumulate).
   clickAbort?.abort();
   clickAbort = new AbortController();
 

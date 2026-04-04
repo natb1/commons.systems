@@ -1,4 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
+import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError } from "@commons-systems/errorutil/log";
 import { formatUtcDate, monthName } from "../date.ts";
 import { isPublished, type PostMeta, type PublishedPost } from "../post-types.ts";
@@ -239,5 +240,8 @@ export function hydrateInfoPanel(
       sortBlogrollByDate(panel);
     })
     // Intentional silent degradation — user sees build-time content rather than an error.
-    .catch((err) => logError(err, { operation: "hydrate-blogroll" }));
+    .catch((err) => {
+      if (classifyError(err) === "programmer") throw err;
+      logError(err, { operation: "hydrate-blogroll" });
+    });
 }

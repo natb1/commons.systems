@@ -1,4 +1,6 @@
 import type { BlogRollStrategy, LatestPost } from "./types.ts";
+import { classifyError } from "@commons-systems/errorutil/classify";
+import { logError } from "@commons-systems/errorutil/log";
 import { parseXml } from "./parse-feed.ts";
 
 export class AtomStrategy implements BlogRollStrategy {
@@ -13,23 +15,28 @@ export class AtomStrategy implements BlogRollStrategy {
       const proxyUrl = `${this.proxyPath}?url=${encodeURIComponent(this.feedUrl)}`;
       const headers = await this.fetchHeaders?.();
       if (this.fetchHeaders && (!headers || !Object.keys(headers).length)) {
-        console.warn(`Skipping feed fetch for ${this.feedUrl}: headers unavailable`);
+        logError(new Error(`Skipping feed fetch for ${this.feedUrl}: headers unavailable`), {
+          operation: "atom-strategy-fetch",
+        });
         return null;
       }
       const response = await fetch(proxyUrl, headers ? { headers } : undefined);
       if (!response.ok) {
-        console.warn(`Feed proxy failed for ${this.feedUrl}: ${response.status}`);
+        logError(new Error(`Feed proxy failed for ${this.feedUrl}: ${response.status}`), {
+          operation: "atom-strategy-fetch",
+        });
         return null;
       }
       const result = parseXml(await response.text());
       if (!result) {
-        console.warn(`Feed parse returned no data for ${this.feedUrl}`);
+        logError(new Error(`Feed parse returned no data for ${this.feedUrl}`), {
+          operation: "atom-strategy-fetch",
+        });
       }
       return result;
     } catch (err) {
-      // ReferenceError indicates a bug (undefined variable); rethrow so it surfaces immediately
-      if (err instanceof ReferenceError) throw err;
-      console.warn(`Feed proxy error for ${this.feedUrl}:`, err);
+      if (classifyError(err) === "programmer") throw err;
+      logError(err, { operation: "atom-strategy-fetch" });
       return null;
     }
   }

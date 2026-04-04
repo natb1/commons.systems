@@ -1,6 +1,6 @@
 import "missing.css";
 import "./style/theme.css";
-import type { User } from "firebase/auth";
+import type { User } from "./auth.js";
 
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -96,7 +96,7 @@ async function loadPosts(): Promise<string> {
   } catch (error) {
     const kind = classifyError(error);
     if (kind === "programmer") throw error;
-    reportError(new Error(`Failed to load posts: ${error instanceof Error ? error.message : error}`));
+    logError(error, { operation: "load-posts" });
     const msg = kind === "permission-denied"
       ? "Permission denied loading posts."
       : "Could not load posts. Try refreshing the page.";
@@ -174,6 +174,9 @@ onAuthStateChanged((user) => {
     if (deferProgrammerError(err)) return;
     logError(err, { operation: "auth-change-refresh" });
   });
+}).catch((err) => {
+  if (deferProgrammerError(err)) return;
+  logError(err, { operation: "auth-init" });
 });
 
 // Defer App Check / reCAPTCHA initialization until first user interaction to keep the

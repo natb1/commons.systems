@@ -27,7 +27,7 @@ export const IMAGE_DIMENSIONS: Record<string, ImageMeta> = Object.fromEntries(
 // Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
 // and opens post-body links in new tabs with rel="noopener noreferrer" to prevent
 // reverse tabnapping. The image renderer adds width/height, srcset/sizes, and
-// fetchpriority="high" on the first image per instance (LCP element).
+// fetchpriority="high" on the first image per instance (likely LCP candidate).
 //
 // Server-side HTML sanitizer (isomorphic-dompurify) is unnecessary: `html: () => ""`
 // strips all raw HTML at build time, and images validate against IMAGE_DIMENSIONS
@@ -55,12 +55,10 @@ export function createMarked(): Marked {
           : ' loading="lazy"';
         imageIndex++;
         const srcsetAttr = ` srcset="${dims.srcset.map(s => `${escapeHtml(s.path)} ${s.width}w`).join(", ")}"`;
-        // sizes derivation (keep in sync with blog.css / fellspiral theme.css):
-        // Desktop (>= 768px): min(49rem, viewport - page padding 2*(1rem+12px) - sidebar 16rem - gap 1.5rem - main padding 2*1.5rem)
-        //   = min(49rem, calc(100vw - 22.5rem - 24px)) ≈ min(49rem, calc(100vw - 24rem))
-        //   sizes uses 19.5rem (overestimate) — safe, fetches slightly larger images
-        // Mobile: viewport - page padding 2*1rem - filigree 2*12px → calc(100vw - 2rem - 24px)
-        const sizesAttr = ' sizes="(min-width: 768px) min(49rem, calc(100vw - 19.5rem)), calc(100vw - 2rem - 24px)"';
+        // sizes: empirically matched to blog.css / fellspiral layout.css.
+        // Desktop: main column capped at ~49rem, narrower on small desktops.
+        // Mobile: full viewport minus page padding and filigree borders.
+        const sizesAttr = ' sizes="(min-width: 768px) min(49rem, calc(100vw - 22.5rem - 24px)), calc(100vw - 5rem - 24px)"';
         return `<img src="${safeHref}" alt="${alt}" width="${dims.width}" height="${dims.height}"${srcsetAttr}${sizesAttr}${loadAttr}>`;
       },
     },
