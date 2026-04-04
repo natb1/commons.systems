@@ -29,8 +29,9 @@ export const IMAGE_DIMENSIONS: Record<string, ImageMeta> = Object.fromEntries(
 // reverse tabnapping. The image renderer adds width/height, srcset/sizes, and
 // fetchpriority="high" on the first image per instance (LCP element).
 //
-// Build-time paths (prerender, vite plugin) rely on the `html: () => ""` renderer
-// to strip raw HTML. The client additionally runs DOMPurify (see pages/home.ts).
+// Server-side HTML sanitizer (isomorphic-dompurify) is unnecessary: `html: () => ""`
+// strips all raw HTML at build time, and images validate against IMAGE_DIMENSIONS
+// (unknown paths throw). The client additionally runs DOMPurify (see pages/home.ts).
 export function createMarked(): Marked {
   let imageIndex = 0;
 
@@ -56,7 +57,8 @@ export function createMarked(): Marked {
         const srcsetAttr = ` srcset="${dims.srcset.map(s => `${escapeHtml(s.path)} ${s.width}w`).join(", ")}"`;
         // sizes derivation (keep in sync with blog.css / fellspiral theme.css):
         // Desktop (>= 768px): min(49rem, viewport - page padding 2*(1rem+12px) - sidebar 16rem - gap 1.5rem - main padding 2*1.5rem)
-        //   = min(49rem, calc(100vw - 22rem - 24px)) ≈ min(49rem, calc(100vw - 19.5rem)) (rounding down for simplicity)
+        //   = min(49rem, calc(100vw - 22.5rem - 24px)) ≈ min(49rem, calc(100vw - 24rem))
+        //   sizes uses 19.5rem (overestimate) — safe, fetches slightly larger images
         // Mobile: viewport - page padding 2*1rem - filigree 2*12px → calc(100vw - 2rem - 24px)
         const sizesAttr = ' sizes="(min-width: 768px) min(49rem, calc(100vw - 19.5rem)), calc(100vw - 2rem - 24px)"';
         return `<img src="${safeHref}" alt="${alt}" width="${dims.width}" height="${dims.height}"${srcsetAttr}${sizesAttr}${loadAttr}>`;
