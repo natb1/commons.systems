@@ -1,4 +1,5 @@
 import type { Plugin } from "vite";
+import { classifyError } from "@commons-systems/errorutil";
 import type { LatestPost } from "./types.ts";
 
 export interface FeedConfig {
@@ -35,6 +36,7 @@ export function feedFetchPlugin(feeds: FeedConfig[]): Plugin {
             if (err instanceof TypeError) {
               throw new Error(`[feed-fetch] ${id}: invalid fetch configuration`, { cause: err });
             }
+            if (classifyError(err) === "programmer") throw err;
             console.warn(`[feed-fetch] ${id}: fetch error`, err);
             return [id, null];
           }

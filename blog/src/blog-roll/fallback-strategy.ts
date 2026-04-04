@@ -1,4 +1,6 @@
 import type { BlogRollStrategy, LatestPost } from "./types.ts";
+import { classifyError } from "@commons-systems/errorutil";
+import { logError } from "@commons-systems/errorutil/log";
 
 export class FallbackStrategy implements BlogRollStrategy {
   constructor(
@@ -11,8 +13,9 @@ export class FallbackStrategy implements BlogRollStrategy {
     try {
       result = await this.primary.fetchLatestPost();
     } catch (err) {
+      if (classifyError(err) === "programmer") throw err;
       if (this.fallbackData) {
-        console.warn("FallbackStrategy: primary threw, using build-time data", err);
+        logError(err, { operation: "fallback-strategy-primary" });
         return this.fallbackData;
       }
       throw err;

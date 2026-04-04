@@ -198,7 +198,7 @@ describe("afterRenderHome", () => {
     afterRenderHome(outlet, player);
 
     const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
-    // .click() toggles checked state in jsdom: false → true
+    // .click() toggles checked state in happy-dom: false → true
     checkbox.click();
 
     expect(player.add).toHaveBeenCalledWith({
@@ -226,7 +226,7 @@ describe("afterRenderHome", () => {
     afterRenderHome(outlet, player);
 
     const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
-    // afterRenderHome set checked=true via isQueued mock; .click() toggles to false
+    // afterRenderHome set checked=true via isQueued mock; .click() toggles false in happy-dom
     checkbox.click();
 
     expect(player.remove).toHaveBeenCalledWith("x1");

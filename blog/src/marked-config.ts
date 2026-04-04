@@ -26,21 +26,11 @@ export const IMAGE_DIMENSIONS: Record<string, ImageMeta> = Object.fromEntries(
 
 // Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
 // and opens post-body links in new tabs with rel="noopener noreferrer" to prevent
-// reverse tabnapping.
-//
-// The image renderer adds width/height attributes from IMAGE_DIMENSIONS,
-// fetchpriority="high" on the first image (LCP element), and loading="lazy"
-// on all subsequent images. The counter is per-Marked-instance: vite plugin
-// and prerender each create their own instance. Client hydration (home.ts)
-// shares a single module-level instance but skips prerendered posts via
-// data-hydrated, so the counter is only used for non-prerendered content
-// (the first non-prerendered image gets fetchpriority=high even though
-// the actual LCP image is prerendered).
+// reverse tabnapping. The image renderer adds width/height, srcset/sizes, and
+// fetchpriority="high" on the first image per instance (LCP element).
 //
 // Build-time paths (prerender, vite plugin) rely on the `html: () => ""` renderer
 // to strip raw HTML. The client additionally runs DOMPurify (see pages/home.ts).
-// A Node-compatible sanitizer (e.g., isomorphic-dompurify) is not currently used
-// at build time — security review should evaluate whether one is needed.
 export function createMarked(): Marked {
   let imageIndex = 0;
 
@@ -65,7 +55,8 @@ export function createMarked(): Marked {
         imageIndex++;
         const srcsetAttr = ` srcset="${dims.srcset.map(s => `${escapeHtml(s.path)} ${s.width}w`).join(", ")}"`;
         // sizes derivation (keep in sync with blog.css / fellspiral theme.css):
-        // Desktop (>= 768px): min(49rem, viewport - sidebar 16rem - gap 1.5rem - main padding 2*1.5rem) → min(49rem, calc(100vw - 19.5rem))
+        // Desktop (>= 768px): min(49rem, viewport - page padding 2*(1rem+12px) - sidebar 16rem - gap 1.5rem - main padding 2*1.5rem)
+        //   = min(49rem, calc(100vw - 22rem - 24px)) ≈ min(49rem, calc(100vw - 19.5rem)) (rounding down for simplicity)
         // Mobile: viewport - page padding 2*1rem - filigree 2*12px → calc(100vw - 2rem - 24px)
         const sizesAttr = ' sizes="(min-width: 768px) min(49rem, calc(100vw - 19.5rem)), calc(100vw - 2rem - 24px)"';
         return `<img src="${safeHref}" alt="${alt}" width="${dims.width}" height="${dims.height}"${srcsetAttr}${sizesAttr}${loadAttr}>`;
