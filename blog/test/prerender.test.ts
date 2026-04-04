@@ -97,6 +97,26 @@ describe("prerenderPosts", () => {
     expect(html).toContain('<meta property="og:image" content="https://example.com/hello.jpg">');
   });
 
+  it("replaces template meta description with post-specific description", async () => {
+    const templateWithDesc = TEMPLATE.replace(
+      "<title>",
+      '<meta name="description" content="Site description" />\n  <title>',
+    );
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (path === "/dist/index.html") return templateWithDesc;
+      return MARKDOWN_HELLO;
+    }) as typeof fs.readFileSync);
+
+    await prerenderPosts(makeConfig());
+
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+    expect(html).toContain('<meta name="description" content="A first post about hello world.">');
+    expect(html).not.toContain("Site description");
+  });
+
   it("omits og:image when previewImage is absent", async () => {
     const config = makeConfig();
     const doc = config.seed.collections[0].documents[0];
