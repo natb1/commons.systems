@@ -8,6 +8,8 @@ if (!host) {
 }
 
 const bucket = process.env.STORAGE_BUCKET ?? "commons-systems.firebasestorage.app";
+// SEED_TEST_ONLY serves dual purpose: includes test-only items AND forces stub
+// content (synthetic WAVs) for all items, enabling fast deterministic seeding.
 const includeTestOnly = process.env.SEED_TEST_ONLY === "true";
 const boundary = "----SeedBoundary";
 
