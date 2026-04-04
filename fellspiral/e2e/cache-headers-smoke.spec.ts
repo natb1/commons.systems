@@ -44,4 +44,20 @@ test.describe("cache headers smoke", () => {
     expect(imgCacheControl, "cache-control header missing from image response").toBeDefined();
     expect(imgCacheControl).toContain("public, max-age=86400");
   });
+
+  test("fonts have daily cache-control @smoke", async ({ request }) => {
+    const fontResponse = await request.get(
+      "/fonts/eb-garamond-latin-400-normal.woff2",
+    );
+    expect(
+      fontResponse.status(),
+      "font file /fonts/eb-garamond-latin-400-normal.woff2 not found -- verify the font path still exists in the build output",
+    ).toBe(200);
+    const fontCacheControl = fontResponse.headers()["cache-control"];
+    expect(
+      fontCacheControl,
+      "cache-control header missing from font response",
+    ).toBeDefined();
+    expect(fontCacheControl).toContain("public, max-age=86400");
+  });
 });

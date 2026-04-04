@@ -98,7 +98,7 @@
           ]
         },
         {
-          "source": "**/*.@(jpg|jpeg|png|gif|webp|avif|svg)",
+          "source": "**/*.@(jpg|jpeg|png|gif|webp|avif|svg|woff2)",
           "headers": [
             {
               "key": "Cache-Control",
