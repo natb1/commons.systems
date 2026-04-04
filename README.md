@@ -54,7 +54,8 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 | 8 | QA Review | Augmented | [ref-qa](.claude/skills/ref-qa/SKILL.md) | QA server |
 | 9 | Code Quality Review | Delegated + QC | [ref-code-quality](.claude/skills/ref-code-quality/SKILL.md) | |
 | 10 | Security Review | Delegated + QC | [ref-security](.claude/skills/ref-security/SKILL.md) | |
-| 11 | Merge | Augmented | [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) | [continuous deployment](.claude/skills/ref-pr-workflow/run-prod-deploy.sh) |
+| 11 | Final PR Checks | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) | |
+| 12 | Merge | Augmented | [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) | [continuous deployment](.claude/skills/ref-pr-workflow/run-prod-deploy.sh) |
 
 **Agent patterns:** *Augmented* = human-in-the-loop, Claude assists. *Delegated* = Claude drives autonomously. *QC* = human quality gate before proceeding.
 
@@ -71,7 +72,8 @@ recovery hook         dispatch table,   ├──>  ref-create-pr     (Step 5)
                                         ├──>  ref-qa            (Step 8)
                                         ├──>  ref-code-quality  (Step 9)
                                         ├──>  ref-security      (Step 10)
-                                        └──>  (inline Step 11)
+                                        ├──>  ref-pr-check      (Step 11, fork)
+                                        └──>  (inline Step 12)
 ```
 
 #### Control Flow with Fork Boundaries
@@ -89,7 +91,8 @@ Step 5: PR Creation
 Step 8: QA Review ──────────────────────────────────────────── wiggum-loop
 Step 9: Code Quality Review ────────────────────────────────── wiggum-loop
 Step 10: Security Review ───────────────────────────────────── wiggum-loop
-Step 11: Mark Ready + Merge
+                                      Step 11: Final PR Checks ──── verify loop
+Step 12: Mark Ready + Merge
 ```
 
 #### State Persistence
@@ -98,7 +101,7 @@ Workflow state is stored as JSON in the GitHub issue body via `issue-state-write
 
 #### Wiggum-Loop Pattern
 
-Six of eleven steps use the [wiggum-loop](.claude/skills/ref-wiggum-loop/SKILL.md) pattern: an evaluate-iterate-terminate cycle where each iteration runs the step's action, evaluates the result, and either iterates (fix + retry) or terminates (advance to next step). Progress reports and termination summaries are posted as PR comments.
+Six of twelve steps use the [wiggum-loop](.claude/skills/ref-wiggum-loop/SKILL.md) pattern: an evaluate-iterate-terminate cycle where each iteration runs the step's action, evaluates the result, and either iterates (fix + retry) or terminates (advance to next step). Progress reports and termination summaries are posted as PR comments.
 
 ## CI/CD
 

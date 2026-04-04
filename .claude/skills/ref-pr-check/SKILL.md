@@ -1,16 +1,17 @@
 ---
 name: ref-pr-check
-description: Forked verify loop with CI monitoring — runs Steps 6 and 7 in isolated context
+description: Forked verify loop with CI monitoring — runs Steps 6, 7, and 11 in isolated context
 context: fork
 ---
 
 # Verify Loop (Forked)
 
-Self-contained wiggum-loop for Steps 6 (acceptance) and 7 (smoke). Runs in isolated context — cannot invoke other skills.
+Self-contained wiggum-loop for Steps 6 (acceptance), 7 (smoke), and 11 (final verify). Runs in isolated context — cannot invoke other skills.
 
 On load, read issue state via `.claude/skills/ref-pr-workflow/scripts/issue-state-read` to determine entry point:
 - step=6 → start at Phase 1 (acceptance)
 - step=7 → start at Phase 2 (smoke)
+- step=11 → start at Phase 3 (final verify)
 
 ## Sandbox
 
@@ -152,6 +153,77 @@ git add <files> && git commit -m "..." && git push origin HEAD
   ```
 - Go to Return with status `"success"`.
 
+## Phase 3: Final Verify (Step 11)
+
+Monitor the latest CI run triggered by code quality/security fixes. No new push — just watch.
+
+Iteration counter starts at 1.
+
+### Execute
+
+Run in a background Task (`run_in_background: true`). Use `dangerouslyDisableSandbox: true`. Find and monitor the latest CI run:
+```bash
+gh run watch -i 30 --exit-status $(gh run list --branch $(git rev-parse --abbrev-ref HEAD) --limit 1 --json databaseId --jq '.[0].databaseId')
+```
+
+### Evaluate
+
+- All pass → go to Terminate
+- Test failures → go to Iterate
+- Infrastructure failures → set status to `"needs_user"`, go to Return
+
+### Progress Report
+
+- `mkdir -p tmp`
+- Write evaluation to `tmp/final-verify-eval-<N>.txt`
+- Post combined comment:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> <output_file> tmp/final-verify-eval-<N>.txt
+  ```
+- Write checkpoint:
+  ```bash
+  echo '{"iteration":<N>,"outcome":"<iterate|terminate>","last_eval_file":"tmp/final-verify-eval-<N>.txt"}' \
+    > tmp/final-verify-subagent-state.json
+  ```
+
+### Iterate
+
+Fix failures. Commit and push. Increment counter. Return to Execute.
+```bash
+git add <files> && git commit -m "..." && git push origin HEAD
+```
+
+### Terminate
+
+- `mkdir -p tmp`
+- Write final summary to `tmp/final-verify-final.txt`:
+  ```
+  # Final PR Check Verification - Complete ✓
+
+  **Date**: [Current date]
+  **Branch**: [branch name]
+
+  ## Iterations
+
+  [For each iteration:]
+  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
+  ...
+  - Final iteration: All checks passed
+
+  ## Conclusion
+
+  All CI checks passed after code quality and security fixes. Proceeding to completion.
+  ```
+- Post:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/final-verify-final.txt
+  ```
+- Update issue state to step=12/phase=core:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":12,"step_label":"Completion","phase":"core","active_skills":["ref-memory-management","ref-pr-workflow"]}'
+  ```
+- Go to Return with status `"success"`.
+
 ## Return Contract
 
 Final output message must be valid JSON:
@@ -166,6 +238,6 @@ Final output message must be valid JSON:
 }
 ```
 
-- `"success"`: Both phases completed
+- `"success"`: All phases completed (or single phase for step=11)
 - `"failure"`: Unrecoverable error — include details in `error`
 - `"needs_user"`: Infrastructure/deploy failure requiring user input
