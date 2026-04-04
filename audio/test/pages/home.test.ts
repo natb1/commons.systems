@@ -266,6 +266,28 @@ describe("afterRenderHome", () => {
     expect(player.remove).not.toHaveBeenCalled();
   });
 
+  it("does not duplicate click listener on repeated afterRenderHome calls", () => {
+    const outlet = document.createElement("div");
+    outlet.innerHTML = `
+      <details class="expand-row audio-row" data-id="x1" data-storage-path="media/x1.mp3" data-title="Track" data-artist="Art" data-album="Alb">
+        <summary><div class="expand-summary">
+          <label class="queue-checkbox"><input type="checkbox" data-queue-toggle /></label>
+          <span class="title">Track</span>
+        </div></summary>
+      </details>
+    `;
+
+    const player = makeMockPlayer();
+    afterRenderHome(outlet, player);
+    afterRenderHome(outlet, player);
+    afterRenderHome(outlet, player);
+
+    const checkbox = outlet.querySelector<HTMLInputElement>("input[data-queue-toggle]")!;
+    checkbox.click();
+
+    expect(player.add).toHaveBeenCalledTimes(1);
+  });
+
   it("syncs checkbox state on render for queued tracks", () => {
     const outlet = document.createElement("div");
     outlet.innerHTML = `

@@ -76,8 +76,8 @@ test.describe("build-time blog content", () => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     // Content is build-time inlined, so no GitHub fetches should occur.
-    // Wait briefly for any deferred requests to fire (App Check init
-    // creates long-lived connections that prevent networkidle).
+    // Wait briefly for any deferred requests to fire (Firebase SDK
+    // initialization creates persistent connections that prevent networkidle).
     await page.waitForTimeout(3000);
 
     expect(githubRequests).toHaveLength(0);
