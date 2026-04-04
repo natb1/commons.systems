@@ -1,14 +1,10 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
+import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError } from "@commons-systems/errorutil/log";
 import { getMediaDownloadUrl } from "./storage.js";
+import type { AudioItem } from "./types.js";
 
-export interface PlayRequest {
-  readonly id: string;
-  readonly title: string;
-  readonly artist: string;
-  readonly album: string;
-  readonly storagePath: string;
-}
+export type PlayRequest = Pick<AudioItem, "id" | "title" | "artist" | "album" | "storagePath">;
 
 export interface PlayerHandle {
   add(item: PlayRequest): void;
@@ -63,11 +59,13 @@ export function initPlayer(
     getMediaDownloadUrl(item.storagePath)
       .then((url) => {
         audioEl.src = url;
-        audioEl.play().catch((err) =>
-          logError(err, { operation: "audio-play" }),
-        );
+        audioEl.play().catch((err) => {
+          if (classifyError(err) === "programmer") throw err;
+          logError(err, { operation: "audio-play" });
+        });
       })
       .catch((err) => {
+        if (classifyError(err) === "programmer") throw err;
         logError(err, { operation: "audio-download-url", storagePath: item.storagePath });
         advanceOrStop(index);
       });
