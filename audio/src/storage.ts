@@ -1,6 +1,6 @@
 import { getDownloadURL, ref } from "firebase/storage";
 import { storage, STORAGE_NAMESPACE } from "./firebase.js";
-import { getFile, putFile } from "./audio-cache.js";
+import { getFile, putFile, CACHE_UPDATED_EVENT } from "./audio-cache.js";
 
 const MIME_TYPES: Record<string, string> = {
   ".mp3": "audio/mpeg",
@@ -12,8 +12,12 @@ const MIME_TYPES: Record<string, string> = {
 };
 
 function mimeTypeFromPath(path: string): string {
-  const ext = path.slice(path.lastIndexOf(".")).toLowerCase();
-  return MIME_TYPES[ext] ?? "application/octet-stream";
+  const dotIndex = path.lastIndexOf(".");
+  if (dotIndex < 0) throw new Error(`Cannot infer MIME type: no file extension in path '${path}'`);
+  const ext = path.slice(dotIndex).toLowerCase();
+  const mime = MIME_TYPES[ext];
+  if (!mime) throw new Error(`Unsupported audio format '${ext}' in path '${path}'`);
+  return mime;
 }
 
 export async function getMediaDownloadUrl(storagePath: string): Promise<string> {
@@ -32,8 +36,10 @@ export async function resolveAudioSource(storagePath: string): Promise<string> {
   if (!res.ok) throw new Error(`Audio fetch failed: ${res.status}`);
   const buf = await res.arrayBuffer();
 
+  // Cache write is fire-and-forget so the caller gets the blob URL without
+  // waiting for IndexedDB persistence.
   putFile(storagePath, buf)
-    .then(() => document.dispatchEvent(new Event("audio-cache-updated")))
+    .then(() => document.dispatchEvent(new Event(CACHE_UPDATED_EVENT)))
     .catch((err) =>
       reportError(new Error("Failed to cache audio file", { cause: err })),
     );

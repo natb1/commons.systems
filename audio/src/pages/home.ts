@@ -7,7 +7,7 @@ import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
 import type { AudioItem } from "../types.js";
 import { formatDuration } from "../player.js";
 import type { PlayerHandle } from "../player.js";
-import { getCacheStats, clearCache } from "../audio-cache.js";
+import { getCacheStats, clearCache, CACHE_UPDATED_EVENT } from "../audio-cache.js";
 
 function renderRow(item: AudioItem): string {
   const track =
@@ -98,7 +98,6 @@ export function afterRenderHome(
   outlet: HTMLElement,
   player: PlayerHandle,
 ): void {
-  // Sync checkbox state for any tracks already queued
   for (const row of outlet.querySelectorAll<HTMLElement>(".audio-row")) {
     const id = row.dataset.id;
     if (!id) continue;
@@ -113,7 +112,7 @@ export function afterRenderHome(
   clickAbort?.abort();
   clickAbort = new AbortController();
 
-  // Checkbox click: add/remove from queue, prevent details toggle
+  // stopPropagation prevents the click from toggling the parent <details> element
   outlet.addEventListener("click", (e) => {
     const checkbox = (e.target as HTMLElement).closest(
       "input[data-queue-toggle]",
@@ -148,7 +147,7 @@ export function afterRenderHome(
   refreshCacheStats(outlet);
 
   document.addEventListener(
-    "audio-cache-updated",
+    CACHE_UPDATED_EVENT,
     () => refreshCacheStats(outlet),
     { signal: clickAbort.signal },
   );
