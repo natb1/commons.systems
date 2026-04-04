@@ -1,4 +1,4 @@
-import { classifyError } from "./classify.js";
+import { classifyError } from "./classify.ts";
 
 /**
  * If the error is a programmer error (as classified by classifyError), defer

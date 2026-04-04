@@ -2,9 +2,16 @@ import { test, expect } from "@playwright/test";
 
 const IMAGE_PATHS = [
   "/woman-with-a-flower-head.webp",
+  "/woman-with-a-flower-head-400w.webp",
+  "/woman-with-a-flower-head-800w.webp",
   "/blog-map-color.webp",
+  "/blog-map-color-400w.webp",
+  "/blog-map-color-800w.webp",
   "/tile10-armadillo-crag.webp",
+  "/tile10-armadillo-crag-400w.webp",
   "/alienurn.webp",
+  "/alienurn-400w.webp",
+  "/alienurn-800w.webp",
 ];
 
 test.describe("image optimization smoke", () => {

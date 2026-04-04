@@ -57,12 +57,12 @@ async function seedItem(item: StorageSeedItem): Promise<string> {
   }
 
   let content: Buffer;
-  if (item.sourceUrl && !includeTestOnly) {
-    content = await fetchSource(item.sourceUrl, item.path);
-  } else if (item.content) {
+  if (includeTestOnly && item.content) {
     content = item.content;
   } else if (item.sourceUrl) {
     content = await fetchSource(item.sourceUrl, item.path);
+  } else if (item.content) {
+    content = item.content;
   } else {
     throw new Error(`Seed item ${item.path} has neither content nor sourceUrl`);
   }

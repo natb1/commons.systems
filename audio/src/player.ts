@@ -46,6 +46,15 @@ export function initPlayer(
     playlistEl.innerHTML = `<ol id="playlist-queue">${items}</ol>`;
   }
 
+  function advanceOrStop(fromIndex: number): void {
+    const nextIndex = fromIndex + 1;
+    if (nextIndex < queue.length) {
+      playTrack(nextIndex);
+    } else {
+      stop();
+    }
+  }
+
   function playTrack(index: number): void {
     const item = queue[index];
     if (!item) throw new Error(`playTrack: index ${index} out of range (queue length ${queue.length})`);
@@ -60,12 +69,7 @@ export function initPlayer(
       })
       .catch((err) => {
         logError(err, { operation: "audio-download-url", storagePath: item.storagePath });
-        const nextIndex = index + 1;
-        if (nextIndex < queue.length) {
-          playTrack(nextIndex);
-        } else {
-          stop();
-        }
+        advanceOrStop(index);
       });
   }
 
@@ -79,12 +83,7 @@ export function initPlayer(
 
   function onEnded(): void {
     if (currentIndex < 0) return;
-    const nextIndex = currentIndex + 1;
-    if (nextIndex < queue.length) {
-      playTrack(nextIndex);
-    } else {
-      stop();
-    }
+    advanceOrStop(currentIndex);
   }
 
   audioEl.addEventListener("ended", onEnded);
