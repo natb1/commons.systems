@@ -57,7 +57,9 @@ async function seedItem(item: StorageSeedItem): Promise<string> {
   }
 
   let content: Buffer;
-  if (item.content) {
+  if (item.sourceUrl && !includeTestOnly) {
+    content = await fetchSource(item.sourceUrl, item.path);
+  } else if (item.content) {
     content = item.content;
   } else if (item.sourceUrl) {
     content = await fetchSource(item.sourceUrl, item.path);
