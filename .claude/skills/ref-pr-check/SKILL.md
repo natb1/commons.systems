@@ -155,19 +155,34 @@ git add <files> && git commit -m "..." && git push origin HEAD
 
 ## Phase 3: Final Verify (Step 11)
 
-Monitor the latest CI run triggered by code quality/security fixes. No new push — just watch.
+Verify the latest CI run covers HEAD. If it does, monitor it; if not, skip to Terminate with a note that no new CI run was triggered.
 
 Iteration counter starts at 1.
 
 ### Execute
 
-Run in a background Task (`run_in_background: true`). Use `dangerouslyDisableSandbox: true`. Find and monitor the latest CI run:
+Two-step discovery and validation. Use `dangerouslyDisableSandbox: true` for all commands.
+
+**Step 1 — Discover latest run:**
 ```bash
-gh run watch -i 30 --exit-status $(gh run list --branch $(git rev-parse --abbrev-ref HEAD) --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run list --branch $(git rev-parse --abbrev-ref HEAD) --limit 1 --json databaseId,headSha
 ```
+
+If no runs exist (empty array), set `run_status` to `"no_run"` and skip to Evaluate.
+
+**Step 2 — Validate HEAD match:**
+
+Compare the returned `headSha` against `git rev-parse HEAD`.
+- Match → monitor the run in a background Task (`run_in_background: true`):
+  ```bash
+  gh run watch -i 30 --exit-status <databaseId>
+  ```
+  Capture output to `tmp/final-verify-watch-<N>.txt`.
+- No match → the latest run predates HEAD (no new CI run was triggered by recent fixes). Set `run_status` to `"stale"` and skip to Evaluate.
 
 ### Evaluate
 
+- `run_status` is `"no_run"` or `"stale"` → go to Terminate (no CI run to verify; note in summary)
 - All pass → go to Terminate
 - Test failures → go to Iterate
 - Infrastructure failures → set status to `"needs_user"`, go to Return
@@ -176,9 +191,13 @@ gh run watch -i 30 --exit-status $(gh run list --branch $(git rev-parse --abbrev
 
 - `mkdir -p tmp`
 - Write evaluation to `tmp/final-verify-eval-<N>.txt`
-- Post combined comment:
+- Post comment using the watch output file (if it exists) and the eval file:
   ```bash
-  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> <output_file> tmp/final-verify-eval-<N>.txt
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/final-verify-watch-<N>.txt tmp/final-verify-eval-<N>.txt
+  ```
+  If no watch output (skipped run), post only the eval file:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/final-verify-eval-<N>.txt
   ```
 - Write checkpoint:
   ```bash
@@ -198,7 +217,7 @@ git add <files> && git commit -m "..." && git push origin HEAD
 - `mkdir -p tmp`
 - Write final summary to `tmp/final-verify-final.txt`:
   ```
-  # Final PR Check Verification - Complete ✓
+  # Final Verify - Complete ✓
 
   **Date**: [Current date]
   **Branch**: [branch name]
@@ -210,9 +229,12 @@ git add <files> && git commit -m "..." && git push origin HEAD
   ...
   - Final iteration: All checks passed
 
+  (If no CI run was monitored:)
+  - No new CI run covers HEAD. The latest passing run predates recent fixes.
+
   ## Conclusion
 
-  All CI checks passed after code quality and security fixes. Proceeding to completion.
+  [Summary of result]. Proceeding to completion.
   ```
 - Post:
   ```bash
@@ -234,6 +256,17 @@ Final output message must be valid JSON:
   "step_completed": 7,
   "iterations": {"acceptance": 2, "smoke": 1},
   "final_summary_file": "tmp/smoke-final.txt",
+  "error": null
+}
+```
+
+Step 11 example (single phase):
+```json
+{
+  "status": "success",
+  "step_completed": 11,
+  "iterations": {"final_verify": 1},
+  "final_summary_file": "tmp/final-verify-final.txt",
   "error": null
 }
 ```

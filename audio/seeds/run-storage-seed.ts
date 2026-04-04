@@ -56,13 +56,14 @@ async function seedItem(item: StorageSeedItem): Promise<string> {
     return `  Skipped ${item.path} (already exists)`;
   }
 
+  const useStub = includeTestOnly && item.content;
   let content: Buffer;
-  if (item.sourceUrl && !includeTestOnly) {
+  if (useStub) {
+    content = item.content!;
+  } else if (item.sourceUrl) {
     content = await fetchSource(item.sourceUrl, item.path);
   } else if (item.content) {
     content = item.content;
-  } else if (item.sourceUrl) {
-    content = await fetchSource(item.sourceUrl, item.path);
   } else {
     throw new Error(`Seed item ${item.path} has neither content nor sourceUrl`);
   }
