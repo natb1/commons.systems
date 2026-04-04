@@ -110,10 +110,8 @@ export function initPlayer(
       } else if (wasPlaying) {
         const nextIndex = idx < queue.length ? idx : 0;
         playTrack(nextIndex);
-      } else if (idx < currentIndex) {
-        currentIndex--;
-        renderPlaylist();
       } else {
+        if (idx < currentIndex) currentIndex--;
         renderPlaylist();
       }
     },
