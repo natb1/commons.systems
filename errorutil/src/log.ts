@@ -1,4 +1,4 @@
-import { classifyError, type ErrorKind } from "./classify.js";
+import { classifyError, type ErrorKind } from "./classify.ts";
 
 export interface ErrorContext {
   /** Human-readable label for what was happening when the error occurred. */

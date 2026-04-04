@@ -36,4 +36,21 @@ describe("FallbackStrategy", () => {
     const result = await strategy.fetchLatestPost();
     expect(result).toBeNull();
   });
+
+  it("returns fallback data when primary throws", async () => {
+    const throwing: BlogRollStrategy = {
+      fetchLatestPost: () => Promise.reject(new Error("network error")),
+    };
+    const strategy = new FallbackStrategy(throwing, FALLBACK_POST);
+    const result = await strategy.fetchLatestPost();
+    expect(result).toEqual(FALLBACK_POST);
+  });
+
+  it("rethrows when primary throws and fallback is null", async () => {
+    const throwing: BlogRollStrategy = {
+      fetchLatestPost: () => Promise.reject(new Error("network error")),
+    };
+    const strategy = new FallbackStrategy(throwing, null);
+    await expect(strategy.fetchLatestPost()).rejects.toThrow("network error");
+  });
 });

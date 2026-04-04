@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createMarked, IMAGE_DIMENSIONS } from "../src/marked-config.ts";
+import { BLOG_IMAGES } from "../src/image-config.ts";
 
 describe("image renderer", () => {
   it("includes width and height for known image paths", async () => {
@@ -50,6 +51,21 @@ describe("image renderer", () => {
     expect(html).not.toContain("fetchpriority");
   });
 
+  it("includes srcset attribute with width descriptors", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("![alt](/woman-with-a-flower-head.webp)");
+    expect(html).toContain("srcset=");
+    expect(html).toContain("/woman-with-a-flower-head-400w.webp 400w");
+    expect(html).toContain("/woman-with-a-flower-head-800w.webp 800w");
+    expect(html).toContain("/woman-with-a-flower-head.webp 1600w");
+  });
+
+  it("includes sizes attribute", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("![alt](/woman-with-a-flower-head.webp)");
+    expect(html).toContain('sizes="');
+  });
+
   it("gives each createMarked() call an independent counter", async () => {
     const marked1 = createMarked();
     const marked2 = createMarked();
@@ -62,11 +78,22 @@ describe("image renderer", () => {
 });
 
 describe("IMAGE_DIMENSIONS", () => {
-  it("contains entries for all known blog images", () => {
-    expect(Object.keys(IMAGE_DIMENSIONS).length).toBe(4);
+  it("derives one entry per BLOG_IMAGES config", () => {
+    expect(Object.keys(IMAGE_DIMENSIONS).length).toBe(BLOG_IMAGES.length);
+    for (const img of BLOG_IMAGES) {
+      expect(IMAGE_DIMENSIONS[`/${img.baseName}.webp`]).toBeDefined();
+    }
+  });
+
+  it("contains correct dimensions and srcset for a known image", () => {
     expect(IMAGE_DIMENSIONS["/woman-with-a-flower-head.webp"]).toEqual({
       width: 1600,
       height: 900,
+      srcset: [
+        { path: "/woman-with-a-flower-head-400w.webp", width: 400 },
+        { path: "/woman-with-a-flower-head-800w.webp", width: 800 },
+        { path: "/woman-with-a-flower-head.webp", width: 1600 },
+      ],
     });
   });
 });
