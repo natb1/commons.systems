@@ -159,18 +159,34 @@ export function createAppContext(
     resolvedAppCheck = doInitAppCheck();
   }
 
+  let tokenPromise: Promise<Record<string, string>> | null = null;
+  let tokenFailedAt = 0;
+  const TOKEN_RETRY_DELAY_MS = 5 * 60 * 1000;
+
   const getAppCheckHeaders =
     resolvedAppCheck || options?.deferAppCheck
       ? async (): Promise<Record<string, string>> => {
           if (!resolvedAppCheck) return {};
-          try {
-            const { token } = await getToken(resolvedAppCheck);
-            return { "X-Firebase-AppCheck": token };
-          } catch (err) {
-            if (classifyError(err) === "programmer") throw err;
-            logError(err, { operation: "appcheck-token" });
+          if (tokenFailedAt > 0 && Date.now() - tokenFailedAt < TOKEN_RETRY_DELAY_MS) {
             return {};
           }
+          if (tokenPromise) return tokenPromise;
+          const pending: Promise<Record<string, string>> = (async () => {
+            try {
+              const { token } = await getToken(resolvedAppCheck!);
+              tokenFailedAt = 0;
+              return { "X-Firebase-AppCheck": token } as Record<string, string>;
+            } catch (err) {
+              if (classifyError(err) === "programmer") throw err;
+              tokenFailedAt = Date.now();
+              logError(err, { operation: "appcheck-token" });
+              return {} as Record<string, string>;
+            } finally {
+              tokenPromise = null;
+            }
+          })();
+          tokenPromise = pending;
+          return pending;
         }
       : undefined;
 

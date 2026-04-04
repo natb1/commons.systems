@@ -217,4 +217,46 @@ describe("AtomStrategy", () => {
       { headers: { "X-Firebase-AppCheck": "test-token" } },
     );
   });
+
+  it("returns null without fetching when fetchHeaders returns empty object", async () => {
+    const mockFetch = vi.fn();
+    vi.stubGlobal("fetch", mockFetch);
+
+    const fetchHeaders = vi.fn().mockResolvedValue({});
+
+    const strategy = new AtomStrategy("https://example.com/feed", undefined, fetchHeaders);
+    const result = await strategy.fetchLatestPost();
+
+    expect(result).toBeNull();
+    expect(fetchHeaders).toHaveBeenCalledTimes(1);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("returns null without fetching when fetchHeaders returns undefined", async () => {
+    const mockFetch = vi.fn();
+    vi.stubGlobal("fetch", mockFetch);
+
+    const fetchHeaders = vi.fn().mockResolvedValue(undefined);
+
+    const strategy = new AtomStrategy("https://example.com/feed", undefined, fetchHeaders);
+    const result = await strategy.fetchLatestPost();
+
+    expect(result).toBeNull();
+    expect(fetchHeaders).toHaveBeenCalledTimes(1);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("fetches normally when fetchHeaders is not provided", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(ATOM_FEED),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const strategy = new AtomStrategy("https://example.com/feed");
+    const result = await strategy.fetchLatestPost();
+
+    expect(result).not.toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
 });
