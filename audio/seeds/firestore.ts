@@ -5,8 +5,8 @@ import { TEST_USER } from "@commons-systems/authutil/seed";
 type AudioSeedData = Omit<AudioItem, "id">;
 
 // The media collection is intentionally non-convergent: prod seed deploys
-// upsert these documents but will not delete private items added via
-// audio/scripts/upload-media.sh or manual Firestore writes.
+// upsert these documents but will not delete items added via manual Firestore
+// writes.
 //
 // Emulator storage objects are seeded separately via seeds/run-storage-seed.ts.
 
@@ -24,10 +24,10 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             trackNumber: 14,
             genre: "Classical",
             year: 1801,
-            duration: 900,
+            duration: 360,
             format: "mp3",
             publicDomain: true,
-            sourceNotes: "Musopen: https://musopen.org/music/2547-piano-sonata-no-14-in-c-sharp-minor-moonlight-sonata-op-27-no-2/",
+            sourceNotes: "Internet Archive: https://archive.org/details/geniesduclassique_vol2no05 (public domain mark 1.0)",
             storagePath: "media/musopen-beethoven-moonlight.mp3",
             groupId: null,
             memberEmails: [],
@@ -47,7 +47,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             duration: 160,
             format: "mp3",
             publicDomain: true,
-            sourceNotes: "Musopen: https://musopen.org/music/1459-cello-suite-no-1-in-g-major-bwv-1007/",
+            sourceNotes: "Internet Archive: https://archive.org/details/01No.1InGBwv10071.PreludeModerato (Pablo Casals, 1936, public domain)",
             storagePath: "media/musopen-bach-cello-suite-1.mp3",
             groupId: null,
             memberEmails: [],
@@ -67,7 +67,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             duration: 270,
             format: "mp3",
             publicDomain: true,
-            sourceNotes: "Musopen: https://musopen.org/music/2587-nocturnes-op-9/",
+            sourceNotes: "Musopen via Internet Archive: https://archive.org/details/musopen-chopin (CC0, performed by Aaron Dunn)",
             storagePath: "media/musopen-chopin-nocturne-op9-2.mp3",
             groupId: null,
             memberEmails: [],

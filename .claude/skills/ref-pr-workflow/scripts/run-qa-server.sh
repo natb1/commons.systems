@@ -148,9 +148,9 @@ if [ "$USES_FIRESTORE" = true ]; then
   # Seed Firestore with worktree-scoped qa namespace (e.g., "myapp/qa-main")
   echo "Seeding Firestore (namespace: ${NAMESPACE})..."
   APP_NAME="$APP_NAME" \
+  FIREBASE_PROJECT_ID="$EMULATOR_PROJECT_ID" \
   FIRESTORE_EMULATOR_HOST="localhost:${FIRESTORE_PORT}" \
   FIRESTORE_NAMESPACE="$NAMESPACE" \
-  SEED_TEST_ONLY=true \
   npx tsx firestoreutil/bin/run-seed.ts
 fi
 
@@ -191,7 +191,7 @@ fi
 # Seed storage emulator (if used and seed script exists)
 if [ "$USES_STORAGE" = true ] && [ -f "$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts" ]; then
   echo "Seeding storage emulator..."
-  STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" npx tsx "$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts"
+  STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${EMULATOR_PROJECT_ID}.firebasestorage.app" npx tsx "$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts"
 fi
 
 VITE_ARGS=()
@@ -204,9 +204,9 @@ fi
 if [ "$USES_STORAGE" = true ]; then
   VITE_ARGS+=("VITE_STORAGE_EMULATOR_HOST=localhost:${STORAGE_PORT}")
 fi
+VITE_ARGS+=("VITE_FIREBASE_PROJECT_ID=${EMULATOR_PROJECT_ID}")
 if [ "$USES_FUNCTIONS" = true ]; then
   VITE_ARGS+=("VITE_FUNCTIONS_EMULATOR_PORT=${FUNCTIONS_PORT}")
-  VITE_ARGS+=("VITE_FIREBASE_PROJECT_ID=${EMULATOR_PROJECT_ID}")
 fi
 
 # Set GitHub branch for apps that fetch raw content from GitHub

@@ -67,8 +67,8 @@ export interface AppContextOptions {
   /** Defer App Check initialization until `initAppCheck()` is called. When true
    *  and `recaptchaSiteKey` is provided, `getAppCheckHeaders` is always a function
    *  (returns `{}` until init completes) and `initAppCheck` is returned on the context.
-   *  When true without `recaptchaSiteKey`, `getAppCheckHeaders` is still a function
-   *  (always returns `{}`) but `initAppCheck` is undefined. */
+   *  When true without `recaptchaSiteKey`, `getAppCheckHeaders` is a no-op function
+   *  returning `{}` and `initAppCheck` is undefined. */
   deferAppCheck?: boolean;
   storageModule?: StorageModule;
   /** Optional; error logs omit user info when not provided. */
