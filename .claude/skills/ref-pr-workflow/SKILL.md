@@ -34,13 +34,14 @@ Reference only. Do not execute this workflow until directed to do so (eg., by `/
 - PR, smoke done, no QA "Complete" → step=8, phase=qa
 - PR, QA done, no code quality "Complete" → step=9, phase=code-quality
 - PR, code quality done, no security "Complete" → step=10, phase=security
-- All "Complete" → step=11, phase=core
+- PR, security done, no final verify "Complete" → step=11, phase=verify
+- All "Complete" → step=12, phase=core
 
 ## Dispatch
 
 Re-invoke each skill listed in `active_skills` from the issue state that is not already active. Then invoke the phase skill at the determined step. If `wiggum_step` is present, the phase skill resumes the wiggum-loop at that step instead of starting from Step 0.
 
-**Continuity rule:** Phase transitions are not stopping points. When a phase completes and the instructions say "proceed to Step N," immediately dispatch Step N without outputting a summary or waiting for user input. The only authorized stops are: (1) entering plan mode, (2) wiggum-loop evaluation steps that require user classification, and (3) Step 11 (completion).
+**Continuity rule:** Phase transitions are not stopping points. When a phase completes and the instructions say "proceed to Step N," immediately dispatch Step N without outputting a summary or waiting for user input. The only authorized stops are: (1) entering plan mode, (2) wiggum-loop evaluation steps that require user classification, and (3) Step 12 (completion).
 
 | Step | Phase | Invoke |
 |---|---|---|
@@ -51,22 +52,23 @@ Re-invoke each skill listed in `active_skills` from the issue state that is not 
 | 8 | qa | `/ref-qa` at Step 8 |
 | 9 | code-quality | `/ref-code-quality` at Step 9 |
 | 10 | security | `/ref-security` at Step 10 |
-| 11 | core | (this skill, inline — see Step 11 below) |
+| 11 | verify | `/ref-pr-check` (isolated) |
+| 12 | core | (this skill, inline — see Step 12 below) |
 
-## Fork Delegation (Steps 4, 6, 7)
+## Fork Delegation (Steps 4, 6, 7, 11)
 
-Steps 4, 6, and 7 are fully automated — invoke fork skills instead of in-thread phase skills:
+Steps 4, 6, 7, and 11 are fully automated — invoke fork skills instead of in-thread phase skills:
 - Step 4 → `/ref-unit-test`
-- Steps 6, 7 → `/ref-pr-check`
+- Steps 6, 7, 11 → `/ref-pr-check`
 
 On fork result:
 - `"success"` → read updated issue state, proceed to next step
 - `"needs_user"` → read checkpoint file for last state, present error to user
 - `"failure"` → read checkpoint file for last state, present error to user
 
-Checkpoint files: `tmp/unit-subagent-state.json` (Step 4), `tmp/acceptance-subagent-state.json` (Step 6), `tmp/smoke-subagent-state.json` (Step 7).
+Checkpoint files: `tmp/unit-subagent-state.json` (Step 4), `tmp/acceptance-subagent-state.json` (Step 6), `tmp/smoke-subagent-state.json` (Step 7), `tmp/final-verify-subagent-state.json` (Step 11).
 
-## Step 11. Completion
+## Step 12. Completion
 
 ```bash
 gh pr ready <pr-num>

@@ -67,6 +67,8 @@ export async function renderHome(user: User | null): Promise<string> {
   `;
 }
 
+let clickAbort: AbortController | undefined;
+
 export function afterRenderHome(
   outlet: HTMLElement,
   player: PlayerHandle,
@@ -79,6 +81,9 @@ export function afterRenderHome(
     );
     if (checkbox) checkbox.checked = player.isQueued(id);
   }
+
+  clickAbort?.abort();
+  clickAbort = new AbortController();
 
   outlet.addEventListener("click", (e) => {
     const checkbox = (e.target as HTMLElement).closest(
@@ -109,5 +114,5 @@ export function afterRenderHome(
     } else {
       player.remove(id);
     }
-  });
+  }, { signal: clickAbort.signal });
 }
