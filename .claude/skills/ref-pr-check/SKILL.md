@@ -1,16 +1,17 @@
 ---
 name: ref-pr-check
-description: Forked verify loop with CI monitoring — runs Steps 6 and 7 in isolated context
+description: Forked verify loop with CI monitoring — runs Steps 6, 7, and 11 in isolated context
 context: fork
 ---
 
 # Verify Loop (Forked)
 
-Self-contained wiggum-loop for Steps 6 (acceptance) and 7 (smoke). Runs in isolated context — cannot invoke other skills.
+Self-contained wiggum-loop for Steps 6 (acceptance), 7 (smoke), and 11 (final verify). Runs in isolated context — cannot invoke other skills.
 
 On load, read issue state via `.claude/skills/ref-pr-workflow/scripts/issue-state-read` to determine entry point:
 - step=6 → start at Phase 1 (acceptance)
 - step=7 → start at Phase 2 (smoke)
+- step=11 → start at Phase 3 (final verify)
 
 ## Sandbox
 
@@ -152,6 +153,99 @@ git add <files> && git commit -m "..." && git push origin HEAD
   ```
 - Go to Return with status `"success"`.
 
+## Phase 3: Final Verify (Step 11)
+
+Verify the latest CI run covers HEAD. If it does, monitor it; if not, skip to Terminate with a note that no new CI run was triggered.
+
+Iteration counter starts at 1.
+
+### Execute
+
+Two-step discovery and validation. Use `dangerouslyDisableSandbox: true` for all commands.
+
+**Step 1 — Discover latest run:**
+```bash
+gh run list --branch $(git rev-parse --abbrev-ref HEAD) --limit 1 --json databaseId,headSha
+```
+
+If no runs exist (empty array), set `run_status` to `"no_run"` and skip to Evaluate.
+
+**Step 2 — Validate HEAD match:**
+
+Compare the returned `headSha` against `git rev-parse HEAD`.
+- Match → monitor the run in a background Task (`run_in_background: true`):
+  ```bash
+  gh run watch -i 30 --exit-status <databaseId>
+  ```
+  Capture output to `tmp/final-verify-watch-<N>.txt`.
+- No match → the latest run predates HEAD (no new CI run was triggered by recent fixes). Set `run_status` to `"stale"` and skip to Evaluate.
+
+### Evaluate
+
+- `run_status` is `"no_run"` or `"stale"` → go to Terminate (no CI run to verify; note in summary)
+- All pass → go to Terminate
+- Test failures → go to Iterate
+- Infrastructure failures → set status to `"needs_user"`, go to Return
+
+### Progress Report
+
+- `mkdir -p tmp`
+- Write evaluation to `tmp/final-verify-eval-<N>.txt`
+- Post comment using the watch output file (if it exists) and the eval file:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/final-verify-watch-<N>.txt tmp/final-verify-eval-<N>.txt
+  ```
+  If no watch output (skipped run), post only the eval file:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/final-verify-eval-<N>.txt
+  ```
+- Write checkpoint:
+  ```bash
+  echo '{"iteration":<N>,"outcome":"<iterate|terminate>","last_eval_file":"tmp/final-verify-eval-<N>.txt"}' \
+    > tmp/final-verify-subagent-state.json
+  ```
+
+### Iterate
+
+Fix failures. Commit and push. Increment counter. Return to Execute.
+```bash
+git add <files> && git commit -m "..." && git push origin HEAD
+```
+
+### Terminate
+
+- `mkdir -p tmp`
+- Write final summary to `tmp/final-verify-final.txt`:
+  ```
+  # Final Verify - Complete ✓
+
+  **Date**: [Current date]
+  **Branch**: [branch name]
+
+  ## Iterations
+
+  [For each iteration:]
+  - Iteration 1: [Failures] → [Fixes] (commits: [hashes])
+  ...
+  - Final iteration: All checks passed
+
+  (If no CI run was monitored:)
+  - No new CI run covers HEAD. The latest passing run predates recent fixes.
+
+  ## Conclusion
+
+  [Summary of result]. Proceeding to completion.
+  ```
+- Post:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/final-verify-final.txt
+  ```
+- Update issue state to step=12/phase=core:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '{"version":1,"step":12,"step_label":"Completion","phase":"core","active_skills":["ref-memory-management","ref-pr-workflow"]}'
+  ```
+- Go to Return with status `"success"`.
+
 ## Return Contract
 
 Final output message must be valid JSON:
@@ -166,6 +260,17 @@ Final output message must be valid JSON:
 }
 ```
 
-- `"success"`: Both phases completed
+Step 11 example (single phase):
+```json
+{
+  "status": "success",
+  "step_completed": 11,
+  "iterations": {"final_verify": 1},
+  "final_summary_file": "tmp/final-verify-final.txt",
+  "error": null
+}
+```
+
+- `"success"`: All phases completed (or single phase for step=11)
 - `"failure"`: Unrecoverable error — include details in `error`
 - `"needs_user"`: Infrastructure/deploy failure requiring user input

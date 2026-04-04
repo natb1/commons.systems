@@ -67,7 +67,7 @@ export async function renderHome(user: User | null): Promise<string> {
   `;
 }
 
-let clickAc: AbortController | undefined;
+let clickAbort: AbortController | undefined;
 
 export function afterRenderHome(
   outlet: HTMLElement,
@@ -83,11 +83,10 @@ export function afterRenderHome(
     if (checkbox) checkbox.checked = player.isQueued(id);
   }
 
-  // Abort previous listener before attaching a new one — afterRenderHome is
-  // called on every navigation to "/", and outlet is the persistent #app
-  // element whose click listeners accumulate without cleanup.
-  clickAc?.abort();
-  clickAc = new AbortController();
+  // Remove previous click listener before adding a new one (the outlet element
+  // persists across router navigations, so without cleanup listeners accumulate).
+  clickAbort?.abort();
+  clickAbort = new AbortController();
 
   // Checkbox click: add/remove from queue, prevent details toggle
   outlet.addEventListener("click", (e) => {
@@ -119,5 +118,5 @@ export function afterRenderHome(
     } else {
       player.remove(id);
     }
-  }, { signal: clickAc.signal });
+  }, { signal: clickAbort.signal });
 }
