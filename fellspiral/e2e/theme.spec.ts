@@ -50,8 +50,8 @@ test.describe("theme", () => {
 
   test("self-hosted fonts are loaded", async ({ page }) => {
     await page.goto("/");
-    await page.waitForLoadState("networkidle");
-
+    // Firebase SDK creates persistent connections that prevent networkidle.
+    // Wait for font loading directly instead.
     const fontsLoaded = await page.evaluate(async () => {
       await document.fonts.ready;
       return {
