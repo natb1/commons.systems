@@ -4,7 +4,7 @@ import { RECAPTCHA_SITE_KEY } from "@commons-systems/firebaseutil/config";
 let cachedGetAuth: (() => import("firebase/auth").Auth) | undefined;
 
 /** Lazy getCurrentUser: returns null until firebase/auth has been loaded by auth.ts.
- *  Provided to the error sink for optional user context in error logs. */
+ *  Provided to the error-logging configuration in createAppContext. */
 const getCurrentUser = (): { uid: string; email: string | null } | null => {
   const user = cachedGetAuth?.().currentUser ?? null;
   return user ? { uid: user.uid, email: user.email } : null;

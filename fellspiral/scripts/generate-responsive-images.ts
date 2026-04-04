@@ -1,5 +1,5 @@
 /**
- * One-time script to generate responsive image variants from originals.
+ * Offline script to generate responsive image variants from originals.
  * Output goes to fellspiral/public/ alongside the full-size images.
  *
  * Usage: npx tsx fellspiral/scripts/generate-responsive-images.ts
