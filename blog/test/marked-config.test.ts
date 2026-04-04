@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createMarked, IMAGE_DIMENSIONS } from "../src/marked-config.ts";
+import { BLOG_IMAGES } from "../src/image-config.ts";
 
 describe("image renderer", () => {
   it("includes width and height for known image paths", async () => {
@@ -77,8 +78,14 @@ describe("image renderer", () => {
 });
 
 describe("IMAGE_DIMENSIONS", () => {
-  it("contains entries for all known blog images", () => {
-    expect(Object.keys(IMAGE_DIMENSIONS).length).toBe(4);
+  it("derives one entry per BLOG_IMAGES config", () => {
+    expect(Object.keys(IMAGE_DIMENSIONS).length).toBe(BLOG_IMAGES.length);
+    for (const img of BLOG_IMAGES) {
+      expect(IMAGE_DIMENSIONS[`/${img.baseName}.webp`]).toBeDefined();
+    }
+  });
+
+  it("contains correct dimensions and srcset for a known image", () => {
     expect(IMAGE_DIMENSIONS["/woman-with-a-flower-head.webp"]).toEqual({
       width: 1600,
       height: 900,

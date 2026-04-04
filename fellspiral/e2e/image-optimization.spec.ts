@@ -44,7 +44,6 @@ test.describe("image optimization", () => {
     const images = page.locator("#posts img");
     const count = await images.count();
 
-    // Skip the first image (LCP) -- remaining images should be lazy-loaded
     for (let i = 1; i < count; i++) {
       const img = images.nth(i);
       const src = await img.getAttribute("src");

@@ -191,7 +191,12 @@ function updateBlogrollEntry(panel: HTMLElement, entry: BlogRollEntry, post: Lat
   const entryLink = panel.querySelector(`#blogroll-entry-${CSS.escape(entry.id)}`);
   const placeholder = panel.querySelector(`#blogroll-latest-${CSS.escape(entry.id)}`);
   const dateSpan = panel.querySelector(`#blogroll-date-${CSS.escape(entry.id)}`);
-  if (!entryLink || !placeholder) return;
+  if (!entryLink || !placeholder) {
+    logError(new Error(`Blogroll DOM element missing for entry "${entry.id}"`), {
+      operation: "update-blogroll-entry",
+    });
+    return;
+  }
 
   placeholder.textContent = post.title;
   entryLink.setAttribute("href", post.url);

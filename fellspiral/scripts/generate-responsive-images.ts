@@ -6,31 +6,23 @@
  */
 import sharp from "sharp";
 import path from "node:path";
+import { BLOG_IMAGES } from "../../blog/src/image-config.ts";
 
 const ORIGINALS_DIR = path.resolve("fellspiral/originals");
 const PUBLIC_DIR = path.resolve("fellspiral/public");
 
-interface ImageSpec {
-  original: string;
-  baseName: string;
-  widths: number[];
-}
-
-const IMAGES: ImageSpec[] = [
-  { original: "blog-map-color.jpg", baseName: "blog-map-color", widths: [400, 800] },
-  { original: "woman-with-a-flower-head.webp", baseName: "woman-with-a-flower-head", widths: [400, 800] },
-  { original: "alienurn.jpg", baseName: "alienurn", widths: [400, 800] },
-  { original: "tile10-armadillo-crag.png", baseName: "tile10-armadillo-crag", widths: [400] },
-];
-
-for (const img of IMAGES) {
+for (const img of BLOG_IMAGES) {
   const inputPath = path.join(ORIGINALS_DIR, img.original);
-  for (const width of img.widths) {
+  for (const width of img.responsiveWidths) {
     const outputPath = path.join(PUBLIC_DIR, `${img.baseName}-${width}w.webp`);
-    await sharp(inputPath)
-      .resize(width)
-      .webp({ quality: 80 })
-      .toFile(outputPath);
+    try {
+      await sharp(inputPath)
+        .resize(width)
+        .webp({ quality: 80 })
+        .toFile(outputPath);
+    } catch (err) {
+      throw new Error(`Failed to generate ${img.baseName}-${width}w.webp from ${img.original}`, { cause: err });
+    }
     const stats = await sharp(outputPath).metadata();
     console.log(`${img.baseName}-${width}w.webp: ${width}x${stats.height}`);
   }

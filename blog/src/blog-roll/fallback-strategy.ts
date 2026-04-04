@@ -7,7 +7,16 @@ export class FallbackStrategy implements BlogRollStrategy {
   ) {}
 
   async fetchLatestPost(): Promise<LatestPost | null> {
-    const result = await this.primary.fetchLatestPost();
+    let result: LatestPost | null;
+    try {
+      result = await this.primary.fetchLatestPost();
+    } catch (err) {
+      if (this.fallbackData) {
+        console.warn("FallbackStrategy: primary threw, using build-time data", err);
+        return this.fallbackData;
+      }
+      throw err;
+    }
     if (result) return result;
     if (this.fallbackData) {
       console.warn("FallbackStrategy: primary returned null, using build-time data");

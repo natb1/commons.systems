@@ -177,7 +177,7 @@ onAuthStateChanged((user) => {
 });
 
 // Defer App Check / reCAPTCHA initialization until the main thread is idle to keep the
-// 744KB reCAPTCHA script off the critical path. Build-time feed data is already
+// large reCAPTCHA script off the critical path. Build-time feed data is already
 // rendered in the blogroll; once App Check is ready, re-hydrate with live data.
 const deferredAppCheckInit = async () => {
   if (!initAppCheck) return;
@@ -185,18 +185,13 @@ const deferredAppCheckInit = async () => {
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
 };
 
-if ("requestIdleCallback" in window) {
-  requestIdleCallback(() => {
-    deferredAppCheckInit().catch((err) => {
-      if (deferProgrammerError(err)) return;
-      logError(err, { operation: "deferred-appcheck-init" });
-    });
+const scheduleIdle = "requestIdleCallback" in window
+  ? (fn: () => void) => requestIdleCallback(fn)
+  : (fn: () => void) => setTimeout(fn, 0);
+
+scheduleIdle(() => {
+  deferredAppCheckInit().catch((err) => {
+    if (deferProgrammerError(err)) return;
+    logError(err, { operation: "deferred-appcheck-init" });
   });
-} else {
-  setTimeout(() => {
-    deferredAppCheckInit().catch((err) => {
-      if (deferProgrammerError(err)) return;
-      logError(err, { operation: "deferred-appcheck-init" });
-    });
-  }, 0);
-}
+});

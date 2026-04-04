@@ -1,6 +1,7 @@
 import { Marked } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { PublishedPost } from "./post-types.ts";
+import { BLOG_IMAGES } from "./image-config.ts";
 
 interface ImageMeta {
   width: number;
@@ -9,39 +10,19 @@ interface ImageMeta {
 }
 
 /** Known image dimensions and responsive variants for blog images served from public/. */
-export const IMAGE_DIMENSIONS: Record<string, ImageMeta> = {
-  "/woman-with-a-flower-head.webp": {
-    width: 1600, height: 900,
-    srcset: [
-      { path: "/woman-with-a-flower-head-400w.webp", width: 400 },
-      { path: "/woman-with-a-flower-head-800w.webp", width: 800 },
-      { path: "/woman-with-a-flower-head.webp", width: 1600 },
-    ],
-  },
-  "/blog-map-color.webp": {
-    width: 1600, height: 1267,
-    srcset: [
-      { path: "/blog-map-color-400w.webp", width: 400 },
-      { path: "/blog-map-color-800w.webp", width: 800 },
-      { path: "/blog-map-color.webp", width: 1600 },
-    ],
-  },
-  "/tile10-armadillo-crag.webp": {
-    width: 782, height: 812,
-    srcset: [
-      { path: "/tile10-armadillo-crag-400w.webp", width: 400 },
-      { path: "/tile10-armadillo-crag.webp", width: 782 },
-    ],
-  },
-  "/alienurn.webp": {
-    width: 1920, height: 1080,
-    srcset: [
-      { path: "/alienurn-400w.webp", width: 400 },
-      { path: "/alienurn-800w.webp", width: 800 },
-      { path: "/alienurn.webp", width: 1920 },
-    ],
-  },
-};
+export const IMAGE_DIMENSIONS: Record<string, ImageMeta> = Object.fromEntries(
+  BLOG_IMAGES.map(img => [
+    `/${img.baseName}.webp`,
+    {
+      width: img.fullWidth,
+      height: img.fullHeight,
+      srcset: [
+        ...img.responsiveWidths.map(w => ({ path: `/${img.baseName}-${w}w.webp`, width: w })),
+        { path: `/${img.baseName}.webp`, width: img.fullWidth },
+      ],
+    },
+  ]),
+);
 
 // Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
 // and opens post-body links in new tabs with rel="noopener noreferrer" to prevent
@@ -52,7 +33,9 @@ export const IMAGE_DIMENSIONS: Record<string, ImageMeta> = {
 // on all subsequent images. The counter is per-Marked-instance: vite plugin
 // and prerender each create their own instance. Client hydration (home.ts)
 // shares a single module-level instance but skips prerendered posts via
-// data-hydrated, so the counter is only used for non-prerendered content.
+// data-hydrated, so the counter is only used for non-prerendered content
+// (the first non-prerendered image gets fetchpriority=high even though
+// the actual LCP image is prerendered).
 //
 // Build-time paths (prerender, vite plugin) rely on the `html: () => ""` renderer
 // to strip raw HTML. The client additionally runs DOMPurify (see pages/home.ts).
@@ -80,7 +63,10 @@ export function createMarked(): Marked {
           ? ' fetchpriority="high"'
           : ' loading="lazy"';
         imageIndex++;
-        const srcsetAttr = ` srcset="${dims.srcset.map(s => `${s.path} ${s.width}w`).join(", ")}"`;
+        const srcsetAttr = ` srcset="${dims.srcset.map(s => `${escapeHtml(s.path)} ${s.width}w`).join(", ")}"`;
+        // sizes derivation (keep in sync with blog.css / fellspiral theme.css):
+        // Desktop (>= 768px): min(49rem, viewport - sidebar 16rem - gap 1.5rem - main padding 2*1.5rem) → min(49rem, calc(100vw - 19.5rem))
+        // Mobile: viewport - page padding 2*1rem - filigree 2*12px → calc(100vw - 2rem - 24px)
         const sizesAttr = ' sizes="(min-width: 768px) min(49rem, calc(100vw - 19.5rem)), calc(100vw - 2rem - 24px)"';
         return `<img src="${safeHref}" alt="${alt}" width="${dims.width}" height="${dims.height}"${srcsetAttr}${sizesAttr}${loadAttr}>`;
       },
