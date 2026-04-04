@@ -144,4 +144,25 @@ test.describe("build-time blog content", () => {
       page.locator("#post-content-disciplinary-review-operations"),
     ).toContainText("Sassy Diaz");
   });
+
+  test("preconnect links are present for googleapis domains", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    const preconnects = page.locator('link[rel="preconnect"]');
+    const hrefs: string[] = [];
+    const count = await preconnects.count();
+    for (let i = 0; i < count; i++) {
+      const href = await preconnects.nth(i).getAttribute("href");
+      if (href) {
+        hrefs.push(href);
+      }
+    }
+
+    expect(hrefs).toContain("https://www.googleapis.com");
+    expect(hrefs).toContain(
+      "https://firebaseinstallations.googleapis.com",
+    );
+  });
 });
