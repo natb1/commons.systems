@@ -183,7 +183,7 @@ export function createAppContext(
               if (classifyError(err) === "programmer") throw err;
               tokenFailedAt = Date.now();
               logError(err, { operation: "appcheck-token" });
-              return {};
+              return {} as Record<string, string>;
             } finally {
               tokenPromise = null;
             }
