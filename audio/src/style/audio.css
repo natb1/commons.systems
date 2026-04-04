@@ -1,0 +1,50 @@
+.audio-row .expand-summary {
+  grid-template-columns: auto 1fr auto auto;
+}
+
+.audio-row .artist,
+.audio-row .album {
+  color: var(--muted);
+}
+
+.audio-row .album {
+  font-style: italic;
+}
+
+#media-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.queue-checkbox {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.queue-checkbox input {
+  cursor: pointer;
+}
+
+#playlist-queue {
+  padding-left: 1.5rem;
+  margin: 0;
+}
+
+#playlist-queue li {
+  padding: 0.25rem 0;
+}
+
+.playlist-active {
+  font-weight: bold;
+}
+
+.playlist-empty {
+  color: var(--muted);
+}
+
+#audio-player {
+  width: 100%;
+  min-height: 54px;
+}
