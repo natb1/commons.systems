@@ -147,6 +147,12 @@ export function afterRenderHome(
 
   refreshCacheStats(outlet);
 
+  document.addEventListener(
+    "audio-cache-updated",
+    () => refreshCacheStats(outlet),
+    { signal: clickAbort.signal },
+  );
+
   const clearBtn = outlet.querySelector<HTMLButtonElement>("#clear-cache-btn");
   if (clearBtn) {
     clearBtn.addEventListener("click", () => {

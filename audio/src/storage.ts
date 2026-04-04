@@ -17,9 +17,11 @@ export async function resolveAudioSource(storagePath: string): Promise<string> {
   if (!res.ok) throw new Error(`Audio fetch failed: ${res.status}`);
   const buf = await res.arrayBuffer();
 
-  putFile(storagePath, buf).catch((err) =>
-    reportError(new Error("Failed to cache audio file", { cause: err })),
-  );
+  putFile(storagePath, buf)
+    .then(() => document.dispatchEvent(new Event("audio-cache-updated")))
+    .catch((err) =>
+      reportError(new Error("Failed to cache audio file", { cause: err })),
+    );
 
   return URL.createObjectURL(new Blob([buf]));
 }
