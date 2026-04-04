@@ -83,6 +83,36 @@ test.describe("build-time blog content", () => {
     expect(githubRequests).toHaveLength(0);
   });
 
+  test("reCAPTCHA scripts do not load before user interaction", async ({
+    page,
+  }) => {
+    const recaptchaRequests: string[] = [];
+    page.on("request", (req) => {
+      const url = req.url();
+      if (
+        url.includes("google.com/recaptcha") ||
+        url.includes("gstatic.com/recaptcha")
+      ) {
+        recaptchaRequests.push(url);
+      }
+    });
+
+    await page.goto("/");
+    await page.waitForSelector("#posts", { timeout: 30000 });
+    // Wait for any deferred requests to fire.
+    await page.waitForTimeout(3000);
+
+    expect(recaptchaRequests).toHaveLength(0);
+
+    // Trigger a user interaction.
+    await page.mouse.click(0, 0);
+    // Wait briefly for the interaction to trigger loading.
+    await page.waitForTimeout(2000);
+
+    // In emulator mode App Check is skipped, so we do not assert that
+    // reCAPTCHA loads after interaction.
+  });
+
   test("blogroll entries have build-time feed data on initial render @smoke", async ({
     page,
   }) => {
