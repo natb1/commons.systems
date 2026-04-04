@@ -1,6 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
-import { getMediaDownloadUrl } from "./storage.js";
+import { resolveAudioSource } from "./storage.js";
 
 export interface PlayRequest {
   readonly id: string;
@@ -31,6 +31,7 @@ export function initPlayer(
 ): PlayerHandle {
   const queue: PlayRequest[] = [];
   let currentIndex = -1;
+  let currentObjectUrl: string | null = null;
 
   function renderPlaylist(): void {
     if (queue.length === 0) {
@@ -55,26 +56,36 @@ export function initPlayer(
     }
   }
 
+  function revokeCurrentObjectUrl(): void {
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = null;
+    }
+  }
+
   function playTrack(index: number): void {
     const item = queue[index];
     if (!item) throw new Error(`playTrack: index ${index} out of range (queue length ${queue.length})`);
     currentIndex = index;
     renderPlaylist();
-    getMediaDownloadUrl(item.storagePath)
+    revokeCurrentObjectUrl();
+    resolveAudioSource(item.storagePath)
       .then((url) => {
+        currentObjectUrl = url;
         audioEl.src = url;
         audioEl.play().catch((err) =>
           logError(err, { operation: "audio-play" }),
         );
       })
       .catch((err) => {
-        logError(err, { operation: "audio-download-url", storagePath: item.storagePath });
+        logError(err, { operation: "audio-source-resolve", storagePath: item.storagePath });
         advanceOrStop(index);
       });
   }
 
   function stop(): void {
     currentIndex = -1;
+    revokeCurrentObjectUrl();
     audioEl.pause();
     audioEl.removeAttribute("src");
     audioEl.load();
