@@ -76,8 +76,8 @@ test.describe("build-time blog content", () => {
     await page.goto("/");
     await page.waitForSelector("#posts", { timeout: 30000 });
     // Content is build-time inlined, so no GitHub fetches should occur.
-    // Wait briefly for any deferred requests to fire (App Check init
-    // creates long-lived connections that prevent networkidle).
+    // Wait briefly for any deferred requests to fire (Firebase SDK
+    // initialization creates persistent connections that prevent networkidle).
     await page.waitForTimeout(3000);
 
     expect(githubRequests).toHaveLength(0);
@@ -143,5 +143,22 @@ test.describe("build-time blog content", () => {
     await expect(
       page.locator("#post-content-disciplinary-review-operations"),
     ).toContainText("Sassy Diaz");
+  });
+
+  test("preconnect links are present for googleapis domains", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    const hrefs = await page
+      .locator('link[rel="preconnect"]')
+      .evaluateAll((els) =>
+        els.map((el) => el.getAttribute("href")).filter(Boolean),
+      );
+
+    expect(hrefs).toContain("https://www.googleapis.com");
+    expect(hrefs).toContain(
+      "https://firebaseinstallations.googleapis.com",
+    );
   });
 });

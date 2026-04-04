@@ -29,8 +29,9 @@ export const IMAGE_DIMENSIONS: Record<string, ImageMeta> = Object.fromEntries(
 // reverse tabnapping. The image renderer adds width/height, srcset/sizes, and
 // fetchpriority="high" on the first image per instance (likely LCP candidate).
 //
-// Build-time paths (prerender, vite plugin) rely on the `html: () => ""` renderer
-// to strip raw HTML. The client additionally runs DOMPurify (see pages/home.ts).
+// Server-side HTML sanitizer (isomorphic-dompurify) is unnecessary: `html: () => ""`
+// strips all raw HTML at build time, and images validate against IMAGE_DIMENSIONS
+// (unknown paths throw). The client additionally runs DOMPurify (see pages/home.ts).
 export function createMarked(): Marked {
   let imageIndex = 0;
 
