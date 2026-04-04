@@ -1,8 +1,23 @@
 @import "@commons-systems/style/default.css";
 @import "@commons-systems/style/hero.css";
+@import "@commons-systems/style/expandable-row.css";
+@import "@commons-systems/style/layout.css";
+@import "./audio.css";
 
 :root {
   color-scheme: dark;
+}
+
+.content-grid {
+  max-width: 64rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+@media (min-width: 768px) {
+  body { --main-max-width: none; --line-length: 100vw; }
+  .content-grid { max-width: none; }
+  main { max-inline-size: none; }
 }
 
 .cc-badge {

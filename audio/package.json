@@ -16,6 +16,7 @@
     "@commons-systems/authutil": "file:../authutil",
     "@commons-systems/firebaseutil": "file:../firebaseutil",
     "@commons-systems/firestoreutil": "file:../firestoreutil",
+    "@commons-systems/errorutil": "file:../errorutil",
     "@commons-systems/htmlutil": "file:../htmlutil",
     "@commons-systems/router": "file:../router",
     "@commons-systems/style": "file:../style",
