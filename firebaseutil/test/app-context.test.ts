@@ -410,6 +410,84 @@ describe("createAppContext", () => {
       const headers = await ctx.getAppCheckHeaders!();
       expect(headers).toEqual({});
     });
+
+    it("deduplicates concurrent getAppCheckHeaders calls into single getToken call", async () => {
+      const { createAppContext } = await loadModule();
+      const mocks = await loadMocks();
+      mocks.initializeAppCheck.mockReturnValue(mockAppCheck);
+      mocks.getToken.mockResolvedValue({ token: "test-token" });
+
+      const ctx = createAppContext("myapp", "app-id-123", {
+        recaptchaSiteKey: "test-key",
+        deferAppCheck: true,
+      });
+
+      await ctx.initAppCheck!();
+
+      const [h1, h2, h3] = await Promise.all([
+        ctx.getAppCheckHeaders!(),
+        ctx.getAppCheckHeaders!(),
+        ctx.getAppCheckHeaders!(),
+      ]);
+
+      expect(mocks.getToken).toHaveBeenCalledTimes(1);
+      expect(h1).toEqual({ "X-Firebase-AppCheck": "test-token" });
+      expect(h2).toEqual({ "X-Firebase-AppCheck": "test-token" });
+      expect(h3).toEqual({ "X-Firebase-AppCheck": "test-token" });
+    });
+
+    it("caches getToken failure and skips retry within cooldown", async () => {
+      const { createAppContext } = await loadModule();
+      const mocks = await loadMocks();
+      mocks.initializeAppCheck.mockReturnValue(mockAppCheck);
+      mocks.getToken.mockRejectedValue(new Error("reCAPTCHA challenge failed"));
+
+      const ctx = createAppContext("myapp", "app-id-123", {
+        recaptchaSiteKey: "test-key",
+        deferAppCheck: true,
+      });
+
+      await ctx.initAppCheck!();
+
+      const headers1 = await ctx.getAppCheckHeaders!();
+      expect(headers1).toEqual({});
+
+      const headers2 = await ctx.getAppCheckHeaders!();
+      expect(headers2).toEqual({});
+
+      expect(mocks.getToken).toHaveBeenCalledTimes(1);
+    });
+
+    it("retries getToken after cooldown expires", async () => {
+      vi.useFakeTimers();
+      try {
+        const { createAppContext } = await loadModule();
+        const mocks = await loadMocks();
+        mocks.initializeAppCheck.mockReturnValue(mockAppCheck);
+        mocks.getToken
+          .mockRejectedValueOnce(new Error("reCAPTCHA challenge failed"))
+          .mockResolvedValueOnce({ token: "retry-token" });
+
+        const ctx = createAppContext("myapp", "app-id-123", {
+          recaptchaSiteKey: "test-key",
+          deferAppCheck: true,
+        });
+
+        await ctx.initAppCheck!();
+
+        const headers1 = await ctx.getAppCheckHeaders!();
+        expect(headers1).toEqual({});
+
+        vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+
+        const headers2 = await ctx.getAppCheckHeaders!();
+        expect(headers2).toEqual({ "X-Firebase-AppCheck": "retry-token" });
+
+        expect(mocks.getToken).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it("includes getAppCheckHeaders in storage context", async () => {
