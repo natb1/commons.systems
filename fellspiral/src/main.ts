@@ -176,27 +176,25 @@ onAuthStateChanged((user) => {
   });
 });
 
-// Defer App Check / reCAPTCHA initialization until the main thread is idle to keep the
-// 744KB reCAPTCHA script off the critical path. Build-time feed data is already
-// rendered in the blogroll; once App Check is ready, re-hydrate with live data.
+// Defer App Check / reCAPTCHA initialization until first user interaction to keep the
+// 742KB reCAPTCHA script completely off the critical path. Build-time feed data is
+// already rendered in the blogroll; once App Check is ready, re-hydrate with live data.
 const deferredAppCheckInit = async () => {
   if (!initAppCheck) return;
   await initAppCheck();
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
 };
 
-if ("requestIdleCallback" in window) {
-  requestIdleCallback(() => {
-    deferredAppCheckInit().catch((err) => {
-      if (deferProgrammerError(err)) return;
-      logError(err, { operation: "deferred-appcheck-init" });
-    });
+const INTERACTION_EVENTS = ["scroll", "click", "touchstart", "keydown"] as const;
+const triggerOnce = () => {
+  for (const evt of INTERACTION_EVENTS) {
+    window.removeEventListener(evt, triggerOnce);
+  }
+  deferredAppCheckInit().catch((err) => {
+    if (deferProgrammerError(err)) return;
+    logError(err, { operation: "deferred-appcheck-init" });
   });
-} else {
-  setTimeout(() => {
-    deferredAppCheckInit().catch((err) => {
-      if (deferProgrammerError(err)) return;
-      logError(err, { operation: "deferred-appcheck-init" });
-    });
-  }, 0);
+};
+for (const evt of INTERACTION_EVENTS) {
+  window.addEventListener(evt, triggerOnce, { once: true, passive: true });
 }
