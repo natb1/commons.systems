@@ -127,7 +127,11 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     }
 
     const ogBlock = ogTags.join("\n    ");
-    let html = template.replace("</head>", `    ${ogBlock}\n  </head>`);
+    let html = template;
+    if (description) {
+      html = html.replace(/\s*<meta name="description"[^>]*>/, "");
+    }
+    html = html.replace("</head>", `    ${ogBlock}\n  </head>`);
     if (html === template) throw new Error(`</head> marker not found in template`);
     const beforeTitle = html;
     html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)} | ${escapeHtml(titleSuffix)}</title>`);
