@@ -12,8 +12,11 @@ const firebaseConfig = JSON.parse(readFileSync(firebaseJsonPath, "utf-8"));
 const fellspiralHosting = firebaseConfig.hosting.find(
   (h: { target: string }) => h.target === "fellspiral",
 );
+if (!fellspiralHosting) {
+  throw new Error("firebase.json missing hosting config with target 'fellspiral'");
+}
 const headers: { source: string; headers: { key: string; value: string }[] }[] =
-  fellspiralHosting?.headers ?? [];
+  fellspiralHosting.headers;
 
 describe("fellspiral firebase headers", () => {
   const cachedExtensions = [

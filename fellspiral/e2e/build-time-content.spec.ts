@@ -150,15 +150,11 @@ test.describe("build-time blog content", () => {
   }) => {
     await page.goto("/");
 
-    const preconnects = page.locator('link[rel="preconnect"]');
-    const hrefs: string[] = [];
-    const count = await preconnects.count();
-    for (let i = 0; i < count; i++) {
-      const href = await preconnects.nth(i).getAttribute("href");
-      if (href) {
-        hrefs.push(href);
-      }
-    }
+    const hrefs = await page
+      .locator('link[rel="preconnect"]')
+      .evaluateAll((els) =>
+        els.map((el) => el.getAttribute("href")).filter(Boolean),
+      );
 
     expect(hrefs).toContain("https://www.googleapis.com");
     expect(hrefs).toContain(

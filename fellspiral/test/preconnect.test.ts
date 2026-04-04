@@ -12,13 +12,13 @@ const html = readFileSync(indexPath, "utf-8");
 describe("fellspiral preconnect links", () => {
   it("preconnects to www.googleapis.com", () => {
     expect(html).toContain(
-      '<link rel="preconnect" href="https://www.googleapis.com"',
+      '<link rel="preconnect" href="https://www.googleapis.com" crossorigin',
     );
   });
 
   it("preconnects to firebaseinstallations.googleapis.com", () => {
     expect(html).toContain(
-      '<link rel="preconnect" href="https://firebaseinstallations.googleapis.com"',
+      '<link rel="preconnect" href="https://firebaseinstallations.googleapis.com" crossorigin',
     );
   });
 });
