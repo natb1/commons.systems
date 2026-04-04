@@ -1,6 +1,6 @@
 import "missing.css";
 import "./style/theme.css";
-import type { User } from "firebase/auth";
+import type { User } from "./auth.js";
 
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
