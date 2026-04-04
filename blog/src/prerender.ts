@@ -70,8 +70,9 @@ function injectNav(html: string, navHtml: string): string {
 // The client-side counterpart (blog/src/og-meta.ts) manages og:title,
 // og:description, og:image, og:type, and og:url dynamically for SPA navigation.
 // This function mirrors those OG tags in static HTML for crawlers, and
-// additionally sets <meta name="description"> and rewrites <title> — neither of
-// which the client-side module handles.
+// additionally sets <meta name="description"> (when the post has a
+// previewDescription, replacing the template's site-level description) and
+// rewrites <title> — neither of which the client-side module handles.
 export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const { siteUrl, titleSuffix, distDir, seed, postDir, navLinks, infoPanel } = config;
 
@@ -127,8 +128,13 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     }
 
     const ogBlock = ogTags.join("\n    ");
-    let html = template.replace("</head>", `    ${ogBlock}\n  </head>`);
-    if (html === template) throw new Error(`</head> marker not found in template`);
+    let html = template;
+    if (description) {
+      html = html.replace(/\s*<meta name="description"[^>]*>/, "");
+    }
+    const beforeHead = html;
+    html = html.replace("</head>", `    ${ogBlock}\n  </head>`);
+    if (html === beforeHead) throw new Error(`</head> marker not found in template`);
     const beforeTitle = html;
     html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)} | ${escapeHtml(titleSuffix)}</title>`);
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
