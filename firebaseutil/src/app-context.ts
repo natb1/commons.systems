@@ -65,10 +65,10 @@ export interface StorageModule {
 export interface AppContextOptions {
   recaptchaSiteKey?: string;
   /** Defer App Check initialization until `initAppCheck()` is called. When true
-   *  and `recaptchaSiteKey` is provided, `getAppCheckHeaders` is always a function
-   *  (returns `{}` until init completes) and `initAppCheck` is returned on the context.
-   *  When true without `recaptchaSiteKey`, `getAppCheckHeaders` is a no-op function
-   *  returning `{}` and `initAppCheck` is undefined. */
+   *  with `recaptchaSiteKey`, `getAppCheckHeaders` returns `{}` until init completes
+   *  and `initAppCheck` is returned on the context. When true without
+   *  `recaptchaSiteKey`, App Check is permanently disabled: `getAppCheckHeaders`
+   *  always returns `{}` and `initAppCheck` is undefined. */
   deferAppCheck?: boolean;
   storageModule?: StorageModule;
   /** Optional; error logs omit user info when not provided. */
@@ -114,7 +114,7 @@ export function createAppContext(
 
   const firestoreEmulatorHost = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST;
 
-  if (options?.recaptchaSiteKey !== undefined && options.recaptchaSiteKey === "") {
+  if (options?.recaptchaSiteKey === "") {
     throw new Error(
       "recaptchaSiteKey must not be empty — configure it in Firebase Console > App Check",
     );
@@ -161,6 +161,7 @@ export function createAppContext(
     resolvedAppCheck = doInitAppCheck();
   }
 
+  // Dedup concurrent getToken calls via shared promise; cache failures with a cooldown.
   let tokenPromise: Promise<Record<string, string>> | null = null;
   let tokenFailedAt = 0;
   const TOKEN_RETRY_DELAY_MS = 5 * 60 * 1000;
@@ -177,12 +178,12 @@ export function createAppContext(
             try {
               const { token } = await getToken(resolvedAppCheck!);
               tokenFailedAt = 0;
-              return { "X-Firebase-AppCheck": token } as Record<string, string>;
+              return { "X-Firebase-AppCheck": token };
             } catch (err) {
               if (classifyError(err) === "programmer") throw err;
               tokenFailedAt = Date.now();
               logError(err, { operation: "appcheck-token" });
-              return {} as Record<string, string>;
+              return {};
             } finally {
               tokenPromise = null;
             }
