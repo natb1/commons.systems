@@ -50,6 +50,21 @@ describe("image renderer", () => {
     expect(html).not.toContain("fetchpriority");
   });
 
+  it("includes srcset attribute with width descriptors", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("![alt](/woman-with-a-flower-head.webp)");
+    expect(html).toContain("srcset=");
+    expect(html).toContain("/woman-with-a-flower-head-400w.webp 400w");
+    expect(html).toContain("/woman-with-a-flower-head-800w.webp 800w");
+    expect(html).toContain("/woman-with-a-flower-head.webp 1600w");
+  });
+
+  it("includes sizes attribute", async () => {
+    const marked = createMarked();
+    const html = await marked.parse("![alt](/woman-with-a-flower-head.webp)");
+    expect(html).toContain('sizes="');
+  });
+
   it("gives each createMarked() call an independent counter", async () => {
     const marked1 = createMarked();
     const marked2 = createMarked();
@@ -67,6 +82,11 @@ describe("IMAGE_DIMENSIONS", () => {
     expect(IMAGE_DIMENSIONS["/woman-with-a-flower-head.webp"]).toEqual({
       width: 1600,
       height: 900,
+      srcset: [
+        { path: "/woman-with-a-flower-head-400w.webp", width: 400 },
+        { path: "/woman-with-a-flower-head-800w.webp", width: 800 },
+        { path: "/woman-with-a-flower-head.webp", width: 1600 },
+      ],
     });
   });
 });

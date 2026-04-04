@@ -94,6 +94,36 @@ test.describe("image optimization", () => {
     }
   });
 
+  test("all post images have srcset with width descriptors", async ({
+    page,
+  }) => {
+    const images = page.locator("#posts img");
+    const count = await images.count();
+    expect(count).toBeGreaterThanOrEqual(EXPECTED_IMAGES.length);
+
+    for (let i = 0; i < count; i++) {
+      const img = images.nth(i);
+      const src = await img.getAttribute("src");
+      const srcset = await img.getAttribute("srcset");
+      expect(srcset, `image ${src} missing srcset`).toBeTruthy();
+      expect(srcset, `image ${src} srcset missing width descriptors`).toMatch(
+        /\d+w/,
+      );
+    }
+  });
+
+  test("all post images have sizes attribute", async ({ page }) => {
+    const images = page.locator("#posts img");
+    const count = await images.count();
+    expect(count).toBeGreaterThanOrEqual(EXPECTED_IMAGES.length);
+
+    for (let i = 0; i < count; i++) {
+      const img = images.nth(i);
+      const src = await img.getAttribute("src");
+      await expect(img, `image ${src} missing sizes`).toHaveAttribute("sizes");
+    }
+  });
+
   test("all expected images are present", async ({ page }) => {
     const images = page.locator("#posts img");
     const count = await images.count();

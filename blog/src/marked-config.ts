@@ -2,13 +2,46 @@ import { Marked } from "marked";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { PublishedPost } from "./post-types.ts";
 
-/** Known image dimensions (width × height) for blog images served from public/. */
-export const IMAGE_DIMENSIONS = {
-  "/woman-with-a-flower-head.webp": { width: 1600, height: 900 },
-  "/blog-map-color.webp": { width: 1600, height: 1267 },
-  "/tile10-armadillo-crag.webp": { width: 782, height: 812 },
-  "/alienurn.webp": { width: 1920, height: 1080 },
-} as const satisfies Record<string, { width: number; height: number }>;
+interface ImageMeta {
+  width: number;
+  height: number;
+  srcset: { path: string; width: number }[];
+}
+
+/** Known image dimensions and responsive variants for blog images served from public/. */
+export const IMAGE_DIMENSIONS: Record<string, ImageMeta> = {
+  "/woman-with-a-flower-head.webp": {
+    width: 1600, height: 900,
+    srcset: [
+      { path: "/woman-with-a-flower-head-400w.webp", width: 400 },
+      { path: "/woman-with-a-flower-head-800w.webp", width: 800 },
+      { path: "/woman-with-a-flower-head.webp", width: 1600 },
+    ],
+  },
+  "/blog-map-color.webp": {
+    width: 1600, height: 1267,
+    srcset: [
+      { path: "/blog-map-color-400w.webp", width: 400 },
+      { path: "/blog-map-color-800w.webp", width: 800 },
+      { path: "/blog-map-color.webp", width: 1600 },
+    ],
+  },
+  "/tile10-armadillo-crag.webp": {
+    width: 782, height: 812,
+    srcset: [
+      { path: "/tile10-armadillo-crag-400w.webp", width: 400 },
+      { path: "/tile10-armadillo-crag.webp", width: 782 },
+    ],
+  },
+  "/alienurn.webp": {
+    width: 1920, height: 1080,
+    srcset: [
+      { path: "/alienurn-400w.webp", width: 400 },
+      { path: "/alienurn-800w.webp", width: 800 },
+      { path: "/alienurn.webp", width: 1920 },
+    ],
+  },
+};
 
 // Creates a Marked instance that strips raw HTML from markdown (defense-in-depth)
 // and opens post-body links in new tabs with rel="noopener noreferrer" to prevent
@@ -39,7 +72,7 @@ export function createMarked(): Marked {
       image({ href, text }) {
         const safeHref = escapeHtml(href);
         const alt = text ? escapeHtml(text) : "";
-        const dims = (IMAGE_DIMENSIONS as Record<string, { width: number; height: number }>)[href];
+        const dims = IMAGE_DIMENSIONS[href];
         if (!dims) {
           throw new Error(`Image "${href}" not found in IMAGE_DIMENSIONS. Add its dimensions to marked-config.ts.`);
         }
@@ -47,7 +80,9 @@ export function createMarked(): Marked {
           ? ' fetchpriority="high"'
           : ' loading="lazy"';
         imageIndex++;
-        return `<img src="${safeHref}" alt="${alt}" width="${dims.width}" height="${dims.height}"${loadAttr}>`;
+        const srcsetAttr = ` srcset="${dims.srcset.map(s => `${s.path} ${s.width}w`).join(", ")}"`;
+        const sizesAttr = ' sizes="(min-width: 768px) min(49rem, calc(100vw - 19.5rem)), calc(100vw - 2rem - 24px)"';
+        return `<img src="${safeHref}" alt="${alt}" width="${dims.width}" height="${dims.height}"${srcsetAttr}${sizesAttr}${loadAttr}>`;
       },
     },
   });
