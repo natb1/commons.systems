@@ -81,7 +81,10 @@ function formatBytes(bytes: number): string {
 
 function refreshCacheStats(outlet: HTMLElement): void {
   const statsEl = outlet.querySelector<HTMLElement>("#cache-stats");
-  if (!statsEl) return;
+  if (!statsEl) {
+    logError(new Error("#cache-stats element not found in outlet"), { operation: "cache-stats" });
+    return;
+  }
   getCacheStats()
     .then(({ trackCount, totalBytes }) => {
       statsEl.textContent = `${trackCount} track${trackCount !== 1 ? "s" : ""} cached (${formatBytes(totalBytes)})`;
@@ -155,7 +158,11 @@ export function afterRenderHome(
     clearBtn.addEventListener("click", () => {
       clearCache()
         .then(() => refreshCacheStats(outlet))
-        .catch((err) => logError(err, { operation: "clear-cache" }));
+        .catch((err) => {
+          logError(err, { operation: "clear-cache" });
+          const statsEl = outlet.querySelector<HTMLElement>("#cache-stats");
+          if (statsEl) statsEl.textContent = "Failed to clear cache. Try again.";
+        });
     }, { signal: clickAbort.signal });
   }
 }

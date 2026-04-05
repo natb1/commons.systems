@@ -26,6 +26,12 @@ describe.skipIf(!hasDistBuild)("critical CSS inlining", () => {
     expect(linkMatch![0]).toMatch(/onload=/);
   });
 
+  it("inline <style> contains a containment rule", () => {
+    const styleMatch = html.match(/<style[\s\S]*?<\/style>/);
+    expect(styleMatch).not.toBeNull();
+    expect(styleMatch![0]).toMatch(/contain:/);
+  });
+
   it('<noscript> fallback link does NOT have media="print"', () => {
     const noscriptMatch = html.match(/<noscript>[\s\S]*?<\/noscript>/);
     expect(noscriptMatch).not.toBeNull();
