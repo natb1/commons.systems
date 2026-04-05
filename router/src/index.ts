@@ -2,7 +2,11 @@ import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 
 export interface Route {
   readonly path: `/${string}` | RegExp;
-  readonly render: (path: string) => string | Promise<string>;
+  /**
+   * Return HTML to replace the outlet contents, or `null` to keep the
+   * existing DOM (hydration path — afterRender still runs).
+   */
+  readonly render: (path: string) => string | null | Promise<string | null>;
   /** See ./hydrate.ts for pattern selection guide (one-shot, observer-driven, async+staleness). */
   readonly afterRender?: (outlet: HTMLElement, path: string) => void;
 }
@@ -53,7 +57,7 @@ function createNavigator(
     try {
       const html = await route.render(path);
       if (id === navigationId) {
-        outlet.innerHTML = html;
+        if (html !== null) outlet.innerHTML = html;
         try {
           route.afterRender?.(outlet, path);
         } catch (afterError) {

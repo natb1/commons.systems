@@ -52,18 +52,28 @@ let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("fellspiral/post");
 const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://fellspiral.commons.systems" };
+// Skip the very first innerHTML replacement when pre-rendered content exists.
+// The pre-render script (prerender.ts) already injected identical panel markup,
+// so replacing it would cause a needless DOM teardown that can trigger CLS.
+const hasPrerenderedPanel = infoPanel.children.length > 0;
+let isFirstPanelRender = hasPrerenderedPanel;
+
 const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
 
-  infoPanel.innerHTML = renderInfoPanel({
-    linkSections: INFO_PANEL_LINK_SECTIONS,
-    topPosts: cachedPosts,
-    blogRoll: BLOG_ROLL_ENTRIES,
-    rssFeedUrl: "/feed.xml",
-    opmlUrl: "/blogroll.opml",
-    postLinkPrefix: "/post/",
-    buildTimeFeeds,
-  });
+  if (isFirstPanelRender) {
+    isFirstPanelRender = false;
+  } else {
+    infoPanel.innerHTML = renderInfoPanel({
+      linkSections: INFO_PANEL_LINK_SECTIONS,
+      topPosts: cachedPosts,
+      blogRoll: BLOG_ROLL_ENTRIES,
+      rssFeedUrl: "/feed.xml",
+      opmlUrl: "/blogroll.opml",
+      postLinkPrefix: "/post/",
+      buildTimeFeeds,
+    });
+  }
   hydrateInfoPanel(infoPanel, BLOG_ROLL_ENTRIES, strategies);
   teardownScroll?.();
   teardownScroll = initScrollIndicator(infoPanel);
@@ -111,12 +121,27 @@ async function loadPosts(): Promise<string> {
 
 updateNav(parsePath().path);
 
+// When pre-rendered content is present (built by prerender.ts), return null
+// on the first navigation so the router keeps the existing DOM instead of
+// tearing it down and rebuilding identical markup — eliminating a layout shift.
+const hasPrerenderedHome = app.querySelector("#posts") !== null;
+let isFirstHomeRender = hasPrerenderedHome;
+
 const router = createHistoryRouter(
   app,
   [
     {
       path: /^\/(?:post\/.*)?$/,
-      render: () => loadPosts(),
+      render: () => {
+        if (isFirstHomeRender) {
+          isFirstHomeRender = false;
+          // Populate cachedPosts synchronously so afterRender sees them.
+          cachedPosts = buildTimeMetadata;
+          lastSkippedCount = 0;
+          return null;
+        }
+        return loadPosts();
+      },
       afterRender: (outlet, path) => {
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
