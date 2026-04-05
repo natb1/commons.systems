@@ -104,8 +104,6 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   writeFileSync(join(distDir, "index.html"), rootHtml);
   console.log("Pre-rendered: /index.html");
 
-  const renderedById = new Map(rendered.map((r) => [r.meta.id, r]));
-
   for (const meta of published) {
     const id = meta.id;
     const title = meta.title;
@@ -139,7 +137,6 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)} | ${escapeHtml(titleSuffix)}</title>`);
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
-    const post = renderedById.get(id)!;
     html = injectMain(html, allArticlesHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
