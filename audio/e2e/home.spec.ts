@@ -90,4 +90,10 @@ test.describe("home page content", () => {
       "Test Private Audio",
     );
   });
+
+  test("cache UI present @smoke", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#cache-info")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("#clear-cache-btn")).toBeVisible();
+  });
 });
