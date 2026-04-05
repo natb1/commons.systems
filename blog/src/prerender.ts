@@ -140,7 +140,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
     const post = renderedById.get(id)!;
-    html = injectMain(html, post.articleHtml);
+    html = injectMain(html, allArticlesHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
 
