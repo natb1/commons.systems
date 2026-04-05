@@ -71,6 +71,26 @@ function mockReadFileSync(postDir: string, markdownByFilename: Record<string, st
   };
 }
 
+function makeTwoPostConfig(): PrerenderConfig {
+  const config = makeConfig();
+  config.seed.collections[0].documents.push({
+    id: "second-post",
+    data: {
+      title: "Second Post",
+      published: true,
+      publishedAt: "2026-01-02T00:00:00Z",
+      filename: "second-post.md",
+    },
+  });
+  vi.mocked(fs.readFileSync).mockImplementation(
+    mockReadFileSync("/posts", {
+      "hello-world.md": MARKDOWN_HELLO,
+      "second-post.md": "# Second Post\nSecond content.",
+    }) as typeof fs.readFileSync,
+  );
+  return config;
+}
+
 describe("prerenderPosts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -238,25 +258,7 @@ describe("prerenderPosts", () => {
   });
 
   it("injects rendered article with data-hydrated into per-post HTML", async () => {
-    const config = makeConfig();
-    config.seed.collections[0].documents.push({
-      id: "second-post",
-      data: {
-        title: "Second Post",
-        published: true,
-        publishedAt: "2026-01-02T00:00:00Z",
-        filename: "second-post.md",
-      },
-    });
-
-    vi.mocked(fs.readFileSync).mockImplementation(
-      mockReadFileSync("/posts", {
-        "hello-world.md": MARKDOWN_HELLO,
-        "second-post.md": "# Second Post\nSecond content.",
-      }) as typeof fs.readFileSync,
-    );
-
-    await prerenderPosts(config);
+    await prerenderPosts(makeTwoPostConfig());
 
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
@@ -270,25 +272,7 @@ describe("prerenderPosts", () => {
   });
 
   it("per-post pages contain all published articles matching root index", async () => {
-    const config = makeConfig();
-    config.seed.collections[0].documents.push({
-      id: "second-post",
-      data: {
-        title: "Second Post",
-        published: true,
-        publishedAt: "2026-01-02T00:00:00Z",
-        filename: "second-post.md",
-      },
-    });
-
-    vi.mocked(fs.readFileSync).mockImplementation(
-      mockReadFileSync("/posts", {
-        "hello-world.md": MARKDOWN_HELLO,
-        "second-post.md": "# Second Post\nSecond content.",
-      }) as typeof fs.readFileSync,
-    );
-
-    await prerenderPosts(config);
+    await prerenderPosts(makeTwoPostConfig());
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
@@ -312,25 +296,7 @@ describe("prerenderPosts", () => {
   });
 
   it("injects all published posts into root index.html", async () => {
-    const config = makeConfig();
-    config.seed.collections[0].documents.push({
-      id: "second-post",
-      data: {
-        title: "Second Post",
-        published: true,
-        publishedAt: "2026-01-02T00:00:00Z",
-        filename: "second-post.md",
-      },
-    });
-
-    vi.mocked(fs.readFileSync).mockImplementation(
-      mockReadFileSync("/posts", {
-        "hello-world.md": MARKDOWN_HELLO,
-        "second-post.md": "# Second Post\nSecond content.",
-      }) as typeof fs.readFileSync,
-    );
-
-    await prerenderPosts(config);
+    await prerenderPosts(makeTwoPostConfig());
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",

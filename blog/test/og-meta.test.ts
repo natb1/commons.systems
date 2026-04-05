@@ -97,6 +97,13 @@ describe("updateOgMeta", () => {
     expect(titles[0].getAttribute("content")).toBe("Updated Title");
   });
 
+  it("removes meta description when navigating away from post", () => {
+    updateOgMeta(SITE_URL, basePost, "Fellspiral");
+    expect(document.querySelector('meta[name="description"]')).not.toBeNull();
+    updateOgMeta(SITE_URL, undefined, "Fellspiral");
+    expect(document.querySelector('meta[name="description"]')).toBeNull();
+  });
+
   it("includes og:url in cleanup", () => {
     const meta = document.createElement("meta");
     meta.setAttribute("property", "og:url");

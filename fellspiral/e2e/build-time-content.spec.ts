@@ -34,36 +34,7 @@ test.describe("build-time blog content", () => {
     ).not.toContainText("Loading...");
   });
 
-  test("post slug route shows content without Loading placeholder", async ({
-    page,
-  }) => {
-    await page.goto("/post/scenes-from-a-hat");
-    await page.waitForSelector("#posts", { timeout: 30000 });
-
-    // All published posts should have visible content on the post page
-    await expect(
-      page.locator("#post-content-the-surreal"),
-    ).toBeVisible();
-    await expect(
-      page.locator("#post-content-scenes-from-a-hat"),
-    ).toBeVisible();
-    await expect(
-      page.locator("#post-content-disciplinary-review-operations"),
-    ).toBeVisible();
-
-    // No "Loading..." placeholders should remain
-    await expect(
-      page.locator("#post-content-the-surreal"),
-    ).not.toContainText("Loading...");
-    await expect(
-      page.locator("#post-content-scenes-from-a-hat"),
-    ).not.toContainText("Loading...");
-    await expect(
-      page.locator("#post-content-disciplinary-review-operations"),
-    ).not.toContainText("Loading...");
-  });
-
-  test("post page contains all published articles @smoke", async ({
+  test("post slug route shows all published posts without Loading placeholders @smoke", async ({
     page,
   }) => {
     await page.goto("/post/scenes-from-a-hat");
@@ -78,6 +49,16 @@ test.describe("build-time blog content", () => {
     await expect(
       page.locator("#post-content-disciplinary-review-operations"),
     ).toBeVisible();
+
+    await expect(
+      page.locator("#post-content-the-surreal"),
+    ).not.toContainText("Loading...");
+    await expect(
+      page.locator("#post-content-scenes-from-a-hat"),
+    ).not.toContainText("Loading...");
+    await expect(
+      page.locator("#post-content-disciplinary-review-operations"),
+    ).not.toContainText("Loading...");
   });
 
   test("content divs have data-hydrated attribute (build-time inlined)", async ({
