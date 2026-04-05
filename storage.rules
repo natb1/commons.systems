@@ -2,7 +2,7 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     match /print/{env}/media/{fileName} {
-      allow read: if resource.metadata["publicDomain"] == "true"
+      allow read: if resource.metadata["publicdomain"] == "true"
         || (request.auth != null && (
             resource.metadata["member_0"] == request.auth.token.email
          || resource.metadata["member_1"] == request.auth.token.email
@@ -10,7 +10,7 @@ service firebase.storage {
       allow write: if false;
     }
     match /audio/{env}/media/{fileName} {
-      allow read: if resource.metadata["publicDomain"] == "true"
+      allow read: if resource.metadata["publicdomain"] == "true"
         || (request.auth != null && (
             resource.metadata["member_0"] == request.auth.token.email
          || resource.metadata["member_1"] == request.auth.token.email
