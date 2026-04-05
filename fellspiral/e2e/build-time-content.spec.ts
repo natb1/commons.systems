@@ -145,7 +145,7 @@ test.describe("build-time blog content", () => {
     ).toContainText("Sassy Diaz");
   });
 
-  test("preconnect links are present for googleapis domains", async ({
+  test("preconnect links are present for Google API domains", async ({
     page,
   }) => {
     await page.goto("/");
