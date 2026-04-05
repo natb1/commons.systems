@@ -34,17 +34,30 @@ test.describe("build-time blog content", () => {
     ).not.toContainText("Loading...");
   });
 
-  test("post slug route shows content without Loading placeholder", async ({
+  test("post slug route shows all published posts without Loading placeholders @smoke", async ({
     page,
   }) => {
     await page.goto("/post/scenes-from-a-hat");
     await page.waitForSelector("#posts", { timeout: 30000 });
 
     await expect(
-      page.locator("#post-content-scenes-from-a-hat"),
+      page.locator("#post-content-the-surreal"),
     ).toBeVisible();
     await expect(
       page.locator("#post-content-scenes-from-a-hat"),
+    ).toBeVisible();
+    await expect(
+      page.locator("#post-content-disciplinary-review-operations"),
+    ).toBeVisible();
+
+    await expect(
+      page.locator("#post-content-the-surreal"),
+    ).not.toContainText("Loading...");
+    await expect(
+      page.locator("#post-content-scenes-from-a-hat"),
+    ).not.toContainText("Loading...");
+    await expect(
+      page.locator("#post-content-disciplinary-review-operations"),
     ).not.toContainText("Loading...");
   });
 

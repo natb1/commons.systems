@@ -71,6 +71,26 @@ function mockReadFileSync(postDir: string, markdownByFilename: Record<string, st
   };
 }
 
+function makeTwoPostConfig(): PrerenderConfig {
+  const config = makeConfig();
+  config.seed.collections[0].documents.push({
+    id: "second-post",
+    data: {
+      title: "Second Post",
+      published: true,
+      publishedAt: "2026-01-02T00:00:00Z",
+      filename: "second-post.md",
+    },
+  });
+  vi.mocked(fs.readFileSync).mockImplementation(
+    mockReadFileSync("/posts", {
+      "hello-world.md": MARKDOWN_HELLO,
+      "second-post.md": "# Second Post\nSecond content.",
+    }) as typeof fs.readFileSync,
+  );
+  return config;
+}
+
 describe("prerenderPosts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -157,7 +177,7 @@ describe("prerenderPosts", () => {
       (c) => String(c[0]).includes("post/hello-world"),
     );
     const html = perPostCall![1] as string;
-    expect(html).toContain("<title>Hello World | My Blog</title>");
+    expect(html).toContain("<title>My Blog - Hello World</title>");
     expect(html).not.toContain("<title>My Blog</title>");
   });
 
@@ -224,7 +244,7 @@ describe("prerenderPosts", () => {
     );
     const html = perPostCall![1] as string;
     expect(html).toContain('content="Say &quot;Hello&quot; &amp; &lt;Goodbye&gt;"');
-    expect(html).toContain("<title>Say &quot;Hello&quot; &amp; &lt;Goodbye&gt; | My Blog</title>");
+    expect(html).toContain("<title>My Blog - Say &quot;Hello&quot; &amp; &lt;Goodbye&gt;</title>");
     expect(html).not.toContain("<script>");
   });
 
@@ -238,38 +258,43 @@ describe("prerenderPosts", () => {
   });
 
   it("injects rendered article with data-hydrated into per-post HTML", async () => {
-    await prerenderPosts(makeConfig());
+    await prerenderPosts(makeTwoPostConfig());
 
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
     );
     const html = perPostCall![1] as string;
     expect(html).toContain('<article id="post-hello-world">');
+    expect(html).toContain('<article id="post-second-post">');
     expect(html).toContain('data-hydrated');
     expect(html).toContain('<main id="app"><div id="posts">');
     expect(html).toContain("hello world");
   });
 
-  it("injects all published posts into root index.html", async () => {
-    const config = makeConfig();
-    config.seed.collections[0].documents.push({
-      id: "second-post",
-      data: {
-        title: "Second Post",
-        published: true,
-        publishedAt: "2026-01-02T00:00:00Z",
-        filename: "second-post.md",
-      },
-    });
+  it("per-post pages contain all published articles matching root index", async () => {
+    await prerenderPosts(makeTwoPostConfig());
 
-    vi.mocked(fs.readFileSync).mockImplementation(
-      mockReadFileSync("/posts", {
-        "hello-world.md": MARKDOWN_HELLO,
-        "second-post.md": "# Second Post\nSecond content.",
-      }) as typeof fs.readFileSync,
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
     );
+    const rootHtml = rootCall![1] as string;
 
-    await prerenderPosts(config);
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const perPostHtml = perPostCall![1] as string;
+
+    expect(perPostHtml).toContain('<article id="post-hello-world">');
+    expect(perPostHtml).toContain('<article id="post-second-post">');
+    expect(perPostHtml).toContain("<hr>");
+
+    expect(rootHtml).toContain('<article id="post-hello-world">');
+    expect(rootHtml).toContain('<article id="post-second-post">');
+    expect(rootHtml).toContain("<hr>");
+  });
+
+  it("injects all published posts into root index.html", async () => {
+    await prerenderPosts(makeTwoPostConfig());
 
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",

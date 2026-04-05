@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { InfoPanelData } from "./components/info-panel.ts";
-import { validatePublishedPosts, type PostMeta } from "./post-types.ts";
+import { validatePublishedPosts, type PostMeta, type PublishedPost } from "./post-types.ts";
+import { formatPageTitle } from "./page-title.ts";
 import { renderInfoPanel } from "./components/info-panel.ts";
 import { createMarked, renderPostContents } from "./marked-config.ts";
 import { renderArticle } from "./pages/home.ts";
@@ -31,7 +32,7 @@ function renderNavHtml(links: NavLink[]): string {
 }
 
 interface RenderedPost {
-  meta: PostMeta & { published: true };
+  meta: PublishedPost;
   articleHtml: string;
 }
 
@@ -62,17 +63,11 @@ function injectNav(html: string, navHtml: string): string {
   return result;
 }
 
-// Build-time function that generates per-post HTML files with OG metadata tags
-// and injects rendered blog content, info panel, and nav into static HTML.
-// Reads the post catalog from seed data and markdown files, enabling crawlers
-// to see full content without executing JS.
-//
-// The client-side counterpart (blog/src/og-meta.ts) manages og:title,
-// og:description, og:image, og:type, and og:url dynamically for SPA navigation.
-// This function mirrors those OG tags in static HTML for crawlers, and
-// additionally sets <meta name="description"> (when the post has a
-// previewDescription, replacing the template's site-level description) and
-// rewrites <title> — neither of which the client-side module handles.
+// Build-time counterpart of og-meta.ts. Generates per-post HTML files with
+// OG tags, <meta name="description">, and <title>, plus injects rendered blog
+// content, info panel, and nav — enabling crawlers to see full content without
+// executing JS. Each post page includes all published articles (matching the
+// root index) so the client hydrates without a visible content shift.
 export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const { siteUrl, titleSuffix, distDir, seed, postDir, navLinks, infoPanel } = config;
 
@@ -104,8 +99,6 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   writeFileSync(join(distDir, "index.html"), rootHtml);
   console.log("Pre-rendered: /index.html");
 
-  const renderedById = new Map(rendered.map((r) => [r.meta.id, r]));
-
   for (const meta of published) {
     const id = meta.id;
     const title = meta.title;
@@ -136,11 +129,10 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     html = html.replace("</head>", `    ${ogBlock}\n  </head>`);
     if (html === beforeHead) throw new Error(`</head> marker not found in template`);
     const beforeTitle = html;
-    html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)} | ${escapeHtml(titleSuffix)}</title>`);
+    html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(formatPageTitle(titleSuffix, title))}</title>`);
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
-    const post = renderedById.get(id)!;
-    html = injectMain(html, post.articleHtml);
+    html = injectMain(html, allArticlesHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
 
