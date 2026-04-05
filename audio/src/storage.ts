@@ -1,4 +1,5 @@
 import { getDownloadURL, ref } from "firebase/storage";
+import { logError } from "@commons-systems/errorutil/log";
 import { storage, STORAGE_NAMESPACE } from "./firebase.js";
 import { getFile, putFile, CACHE_UPDATED_EVENT } from "./audio-cache.js";
 
@@ -41,7 +42,7 @@ export async function resolveAudioSource(storagePath: string): Promise<string> {
   putFile(storagePath, buf)
     .then(() => document.dispatchEvent(new Event(CACHE_UPDATED_EVENT)))
     .catch((err) =>
-      reportError(new Error("Failed to cache audio file", { cause: err })),
+      logError(err, { operation: "cache-write", storagePath }),
     );
 
   return URL.createObjectURL(new Blob([buf], { type }));

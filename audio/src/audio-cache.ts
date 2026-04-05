@@ -2,9 +2,9 @@
  * IndexedDB-backed LRU cache for audio files.
  *
  * Two object stores: `media-data` holds ArrayBuffers, `media-meta` holds size +
- * lastAccessed metadata (separated so eviction scans never load large buffers and
- * read-path timestamp
- * updates do not block data retrieval). A sentinel `__total__` entry in meta tracks
+ * lastAccessed metadata (separated so eviction scans never load large buffers
+ * and read-path timestamp updates do not block data retrieval). A sentinel
+ * `__total__` entry in meta tracks
  * aggregate cache size for O(1) capacity checks. The sentinel uses `lastAccessed: 0`
  * so it sorts first in the eviction index; the eviction cursor explicitly skips it.
  * 500 MB cap with LRU eviction.
@@ -93,9 +93,9 @@ function updateTotalAfterEviction(
 }
 
 /**
- * The total read, eviction, and subsequent write in putFile are not atomic;
- * concurrent writes may briefly exceed the cap, which is acceptable for a
- * best-effort cache.
+ * The total-size read and eviction here run in a separate transaction from the
+ * subsequent put in the caller (putFile); concurrent writes may briefly exceed
+ * the cap, which is acceptable for a best-effort cache.
  */
 async function evictIfNeeded(db: IDBDatabase, incomingSize: number): Promise<void> {
   const totalSize = await getTotalSize(db);
@@ -194,15 +194,23 @@ export async function clearCache(): Promise<void> {
 
 export async function getCacheStats(): Promise<{ trackCount: number; totalBytes: number }> {
   const db = await openDb();
-  const totalBytes = await getTotalSize(db);
   return new Promise((resolve, reject) => {
     const tx = db.transaction(META_STORE, "readonly");
-    const req = tx.objectStore(META_STORE).count();
-    req.onsuccess = () => {
+    const store = tx.objectStore(META_STORE);
+    const countReq = store.count();
+    const totalReq = store.get(TOTAL_KEY);
+    let trackCount = 0;
+    let totalBytes = 0;
+    countReq.onsuccess = () => {
+      const raw = countReq.result;
       // Subtract 1 for the __total__ sentinel entry (or 0 if store is empty)
-      const raw = req.result;
-      resolve({ trackCount: raw > 0 ? raw - 1 : 0, totalBytes });
+      trackCount = raw > 0 ? raw - 1 : 0;
     };
-    req.onerror = () => reject(req.error);
+    totalReq.onsuccess = () => {
+      const entry = totalReq.result as MetaEntry | undefined;
+      totalBytes = entry ? entry.size : 0;
+    };
+    tx.oncomplete = () => resolve({ trackCount, totalBytes });
+    tx.onerror = () => reject(tx.error);
   });
 }

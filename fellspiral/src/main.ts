@@ -121,9 +121,9 @@ async function loadPosts(): Promise<string> {
 
 updateNav(parsePath().path);
 
-// When pre-rendered content is present (built by prerender.ts), return null
-// on the first navigation so the router keeps the existing DOM instead of
-// tearing it down and rebuilding identical markup — eliminating a layout shift.
+// Same pre-render skip pattern as isFirstPanelRender above — return null on
+// the first navigation so the router keeps the existing DOM instead of
+// tearing it down and rebuilding identical markup.
 const hasPrerenderedHome = app.querySelector("#posts") !== null;
 let isFirstHomeRender = hasPrerenderedHome;
 
@@ -135,7 +135,8 @@ const router = createHistoryRouter(
       render: () => {
         if (isFirstHomeRender) {
           isFirstHomeRender = false;
-          // Populate cachedPosts synchronously so afterRender sees them.
+          // Populate cachedPosts synchronously since the null return skips
+          // loadPosts, and afterRender needs them for hydration.
           cachedPosts = buildTimeMetadata;
           lastSkippedCount = 0;
           return null;

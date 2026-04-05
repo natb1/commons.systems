@@ -3,8 +3,9 @@ import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 export interface Route {
   readonly path: `/${string}` | RegExp;
   /**
-   * Return HTML to replace the outlet contents, or `null` to keep the
-   * existing DOM (hydration path — afterRender still runs).
+   * Return HTML to replace the outlet contents, or `null` to preserve
+   * existing DOM content (e.g., pre-rendered markup that only needs event
+   * binding via afterRender).
    */
   readonly render: (path: string) => string | null | Promise<string | null>;
   /** See ./hydrate.ts for pattern selection guide (one-shot, observer-driven, async+staleness). */
