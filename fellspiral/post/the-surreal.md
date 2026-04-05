@@ -16,7 +16,7 @@ My wife had a different reaction. She loved it without question. She understood 
 
 *[Amanda Lee Franck](http://comradery.co/amandalee) via [Prismatic Wasteland](https://www.prismaticwasteland.com/blog/bandwagon-the-map-is-not-the-territory-but-it-is-the-topic). DISCLAIMER: this blog post is a statement of where the art took me, not a statement on the actual genre of the art.*
 
-The magic of the surface world does not penetrate the depths of this darkness. By following this map, each level of the darkness can be escaped, but at a cost. The gods demand a member of your company will be left behind at each level (they do not care whom, or why).
+The magic of the surface world does not penetrate the depths of this darkness. By following this map, each level of the darkness can be escaped, but at a cost. **The gods demand a member of your company will be left behind at each level** (they do not care whom, or why).
 
 > Play Notes:
 > 
@@ -35,12 +35,12 @@ The magic of the surface world does not penetrate the depths of this darkness. B
     > 4. Consumed by hatred: This sentient flame cannot be extinguished. Attempting to do so will only make it spread like an oil fire.
     > 5. Consumed by fear: A screaming goat. Will speak to you from a distance (in screams). Flees on approach, faints if you catch it.
     > 6. Consumed by shame: A simple, spiteful goblin impedes your progress. Defeat the goblin and all other beasts are summoned to your location.
-4. The **Foreman's station** is occupied by a visage that mirrors any one character that attempts to escape to the surface. The visage guards the surface with force. On return, any fallen character will guard the descent.
+4. The **Foreman's station** is occupied by a visage that mirrors any one character that attempts to escape to the surface. The visage guards the surface with force. On return, any character left at the foreman station will guard the descent.
 
-### Magic Items Found on the Surface
+### Magic Artifacts Found on the Surface
 Upon reaching the surface and availing yourself of the magic to be found there, you find yourself either alone, or in conflict with the gods.
 
-Adventurers may return to any level of the darkness they have left, but the further they backtrack, the more they lose their senses. They become blind, the echos are deafening, the heat burns, they are mute.
+Adventurers may return to any level of the darkness they have left, but the further they backtrack, the more they lose their senses. They become blind, and mute. Artifacts aid the descent.
 
 5. Servant homunculus: lacks sentience of its own.
 6. Frozen Tear: You remain mute, but you may choose a part of yourself to release into the artifact. Only that part of you may speak. Choose wisely, or be consumed by it.
