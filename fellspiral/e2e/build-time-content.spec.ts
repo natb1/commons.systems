@@ -160,5 +160,7 @@ test.describe("build-time blog content", () => {
     expect(hrefs).toContain(
       "https://firebaseinstallations.googleapis.com",
     );
+    expect(hrefs).toContain("https://apis.google.com");
+    expect(hrefs).toContain("https://firestore.googleapis.com");
   });
 });

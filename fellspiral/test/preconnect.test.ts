@@ -21,4 +21,16 @@ describe("fellspiral preconnect links", () => {
       '<link rel="preconnect" href="https://firebaseinstallations.googleapis.com" crossorigin',
     );
   });
+
+  it("preconnects to apis.google.com", () => {
+    expect(html).toContain(
+      '<link rel="preconnect" href="https://apis.google.com" crossorigin',
+    );
+  });
+
+  it("preconnects to firestore.googleapis.com", () => {
+    expect(html).toContain(
+      '<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin',
+    );
+  });
 });
