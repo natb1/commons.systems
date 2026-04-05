@@ -284,12 +284,10 @@ describe("prerenderPosts", () => {
     );
     const perPostHtml = perPostCall![1] as string;
 
-    // Per-post page contains all article IDs
     expect(perPostHtml).toContain('<article id="post-hello-world">');
     expect(perPostHtml).toContain('<article id="post-second-post">');
     expect(perPostHtml).toContain("<hr>");
 
-    // Same article IDs present in root index
     expect(rootHtml).toContain('<article id="post-hello-world">');
     expect(rootHtml).toContain('<article id="post-second-post">');
     expect(rootHtml).toContain("<hr>");

@@ -66,7 +66,8 @@ function injectNav(html: string, navHtml: string): string {
 // Build-time counterpart of og-meta.ts. Generates per-post HTML files with
 // OG tags, <meta name="description">, and <title>, plus injects rendered blog
 // content, info panel, and nav — enabling crawlers to see full content without
-// executing JS.
+// executing JS. Each post page includes all published articles (matching the
+// root index) so the client hydrates without a visible content shift.
 export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const { siteUrl, titleSuffix, distDir, seed, postDir, navLinks, infoPanel } = config;
 

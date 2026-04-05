@@ -1,5 +1,6 @@
-// Client-side OG tag management for SPA navigation. Build-time counterpart
-// (blog/src/prerender.ts) generates static copies for crawlers.
+// Client-side meta tag management for SPA navigation — sets document.title,
+// <meta name="description">, and OG tags. Build-time counterpart
+// (blog/src/prerender.ts) generates static equivalents for crawlers.
 import type { PostMeta } from "./post-types.ts";
 import { formatPageTitle } from "./page-title.ts";
 
