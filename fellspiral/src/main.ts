@@ -35,8 +35,10 @@ if (!infoPanel) throw new Error("#info-panel element not found");
 
 const header = document.querySelector(".page > header");
 if (!header) throw new Error(".page > header element not found");
+const contentGrid = document.querySelector(".content-grid");
+if (!contentGrid) throw new Error(".content-grid element not found");
 new ResizeObserver(([entry]) => {
-  document.documentElement.style.setProperty(
+  (contentGrid as HTMLElement).style.setProperty(
     "--header-height",
     `${entry.borderBoxSize[0].blockSize}px`,
   );
