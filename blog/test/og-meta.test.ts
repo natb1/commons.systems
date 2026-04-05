@@ -27,6 +27,8 @@ const basePost: PostMeta = {
 describe("updateOgMeta", () => {
   beforeEach(() => {
     document.head.querySelectorAll('meta[property^="og:"]').forEach((el) => el.remove());
+    document.head.querySelectorAll('meta[name="description"]').forEach((el) => el.remove());
+    document.title = "";
   });
 
   it("sets og:title, og:description, og:type, og:url when post has previewDescription", () => {
@@ -35,6 +37,28 @@ describe("updateOgMeta", () => {
     expect(getOgContent("og:description")).toBe("A test description");
     expect(getOgContent("og:type")).toBe("article");
     expect(getOgContent("og:url")).toBe("https://example.com/post/test-post");
+  });
+
+  it("sets document.title with titleSuffix when provided", () => {
+    updateOgMeta(SITE_URL, basePost, "Fellspiral");
+    expect(document.title).toBe("Fellspiral - Test Post");
+  });
+
+  it("sets document.title to post title when no titleSuffix", () => {
+    updateOgMeta(SITE_URL, basePost);
+    expect(document.title).toBe("Test Post");
+  });
+
+  it("resets document.title to titleSuffix when post is undefined", () => {
+    updateOgMeta(SITE_URL, basePost, "Fellspiral");
+    updateOgMeta(SITE_URL, undefined, "Fellspiral");
+    expect(document.title).toBe("Fellspiral");
+  });
+
+  it("sets meta description when post has previewDescription", () => {
+    updateOgMeta(SITE_URL, basePost);
+    const desc = document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content;
+    expect(desc).toBe("A test description");
   });
 
   it("sets og:image with siteUrl prefix when post has previewImage", () => {

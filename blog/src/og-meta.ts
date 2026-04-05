@@ -20,11 +20,24 @@ function removeOgTags(): void {
   }
 }
 
-export function updateOgMeta(siteUrl: string, post: PostMeta | undefined): void {
+function setDescriptionTag(content: string): void {
+  let el = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+  if (!el) {
+    el = document.createElement("meta");
+    el.setAttribute("name", "description");
+    document.head.appendChild(el);
+  }
+  el.setAttribute("content", content);
+}
+
+export function updateOgMeta(siteUrl: string, post: PostMeta | undefined, titleSuffix?: string): void {
   if (!post?.previewDescription) {
     removeOgTags();
+    if (titleSuffix) document.title = titleSuffix;
     return;
   }
+  document.title = titleSuffix ? `${titleSuffix} - ${post.title}` : post.title;
+  setDescriptionTag(post.previewDescription);
   setOgTag("og:title", post.title);
   setOgTag("og:description", post.previewDescription);
   setOgTag("og:type", "article");

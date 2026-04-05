@@ -146,7 +146,7 @@ const router = createHistoryRouter(
       afterRender: (outlet, path) => {
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
-        updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined);
+        updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, "Fellspiral");
         updateInfoPanel();
       },
     },

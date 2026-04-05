@@ -9,7 +9,7 @@ const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
 
 await prerenderPosts({
   siteUrl: "https://fellspiral.commons.systems",
-  titleSuffix: "fellspiral",
+  titleSuffix: "Fellspiral",
   distDir,
   seed: appSeed,
   postDir: join(distDir, "..", "post"),

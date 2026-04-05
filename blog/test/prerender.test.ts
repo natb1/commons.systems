@@ -157,7 +157,7 @@ describe("prerenderPosts", () => {
       (c) => String(c[0]).includes("post/hello-world"),
     );
     const html = perPostCall![1] as string;
-    expect(html).toContain("<title>Hello World | My Blog</title>");
+    expect(html).toContain("<title>My Blog - Hello World</title>");
     expect(html).not.toContain("<title>My Blog</title>");
   });
 
@@ -224,7 +224,7 @@ describe("prerenderPosts", () => {
     );
     const html = perPostCall![1] as string;
     expect(html).toContain('content="Say &quot;Hello&quot; &amp; &lt;Goodbye&gt;"');
-    expect(html).toContain("<title>Say &quot;Hello&quot; &amp; &lt;Goodbye&gt; | My Blog</title>");
+    expect(html).toContain("<title>My Blog - Say &quot;Hello&quot; &amp; &lt;Goodbye&gt;</title>");
     expect(html).not.toContain("<script>");
   });
 
