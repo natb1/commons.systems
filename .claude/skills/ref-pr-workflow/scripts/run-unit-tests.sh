@@ -132,10 +132,18 @@ fi
 # Run CI scripts tests
 if [ "$RUN_CI_SCRIPTS" = true ]; then
   echo "=== CI scripts tests ==="
-  if "$REPO_ROOT/.github/scripts/test-firebase-auth.sh"; then
-    echo "PASS: CI scripts"
-  else
-    echo "FAIL: CI scripts" >&2
+  CI_SCRIPT_FAIL=false
+  for test_script in "$REPO_ROOT/.github/scripts"/test-*.sh; do
+    name=$(basename "$test_script")
+    echo "--- $name ---"
+    if "$test_script"; then
+      echo "PASS: $name"
+    else
+      echo "FAIL: $name" >&2
+      CI_SCRIPT_FAIL=true
+    fi
+  done
+  if [ "$CI_SCRIPT_FAIL" = true ]; then
     FAILURES+=(ci-scripts)
   fi
 fi

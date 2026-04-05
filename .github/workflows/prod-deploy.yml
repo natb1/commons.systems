@@ -31,6 +31,8 @@ jobs:
           GA_MEASUREMENT_ID_PRINT: ${{ secrets.GA_MEASUREMENT_ID_PRINT }}
           VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           VITE_RECAPTCHA_SITE_KEY: ${{ secrets.RECAPTCHA_SITE_KEY }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: .claude/skills/ref-pr-workflow/scripts/run-all-prod-deploy-smoke.sh
       - name: Cleanup credentials
         if: always()
