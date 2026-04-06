@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { InfoPanelData } from "./components/info-panel.ts";
-import type { SiteDefaults } from "./og-meta.ts";
+import { siteDefaultOgEntries, postOgEntries, type OgTagEntry, type SiteDefaults } from "./og-meta.ts";
 import { validatePublishedPosts, type PostMeta, type PublishedPost } from "./post-types.ts";
 import { formatPageTitle } from "./page-title.ts";
 import { renderInfoPanel } from "./components/info-panel.ts";
@@ -24,6 +24,12 @@ export interface PrerenderConfig {
   navLinks: NavLink[];
   infoPanel: Omit<InfoPanelData, "topPosts">;
   siteDefaults?: SiteDefaults;
+}
+
+function ogTagsToHtml(entries: OgTagEntry[]): string {
+  return entries
+    .map((e) => `<meta ${e.attr}="${e.key}" content="${escapeHtml(e.content)}">`)
+    .join("\n    ");
 }
 
 function renderNavHtml(links: NavLink[]): string {
@@ -99,13 +105,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   rootHtml = injectInfoPanel(rootHtml, panelHtml);
   rootHtml = injectNav(rootHtml, navHtml);
   if (siteDefaults) {
-    const rootOgTags = [
-      `<meta property="og:title" content="${escapeHtml(siteDefaults.title)}">`,
-      `<meta property="og:description" content="${escapeHtml(siteDefaults.description)}">`,
-      `<meta property="og:image" content="${escapeHtml(siteUrl + siteDefaults.image)}">`,
-      `<meta property="og:type" content="website">`,
-      `<meta property="og:url" content="${escapeHtml(siteUrl)}">`,
-    ].join("\n    ");
+    const rootOgTags = ogTagsToHtml(siteDefaultOgEntries(siteUrl, siteDefaults));
     const beforeOg = rootHtml;
     rootHtml = rootHtml.replace("</head>", `    ${rootOgTags}\n  </head>`);
     if (rootHtml === beforeOg) throw new Error("</head> marker not found in root template");
@@ -114,45 +114,25 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   console.log("Pre-rendered: /index.html");
 
   for (const meta of published) {
-    const id = meta.id;
-    const title = meta.title;
-    const description = meta.previewDescription;
-    const image = meta.previewImage;
-
-    const ogTags = [
-      `<meta property="og:title" content="${escapeHtml(title)}">`,
-      `<meta property="og:url" content="${siteUrl}/post/${encodeURIComponent(id)}">`,
-      `<meta property="og:type" content="article">`,
-    ];
-
-    if (description) {
-      ogTags.push(`<meta property="og:description" content="${escapeHtml(description)}">`);
-      ogTags.push(`<meta name="description" content="${escapeHtml(description)}">`);
-    }
-
-    if (image) {
-      ogTags.push(`<meta property="og:image" content="${escapeHtml(siteUrl + image)}">`);
-    }
-
-    const ogBlock = ogTags.join("\n    ");
+    const ogBlock = ogTagsToHtml(postOgEntries(siteUrl, meta));
     let html = template;
-    if (description) {
+    if (meta.previewDescription) {
       html = html.replace(/\s*<meta name="description"[^>]*>/, "");
     }
     const beforeHead = html;
     html = html.replace("</head>", `    ${ogBlock}\n  </head>`);
     if (html === beforeHead) throw new Error(`</head> marker not found in template`);
     const beforeTitle = html;
-    html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(formatPageTitle(titleSuffix, title))}</title>`);
+    html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(formatPageTitle(titleSuffix, meta.title))}</title>`);
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
     html = injectMain(html, allArticlesHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
 
-    const outDir = join(distDir, "post", id);
+    const outDir = join(distDir, "post", meta.id);
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, "index.html"), html);
-    console.log(`Pre-rendered: /post/${id}/index.html`);
+    console.log(`Pre-rendered: /post/${meta.id}/index.html`);
   }
 }
