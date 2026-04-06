@@ -97,6 +97,8 @@
             }
           ]
         },
+        // Static assets by extension: 1-year cache, no immutable (non-hashed filenames).
+        // Hashed build artifacts under /assets/** get immutable separately below.
         {
           "source": "**/*.jpg",
           "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000" }]

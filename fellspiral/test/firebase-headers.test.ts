@@ -8,7 +8,9 @@ const firebaseJsonPath = join(
   "..",
   "firebase.json",
 );
-const firebaseConfig = JSON.parse(readFileSync(firebaseJsonPath, "utf-8"));
+const firebaseJson = readFileSync(firebaseJsonPath, "utf-8")
+  .replace(/^\s*\/\/.*$/gm, "");
+const firebaseConfig = JSON.parse(firebaseJson);
 const fellspiralHosting = firebaseConfig.hosting.find(
   (h: { target: string }) => h.target === "fellspiral",
 );
@@ -30,6 +32,9 @@ describe("fellspiral firebase headers", () => {
     "woff2",
   ];
 
+  const STATIC_ASSET_CACHE = "public, max-age=31536000";
+  const HASHED_ASSET_CACHE = "public, max-age=31536000, immutable";
+
   for (const ext of cachedExtensions) {
     it(`has a Cache-Control header for *.${ext} files`, () => {
       const rule = headers.find((h) => h.source === `**/*.${ext}`);
@@ -37,17 +42,24 @@ describe("fellspiral firebase headers", () => {
       const cacheHeader = rule!.headers.find(
         (h) => h.key === "Cache-Control",
       );
-      expect(cacheHeader?.value).toBe("public, max-age=31536000");
+      expect(cacheHeader, `Cache-Control header not found in rule for **/*.${ext}`).toBeDefined();
+      expect(cacheHeader!.value).toBe(STATIC_ASSET_CACHE);
     });
   }
+
+  it("has no unexpected extension-based cache rules", () => {
+    const extensionRules = headers
+      .filter((h) => h.source.match(/^\*\*\/\*\.\w+$/))
+      .map((h) => h.source.replace("**/*.", ""));
+    expect(extensionRules.sort()).toEqual([...cachedExtensions].sort());
+  });
 
   it("has an immutable Cache-Control header for /assets/**", () => {
     const rule = headers.find((h) => h.source === "/assets/**");
     expect(rule).toBeDefined();
     const cacheHeader = rule!.headers.find((h) => h.key === "Cache-Control");
-    expect(cacheHeader?.value).toBe(
-      "public, max-age=31536000, immutable",
-    );
+    expect(cacheHeader, "Cache-Control header not found in /assets/** rule").toBeDefined();
+    expect(cacheHeader!.value).toBe(HASHED_ASSET_CACHE);
   });
 
   it("does not use extglob syntax in any header source", () => {
