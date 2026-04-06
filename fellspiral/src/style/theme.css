@@ -57,6 +57,7 @@ body {
   --filigree-width: 12px;
   font-size: 1.125rem;
   line-height: 1.6;
+  font-size-adjust: 0.44; /* EB Garamond x-height ratio */
   background:
     repeating-conic-gradient(
       rgba(139, 119, 85, 0.03) 0% 25%,
@@ -139,6 +140,7 @@ h3 {
   letter-spacing: 0.02em;
   text-shadow: none;
   color: var(--deep-blue);
+  font-size-adjust: 0.5; /* Uncial Antiqua x-height ratio */
 }
 
 h1 {
