@@ -5,13 +5,29 @@ interface ShiftEntry {
   sources: { node: string; previousRect: string; currentRect: string }[];
 }
 
+// Use test.use to set the viewport at context creation time rather than
+// resizing after creation, which can introduce spurious layout shifts.
+test.use({ viewport: { width: 412, height: 915 } });
+
 test.describe("Cumulative Layout Shift", () => {
-  test("CLS score is below 0.12 on mobile viewport", async ({ page }) => {
-    await page.setViewportSize({ width: 412, height: 915 });
+  test("CLS score is below 0.1 on mobile viewport", async ({ page, context }) => {
+    // Pre-warm the hosting emulator. The first request against a cold Firebase
+    // emulator is slow enough that fonts miss the font-display:optional block
+    // window, causing the browser to skip web fonts and render with fallback
+    // fonts whose different metrics produce layout shifts. This preliminary
+    // fetch primes the emulator so the measured page load reflects
+    // production-like latency.
     await page.goto("/");
     await page.waitForLoadState("load");
 
-    const result = await page.evaluate(() => {
+    // Open a fresh page so the PerformanceObserver captures only layout shifts
+    // from a clean navigation. The new page shares the warm-up page's browser
+    // cache via the same context, so font/asset latency reflects a primed load.
+    const measured = await context.newPage();
+    await measured.goto("/");
+    await measured.waitForLoadState("load");
+
+    const result = await measured.evaluate(() => {
       return new Promise<{ score: number; entries: ShiftEntry[] }>((resolve) => {
         let score = 0;
         const entries: ShiftEntry[] = [];
@@ -51,8 +67,8 @@ test.describe("Cumulative Layout Shift", () => {
       console.log("CLS entries:", JSON.stringify(result.entries, null, 2));
     }
 
-    // Allow small headroom above Google's 0.1 "good" threshold to absorb
-    // CI environment timing variance (font loads, emulator startup, etc.).
-    expect(result.score).toBeLessThan(0.12);
+    expect(result.score).toBeLessThan(0.1);
+
+    await measured.close();
   });
 });
