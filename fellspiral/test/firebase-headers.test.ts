@@ -17,6 +17,9 @@ if (!fellspiralHosting) {
 }
 const headers: { source: string; headers: { key: string; value: string }[] }[] =
   fellspiralHosting.headers;
+if (!headers || headers.length === 0) {
+  throw new Error("fellspiral hosting config has no header rules");
+}
 
 describe("fellspiral firebase headers", () => {
   const cachedExtensions = [
@@ -65,7 +68,10 @@ describe("fellspiral security headers", () => {
   });
 
   function getHeader(key: string): string | undefined {
-    return globalRule?.headers.find((h) => h.key === key)?.value;
+    if (!globalRule) {
+      throw new Error("Cannot look up headers: global ** rule is missing from firebase.json");
+    }
+    return globalRule.headers.find((h) => h.key === key)?.value;
   }
 
   describe("Content-Security-Policy", () => {
@@ -112,6 +118,10 @@ describe("fellspiral security headers", () => {
 
     it("includes preload", () => {
       expect(hsts).toContain("preload");
+    });
+
+    it("includes max-age=31536000", () => {
+      expect(hsts).toContain("max-age=31536000");
     });
   });
 });

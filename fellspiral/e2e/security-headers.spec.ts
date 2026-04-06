@@ -48,10 +48,11 @@ test.describe("security headers", () => {
 
   test("no CSP violation errors in console", async ({ page }) => {
     const cspViolations: string[] = [];
-    // In the emulator environment, Firestore connects over http://localhost
-    // and Google auth loads cleardot.gif from www.google.com. These violate
-    // connect-src and img-src respectively, but only because the emulator
-    // uses different origins than production Firebase.
+    // The emulator connects to localhost for Firestore and Auth, which
+    // violates connect-src in the production CSP (localhost is not
+    // allowlisted). Google auth may also load cleardot.gif from
+    // www.google.com/images/ which can trigger img-src violations.
+    // These are emulator-specific and do not occur in production.
     const emulatorPattern = /localhost:\d+|www\.google\.com\/images\//;
     page.on("console", (msg) => {
       if (
