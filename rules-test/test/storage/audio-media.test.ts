@@ -25,7 +25,7 @@ describe("storage audio media", () => {
       env,
       `audio/${ENV}/media/public-audiobook.mp3`,
       {
-        publicDomain: "true",
+        publicdomain: "true",
         member_0: "member@test.com",
       },
     );
@@ -33,7 +33,7 @@ describe("storage audio media", () => {
       env,
       `audio/${ENV}/media/private-audiobook.mp3`,
       {
-        publicDomain: "false",
+        publicdomain: "false",
         member_0: "member@test.com",
         member_1: "other@test.com",
       },

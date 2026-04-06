@@ -42,8 +42,8 @@ function makeWav(durationSeconds: number): Buffer {
   return buf;
 }
 
-const publicMeta = { publicDomain: "true" };
-const testPrivateMeta = { publicDomain: "false", member_0: TEST_USER.email };
+const publicMeta = { publicdomain: "true" };
+const testPrivateMeta = { publicdomain: "false", member_0: TEST_USER.email };
 
 // Public domain items have both a sourceUrl (real audio from Internet Archive)
 // and a content stub (synthetic WAV). The seed script uses the stub in CI
