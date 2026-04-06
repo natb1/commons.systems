@@ -28,13 +28,11 @@
       "Bash(lsof:*)",
       "Bash(tail:*)",
       "Bash(tee:*)",
-
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git fetch:*)",
       "Bash(git merge:*)",
       "Bash(git push:*)",
-
       "Bash(gh api /repos/*/issues/*:*)",
       "Bash(gh api repos/*/issues/*:*)",
       "Bash(gh issue list:*)",
@@ -50,10 +48,8 @@
       "Bash(gh run watch:*)",
       "Bash(.claude/skills/ref-pr-workflow/scripts/run-ci-watch.sh:*)",
       "Bash(gh search:*)",
-
       "Bash(go build:*)",
       "Bash(go test:*)",
-
       "Bash(npm ci:*)",
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
@@ -66,11 +62,6 @@
       "Bash(npx vite:*)",
       "Bash(npx vitest:*)"
     ]
-  },
-  "showClearContextOnPlanAccept": true,
-  "sandbox": {
-    "enabled": true,
-    "autoAllowBashIfSandboxed": true
   },
   "hooks": {
     "PreToolUse": [
@@ -104,5 +95,13 @@
         ]
       }
     ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "showClearContextOnPlanAccept": true,
+  "enabledPlugins": {
+    "security-guidance@claude-plugins-official": true
   }
 }
