@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/test-helpers.sh"
 SCRIPT="$SCRIPT_DIR/run-ci-watch.sh"
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "Error: not inside a git repository" >&2; exit 1; }
 TMP_DIR="$REPO_ROOT/tmp/test-ci-watch"
 
 cleanup() { rm -rf "$TMP_DIR"; }
@@ -16,7 +16,7 @@ setup() {
   mkdir -p "$TMP_DIR"
 }
 
-# Create a mock gh that echoes its args and exits with the given code (default 0)
+# Create a mock gh that prints "gh <args>" and exits with the given code (default 0)
 make_mock_gh() {
   local dir="$1" exit_code="${2:-0}"
   mkdir -p "$dir"
