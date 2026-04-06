@@ -123,7 +123,7 @@ if [ -n "$APP_REWRITES" ]; then
 fi
 APP_HEADERS=$(jq -c ".hosting[] | select(.target == \"$APP_NAME\") | .headers // empty" "$REPO_ROOT/firebase.json" 2>/dev/null || true)
 if [ -n "$APP_HEADERS" ]; then
-  # Inject http://localhost:* into CSP connect-src for emulator auth compatibility
+  # Inject http://localhost:* into CSP connect-src for emulator compatibility
   APP_HEADERS=$(echo "$APP_HEADERS" | jq -c '
     [.[] | .headers = [.headers[] |
       if .key == "Content-Security-Policy"
