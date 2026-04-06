@@ -192,10 +192,10 @@ echo ""
 echo "Uploading ${FILENAME} to GCS..."
 META_ARGS=()
 if [ "$PUBLIC" = true ]; then
-  META_ARGS+=(-h "x-goog-meta-publicDomain:true")
+  META_ARGS+=(-h "x-goog-meta-publicdomain:true")
 else
-  META_ARGS+=(-h "x-goog-meta-publicDomain:false")
-  META_ARGS+=(-h "x-goog-meta-groupId:${GROUP_ID}")
+  META_ARGS+=(-h "x-goog-meta-publicdomain:false")
+  META_ARGS+=(-h "x-goog-meta-groupid:${GROUP_ID}")
 fi
 for i in "${!EMAILS[@]}"; do
   META_ARGS+=(-h "x-goog-meta-member_${i}:${EMAILS[$i]}")

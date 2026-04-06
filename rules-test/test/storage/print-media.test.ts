@@ -22,11 +22,11 @@ describe("storage print media", () => {
 
   beforeEach(async () => {
     await adminUploadStorage(env, `print/${ENV}/media/public-book.epub`, {
-      publicDomain: "true",
+      publicdomain: "true",
       member_0: "member@test.com",
     });
     await adminUploadStorage(env, `print/${ENV}/media/private-book.epub`, {
-      publicDomain: "false",
+      publicdomain: "false",
       member_0: "member@test.com",
       member_1: "other@test.com",
     });
@@ -84,7 +84,7 @@ describe("storage print media", () => {
         env,
         `print/${ENV}/media/three-member.epub`,
         {
-          publicDomain: "false",
+          publicdomain: "false",
           member_0: "a@test.com",
           member_1: "b@test.com",
           member_2: "c@test.com",

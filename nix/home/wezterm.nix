@@ -101,12 +101,13 @@
       config.ssh_domains = ssh_domains
 
       wezterm.on('format-tab-title', function(tab)
+        local index = tab.tab_index + 1
         local branch = tab.active_pane.user_vars.git_branch or ""
         local title = tab.active_pane.title
         if branch ~= "" then
-          return branch .. ' | ' .. title
+          return index .. ': ' .. branch .. ' > ' .. title
         end
-        return title
+        return index .. ': ' .. title
       end)
 
       return config
