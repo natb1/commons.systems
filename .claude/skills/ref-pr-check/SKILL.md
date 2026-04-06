@@ -15,7 +15,7 @@ On load, read issue state via `.claude/skills/ref-pr-workflow/scripts/issue-stat
 
 ## Sandbox
 
-Use `dangerouslyDisableSandbox: true` for git write operations (`git add`, `git commit`, `git merge`, `git push`) and all `gh` CLI calls (`gh run watch`, `.claude/skills/ref-pr-workflow/scripts/issue-state-write`, `.claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh`).
+Use `dangerouslyDisableSandbox: true` for git write operations (`git add`, `git commit`, `git merge`, `git push`) and all `gh` CLI calls (`.claude/skills/ref-pr-workflow/scripts/run-ci-watch.sh`, `.claude/skills/ref-pr-workflow/scripts/issue-state-write`, `.claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh`).
 
 ## Phase 1: Acceptance Tests (Step 6)
 
@@ -25,7 +25,7 @@ Iteration counter starts at 1.
 
 Run in a background Task (`run_in_background: true`). Use `dangerouslyDisableSandbox: true`. Wait for the initial CI run to start, then monitor it:
 ```bash
-sleep 240 && gh run watch -i 30 --exit-status <run-id>
+.claude/skills/ref-pr-workflow/scripts/run-ci-watch.sh <run-id> --delay 240
 ```
 
 ### Evaluate
@@ -92,7 +92,7 @@ git add <files> && git commit -m "..." && git push origin HEAD
 
 Same as Phase 1 Execute — run in a background Task with `dangerouslyDisableSandbox: true`:
 ```bash
-sleep 240 && gh run watch -i 30 --exit-status <run-id>
+.claude/skills/ref-pr-workflow/scripts/run-ci-watch.sh <run-id> --delay 240
 ```
 
 ### Evaluate
@@ -175,9 +175,8 @@ If no runs exist (empty array), set `run_status` to `"no_run"` and skip to Evalu
 Compare the returned `headSha` against `git rev-parse HEAD`.
 - Match → monitor the run in a background Task (`run_in_background: true`):
   ```bash
-  gh run watch -i 30 --exit-status <databaseId>
+  .claude/skills/ref-pr-workflow/scripts/run-ci-watch.sh <databaseId> --output tmp/final-verify-watch-<N>.txt
   ```
-  Capture output to `tmp/final-verify-watch-<N>.txt`.
 - No match → the latest run predates HEAD (no new CI run was triggered by recent fixes). Set `run_status` to `"stale"` and skip to Evaluate.
 
 ### Evaluate

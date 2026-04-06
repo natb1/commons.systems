@@ -23,16 +23,17 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 - Construct `tmp/codequality-output-<N>.txt` by calling the concat script — do NOT use the Write tool or re-output verbatim content:
   ```bash
   .claude/skills/ref-pr-workflow/scripts/concat-review-output.sh \
+    --task-dir /path/to/task/output/dir \
     tmp/codequality-output-<N>.txt \
-    "/review Output:$REVIEW_OUT" \
-    "pr-review-toolkit: code-reviewer:$CODE_REVIEWER_OUT" \
-    "/simplify Output:$SIMPLIFY_OUT" \
-    "pr-review-toolkit: comment-analyzer:$COMMENT_ANALYZER_OUT" \
-    "pr-review-toolkit: pr-test-analyzer:$PR_TEST_ANALYZER_OUT" \
-    "pr-review-toolkit: silent-failure-hunter:$SILENT_FAILURE_OUT" \
-    "pr-review-toolkit: type-design-analyzer:$TYPE_DESIGN_OUT"
+    "/review Output:review-task-id.output" \
+    "pr-review-toolkit: code-reviewer:code-reviewer-task-id.output" \
+    "/simplify Output:simplify-task-id.output" \
+    "pr-review-toolkit: comment-analyzer:comment-analyzer-task-id.output" \
+    "pr-review-toolkit: pr-test-analyzer:pr-test-analyzer-task-id.output" \
+    "pr-review-toolkit: silent-failure-hunter:silent-failure-task-id.output" \
+    "pr-review-toolkit: type-design-analyzer:type-design-task-id.output"
   ```
-  Substitute each `$*_OUT` variable with the `output_file` path from the corresponding Task result. For unavailable tasks, pass an empty path (e.g., `"label:"`) — the script prints "Task unavailable".
+  Use `--task-dir` with the common task output directory (from `output_file` paths in Task results), then pass just the filename after each label's colon. For unavailable tasks, pass an empty path (e.g., `"label:"`) — the script prints "Task unavailable".
 
 **Evaluation instructions:**
 - **Aggregate and deduplicate** findings across all tasks — merge near-identical findings into single entries noting which tasks raised them

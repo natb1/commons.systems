@@ -47,6 +47,7 @@
       "Bash(gh run rerun:*)",
       "Bash(gh run view:*)",
       "Bash(gh run watch:*)",
+      "Bash(.claude/skills/ref-pr-workflow/scripts/run-ci-watch.sh:*)",
       "Bash(gh search:*)",
       "Bash(go build:*)",
       "Bash(go test:*)",
