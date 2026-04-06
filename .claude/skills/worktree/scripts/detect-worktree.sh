@@ -5,6 +5,7 @@ set -euo pipefail
 # worktree whose branch starts with <issue-num>-.
 # Usage: detect-worktree.sh <issue-number>
 # Output: key=value lines (LAYOUT, PROJECT_ROOT, WORKTREE_PATH, WORKTREE_BRANCH)
+# WORKTREE_PATH and WORKTREE_BRANCH are either both set or both empty.
 
 if [ $# -lt 1 ] || [ -z "$1" ]; then
   echo "Usage: detect-worktree.sh <issue-number>" >&2
@@ -12,17 +13,21 @@ if [ $# -lt 1 ] || [ -z "$1" ]; then
 fi
 
 ISSUE_NUM="$1"
+[[ "$ISSUE_NUM" =~ ^[0-9]+$ ]] || { echo "ERROR: issue number must be numeric, got: $ISSUE_NUM" >&2; exit 1; }
 
 PORCELAIN=$(git worktree list --porcelain)
+FIRST_LINE=$(printf '%s\n' "$PORCELAIN" | head -1)
 SECOND_LINE=$(printf '%s\n' "$PORCELAIN" | sed -n '2p')
+
+[[ "$FIRST_LINE" == worktree\ * ]] || { echo "ERROR: expected 'worktree ' prefix in porcelain output, got: $FIRST_LINE" >&2; exit 1; }
+WORKTREE_DIR="${FIRST_LINE#worktree }"
 
 if [ "$SECOND_LINE" = "bare" ]; then
   LAYOUT="bare"
-  GIT_DIR=$(printf '%s\n' "$PORCELAIN" | head -1 | sed 's/^worktree //')
-  PROJECT_ROOT=$(dirname "$GIT_DIR")
+  PROJECT_ROOT=$(dirname "$WORKTREE_DIR")
 else
   LAYOUT="classic"
-  PROJECT_ROOT=$(printf '%s\n' "$PORCELAIN" | head -1 | sed 's/^worktree //')
+  PROJECT_ROOT="$WORKTREE_DIR"
 fi
 
 # Search for an existing worktree with a branch matching <issue-num>-

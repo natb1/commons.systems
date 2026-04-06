@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PreToolUse hook: auto-approve workflow script and allowedTools commands.
 # Reads tool input JSON from stdin. Returns JSON permissionDecision of "allow"
-# when every command segment is a ref-pr-workflow script or an allowedTools command.
+# when every command segment is a skill script or an allowedTools command.
 # Exits 0 with no output for unrecognized commands (passthrough).
 #
 # errexit (-e) is intentionally omitted — hook failures must not block the user.
