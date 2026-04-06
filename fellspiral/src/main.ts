@@ -20,7 +20,7 @@ import { initScrollIndicator } from "@commons-systems/style/scroll-indicator";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { createStrategies, BLOG_ROLL_ENTRIES } from "./blog-roll/config.js";
-import { INFO_PANEL_LINK_SECTIONS } from "./site-config.js";
+import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS } from "./site-config.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
@@ -52,11 +52,6 @@ let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("fellspiral/post");
 const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://fellspiral.commons.systems" };
-const SITE_DEFAULTS = {
-  title: "fellspiral",
-  description: "A TTRPG game blog by Nate. Nate likes games about social role play.",
-  image: "/tile10-armadillo-crag.webp",
-};
 // Skip the very first innerHTML replacement when pre-rendered content exists.
 // The pre-render script (prerender.ts) already injected identical panel markup,
 // so replacing it would cause a needless DOM teardown that can trigger CLS.

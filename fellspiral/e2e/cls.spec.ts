@@ -6,7 +6,7 @@ interface ShiftEntry {
 }
 
 test.describe("Cumulative Layout Shift", () => {
-  test("CLS score is below 0.1 on mobile viewport", async ({ page }) => {
+  test("CLS score is below 0.12 on mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 412, height: 915 });
     await page.goto("/");
     await page.waitForLoadState("load");

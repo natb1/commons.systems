@@ -105,6 +105,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   rootHtml = injectInfoPanel(rootHtml, panelHtml);
   rootHtml = injectNav(rootHtml, navHtml);
   if (siteDefaults) {
+    rootHtml = rootHtml.replace(/\s*<meta name="description"[^>]*>/, "");
     const rootOgTags = ogTagsToHtml(siteDefaultOgEntries(siteUrl, siteDefaults));
     const beforeOg = rootHtml;
     rootHtml = rootHtml.replace("</head>", `    ${rootOgTags}\n  </head>`);
