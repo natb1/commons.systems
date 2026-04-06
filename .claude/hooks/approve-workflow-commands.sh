@@ -47,7 +47,7 @@ fi
 #   script-a; rm -rf /
 CLEANED=$(printf '%s' "$FIRST_LINE" | sed 's/ *2>[/&][a-z1-9]*//g')
 
-SCRIPT_RE='(^|/)\.claude/skills/ref-pr-workflow/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$'
+SCRIPT_RE='(^|/)\.claude/skills/[a-zA-Z0-9_-]+/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$'
 UNSAFE_RE='[`<>$]'
 
 # Reject && and || before splitting on | — IFS='|' splits || into empty segments
