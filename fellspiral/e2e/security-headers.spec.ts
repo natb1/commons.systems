@@ -67,8 +67,11 @@ test.describe("security headers", () => {
     expect(response).not.toBeNull();
     expect(response!.status()).toBe(200);
 
-    // Wait for any deferred scripts/resources to trigger potential violations
-    await page.waitForLoadState("networkidle");
+    // Wait for deferred scripts to trigger potential violations. Using "load"
+    // instead of "networkidle" because the Firestore emulator keeps long-lived
+    // connections open, preventing networkidle from ever resolving.
+    await page.waitForLoadState("load");
+    await page.waitForTimeout(2000);
 
     expect(
       cspViolations,
