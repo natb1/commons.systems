@@ -373,6 +373,37 @@ describe("prerenderPosts", () => {
     expect(html).toContain('<main id="app"><div id="posts">');
   });
 
+  it("injects OG tags into root index.html when siteDefaults provided", async () => {
+    await prerenderPosts(makeConfig({
+      siteDefaults: {
+        title: "My Site",
+        description: "Site description for OG",
+        image: "/og-image.jpg",
+      },
+    }));
+
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    expect(html).toContain('<meta property="og:title" content="My Site">');
+    expect(html).toContain('<meta property="og:description" content="Site description for OG">');
+    expect(html).toContain('<meta property="og:image" content="https://example.com/og-image.jpg">');
+    expect(html).toContain('<meta property="og:type" content="website">');
+    expect(html).toContain('<meta property="og:url" content="https://example.com">');
+    expect(html).toContain('<meta name="description" content="Site description for OG">');
+  });
+
+  it("omits root OG tags when siteDefaults not provided", async () => {
+    await prerenderPosts(makeConfig());
+
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    expect(html).not.toContain("og:title");
+  });
+
   it("renders archive section with posts in info panel", async () => {
     await prerenderPosts(makeConfig());
 

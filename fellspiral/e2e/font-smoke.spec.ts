@@ -19,21 +19,11 @@ test.describe("font smoke", () => {
     expect(blocked).toEqual([]);
   });
 
-  test("font preload links are present @smoke", async ({ page }) => {
+  test("no font preload links (font-display: optional makes preloads wasteful) @smoke", async ({
+    page,
+  }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-
     const preloads = page.locator('link[rel="preload"][as="font"]');
-    const count = await preloads.count();
-    expect(count).toBeGreaterThanOrEqual(2);
-
-    const hrefs: string[] = [];
-    for (let i = 0; i < count; i++) {
-      const href = await preloads.nth(i).getAttribute("href");
-      expect(href).not.toBeNull();
-      hrefs.push(href!);
-    }
-
-    expect(hrefs.some((h) => h.includes("uncial-antiqua"))).toBe(true);
-    expect(hrefs.some((h) => h.includes("eb-garamond"))).toBe(true);
+    await expect(preloads).toHaveCount(0);
   });
 });

@@ -112,4 +112,47 @@ describe("updateOgMeta", () => {
     updateOgMeta(SITE_URL, undefined);
     expect(getOgContent("og:url")).toBeNull();
   });
+
+  const siteDefaults = {
+    title: "fellspiral",
+    description: "A TTRPG game blog by Nate.",
+    image: "/tile10-armadillo-crag.webp",
+  };
+
+  it("restores site-level description when post is undefined and siteDefaults provided", () => {
+    updateOgMeta(SITE_URL, undefined, "Fellspiral", siteDefaults);
+    const desc = document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content;
+    expect(desc).toBe("A TTRPG game blog by Nate.");
+  });
+
+  it("restores site-level OG tags when navigating to home with siteDefaults", () => {
+    updateOgMeta(SITE_URL, undefined, "Fellspiral", siteDefaults);
+    expect(getOgContent("og:title")).toBe("fellspiral");
+    expect(getOgContent("og:description")).toBe("A TTRPG game blog by Nate.");
+    expect(getOgContent("og:image")).toBe("https://example.com/tile10-armadillo-crag.webp");
+    expect(getOgContent("og:type")).toBe("website");
+    expect(getOgContent("og:url")).toBe("https://example.com");
+  });
+
+  it("post-specific tags override site defaults", () => {
+    updateOgMeta(SITE_URL, basePost, "Fellspiral", siteDefaults);
+    expect(getOgContent("og:title")).toBe("Test Post");
+    expect(getOgContent("og:description")).toBe("A test description");
+    expect(getOgContent("og:image")).toBe("https://example.com/images/test.png");
+    expect(getOgContent("og:type")).toBe("article");
+    expect(getOgContent("og:url")).toBe("https://example.com/post/test-post");
+  });
+
+  it("navigating from post to home replaces post OG tags with site defaults", () => {
+    updateOgMeta(SITE_URL, basePost, "Fellspiral", siteDefaults);
+    expect(getOgContent("og:title")).toBe("Test Post");
+    expect(getOgContent("og:type")).toBe("article");
+
+    updateOgMeta(SITE_URL, undefined, "Fellspiral", siteDefaults);
+    expect(getOgContent("og:title")).toBe("fellspiral");
+    expect(getOgContent("og:description")).toBe("A TTRPG game blog by Nate.");
+    expect(getOgContent("og:image")).toBe("https://example.com/tile10-armadillo-crag.webp");
+    expect(getOgContent("og:type")).toBe("website");
+    expect(getOgContent("og:url")).toBe("https://example.com");
+  });
 });
