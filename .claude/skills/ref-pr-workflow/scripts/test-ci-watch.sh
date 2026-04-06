@@ -16,20 +16,7 @@ setup() {
   mkdir -p "$TMP_DIR"
 }
 
-assert_exit_nonzero() {
-  local label="$1"
-  shift
-  TOTAL=$((TOTAL + 1))
-  if "$@" 2>/dev/null; then
-    echo "  FAIL: $label — expected non-zero exit"
-    FAIL=$((FAIL + 1))
-  else
-    echo "  PASS: $label"
-    PASS=$((PASS + 1))
-  fi
-}
-
-# Create a fake gh that succeeds — echoes args and exits 0
+# Create a mock gh that echoes its args and exits with the given code (default 0)
 make_mock_gh() {
   local dir="$1" exit_code="${2:-0}"
   mkdir -p "$dir"
@@ -84,8 +71,7 @@ test_valid_args_succeeds() {
   local rc=$?
 
   assert_eq "valid args: exits 0" "0" "$rc"
-  assert_contains "valid args: calls gh with run-id" "42" "$output"
-  assert_contains "valid args: passes --exit-status" "--exit-status" "$output"
+  assert_eq "valid args: exact gh command" "gh run watch -i 30 --exit-status 42" "$output"
 }
 
 test_output_flag_creates_file() {
@@ -95,28 +81,35 @@ test_output_flag_creates_file() {
 
   PATH="$TMP_DIR/bin:$PATH" "$SCRIPT" "42" --output "$outfile" 2>&1
 
-  TOTAL=$((TOTAL + 1))
-  if [[ -f "$outfile" ]]; then
-    echo "  PASS: --output creates file"
-    PASS=$((PASS + 1))
-  else
-    echo "  FAIL: --output creates file — file not found: $outfile"
-    FAIL=$((FAIL + 1))
-  fi
+  assert_file_exists "--output creates file" "$outfile"
+  local content
+  content=$(cat "$outfile")
+  assert_contains "--output file contains gh output" "gh run watch" "$content"
 }
 
 test_gh_failure_exits_nonzero() {
   setup
   make_mock_gh "$TMP_DIR/bin" 1
 
-  TOTAL=$((TOTAL + 1))
-  if PATH="$TMP_DIR/bin:$PATH" "$SCRIPT" "42" 2>/dev/null; then
-    echo "  FAIL: gh failure exits non-zero — expected non-zero exit"
-    FAIL=$((FAIL + 1))
-  else
-    echo "  PASS: gh failure exits non-zero"
-    PASS=$((PASS + 1))
-  fi
+  assert_exit_nonzero "gh failure exits non-zero" \
+    env PATH="$TMP_DIR/bin:$PATH" "$SCRIPT" "42"
+}
+
+test_gh_failure_with_output_exits_nonzero() {
+  setup
+  make_mock_gh "$TMP_DIR/bin" 1
+  local outfile="$TMP_DIR/ci-output.txt"
+
+  assert_exit_nonzero "gh failure with --output exits non-zero" \
+    env PATH="$TMP_DIR/bin:$PATH" "$SCRIPT" "42" --output "$outfile"
+}
+
+test_output_invalid_directory() {
+  setup
+  make_mock_gh "$TMP_DIR/bin" 0
+
+  assert_exit_nonzero "invalid output directory exits non-zero" \
+    env PATH="$TMP_DIR/bin:$PATH" "$SCRIPT" "42" --output "/nonexistent/path/file.txt"
 }
 
 # --- Run ---
@@ -132,5 +125,7 @@ test_unknown_flag
 test_valid_args_succeeds
 test_output_flag_creates_file
 test_gh_failure_exits_nonzero
+test_gh_failure_with_output_exits_nonzero
+test_output_invalid_directory
 
 report_results

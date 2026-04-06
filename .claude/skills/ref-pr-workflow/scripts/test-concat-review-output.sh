@@ -30,19 +30,6 @@ assert_file_contains() {
   fi
 }
 
-assert_exit_nonzero() {
-  local label="$1"
-  shift
-  TOTAL=$((TOTAL + 1))
-  if "$@" 2>/dev/null; then
-    echo "  FAIL: $label — expected non-zero exit"
-    FAIL=$((FAIL + 1))
-  else
-    echo "  PASS: $label"
-    PASS=$((PASS + 1))
-  fi
-}
-
 # --- Tests ---
 
 test_basic_concatenation() {

@@ -34,6 +34,31 @@ assert_contains() {
   fi
 }
 
+assert_exit_nonzero() {
+  local label="$1"
+  shift
+  TOTAL=$((TOTAL + 1))
+  if "$@" 2>/dev/null; then
+    echo "  FAIL: $label — expected non-zero exit"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  PASS: $label"
+    PASS=$((PASS + 1))
+  fi
+}
+
+assert_file_exists() {
+  local label="$1" file="$2"
+  TOTAL=$((TOTAL + 1))
+  if [[ -f "$file" ]]; then
+    echo "  PASS: $label"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $label — file not found: $file"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 report_results() {
   echo ""
   echo "================================"

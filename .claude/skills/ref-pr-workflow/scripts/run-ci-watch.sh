@@ -52,6 +52,11 @@ if [[ "$delay" -gt 0 ]]; then
 fi
 
 if [[ -n "$output_file" ]]; then
+  output_dir="$(dirname "$output_file")"
+  if [[ ! -d "$output_dir" ]]; then
+    echo "Error: output directory does not exist: $output_dir" >&2
+    exit 1
+  fi
   gh run watch -i 30 --exit-status "$run_id" | tee "$output_file"
 else
   gh run watch -i 30 --exit-status "$run_id"
