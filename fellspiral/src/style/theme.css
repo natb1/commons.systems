@@ -35,9 +35,32 @@
     U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+/* Metric-adjusted fallback fonts to minimize CLS when web fonts load within
+   the font-display:optional block period (common on fast connections). The
+   size-adjust values compensate for the metric differences between web fonts
+   and system fallbacks so text occupies the same space before and after the
+   swap. */
+@font-face {
+  font-family: "EB Garamond Fallback";
+  src: local("Georgia");
+  size-adjust: 97%;
+  ascent-override: 95%;
+  descent-override: 24%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Uncial Antiqua Fallback";
+  src: local("Georgia");
+  size-adjust: 105%;
+  ascent-override: 95%;
+  descent-override: 22%;
+  line-gap-override: 0%;
+}
+
 :root {
-  --font-body: "EB Garamond", "Georgia", "Times New Roman", serif;
-  --font-heading: "Uncial Antiqua", "EB Garamond", serif;
+  --font-body: "EB Garamond", "EB Garamond Fallback", "Georgia", "Times New Roman", serif;
+  --font-heading: "Uncial Antiqua", "Uncial Antiqua Fallback", "EB Garamond", serif;
 
   --fg: #2a1f14;
   --bg: #f5eed6;
