@@ -134,6 +134,44 @@ test_all_seven_labels() {
   assert_file_contains "all seven: has colon-containing label" "$TMP_DIR/output.txt" "## pr-review-toolkit: code-reviewer"
 }
 
+test_task_dir_basic() {
+  setup
+  mkdir -p "$TMP_DIR/tasks"
+  echo "Review from task dir" > "$TMP_DIR/tasks/review.txt"
+  echo "Code reviewer from task dir" > "$TMP_DIR/tasks/code-reviewer.txt"
+
+  "$SCRIPT" --task-dir "$TMP_DIR/tasks" "$TMP_DIR/output.txt" \
+    "/review Output:review.txt" \
+    "pr-review-toolkit: code-reviewer:code-reviewer.txt"
+
+  assert_file_contains "task-dir basic: has first content" "$TMP_DIR/output.txt" "Review from task dir"
+  assert_file_contains "task-dir basic: has second content" "$TMP_DIR/output.txt" "Code reviewer from task dir"
+  assert_file_contains "task-dir basic: has header" "$TMP_DIR/output.txt" "## /review Output"
+}
+
+test_task_dir_empty_path() {
+  setup
+  mkdir -p "$TMP_DIR/tasks"
+  echo "Exists" > "$TMP_DIR/tasks/exists.txt"
+
+  "$SCRIPT" --task-dir "$TMP_DIR/tasks" "$TMP_DIR/output.txt" \
+    "Task A:exists.txt" \
+    "Task B:"
+
+  assert_file_contains "task-dir empty path: has content" "$TMP_DIR/output.txt" "Exists"
+  assert_file_contains "task-dir empty path: shows unavailable" "$TMP_DIR/output.txt" "Task unavailable"
+}
+
+test_task_dir_missing_file() {
+  setup
+  mkdir -p "$TMP_DIR/tasks"
+
+  "$SCRIPT" --task-dir "$TMP_DIR/tasks" "$TMP_DIR/output.txt" \
+    "Task A:nonexistent.txt"
+
+  assert_file_contains "task-dir missing file: shows unavailable" "$TMP_DIR/output.txt" "Task unavailable"
+}
+
 # --- Run ---
 
 test_basic_concatenation
@@ -144,5 +182,8 @@ test_no_args
 test_only_output_file
 test_first_section_no_leading_newlines
 test_all_seven_labels
+test_task_dir_basic
+test_task_dir_empty_path
+test_task_dir_missing_file
 
 report_results

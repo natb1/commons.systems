@@ -1,14 +1,25 @@
 #!/usr/bin/env bash
 # Concatenate review task outputs into a single file with markdown headers.
-# Usage: concat-review-output.sh <output-file> <label1>:<path1> [<label2>:<path2> ...]
+# Usage: concat-review-output.sh [--task-dir <dir>] <output-file> <label1>:<path1> [...]
 # Labels may contain colons (e.g., "pr-review-toolkit: code-reviewer") —
 # each argument is split on the LAST colon to separate label from path.
+# When --task-dir is provided, non-empty paths are resolved relative to <dir>.
 set -euo pipefail
+
+TASK_DIR=""
+if [ "${1:-}" = "--task-dir" ]; then
+  if [ -z "${2:-}" ]; then
+    echo "error: --task-dir requires a directory argument" >&2
+    exit 1
+  fi
+  TASK_DIR="$2"
+  shift 2
+fi
 
 OUTPUT_FILE="${1:-}"
 
 if [ -z "$OUTPUT_FILE" ]; then
-  echo "error: usage: concat-review-output.sh <output-file> <label:path> [...]" >&2
+  echo "error: usage: concat-review-output.sh [--task-dir <dir>] <output-file> <label:path> [...]" >&2
   exit 1
 fi
 shift
@@ -51,6 +62,10 @@ FIRST=true
       FIRST=false
     else
       printf '\n\n## %s\n\n' "$label"
+    fi
+
+    if [ -n "$TASK_DIR" ] && [ -n "$path" ]; then
+      path="${TASK_DIR}/${path}"
     fi
 
     if [ -z "$path" ] || [ ! -f "$path" ]; then
