@@ -38,6 +38,8 @@
 :root {
   --font-body: "EB Garamond", "Georgia", "Times New Roman", serif;
   --font-heading: "Uncial Antiqua", "EB Garamond", serif;
+  --main-font: var(--font-body);
+  --display-font: var(--font-heading);
 
   --fg: #2a1f14;
   --bg: #f5eed6;
