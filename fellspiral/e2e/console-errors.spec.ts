@@ -13,7 +13,7 @@ test.describe("console errors", () => {
 
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
-    // Wait for any deferred async operations to complete.
+    // Allow time for the blogroll feed fetch to settle after DOM render.
     await page.waitForTimeout(3000);
 
     const atomErrors = consoleErrors.filter((msg) =>

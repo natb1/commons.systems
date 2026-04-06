@@ -12,16 +12,17 @@ test.use({ viewport: { width: 412, height: 915 } });
 test.describe("Cumulative Layout Shift", () => {
   test("CLS score is below 0.1 on mobile viewport", async ({ page, context }) => {
     // Pre-warm the hosting emulator. The first request against a cold Firebase
-    // emulator is slow enough that preloaded fonts miss the font-display:optional
-    // block window, causing a fallback-to-web-font swap and extra layout shifts.
-    // This preliminary fetch primes the emulator so the measured page load
-    // reflects production-like latency.
+    // emulator is slow enough that fonts miss the font-display:optional block
+    // window, causing the browser to skip web fonts and render with fallback
+    // fonts whose different metrics produce layout shifts. This preliminary
+    // fetch primes the emulator so the measured page load reflects
+    // production-like latency.
     await page.goto("/");
     await page.waitForLoadState("load");
 
-    // Open a fresh page in the same context (shares cache with the warm-up
-    // page, matching how a real user with primed browser cache would experience
-    // the site) and measure CLS there.
+    // Open a fresh page so the PerformanceObserver captures only layout shifts
+    // from a clean navigation. The new page shares the warm-up page's browser
+    // cache via the same context, so font/asset latency reflects a primed load.
     const measured = await context.newPage();
     await measured.goto("/");
     await measured.waitForLoadState("load");
