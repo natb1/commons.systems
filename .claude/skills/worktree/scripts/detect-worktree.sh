@@ -6,6 +6,7 @@ set -euo pipefail
 # Usage: detect-worktree.sh <issue-number>
 # Output: key=value lines (LAYOUT, PROJECT_ROOT, WORKTREE_PATH, WORKTREE_BRANCH)
 # WORKTREE_PATH and WORKTREE_BRANCH are either both set or both empty.
+# LAYOUT is always 'bare' or 'classic'.
 
 if [ $# -lt 1 ] || [ -z "$1" ]; then
   echo "Usage: detect-worktree.sh <issue-number>" >&2
@@ -15,7 +16,7 @@ fi
 ISSUE_NUM="$1"
 [[ "$ISSUE_NUM" =~ ^[0-9]+$ ]] || { echo "ERROR: issue number must be numeric, got: $ISSUE_NUM" >&2; exit 1; }
 
-PORCELAIN=$(git worktree list --porcelain)
+PORCELAIN=$(git worktree list --porcelain) || { echo "ERROR: 'git worktree list --porcelain' failed -- is this a git repository?" >&2; exit 1; }
 FIRST_LINE=$(printf '%s\n' "$PORCELAIN" | head -1)
 SECOND_LINE=$(printf '%s\n' "$PORCELAIN" | sed -n '2p')
 
@@ -31,8 +32,8 @@ else
 fi
 
 # Search for an existing worktree with a branch matching <issue-num>-
-# Parse blank-line-delimited records since porcelain format includes HEAD,
-# prunable, and other lines between worktree and branch lines.
+# Parse blank-line-delimited records since porcelain format may include
+# other fields (HEAD sha, prunable status) between worktree and branch lines.
 WORKTREE_PATH=""
 WORKTREE_BRANCH=""
 
@@ -49,7 +50,7 @@ while IFS= read -r LINE; do
     branch\ refs/heads/"${ISSUE_NUM}"-*)
       WORKTREE_PATH="$CURRENT_PATH"
       WORKTREE_BRANCH="${LINE#branch refs/heads/}"
-      break
+      break  # first match wins; multiple worktrees per issue is not expected
       ;;
   esac
 done <<< "$PORCELAIN"
