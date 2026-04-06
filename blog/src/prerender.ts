@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { InfoPanelData } from "./components/info-panel.ts";
+import { siteDefaultOgEntries, postOgEntries, type OgTagEntry, type SiteDefaults } from "./og-meta.ts";
 import { validatePublishedPosts, type PostMeta, type PublishedPost } from "./post-types.ts";
 import { formatPageTitle } from "./page-title.ts";
 import { renderInfoPanel } from "./components/info-panel.ts";
@@ -22,6 +23,13 @@ export interface PrerenderConfig {
   postDir: string;
   navLinks: NavLink[];
   infoPanel: Omit<InfoPanelData, "topPosts">;
+  siteDefaults?: SiteDefaults;
+}
+
+function ogTagsToHtml(entries: OgTagEntry[]): string {
+  return entries
+    .map((e) => `<meta ${e.attr}="${e.key}" content="${escapeHtml(e.content)}">`)
+    .join("\n    ");
 }
 
 function renderNavHtml(links: NavLink[]): string {
@@ -69,7 +77,7 @@ function injectNav(html: string, navHtml: string): string {
 // executing JS. Each post page includes all published articles (matching the
 // root index) so the client hydrates without a visible content shift.
 export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
-  const { siteUrl, titleSuffix, distDir, seed, postDir, navLinks, infoPanel } = config;
+  const { siteUrl, titleSuffix, distDir, seed, postDir, navLinks, infoPanel, siteDefaults } = config;
 
   const template = readFileSync(join(distDir, "index.html"), "utf-8");
   const marked = createMarked();
@@ -96,49 +104,36 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   let rootHtml = injectMain(template, allArticlesHtml);
   rootHtml = injectInfoPanel(rootHtml, panelHtml);
   rootHtml = injectNav(rootHtml, navHtml);
+  if (siteDefaults) {
+    rootHtml = rootHtml.replace(/\s*<meta name="description"[^>]*>/, "");
+    const rootOgTags = ogTagsToHtml(siteDefaultOgEntries(siteUrl, siteDefaults));
+    const beforeOg = rootHtml;
+    rootHtml = rootHtml.replace("</head>", `    ${rootOgTags}\n  </head>`);
+    if (rootHtml === beforeOg) throw new Error("</head> marker not found in root template");
+  }
   writeFileSync(join(distDir, "index.html"), rootHtml);
   console.log("Pre-rendered: /index.html");
 
   for (const meta of published) {
-    const id = meta.id;
-    const title = meta.title;
-    const description = meta.previewDescription;
-    const image = meta.previewImage;
-
-    const ogTags = [
-      `<meta property="og:title" content="${escapeHtml(title)}">`,
-      `<meta property="og:url" content="${siteUrl}/post/${encodeURIComponent(id)}">`,
-      `<meta property="og:type" content="article">`,
-    ];
-
-    if (description) {
-      ogTags.push(`<meta property="og:description" content="${escapeHtml(description)}">`);
-      ogTags.push(`<meta name="description" content="${escapeHtml(description)}">`);
-    }
-
-    if (image) {
-      ogTags.push(`<meta property="og:image" content="${escapeHtml(siteUrl + image)}">`);
-    }
-
-    const ogBlock = ogTags.join("\n    ");
+    const ogBlock = ogTagsToHtml(postOgEntries(siteUrl, meta));
     let html = template;
-    if (description) {
+    if (meta.previewDescription) {
       html = html.replace(/\s*<meta name="description"[^>]*>/, "");
     }
     const beforeHead = html;
     html = html.replace("</head>", `    ${ogBlock}\n  </head>`);
     if (html === beforeHead) throw new Error(`</head> marker not found in template`);
     const beforeTitle = html;
-    html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(formatPageTitle(titleSuffix, title))}</title>`);
+    html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(formatPageTitle(titleSuffix, meta.title))}</title>`);
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
     html = injectMain(html, allArticlesHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
 
-    const outDir = join(distDir, "post", id);
+    const outDir = join(distDir, "post", meta.id);
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, "index.html"), html);
-    console.log(`Pre-rendered: /post/${id}/index.html`);
+    console.log(`Pre-rendered: /post/${meta.id}/index.html`);
   }
 }

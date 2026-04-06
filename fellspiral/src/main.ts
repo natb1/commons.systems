@@ -20,7 +20,7 @@ import { initScrollIndicator } from "@commons-systems/style/scroll-indicator";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { createStrategies, BLOG_ROLL_ENTRIES } from "./blog-roll/config.js";
-import { INFO_PANEL_LINK_SECTIONS } from "./site-config.js";
+import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS } from "./site-config.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
@@ -146,7 +146,7 @@ const router = createHistoryRouter(
       afterRender: (outlet, path) => {
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
-        updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, "Fellspiral");
+        updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, "Fellspiral", SITE_DEFAULTS);
         updateInfoPanel();
       },
     },
