@@ -56,3 +56,62 @@ describe("fellspiral firebase headers", () => {
     }
   });
 });
+
+describe("fellspiral security headers", () => {
+  const globalRule = headers.find((h) => h.source === "**");
+
+  it("has a global ** source rule", () => {
+    expect(globalRule).toBeDefined();
+  });
+
+  function getHeader(key: string): string | undefined {
+    return globalRule?.headers.find((h) => h.key === key)?.value;
+  }
+
+  describe("Content-Security-Policy", () => {
+    const csp = getHeader("Content-Security-Policy");
+
+    it("is present", () => {
+      expect(csp).toBeDefined();
+    });
+
+    const requiredDirectives = [
+      "default-src 'none'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self'",
+      "font-src 'self'",
+      "connect-src 'self'",
+      "frame-src 'self'",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ];
+
+    for (const directive of requiredDirectives) {
+      it(`contains ${directive}`, () => {
+        expect(csp).toContain(directive);
+      });
+    }
+  });
+
+  it("sets Cross-Origin-Opener-Policy to same-origin", () => {
+    expect(getHeader("Cross-Origin-Opener-Policy")).toBe("same-origin");
+  });
+
+  it("sets X-Frame-Options to DENY", () => {
+    expect(getHeader("X-Frame-Options")).toBe("DENY");
+  });
+
+  describe("Strict-Transport-Security", () => {
+    const hsts = getHeader("Strict-Transport-Security");
+
+    it("includes includeSubDomains", () => {
+      expect(hsts).toContain("includeSubDomains");
+    });
+
+    it("includes preload", () => {
+      expect(hsts).toContain("preload");
+    });
+  });
+});
