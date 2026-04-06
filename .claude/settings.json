@@ -56,7 +56,8 @@
       "Bash(lsof:*)",
       "Bash(head:*)",
       "Bash(tail:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(grep:*)"
     ]
   },
   "showClearContextOnPlanAccept": true,
