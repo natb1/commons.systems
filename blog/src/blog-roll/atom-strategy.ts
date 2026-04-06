@@ -15,9 +15,6 @@ export class AtomStrategy implements BlogRollStrategy {
       const proxyUrl = `${this.proxyPath}?url=${encodeURIComponent(this.feedUrl)}`;
       const headers = await this.fetchHeaders?.();
       if (this.fetchHeaders && (!headers || !Object.keys(headers).length)) {
-        logError(new Error(`Skipping feed fetch for ${this.feedUrl}: headers unavailable`), {
-          operation: "atom-strategy-fetch",
-        });
         return null;
       }
       const response = await fetch(proxyUrl, headers ? { headers } : undefined);
