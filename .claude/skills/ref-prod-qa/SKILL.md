@@ -28,7 +28,7 @@ Step 13. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 Claude walks through the QA plan one item at a time in the user's browser against production URLs. For each item, Claude sets up the UI state, checks the output, tells the user what they should see, and waits for the user to confirm before moving on.
 
 1. Load chrome tools via `ToolSearch("select:mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__read_console_messages,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__gif_creator,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__tabs_context_mcp")`
-   - If ToolSearch fails or tools are unavailable → skip entire demo, note "Chrome extension unavailable" in results, fall through to user-driven phase
+   - If ToolSearch fails or tools are unavailable → skip entire demo, mark all items SKIP in results, note "Chrome extension unavailable"
 2. Create a new tab via `tabs_create_mcp`, capture `tabId`
 3. Navigate to the first production URL
 4. Suppress JS dialogs: use `javascript_tool` to override `window.alert`, `window.confirm`, `window.prompt` with no-ops
@@ -49,7 +49,8 @@ Claude walks through the QA plan one item at a time in the user's browser agains
 
 **Evaluation instructions:**
 - All items PASS or SKIP (no FAIL) → **Terminate**
-- Any items FAIL → **Iterate**
+- All FAIL items have follow-up issues created → **Terminate**
+- Any FAIL items without follow-up issues → **Iterate**
 
 **Iterate instructions:**
 - **Do NOT fix code.** Production is immutable in this loop.
@@ -85,7 +86,7 @@ Claude walks through the QA plan one item at a time in the user's browser agains
     --label "bug"
   ```
 - After creating follow-up issues for all FAIL items, re-run browser demo on any remaining untested or SKIP items only
-- If no remaining items to test, proceed to evaluation (which will terminate since all FAILs now have follow-up issues)
+- If no remaining items to test, proceed to evaluation
 
 **Progress report instructions:**
 - Invoke `/pr-workflow-progress-report` with `FILE_PREFIX=prod-qa PR_NUM=<pr-num> ITERATION=<N>` (no output file — the QA plan lives in plan mode, not a temp file)
