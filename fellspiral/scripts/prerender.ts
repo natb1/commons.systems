@@ -20,6 +20,11 @@ await prerenderPosts({
     rssFeedUrl: "/feed.xml",
     opmlUrl: "/blogroll.opml",
   },
+  siteDefaults: {
+    title: "fellspiral",
+    description: "A TTRPG game blog by Nate. Nate likes games about social role play.",
+    image: "/tile10-armadillo-crag.webp",
+  },
 });
 
 generateFeedXml({

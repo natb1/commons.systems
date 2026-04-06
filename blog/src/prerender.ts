@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { InfoPanelData } from "./components/info-panel.ts";
+import type { SiteDefaults } from "./og-meta.ts";
 import { validatePublishedPosts, type PostMeta, type PublishedPost } from "./post-types.ts";
 import { formatPageTitle } from "./page-title.ts";
 import { renderInfoPanel } from "./components/info-panel.ts";
@@ -22,6 +23,7 @@ export interface PrerenderConfig {
   postDir: string;
   navLinks: NavLink[];
   infoPanel: Omit<InfoPanelData, "topPosts">;
+  siteDefaults?: SiteDefaults;
 }
 
 function renderNavHtml(links: NavLink[]): string {
@@ -69,7 +71,7 @@ function injectNav(html: string, navHtml: string): string {
 // executing JS. Each post page includes all published articles (matching the
 // root index) so the client hydrates without a visible content shift.
 export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
-  const { siteUrl, titleSuffix, distDir, seed, postDir, navLinks, infoPanel } = config;
+  const { siteUrl, titleSuffix, distDir, seed, postDir, navLinks, infoPanel, siteDefaults } = config;
 
   const template = readFileSync(join(distDir, "index.html"), "utf-8");
   const marked = createMarked();
@@ -96,6 +98,18 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   let rootHtml = injectMain(template, allArticlesHtml);
   rootHtml = injectInfoPanel(rootHtml, panelHtml);
   rootHtml = injectNav(rootHtml, navHtml);
+  if (siteDefaults) {
+    const rootOgTags = [
+      `<meta property="og:title" content="${escapeHtml(siteDefaults.title)}">`,
+      `<meta property="og:description" content="${escapeHtml(siteDefaults.description)}">`,
+      `<meta property="og:image" content="${escapeHtml(siteUrl + siteDefaults.image)}">`,
+      `<meta property="og:type" content="website">`,
+      `<meta property="og:url" content="${escapeHtml(siteUrl)}">`,
+    ].join("\n    ");
+    const beforeOg = rootHtml;
+    rootHtml = rootHtml.replace("</head>", `    ${rootOgTags}\n  </head>`);
+    if (rootHtml === beforeOg) throw new Error("</head> marker not found in root template");
+  }
   writeFileSync(join(distDir, "index.html"), rootHtml);
   console.log("Pre-rendered: /index.html");
 

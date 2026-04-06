@@ -4,6 +4,12 @@
 import type { PostMeta } from "./post-types.ts";
 import { formatPageTitle } from "./page-title.ts";
 
+export interface SiteDefaults {
+  title: string;
+  description: string;
+  image: string;
+}
+
 const OG_PROPERTIES = ["og:title", "og:description", "og:image", "og:type", "og:url"] as const;
 
 function setMetaTag(attr: "property" | "name", value: string, content: string): void {
@@ -22,11 +28,26 @@ function removeOgTags(): void {
   }
 }
 
-export function updateOgMeta(siteUrl: string, post: PostMeta | undefined, titleSuffix?: string): void {
+export function updateOgMeta(
+  siteUrl: string,
+  post: PostMeta | undefined,
+  titleSuffix?: string,
+  siteDefaults?: SiteDefaults,
+): void {
   if (!post?.previewDescription) {
-    removeOgTags();
-    document.querySelector('meta[name="description"]')?.remove();
-    if (titleSuffix) document.title = titleSuffix;
+    if (siteDefaults) {
+      if (titleSuffix) document.title = titleSuffix;
+      setMetaTag("name", "description", siteDefaults.description);
+      setMetaTag("property", "og:title", siteDefaults.title);
+      setMetaTag("property", "og:description", siteDefaults.description);
+      setMetaTag("property", "og:image", `${siteUrl}${siteDefaults.image}`);
+      setMetaTag("property", "og:type", "website");
+      setMetaTag("property", "og:url", siteUrl);
+    } else {
+      removeOgTags();
+      document.querySelector('meta[name="description"]')?.remove();
+      if (titleSuffix) document.title = titleSuffix;
+    }
     return;
   }
   document.title = titleSuffix ? formatPageTitle(titleSuffix, post.title) : post.title;

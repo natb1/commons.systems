@@ -52,6 +52,11 @@ let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("fellspiral/post");
 const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://fellspiral.commons.systems" };
+const SITE_DEFAULTS = {
+  title: "fellspiral",
+  description: "A TTRPG game blog by Nate. Nate likes games about social role play.",
+  image: "/tile10-armadillo-crag.webp",
+};
 // Skip the very first innerHTML replacement when pre-rendered content exists.
 // The pre-render script (prerender.ts) already injected identical panel markup,
 // so replacing it would cause a needless DOM teardown that can trigger CLS.
@@ -146,7 +151,7 @@ const router = createHistoryRouter(
       afterRender: (outlet, path) => {
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
-        updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, "Fellspiral");
+        updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, "Fellspiral", SITE_DEFAULTS);
         updateInfoPanel();
       },
     },
