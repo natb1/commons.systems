@@ -299,6 +299,23 @@ describe("createHistoryRouter", () => {
     });
   });
 
+  it("null render preserves existing DOM and still calls afterRender", async () => {
+    outlet.innerHTML = "<h2>Pre-rendered</h2>";
+    let afterRenderEl: HTMLElement | undefined;
+    const hydrateRoutes: [Route, ...Route[]] = [
+      {
+        path: "/",
+        render: () => null,
+        afterRender: (el) => { afterRenderEl = el; },
+      },
+    ];
+    router = createHistoryRouter(outlet, hydrateRoutes);
+    await vi.waitFor(() => {
+      expect(afterRenderEl).toBe(outlet);
+    });
+    expect(outlet.innerHTML).toBe("<h2>Pre-rendered</h2>");
+  });
+
   it("does not call afterRender on stale navigation", async () => {
     let afterRenderCalled = false;
     let resolveFirst!: (value: string) => void;

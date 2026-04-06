@@ -10,15 +10,14 @@ const indexPath = join(
 const html = readFileSync(indexPath, "utf-8");
 
 describe("fellspiral preconnect links", () => {
-  it("preconnects to www.googleapis.com", () => {
+  it.each([
+    "www.googleapis.com",
+    "firebaseinstallations.googleapis.com",
+    "apis.google.com",
+    "firestore.googleapis.com",
+  ])("preconnects to %s", (host) => {
     expect(html).toContain(
-      '<link rel="preconnect" href="https://www.googleapis.com" crossorigin',
-    );
-  });
-
-  it("preconnects to firebaseinstallations.googleapis.com", () => {
-    expect(html).toContain(
-      '<link rel="preconnect" href="https://firebaseinstallations.googleapis.com" crossorigin',
+      `<link rel="preconnect" href="https://${host}" crossorigin`,
     );
   });
 });

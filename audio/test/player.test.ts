@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mockGetMediaDownloadUrl = vi.fn();
+const mockResolveAudioSource = vi.fn();
 
 vi.mock("../src/storage.js", () => ({
-  getMediaDownloadUrl: (...args: unknown[]) => mockGetMediaDownloadUrl(...args),
+  resolveAudioSource: (...args: unknown[]) => mockResolveAudioSource(...args),
 }));
 
 const mockLogError = vi.fn();
@@ -36,6 +36,7 @@ describe("formatDuration", () => {
 describe("initPlayer", () => {
   let audioEl: HTMLAudioElement;
   let playlistEl: HTMLElement;
+  let revokeObjectURLSpy: ReturnType<typeof vi.spyOn>;
 
   const track1: PlayRequest = {
     id: "t1",
@@ -66,7 +67,8 @@ describe("initPlayer", () => {
     audioEl = document.createElement("audio");
     playlistEl = document.createElement("div");
     vi.spyOn(audioEl, "play").mockResolvedValue();
-    mockGetMediaDownloadUrl.mockResolvedValue("https://storage.example.com/track.mp3");
+    revokeObjectURLSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    mockResolveAudioSource.mockResolvedValue("blob:http://localhost/track-blob");
   });
 
   it("renders empty state on init", () => {
@@ -85,7 +87,7 @@ describe("initPlayer", () => {
       expect(playlistEl.querySelector(".playlist-active")).not.toBeNull();
 
       await vi.waitFor(() => {
-        expect(audioEl.src).toContain("https://storage.example.com/track.mp3");
+        expect(audioEl.src).toContain("blob:");
       });
       expect(audioEl.play).toHaveBeenCalled();
     });
@@ -126,9 +128,9 @@ describe("initPlayer", () => {
     });
 
     it("advances to next track when removing current", async () => {
-      mockGetMediaDownloadUrl
-        .mockResolvedValueOnce("https://storage.example.com/t1.mp3")
-        .mockResolvedValueOnce("https://storage.example.com/t2.mp3");
+      mockResolveAudioSource
+        .mockResolvedValueOnce("blob:http://localhost/t1-blob")
+        .mockResolvedValueOnce("blob:http://localhost/t2-blob");
 
       const player = initPlayer(audioEl, playlistEl);
       player.add(track1);
@@ -178,9 +180,9 @@ describe("initPlayer", () => {
 
   describe("ended event", () => {
     it("advances to next track on ended", async () => {
-      mockGetMediaDownloadUrl
-        .mockResolvedValueOnce("https://storage.example.com/t1.mp3")
-        .mockResolvedValueOnce("https://storage.example.com/t2.mp3");
+      mockResolveAudioSource
+        .mockResolvedValueOnce("blob:http://localhost/t1-blob")
+        .mockResolvedValueOnce("blob:http://localhost/t2-blob");
 
       const player = initPlayer(audioEl, playlistEl);
       player.add(track1);
@@ -195,7 +197,7 @@ describe("initPlayer", () => {
       await vi.waitFor(() => {
         expect(audioEl.play).toHaveBeenCalledTimes(2);
       });
-      expect(mockGetMediaDownloadUrl).toHaveBeenCalledWith("media/t2.mp3");
+      expect(mockResolveAudioSource).toHaveBeenCalledWith("media/t2.mp3");
     });
 
     it("stops after last track ends", async () => {
@@ -211,6 +213,60 @@ describe("initPlayer", () => {
 
       expect(pauseSpy).toHaveBeenCalled();
       expect(playlistEl.querySelector(".playlist-active")).toBeNull();
+    });
+  });
+
+  describe("object URL revocation", () => {
+    it("revokes object URL when changing tracks", async () => {
+      mockResolveAudioSource
+        .mockResolvedValueOnce("blob:http://localhost/t1-blob")
+        .mockResolvedValueOnce("blob:http://localhost/t2-blob");
+
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+      player.add(track2);
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+
+      audioEl.dispatchEvent(new Event("ended"));
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(2);
+      });
+
+      expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:http://localhost/t1-blob");
+    });
+
+    it("revokes object URL on stop", async () => {
+      mockResolveAudioSource.mockResolvedValueOnce("blob:http://localhost/t1-blob");
+
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+
+      player.remove(track1.id);
+
+      expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:http://localhost/t1-blob");
+    });
+
+    it("revokes object URL on destroy", async () => {
+      mockResolveAudioSource.mockResolvedValueOnce("blob:http://localhost/t1-blob");
+
+      const player = initPlayer(audioEl, playlistEl);
+      player.add(track1);
+
+      await vi.waitFor(() => {
+        expect(audioEl.play).toHaveBeenCalledTimes(1);
+      });
+
+      player.destroy();
+
+      expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:http://localhost/t1-blob");
     });
   });
 

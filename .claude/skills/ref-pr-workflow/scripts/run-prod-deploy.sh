@@ -32,6 +32,11 @@ cd "$REPO_ROOT"
 echo "Deploying hosting to production (site: $HOSTING_SITE)..."
 npx firebase-tools deploy --only "hosting:$APP_NAME" --project "$FIREBASE_PROJECT_ID"
 
+# Purge Cloudflare cache for non-hashed resources
+if [ -n "${CLOUDFLARE_ZONE_ID:-}" ] && [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+  "$REPO_ROOT/.github/scripts/cloudflare-purge.sh" "$APP_NAME"
+fi
+
 # Seed Firestore (idempotent — uses doc.set() with fixed IDs)
 if [ "$USES_FIRESTORE" = true ]; then
   NAMESPACE=$(get_firestore_namespace "$APP_NAME" "prod")

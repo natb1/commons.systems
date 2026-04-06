@@ -7,6 +7,7 @@ import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
 import type { AudioItem } from "../types.js";
 import { formatDuration } from "../player.js";
 import type { PlayerHandle } from "../player.js";
+import { getCacheStats, clearCache, CACHE_UPDATED_EVENT } from "../audio-cache.js";
 
 function renderRow(item: AudioItem): string {
   const track =
@@ -64,7 +65,34 @@ export async function renderHome(user: User | null): Promise<string> {
     <h2>Library</h2>
     ${publicNotice}
     ${mediaHtml}
+    <section id="cache-info">
+      <p><span id="cache-stats"></span></p>
+      <button id="clear-cache-btn" type="button">Clear audio cache</button>
+    </section>
   `;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function refreshCacheStats(outlet: HTMLElement): void {
+  const statsEl = outlet.querySelector<HTMLElement>("#cache-stats");
+  if (!statsEl) {
+    logError(new Error("#cache-stats element not found in outlet"), { operation: "cache-stats" });
+    return;
+  }
+  getCacheStats()
+    .then(({ trackCount, totalBytes }) => {
+      statsEl.textContent = `${trackCount} track${trackCount !== 1 ? "s" : ""} cached (${formatBytes(totalBytes)})`;
+    })
+    .catch((err) => {
+      logError(err, { operation: "cache-stats" });
+      statsEl.textContent = "Cache stats unavailable";
+    });
 }
 
 let clickAbort: AbortController | undefined;
@@ -85,6 +113,7 @@ export function afterRenderHome(
   clickAbort?.abort();
   clickAbort = new AbortController();
 
+  // stopPropagation prevents the click from toggling the parent <details> element
   outlet.addEventListener("click", (e) => {
     const checkbox = (e.target as HTMLElement).closest(
       "input[data-queue-toggle]",
@@ -115,4 +144,25 @@ export function afterRenderHome(
       player.remove(id);
     }
   }, { signal: clickAbort.signal });
+
+  refreshCacheStats(outlet);
+
+  document.addEventListener(
+    CACHE_UPDATED_EVENT,
+    () => refreshCacheStats(outlet),
+    { signal: clickAbort.signal },
+  );
+
+  const clearBtn = outlet.querySelector<HTMLButtonElement>("#clear-cache-btn");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      clearCache()
+        .then(() => refreshCacheStats(outlet))
+        .catch((err) => {
+          logError(err, { operation: "clear-cache" });
+          const statsEl = outlet.querySelector<HTMLElement>("#cache-stats");
+          if (statsEl) statsEl.textContent = "Failed to clear cache. Try again.";
+        });
+    }, { signal: clickAbort.signal });
+  }
 }
