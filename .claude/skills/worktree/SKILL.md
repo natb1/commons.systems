@@ -43,27 +43,17 @@ If no issue is found, inform the user that no eligible issues exist.
 
 ## 2. Detect Layout and Check for Existing Worktree
 
-Detect whether the repo uses the bare layout or classic layout, then compute `PROJECT_ROOT`:
+Run the detect script to determine layout, project root, and whether a worktree already exists for this issue:
 
 ```bash
-SECOND_LINE=$(git worktree list --porcelain | sed -n '2p')
-if [ "$SECOND_LINE" = "bare" ]; then
-  LAYOUT="bare"
-  GIT_DIR=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
-  PROJECT_ROOT=$(dirname "$GIT_DIR")
-else
-  LAYOUT="classic"
-  PROJECT_ROOT=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
-fi
+.claude/skills/worktree/scripts/detect-worktree.sh <issue-num>
 ```
 
-`PROJECT_ROOT` is used for all path construction. In the bare layout it is the parent of `.bare/`; in the classic layout it is the repo root (same as the old `REPO_ROOT`).
-
-Then list all worktrees and look for one whose branch name starts with `<issue-num>-`:
-
-```bash
-git worktree list --porcelain
-```
+Output is key=value lines:
+- `LAYOUT` — `bare` or `classic`
+- `PROJECT_ROOT` — parent of `.bare/` (bare) or the repo root (classic). Used for all path construction.
+- `WORKTREE_PATH` — path to existing worktree for the issue, or empty if none
+- `WORKTREE_BRANCH` — branch name of existing worktree, or empty if none
 
 ### Edge Case: Worktree exists and is the current directory
 

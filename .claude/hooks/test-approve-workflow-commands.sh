@@ -128,10 +128,15 @@ assert_passthrough \
   "Bash" \
   "gh pr view 323"
 
-assert_passthrough \
-  "different skill path" \
+assert_approves \
+  "different skill path (broadened SCRIPT_RE)" \
   "Bash" \
   ".claude/skills/some-other-skill/scripts/run-lint.sh"
+
+assert_approves \
+  "worktree detect script" \
+  "Bash" \
+  ".claude/skills/worktree/scripts/detect-worktree.sh 435"
 
 assert_approves \
   "echo is in allowedTools (argument contains no unsafe metacharacters)" \
