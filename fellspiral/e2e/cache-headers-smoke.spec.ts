@@ -25,7 +25,7 @@ test.describe("cache headers smoke", () => {
     expect(cacheControl).toContain("public, max-age=31536000, immutable");
   });
 
-  test("images have daily cache-control @smoke", async ({ page }) => {
+  test("images have yearly cache-control @smoke", async ({ page }) => {
     const response = await page.goto("/");
     expect(response).not.toBeNull();
     expect(response!.status()).toBe(200);
@@ -42,10 +42,10 @@ test.describe("cache headers smoke", () => {
     expect(imageResponse!.status()).toBe(200);
     const imgCacheControl = imageResponse!.headers()["cache-control"];
     expect(imgCacheControl, "cache-control header missing from image response").toBeDefined();
-    expect(imgCacheControl).toContain("public, max-age=86400");
+    expect(imgCacheControl).toContain("public, max-age=31536000");
   });
 
-  test("fonts have daily cache-control @smoke", async ({ request }) => {
+  test("fonts have yearly cache-control @smoke", async ({ request }) => {
     const fontResponse = await request.get(
       "/fonts/eb-garamond-latin-400-normal.woff2",
     );
@@ -58,6 +58,6 @@ test.describe("cache headers smoke", () => {
       fontCacheControl,
       "cache-control header missing from font response",
     ).toBeDefined();
-    expect(fontCacheControl).toContain("public, max-age=86400");
+    expect(fontCacheControl).toContain("public, max-age=31536000");
   });
 });

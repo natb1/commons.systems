@@ -37,7 +37,7 @@ describe("fellspiral firebase headers", () => {
       const cacheHeader = rule!.headers.find(
         (h) => h.key === "Cache-Control",
       );
-      expect(cacheHeader?.value).toBe("public, max-age=86400");
+      expect(cacheHeader?.value).toBe("public, max-age=31536000");
     });
   }
 
