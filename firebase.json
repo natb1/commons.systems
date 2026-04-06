@@ -72,6 +72,27 @@
       ],
       "headers": [
         {
+          "source": "**",
+          "headers": [
+            {
+              "key": "Content-Security-Policy",
+              "value": "default-src 'none'; script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://mirrors.creativecommons.org https://www.google.com; font-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebasestorage.app https://raw.githubusercontent.com https://static.cloudflareinsights.com; frame-src 'self' https://*.firebaseapp.com https://www.google.com https://apis.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'"
+            },
+            {
+              "key": "Cross-Origin-Opener-Policy",
+              "value": "same-origin"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
+            },
+            {
+              "key": "Strict-Transport-Security",
+              "value": "max-age=31536000; includeSubDomains; preload"
+            }
+          ]
+        },
+        {
           "source": "/blogroll.opml",
           "headers": [
             {

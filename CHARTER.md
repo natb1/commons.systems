@@ -85,7 +85,7 @@ Forkability is central to this, but forkability without documentation is a hollo
 
 ## Dependency Self-Assessment
 
-The project applies its own diagnostic framework to its own dependencies. For the current technical state of the project, see the [README](https://github.com/natb1/commons.systems/blob/main/README.md). For planned work, see the [project board](https://github.com/users/natb1/projects/2/views/1).
+The project applies its own diagnostic framework to its own dependencies. For the current technical state of the project, see the [README](https://github.com/natb1/commons.systems/blob/main/README.md). For current priorities, see [ROADMAP.md](ROADMAP.md).
 
 This assessment is not a one-time exercise — it should be revisited as conditions change.
 
@@ -116,14 +116,6 @@ The project propagates through useful artifacts, not philosophical arguments. Ea
 **Practitioners** fork the repo. They build their own versions, adapt the agentic workflow, make different architectural choices. They're practicing progressive detachment through the act of building.
 
 **Collaborators** read this charter. They understand the diagnosis, share the goals, and help identify the next highest-leverage artifact to build.
-
-### Choosing What to Build Next
-
-The next artifact should be chosen by asking:
-
-1. **Where is institutional dependency most painful?** Look for domains where the platform's business model is visibly misaligned with the user's interest (the budget tool pattern).
-2. **Where has agentic coding shifted the cost-benefit?** Look for domains where building your own solution was previously infeasible but is now tractable.
-3. **Where is the demonstration most legible?** The artifact should make the before/after of recovered autonomy obvious to someone who has never thought about institutional capture.
 
 ### Scope
 

@@ -17,6 +17,9 @@ if (!fellspiralHosting) {
 }
 const headers: { source: string; headers: { key: string; value: string }[] }[] =
   fellspiralHosting.headers;
+if (!headers || headers.length === 0) {
+  throw new Error("fellspiral hosting config has no header rules");
+}
 
 describe("fellspiral firebase headers", () => {
   const cachedExtensions = [
@@ -64,5 +67,71 @@ describe("fellspiral firebase headers", () => {
     for (const rule of headers) {
       expect(rule.source).not.toMatch(/@\(/);
     }
+  });
+});
+
+describe("fellspiral security headers", () => {
+  const globalRule = headers.find((h) => h.source === "**");
+
+  it("has a global ** source rule", () => {
+    expect(globalRule).toBeDefined();
+  });
+
+  function getHeader(key: string): string | undefined {
+    if (!globalRule) {
+      throw new Error("Cannot look up headers: global ** rule is missing from firebase.json");
+    }
+    return globalRule.headers.find((h) => h.key === key)?.value;
+  }
+
+  describe("Content-Security-Policy", () => {
+    const csp = getHeader("Content-Security-Policy");
+
+    it("is present", () => {
+      expect(csp).toBeDefined();
+    });
+
+    const requiredDirectives = [
+      "default-src 'none'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self'",
+      "font-src 'self'",
+      "connect-src 'self'",
+      "frame-src 'self'",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ];
+
+    for (const directive of requiredDirectives) {
+      it(`contains ${directive}`, () => {
+        expect(csp).toContain(directive);
+      });
+    }
+  });
+
+  it("sets Cross-Origin-Opener-Policy to same-origin", () => {
+    expect(getHeader("Cross-Origin-Opener-Policy")).toBe("same-origin");
+  });
+
+  it("sets X-Frame-Options to DENY", () => {
+    expect(getHeader("X-Frame-Options")).toBe("DENY");
+  });
+
+  describe("Strict-Transport-Security", () => {
+    const hsts = getHeader("Strict-Transport-Security");
+
+    it("includes includeSubDomains", () => {
+      expect(hsts).toContain("includeSubDomains");
+    });
+
+    it("includes preload", () => {
+      expect(hsts).toContain("preload");
+    });
+
+    it("includes max-age=31536000", () => {
+      expect(hsts).toContain("max-age=31536000");
+    });
   });
 });
