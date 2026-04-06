@@ -198,6 +198,12 @@ This section captures the counter-arguments, unresolved tensions, and structural
 
 **Status:** Theoretical for now. The test comes later. Define what "purpose served" looks like before the ratchet has a chance to form.
 
----
+## How this document works
 
-*This document is a living artifact, not a founding text. Fork it. Argue with it. Discard the parts that don't serve you. The only failure would be treating it as dogma rather than a departure point.*
+This charter captures the project's diagnosis, principles, and strategy. It changes rarely — when the understanding of the problem shifts, when a principle proves wrong, or when the approach needs revision. Frequent edits are a signal that the charter is either too specific (capturing operational decisions that belong in [ROADMAP.md](ROADMAP.md)) or too fragile (encoding assumptions that haven't been tested).
+
+The charter is not a plan. It does not say what to build next or in what order. Those decisions live in [ROADMAP.md](ROADMAP.md), which applies the charter's strategy to current conditions. The charter constrains the roadmap; the roadmap operationalizes the charter.
+
+The Assumptions and Risks section is the primary maintenance surface. Its entries are structural tensions in the project's theory of change, not operational risks. They belong here because they challenge the diagnosis and principles directly — a reader should encounter the counterarguments alongside the claims. Entries should be added when new risks are identified, updated when conditions change, and removed when resolved. If other sections need frequent revision, that suggests either the diagnosis was wrong or the project has outgrown its original framing — both worth confronting directly rather than patching around.
+
+Fork it. Argue with it. Discard the parts that don't serve you. The only failure would be treating it as dogma rather than a departure point.
