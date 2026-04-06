@@ -222,8 +222,8 @@ echo "Test 4: --public upload -> correct GCS metadata and Firestore body"
 setup
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-song.mp3" --public 2>&1)
 headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
-assert_contains "GCS has publicDomain:true" "x-goog-meta-publicDomain:true" "$headers"
-assert_not_contains "GCS has no groupId" "groupId" "$headers"
+assert_contains "GCS has publicdomain:true" "x-goog-meta-publicdomain:true" "$headers"
+assert_not_contains "GCS has no groupid" "groupid" "$headers"
 curl_body=$(cat "$TMPDIR_TEST/stub/curl-body.json")
 assert_contains "Firestore publicDomain is true" '"booleanValue": true' "$curl_body"
 assert_contains "Firestore title" '"stringValue": "Test Song"' "$curl_body"
@@ -243,8 +243,8 @@ echo "Test 5: --group -> resolves members and sets groupId"
 setup
 output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-song.mp3" --group test-group 2>&1)
 headers=$(cat "$TMPDIR_TEST/stub/meta-headers.log")
-assert_contains "GCS has publicDomain:false" "x-goog-meta-publicDomain:false" "$headers"
-assert_contains "GCS has groupId" "x-goog-meta-groupId:test-group" "$headers"
+assert_contains "GCS has publicdomain:false" "x-goog-meta-publicdomain:false" "$headers"
+assert_contains "GCS has groupid" "x-goog-meta-groupid:test-group" "$headers"
 curl_body=$(cat "$TMPDIR_TEST/stub/curl-body.json")
 assert_contains "Firestore publicDomain is false" '"booleanValue": false' "$curl_body"
 assert_contains "Firestore has alice email" '"stringValue": "alice@example.com"' "$curl_body"
