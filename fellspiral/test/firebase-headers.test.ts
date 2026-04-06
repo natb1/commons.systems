@@ -8,9 +8,7 @@ const firebaseJsonPath = join(
   "..",
   "firebase.json",
 );
-const firebaseJson = readFileSync(firebaseJsonPath, "utf-8")
-  .replace(/^\s*\/\/.*$/gm, "");
-const firebaseConfig = JSON.parse(firebaseJson);
+const firebaseConfig = JSON.parse(readFileSync(firebaseJsonPath, "utf-8"));
 const fellspiralHosting = firebaseConfig.hosting.find(
   (h: { target: string }) => h.target === "fellspiral",
 );
