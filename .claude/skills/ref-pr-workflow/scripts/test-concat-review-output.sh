@@ -16,33 +16,6 @@ setup() {
   mkdir -p "$TMP_DIR"
 }
 
-assert_file_contains() {
-  local label="$1" file="$2" pattern="$3"
-  TOTAL=$((TOTAL + 1))
-  if grep -qF "$pattern" "$file"; then
-    echo "  PASS: $label"
-    PASS=$((PASS + 1))
-  else
-    echo "  FAIL: $label — pattern not found: $pattern"
-    echo "    file contents:"
-    head -10 "$file" | sed 's/^/      /'
-    FAIL=$((FAIL + 1))
-  fi
-}
-
-assert_exit_nonzero() {
-  local label="$1"
-  shift
-  TOTAL=$((TOTAL + 1))
-  if "$@" 2>/dev/null; then
-    echo "  FAIL: $label — expected non-zero exit"
-    FAIL=$((FAIL + 1))
-  else
-    echo "  PASS: $label"
-    PASS=$((PASS + 1))
-  fi
-}
-
 # --- Tests ---
 
 test_basic_concatenation() {
