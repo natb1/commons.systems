@@ -5,9 +5,12 @@ interface ShiftEntry {
   sources: { node: string; previousRect: string; currentRect: string }[];
 }
 
+// Use test.use to set the viewport at context creation time rather than
+// resizing after creation, which can introduce spurious layout shifts.
+test.use({ viewport: { width: 412, height: 915 } });
+
 test.describe("Cumulative Layout Shift", () => {
   test("CLS score is below 0.1 on mobile viewport", async ({ page }) => {
-    await page.setViewportSize({ width: 412, height: 915 });
     await page.goto("/");
     await page.waitForLoadState("load");
 
