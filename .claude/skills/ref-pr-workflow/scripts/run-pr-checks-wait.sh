@@ -63,8 +63,8 @@ fi
 # Wait for all checks to complete (--watch blocks until done)
 gh pr checks "$pr_number" --watch > /dev/null 2>&1 || true
 
-# Capture final status of all checks
-results=$(gh pr checks "$pr_number" 2>&1)
+# Capture final status of all checks (gh pr checks exits non-zero on failure)
+results=$(gh pr checks "$pr_number" 2>&1) || true
 
 if [[ -n "$output_file" ]]; then
   printf '%s\n' "$results" | tee "$output_file"
