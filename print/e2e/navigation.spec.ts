@@ -62,6 +62,10 @@ test.describe("navigation", () => {
   test("PDF text layer present on viewer page @smoke", async ({ page }) => {
     await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
-    await expect(page.locator(".textLayer")).toBeAttached({ timeout: 15000 });
+    // The textLayer div is created inside renderer.init(), which runs after
+    // the PDF source is fetched from Firebase Storage. Wait for the position
+    // label to show a page number, confirming the PDF loaded successfully.
+    await expect(page.locator(".viewer-position")).toContainText(/Page \d+/, { timeout: 30000 });
+    await expect(page.locator(".textLayer")).toBeAttached();
   });
 });
