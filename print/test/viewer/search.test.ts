@@ -1,25 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderSearchSection, initSearch } from "../../src/viewer/search";
-import type { ContentRenderer, SearchResult } from "../../src/viewer/types";
-
-function makeMockRenderer(overrides: Partial<ContentRenderer> = {}): ContentRenderer {
-  let _currentPage = 1;
-  const _pageCount = 10;
-  return {
-    init: vi.fn().mockResolvedValue(undefined),
-    goToPage: vi.fn().mockImplementation(async (p: number) => { _currentPage = p; }),
-    next: vi.fn().mockImplementation(async () => { if (_currentPage < _pageCount) _currentPage++; }),
-    prev: vi.fn().mockImplementation(async () => { if (_currentPage > 1) _currentPage--; }),
-    get pageCount() { return _pageCount; },
-    get currentPage() { return _currentPage; },
-    get canGoNext() { return _currentPage < _pageCount; },
-    get canGoPrev() { return _currentPage > 1; },
-    get position() { return String(_currentPage); },
-    get positionLabel() { return `Page ${_currentPage} / ${_pageCount}`; },
-    destroy: vi.fn(),
-    ...overrides,
-  };
-}
+import type { SearchResult } from "../../src/viewer/types";
+import { makeMockRenderer } from "./mock-renderer";
 
 function makeSearchResult(overrides: Partial<SearchResult> = {}): SearchResult {
   return {
@@ -80,6 +62,14 @@ describe("initSearch", () => {
 
   it("returns null when renderer lacks search method", () => {
     const renderer = makeMockRenderer();
+    const result = initSearch(container, renderer, vi.fn());
+    expect(result).toBeNull();
+  });
+
+  it("returns null when renderer has search but lacks goToResult", () => {
+    const renderer = makeMockRenderer({
+      search: vi.fn().mockResolvedValue([]),
+    });
     const result = initSearch(container, renderer, vi.fn());
     expect(result).toBeNull();
   });
@@ -309,6 +299,45 @@ describe("initSearch", () => {
     // The search should not have been called because cleanup cancelled the timer
     // and set destroyed = true
     expect(searchFn).not.toHaveBeenCalled();
+  });
+
+  it("discards stale search results when query changes during await", async () => {
+    let resolveFirst!: (value: SearchResult[]) => void;
+    const staleResults = [makeSearchResult({ label: "Stale" })];
+    const freshResults = [makeSearchResult({ label: "Fresh" })];
+    const searchFn = vi.fn()
+      .mockImplementationOnce(() => new Promise<SearchResult[]>((r) => { resolveFirst = r; }))
+      .mockImplementationOnce(() => Promise.resolve(freshResults));
+    const renderer = makeMockRenderer({
+      search: searchFn,
+      goToResult: vi.fn().mockResolvedValue(undefined),
+      clearSearch: vi.fn(),
+    });
+    initSearch(container, renderer, vi.fn());
+
+    const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
+    const countEl = container.querySelector(".viewer-search-count") as HTMLElement;
+
+    // Type first query and trigger debounce
+    input.value = "first";
+    input.dispatchEvent(new Event("input"));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(searchFn).toHaveBeenCalledWith("first");
+
+    // Type second query before first resolves
+    input.value = "second";
+    input.dispatchEvent(new Event("input"));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(searchFn).toHaveBeenCalledWith("second");
+
+    // Resolve the first (stale) search — results should be discarded
+    resolveFirst(staleResults);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Only fresh results should be displayed
+    expect(countEl.textContent).toBe("1 result");
+    const labelEl = container.querySelector(".viewer-search-result-label") as HTMLElement;
+    expect(labelEl.textContent).toBe("Fresh");
   });
 
   it("search event (Enter key) triggers search immediately without debounce", async () => {

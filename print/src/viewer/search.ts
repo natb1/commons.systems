@@ -33,7 +33,7 @@ export function initSearch(
   renderer: ContentRenderer,
   onNavigate: () => void,
 ): (() => void) | null {
-  if (!renderer.search) return null;
+  if (!renderer.search || !renderer.goToResult) return null;
 
   const section = container.querySelector(".viewer-search") as HTMLElement;
   const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
@@ -49,17 +49,13 @@ export function initSearch(
 
   function clearResults() {
     results = [];
-    while (resultsList.firstChild) resultsList.removeChild(resultsList.firstChild);
+    resultsList.replaceChildren();
     countEl.textContent = "";
   }
 
   function renderResults() {
-    // Build result items using a temporary container to parse escaped HTML,
-    // then move the DOM nodes into the results list.
-    const temp = document.createElement("div");
-    temp.innerHTML = results.map(renderResultItem).join("");
-    while (resultsList.firstChild) resultsList.removeChild(resultsList.firstChild);
-    while (temp.firstChild) resultsList.appendChild(temp.firstChild);
+    // Safe: renderResultItem escapes all user-provided text via escapeHtml.
+    resultsList.innerHTML = results.map(renderResultItem).join("");
     countEl.textContent = results.length === 1 ? "1 result" : `${results.length} results`;
   }
 
@@ -85,8 +81,9 @@ export function initSearch(
       return;
     }
 
-    results = await renderer.search!(trimmed);
-    if (destroyed) return;
+    const searchResults = await renderer.search(trimmed);
+    if (destroyed || trimmed !== currentQuery) return;
+    results = searchResults;
     renderResults();
   }
 
@@ -120,7 +117,7 @@ export function initSearch(
     const index = Number(li.dataset.index);
     if (index >= 0 && index < results.length) {
       setActive(index);
-      renderer.goToResult!(results[index]!).then(() => {
+      renderer.goToResult(results[index]!).then(() => {
         onNavigate();
       }).catch((err) => {
         reportError(new Error("Go to result failed", { cause: err }));
