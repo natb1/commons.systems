@@ -1,3 +1,8 @@
+/**
+ * A single match returned by a renderer's search method.
+ *
+ * Invariant: matchStart >= 0, matchLength > 0, and matchStart + matchLength <= snippet.length.
+ */
 export interface SearchResult {
   /** Opaque location token understood by the renderer (page number string, EPUB CFI, etc.) */
   readonly location: string;
@@ -29,6 +34,7 @@ export interface ContentRenderer {
   resetZoom?(): void;
   readonly isZoomed?: boolean;
   onZoomChange?: () => void;
+  /** Renderers implementing search must also implement goToResult and clearSearch. */
   search?(query: string): Promise<SearchResult[]>;
   goToResult?(result: SearchResult): Promise<void>;
   clearSearch?(): void;
