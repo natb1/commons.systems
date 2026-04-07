@@ -19,18 +19,13 @@ Five personas analyze project state independently, synthesize priorities, debate
 
 ## Phase 1: Gather Context
 
-Collect project state for all personas:
+Run the gather-context script:
 
 ```bash
-cat CHARTER.md
-cat ROADMAP.md
-cat README.md
-gh issue list --state open --json number,title,labels --limit 200
-gh issue list --state closed --json number,title,closedAt --limit 100
-gh api repos/{owner}/{repo} --jq '{stargazers_count, forks_count, watchers_count}'
+.claude/skills/roadmap-debate/scripts/gather-context.sh
 ```
 
-Store all gathered context as a single block to pass to each agent.
+Store the output as a single block to pass to each agent.
 
 ## Phase 2: Independent Assessments
 
