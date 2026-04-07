@@ -85,18 +85,11 @@ body.viewer-active {
   max-height: 100%;
 }
 
-.pdf-page-wrapper canvas {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-}
-
-/* PDF text layer — invisible text positioned over canvas for select/copy and Ctrl+F */
+/* PDF text layer — transparent text positioned over canvas for select/copy and Ctrl+F */
 .textLayer {
   position: absolute;
   inset: 0;
   overflow: clip;
-  opacity: 1;
   line-height: 1;
   text-align: initial;
   -webkit-text-size-adjust: none;
