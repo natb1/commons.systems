@@ -13,6 +13,8 @@
     "./tsconfig.lib.json": "./tsconfig.lib.json",
     "./eslint": "./eslint.config.js",
     "./vite": "./vite.js",
-    "./playwright": "./playwright.js"
+    "./playwright": "./playwright.js",
+    "./firebase-headers.test-helper": "./firebase-headers.test-helper.ts",
+    "./cache-headers-smoke": "./cache-headers-smoke.ts"
   }
 }
