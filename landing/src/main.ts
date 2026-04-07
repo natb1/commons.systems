@@ -23,6 +23,7 @@ import { INFO_PANEL_LINK_SECTIONS } from "./site-config.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
+import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -173,23 +174,4 @@ onAuthStateChanged((user) => {
   logError(err, { operation: "auth-init" });
 });
 
-// Defer App Check / reCAPTCHA initialization until first user interaction to keep the
-// large reCAPTCHA script completely off the critical path.
-const deferredAppCheckInit = async () => {
-  if (!initAppCheck) return;
-  await initAppCheck();
-};
-
-const INTERACTION_EVENTS = ["scroll", "click", "touchstart", "keydown"] as const;
-const triggerOnce = () => {
-  for (const evt of INTERACTION_EVENTS) {
-    window.removeEventListener(evt, triggerOnce);
-  }
-  deferredAppCheckInit().catch((err) => {
-    if (deferProgrammerError(err)) return;
-    logError(err, { operation: "deferred-appcheck-init" });
-  });
-};
-for (const evt of INTERACTION_EVENTS) {
-  window.addEventListener(evt, triggerOnce, { once: true, passive: true });
-}
+deferAppCheckInit(initAppCheck);

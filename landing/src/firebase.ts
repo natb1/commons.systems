@@ -10,7 +10,8 @@ const getCurrentUser = (): { uid: string; email: string | null } | null => {
   return user ? { uid: user.uid, email: user.email } : null;
 };
 
-/** Called by auth.ts after firebase/auth is loaded to enable getCurrentUser. */
+/** Called by auth.ts after firebase/auth is loaded to enable getCurrentUser.
+ *  This indirection keeps firebase/auth out of the firebase.ts chunk so it loads on demand. */
 export function registerGetAuth(getAuth: () => import("firebase/auth").Auth): void {
   if (cachedGetAuth) throw new Error("registerGetAuth called more than once");
   cachedGetAuth = getAuth;

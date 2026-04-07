@@ -6,7 +6,8 @@
   "exports": {
     "./config": "./src/config.ts",
     "./app-context": "./src/app-context.ts",
-    "./error-sink": "./src/error-sink.ts"
+    "./error-sink": "./src/error-sink.ts",
+    "./defer-appcheck": "./src/defer-appcheck.ts"
   },
   "peerDependencies": {
     "@commons-systems/errorutil": "*",
