@@ -11,6 +11,7 @@ import {
   getReadingPosition,
   saveReadingPosition,
 } from "../reading-position.js";
+import { renderSearchSection, initSearch } from "./search.js";
 
 function renderTags(tags: Record<string, string>): string {
   const entries = Object.entries(tags);
@@ -38,6 +39,7 @@ export function renderViewerShell(item: MediaItem): string {
           <button class="viewer-zoom-reset zoom-hidden" aria-label="Reset zoom">&#8865;</button>
           <button class="viewer-spread-toggle spread-hidden" aria-label="Toggle spread view" aria-pressed="false">&#9783;</button>
         </div>
+        ${renderSearchSection()}
         <div class="viewer-meta">
           <h3 class="viewer-title">${escapeHtml(item.title)}</h3>
           <p class="viewer-type"><span class="media-badge">${escapeHtml(item.mediaType)}</span></p>
@@ -229,6 +231,7 @@ export function initViewer(
     updateZoomState();
   }
 
+  let searchCleanup: (() => void) | null = null;
   let spreadToggleCleanup: (() => void) | null = null;
   let spreadEnabled = false;
   let spreads: Spread[] = [];
@@ -393,6 +396,7 @@ export function initViewer(
 
   // Keyboard navigation
   function handleKeydown(e: KeyboardEvent) {
+    if ((e.target as HTMLElement)?.closest(".viewer-search-input")) return;
     if (e.key === "ArrowLeft") goPrev().catch(handleNavError);
     else if (e.key === "ArrowRight") goNext().catch(handleNavError);
   }
@@ -454,6 +458,7 @@ export function initViewer(
         await renderSpread();
       }
     }
+    searchCleanup = initSearch(viewer, renderer, () => updateNav());
     updateNav();
   })().catch((err) => {
     reportError(new Error("Viewer initialization failed", { cause: err }));
@@ -475,6 +480,7 @@ export function initViewer(
     zoomInBtn.removeEventListener("click", handleZoomIn);
     zoomOutBtn.removeEventListener("click", handleZoomOut);
     zoomResetBtn.removeEventListener("click", handleZoomReset);
+    searchCleanup?.();
     spreadToggleCleanup?.();
     if (spreadResizeObserver) spreadResizeObserver.disconnect();
     if (spreadResizeTimer) clearTimeout(spreadResizeTimer);

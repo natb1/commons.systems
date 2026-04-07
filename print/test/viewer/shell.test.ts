@@ -19,6 +19,7 @@ import {
 } from "../../src/reading-position";
 import type { MediaItem } from "../../src/types";
 import type { ContentRenderer } from "../../src/viewer/types";
+import { makeMockRenderer } from "./mock-renderer";
 
 function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
   return {
@@ -32,25 +33,6 @@ function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
     groupId: null,
     memberEmails: ["user@example.com"],
     addedAt: "2026-01-15T00:00:00Z",
-    ...overrides,
-  };
-}
-
-function makeMockRenderer(overrides: Partial<ContentRenderer> = {}): ContentRenderer {
-  let _currentPage = 1;
-  const _pageCount = 10;
-  return {
-    init: vi.fn().mockResolvedValue(undefined),
-    goToPage: vi.fn().mockImplementation(async (p: number) => { _currentPage = p; }),
-    next: vi.fn().mockImplementation(async () => { if (_currentPage < _pageCount) _currentPage++; }),
-    prev: vi.fn().mockImplementation(async () => { if (_currentPage > 1) _currentPage--; }),
-    get pageCount() { return _pageCount; },
-    get currentPage() { return _currentPage; },
-    get canGoNext() { return _currentPage < _pageCount; },
-    get canGoPrev() { return _currentPage > 1; },
-    get position() { return String(_currentPage); },
-    get positionLabel() { return `Page ${_currentPage} / ${_pageCount}`; },
-    destroy: vi.fn(),
     ...overrides,
   };
 }
@@ -162,6 +144,12 @@ describe("renderViewerShell", () => {
     const html = renderViewerShell(makeMediaItem({ tags: {} }));
 
     expect(html).not.toContain('class="viewer-tag"');
+  });
+
+  it("contains .viewer-search with search-hidden class", () => {
+    const html = renderViewerShell(makeMediaItem());
+
+    expect(html).toContain('class="viewer-search search-hidden"');
   });
 
   it("escapes HTML in title", () => {
@@ -394,6 +382,36 @@ describe("initViewer", () => {
     expect(prevBtn.disabled).toBe(true);
     expect(nextBtn.disabled).toBe(true);
     expect(globalThis.reportError).toHaveBeenCalled();
+  });
+
+  it("arrow keys do not trigger page navigation when search input is focused", async () => {
+    const renderer = makeMockRenderer({
+      search: vi.fn().mockResolvedValue([]),
+      goToResult: vi.fn().mockResolvedValue(undefined),
+      clearSearch: vi.fn(),
+    });
+
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    // Focus the search input
+    const searchInput = outlet.querySelector(".viewer-search-input") as HTMLInputElement;
+    searchInput.focus();
+
+    // Dispatch arrow key events with the search input as target
+    const rightEvent = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true });
+    Object.defineProperty(rightEvent, "target", { value: searchInput });
+    document.dispatchEvent(rightEvent);
+    await flushInit();
+
+    const leftEvent = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true });
+    Object.defineProperty(leftEvent, "target", { value: searchInput });
+    document.dispatchEvent(leftEvent);
+    await flushInit();
+
+    // renderer.next and renderer.prev should not have been called
+    expect(renderer.next).not.toHaveBeenCalled();
+    expect(renderer.prev).not.toHaveBeenCalled();
   });
 
   it("Firestore read failure falls back to localStorage for saves", async () => {
