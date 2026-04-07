@@ -36,9 +36,14 @@ if [ -z "$DIRTY_APPS" ]; then
   exit 0
 fi
 
+if [ ! -f "$REPO_ROOT/.firebaserc" ]; then
+  echo "ERROR: .firebaserc not found at $REPO_ROOT/.firebaserc" >&2
+  exit 1
+fi
+
 while IFS= read -r app; do
   [ -z "$app" ] && continue
-  if SITE=$(get_hosting_site "$REPO_ROOT" "$app"); then
+  if SITE=$(get_hosting_site "$REPO_ROOT" "$app" 2>/dev/null); then
     echo "$app https://${SITE}.web.app"
   fi
 done <<< "$DIRTY_APPS" | sort

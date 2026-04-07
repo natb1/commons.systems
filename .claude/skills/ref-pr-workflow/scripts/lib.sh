@@ -250,7 +250,7 @@ resolve_dirty_apps() {
     top_dir="${file%%/*}"
     case "$file" in
       firebase.json|firestore.rules|storage.rules|package.json|package-lock.json)
-        # Root config changes affect all workspaces
+        # Root-level config changes affect all workspaces
         for app in "${!all_apps[@]}"; do
           dirty_apps["$app"]=1
         done
