@@ -6,6 +6,12 @@ import { test, expect } from "@playwright/test";
 // visitors see content without runtime fetches to GitHub or Firestore.
 
 test.describe("blog smoke", () => {
+  test("meta description is present @smoke", async ({ page }) => {
+    await page.goto("/");
+    const desc = await page.getAttribute('meta[name="description"]', "content");
+    expect(desc).toBeTruthy();
+  });
+
   test("homepage loads without JS errors @smoke", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(err.message));
