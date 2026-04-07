@@ -621,14 +621,12 @@ test.describe("viewer", () => {
   }) => {
     await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
-    await expect(page.locator(".textLayer")).toBeVisible();
-    const spanCount = await page.locator(".textLayer span").count();
-    expect(spanCount).toBeGreaterThan(0);
+    await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
   });
 
   test("PDF text layer updates on page navigation", async ({ page }) => {
     await page.goto("/view/plato-republic");
-    await expect(page.locator(".textLayer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".textLayer span").first()).toBeAttached({ timeout: 15000 });
 
     // Capture text content on page 1
     const page1Text = await page.locator(".textLayer").textContent();

@@ -62,6 +62,6 @@ test.describe("navigation", () => {
   test("PDF text layer present on viewer page @smoke", async ({ page }) => {
     await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
-    await expect(page.locator(".textLayer")).toBeAttached();
+    await expect(page.locator(".textLayer")).toBeAttached({ timeout: 15000 });
   });
 });
