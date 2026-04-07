@@ -340,7 +340,8 @@ initialize().catch((error) => {
 });
 
 // Defer App Check / reCAPTCHA initialization until first user interaction to keep the
-// large reCAPTCHA script completely off the critical path.
+// large reCAPTCHA script off the critical path. Until initAppCheck() resolves,
+// getAppCheckHeaders returns empty headers, so pre-interaction requests lack App Check tokens.
 const deferredAppCheckInit = async () => {
   if (!initAppCheck) return;
   await initAppCheck();
