@@ -58,6 +58,16 @@ Assessment of how forkable the project is today:
 - What tribal knowledge is not captured anywhere?
 - Build and deploy reproducibility from a clean clone
 
+### Gap Analysis
+
+Evaluate the current backlog through the engineering lens:
+
+**Missing Issues** — issues that should exist but don't:
+- For each: proposed title, technical concern it addresses, impact x risk x effort estimate
+
+**Scope Refinements** — existing issues that need scope changes:
+- For each: issue number, current scope problem, proposed refinement, what technical concern the current scope ignores
+
 ## Instructions
 
 Be substantive and opinionated. "Improve test coverage" is useless without specifying which modules, what kind of tests, and why those gaps matter more than others. "Reduce tech debt" is useless without categorizing the debt and arguing for specific items.

@@ -55,6 +55,16 @@ List the riskiest assumptions across all priorities. For each:
 - What evidence supports or contradicts it
 - How to test it cheaply
 
+### Gap Analysis
+
+Evaluate the current backlog through the product lens:
+
+**Missing Issues** — issues that should exist but don't:
+- For each: proposed title, which charter audience it serves, why it matters now, RICE score estimate
+
+**Scope Refinements** — existing issues that need scope changes:
+- For each: issue number, current scope problem, proposed refinement, why the current scope is wrong from a user value perspective
+
 ## Instructions
 
 Be substantive and opinionated. Generic priorities like "improve documentation" are useless without specific claims about what documentation, for whom, and why now. Ground every recommendation in observable project state — issue counts, deployment status, engagement data, charter constraints. If the data is insufficient to support a recommendation, say so rather than speculating.

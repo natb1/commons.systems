@@ -62,6 +62,16 @@ Recommended distribution approach:
 - Sequencing (what builds on what)
 - Expected reach and how to measure it
 
+### Gap Analysis
+
+Evaluate the current backlog through the marketing lens:
+
+**Missing Issues** — issues that should exist but don't:
+- For each: proposed title, which distribution/discoverability gap it addresses, target audience, expected reach impact
+
+**Scope Refinements** — existing issues that need scope changes:
+- For each: issue number, current scope problem, proposed refinement, why the current scope misses a distribution or positioning opportunity
+
 ## Instructions
 
 Be substantive and opinionated. "Improve SEO" is useless without specific keywords, specific pages, and specific gaps. "Post on Hacker News" is useless without assessing what HN audiences respond to and whether this project's current artifacts match.

@@ -79,6 +79,16 @@ Overall financial health:
 - When monetization becomes necessary (if ever)
 - Recommended charter-consistent revenue approaches ranked by viability
 
+### Gap Analysis
+
+Evaluate the current backlog through the finance lens:
+
+**Missing Issues** — issues that should exist but don't:
+- For each: proposed title, financial concern it addresses, estimated cost impact
+
+**Scope Refinements** — existing issues that need scope changes:
+- For each: issue number, current scope problem, proposed refinement, what cost or sustainability concern the current scope ignores
+
 ## Instructions
 
 Be substantive and opinionated. "Reduce costs" is useless without identifying specific cost drivers and specific reductions. "Add donations" is useless without estimating likely donation revenue and whether it covers the gap.

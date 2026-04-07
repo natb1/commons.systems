@@ -1,12 +1,12 @@
 ---
 name: roadmap-debate
-description: Structured roadmap reassessment — five personas analyze project state through different lenses, debate synthesis, produce draft ROADMAP.md update
+description: Structured roadmap reassessment — five personas analyze project state, debate synthesis, stop for user feedback, then propose edits
 user-invocable: true
 ---
 
 # Roadmap Debate
 
-Five personas analyze project state independently, synthesize priorities, debate the synthesis, and produce a draft ROADMAP.md update.
+Five personas analyze project state independently, synthesize priorities, debate the synthesis, re-synthesize, and stop for user feedback before proposing edits to ROADMAP.md, CHARTER.md, and the issue backlog.
 
 **Personas:**
 | Agent | Lens | Produces priorities? |
@@ -19,13 +19,13 @@ Five personas analyze project state independently, synthesize priorities, debate
 
 ## Phase 1: Gather Context
 
-Run the gather-context script:
+Run the gather-context script. It writes output to a file and prints the path:
 
 ```bash
 .claude/skills/roadmap-debate/scripts/gather-context.sh
 ```
 
-Store the output as a single block to pass to each agent.
+Read the output file at the printed path. Store the contents as a single block to pass to each agent.
 
 ## Phase 2: Independent Assessments
 
@@ -79,31 +79,53 @@ Instruction to each agent: "Produce substantive feedback. Agreement without anal
 
 Wait for all 5 to complete.
 
-## Phase 5: Final Draft
+## Phase 5: Re-Synthesize
 
-Incorporate review feedback from Phase 4, then present the complete output:
+Take the Phase 3 synthesis and all five Phase 4 review outputs. Produce an updated synthesis that incorporates the review feedback:
 
-### 1. Persona Assessments
-Each persona's original Phase 2 output, labeled by persona.
+1. **Updated unified priority list.** Re-rank priorities based on review feedback. Where a ranking changed from Phase 3, note which agent's feedback caused the change and why.
+2. **Consolidated gap analysis.** Merge all five agents' Gap Analysis outputs from Phase 2 into two groups:
+   - **Missing issues** — issues that should be on the backlog but aren't. Note which agents flagged each and through what lens.
+   - **Scope refinements** — existing issues that need scope changes. Note which agents flagged each.
+3. **Unresolved disagreements.** List priority-affecting disagreements that persist after incorporating review feedback. For each:
+   - The disagreement
+   - Which personas are on each side
+   - What information would resolve it
 
-### 2. Synthesis
-The Phase 3 unified priority list with rationale.
+## Phase 6: Stop for User Feedback
 
-### 3. Review Feedback
-Each persona's Phase 4 response (Agreement, Disagreement, Missing), labeled by persona.
+Present three sections to the user:
+1. Updated synthesis (the re-synthesized priority list from Phase 5)
+2. Unresolved disagreements (from Phase 5)
+3. Consolidated gap analysis (from Phase 5)
 
-### 4. Draft ROADMAP.md Update
-A complete draft of ROADMAP.md incorporating the synthesis. Follow the existing ROADMAP.md structure:
+**STOP. Ask the user for feedback before proceeding.** Do not continue to Phase 7 until the user responds.
+
+## Phase 7: Propose Edits
+
+After receiving user feedback, incorporate it and propose concrete edits:
+
+### 1. Draft ROADMAP.md Update
+A complete draft of ROADMAP.md incorporating the synthesis and user feedback. Follow the existing ROADMAP.md structure:
 - Strategy section (update only if assessment warrants it)
 - Current assessment (update date, stats, what's working/not working, bottleneck)
 - Priorities (new ranked list with the schema: why, audience, distribution, done-when, signal)
 - Feedback loop (update triggers and metrics)
 
-### 5. Proposed Charter Revisions
+### 2. Proposed Charter Revisions
 If any persona or the auditor identified charter sections that need updating, list specific proposed edits with rationale. If none, state "No charter revisions proposed."
 
-### 6. Unresolved Disagreements
-List any priority-affecting disagreements that Phase 4 review did not resolve. For each:
-- The disagreement
-- Which personas are on each side
-- What information would resolve it
+### 3. Existing Issues to Update
+For each existing issue that needs scope refinement (from gap analysis and synthesis):
+- Issue number
+- Current scope summary
+- Proposed change
+- Rationale
+
+### 4. New Issues to File
+For each gap identified (issues that should exist but don't):
+- Proposed title
+- Body draft
+- Labels
+- Which agents flagged it
+- Rationale
