@@ -1,14 +1,14 @@
 export interface SearchResult {
   /** Opaque location token understood by the renderer (page number string, EPUB CFI, etc.) */
-  location: string;
+  readonly location: string;
   /** Human-readable label ("Page 42", "Ch. 3") */
-  label: string;
+  readonly label: string;
   /** Text snippet around the match */
-  snippet: string;
+  readonly snippet: string;
   /** Character offset of match start within snippet */
-  matchStart: number;
+  readonly matchStart: number;
   /** Character length of the match within snippet */
-  matchLength: number;
+  readonly matchLength: number;
 }
 
 export interface ContentRenderer {

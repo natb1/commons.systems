@@ -34,6 +34,8 @@ export function initSearch(
   onNavigate: () => void,
 ): (() => void) | null {
   if (!renderer.search || !renderer.goToResult) return null;
+  const search = renderer.search;
+  const goToResult = renderer.goToResult;
 
   const section = container.querySelector(".viewer-search") as HTMLElement;
   const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
@@ -47,6 +49,14 @@ export function initSearch(
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   let destroyed = false;
 
+  function runSearch() {
+    executeSearch(input.value).catch((err) => {
+      countEl.textContent = "Search failed";
+      clearResults();
+      reportError(new Error("Search failed", { cause: err }));
+    });
+  }
+
   function clearResults() {
     results = [];
     resultsList.replaceChildren();
@@ -54,7 +64,7 @@ export function initSearch(
   }
 
   function renderResults() {
-    // Safe: renderResultItem escapes all user-provided text via escapeHtml.
+    // Safe: renderResultItem and renderSnippet escape all user-provided text via escapeHtml.
     resultsList.innerHTML = results.map(renderResultItem).join("");
     countEl.textContent = results.length === 1 ? "1 result" : `${results.length} results`;
   }
@@ -81,7 +91,7 @@ export function initSearch(
       return;
     }
 
-    const searchResults = await renderer.search(trimmed);
+    const searchResults = await search(trimmed);
     if (destroyed || trimmed !== currentQuery) return;
     results = searchResults;
     renderResults();
@@ -97,18 +107,14 @@ export function initSearch(
     }
     searchTimer = setTimeout(() => {
       searchTimer = null;
-      executeSearch(input.value).catch((err) => {
-        reportError(new Error("Search failed", { cause: err }));
-      });
+      runSearch();
     }, 300);
   }
 
   function handleSearchEvent() {
     if (searchTimer) clearTimeout(searchTimer);
     searchTimer = null;
-    executeSearch(input.value).catch((err) => {
-      reportError(new Error("Search failed", { cause: err }));
-    });
+    runSearch();
   }
 
   function handleResultClick(e: Event) {
@@ -117,9 +123,10 @@ export function initSearch(
     const index = Number(li.dataset.index);
     if (index >= 0 && index < results.length) {
       setActive(index);
-      renderer.goToResult(results[index]!).then(() => {
+      goToResult(results[index]!).then(() => {
         onNavigate();
       }).catch((err) => {
+        countEl.textContent = "Navigation failed";
         reportError(new Error("Go to result failed", { cause: err }));
       });
     }

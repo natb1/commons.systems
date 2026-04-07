@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderSearchSection, initSearch } from "../../src/viewer/search";
-import type { SearchResult } from "../../src/viewer/types";
+import type { ContentRenderer, SearchResult } from "../../src/viewer/types";
 import { makeMockRenderer } from "./mock-renderer";
 
 function makeSearchResult(overrides: Partial<SearchResult> = {}): SearchResult {
@@ -12,6 +12,16 @@ function makeSearchResult(overrides: Partial<SearchResult> = {}): SearchResult {
     matchLength: 5,
     ...overrides,
   };
+}
+
+/** Renderer with search/goToResult/clearSearch wired up. Pass `search` override to control results. */
+function makeSearchableRenderer(overrides: Partial<ContentRenderer> = {}) {
+  return makeMockRenderer({
+    search: vi.fn().mockResolvedValue([]),
+    goToResult: vi.fn().mockResolvedValue(undefined),
+    clearSearch: vi.fn(),
+    ...overrides,
+  });
 }
 
 function createContainer(): HTMLElement {
@@ -75,21 +85,13 @@ describe("initSearch", () => {
   });
 
   it("returns a cleanup function when renderer has search", () => {
-    const renderer = makeMockRenderer({
-      search: vi.fn().mockResolvedValue([]),
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
-    });
+    const renderer = makeSearchableRenderer();
     const result = initSearch(container, renderer, vi.fn());
     expect(typeof result).toBe("function");
   });
 
   it("removes search-hidden class when renderer has search", () => {
-    const renderer = makeMockRenderer({
-      search: vi.fn().mockResolvedValue([]),
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
-    });
+    const renderer = makeSearchableRenderer();
     initSearch(container, renderer, vi.fn());
 
     const section = container.querySelector(".viewer-search") as HTMLElement;
@@ -106,11 +108,7 @@ describe("initSearch", () => {
 
   it("calls renderer.search after 300ms debounce on input", async () => {
     const searchFn = vi.fn().mockResolvedValue([]);
-    const renderer = makeMockRenderer({
-      search: searchFn,
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
-    });
+    const renderer = makeSearchableRenderer({ search: searchFn });
     initSearch(container, renderer, vi.fn());
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
@@ -128,10 +126,8 @@ describe("initSearch", () => {
 
   it("empty input calls renderer.clearSearch and clears results", async () => {
     const clearSearch = vi.fn();
-    const searchFn = vi.fn().mockResolvedValue([makeSearchResult()]);
-    const renderer = makeMockRenderer({
-      search: searchFn,
-      goToResult: vi.fn().mockResolvedValue(undefined),
+    const renderer = makeSearchableRenderer({
+      search: vi.fn().mockResolvedValue([makeSearchResult()]),
       clearSearch,
     });
     initSearch(container, renderer, vi.fn());
@@ -160,10 +156,9 @@ describe("initSearch", () => {
     const result1 = makeSearchResult({ location: "3", label: "Page 3" });
     const result2 = makeSearchResult({ location: "7", label: "Page 7" });
     const goToResult = vi.fn().mockResolvedValue(undefined);
-    const renderer = makeMockRenderer({
+    const renderer = makeSearchableRenderer({
       search: vi.fn().mockResolvedValue([result1, result2]),
       goToResult,
-      clearSearch: vi.fn(),
     });
     initSearch(container, renderer, vi.fn());
 
@@ -181,11 +176,8 @@ describe("initSearch", () => {
 
   it("clicking a result calls the onNavigate callback", async () => {
     const onNavigate = vi.fn();
-    const goToResult = vi.fn().mockResolvedValue(undefined);
-    const renderer = makeMockRenderer({
+    const renderer = makeSearchableRenderer({
       search: vi.fn().mockResolvedValue([makeSearchResult()]),
-      goToResult,
-      clearSearch: vi.fn(),
     });
     initSearch(container, renderer, onNavigate);
 
@@ -204,12 +196,10 @@ describe("initSearch", () => {
   });
 
   it("count text shows correct singular and plural forms", async () => {
-    const renderer = makeMockRenderer({
+    const renderer = makeSearchableRenderer({
       search: vi.fn()
         .mockResolvedValueOnce([makeSearchResult()])
         .mockResolvedValueOnce([makeSearchResult(), makeSearchResult(), makeSearchResult()]),
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
     });
     initSearch(container, renderer, vi.fn());
 
@@ -235,10 +225,8 @@ describe("initSearch", () => {
       matchStart: 0,
       matchLength: 8,
     });
-    const renderer = makeMockRenderer({
+    const renderer = makeSearchableRenderer({
       search: vi.fn().mockResolvedValue([xssResult]),
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
     });
     initSearch(container, renderer, vi.fn());
 
@@ -260,10 +248,8 @@ describe("initSearch", () => {
     const xssResult = makeSearchResult({
       label: '<img onerror="alert(1)">',
     });
-    const renderer = makeMockRenderer({
+    const renderer = makeSearchableRenderer({
       search: vi.fn().mockResolvedValue([xssResult]),
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
     });
     initSearch(container, renderer, vi.fn());
 
@@ -278,11 +264,7 @@ describe("initSearch", () => {
 
   it("cleanup function removes event listeners and clears timers", async () => {
     const searchFn = vi.fn().mockResolvedValue([]);
-    const renderer = makeMockRenderer({
-      search: searchFn,
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
-    });
+    const renderer = makeSearchableRenderer({ search: searchFn });
     const cleanup = initSearch(container, renderer, vi.fn())!;
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
@@ -308,11 +290,7 @@ describe("initSearch", () => {
     const searchFn = vi.fn()
       .mockImplementationOnce(() => new Promise<SearchResult[]>((r) => { resolveFirst = r; }))
       .mockImplementationOnce(() => Promise.resolve(freshResults));
-    const renderer = makeMockRenderer({
-      search: searchFn,
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
-    });
+    const renderer = makeSearchableRenderer({ search: searchFn });
     initSearch(container, renderer, vi.fn());
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
@@ -342,11 +320,7 @@ describe("initSearch", () => {
 
   it("search event (Enter key) triggers search immediately without debounce", async () => {
     const searchFn = vi.fn().mockResolvedValue([]);
-    const renderer = makeMockRenderer({
-      search: searchFn,
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
-    });
+    const renderer = makeSearchableRenderer({ search: searchFn });
     initSearch(container, renderer, vi.fn());
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
@@ -361,11 +335,7 @@ describe("initSearch", () => {
 
   it("search event cancels pending debounce timer", async () => {
     const searchFn = vi.fn().mockResolvedValue([]);
-    const renderer = makeMockRenderer({
-      search: searchFn,
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
-    });
+    const renderer = makeSearchableRenderer({ search: searchFn });
     initSearch(container, renderer, vi.fn());
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
@@ -391,10 +361,8 @@ describe("initSearch", () => {
       makeSearchResult({ location: "1", label: "Page 1" }),
       makeSearchResult({ location: "2", label: "Page 2" }),
     ];
-    const renderer = makeMockRenderer({
+    const renderer = makeSearchableRenderer({
       search: vi.fn().mockResolvedValue(results),
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
     });
     initSearch(container, renderer, vi.fn());
 
@@ -411,11 +379,7 @@ describe("initSearch", () => {
   });
 
   it("zero results shows '0 results' count", async () => {
-    const renderer = makeMockRenderer({
-      search: vi.fn().mockResolvedValue([]),
-      goToResult: vi.fn().mockResolvedValue(undefined),
-      clearSearch: vi.fn(),
-    });
+    const renderer = makeSearchableRenderer();
     initSearch(container, renderer, vi.fn());
 
     const input = container.querySelector(".viewer-search-input") as HTMLInputElement;
