@@ -8,7 +8,7 @@ const indexPath = join(srcDir, "index.html");
 const html = readFileSync(indexPath, "utf-8");
 
 describe("font preload links", () => {
-  it("does not preload fonts (font-display: optional makes preloads wasteful)", () => {
+  it("does not preload fonts (font-display: optional skips uncached fonts, making preloads wasteful)", () => {
     const preloadLinks = [
       ...html.matchAll(/<link[^>]*rel="preload"[^>]*as="font"[^>]*>/g),
     ];

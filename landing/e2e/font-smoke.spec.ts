@@ -19,7 +19,7 @@ test.describe("font smoke", () => {
     expect(blocked).toEqual([]);
   });
 
-  test("no font preload links (font-display: optional makes preloads wasteful) @smoke", async ({
+  test("no font preload links (font-display: optional skips uncached fonts, making preloads wasteful) @smoke", async ({
     page,
   }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
