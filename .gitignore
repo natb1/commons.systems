@@ -14,3 +14,4 @@ ui-debug.log
 .direnv/
 **/tmp/
 budget-etl/budget-etl
+productivity-tui/productivity-tui
