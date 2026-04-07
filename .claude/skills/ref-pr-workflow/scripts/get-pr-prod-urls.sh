@@ -6,7 +6,7 @@ set -euo pipefail
 # git diff, which requires local refs that may not exist post-merge.
 #
 # Usage: get-pr-prod-urls.sh <pr-number>
-# Output: one line per app: <app-name> <production-url>
+# Output: one line per app: <app-name> <production-url>  (URL from .firebaserc hosting target)
 # Exit 0 with no output if no changed apps have hosting targets.
 
 PR_NUM="${1:?Usage: get-pr-prod-urls.sh <pr-number>}"

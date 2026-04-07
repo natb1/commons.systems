@@ -277,7 +277,7 @@ resolve_dirty_apps() {
 
 # Print the hosting site ID for an app from .firebaserc deploy targets.
 # Returns code 1 (with stderr message) if no hosting target is found.
-# Args: $1 = repo root, $2 = app name (e.g. "hello")
+# Args: $1 = repo root, $2 = app name (e.g. "budget")
 get_hosting_site() {
   local repo_root="$1"
   local app_name="$2"

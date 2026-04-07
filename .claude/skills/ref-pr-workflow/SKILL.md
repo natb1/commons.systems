@@ -97,7 +97,7 @@ Before dispatching Step 13, monitor the production deployment:
 
 2. If a matching run is found and not yet complete, monitor it:
    ```bash
-   gh run watch -i 30 --exit-status <run-id>
+   .claude/skills/ref-pr-workflow/scripts/run-ci-watch.sh <run-id>
    ```
 
 3. If the run succeeds, check if any changed apps have hosting targets:
