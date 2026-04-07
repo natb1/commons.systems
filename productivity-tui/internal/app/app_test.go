@@ -12,32 +12,19 @@ import (
 	"github.com/natb1/commons.systems/productivity-tui/internal/session"
 )
 
-func TestQuitKey(t *testing.T) {
-	tests := []struct {
-		name string
-		key  string
-	}{
-		{"q key", "q"},
-		{"ctrl+c", "ctrl+c"},
+func TestQuitKeyQ(t *testing.T) {
+	m := New("/dev/null")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if cmd == nil {
+		t.Error("expected quit command for 'q' key")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := New("/dev/null")
-			updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tt.key)})
-			_ = updated
-			if cmd == nil {
-				// Try as special key
-				var keyType tea.KeyType
-				switch tt.key {
-				case "ctrl+c":
-					keyType = tea.KeyCtrlC
-				}
-				_, cmd = m.Update(tea.KeyMsg{Type: keyType})
-			}
-			if cmd == nil {
-				t.Error("expected quit command")
-			}
-		})
+}
+
+func TestQuitKeyCtrlC(t *testing.T) {
+	m := New("/dev/null")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Error("expected quit command for ctrl+c")
 	}
 }
 

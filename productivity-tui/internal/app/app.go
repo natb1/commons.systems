@@ -63,8 +63,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m, tea.Batch(tick(), loadSessions(m.stateFilePath))
 	case sessionsMsg:
-		m.sessions = msg.sessions
-		m.err = msg.err
+		if msg.err != nil {
+			m.err = msg.err
+			m.sessions = map[string]session.Session{}
+		} else {
+			m.err = nil
+			m.sessions = msg.sessions
+		}
 	}
 	return m, nil
 }
@@ -102,12 +107,10 @@ func (m Model) View() string {
 	return b.String()
 }
 
-// Sessions returns the current sessions map (for testing).
 func (m Model) Sessions() map[string]session.Session {
 	return m.sessions
 }
 
-// Err returns the current error (for testing).
 func (m Model) Err() error {
 	return m.err
 }

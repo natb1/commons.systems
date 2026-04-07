@@ -1,22 +1,5 @@
 #!/usr/bin/env bash
+# Claude Code hook: Stop, SessionStart — marks a session as idle.
+# Reads {session_id, cwd, ...} JSON from stdin.
 set -euo pipefail
-
-STATE_DIR="$HOME/.local/share/productivity-tui"
-STATE_FILE="$STATE_DIR/sessions.json"
-
-HOOK_INPUT="$(cat)"
-SESSION_ID="$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id')"
-[ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "null" ] || { echo "session_id not found in hook input" >&2; exit 1; }
-WORK_DIR="$(printf '%s' "$HOOK_INPUT" | jq -r '.cwd // empty')"
-WORK_DIR="${WORK_DIR:-$PWD}"
-
-mkdir -p "$STATE_DIR"
-[ -f "$STATE_FILE" ] || echo '{}' > "$STATE_FILE"
-
-tmp="$(mktemp "$STATE_DIR/sessions.XXXXXX")"
-jq --arg id "$SESSION_ID" \
-   --arg dir "$WORK_DIR" \
-   --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-   '.[$id] = (.[$id] // {}) + {working_dir: $dir, idle: true, last_activity: $now}' \
-   "$STATE_FILE" > "$tmp"
-mv "$tmp" "$STATE_FILE"
+exec "$(dirname "$0")/update-session.sh" true

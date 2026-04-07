@@ -27,10 +27,18 @@ func main() {
 			fmt.Println("  --version, -v  Print version and exit")
 			fmt.Println("  --help, -h     Print this help and exit")
 			os.Exit(0)
+		default:
+			fmt.Fprintf(os.Stderr, "unknown flag: %s\n", os.Args[1])
+			os.Exit(1)
 		}
 	}
 
-	m := app.New(session.StateFilePath())
+	stateFile, err := session.StateFilePath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	m := app.New(stateFile)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

@@ -15,15 +15,19 @@ type Session struct {
 	LastActivity time.Time `json:"last_activity"`
 }
 
-func StateFilePath() string {
+// StateFilePath returns the path to the shared session state file.
+// Shell hooks in productivity-tui/hooks/ hardcode the same path independently.
+func StateFilePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot determine home directory: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return filepath.Join(home, ".local", "share", "productivity-tui", "sessions.json")
+	return filepath.Join(home, ".local", "share", "productivity-tui", "sessions.json"), nil
 }
 
+// ReadSessions reads the session state file at path. Returns an empty map
+// if the file is missing or empty — this is the expected first-run state
+// before any hook has created the file.
 func ReadSessions(path string) (map[string]Session, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
