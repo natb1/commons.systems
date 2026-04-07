@@ -3,7 +3,7 @@ import { prerenderPosts } from "@commons-systems/blog/prerender";
 import { generateFeedXml } from "@commons-systems/blog/feed";
 import appSeed from "../seeds/firestore.js";
 import { BLOG_ROLL_ENTRIES } from "../src/blog-roll/config.js";
-import { NAV_LINKS, INFO_PANEL_LINK_SECTIONS } from "../src/site-config.js";
+import { NAV_LINKS, INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS } from "../src/site-config.js";
 
 const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
 
@@ -20,6 +20,7 @@ await prerenderPosts({
     rssFeedUrl: "/feed.xml",
     opmlUrl: "/blogroll.opml",
   },
+  siteDefaults: SITE_DEFAULTS,
 });
 
 generateFeedXml({
