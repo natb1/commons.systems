@@ -52,7 +52,7 @@ The test is not "how detached am I?" but "can I move between modes when I choose
 
 Philosophical arguments about institutional capture fail to propagate for the same reason philosophical arguments generally fail: they play the power game badly. They try to convert rather than select. They appeal to reason in a world that responds to emotional resonance and lived experience.
 
-The propagation strategy is therefore *demonstration, not argument*. Build artifacts that are genuinely useful on their own terms. People encounter a tool that solves their problem better than the institutional alternative. They experience recovered autonomy before they have a name for it. The philosophy is embedded in the experience, available to those who want it, invisible to those who don't.
+The propagation strategy is therefore *demonstration, not argument*. Build artifacts that are genuinely useful — to the author first, then to others. The author's daily use is what makes the demonstration honest rather than performative. People encounter a tool that solves their problem better than the institutional alternative. They experience recovered autonomy before they have a name for it. The philosophy is embedded in the experience, available to those who want it, invisible to those who don't.
 
 This means:
 
@@ -102,24 +102,32 @@ This table is itself a ratchet tooth of the project (it creates a framework that
 
 ### Artifact-First Propagation
 
-The project propagates through useful artifacts, not philosophical arguments. Each artifact should:
+The project propagates through useful artifacts, not philosophical arguments. These criteria apply in order of audience tiers. An artifact must first solve the author's real problem before it can credibly claim to solve others'. Each criterion adds ratchet exposure — documentation for progressive depth creates maintenance obligations, and "better than the institutional alternative" creates expectations of continued operation. Accept these teeth only when the previous tier validates the need.
+
+Each artifact should:
 
 1. **Solve a real problem** that a user arrived with, independent of any philosophical framing.
 2. **Be better than the institutional alternative** in at least one dimension the user cares about (cost, privacy, control, fit).
 3. **Embed the philosophy in the architecture** — local-first data storage, deliberate dependencies, forkability — so the user practices progressive detachment by using the tool, whether or not they recognize it.
 4. **Offer progressive depth** — easy entry point for immediate utility, deeper engagement for those who want to understand or modify.
 
-### Three Audiences
+### Audiences and Ratchet Exposure
 
-**Users** encounter tools. They use them because they work. They may never engage with the philosophy and that's fine. The tool is the gift.
+Four audiences engage at progressive depth. Each tier validates the previous — and each tier adds ratchet teeth. This is the project's own diagnosis applied to itself: the same stabilizing mechanisms that make institutions capable of solving problems make them unable to stand down. Reaching each audience tier is a choice to accept more teeth in exchange for more reach.
 
-**Practitioners** fork the repo. They build their own versions, adapt the agentic workflow, make different architectural choices. They're practicing progressive detachment through the act of building.
+**The author** uses the tools daily. Personal utility is the prerequisite for honest demonstration — you cannot show what you do not practice. Ratchet exposure is minimal: if the author stops needing a tool, nothing resists its removal. If the project fails to reach any other audience, artifacts that solve the author's own problems still justify the work.
 
-**Collaborators** read this charter. They understand the diagnosis, share the goals, and help identify the next highest-leverage artifact to build.
+**Users** encounter tools that work. They use them because the author's genuine use produced something functional and considered. The tool is the gift. Ratchet exposure increases: documentation, data formats, and hosting create expectations. If a user depends on an artifact but cannot migrate away from it, the dependency is parasitic by this project's own definition — the gift has become a lock-in mechanism.
+
+**Practitioners** fork the repo. They adapt the workflow, make different choices, practice progressive detachment through building. Practitioners need evidence from users that the artifacts are worth adapting. Ratchet exposure increases further: shared terminology, conventions, and patterns form. If these calcify into orthodoxy that practitioners cannot deviate from, the project is producing the same institutional capture it diagnoses.
+
+**Collaborators** read this charter. They share the diagnosis and help identify what to build next. Collaborators need a body of practitioner experience to build philosophy around — a charter without demonstrated practice is theory. Ratchet exposure is highest: legitimacy, cultural identity, and shared purpose form. Collaboration exists because recognizing and decoupling from parasitic institutions is a social need. If that need is served — or if it never materializes — the collaborative structure itself resists standing down. An institution dedicated to fighting institutions that has outlived its purpose is the diagnosis made recursive.
+
+Skipping tiers does not just produce hollow claims — it accumulates ratchet teeth before the previous tier proves they are required. Building for practitioners before users find it useful creates documentation and conventions that exist to serve an audience that has not validated the underlying artifacts. Building for collaborators before practitioners exist creates legitimacy and cultural identity around undemonstrated practice.
 
 ### Scope
 
-This project demonstrates progressive detachment in domains where local-first solutions are viable — personal finance, publishing, development workflows. It does not address institutional capture in healthcare, climate, or financial regulation, and claiming otherwise would undermine the project's credibility.
+This project demonstrates progressive detachment in domains where individuals can plausibly recover autonomy. Domain selection is an operational decision that belongs in [ROADMAP.md](ROADMAP.md).
 
 What the project offers is a worked example of the *method*: diagnose the ratchet, identify which teeth are required and which are parasitic, build alternatives where feasible, share them as gifts. Whether that method transfers to domains that require institutional coordination at scale is an open question that this project cannot answer alone, and does not claim to.
 
@@ -131,6 +139,7 @@ To the extent that commons.systems is a non-parasitic institution — one that s
 
 **Observable indicators that the project is serving its purpose:**
 
+- The author actively uses the deployed artifacts in daily life (tier 1 — prerequisite for all other indicators)
 - Forks of the repository (public on GitHub)
 - Derivative projects — people building their own alternatives to institutional dependencies, whether or not they reference this project
 - Unsolicited engagement from people who encountered the work independently
@@ -142,6 +151,7 @@ To the extent that commons.systems is a non-parasitic institution — one that s
 - After twelve months of active publishing and building, zero forks, zero derivative projects, and zero unsolicited engagement from people who encountered the work independently. This is evidence the demonstration is not demonstrating.
 - The project develops a user base that depends on it and cannot easily migrate away. This is the ratchet forming.
 - The dependency self-assessment reveals a dependency has shifted from required to parasitic, and the project cannot or does not act on that assessment. This is the project failing its own test.
+- The author stops using an artifact but continues maintaining it for others. This is the project's own ratchet forming — the artifact persists because of accumulated obligations (documentation, user expectations, hosting) rather than because it serves the author's need. The honest response is to archive the artifact and transfer maintenance to users who depend on it, not to sustain it out of obligation.
 - The charter becomes a document that is maintained for its own sake rather than revised or pruned in response to what the project actually needs. This is institutional memory calcifying into canon.
 
 The willingness to define failure conditions is itself a form of philosophical mobility — it means the project is not locked into its current approach by its own ratchet.
@@ -184,7 +194,7 @@ This section captures the counter-arguments, unresolved tensions, and structural
 
 ### Scale Limits
 
-**Risk:** If progressive detachment only works for problems where local-first solutions are viable, and the problems causing the most human suffering require institutional coordination at scale, then the project is a lifestyle optimization for technical professionals, not a response to the institutional pathology it diagnoses.
+**Risk:** If progressive detachment only works for problems where individuals can plausibly build their own alternatives, and the problems causing the most human suffering require institutional coordination at scale, then the project is a lifestyle optimization for technical professionals, not a response to the institutional pathology it diagnoses.
 
 **Current response:** This is accurate, and the project should not overclaim. The project demonstrates the *method* of progressive detachment in tractable domains. Whether the method transfers to harder domains is unproven. The project's credibility depends on being honest about this scope.
 
@@ -194,7 +204,7 @@ This section captures the counter-arguments, unresolved tensions, and structural
 
 **Risk:** commons.systems could develop its own institutional ratchet — accumulating contributors, documentation, process, and cultural identity that make it structurally unable to scale back down or wind itself down when its purpose is served.
 
-**Current response:** The architecture is designed to prevent lock-in: CC-BY-SA licensing, forkable structure, local-first data, no user accounts. The failure conditions defined in the Success and Failure section include detecting the ratchet forming. The strongest test of the project's philosophy will be whether it can identify when its purpose is served and actually stand down.
+**Current response:** The architecture is designed to prevent lock-in: CC-BY-SA licensing, forkable structure, local-first data, no user accounts. The audience tier progression provides an additional structural check: each tier adds ratchet teeth (documentation, conventions, legitimacy, cultural identity), and the project should only accept teeth when the previous tier validates the need. If the project finds itself building for collaborators before practitioners exist, or maintaining artifacts for users the author no longer uses, those are early signals that the ratchet is forming. The failure conditions defined in the Success and Failure section include detecting the ratchet forming. The strongest test of the project's philosophy will be whether it can identify when its purpose is served and actually stand down.
 
 **Status:** Theoretical for now. The test comes later. Define what "purpose served" looks like before the ratchet has a chance to form.
 
