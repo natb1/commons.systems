@@ -124,10 +124,10 @@ Four consolidated workflows handle all CI/CD. Change detection determines which 
 `get-changed-apps.sh` determines which apps are affected by a change:
 
 - **Direct changes** to `<app>/**` mark that app
-- **Shared package changes** (e.g. `authutil/`) scan every app's `package.json` for `file:` references to the changed package and mark all matches
-- **Global triggers** (`firebase.json`, `firestore.rules`, CI scripts) mark all apps
+- **Shared package changes** (e.g. `authutil/`) scan every app's `package.json` for `@commons-systems/` dependencies referencing the changed package and mark all matches
+- **Global triggers** (`firebase.json`, `firestore.rules`, `storage.rules`, `package.json`, `package-lock.json`) mark all apps
 
-An "app" is any top-level directory containing both `package.json` and `package-lock.json`.
+An "app" is any workspace listed in the root `package.json` `workspaces` array.
 
 ### Script call chain
 

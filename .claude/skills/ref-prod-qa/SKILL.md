@@ -48,7 +48,8 @@ Claude walks through the QA plan one item at a time in the user's browser agains
 10. Present final demo summary: items explored, pass/fail/skip counts, GIF filename, any console/network errors found
 
 **Evaluation instructions:**
-- All items PASS or SKIP (no FAIL) → **Terminate**
+- All items PASS or SKIP (at least one PASS) → **Terminate**
+- All items SKIP (no PASS, no FAIL) → Do NOT terminate. Inform the user that no QA testing was performed and ask how to proceed.
 - All FAIL items have follow-up issues created → **Terminate**
 - Any FAIL items without follow-up issues → **Iterate**
 

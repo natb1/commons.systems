@@ -10,6 +10,7 @@ set -euo pipefail
 # Exit 0 with no output if no changed apps have hosting targets.
 
 PR_NUM="${1:?Usage: get-pr-prod-urls.sh <pr-number>}"
+[[ "$PR_NUM" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: PR number must be a positive integer: $PR_NUM" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT=$(git rev-parse --show-toplevel)
@@ -26,13 +27,15 @@ if [ -z "$CHANGED" ]; then
   exit 0
 fi
 
-DIRTY_APPS=$(printf '%s\n' "$CHANGED" | resolve_dirty_apps "$REPO_ROOT")
+if ! DIRTY_APPS=$(printf '%s\n' "$CHANGED" | resolve_dirty_apps "$REPO_ROOT"); then
+  echo "ERROR: failed to resolve changed apps for PR #$PR_NUM" >&2
+  exit 1
+fi
 
 if [ -z "$DIRTY_APPS" ]; then
   exit 0
 fi
 
-# Output only apps with hosting targets, with their production URLs
 while IFS= read -r app; do
   [ -z "$app" ] && continue
   if SITE=$(get_hosting_site "$REPO_ROOT" "$app"); then

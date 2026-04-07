@@ -41,4 +41,11 @@ if [ -z "$CHANGED" ]; then
   exit 0
 fi
 
-printf '%s\n' "$CHANGED" | resolve_dirty_apps "$REPO_ROOT" | sort
+if ! DIRTY_APPS=$(printf '%s\n' "$CHANGED" | resolve_dirty_apps "$REPO_ROOT"); then
+  echo "ERROR: failed to resolve changed apps (base: $BASE)" >&2
+  exit 1
+fi
+
+if [ -n "$DIRTY_APPS" ]; then
+  printf '%s\n' "$DIRTY_APPS" | sort
+fi

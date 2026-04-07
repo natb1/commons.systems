@@ -207,7 +207,7 @@ kill_tree() {
 # Outputs dirty app names to stdout, one per line (unsorted).
 # Args: $1 = repo root
 resolve_dirty_apps() {
-  local repo_root="$1"
+  local repo_root="${1:?resolve_dirty_apps requires a repo root argument}"
 
   # Discover all workspaces from root package.json
   declare -A all_apps
