@@ -4,8 +4,11 @@ set -euo pipefail
 STATE_DIR="$HOME/.local/share/productivity-tui"
 STATE_FILE="$STATE_DIR/sessions.json"
 
-SESSION_ID="${CLAUDE_SESSION_ID:?CLAUDE_SESSION_ID not set}"
-WORK_DIR="${PWD}"
+HOOK_INPUT="$(cat)"
+SESSION_ID="$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id')"
+[ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "null" ] || { echo "session_id not found in hook input" >&2; exit 1; }
+WORK_DIR="$(printf '%s' "$HOOK_INPUT" | jq -r '.cwd // empty')"
+WORK_DIR="${WORK_DIR:-$PWD}"
 
 mkdir -p "$STATE_DIR"
 [ -f "$STATE_FILE" ] || echo '{}' > "$STATE_FILE"

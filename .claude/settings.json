@@ -108,6 +108,14 @@
     ],
     "SessionStart": [
       {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/productivity-tui/hooks/on-idle.sh"
+          }
+        ]
+      },
+      {
         "matcher": "compact",
         "hooks": [
           {
