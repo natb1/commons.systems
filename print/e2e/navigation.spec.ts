@@ -59,6 +59,15 @@ test.describe("navigation", () => {
     await expect(page.locator(".viewer-spread-toggle")).toBeAttached();
   });
 
+  // Not tagged @smoke because preview deploys show 'Failed to load' -- the
+  // PDF download from Firebase Storage fails in the preview environment.
+  test("PDF text layer present on viewer page", async ({ page }) => {
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-position")).toContainText(/Page \d+/, { timeout: 15000 });
+    await expect(page.locator(".textLayer")).toBeAttached();
+  });
+
   test("search section present in viewer shell @smoke", async ({ page }) => {
     await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });

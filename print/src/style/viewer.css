@@ -54,12 +54,12 @@ body.viewer-active {
 
 .tap-zone-prev {
   left: 0;
-  width: 50%;
+  width: 20%;
 }
 
 .tap-zone-next {
   right: 0;
-  width: 50%;
+  width: 20%;
 }
 
 .viewer-canvas-wrap {
@@ -75,6 +75,55 @@ body.viewer-active {
   display: block;
   max-width: 100%;
   max-height: 100%;
+}
+
+/* PDF page wrapper: positions text layer over canvas */
+.pdf-page-wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* PDF text layer — transparent text positioned over canvas for select/copy and Ctrl+F */
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  -webkit-text-size-adjust: none;
+     -moz-text-size-adjust: none;
+          text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+}
+
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+}
+
+.textLayer span.markedContent {
+  top: 0;
+  height: 0;
+}
+
+.textLayer ::selection {
+  background: rgba(0, 0, 255, 0.25);
+}
+
+.textLayer br::selection {
+  background: transparent;
 }
 
 /* When zoomed, switch from centered fit-to-view to scrollable overflow layout */
@@ -120,7 +169,8 @@ body.viewer-active {
 }
 
 .viewer-canvas-wrap.spread-mode > canvas,
-.viewer-canvas-wrap.spread-mode > img {
+.viewer-canvas-wrap.spread-mode > img,
+.viewer-canvas-wrap.spread-mode > .pdf-page-wrapper {
   display: none;
 }
 
