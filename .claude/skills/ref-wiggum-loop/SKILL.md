@@ -18,6 +18,8 @@ Callers provide three instruction sets, plus one optional:
 
 Plan mode is mandatory at Steps 0 and 3, regardless of loop complexity.
 
+**Plan file rule:** When plan mode activates, the system message specifies the plan file path. Always write to that path — never create a different plan file or choose your own filename.
+
 ## State Persistence
 
 Before executing each step, update the issue body state with `wiggum_step` and `wiggum_step_label` set to the current step number and label via `.claude/skills/ref-pr-workflow/scripts/issue-state-write`. Include all existing state fields (`step`, `step_label`, `phase`, `active_skills`) alongside the updated wiggum fields.
@@ -30,7 +32,7 @@ Before executing each step, update the issue body state with `wiggum_step` and `
 
 ## Step 0. Initialize
 
-Enter plan mode. Write a complete new plan from scratch — do not edit or patch any existing plan file. The plan must include all instruction sets: next step, evaluation, termination, and progress report (if provided).
+Enter plan mode. When plan mode activates, a system message specifies the plan file path — always write to that file. Write a complete new plan from scratch (do not patch or append to prior plan content). The plan must include all instruction sets: next step, evaluation, termination, and progress report (if provided).
 
 Before exiting plan mode, update issue state to advance `wiggum_step` to 1:
 
@@ -62,7 +64,7 @@ Determine outcome:
 
 User responses and finding classifications from Step 2 are inputs to plan mode — not authorization to skip it. Implement nothing until plan mode is complete.
 
-Enter plan mode. Plan must include:
+Enter plan mode. Write the plan to the file path specified in the plan mode system message. Plan must include:
 - Findings from Step 2 (retrieved from persistent storage if needed, e.g., the progress report written in Step 2)
 - Steps to address the findings
 - Commit instructions (commit after work is done)
@@ -79,7 +81,7 @@ Execute plan, then immediately return to Step 0 without stopping. (Step 0, not S
 
 ## Step 4. Terminate
 
-**If termination instructions include implementation work** (code changes, file edits), enter plan mode first. Plan must include:
+**If termination instructions include implementation work** (code changes, file edits), enter plan mode first. Write the plan to the file path specified in the plan mode system message. Plan must include:
 - Findings to implement (from the evaluation written in Step 2)
 - Steps to address each finding
 - Commit instructions
