@@ -15,7 +15,7 @@ Five personas analyze project state independently, synthesize priorities, debate
 | Marketing | Discoverability, distribution, brand, competitive positioning | Yes |
 | Engineering | Technical health, workflow sustainability, forkability | Yes |
 | Finance | Cost sustainability, dependency economics, monetization | Yes |
-| Auditor | Charter compliance, dependency health, ratchet risk | No (findings/warnings only) |
+| Auditor | Charter compliance, dependency health, ratchet risk | No (findings/warnings that can veto priorities) |
 
 ## Phase 1: Gather Context
 
@@ -51,7 +51,7 @@ Wait for all 5 to complete. Store each agent's output.
 
 ## Phase 3: Synthesize
 
-Process outputs in this order (synthesis hierarchy):
+Process outputs in this order (synthesis hierarchy). Before synthesizing, verify each agent produced valid output in the expected format. If any agent output is missing, empty, or does not contain the required sections, note this explicitly in the synthesis and adjust the merging weights accordingly.
 
 1. **Auditor first.** Read the Auditor output. Extract all findings and warnings. Any Critical-severity finding can veto a priority.
 2. **Flag conflicts.** Identify where auditor warnings contradict priorities from other personas. Document each conflict.
@@ -59,7 +59,7 @@ Process outputs in this order (synthesis hierarchy):
    - Items appearing in 3+ lists rank highest
    - Items appearing in 2 lists rank by combined scores
    - Items in 1 list rank by that persona's score, discounted
-   - Auditor warnings adjust rankings: Critical finding demotes to bottom, Warning adds a note
+   - Auditor warnings adjust rankings: Critical finding vetoes the priority (removes from list), Warning adds a note
 4. **Produce unified synthesis.** For each priority in the merged list:
    - Which personas advocated for it and why
    - Which personas opposed or didn't mention it

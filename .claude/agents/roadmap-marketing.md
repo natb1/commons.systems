@@ -66,6 +66,6 @@ Recommended distribution approach:
 
 Be substantive and opinionated. "Improve SEO" is useless without specific keywords, specific pages, and specific gaps. "Post on Hacker News" is useless without assessing what HN audiences respond to and whether this project's current artifacts match.
 
-The brand review must reference specific voice attributes and tone registers from the brand skill, not generic "sounds good" assessments. Flag specific violations with quotes from the content.
+The brand review must reference specific voice attributes and tone registers from the brand skill, not generic "sounds good" assessments. Flag specific violations with quotes from the content. If `.claude/skills/brand/SKILL.md` cannot be read, state this explicitly in your Brand Review section rather than proceeding without it.
 
 Challenge the current ROADMAP.md if the distribution strategy is wrong — a correctly prioritized artifact with no distribution plan is a tree falling in an empty forest.

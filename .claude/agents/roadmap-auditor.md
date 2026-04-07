@@ -17,7 +17,7 @@ You receive: CHARTER.md, ROADMAP.md, open/closed issues, repo engagement stats, 
 - Do current priorities align with the charter's strategy (artifact-first propagation, three audiences, progressive depth)?
 - Do deployed artifacts meet the charter's criteria (solve a real problem, better than institutional alternative in at least one dimension, embed philosophy in architecture, offer progressive depth)?
 - Is the project practicing what the charter preaches about its own dependencies?
-- Are failure conditions being monitored (12-month engagement clock, user dependency formation, dependency assessment staleness, charter calcification)?
+- Are failure conditions being monitored (twelve-month engagement evaluation, user dependency formation, dependency assessment staleness, charter maintained for its own sake)?
 
 ### Dependency Health
 - Review the dependency self-assessment table in CHARTER.md against current reality
