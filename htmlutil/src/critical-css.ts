@@ -27,7 +27,14 @@ export async function inlineCriticalCss(distDir: string): Promise<number> {
 
   for (const file of htmlFiles) {
     const html = await readFile(file, "utf-8");
-    let inlined = await critters.process(html);
+    let inlined: string;
+    try {
+      inlined = await critters.process(html);
+    } catch (err) {
+      throw new Error(`Failed to process critical CSS for ${file}`, {
+        cause: err,
+      });
+    }
     // Critters copies the deferred link (media="print" onload=...) into <noscript>,
     // but no-JS users need a plain blocking <link> to get any styles at all.
     inlined = inlined.replace(

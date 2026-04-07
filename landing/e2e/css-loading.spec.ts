@@ -20,8 +20,8 @@ test.describe("CSS loading", () => {
       `background-color returned unexpected format: "${bg}"`,
     ).not.toBeNull();
     expect(match!.length).toBeGreaterThanOrEqual(3);
-    // Landing forces color-scheme: dark, so --bg resolves to #1a1714 (≈ rgb(26, 23, 20)).
-    // All channels should be below 80 to confirm the dark background is applied.
+    // Landing uses color-scheme: dark. All RGB channels should be low
+    // to confirm the dark background rendered before full stylesheets loaded.
     expect(match![0]).toBeLessThan(80);
     expect(match![1]).toBeLessThan(80);
     expect(match![2]).toBeLessThan(80);
