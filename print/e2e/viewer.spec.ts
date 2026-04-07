@@ -615,4 +615,64 @@ test.describe("viewer", () => {
     await page.keyboard.press("ArrowLeft");
     await expect(page.locator(".viewer-position")).toContainText(/Pages 2\u20133 \/ 5/)
   });
+
+  test("PDF text layer renders with selectable text spans", async ({
+    page,
+  }) => {
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".textLayer")).toBeVisible();
+    const spanCount = await page.locator(".textLayer span").count();
+    expect(spanCount).toBeGreaterThan(0);
+  });
+
+  test("PDF text layer updates on page navigation", async ({ page }) => {
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".textLayer")).toBeVisible({ timeout: 15000 });
+
+    // Capture text content on page 1
+    const page1Text = await page.locator(".textLayer").textContent();
+
+    // Navigate to page 2
+    await page.locator(".viewer-next").click();
+    await expect(page.locator(".viewer-position")).toContainText("2 / 3");
+
+    // Text layer content should differ on page 2
+    const page2Text = await page.locator(".textLayer").textContent();
+    expect(page2Text).not.toBe(page1Text);
+  });
+
+  test("tap zones narrowed to edges in collapsed mode", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "mobile only");
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+
+    // Collapse panel
+    await page.locator(".viewer-panel-toggle").click();
+    await expect(page.locator(".viewer-panel-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+
+    const prevBox = await page.locator(".tap-zone-prev").boundingBox();
+    const nextBox = await page.locator(".tap-zone-next").boundingBox();
+    const containerBox = await page.locator(".viewer-content").boundingBox();
+
+    expect(prevBox).not.toBeNull();
+    expect(nextBox).not.toBeNull();
+    expect(containerBox).not.toBeNull();
+
+    const expectedWidth = containerBox!.width * 0.2;
+    const tolerance = containerBox!.width * 0.05;
+    expect(Math.abs(prevBox!.width - expectedWidth)).toBeLessThan(tolerance);
+    expect(Math.abs(nextBox!.width - expectedWidth)).toBeLessThan(tolerance);
+  });
+
+  test("text layer not present for image archive", async ({ page }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".textLayer")).not.toBeAttached();
+  });
 });
