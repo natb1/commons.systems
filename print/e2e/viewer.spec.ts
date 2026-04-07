@@ -673,4 +673,10 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".textLayer")).not.toBeAttached();
   });
+
+  test("search section is hidden for image archive viewer", async ({ page }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-search")).toHaveClass(/search-hidden/);
+  });
 });
