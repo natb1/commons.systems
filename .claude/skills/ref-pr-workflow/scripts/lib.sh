@@ -202,9 +202,82 @@ kill_tree() {
   done
 }
 
+# Resolve which apps are affected by a set of changed files.
+# Reads changed file paths from stdin, one per line.
+# Outputs dirty app names to stdout, one per line (unsorted).
+# Args: $1 = repo root
+resolve_dirty_apps() {
+  local repo_root="${1:?resolve_dirty_apps requires a repo root argument}"
+
+  # Discover all workspaces from root package.json
+  declare -A all_apps
+  local workspace_list
+  if ! workspace_list=$(jq -r '.workspaces[]' "$repo_root/package.json"); then
+    echo "ERROR: failed to read workspaces from $repo_root/package.json" >&2
+    return 1
+  fi
+
+  while IFS= read -r ws; do
+    [ -z "$ws" ] && continue
+    all_apps["$ws"]=1
+  done <<< "$workspace_list"
+
+  if [ ${#all_apps[@]} -eq 0 ]; then
+    echo "ERROR: no workspaces found in $repo_root/package.json" >&2
+    return 1
+  fi
+
+  # Build reverse dependency map: shared package -> consuming apps
+  declare -A shared_pkgs
+  local app pkg dep_list dep_dir
+  for app in "${!all_apps[@]}"; do
+    pkg="$repo_root/$app/package.json"
+    if ! dep_list=$(jq -r '(.dependencies // {}) + (.devDependencies // {}) + (.peerDependencies // {}) | keys[] | select(startswith("@commons-systems/")) | sub("@commons-systems/"; "")' "$pkg"); then
+      echo "ERROR: failed to read dependencies from $pkg" >&2
+      return 1
+    fi
+    while IFS= read -r dep_dir; do
+      [ -z "$dep_dir" ] && continue
+      shared_pkgs["$dep_dir"]+="$app "
+    done <<< "$dep_list"
+  done
+
+  declare -A dirty_apps
+  local file top_dir
+
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    top_dir="${file%%/*}"
+    case "$file" in
+      firebase.json|firestore.rules|storage.rules|package.json|package-lock.json)
+        # Root-level config changes affect all workspaces
+        for app in "${!all_apps[@]}"; do
+          dirty_apps["$app"]=1
+        done
+        ;;
+      *)
+        # Check if this is a shared package change
+        if [ -n "${shared_pkgs[$top_dir]+x}" ]; then
+          for app in ${shared_pkgs[$top_dir]}; do
+            dirty_apps["$app"]=1
+          done
+        fi
+        # Check if this is a direct app change
+        if [ -n "${all_apps[$top_dir]+x}" ]; then
+          dirty_apps["$top_dir"]=1
+        fi
+        ;;
+    esac
+  done
+
+  for app in "${!dirty_apps[@]}"; do
+    echo "$app"
+  done
+}
+
 # Print the hosting site ID for an app from .firebaserc deploy targets.
 # Returns code 1 (with stderr message) if no hosting target is found.
-# Args: $1 = repo root, $2 = app name (e.g. "hello")
+# Args: $1 = repo root, $2 = app name (e.g. "budget")
 get_hosting_site() {
   local repo_root="$1"
   local app_name="$2"

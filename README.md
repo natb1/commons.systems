@@ -56,6 +56,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 | 10 | Security Review | Delegated + QC | [ref-security](.claude/skills/ref-security/SKILL.md) | |
 | 11 | Final PR Checks | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) | |
 | 12 | Merge | Augmented | [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) | [continuous deployment](.claude/skills/ref-pr-workflow/run-prod-deploy.sh) |
+| 13 | Production QA | Augmented | [ref-prod-qa](.claude/skills/ref-prod-qa/SKILL.md) | [browser demo](https://code.claude.com/docs/en/mcp) |
 
 **Agent patterns:** *Augmented* = human-in-the-loop, Claude assists. *Delegated* = Claude drives autonomously. *QC* = human quality gate before proceeding.
 
@@ -73,7 +74,8 @@ recovery hook         dispatch table,   ├──>  ref-create-pr     (Step 5)
                                         ├──>  ref-code-quality  (Step 9)
                                         ├──>  ref-security      (Step 10)
                                         ├──>  ref-pr-check      (Step 11, fork)
-                                        └──>  (inline Step 12)
+                                        ├──>  (inline Step 12)
+                                        └──>  ref-prod-qa       (Step 13)
 ```
 
 #### Control Flow with Fork Boundaries
@@ -93,6 +95,7 @@ Step 9: Code Quality Review ─────────────────�
 Step 10: Security Review ───────────────────────────────────── wiggum-loop
                                       Step 11: Final PR Checks ──── verify loop
 Step 12: Mark Ready + Merge
+Step 13: Production QA ─────────────────────────────────────── wiggum-loop
 ```
 
 #### State Persistence
@@ -101,7 +104,7 @@ Workflow state is stored as JSON in the GitHub issue body via `issue-state-write
 
 #### Wiggum-Loop Pattern
 
-Six of twelve steps use the [wiggum-loop](.claude/skills/ref-wiggum-loop/SKILL.md) pattern: an evaluate-iterate-terminate cycle where each iteration runs the step's action, evaluates the result, and either iterates (fix + retry) or terminates (advance to next step). Progress reports and termination summaries are posted as PR comments.
+Seven of thirteen steps use the [wiggum-loop](.claude/skills/ref-wiggum-loop/SKILL.md) pattern: an evaluate-iterate-terminate cycle where each iteration runs the step's action, evaluates the result, and either iterates (fix + retry) or terminates (advance to next step). Progress reports and termination summaries are posted as PR comments.
 
 ## CI/CD
 
@@ -121,10 +124,10 @@ Four consolidated workflows handle all CI/CD. Change detection determines which 
 `get-changed-apps.sh` determines which apps are affected by a change:
 
 - **Direct changes** to `<app>/**` mark that app
-- **Shared package changes** (e.g. `authutil/`) scan every app's `package.json` for `file:` references to the changed package and mark all matches
-- **Global triggers** (`firebase.json`, `firestore.rules`, CI scripts) mark all apps
+- **Shared package changes** (e.g. `authutil/`) scan every app's `package.json` for `@commons-systems/` dependencies referencing the changed package and mark all matches
+- **Global triggers** (`firebase.json`, `firestore.rules`, `storage.rules`, `package.json`, `package-lock.json`) mark all apps
 
-An "app" is any top-level directory containing both `package.json` and `package-lock.json`.
+An "app" is any workspace listed in the root `package.json` `workspaces` array.
 
 ### Script call chain
 

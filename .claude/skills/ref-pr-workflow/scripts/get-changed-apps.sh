@@ -7,7 +7,11 @@ set -euo pipefail
 # Usage: get-changed-apps.sh [--base <ref>]
 #   --base <ref>  Override comparison base (default: origin/main)
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
 
 BASE=""
 while [[ $# -gt 0 ]]; do
@@ -24,7 +28,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Determine changed files
 if [ -z "$BASE" ]; then
   BASE="origin/main"
 fi
@@ -34,70 +37,15 @@ if ! CHANGED=$(git diff --name-only "$BASE"...HEAD); then
   exit 1
 fi
 
-# Discover all apps from workspace list in root package.json
-declare -A ALL_APPS
-if ! workspace_list=$(jq -r '.workspaces[]' "$REPO_ROOT/package.json"); then
-  echo "ERROR: failed to read workspaces from $REPO_ROOT/package.json" >&2
-  exit 1
-fi
-
-while IFS= read -r ws; do
-  [ -z "$ws" ] && continue
-  ALL_APPS["$ws"]=1
-done <<< "$workspace_list"
-
-if [ ${#ALL_APPS[@]} -eq 0 ]; then
-  echo "ERROR: no workspaces found in $REPO_ROOT/package.json" >&2
-  exit 1
-fi
-
-# No changed files — nothing to output
 if [ -z "$CHANGED" ]; then
   exit 0
 fi
 
-# Build a reverse dependency map: workspace → apps that depend on it.
-# Changes to a dependency workspace mark all its consumers as changed.
-declare -A SHARED_PKGS
-for app in "${!ALL_APPS[@]}"; do
-  pkg="$REPO_ROOT/$app/package.json"
-  if ! dep_list=$(jq -r '(.dependencies // {}) + (.devDependencies // {}) + (.peerDependencies // {}) | keys[] | select(startswith("@commons-systems/")) | sub("@commons-systems/"; "")' "$pkg"); then
-    echo "ERROR: failed to read dependencies from $pkg" >&2
-    exit 1
-  fi
-  while IFS= read -r dep_dir; do
-    [ -z "$dep_dir" ] && continue
-    SHARED_PKGS["$dep_dir"]+="$app "
-  done <<< "$dep_list"
-done
+if ! DIRTY_APPS=$(printf '%s\n' "$CHANGED" | resolve_dirty_apps "$REPO_ROOT"); then
+  echo "ERROR: failed to resolve changed apps (base: $BASE)" >&2
+  exit 1
+fi
 
-declare -A DIRTY_APPS
-
-while IFS= read -r file; do
-  [ -z "$file" ] && continue
-  top_dir="${file%%/*}"
-  case "$file" in
-    firebase.json|firestore.rules|storage.rules|package.json|package-lock.json)
-      # Global triggers: root dependency changes affect all workspace resolution
-      for app in "${!ALL_APPS[@]}"; do
-        DIRTY_APPS["$app"]=1
-      done
-      ;;
-    *)
-      # Check if this is a shared package change
-      if [ -n "${SHARED_PKGS[$top_dir]+x}" ]; then
-        for app in ${SHARED_PKGS[$top_dir]}; do
-          DIRTY_APPS["$app"]=1
-        done
-      fi
-      # Check if this is a direct app change
-      if [ -n "${ALL_APPS[$top_dir]+x}" ]; then
-        DIRTY_APPS["$top_dir"]=1
-      fi
-      ;;
-  esac
-done <<< "$CHANGED"
-
-for app in "${!DIRTY_APPS[@]}"; do
-  echo "$app"
-done | sort
+if [ -n "$DIRTY_APPS" ]; then
+  printf '%s\n' "$DIRTY_APPS" | sort
+fi
