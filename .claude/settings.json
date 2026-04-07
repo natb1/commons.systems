@@ -22,6 +22,7 @@
       "Skill(roadmap-debate)",
       "Skill(wiggum-loop)",
       "Skill(worktree)",
+      "Bash(cat:*)",
       "Bash(echo:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
@@ -137,12 +138,13 @@
       }
     ]
   },
+  "enabledPlugins": {
+    "security-guidance@claude-plugins-official": true,
+    "marketing@knowledge-work-plugins": false
+  },
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true
   },
-  "showClearContextOnPlanAccept": true,
-  "enabledPlugins": {
-    "security-guidance@claude-plugins-official": true
-  }
+  "showClearContextOnPlanAccept": true
 }
