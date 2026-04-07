@@ -8,7 +8,7 @@ test.describe("meta description", () => {
       const meta = document.querySelector('meta[name="description"]');
       return meta?.getAttribute("content") ?? null;
     });
-    expect(description, 'meta[name="description"] missing or has no content').not.toBeNull();
+    expect(description, 'meta[name="description"] tag or content attribute missing').not.toBeNull();
     expect(description!.length, 'meta[name="description"] content is empty').toBeGreaterThan(0);
   });
 });
