@@ -164,6 +164,12 @@ describe("renderViewerShell", () => {
     expect(html).not.toContain('class="viewer-tag"');
   });
 
+  it("contains .viewer-search with search-hidden class", () => {
+    const html = renderViewerShell(makeMediaItem());
+
+    expect(html).toContain('class="viewer-search search-hidden"');
+  });
+
   it("escapes HTML in title", () => {
     const html = renderViewerShell(
       makeMediaItem({ title: "<script>alert(1)</script>" }),
@@ -394,6 +400,36 @@ describe("initViewer", () => {
     expect(prevBtn.disabled).toBe(true);
     expect(nextBtn.disabled).toBe(true);
     expect(globalThis.reportError).toHaveBeenCalled();
+  });
+
+  it("arrow keys do not trigger page navigation when search input is focused", async () => {
+    const renderer = makeMockRenderer({
+      search: vi.fn().mockResolvedValue([]),
+      goToResult: vi.fn().mockResolvedValue(undefined),
+      clearSearch: vi.fn(),
+    });
+
+    initViewer(outlet, () => renderer, () => Promise.resolve("https://example.com/doc.pdf"), "m1", null);
+    await flushInit();
+
+    // Focus the search input
+    const searchInput = outlet.querySelector(".viewer-search-input") as HTMLInputElement;
+    searchInput.focus();
+
+    // Dispatch arrow key events with the search input as target
+    const rightEvent = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true });
+    Object.defineProperty(rightEvent, "target", { value: searchInput });
+    document.dispatchEvent(rightEvent);
+    await flushInit();
+
+    const leftEvent = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true });
+    Object.defineProperty(leftEvent, "target", { value: searchInput });
+    document.dispatchEvent(leftEvent);
+    await flushInit();
+
+    // renderer.next and renderer.prev should not have been called
+    expect(renderer.next).not.toHaveBeenCalled();
+    expect(renderer.prev).not.toHaveBeenCalled();
   });
 
   it("Firestore read failure falls back to localStorage for saves", async () => {

@@ -1,3 +1,16 @@
+export interface SearchResult {
+  /** Opaque location token understood by the renderer (page number string, EPUB CFI, etc.) */
+  location: string;
+  /** Human-readable label ("Page 42", "Ch. 3") */
+  label: string;
+  /** Text snippet around the match */
+  snippet: string;
+  /** Character offset of match start within snippet */
+  matchStart: number;
+  /** Character length of the match within snippet */
+  matchLength: number;
+}
+
 export interface ContentRenderer {
   init(container: HTMLElement, source: string | ArrayBuffer, initialPosition?: string): Promise<void>;
   goToPage(page: number): Promise<void>;
@@ -16,6 +29,9 @@ export interface ContentRenderer {
   resetZoom?(): void;
   readonly isZoomed?: boolean;
   onZoomChange?: () => void;
+  search?(query: string): Promise<SearchResult[]>;
+  goToResult?(result: SearchResult): Promise<void>;
+  clearSearch?(): void;
   destroy(): void;
 }
 

@@ -615,4 +615,10 @@ test.describe("viewer", () => {
     await page.keyboard.press("ArrowLeft");
     await expect(page.locator(".viewer-position")).toContainText(/Pages 2\u20133 \/ 5/)
   });
+
+  test("search section is hidden for image archive viewer", async ({ page }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-search")).toHaveClass(/search-hidden/);
+  });
 });
