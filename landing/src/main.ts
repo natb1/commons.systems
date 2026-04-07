@@ -1,6 +1,6 @@
 import "missing.css";
 import "./style/theme.css";
-import type { User } from "firebase/auth";
+import type { User } from "./auth.js";
 
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -22,7 +22,7 @@ import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { INFO_PANEL_LINK_SECTIONS } from "./site-config.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
-import { db, NAMESPACE, trackPageView } from "./firebase.js";
+import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -168,4 +168,28 @@ onAuthStateChanged((user) => {
     if (deferProgrammerError(err)) return;
     logError(err, { operation: "auth-change-refresh" });
   });
+}).catch((err) => {
+  if (deferProgrammerError(err)) return;
+  logError(err, { operation: "auth-init" });
 });
+
+// Defer App Check / reCAPTCHA initialization until first user interaction to keep the
+// large reCAPTCHA script completely off the critical path.
+const deferredAppCheckInit = async () => {
+  if (!initAppCheck) return;
+  await initAppCheck();
+};
+
+const INTERACTION_EVENTS = ["scroll", "click", "touchstart", "keydown"] as const;
+const triggerOnce = () => {
+  for (const evt of INTERACTION_EVENTS) {
+    window.removeEventListener(evt, triggerOnce);
+  }
+  deferredAppCheckInit().catch((err) => {
+    if (deferProgrammerError(err)) return;
+    logError(err, { operation: "deferred-appcheck-init" });
+  });
+};
+for (const evt of INTERACTION_EVENTS) {
+  window.addEventListener(evt, triggerOnce, { once: true, passive: true });
+}
