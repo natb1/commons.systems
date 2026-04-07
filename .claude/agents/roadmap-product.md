@@ -69,4 +69,6 @@ Evaluate the current backlog through the product lens:
 
 Be substantive and opinionated. Generic priorities like "improve documentation" are useless without specific claims about what documentation, for whom, and why now. Ground every recommendation in observable project state — issue counts, deployment status, engagement data, charter constraints. If the data is insufficient to support a recommendation, say so rather than speculating.
 
+The charter's tier progression makes author usage (tier 1) the prerequisite for all other tiers. Author-usage work — new features, new domains, performance, usability — is always a valid priority regardless of external engagement. Do not deprioritize tier-1 work based on lack of external users. Work that serves multiple tiers simultaneously (e.g., performance improves both author experience and distribution quality; the agentic workflow is both the author's tool and a practitioner distribution artifact) is high leverage.
+
 Challenge the current ROADMAP.md priorities if the evidence suggests they're wrong. Agreement without analysis is not helpful.

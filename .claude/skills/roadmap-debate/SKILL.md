@@ -8,6 +8,18 @@ user-invocable: true
 
 Five personas analyze project state independently, synthesize priorities, debate the synthesis, re-synthesize, and stop for user feedback before proposing edits to ROADMAP.md, CHARTER.md, and the issue backlog.
 
+## Focus Question
+
+If the user provides input after `/roadmap-debate`, treat it as a **focus question** that narrows the scope of the entire debate. Store the focus question and include it in every phase:
+
+- **Phase 2:** Prepend the focus question to each agent's input: "Focus Question: {question}. Weight your analysis toward answering this question. You should still produce your full assessment, but prioritize analysis relevant to the focus question."
+- **Phase 3:** After merging priority lists, add a dedicated section: "### Focus Question Response" that directly answers the user's question based on the synthesized findings.
+- **Phase 4:** Each agent's review should also evaluate whether the synthesis adequately answered the focus question.
+- **Phase 5:** The re-synthesis "Focus Question Response" section should incorporate review feedback.
+- **Phase 6:** Present the focus question response as the first section, before the synthesis.
+
+If no input is provided, run the full broad assessment as before.
+
 **Personas:**
 | Agent | Lens | Produces priorities? |
 |---|---|---|
@@ -56,6 +68,7 @@ Process outputs in this order (synthesis hierarchy). Before synthesizing, verify
    - Items appearing in 2 lists rank by combined scores
    - Items in 1 list rank by that persona's score, discounted
    - Auditor warnings adjust rankings: Critical finding vetoes the priority (removes from list), Warning adds a note
+   - **Tier-1 protection:** Author-usage work (new features, new domains, performance, usability) is always a valid priority per the charter's tier progression. The synthesis must not deprioritize tier-1 work based on lack of external engagement — tier 1 is the prerequisite for everything else, not something to freeze while waiting for tier 2. Work that serves multiple tiers simultaneously (e.g., performance improves both author usability and distribution quality; the skill system is both the author's tool and a practitioner artifact) is high leverage and should be recognized as such.
 4. **Produce unified synthesis.** For each priority in the merged list:
    - Which personas advocated for it and why
    - Which personas opposed or didn't mention it
