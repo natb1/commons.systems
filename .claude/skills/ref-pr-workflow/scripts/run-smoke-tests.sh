@@ -20,22 +20,15 @@ echo "Waiting for preview to become available at $BASE_URL..."
 READY=false
 TMPHTML=$(mktemp)
 trap 'rm -f "$TMPHTML"' EXIT
-for i in $(seq 1 60); do
+for i in $(seq 1 30); do
   STATUS=$(curl -s -o "$TMPHTML" -w '%{http_code}' "$BASE_URL")
-  if [[ "$STATUS" != "200" ]]; then
-    echo "  [$i] HTTP $STATUS (waiting for 200)..."
-  elif grep -q '<script type="module"' "$TMPHTML"; then
+  if [[ "$STATUS" == "200" ]] && grep -q '<script type="module"' "$TMPHTML"; then
     echo "Preview is ready."
     READY=true
     break
-  else
-    echo "  [$i] HTTP 200 but missing script tag ($(wc -c < "$TMPHTML") bytes)"
-    if [ "$i" -le 3 ]; then
-      head -20 "$TMPHTML" >&2
-    fi
   fi
-  if [ "$i" -eq 60 ]; then
-    echo "ERROR: Preview at $BASE_URL did not serve expected content after 120s (last HTTP status: $STATUS)" >&2
+  if [ "$i" -eq 30 ]; then
+    echo "ERROR: Preview at $BASE_URL did not serve expected content after 60s (last HTTP status: $STATUS)" >&2
     head -20 "$TMPHTML" >&2
     exit 1
   fi
