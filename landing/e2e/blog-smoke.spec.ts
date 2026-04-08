@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // Smoke tests run against a deployed preview URL via run-smoke-tests.sh
-// (--grep @smoke). They verify essential SEO meta tags and that the
+// (--grep @smoke). They verify the meta description tag and that the
 // build-time blog content feature works end-to-end: post HTML is inlined
 // at build time so unauthenticated visitors see content without runtime
 // fetches to GitHub or Firestore.
