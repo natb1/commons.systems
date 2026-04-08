@@ -7,8 +7,13 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
-# Post-merge context: origin/main == HEAD, so use HEAD~1 as base
-CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" --base HEAD~1)
+# Post-merge context: origin/main == HEAD, so use HEAD~1 as base.
+# DEPLOY_ALL=1 deploys every app with a hosting target (for workflow_dispatch).
+if [ "${DEPLOY_ALL:-}" = "1" ]; then
+  CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" --all)
+else
+  CHANGED_APPS=$("$SCRIPT_DIR/get-changed-apps.sh" --base HEAD~1)
+fi
 
 ensure_deps
 

@@ -1,15 +1,30 @@
 name: Production Deploy
 
 on:
+  workflow_dispatch:
   pull_request:
     types: [closed]
+  push:
+    branches: [main]
+    paths-ignore:
+      - ".claude/**"
+      - ".github/**"
+      - "nix/**"
+      - "scaffolding/**"
+      - "rules-test/**"
+      - "*.md"
+      - "*.nix"
+      - "flake.lock"
 
 permissions:
   contents: read
 
 jobs:
   deploy-and-smoke:
-    if: github.event.pull_request.merged == true
+    if: >-
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
@@ -33,6 +48,7 @@ jobs:
           VITE_RECAPTCHA_SITE_KEY: ${{ secrets.RECAPTCHA_SITE_KEY }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DEPLOY_ALL: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
         run: .claude/skills/ref-pr-workflow/scripts/run-all-prod-deploy-smoke.sh
       - name: Cleanup credentials
         if: always()

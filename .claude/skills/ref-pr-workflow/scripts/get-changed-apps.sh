@@ -14,6 +14,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 source "$SCRIPT_DIR/lib.sh"
 
 BASE=""
+ALL=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base)
@@ -21,12 +22,22 @@ while [[ $# -gt 0 ]]; do
       BASE="$2"
       shift 2
       ;;
+    --all)
+      ALL=true
+      shift
+      ;;
     *)
-      echo "Usage: get-changed-apps.sh [--base <ref>]" >&2
+      echo "Usage: get-changed-apps.sh [--base <ref>] [--all]" >&2
       exit 1
       ;;
   esac
 done
+
+if [ "$ALL" = true ]; then
+  # Return every workspace — caller wants to deploy all apps
+  jq -r '.workspaces[]' "$REPO_ROOT/package.json" | sort
+  exit 0
+fi
 
 if [ -z "$BASE" ]; then
   BASE="origin/main"
