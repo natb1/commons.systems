@@ -5,6 +5,18 @@ export default defineConfig({
   testDir: ".", // resolves relative to the consuming config file's directory
   use: {
     baseURL: process.env.BASE_URL || "http://localhost:5173",
+    // Tag all Playwright traffic as internal so it can be filtered from GA4 reports.
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: process.env.BASE_URL || "http://localhost:5173",
+          localStorage: [
+            { name: "analytics_traffic_type", value: "internal" },
+          ],
+        },
+      ],
+    },
   },
   projects: [
     {

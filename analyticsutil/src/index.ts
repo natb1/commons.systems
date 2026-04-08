@@ -1,6 +1,33 @@
-import { initializeAnalytics, logEvent } from "firebase/analytics";
+import {
+  initializeAnalytics,
+  logEvent,
+  setUserProperties,
+} from "firebase/analytics";
 import type { FirebaseApp } from "firebase/app";
 import { classifyError } from "@commons-systems/errorutil/classify";
+
+const STORAGE_KEY = "analytics_traffic_type";
+const PARAM_KEY = "_ct";
+
+function applyTrafficTag(): string {
+  const url = new URL(window.location.href);
+  const param = url.searchParams.get(PARAM_KEY);
+
+  if (param === "internal") {
+    localStorage.setItem(STORAGE_KEY, "internal");
+  } else if (param === "clear") {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  if (param) {
+    url.searchParams.delete(PARAM_KEY);
+    history.replaceState(history.state, "", url.toString());
+  }
+
+  return localStorage.getItem(STORAGE_KEY) === "internal"
+    ? "internal"
+    : "organic";
+}
 
 export function initAnalyticsSafe(app: FirebaseApp): (path: string) => void {
   try {
@@ -24,10 +51,16 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
   if (!app.options.appId) {
     throw new Error("Analytics requires appId in Firebase config.");
   }
+
+  const trafficType = applyTrafficTag();
+
   // Disable automatic page views — the returned tracker fires them manually.
   const analytics = initializeAnalytics(app, {
     config: { send_page_view: false },
   });
+
+  setUserProperties(analytics, { traffic_type: trafficType });
+
   return (path: string) => {
     try {
       logEvent(analytics, "page_view", { page_path: path });

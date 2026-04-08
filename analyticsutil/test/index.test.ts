@@ -1,12 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { FirebaseApp } from "firebase/app";
 
 vi.mock("firebase/analytics", () => ({
   initializeAnalytics: vi.fn(() => ({ app: {} })),
   logEvent: vi.fn(),
+  setUserProperties: vi.fn(),
 }));
 
-import { initializeAnalytics, logEvent } from "firebase/analytics";
+import { initializeAnalytics, logEvent, setUserProperties } from "firebase/analytics";
 import { initAnalytics, initAnalyticsSafe } from "../src/index";
 
 // reportError is a browser API not available in Node — stub it so tests that
@@ -106,6 +107,101 @@ describe("initAnalytics", () => {
     const tracker = initAnalytics(app);
 
     expect(() => tracker("/about")).toThrow(TypeError);
+  });
+});
+
+describe("traffic tagging", () => {
+  const validApp = { options: { measurementId: "G-TEST", appId: "1:test:web:abc" } } as unknown as FirebaseApp;
+
+  function setLocation(url: string) {
+    Object.defineProperty(window, "location", {
+      value: new URL(url),
+      writable: true,
+      configurable: true,
+    });
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    setLocation("https://example.com/page");
+    vi.spyOn(history, "replaceState").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(history.replaceState).mockRestore();
+  });
+
+  it("sets localStorage and tags internal when ?_ct=internal", () => {
+    setLocation("https://example.com/page?_ct=internal");
+    initAnalytics(validApp);
+
+    expect(localStorage.getItem("analytics_traffic_type")).toBe("internal");
+    expect(setUserProperties).toHaveBeenCalledWith(expect.anything(), {
+      traffic_type: "internal",
+    });
+  });
+
+  it("strips _ct param from URL after processing", () => {
+    setLocation("https://example.com/page?_ct=internal&other=1");
+    initAnalytics(validApp);
+
+    expect(history.replaceState).toHaveBeenCalledWith(
+      null,
+      "",
+      "https://example.com/page?other=1",
+    );
+  });
+
+  it("removes localStorage and tags organic when ?_ct=clear", () => {
+    localStorage.setItem("analytics_traffic_type", "internal");
+    setLocation("https://example.com/page?_ct=clear");
+    initAnalytics(validApp);
+
+    expect(localStorage.getItem("analytics_traffic_type")).toBeNull();
+    expect(setUserProperties).toHaveBeenCalledWith(expect.anything(), {
+      traffic_type: "organic",
+    });
+  });
+
+  it("tags internal when localStorage flag exists and no param", () => {
+    localStorage.setItem("analytics_traffic_type", "internal");
+    initAnalytics(validApp);
+
+    expect(setUserProperties).toHaveBeenCalledWith(expect.anything(), {
+      traffic_type: "internal",
+    });
+  });
+
+  it("tags organic when no localStorage flag and no param", () => {
+    initAnalytics(validApp);
+
+    expect(setUserProperties).toHaveBeenCalledWith(expect.anything(), {
+      traffic_type: "organic",
+    });
+  });
+
+  it("skips traffic tagging when measurementId is absent", () => {
+    const app = { options: {} } as unknown as FirebaseApp;
+    const consoleDebugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    initAnalytics(app);
+
+    expect(setUserProperties).not.toHaveBeenCalled();
+    expect(localStorage.getItem("analytics_traffic_type")).toBeNull();
+    consoleDebugSpy.mockRestore();
+  });
+
+  it("calls setUserProperties before returning the tracker", () => {
+    const callOrder: string[] = [];
+    vi.mocked(setUserProperties).mockImplementation(() => {
+      callOrder.push("setUserProperties");
+    });
+    vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
+
+    const tracker = initAnalytics(validApp);
+    callOrder.push("tracker_returned");
+
+    expect(callOrder).toEqual(["setUserProperties", "tracker_returned"]);
+    expect(tracker).toBeTypeOf("function");
   });
 });
 
