@@ -15,6 +15,7 @@
     "./vite": "./vite.js",
     "./playwright": "./playwright.js",
     "./firebase-headers.test-helper": "./firebase-headers.test-helper.ts",
-    "./cache-headers-smoke": "./cache-headers-smoke.ts"
+    "./cache-headers-smoke": "./cache-headers-smoke.ts",
+    "./security-headers-smoke": "./security-headers-smoke.ts"
   }
 }
