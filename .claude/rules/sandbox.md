@@ -58,12 +58,11 @@ Use flags that accept a directory instead:
 - `npx vitest run --root print` (vitest `--root` flag)
 - For tests, deploys, QA: use the wrapper scripts which handle directory context
 
-### Avoid `git -C /path`
+### `git -C /path` is auto-approved for worktrees
 
-`git -C /path add` doesn't match rules like `Bash(git add:*)`.
-
-Ensure you are in the worktree directory before running git commands so they
-match existing `allowedTools` patterns.
+`git -C <path>` is auto-approved by the PreToolUse hook when the path resolves
+to a directory under the worktrees root and the git subcommand is permitted by
+`settings.json`. Paths outside the worktrees directory are rejected.
 
 ### Avoid inline env var prefixes
 
