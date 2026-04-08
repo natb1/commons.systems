@@ -155,35 +155,23 @@ git add <files> && git commit -m "..." && git push origin HEAD
 
 ## Phase 3: Final Verify (Step 11)
 
-Verify the latest CI run covers HEAD. If it does, monitor it; if not, skip to Terminate with a note that no new CI run was triggered.
+Wait for ALL PR checks to complete, then verify they all pass. Uses `gh pr checks` to cover every workflow (not just the most recent run).
 
 Iteration counter starts at 1.
 
 ### Execute
 
-Two-step discovery and validation. Use `dangerouslyDisableSandbox: true` for all commands.
-
-**Step 1 — Discover latest run:**
+Use `dangerouslyDisableSandbox: true`. Run in a background Task (`run_in_background: true`):
 ```bash
-gh run list --branch $(git rev-parse --abbrev-ref HEAD) --limit 1 --json databaseId,headSha
+.claude/skills/ref-pr-workflow/scripts/run-pr-checks-wait.sh <pr-number> --output tmp/final-verify-watch-<N>.txt
 ```
 
-If no runs exist (empty array), set `run_status` to `"no_run"` and skip to Evaluate.
-
-**Step 2 — Validate HEAD match:**
-
-Compare the returned `headSha` against `git rev-parse HEAD`.
-- Match → monitor the run in a background Task (`run_in_background: true`):
-  ```bash
-  .claude/skills/ref-pr-workflow/scripts/run-ci-watch.sh <databaseId> --output tmp/final-verify-watch-<N>.txt
-  ```
-- No match → the latest run predates HEAD (no new CI run was triggered by recent fixes). Set `run_status` to `"stale"` and skip to Evaluate.
+The script waits for all checks to complete, then exits 0 if all passed or non-zero if any failed. Output contains the status of every check.
 
 ### Evaluate
 
-- `run_status` is `"no_run"` or `"stale"` → go to Terminate (no CI run to verify; note in summary)
-- All pass → go to Terminate
-- Test failures → go to Iterate
+- Exit code 0, all pass → go to Terminate
+- Check failures → go to Iterate
 - Infrastructure failures → set status to `"needs_user"`, go to Return
 
 ### Progress Report

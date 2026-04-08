@@ -1,5 +1,7 @@
 import * as pdfjsLib from "pdfjs-dist";
-import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import { TextLayer } from "pdfjs-dist";
+import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
+import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils.js";
 import type { ContentRenderer } from "./types.js";
 import { parsePositionPage } from "./types.js";
 
@@ -11,17 +13,39 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   let _pageCount = 0;
   let canvas: HTMLCanvasElement | null = null;
   let container: HTMLElement | null = null;
+  let pageWrapper: HTMLDivElement | null = null;
+  let textLayerDiv: HTMLDivElement | null = null;
+  let activeTextLayer: TextLayer | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let renderTask: RenderTask | null = null;
   let destroyed = false;
-  const spreadRenderTasks: RenderTask[] = [];
+  interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; }
+  const spreadPages: SpreadPage[] = [];
+
+  interface CanvasRenderResult {
+    task: RenderTask;
+    cssViewport: PageViewport;
+    page: PDFPageProxy;
+  }
+
+  function createPageWrapper(): { wrapper: HTMLDivElement; canvas: HTMLCanvasElement; textLayerDiv: HTMLDivElement } {
+    const wrapper = document.createElement("div");
+    wrapper.className = "pdf-page-wrapper";
+    const canvas = document.createElement("canvas");
+    wrapper.appendChild(canvas);
+    const textLayerDiv = document.createElement("div");
+    textLayerDiv.className = "textLayer";
+    wrapper.appendChild(textLayerDiv);
+    return { wrapper, canvas, textLayerDiv };
+  }
 
   async function renderPageToCanvas(
     pageNum: number,
     targetCanvas: HTMLCanvasElement,
     containerRect: DOMRect,
-  ): Promise<RenderTask | null> {
+    wrapper?: HTMLDivElement,
+  ): Promise<CanvasRenderResult | null> {
     const page = await pdfDoc!.getPage(pageNum);
     if (destroyed) return null;
 
@@ -29,13 +53,21 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     const scaleX = containerRect.width / baseViewport.width;
     const scaleY = containerRect.height / baseViewport.height;
     const cssScale = Math.min(scaleX, scaleY);
+    // Two viewports: cssViewport positions text layer spans at CSS scale,
+    // while the canvas renders at devicePixelRatio for sharp output.
+    const cssViewport = page.getViewport({ scale: cssScale });
     const pixelScale = cssScale * window.devicePixelRatio;
     const viewport = page.getViewport({ scale: pixelScale });
 
     targetCanvas.width = viewport.width;
     targetCanvas.height = viewport.height;
-    targetCanvas.style.width = `${viewport.width / window.devicePixelRatio}px`;
-    targetCanvas.style.height = `${viewport.height / window.devicePixelRatio}px`;
+    targetCanvas.style.width = `${cssViewport.width}px`;
+    targetCanvas.style.height = `${cssViewport.height}px`;
+
+    if (wrapper) {
+      wrapper.style.width = `${cssViewport.width}px`;
+      wrapper.style.height = `${cssViewport.height}px`;
+    }
 
     const ctx = targetCanvas.getContext("2d");
     if (!ctx) throw new Error("Could not acquire 2D canvas context");
@@ -46,7 +78,26 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     } catch (e) {
       if ((e as Error).name !== "RenderingCancelledException") throw e;
     }
-    return task;
+    return { task, cssViewport, page };
+  }
+
+  async function renderTextLayer(
+    page: PDFPageProxy,
+    cssViewport: PageViewport,
+    targetDiv: HTMLDivElement,
+  ): Promise<TextLayer | null> {
+    if (destroyed) return null;
+    const textContent = await page.getTextContent();
+    if (destroyed) return null;
+
+    targetDiv.replaceChildren();
+    const tl = new TextLayer({
+      textContentSource: textContent,
+      container: targetDiv,
+      viewport: cssViewport,
+    });
+    await tl.render();
+    return tl;
   }
 
   async function renderPage(pageNum: number): Promise<void> {
@@ -56,17 +107,29 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
       renderTask.cancel();
       renderTask = null;
     }
+    if (activeTextLayer) {
+      activeTextLayer.cancel();
+      activeTextLayer = null;
+    }
 
     const containerRect = container.getBoundingClientRect();
     if (containerRect.width === 0 || containerRect.height === 0) return;
 
-    const task = await renderPageToCanvas(pageNum, canvas, containerRect);
-    if (task) renderTask = task;
+    const result = await renderPageToCanvas(pageNum, canvas, containerRect, pageWrapper ?? undefined);
+    if (!result) return;
+
+    renderTask = result.task;
+    if (textLayerDiv) {
+      activeTextLayer = await renderTextLayer(result.page, result.cssViewport, textLayerDiv);
+    }
   }
 
   function cancelSpreadRenderTasks(): void {
-    for (const task of spreadRenderTasks) task.cancel();
-    spreadRenderTasks.length = 0;
+    for (const sp of spreadPages) {
+      sp.renderTask.cancel();
+      if (sp.textLayer) sp.textLayer.cancel();
+    }
+    spreadPages.length = 0;
   }
 
   async function renderPageInto(pageNum: number, target: HTMLElement): Promise<void> {
@@ -75,18 +138,24 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     const targetRect = target.getBoundingClientRect();
     if (targetRect.width === 0 || targetRect.height === 0) return;
 
-    const c = document.createElement("canvas");
-    target.appendChild(c);
+    const { wrapper, canvas: c, textLayerDiv: tlDiv } = createPageWrapper();
+    target.appendChild(wrapper);
 
-    const task = await renderPageToCanvas(pageNum, c, targetRect);
-    if (task) spreadRenderTasks.push(task);
+    const result = await renderPageToCanvas(pageNum, c, targetRect, wrapper);
+    if (!result) return;
+
+    const tl = await renderTextLayer(result.page, result.cssViewport, tlDiv);
+    spreadPages.push({ renderTask: result.task, textLayer: tl });
   }
 
   return {
     async init(containerEl: HTMLElement, source: string | ArrayBuffer, initialPosition?: string): Promise<void> {
       container = containerEl;
-      canvas = document.createElement("canvas");
-      containerEl.appendChild(canvas);
+      const pw = createPageWrapper();
+      pageWrapper = pw.wrapper;
+      canvas = pw.canvas;
+      textLayerDiv = pw.textLayerDiv;
+      containerEl.appendChild(pageWrapper);
 
       const loadingTask = pdfjsLib.getDocument(source);
       const doc = await loadingTask.promise;
@@ -165,6 +234,10 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
         renderTask.cancel();
         renderTask = null;
       }
+      if (activeTextLayer) {
+        activeTextLayer.cancel();
+        activeTextLayer = null;
+      }
       cancelSpreadRenderTasks();
       if (resizeObserver) {
         resizeObserver.disconnect();
@@ -174,10 +247,12 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
         pdfDoc.destroy();
         pdfDoc = null;
       }
-      if (canvas) {
-        canvas.remove();
-        canvas = null;
+      if (pageWrapper) {
+        pageWrapper.remove();
+        pageWrapper = null;
       }
+      canvas = null;
+      textLayerDiv = null;
       container = null;
     },
   };

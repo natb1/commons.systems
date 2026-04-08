@@ -643,10 +643,10 @@ let
               "echo 'FAIL: ${platform.name} config missing user_vars.git_branch' && exit 1"
           }
           ${
-            if lib.hasInfix " | " luaConfig then
-              "echo 'PASS: ${platform.name} config uses branch | title separator'"
+            if lib.hasInfix " > " luaConfig then
+              "echo 'PASS: ${platform.name} config uses branch > title separator'"
             else
-              "echo 'FAIL: ${platform.name} config missing branch | title separator' && exit 1"
+              "echo 'FAIL: ${platform.name} config missing branch > title separator' && exit 1"
           }
         ''
       ) testPlatforms}
