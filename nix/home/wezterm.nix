@@ -100,6 +100,10 @@
       end
       config.ssh_domains = ssh_domains
 
+      config.keys = {
+        { key = '9', mods = 'CMD', action = wezterm.action.ActivateTabRelative(1) },
+      }
+
       wezterm.on('format-tab-title', function(tab)
         local index = tab.tab_index + 1
         local branch = tab.active_pane.user_vars.git_branch or ""

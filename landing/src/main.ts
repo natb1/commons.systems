@@ -1,6 +1,6 @@
 import "missing.css";
 import "./style/theme.css";
-import type { User } from "firebase/auth";
+import type { User } from "./auth.js";
 
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -19,10 +19,11 @@ import { initPanelToggle } from "@commons-systems/style/panel-toggle";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
-import { INFO_PANEL_LINK_SECTIONS } from "./site-config.js";
+import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS } from "./site-config.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
-import { db, NAMESPACE, trackPageView } from "./firebase.js";
+import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
+import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
@@ -112,7 +113,7 @@ const router = createHistoryRouter(
       afterRender: (outlet, path) => {
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
-        updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined);
+        updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, RSS_CONFIG.title, SITE_DEFAULTS);
         updateInfoPanel();
       },
     },
@@ -168,4 +169,9 @@ onAuthStateChanged((user) => {
     if (deferProgrammerError(err)) return;
     logError(err, { operation: "auth-change-refresh" });
   });
+}).catch((err) => {
+  if (deferProgrammerError(err)) return;
+  logError(err, { operation: "auth-init" });
 });
+
+deferAppCheckInit(initAppCheck);
