@@ -23,6 +23,10 @@
 
       # Per-system outputs
       systemOutputs = {
+        packages = forAllSystems ({ pkgs, ... }: {
+          productivity-tui = pkgs.callPackage ./nix/packages/productivity-tui.nix { };
+        });
+
         devShells = forAllSystems ({ pkgs, ... }: {
           default = pkgs.mkShell {
             packages = with pkgs; [

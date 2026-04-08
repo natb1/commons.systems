@@ -25,6 +25,7 @@ vi.mock("../src/firebase.js", () => ({
   db: { type: "mock-firestore" },
   NAMESPACE: "app/test",
   trackPageView: vi.fn(),
+  initAppCheck: vi.fn().mockResolvedValue(undefined),
 }));
 
 const mockGetMeta = vi.fn();
@@ -75,6 +76,7 @@ function resetAndMockAll(): void {
   }));
   vi.mock("../src/firebase.js", () => ({
     db: { type: "mock-firestore" }, NAMESPACE: "app/test", trackPageView: vi.fn(),
+    initAppCheck: vi.fn().mockResolvedValue(undefined),
   }));
   vi.mock("../src/idb.js", () => ({
     getMeta: mockGetMeta, storeParsedData: mockStoreParsedData, clearAll: mockClearAll,
@@ -122,6 +124,39 @@ describe("main module", () => {
     expect(mockGetMeta).toHaveBeenCalled();
     const heroContainer = document.getElementById("hero-container")!;
     expect(heroContainer.hidden).toBe(false);
+  });
+
+  it("does not call initAppCheck before user interaction", async () => {
+    mockGetMeta.mockResolvedValue(undefined);
+    resetAndMockAll();
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+
+    const { initAppCheck } = await import("../src/firebase.js");
+    expect(initAppCheck).not.toHaveBeenCalled();
+  });
+
+  it("calls initAppCheck on first user interaction", async () => {
+    mockGetMeta.mockResolvedValue(undefined);
+    resetAndMockAll();
+
+    await import("../src/main");
+    await new Promise(r => setTimeout(r, 0));
+
+    const { initAppCheck } = await import("../src/firebase.js");
+    const mock = initAppCheck as ReturnType<typeof vi.fn>;
+    const callsBefore = mock.mock.calls.length;
+
+    window.dispatchEvent(new Event("click"));
+    await new Promise(r => setTimeout(r, 0));
+    const callsAfterFirst = mock.mock.calls.length;
+    expect(callsAfterFirst).toBeGreaterThan(callsBefore);
+
+    // Second interaction should not add more calls (listener removed)
+    window.dispatchEvent(new Event("click"));
+    await new Promise(r => setTimeout(r, 0));
+    expect(mock.mock.calls.length).toBe(callsAfterFirst);
   });
 
   it("transitions to local state when meta exists — hero hidden", async () => {

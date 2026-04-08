@@ -19,8 +19,10 @@
       "Skill(ref-unit-test)",
       "Skill(ref-wiggum-loop)",
       "Skill(ref-write-instructions)",
+      "Skill(roadmap-debate)",
       "Skill(wiggum-loop)",
       "Skill(worktree)",
+      "Bash(cat:*)",
       "Bash(echo:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
@@ -48,6 +50,7 @@
       "Bash(gh run view:*)",
       "Bash(gh run watch:*)",
       "Bash(.claude/skills/ref-pr-workflow/scripts/run-ci-watch.sh:*)",
+      "Bash(.claude/skills/roadmap-debate/scripts/gather-context.sh:*)",
       "Bash(gh search:*)",
       "Bash(go build:*)",
       "Bash(go test:*)",
@@ -76,7 +79,45 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/productivity-tui/hooks/on-active.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/productivity-tui/hooks/on-idle.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/productivity-tui/hooks/on-close.sh"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/productivity-tui/hooks/on-idle.sh"
+          }
+        ]
+      },
       {
         "matcher": "compact",
         "hooks": [
@@ -97,12 +138,13 @@
       }
     ]
   },
+  "enabledPlugins": {
+    "security-guidance@claude-plugins-official": true,
+    "marketing@knowledge-work-plugins": false
+  },
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true
   },
-  "showClearContextOnPlanAccept": true,
-  "enabledPlugins": {
-    "security-guidance@claude-plugins-official": true
-  }
+  "showClearContextOnPlanAccept": true
 }
