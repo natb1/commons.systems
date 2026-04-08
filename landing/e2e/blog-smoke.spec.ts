@@ -1,9 +1,10 @@
 import { test, expect } from "@playwright/test";
 
 // Smoke tests run against a deployed preview URL via run-smoke-tests.sh
-// (--grep @smoke). They verify that the build-time blog content feature
-// works end-to-end: post HTML is inlined at build time so unauthenticated
-// visitors see content without runtime fetches to GitHub or Firestore.
+// (--grep @smoke). They verify essential SEO meta tags and that the
+// build-time blog content feature works end-to-end: post HTML is inlined
+// at build time so unauthenticated visitors see content without runtime
+// fetches to GitHub or Firestore.
 
 test.describe("blog smoke", () => {
   test("meta description is present @smoke", async ({ page }) => {
