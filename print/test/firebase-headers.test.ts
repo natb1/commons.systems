@@ -50,7 +50,7 @@ describe("print security headers", () => {
       "font-src 'self' https://fonts.gstatic.com",
       "connect-src 'self'",
       "frame-src 'self'",
-      "worker-src 'self' https://cdn.jsdelivr.net",
+      "worker-src 'self' blob: https://cdn.jsdelivr.net",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

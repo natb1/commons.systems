@@ -231,7 +231,7 @@
           "headers": [
             {
               "key": "Content-Security-Policy",
-              "value": "default-src 'none'; script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://mirrors.creativecommons.org https://www.google.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebasestorage.app; frame-src 'self' https://*.firebaseapp.com https://www.google.com https://apis.google.com; worker-src 'self' https://cdn.jsdelivr.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'"
+              "value": "default-src 'none'; script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://apis.google.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://mirrors.creativecommons.org https://www.google.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' blob: https://*.googleapis.com https://*.firebaseapp.com https://*.firebasestorage.app; frame-src 'self' blob: https://*.firebaseapp.com https://www.google.com https://apis.google.com; worker-src 'self' blob: https://cdn.jsdelivr.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'"
             },
             {
               "key": "Cross-Origin-Opener-Policy",
