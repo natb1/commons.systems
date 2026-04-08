@@ -9,10 +9,12 @@ Step 8. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 
 **Next step instructions:**
 - If implementation has a browser component (detect via `vite.config.*`, HTML templates, or frontend framework files):
-  1. Check if a QA server from a previous iteration is still running (look for the background task or a listening Vite port). If running, reuse its App URL. If not, start the QA server in background:
+  1. Check if a QA server from a previous iteration is still running (look for the background task or a listening Vite port). If running, reuse its App URL. If not, clean up stale processes and start the QA server in background:
      ```bash
+     .claude/skills/ref-pr-workflow/scripts/run-qa-cleanup.sh
      .claude/skills/ref-pr-workflow/scripts/run-qa-server.sh <app-dir>
      ```
+     Use `run-qa-cleanup.sh` any time you need to kill stale QA processes — never use broad `pkill` commands.
   2. Wait for the server to be ready:
      ```bash
      .claude/skills/ref-pr-workflow/scripts/wait-for-url.sh http://localhost:<port>
