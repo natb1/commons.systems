@@ -107,6 +107,21 @@ assert_approves \
   ".claude/skills/ref-pr-workflow/scripts/load-context 350 | tail -5"
 
 assert_approves \
+  "bare 2>&1 with no pipe" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-qa-cleanup.sh 2>&1"
+
+assert_approves \
+  "user-reported: qa-cleanup 2>&1 piped to tail" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-qa-cleanup.sh 2>&1 | tail -5"
+
+assert_approves \
+  "2>/dev/null stderr silence piped to tail" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-qa-cleanup.sh 2>/dev/null | tail -5"
+
+assert_approves \
   "pipe allowed command to allowed command" \
   "Bash" \
   "head -20 file.txt | tail -5"
@@ -143,8 +158,8 @@ assert_approves \
   "Bash" \
   "echo .claude/skills/ref-pr-workflow/scripts/run-lint.sh"
 
-assert_passthrough \
-  "cat referencing script path (not execution)" \
+assert_approves \
+  "cat (in allowedTools) reading a script path" \
   "Bash" \
   "cat .claude/skills/ref-pr-workflow/scripts/run-lint.sh"
 
@@ -176,7 +191,7 @@ assert_passthrough \
 assert_passthrough \
   "unrelated command not in allowedTools" \
   "Bash" \
-  "curl http://example.com"
+  "definitely-not-a-real-command --flag value"
 
 # --- Security edge cases ---
 

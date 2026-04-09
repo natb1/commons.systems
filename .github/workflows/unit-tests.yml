@@ -56,3 +56,10 @@ jobs:
           node-version-file: .node-version
       - name: Run lint
         run: .claude/skills/ref-pr-workflow/scripts/run-lint.sh
+
+  hook-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Run approve-workflow-commands hook tests
+        run: .claude/hooks/test-approve-workflow-commands.sh
