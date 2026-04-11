@@ -132,21 +132,26 @@ describe("traffic tagging", () => {
   });
 
   it("sets localStorage and tags internal when ?_ct=internal", () => {
+    const fakeAnalytics = { app: {} };
+    vi.mocked(initializeAnalytics).mockReturnValue(fakeAnalytics as never);
     setLocation("https://example.com/page?_ct=internal");
     initAnalytics(validApp);
 
     expect(localStorage.getItem("analytics_traffic_type")).toBe("internal");
-    expect(setUserProperties).toHaveBeenCalledWith(expect.anything(), {
+    expect(setUserProperties).toHaveBeenCalledWith(fakeAnalytics, {
       traffic_type: "internal",
     });
   });
 
   it("strips _ct param from URL after processing", () => {
     setLocation("https://example.com/page?_ct=internal&other=1");
+    vi.mocked(history.replaceState).mockRestore();
+    history.replaceState({ sentinel: true }, "");
+    vi.spyOn(history, "replaceState").mockImplementation(() => {});
     initAnalytics(validApp);
 
     expect(history.replaceState).toHaveBeenCalledWith(
-      null,
+      { sentinel: true },
       "",
       "https://example.com/page?other=1",
     );
@@ -180,27 +185,60 @@ describe("traffic tagging", () => {
     });
   });
 
-  it("skips traffic tagging when measurementId is absent", () => {
+  it("does not call applyTrafficTag or setUserProperties when measurementId is absent", () => {
     const app = { options: {} } as unknown as FirebaseApp;
+    setLocation("https://example.com/page?_ct=internal");
     const consoleDebugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
     initAnalytics(app);
 
     expect(setUserProperties).not.toHaveBeenCalled();
     expect(localStorage.getItem("analytics_traffic_type")).toBeNull();
+    expect(history.replaceState).not.toHaveBeenCalled();
     consoleDebugSpy.mockRestore();
+  });
+
+  it("ignores unknown _ct values and does not strip URL", () => {
+    setLocation("https://example.com/page?_ct=typo");
+    initAnalytics(validApp);
+
+    expect(localStorage.getItem("analytics_traffic_type")).toBeNull();
+    expect(history.replaceState).not.toHaveBeenCalled();
+    expect(setUserProperties).toHaveBeenCalledWith(expect.anything(), {
+      traffic_type: "organic",
+    });
+  });
+
+  it("continues with organic tag when localStorage throws", () => {
+    const reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
+    setLocation("https://example.com/page?_ct=internal");
+    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    });
+    initAnalytics(validApp);
+
+    expect(setUserProperties).toHaveBeenCalledWith(expect.anything(), {
+      traffic_type: "organic",
+    });
+    const reported = reportErrorSpy.mock.calls[0][0] as Error;
+    expect(reported.message).toContain("Failed to apply traffic tag");
+    reportErrorSpy.mockRestore();
+    vi.mocked(localStorage.setItem).mockRestore();
   });
 
   it("calls setUserProperties before returning the tracker", () => {
     const callOrder: string[] = [];
+    vi.mocked(initializeAnalytics).mockImplementation(() => {
+      callOrder.push("initializeAnalytics");
+      return { app: {} } as never;
+    });
     vi.mocked(setUserProperties).mockImplementation(() => {
       callOrder.push("setUserProperties");
     });
-    vi.mocked(initializeAnalytics).mockReturnValue({ app: {} } as never);
 
     const tracker = initAnalytics(validApp);
     callOrder.push("tracker_returned");
 
-    expect(callOrder).toEqual(["setUserProperties", "tracker_returned"]);
+    expect(callOrder).toEqual(["initializeAnalytics", "setUserProperties", "tracker_returned"]);
     expect(tracker).toBeTypeOf("function");
   });
 });

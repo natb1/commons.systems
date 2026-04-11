@@ -9,7 +9,23 @@ import { classifyError } from "@commons-systems/errorutil/classify";
 const STORAGE_KEY = "analytics_traffic_type";
 const PARAM_KEY = "_ct";
 
-function applyTrafficTag(): string {
+type TrafficType = "internal" | "organic";
+
+/**
+ * Reads the `_ct` ("classify traffic") URL parameter and updates the persistent
+ * traffic-type flag in localStorage.
+ *
+ * - `?_ct=internal` sets the flag (one-time visit from any team browser)
+ * - `?_ct=clear` removes the flag (escape hatch)
+ * - Unknown values are ignored and left in the URL for debugging
+ *
+ * Recognized values are stripped via `replaceState` so the param is not
+ * re-applied on refresh and does not leak into GA4 `page_path` dimensions.
+ *
+ * @returns `"internal"` if the flag is set, `"organic"` otherwise — used as the
+ *   `traffic_type` GA4 user property.
+ */
+function applyTrafficTag(): TrafficType {
   const url = new URL(window.location.href);
   const param = url.searchParams.get(PARAM_KEY);
 
@@ -19,7 +35,7 @@ function applyTrafficTag(): string {
     localStorage.removeItem(STORAGE_KEY);
   }
 
-  if (param) {
+  if (param === "internal" || param === "clear") {
     url.searchParams.delete(PARAM_KEY);
     history.replaceState(history.state, "", url.toString());
   }
@@ -52,7 +68,17 @@ export function initAnalytics(app: FirebaseApp): (path: string) => void {
     throw new Error("Analytics requires appId in Firebase config.");
   }
 
-  const trafficType = applyTrafficTag();
+  let trafficType: TrafficType = "organic";
+  try {
+    trafficType = applyTrafficTag();
+  } catch (error) {
+    if (classifyError(error) === "programmer") throw error;
+    reportError(
+      new Error(
+        `Failed to apply traffic tag: ${error instanceof Error ? error.message : error}`,
+      ),
+    );
+  }
 
   // Disable automatic page views — the returned tracker fires them manually.
   const analytics = initializeAnalytics(app, {
