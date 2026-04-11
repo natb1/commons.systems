@@ -40,6 +40,7 @@ jobs:
         run: .github/scripts/firebase-auth.sh
       - name: Deploy to production and run smoke tests
         env:
+          GA_MEASUREMENT_ID_AUDIO: ${{ secrets.GA_MEASUREMENT_ID_AUDIO }}
           GA_MEASUREMENT_ID_LANDING: ${{ secrets.GA_MEASUREMENT_ID_LANDING }}
           GA_MEASUREMENT_ID_BUDGET: ${{ secrets.GA_MEASUREMENT_ID_BUDGET }}
           GA_MEASUREMENT_ID_FELLSPIRAL: ${{ secrets.GA_MEASUREMENT_ID_FELLSPIRAL }}
