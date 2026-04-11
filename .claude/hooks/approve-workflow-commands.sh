@@ -192,7 +192,13 @@ validate_command() {
   local cleaned
   cleaned=$(extract_and_validate_subst "$cmd" "$depth") || return 1
 
-  # Now check for < > in the cleaned string (after $() removed)
+  # Strip benign stderr redirects BEFORE the <> rejection so that 2>&1
+  # does not trip the rejection. Must run after $() extraction so that
+  # redirects inside command substitutions have already been validated.
+  # Matches only the two known-safe forms: 2>&<digit> and 2>/dev/null.
+  cleaned=$(printf '%s' "$cleaned" | sed 's| *2>&[0-9]||g; s| *2>/dev/null||g')
+
+  # Now check for < > in the cleaned string (after $() and 2>&1 removed)
   if printf '%s\n' "$cleaned" | grep -qE '[<>]'; then
     return 1
   fi
@@ -201,9 +207,6 @@ validate_command() {
   if printf '%s\n' "$cleaned" | grep -qE '(&&|\|\|)'; then
     return 1
   fi
-
-  # Strip benign stderr redirects
-  cleaned=$(printf '%s' "$cleaned" | sed 's/ *2>[/&][a-z1-9]*//g')
 
   # Split on | then ; and validate each segment
   local IFS_SAVE="$IFS"
