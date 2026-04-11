@@ -679,4 +679,10 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".viewer-search")).toHaveClass(/search-hidden/);
   });
+
+  test("viewer does not show markdown buttons for document without markdownPath", async ({ page }) => {
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-md-actions")).toHaveCount(0);
+  });
 });

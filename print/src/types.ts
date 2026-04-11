@@ -9,6 +9,7 @@ export interface MediaItem {
   readonly publicDomain: boolean;
   readonly sourceNotes: string;
   readonly storagePath: string;
+  readonly markdownPath: string | null;
   readonly groupId: string | null;
   readonly memberEmails: readonly string[];
   readonly addedAt: string;

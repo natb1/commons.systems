@@ -54,4 +54,31 @@ test.describe("media", () => {
     await page.locator(".viewer-back").click();
     await expect(page.locator("main h2")).toHaveText("Library");
   });
+
+  test("markdown buttons shown for documents with markdownPath", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
+    const phaedrusItem = page.locator("#media-list .media-item", { hasText: "Phaedrus" });
+    await expect(phaedrusItem.locator(".media-md-download")).toBeVisible();
+    await expect(phaedrusItem.locator(".media-md-copy")).toBeVisible();
+  });
+
+  test("markdown buttons not shown for documents without markdownPath", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("#media-list .media-md-download")).toHaveCount(1);
+    const republicItem = page.locator("#media-list .media-item", { hasText: "Republic" });
+    await expect(republicItem.locator(".media-md-download")).toHaveCount(0);
+  });
+
+  test("viewer shows markdown buttons for document with markdownPath", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#media-list")).toBeVisible({ timeout: 10000 });
+    const phaedrusItem = page.locator("#media-list .media-item", { hasText: "Phaedrus" });
+    await phaedrusItem.locator(".media-view").click();
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-md-actions")).toBeVisible();
+    await expect(page.locator(".viewer-md-actions .media-md-download")).toBeVisible();
+    await expect(page.locator(".viewer-md-actions .media-md-copy")).toBeVisible();
+  });
 });

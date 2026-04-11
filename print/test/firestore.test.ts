@@ -43,6 +43,7 @@ function validMediaDoc(
       publicDomain: true,
       sourceNotes: "Public domain source",
       storagePath: `media/${id}.pdf`,
+      markdownPath: null,
       groupId: null,
       memberEmails: ["user@example.com"],
       addedAt: "2026-01-01T00:00:00Z",
@@ -101,6 +102,7 @@ describe("getPublicMedia", () => {
         publicDomain: true,
         sourceNotes: "Public domain source",
         storagePath: "media/doc-2.pdf",
+        markdownPath: null,
         groupId: null,
         memberEmails: ["user@example.com"],
         addedAt: "2026-01-02T00:00:00Z",
@@ -113,6 +115,7 @@ describe("getPublicMedia", () => {
         publicDomain: true,
         sourceNotes: "Public domain source",
         storagePath: "media/doc-1.pdf",
+        markdownPath: null,
         groupId: null,
         memberEmails: ["user@example.com"],
         addedAt: "2026-01-01T00:00:00Z",
@@ -373,10 +376,35 @@ describe("getMediaItem", () => {
       publicDomain: true,
       sourceNotes: "Public domain source",
       storagePath: "media/doc-1.pdf",
+      markdownPath: null,
       groupId: null,
       memberEmails: ["user@example.com"],
       addedAt: "2026-01-01T00:00:00Z",
     });
+  });
+
+  it("parses markdownPath when present as a string", async () => {
+    const docData = validMediaDoc("with-md", { markdownPath: "media/test.md" });
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      id: docData.id,
+      data: docData.data,
+    });
+
+    const result = await getMediaItem("with-md");
+
+    expect(result!.markdownPath).toBe("media/test.md");
+  });
+
+  it("throws DataIntegrityError for non-string non-null markdownPath", async () => {
+    const docData = validMediaDoc("bad-md", { markdownPath: 42 });
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      id: docData.id,
+      data: docData.data,
+    });
+
+    await expect(getMediaItem("bad-md")).rejects.toThrow(DataIntegrityError);
   });
 
   it("throws DataIntegrityError for corrupt document data", async () => {
