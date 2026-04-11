@@ -29,6 +29,7 @@ function toMediaItem(id: string, data: Record<string, unknown>): MediaItem {
     publicDomain: requireBoolean(data.publicDomain, "publicDomain"),
     sourceNotes: requireString(data.sourceNotes, "sourceNotes"),
     storagePath: requireString(data.storagePath, "storagePath"),
+    markdownPath: optionalString(data.markdownPath, "markdownPath"),
     groupId: optionalString(data.groupId, "groupId"),
     memberEmails: requireStringArray(data.memberEmails, "memberEmails"),
     addedAt: requireIso8601(data.addedAt, "addedAt"),

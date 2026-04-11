@@ -254,6 +254,11 @@ const storageSeed: StorageSeedItem[] = [
     metadata: publicMeta,
   },
   {
+    path: "print/prod/media/phaedrus-test.md",
+    content: "# Phaedrus\n\nBy Plato, translated by David Horan.\n\nThis is a test markdown rendering of the Phaedrus dialogue.\n",
+    metadata: publicMeta,
+  },
+  {
     path: "print/prod/media/republic-i-to-x-david-horan-translation-22-nov-25.pdf",
     content: readFileSync(join(__dirname, "pdf-fixtures/republic-3p.pdf")),
     metadata: publicMeta,

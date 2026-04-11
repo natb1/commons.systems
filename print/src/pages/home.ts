@@ -4,6 +4,7 @@ import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
 import { getMediaDownloadUrl } from "../storage.js";
+import { handleMarkdownDownload, handleMarkdownCopy } from "../markdown-actions.js";
 import type { MediaItem, MediaType } from "../types.js";
 
 function mediaTypeBadge(mediaType: MediaType): string {
@@ -25,6 +26,8 @@ function renderMediaList(items: MediaItem[]): string {
         <div class="media-actions">
           <a href="/view/${escapeHtml(item.id)}" class="media-view" title="View in Reader" aria-label="View ${escapeHtml(item.title)}">&#128196;</a>
           <button class="media-download" data-path="${escapeHtml(item.storagePath)}" title="Download" aria-label="Download ${escapeHtml(item.title)}">&#11015;</button>
+          ${item.markdownPath ? `<button class="media-md-download" data-md-path="${escapeHtml(item.markdownPath)}" data-title="${escapeHtml(item.title)}" title="Download Markdown" aria-label="Download Markdown for ${escapeHtml(item.title)}">&#128220;</button>
+          <button class="media-md-copy" data-md-path="${escapeHtml(item.markdownPath)}" title="Copy Markdown" aria-label="Copy Markdown for ${escapeHtml(item.title)}">&#128203;</button>` : ""}
         </div>
       </li>`;
     })
@@ -94,10 +97,29 @@ export async function renderHome(user: User | null): Promise<string> {
 
 export function afterRenderHome(outlet: HTMLElement): void {
   outlet.addEventListener("click", (e) => {
-    const button = (e.target as HTMLElement).closest(".media-download") as HTMLButtonElement | null;
-    if (button) {
+    const target = e.target as HTMLElement;
+    const downloadBtn = target.closest(".media-download") as HTMLButtonElement | null;
+    if (downloadBtn) {
       e.preventDefault();
-      handleDownload(button).catch((err) => logError(err, { operation: "download" }));
+      handleDownload(downloadBtn).catch((err) => logError(err, { operation: "download" }));
+      return;
+    }
+    const mdDownloadBtn = target.closest(".media-md-download") as HTMLButtonElement | null;
+    if (mdDownloadBtn) {
+      e.preventDefault();
+      const mdPath = mdDownloadBtn.dataset.mdPath!;
+      const title = mdDownloadBtn.dataset.title!;
+      mdDownloadBtn.disabled = true;
+      handleMarkdownDownload(mdPath, title)
+        .catch((err) => logError(err, { operation: "markdown-download" }))
+        .finally(() => { mdDownloadBtn.disabled = false; });
+      return;
+    }
+    const mdCopyBtn = target.closest(".media-md-copy") as HTMLButtonElement | null;
+    if (mdCopyBtn) {
+      e.preventDefault();
+      handleMarkdownCopy(mdCopyBtn.dataset.mdPath!, mdCopyBtn)
+        .catch((err) => logError(err, { operation: "markdown-copy" }));
     }
   });
 }
