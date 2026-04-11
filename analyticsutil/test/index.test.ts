@@ -208,6 +208,15 @@ describe("traffic tagging", () => {
     });
   });
 
+  it("re-throws TypeError from applyTrafficTag", () => {
+    vi.spyOn(localStorage, "getItem").mockImplementation(() => {
+      throw new TypeError("invalid invocation");
+    });
+    setLocation("https://example.com/page");
+    expect(() => initAnalytics(validApp)).toThrow(TypeError);
+    vi.mocked(localStorage.getItem).mockRestore();
+  });
+
   it("continues with organic tag when localStorage throws", () => {
     const reportErrorSpy = vi.spyOn(globalThis, "reportError").mockImplementation(() => {});
     setLocation("https://example.com/page?_ct=internal");
