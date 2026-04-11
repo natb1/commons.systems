@@ -152,6 +152,12 @@ describe("renderViewerShell", () => {
     expect(html).toContain('class="viewer-search search-hidden"');
   });
 
+  it("contains .viewer-outline with outline-hidden class", () => {
+    const html = renderViewerShell(makeMediaItem());
+
+    expect(html).toContain('class="viewer-outline outline-hidden"');
+  });
+
   it("escapes HTML in title", () => {
     const html = renderViewerShell(
       makeMediaItem({ title: "<script>alert(1)</script>" }),

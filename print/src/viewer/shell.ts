@@ -12,6 +12,7 @@ import {
   saveReadingPosition,
 } from "../reading-position.js";
 import { renderSearchSection, initSearch } from "./search.js";
+import { renderOutlineSection, initOutline } from "./outline.js";
 
 function renderTags(tags: Record<string, string>): string {
   const entries = Object.entries(tags);
@@ -40,6 +41,7 @@ export function renderViewerShell(item: MediaItem): string {
           <button class="viewer-spread-toggle spread-hidden" aria-label="Toggle spread view" aria-pressed="false">&#9783;</button>
         </div>
         ${renderSearchSection()}
+        ${renderOutlineSection()}
         <div class="viewer-meta">
           <h3 class="viewer-title">${escapeHtml(item.title)}</h3>
           <p class="viewer-type"><span class="media-badge">${escapeHtml(item.mediaType)}</span></p>
@@ -232,6 +234,7 @@ export function initViewer(
   }
 
   let searchCleanup: (() => void) | null = null;
+  let outlineCleanup: (() => void) | null = null;
   let spreadToggleCleanup: (() => void) | null = null;
   let spreadEnabled = false;
   let spreads: Spread[] = [];
@@ -459,6 +462,7 @@ export function initViewer(
       }
     }
     searchCleanup = initSearch(viewer, renderer, () => updateNav());
+    outlineCleanup = initOutline(viewer, renderer, () => updateNav());
     updateNav();
   })().catch((err) => {
     reportError(new Error("Viewer initialization failed", { cause: err }));
@@ -481,6 +485,7 @@ export function initViewer(
     zoomOutBtn.removeEventListener("click", handleZoomOut);
     zoomResetBtn.removeEventListener("click", handleZoomReset);
     searchCleanup?.();
+    outlineCleanup?.();
     spreadToggleCleanup?.();
     if (spreadResizeObserver) spreadResizeObserver.disconnect();
     if (spreadResizeTimer) clearTimeout(spreadResizeTimer);

@@ -81,8 +81,14 @@ function makeEpub(chapterCount: number, chapterBodies: string[] = []): Buffer {
   // Build manifest and spine entries
   const manifestItems: string[] = [
     `    <item id="css" href="style.css" media-type="text/css"/>`,
+    `    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
   ];
   const spineItems: string[] = [];
+  const chapterTitles = [
+    "Preliminary Confessions",
+    "The Pleasures of Opium",
+    "Introduction to the Pains of Opium",
+  ];
   for (let i = 1; i <= chapterCount; i++) {
     manifestItems.push(
       `    <item id="ch${i}" href="chapter${i}.xhtml" media-type="application/xhtml+xml"/>`,
@@ -109,6 +115,39 @@ ${manifestItems.join("\n")}
 ${spineItems.join("\n")}
   </spine>
 </package>`),
+  });
+
+  // EPUB3 navigation document (TOC).
+  // Chapter 1 has nested sub-entries to exercise expand/collapse in tests.
+  const navItems = Array.from({ length: chapterCount }, (_, i) => {
+    const title = chapterTitles[i] ?? `Chapter ${i + 1}`;
+    if (i === 0) {
+      return `        <li>
+          <a href="chapter1.xhtml">${title}</a>
+          <ol>
+            <li><a href="chapter1.xhtml#part-i">Part I</a></li>
+            <li><a href="chapter1.xhtml#part-ii">Part II</a></li>
+          </ol>
+        </li>`;
+    }
+    return `        <li><a href="chapter${i + 1}.xhtml">${title}</a></li>`;
+  });
+  files.push({
+    name: "OEBPS/nav.xhtml",
+    data: Buffer.from(
+      `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Table of Contents</title></head>
+<body>
+  <nav epub:type="toc">
+    <h1>Table of Contents</h1>
+    <ol>
+${navItems.join("\n")}
+    </ol>
+  </nav>
+</body>
+</html>`),
   });
 
   // Chapter XHTML files
