@@ -10,18 +10,18 @@ export function renderOutlineSection(): string {
   `;
 }
 
-function renderEntryItem(entry: OutlineEntry, index: number, depth: number): string {
+function renderEntryItem(entry: OutlineEntry): string {
   const hasChildren = entry.children.length > 0;
   const toggleBtn = hasChildren
     ? `<button class="viewer-outline-toggle" aria-expanded="false" aria-label="Expand">\u25b6</button>`
     : "";
   const childrenHtml = hasChildren
     ? `<ul class="viewer-outline-children outline-collapsed" role="group">${
-        entry.children.map((child, i) => renderEntryItem(child, i, depth + 1)).join("")
+        entry.children.map((child) => renderEntryItem(child)).join("")
       }</ul>`
     : "";
-  return `<li class="viewer-outline-item" role="treeitem" data-depth="${depth}" data-index="${index}">` +
-    `<span class="viewer-outline-row">${toggleBtn}<a class="viewer-outline-entry" href="#" data-depth="${depth}" data-index="${index}">${escapeHtml(entry.title)}</a></span>` +
+  return `<li class="viewer-outline-item" role="treeitem">` +
+    `<span class="viewer-outline-row">${toggleBtn}<a class="viewer-outline-entry" href="#">${escapeHtml(entry.title)}</a></span>` +
     childrenHtml +
     `</li>`;
 }
@@ -99,7 +99,7 @@ export function initOutline(
     entries = result;
     if (entries.length === 0) return;
     section.classList.remove("outline-hidden");
-    list.innerHTML = entries.map((entry, i) => renderEntryItem(entry, i, 0)).join("");
+    list.innerHTML = entries.map((entry) => renderEntryItem(entry)).join("");
   }).catch((err) => {
     reportError(new Error("Failed to load outline", { cause: err }));
   });

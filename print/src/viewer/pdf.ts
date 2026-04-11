@@ -35,15 +35,19 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     for (const item of items) {
       let page: number | null = null;
       if (item.dest) {
-        let destArray: Array<unknown> | null = null;
-        if (typeof item.dest === "string") {
-          destArray = await pdfDoc!.getDestination(item.dest);
-        } else {
-          destArray = item.dest;
-        }
-        if (destArray && destArray.length > 0) {
-          const pageIndex = await pdfDoc!.getPageIndex(destArray[0] as { num: number; gen: number });
-          page = pageIndex + 1; // 1-based
+        try {
+          let destArray: Array<unknown> | null = null;
+          if (typeof item.dest === "string") {
+            destArray = await pdfDoc!.getDestination(item.dest);
+          } else {
+            destArray = item.dest;
+          }
+          if (destArray && destArray.length > 0) {
+            const pageIndex = await pdfDoc!.getPageIndex(destArray[0] as { num: number; gen: number });
+            page = pageIndex + 1; // 1-based
+          }
+        } catch (err) {
+          reportError(new Error(`Failed to resolve outline destination for "${item.title}"`, { cause: err }));
         }
       }
       const children = item.items.length > 0 ? await resolveOutlineItems(item.items) : [];

@@ -162,7 +162,7 @@ export function createEpubRenderer(
     async goToOutlineEntry(entry: OutlineEntry): Promise<void> {
       if (!rendition) return;
       const href = outlineHrefMap.get(entry);
-      if (!href) return;
+      if (!href) throw new Error("Outline entry not found in href map");
       const relocated = waitForRelocated();
       await rendition.display(href);
       await relocated;
