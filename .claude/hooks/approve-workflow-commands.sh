@@ -203,9 +203,20 @@ validate_command() {
     return 1
   fi
 
-  # Reject && and || in the cleaned string
+  # Split on && and || first, validating each part independently.
+  # This allows chained commands like "git fetch && git merge" when both sides
+  # are individually approved.
   if printf '%s\n' "$cleaned" | grep -qE '(&&|\|\|)'; then
-    return 1
+    local _chain_parts _chain_part
+    _chain_parts=$(printf '%s' "$cleaned" | sed 's/ *&& */\n/g; s/ *|| */\n/g')
+    while IFS= read -r _chain_part; do
+      _chain_part=$(printf '%s' "$_chain_part" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      [ -z "$_chain_part" ] && continue
+      if ! validate_command "$_chain_part" "$depth"; then
+        return 1
+      fi
+    done <<< "$_chain_parts"
+    return 0
   fi
 
   # Split on | then ; and validate each segment

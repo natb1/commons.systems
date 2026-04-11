@@ -131,6 +131,16 @@ assert_approves \
   "Bash" \
   ".claude/skills/ref-pr-workflow/scripts/issue-primary 350; .claude/skills/ref-pr-workflow/scripts/load-context 350 | head -20"
 
+assert_approves \
+  "&& between two allowed workflow scripts" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh && .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh"
+
+assert_approves \
+  "&& between two allowed commands" \
+  "Bash" \
+  "echo hello && head file.txt"
+
 # --- Passthrough cases ---
 
 assert_passthrough \
@@ -270,7 +280,7 @@ assert_passthrough \
   "Bash" \
   ".claude/skills/ref-pr-workflow/scripts/run-lint.sh || evil-command"
 
-assert_passthrough \
+assert_approves \
   "or-chaining || between two allowed commands" \
   "Bash" \
   "echo hello || head /etc/passwd"
