@@ -30,6 +30,7 @@ function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
     publicDomain: true,
     sourceNotes: "Sourced from archive.org",
     storagePath: "media/test-book.pdf",
+    markdownPath: null,
     groupId: null,
     memberEmails: ["user@example.com"],
     addedAt: "2026-01-15T00:00:00Z",
@@ -156,6 +157,23 @@ describe("renderViewerShell", () => {
     const html = renderViewerShell(makeMediaItem());
 
     expect(html).toContain('class="viewer-outline outline-hidden"');
+  });
+
+  it("renders .viewer-md-actions with both buttons when markdownPath is non-null", () => {
+    const html = renderViewerShell(makeMediaItem({ markdownPath: "media/test.md" }));
+
+    expect(html).toContain('class="viewer-md-actions"');
+    expect(html).toContain('class="media-md-download"');
+    expect(html).toContain('class="media-md-copy"');
+    expect(html).toContain('data-md-path="media/test.md"');
+  });
+
+  it("does not render .viewer-md-actions when markdownPath is null", () => {
+    const html = renderViewerShell(makeMediaItem({ markdownPath: null }));
+
+    expect(html).not.toContain("viewer-md-actions");
+    expect(html).not.toContain("media-md-download");
+    expect(html).not.toContain("media-md-copy");
   });
 
   it("escapes HTML in title", () => {

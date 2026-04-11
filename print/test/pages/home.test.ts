@@ -33,6 +33,7 @@ function makeMediaItem(overrides: Partial<MediaItem> = {}): MediaItem {
     publicDomain: true,
     sourceNotes: "Public domain source",
     storagePath: "media/test-book.pdf",
+    markdownPath: null,
     groupId: null,
     memberEmails: [],
     addedAt: "2026-01-15T00:00:00Z",
@@ -171,6 +172,29 @@ describe("renderHome", () => {
 
     expect(html).toContain('id="media-error"');
     expect(html).toContain("Could not load media library.");
+  });
+
+  it("renders markdown buttons when markdownPath is non-null", async () => {
+    mockGetPublicMedia.mockResolvedValue([
+      makeMediaItem({ markdownPath: "media/test.md" }),
+    ]);
+
+    const html = await renderHome(null);
+
+    expect(html).toContain('class="media-md-download"');
+    expect(html).toContain('class="media-md-copy"');
+    expect(html).toContain('data-md-path="media/test.md"');
+  });
+
+  it("does not render markdown buttons when markdownPath is null", async () => {
+    mockGetPublicMedia.mockResolvedValue([
+      makeMediaItem(),
+    ]);
+
+    const html = await renderHome(null);
+
+    expect(html).not.toContain("media-md-download");
+    expect(html).not.toContain("media-md-copy");
   });
 
   it("re-throws DataIntegrityError", async () => {

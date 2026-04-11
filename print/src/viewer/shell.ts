@@ -48,6 +48,10 @@ export function renderViewerShell(item: MediaItem): string {
           ${item.publicDomain ? '<p class="viewer-pd">Public Domain</p>' : ""}
           <p class="viewer-source">${escapeHtml(item.sourceNotes)}</p>
           <div class="viewer-tags">${renderTags(item.tags)}</div>
+          ${item.markdownPath ? `<div class="viewer-md-actions">
+            <button class="media-md-download" data-md-path="${escapeHtml(item.markdownPath)}" data-title="${escapeHtml(item.title)}" title="Download Markdown" aria-label="Download Markdown">&#128220;</button>
+            <button class="media-md-copy" data-md-path="${escapeHtml(item.markdownPath)}" title="Copy Markdown" aria-label="Copy Markdown">&#128203;</button>
+          </div>` : ""}
         </div>
       </aside>
     </div>

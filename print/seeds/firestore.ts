@@ -27,6 +27,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             publicDomain: true,
             sourceNotes: "Project Gutenberg eBook #3296: https://www.gutenberg.org/ebooks/3296",
             storagePath: "media/pg3296-images-3.epub",
+            markdownPath: null,
             groupId: null,
             memberEmails: [],
 
@@ -42,6 +43,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             publicDomain: true,
             sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/phaedrus",
             storagePath: "media/phaedrus-david-horan-translation-7-nov-25.pdf",
+            markdownPath: "media/phaedrus-test.md",
             groupId: null,
             memberEmails: [],
 
@@ -57,6 +59,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             publicDomain: true,
             sourceNotes: "Platonic Foundation: https://www.platonicfoundation.org/translation/republic/republic-all-books/",
             storagePath: "media/republic-i-to-x-david-horan-translation-22-nov-25.pdf",
+            markdownPath: null,
             groupId: null,
             memberEmails: [],
 
@@ -78,6 +81,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             publicDomain: true,
             sourceNotes: "Public domain comic strip by Winsor McCay (1905-1914), sourced from Internet Archive",
             storagePath: "media/test-image-archive.cbz",
+            markdownPath: null,
             groupId: null,
             memberEmails: [],
 
@@ -93,6 +97,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             publicDomain: false,
             sourceNotes: "Test-only private item for emulator testing",
             storagePath: "media/test-private-item.pdf",
+            markdownPath: null,
             groupId: "test-group",
             memberEmails: [TEST_USER.email],
 
