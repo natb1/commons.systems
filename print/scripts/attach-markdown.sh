@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Attach a markdown rendering to an existing media document.
-# Uploads the .md file to GCS and patches the Firestore document's markdownPath field.
+# Verifies the document exists and the GCS destination is unoccupied, then uploads
+# the .md file to GCS and patches the Firestore document's markdownPath field.
 # Usage: attach-markdown.sh <docId> <mdFile>
 set -euo pipefail
 
 BUCKET="gs://commons-systems.firebasestorage.app"
 PROJECT="commons-systems"
+# Targets production only -- no environment parameter by design
 COLLECTION_PATH="print/prod/media"
 
 usage() {
@@ -62,7 +64,9 @@ if [ "$DOC_HTTP" -lt 200 ] || [ "$DOC_HTTP" -ge 300 ]; then
 fi
 
 FILENAME="$(basename "$MD_FILE")"
+# Full GCS object path for upload
 GCS_DEST="${BUCKET}/${COLLECTION_PATH}/${FILENAME}"
+# Firestore markdownPath value, resolved relative to the app storage namespace
 STORAGE_PATH="media/${FILENAME}"
 
 # Check for existing object at destination

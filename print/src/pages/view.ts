@@ -2,8 +2,7 @@ import type { User } from "../auth.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { getMediaItem } from "../firestore.js";
 import { getMediaDownloadUrl } from "../storage.js";
-import { handleMarkdownDownload, handleMarkdownCopy } from "../markdown-actions.js";
-import { logError } from "@commons-systems/errorutil/log";
+import { wireMarkdownActions } from "../markdown-actions.js";
 import type { MediaItem } from "../types.js";
 import { renderViewerShell, initViewer } from "../viewer/shell.js";
 import { createPdfRenderer } from "../viewer/pdf.js";
@@ -106,25 +105,5 @@ export function afterRenderView(outlet: HTMLElement, user: User | null): void {
     }
   }
 
-  // Wire markdown action buttons (if present)
-  outlet.addEventListener("click", (e) => {
-    const target = e.target as HTMLElement;
-    const mdDownloadBtn = target.closest(".media-md-download") as HTMLButtonElement | null;
-    if (mdDownloadBtn) {
-      e.preventDefault();
-      const mdPath = mdDownloadBtn.dataset.mdPath!;
-      const title = mdDownloadBtn.dataset.title!;
-      mdDownloadBtn.disabled = true;
-      handleMarkdownDownload(mdPath, title)
-        .catch((err) => logError(err, { operation: "markdown-download" }))
-        .finally(() => { mdDownloadBtn.disabled = false; });
-      return;
-    }
-    const mdCopyBtn = target.closest(".media-md-copy") as HTMLButtonElement | null;
-    if (mdCopyBtn) {
-      e.preventDefault();
-      handleMarkdownCopy(mdCopyBtn.dataset.mdPath!, mdCopyBtn)
-        .catch((err) => logError(err, { operation: "markdown-copy" }));
-    }
-  });
+  wireMarkdownActions(outlet);
 }

@@ -40,3 +40,26 @@ export async function handleMarkdownCopy(storagePath: string, button: HTMLButton
     button.disabled = false;
   }
 }
+
+export function wireMarkdownActions(container: HTMLElement): void {
+  container.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement;
+    const mdDownloadBtn = target.closest(".media-md-download") as HTMLButtonElement | null;
+    if (mdDownloadBtn) {
+      e.preventDefault();
+      const mdPath = mdDownloadBtn.dataset.mdPath!;
+      const title = mdDownloadBtn.dataset.title!;
+      mdDownloadBtn.disabled = true;
+      handleMarkdownDownload(mdPath, title)
+        .catch((err) => logError(err, { operation: "markdown-download" }))
+        .finally(() => { mdDownloadBtn.disabled = false; });
+      return;
+    }
+    const mdCopyBtn = target.closest(".media-md-copy") as HTMLButtonElement | null;
+    if (mdCopyBtn) {
+      e.preventDefault();
+      handleMarkdownCopy(mdCopyBtn.dataset.mdPath!, mdCopyBtn)
+        .catch((err) => logError(err, { operation: "markdown-copy" }));
+    }
+  });
+}

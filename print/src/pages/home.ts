@@ -4,7 +4,7 @@ import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
 import { getMediaDownloadUrl } from "../storage.js";
-import { handleMarkdownDownload, handleMarkdownCopy } from "../markdown-actions.js";
+import { wireMarkdownActions } from "../markdown-actions.js";
 import type { MediaItem, MediaType } from "../types.js";
 
 function mediaTypeBadge(mediaType: MediaType): string {
@@ -102,24 +102,7 @@ export function afterRenderHome(outlet: HTMLElement): void {
     if (downloadBtn) {
       e.preventDefault();
       handleDownload(downloadBtn).catch((err) => logError(err, { operation: "download" }));
-      return;
-    }
-    const mdDownloadBtn = target.closest(".media-md-download") as HTMLButtonElement | null;
-    if (mdDownloadBtn) {
-      e.preventDefault();
-      const mdPath = mdDownloadBtn.dataset.mdPath!;
-      const title = mdDownloadBtn.dataset.title!;
-      mdDownloadBtn.disabled = true;
-      handleMarkdownDownload(mdPath, title)
-        .catch((err) => logError(err, { operation: "markdown-download" }))
-        .finally(() => { mdDownloadBtn.disabled = false; });
-      return;
-    }
-    const mdCopyBtn = target.closest(".media-md-copy") as HTMLButtonElement | null;
-    if (mdCopyBtn) {
-      e.preventDefault();
-      handleMarkdownCopy(mdCopyBtn.dataset.mdPath!, mdCopyBtn)
-        .catch((err) => logError(err, { operation: "markdown-copy" }));
     }
   });
+  wireMarkdownActions(outlet);
 }
