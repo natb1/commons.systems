@@ -44,7 +44,6 @@ describe("initOutline", () => {
   let container: HTMLElement;
 
   beforeEach(() => {
-    vi.useFakeTimers();
     container = createContainer();
     if (typeof globalThis.reportError !== "function") {
       globalThis.reportError = () => {};
@@ -53,7 +52,6 @@ describe("initOutline", () => {
   });
 
   afterEach(() => {
-    vi.useRealTimers();
     vi.mocked(globalThis.reportError).mockRestore();
   });
 
@@ -71,15 +69,13 @@ describe("initOutline", () => {
     expect(result).toBeNull();
   });
 
-  it("returns null when outline is empty", async () => {
+  it("stays hidden when outline is empty", async () => {
     const renderer = makeOutlineRenderer({
       getOutline: vi.fn().mockResolvedValue([]),
     });
-    const cleanup = initOutline(container, renderer, vi.fn());
+    initOutline(container, renderer, vi.fn());
     await flushInit();
 
-    // cleanup is a function (not null) because the renderer has both methods,
-    // but the section stays hidden when entries are empty
     const section = container.querySelector(".viewer-outline") as HTMLElement;
     expect(section.classList.contains("outline-hidden")).toBe(true);
   });

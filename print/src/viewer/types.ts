@@ -16,6 +16,7 @@ export interface SearchResult {
   readonly matchLength: number;
 }
 
+/** A node in a document's table of contents tree. */
 export interface OutlineEntry {
   readonly title: string;
   readonly children: readonly OutlineEntry[];
