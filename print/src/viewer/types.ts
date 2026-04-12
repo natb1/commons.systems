@@ -16,6 +16,12 @@ export interface SearchResult {
   readonly matchLength: number;
 }
 
+/** A node in a document's table of contents tree. */
+export interface OutlineEntry {
+  readonly title: string;
+  readonly children: readonly OutlineEntry[];
+}
+
 export interface ContentRenderer {
   init(container: HTMLElement, source: string | ArrayBuffer, initialPosition?: string): Promise<void>;
   goToPage(page: number): Promise<void>;
@@ -38,6 +44,9 @@ export interface ContentRenderer {
   search?(query: string): Promise<SearchResult[]>;
   goToResult?(result: SearchResult): Promise<void>;
   clearSearch?(): void;
+  /** Renderers implementing getOutline must also implement goToOutlineEntry. */
+  getOutline?(): Promise<OutlineEntry[]>;
+  goToOutlineEntry?(entry: OutlineEntry): Promise<void>;
   destroy(): void;
 }
 

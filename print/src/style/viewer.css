@@ -250,7 +250,8 @@ body.viewer-active {
 
 .zoom-hidden,
 .spread-hidden,
-.search-hidden {
+.search-hidden,
+.outline-hidden {
   display: none;
 }
 
@@ -386,4 +387,78 @@ body.viewer-active {
   padding: 0.1rem 0.3rem;
   border: 1px solid var(--muted-fg, #888);
   border-radius: 3px;
+}
+
+/* Outline / TOC */
+.viewer-outline-heading {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.viewer-outline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  border: 1px solid var(--muted-fg, #888);
+  border-radius: 3px;
+}
+
+.viewer-outline-list:empty {
+  display: none;
+}
+
+.viewer-outline-item {
+  font-size: 0.8rem;
+}
+
+.viewer-outline-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--muted-fg, #888);
+}
+
+.viewer-outline-item:last-child > .viewer-outline-row {
+  border-bottom: none;
+}
+
+.viewer-outline-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.6rem;
+  color: var(--muted-fg, #888);
+  flex-shrink: 0;
+  width: 1rem;
+  text-align: center;
+}
+
+.viewer-outline-entry {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-outline-entry:hover {
+  text-decoration: underline;
+}
+
+.viewer-outline-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  padding-left: 1rem;
+}
+
+.outline-collapsed {
+  display: none;
 }

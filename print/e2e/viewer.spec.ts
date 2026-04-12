@@ -680,6 +680,77 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-search")).toHaveClass(/search-hidden/);
   });
 
+  test("EPUB outline is visible with TOC entries", async ({ page }) => {
+    await page.goto("/view/gutenberg-3296");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-position")).toContainText("Ch. 1/3", {
+      timeout: 15000,
+    });
+
+    const outline = page.locator(".viewer-outline");
+    await expect(outline).not.toHaveClass(/outline-hidden/, { timeout: 15000 });
+    const entries = page.locator(".viewer-outline-entry");
+    await expect(entries.first()).toBeVisible();
+    expect(await entries.count()).toBeGreaterThanOrEqual(3);
+  });
+
+  test("EPUB outline navigation changes chapter", async ({ page }) => {
+    await page.goto("/view/gutenberg-3296");
+    const position = page.locator(".viewer-position");
+    await expect(position).toContainText("Ch. 1/3", { timeout: 15000 });
+
+    // Click the last TOC entry to navigate to a different chapter
+    const entries = page.locator(".viewer-outline-entry");
+    await entries.last().click();
+    await expect(position).not.toContainText("Ch. 1/3", { timeout: 15000 });
+  });
+
+  test("EPUB outline expand and collapse nested entries", async ({ page }) => {
+    await page.goto("/view/gutenberg-3296");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-position")).toContainText("Ch. 1/3", {
+      timeout: 15000,
+    });
+
+    // Wait for outline to populate
+    const outline = page.locator(".viewer-outline");
+    await expect(outline).not.toHaveClass(/outline-hidden/, { timeout: 15000 });
+
+    // First entry has nested children -- toggle button should be present
+    const toggle = page.locator(".viewer-outline-toggle").first();
+    await expect(toggle).toBeVisible();
+
+    // Children start collapsed
+    const children = page.locator(".viewer-outline-children").first();
+    await expect(children).toHaveClass(/outline-collapsed/);
+
+    // Expand
+    await toggle.click();
+    await expect(children).not.toHaveClass(/outline-collapsed/);
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    // Collapse
+    await toggle.click();
+    await expect(children).toHaveClass(/outline-collapsed/);
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("image archive outline is hidden", async ({ page }) => {
+    await page.goto("/view/test-image-archive");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-outline")).toHaveClass(/outline-hidden/);
+  });
+
+  test("PDF outline is hidden when PDF has no bookmarks", async ({ page }) => {
+    // The plato-republic seed PDF was truncated with pdf-lib, which strips bookmarks.
+    await page.goto("/view/plato-republic");
+    await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".viewer-position")).toContainText("1 / 3", {
+      timeout: 15000,
+    });
+    await expect(page.locator(".viewer-outline")).toHaveClass(/outline-hidden/);
+  });
+
   test("viewer does not show markdown buttons for document without markdownPath", async ({ page }) => {
     await page.goto("/view/plato-republic");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });

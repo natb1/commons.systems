@@ -1,5 +1,5 @@
-import ePub, { type Book, type Rendition, type Location } from "epubjs";
-import type { ContentRenderer } from "./types.js";
+import ePub, { type Book, type Rendition, type Location, type NavItem } from "epubjs";
+import type { ContentRenderer, OutlineEntry } from "./types.js";
 
 export function createEpubRenderer(
   onError?: (err: unknown) => void,
@@ -15,6 +15,16 @@ export function createEpubRenderer(
   let _atEnd = false;
   let _currentCfi = "";
   let destroyed = false;
+  const outlineHrefMap = new WeakMap<OutlineEntry, string>();
+
+  function mapNavItems(items: NavItem[]): OutlineEntry[] {
+    return items.map((item) => {
+      const children = item.subitems ? mapNavItems(item.subitems) : [];
+      const entry: OutlineEntry = { title: item.label, children };
+      outlineHrefMap.set(entry, item.href);
+      return entry;
+    });
+  }
 
   // epub.js next()/prev() resolve before the relocated event fires.
   // Callers await this to get updated position state. The 5s timeout
@@ -139,6 +149,23 @@ export function createEpubRenderer(
     },
     get positionLabel() {
       return `Ch. ${_chapterIndex + 1}/${_chapterCount} — p. ${_subPage}/${_subPageTotal}`;
+    },
+
+    async getOutline(): Promise<OutlineEntry[]> {
+      if (!book) return [];
+      await book.loaded.navigation;
+      const toc = book.navigation.toc;
+      if (!toc || toc.length === 0) return [];
+      return mapNavItems(toc);
+    },
+
+    async goToOutlineEntry(entry: OutlineEntry): Promise<void> {
+      if (!rendition) return;
+      const href = outlineHrefMap.get(entry);
+      if (!href) throw new Error("Outline entry not found in href map");
+      const relocated = waitForRelocated();
+      await rendition.display(href);
+      await relocated;
     },
 
     destroy(): void {

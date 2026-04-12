@@ -153,6 +153,12 @@ describe("renderViewerShell", () => {
     expect(html).toContain('class="viewer-search search-hidden"');
   });
 
+  it("contains .viewer-outline with outline-hidden class", () => {
+    const html = renderViewerShell(makeMediaItem());
+
+    expect(html).toContain('class="viewer-outline outline-hidden"');
+  });
+
   it("renders .viewer-md-actions with both buttons when markdownPath is non-null", () => {
     const html = renderViewerShell(makeMediaItem({ markdownPath: "media/test.md" }));
 

@@ -2,7 +2,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import { TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import type { PageViewport } from "pdfjs-dist/types/src/display/display_utils.js";
-import type { ContentRenderer } from "./types.js";
+import type { ContentRenderer, OutlineEntry } from "./types.js";
 import { parsePositionPage } from "./types.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -22,6 +22,43 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
   let destroyed = false;
   interface SpreadPage { renderTask: RenderTask; textLayer: TextLayer | null; }
   const spreadPages: SpreadPage[] = [];
+  const outlinePageMap = new WeakMap<OutlineEntry, number>();
+
+  type PdfOutlineItem = {
+    title: string;
+    dest: string | Array<unknown> | null;
+    items: PdfOutlineItem[];
+  };
+
+  async function resolveOutlineItems(items: PdfOutlineItem[]): Promise<OutlineEntry[]> {
+    const entries: OutlineEntry[] = [];
+    for (const item of items) {
+      let page: number | null = null;
+      if (item.dest) {
+        try {
+          let destArray: Array<unknown> | null = null;
+          if (typeof item.dest === "string") {
+            destArray = await pdfDoc!.getDestination(item.dest);
+          } else {
+            destArray = item.dest;
+          }
+          if (destArray && destArray.length > 0) {
+            const pageIndex = await pdfDoc!.getPageIndex(destArray[0] as { num: number; gen: number });
+            page = pageIndex + 1; // 1-based
+          }
+        } catch (err) {
+          reportError(new Error(`Failed to resolve outline destination for "${item.title}"`, { cause: err }));
+        }
+      }
+      const children = item.items.length > 0 ? await resolveOutlineItems(item.items) : [];
+      const entry: OutlineEntry = { title: item.title, children };
+      if (page !== null) {
+        outlinePageMap.set(entry, page);
+      }
+      entries.push(entry);
+    }
+    return entries;
+  }
 
   interface CanvasRenderResult {
     task: RenderTask;
@@ -222,6 +259,20 @@ export function createPdfRenderer(onError?: (err: unknown) => void): ContentRend
     },
     get positionLabel() {
       return `Page ${_currentPage} / ${_pageCount}`;
+    },
+
+    async getOutline(): Promise<OutlineEntry[]> {
+      if (!pdfDoc) return [];
+      const outline = await pdfDoc.getOutline();
+      if (!outline || outline.length === 0) return [];
+      return resolveOutlineItems(outline as PdfOutlineItem[]);
+    },
+
+    async goToOutlineEntry(entry: OutlineEntry): Promise<void> {
+      const page = outlinePageMap.get(entry);
+      if (page === undefined) return;
+      _currentPage = page;
+      await renderPage(page);
     },
 
     destroy(): void {
