@@ -10,20 +10,19 @@ const indexPath = join(
 const html = readFileSync(indexPath, "utf-8");
 
 describe("fellspiral preconnect links", () => {
-  it("preconnects to www.googleapis.com with crossorigin (auth uses CORS)", () => {
+  it("preconnects to firebaseinstallations.googleapis.com (SDK init)", () => {
     expect(html).toContain(
-      `<link rel="preconnect" href="https://www.googleapis.com" crossorigin`,
+      `<link rel="preconnect" href="https://firebaseinstallations.googleapis.com" />`,
     );
   });
 
   it.each([
-    "firebaseinstallations.googleapis.com",
+    "www.googleapis.com",
     "apis.google.com",
     "firestore.googleapis.com",
-  ])("preconnects to %s without crossorigin", (host) => {
-    expect(html).toContain(`<link rel="preconnect" href="https://${host}" />`);
+  ])("does not preconnect to %s (not used on initial load)", (host) => {
     expect(html).not.toContain(
-      `<link rel="preconnect" href="https://${host}" crossorigin`,
+      `<link rel="preconnect" href="https://${host}"`,
     );
   });
 });

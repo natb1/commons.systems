@@ -12,11 +12,6 @@ test.describe("landing preconnect links", () => {
         els.map((el) => el.getAttribute("href")).filter(Boolean),
       );
 
-    expect(hrefs).toContain("https://www.googleapis.com");
-    expect(hrefs).toContain(
-      "https://firebaseinstallations.googleapis.com",
-    );
-    expect(hrefs).toContain("https://apis.google.com");
-    expect(hrefs).toContain("https://firestore.googleapis.com");
+    expect(hrefs).toEqual(["https://firebaseinstallations.googleapis.com"]);
   });
 });
