@@ -26,7 +26,7 @@ When choosing a new domain, these criteria help identify where the author's prob
 
 ## Current assessment
 
-**As of April 2026.** The project is two months old. Five apps are deployed (budget, print, fellspiral, landing, audio). The agentic coding workflow is mature: 12-step PR pipeline, wiggum loops, forked contexts, CI/CD, acceptance tests. ~430 issues closed, ~230 commits. 0 forks, 1 star.
+**As of 2026-04-15.** The project is two months old. Five apps are deployed (budget, print, fellspiral, landing, audio). The agentic coding workflow is mature: 12-step PR pipeline, wiggum loops, forked contexts, CI/CD, acceptance tests. ~430 issues closed, ~230 commits. 0 forks, 1 star.
 
 **What's working:** Artifact production velocity is high. One person with an agent is building and shipping deployed apps at a pace that demonstrates what the charter claims about agentic coding shifting the cost-benefit. All deployed apps are in active author use (tier 1 validated). The agentic workflow — including the skill system — is the author's daily development tool and the project's most distinctive artifact.
 
@@ -44,15 +44,31 @@ When choosing a new domain, these criteria help identify where the author's prob
 - **Done when:** A visitor understands what the project is in five seconds. Shared links render meaningful preview cards on social platforms (OG metadata, meta description included).
 - **Signal:** Bounce rate on the landing page after blog post submission.
 
-### 2. Blog post: the agentic workflow ([#223](https://github.com/natb1/commons.systems/issues/223))
+### 2. Landing ready for #223 traffic
+
+- **Why:** Visitors arriving from HN/Reddit via the tentpole must see a landing that shows the apps, reads well, and is crawlable. Every unshipped prereq is a distribution own-goal at the moment of peak attention.
+- **Validation tier:** Users.
+- **Distribution:** Implicit — the landing itself is the surface.
+- **Done when:** [#531](https://github.com/natb1/commons.systems/issues/531) (app showcase grid with dependency self-assessment table), [#533](https://github.com/natb1/commons.systems/issues/533) (structured data, sitemap, rel=me), [#537](https://github.com/natb1/commons.systems/issues/537) (IBM Plex Serif body), [#508](https://github.com/natb1/commons.systems/issues/508) (Google Search Console), and [#469](https://github.com/natb1/commons.systems/issues/469) (GA integration) are shipped.
+- **Signal:** Each shipped sub-issue; social share card rendering on HN/Twitter/LinkedIn.
+
+### 3. Blog post: the agentic workflow ([#223](https://github.com/natb1/commons.systems/issues/223))
 
 - **Why:** The most legible demonstration of what agentic coding makes possible. The only planned artifact designed to be found by people who do not already know the project exists. The 12-month failure-condition clock starts when this ships. The competitive position — "agentic coding as platform replacement" — is distinct from generic AI productivity content.
 - **Validation tier:** Users and practitioners.
 - **Distribution:** Submit to Hacker News, r/ClaudeAI, r/selfhosted. Share in Claude Code community channels.
-- **Done when:** Published on fellspiral with concrete claims (apps built, timeline, workflow description) and submitted to at least two channels. Landing page hero ships first.
+- **Done when:** Published on fellspiral with concrete claims (apps built, timeline, workflow description) and submitted to at least two channels. Priority 2 ships first.
 - **Signal:** GitHub traffic referrers and unique visitors two weeks after submission. Did people arrive and look around?
 
-### 3. PageSpeed and usability ([#486](https://github.com/natb1/commons.systems/issues/486))
+### 4. Blog series follow-ups ([#475](https://github.com/natb1/commons.systems/issues/475) → [#529](https://github.com/natb1/commons.systems/issues/529) → [#530](https://github.com/natb1/commons.systems/issues/530))
+
+- **Why:** #223 is the spine; these extend the arc for tier-2 readers who engage with it. #475 handles the ethical-critique defense (construction tool vs runtime dependency). #529 flips to the incumbent perspective (required vs parasitic, wind-down). #530 shows the planning pattern as a concept users can adapt for their own work, parallel to how the apps are concepts to adapt.
+- **Validation tier:** Users.
+- **Distribution:** Space ~3–4 weeks between HN submissions. #475 to r/opensource and lobste.rs; #529 to r/ProductManagement and HN; #530 to r/ClaudeAI and HN.
+- **Done when:** All three published in order, each with its own two-week signal check.
+- **Gate:** Each post's publication is gated on the prior post's signal check. If #223 produces zero referrer movement, the bottleneck is the artifacts — reassess before publishing #475.
+
+### 5. PageSpeed and usability ([#486](https://github.com/natb1/commons.systems/issues/486))
 
 - **Why:** Performance and usability serve both author experience and the quality of artifacts visitors encounter. Slow, janky apps undermine the "better than the institutional alternative" claim. Meta descriptions, security headers, cache headers, and preconnect hints are table-stakes for distribution.
 - **Validation tier:** Author (tier 1) and users (tier 2).
@@ -60,7 +76,7 @@ When choosing a new domain, these criteria help identify where the author's prob
 - **Done when:** All deployed apps pass Core Web Vitals and have proper meta/OG tags, security headers, and cache headers.
 - **Signal:** PageSpeed scores; social share card rendering.
 
-### 4. Budget professional features ([#452](https://github.com/natb1/commons.systems/issues/452))
+### 6. Budget professional features ([#452](https://github.com/natb1/commons.systems/issues/452))
 
 - **Why:** Account reconciliation, income statements, cash flow views, and budget variance decomposition are features the author needs for personal finances. Budget is the flagship demonstration of recovered autonomy — it must be genuinely better than platform alternatives for the author.
 - **Validation tier:** Author.
@@ -68,43 +84,44 @@ When choosing a new domain, these criteria help identify where the author's prob
 - **Done when:** The author uses budget as their primary personal finance tool with these capabilities.
 - **Signal:** Author usage continuity.
 
-### 5. Daily productivity app ([#456](https://github.com/natb1/commons.systems/issues/456))
+### 7. Daily productivity app — minimum daily-use core ([#456](https://github.com/natb1/commons.systems/issues/456))
 
-- **Why:** Daily agenda, feed aggregation, message integration, and goal tracking solve the author's own coordination problem. New domain where institutional dependency is painful and agentic coding has shifted the cost-benefit.
+- **Why:** Daily agenda and feed aggregation solve the author's own coordination problem. New domain where institutional dependency is painful and agentic coding has shifted the cost-benefit. Scoped narrowly so tier-1 validation of this domain can happen soon, rather than stalling behind a sprawling sub-issue tree.
 - **Validation tier:** Author.
 - **Distribution:** Becomes a distributable artifact only after the author validates it through daily use.
-- **Done when:** The author uses the productivity app daily.
-- **Signal:** Author usage continuity.
+- **Done when:** The author uses the minimum core (agenda with Google Calendar, RSS feed aggregation) daily. Message integration, goal views, Discord, TUI, and other sub-issues are follow-ons that ship only after the core is validated.
+- **Signal:** Author usage continuity on the minimum core.
 
-### 6. Plugin distribution ([#440](https://github.com/natb1/commons.systems/issues/440))
+### 8. Plugin distribution ([#440](https://github.com/natb1/commons.systems/issues/440))
 
 - **Why:** Turns the PR workflow from internal plumbing into a distributable gift. The agentic workflow — including the skill system — is both the author's daily tool and the most distinctive artifact for practitioners. Scope must enable a practitioner to use the workflow, not just read about it.
 - **Validation tier:** Practitioners.
 - **Distribution:** Referenced in the blog post. Listed wherever Claude Code plugins are discoverable. Mentioned in README.
 - **Done when:** A practitioner can install the plugin and run the PR workflow on their own repo without reading the monorepo source.
 - **Signal:** Plugin installs or clones from people who are not the repo owner.
-- **Gate:** Not a priority until the user-facing workflow is clearly distributed (blog post shipped, engagement signal received).
+- **Gate:** Not a priority until the user-facing workflow is clearly distributed (blog post shipped, engagement signal received) AND wind-down criteria (#444) are defined.
 
-### 7. Shallow fork documentation for budget ([#442](https://github.com/natb1/commons.systems/issues/442))
+### 9. Shallow fork documentation for budget ([#442](https://github.com/natb1/commons.systems/issues/442))
 
-- **Why:** The charter says forkability without documentation is a hollow gift. Budget is the flagship artifact for demonstrating recovered autonomy in personal finance. The blocker is not documentation alone but mechanical extractability — budget depends on internal `@commons-systems/*` packages with no extraction mechanism. Scope must enable a practitioner to use the fork, not just read about it.
+- **Why:** The charter says forkability without documentation is a hollow gift. Budget is the flagship artifact for demonstrating recovered autonomy in personal finance. The blocker is not documentation alone but mechanical extractability — budget depends on internal `@commons-systems/*` packages with no extraction mechanism (tracked as [#512](https://github.com/natb1/commons.systems/issues/512)). Scope must enable a practitioner to use the fork, not just read about it.
 - **Validation tier:** Users who want to own their budget tool; practitioners who want to see the pattern applied.
 - **Distribution:** Linked from the budget app itself and from the blog post.
 - **Done when:** Someone can fork the budget tool, understand the architectural decisions, and deploy their own instance with an agent's help.
 - **Signal:** Forks of the repo or derivative budget projects.
-- **Gate:** Not a priority until the user-facing workflow is clearly distributed.
+- **Gate:** Not a priority until the user-facing workflow is clearly distributed AND wind-down criteria (#444) are defined.
 
-### 8. Wind-down criteria ([#444](https://github.com/natb1/commons.systems/issues/444))
+### 10. Wind-down criteria ([#444](https://github.com/natb1/commons.systems/issues/444))
 
-- **Why:** The charter's Assumption 6 says "define what 'purpose served' looks like before the ratchet has a chance to form." Defining exit criteria is a charter obligation. Must ship before tier 3 work advances.
+- **Why:** The charter's Assumption 6 says "define what 'purpose served' looks like before the ratchet has a chance to form." The ratchet forms when external obligations accumulate from tier-3 engagement, so wind-down criteria must ship before any tier-3 artifact (#440, #442) does. Not a prerequisite for publishing #223 — the tentpole starts the evaluation clock but does not itself form the ratchet.
 - **Validation tier:** Collaborators.
 - **Done when:** CHARTER.md includes concrete, testable wind-down criteria.
+- **Gate:** Required before any tier-3 priority advances.
 
 ## Feedback loop
 
 The first signal is internal: is the author using the artifacts? If any deployed app stops being useful to the author, that is a tier-1 failure that precedes any external measurement.
 
-After the blog post (#223) ships, check GitHub traffic (views, clones, referrers) and engagement (forks, stars, issues from new people) at two weeks. The charter defines a 12-month failure condition: zero forks, zero derivative projects, zero unsolicited engagement after active publishing and building. The clock on "active publishing" starts when the blog post ships — that is the first artifact designed to be found.
+After the blog post (#223) ships, check GitHub traffic (views, clones, referrers) and engagement (forks, stars, issues from new people) at two weeks. The two-week signal review is tracked as its own issue so the reassessment is concrete and not retrospective. The charter defines a 12-month failure condition: zero forks, zero derivative projects, zero unsolicited engagement after active publishing and building. The clock on "active publishing" starts when the blog post ships — that is the first artifact designed to be found.
 
 After the blog post ships, reassess whether the bottleneck has shifted. If traffic increases but engagement doesn't, the problem is the artifacts themselves, not discoverability. If traffic doesn't increase, the problem is the channels or the content. Blog post engagement signal is the gate for tier 3 priorities (plugin distribution and fork documentation).
 
