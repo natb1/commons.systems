@@ -2,7 +2,10 @@ package session
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -75,39 +78,49 @@ func TestReadSessions_MalformedJSON(t *testing.T) {
 }
 
 func TestFilterLive(t *testing.T) {
-	dir := t.TempDir()
+	if _, err := exec.LookPath("ps"); err != nil {
+		t.Skip("ps not available")
+	}
 
-	alivePath := filepath.Join(dir, "alive.jsonl")
-	aliveFile, err := os.OpenFile(alivePath, os.O_CREATE|os.O_RDWR, 0644)
+	selfPID := os.Getpid()
+	selfStart, err := psLStart(selfPID)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("reading own start-time: %v", err)
 	}
-	t.Cleanup(func() { aliveFile.Close() })
 
-	deadPath := filepath.Join(dir, "dead.jsonl")
-	deadFile, err := os.OpenFile(deadPath, os.O_CREATE|os.O_RDWR, 0644)
-	if err != nil {
-		t.Fatal(err)
+	cmd := exec.Command("sh", "-c", "exit 0")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("spawning dead process: %v", err)
 	}
-	if err := deadFile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	deadPID := cmd.Process.Pid
 
 	sessions := map[string]Session{
-		"alive":       {WorkingDir: "/tmp/a", TranscriptPath: alivePath},
-		"dead":        {WorkingDir: "/tmp/b", TranscriptPath: deadPath},
-		"pre_upgrade": {WorkingDir: "/tmp/c"},
+		"live":        {WorkingDir: "/tmp/a", PID: selfPID, PIDStart: selfStart},
+		"dead":        {WorkingDir: "/tmp/b", PID: deadPID, PIDStart: selfStart},
+		"recycled":    {WorkingDir: "/tmp/c", PID: selfPID, PIDStart: "Thu Jan  1 00:00:00 1970"},
+		"pre_upgrade": {WorkingDir: "/tmp/d"},
 	}
 
 	got := FilterLive(sessions)
 
-	if _, ok := got["alive"]; !ok {
-		t.Error("expected alive session to be kept")
+	if _, ok := got["live"]; !ok {
+		t.Error("expected live session to be kept")
 	}
 	if _, ok := got["dead"]; ok {
 		t.Error("expected dead session to be dropped")
 	}
-	if _, ok := got["pre_upgrade"]; !ok {
-		t.Error("expected pre-upgrade session (empty TranscriptPath) to be kept")
+	if _, ok := got["recycled"]; ok {
+		t.Error("expected recycled session (PID-start mismatch) to be dropped")
 	}
+	if _, ok := got["pre_upgrade"]; !ok {
+		t.Error("expected pre-upgrade session (PID == 0) to be kept")
+	}
+}
+
+func psLStart(pid int) (string, error) {
+	out, err := exec.Command("ps", "-o", "lstart=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
