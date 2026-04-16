@@ -10,7 +10,7 @@ test.describe("hero band", () => {
 
     const tagline = page.locator(".page > header .tagline");
     await expect(tagline).toBeVisible();
-    await expect(tagline).toHaveText("Custom software you can understand");
+    await expect(tagline).toHaveText("Custom software you can understand.");
 
     const taglineBox = await tagline.boundingBox();
     const viewport = page.viewportSize();

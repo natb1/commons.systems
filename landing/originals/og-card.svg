@@ -35,7 +35,7 @@
     fill="#e0d8c8"
     text-anchor="middle"
     opacity="0.85"
-  >Custom software you can understand</text>
+  >Custom software you can understand.</text>
 
   <line x1="540" y1="430" x2="660" y2="430" stroke="#e8943a" stroke-width="2" opacity="0.5"/>
 
