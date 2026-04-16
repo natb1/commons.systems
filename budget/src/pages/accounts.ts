@@ -3,6 +3,7 @@ import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./re
 import type { Transaction, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
 import { accountKey, splitAccountKey, computeAggregateTrend, computeNetWorth, computeCashFlow, computeDerivedBalances, type AggregatePoint, type NetWorthPoint, type CashFlowPoint, type DerivedAccountBalance } from "../balance.js";
+import { computeIncomeStatementReport, type IncomeStatementReport, type PeriodVariance, type VarianceRow, type CashFlowSummary } from "../income-statement.js";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError } from "@commons-systems/errorutil/log";
 
@@ -131,6 +132,168 @@ function serializeData(data: readonly AggregatePoint[] | readonly NetWorthPoint[
   return escapeHtml(JSON.stringify(data));
 }
 
+function formatSignedCurrency(n: number): string {
+  if (n === 0) return formatCurrency(0);
+  if (n > 0) return `+${formatCurrency(n)}`;
+  return `\u2212${formatCurrency(-n)}`;
+}
+
+function formatSignedPercent(p: number): string {
+  const rounded = Math.round(p * 10) / 10;
+  if (rounded === 0) return "0.0%";
+  if (rounded > 0) return `+${rounded.toFixed(1)}%`;
+  return `\u2212${Math.abs(rounded).toFixed(1)}%`;
+}
+
+function formatPercent(ratio: number | null): string {
+  if (ratio === null) return "—";
+  return `${(ratio * 100).toFixed(1)}%`;
+}
+
+function varianceClass(value: number | null): string {
+  if (value === null || value === 0) return "variance-neutral";
+  return value > 0 ? "variance-positive" : "variance-negative";
+}
+
+function renderAmountCell(n: number): string {
+  return `<td class="num">${escapeHtml(formatCurrency(n))}</td>`;
+}
+
+function renderNullableAmountCell(n: number | null): string {
+  if (n === null) return `<td class="num">—</td>`;
+  return `<td class="num">${escapeHtml(formatCurrency(n))}</td>`;
+}
+
+function renderVarianceAbsCell(n: number | null): string {
+  if (n === null) return `<td class="num variance-neutral">—</td>`;
+  return `<td class="num ${varianceClass(n)}">${escapeHtml(formatSignedCurrency(n))}</td>`;
+}
+
+function renderVariancePctCell(p: number | null): string {
+  if (p === null) return `<td class="num variance-neutral">—</td>`;
+  return `<td class="num ${varianceClass(p)}">${escapeHtml(formatSignedPercent(p))}</td>`;
+}
+
+function renderVarianceRow(label: string, variance: PeriodVariance, labelClass = "", rowClass = ""): string {
+  const labelAttr = labelClass ? ` class="${labelClass}"` : "";
+  const rowAttr = rowClass ? ` class="${rowClass}"` : "";
+  return `<tr${rowAttr}>
+    <td${labelAttr}>${escapeHtml(label)}</td>
+    ${renderAmountCell(variance.current)}
+    ${renderNullableAmountCell(variance.prior)}
+    ${renderVarianceAbsCell(variance.priorVarianceAbs)}
+    ${renderVariancePctCell(variance.priorVariancePct)}
+    ${renderNullableAmountCell(variance.yoY)}
+    ${renderVarianceAbsCell(variance.yoYVarianceAbs)}
+    ${renderVariancePctCell(variance.yoYVariancePct)}
+  </tr>`;
+}
+
+function renderIncomeStatementTable(
+  title: string,
+  tableId: string,
+  rows: VarianceRow[],
+  totalLabel: string,
+  totalVariance: PeriodVariance,
+  report: IncomeStatementReport,
+): string {
+  const bodyRows = rows.length > 0
+    ? rows.map((row) => renderVarianceRow(row.category, row.variance)).join("\n")
+    : `<tr><td colspan="8" class="empty-row">No ${title.toLowerCase()} this period.</td></tr>`;
+  return `<table id="${tableId}" class="income-statement-table">
+    <caption>${escapeHtml(title)}</caption>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th class="num">${escapeHtml(report.currentLabel)}</th>
+        <th class="num">${escapeHtml(report.priorLabel)}</th>
+        <th class="num">Δ$</th>
+        <th class="num">Δ%</th>
+        <th class="num">${escapeHtml(report.yoYLabel)}</th>
+        <th class="num">Δ$</th>
+        <th class="num">Δ%</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${bodyRows}
+      ${renderVarianceRow(totalLabel, totalVariance, "total-label", "total-row")}
+    </tbody>
+  </table>`;
+}
+
+function renderIncomeStatement(report: IncomeStatementReport): string {
+  const incomeTable = renderIncomeStatementTable(
+    "Income",
+    "accounts-income-table",
+    report.incomeRows,
+    "Total income",
+    report.totalIncome,
+    report,
+  );
+  const expenseTable = renderIncomeStatementTable(
+    "Expenses",
+    "accounts-expenses-table",
+    report.expenseRows,
+    "Total expenses",
+    report.totalExpenses,
+    report,
+  );
+  const netTable = `<table id="accounts-net-income-table" class="income-statement-table">
+    <tbody>
+      ${renderVarianceRow("Net income", report.netIncome, "total-label", "total-row")}
+      <tr class="savings-rate-row">
+        <td class="total-label">Savings rate</td>
+        <td class="num">${escapeHtml(formatPercent(report.savingsRate.current))}</td>
+        <td class="num">${escapeHtml(formatPercent(report.savingsRate.prior))}</td>
+        <td class="num variance-neutral"></td>
+        <td class="num variance-neutral"></td>
+        <td class="num">${escapeHtml(formatPercent(report.savingsRate.yoY))}</td>
+        <td class="num variance-neutral"></td>
+        <td class="num variance-neutral"></td>
+      </tr>
+    </tbody>
+  </table>`;
+  return `<section id="accounts-income-statement">
+    <h3>Income statement</h3>
+    ${incomeTable}
+    ${expenseTable}
+    ${netTable}
+  </section>`;
+}
+
+function renderCashFlowRow(label: string, field: keyof CashFlowSummary, report: IncomeStatementReport): string {
+  const current = report.cashFlow.current[field];
+  const prior = report.cashFlow.prior[field];
+  const yoY = report.cashFlow.yoY[field];
+  return `<tr>
+    <td>${escapeHtml(label)}</td>
+    <td class="num ${varianceClass(current)}">${escapeHtml(formatSignedCurrency(current))}</td>
+    <td class="num ${varianceClass(prior)}">${escapeHtml(formatSignedCurrency(prior))}</td>
+    <td class="num ${varianceClass(yoY)}">${escapeHtml(formatSignedCurrency(yoY))}</td>
+  </tr>`;
+}
+
+function renderCashFlowSummary(report: IncomeStatementReport): string {
+  return `<section id="accounts-cash-flow-summary">
+    <h3>Cash flow summary</h3>
+    <table id="accounts-cash-flow-table" class="cash-flow-summary-table">
+      <thead>
+        <tr>
+          <th>Activity</th>
+          <th class="num">${escapeHtml(report.currentLabel)}</th>
+          <th class="num">${escapeHtml(report.priorLabel)}</th>
+          <th class="num">${escapeHtml(report.yoYLabel)}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${renderCashFlowRow("Operating", "operating", report)}
+        ${renderCashFlowRow("Transfers", "transfers", report)}
+        ${renderCashFlowRow("Net change", "netChange", report)}
+      </tbody>
+    </table>
+  </section>`;
+}
+
 function renderDivergenceWarning(derivedBalances: DerivedAccountBalance[]): string {
   const discrepancies = derivedBalances.filter(d => Math.abs(d.discrepancy) > 0.01);
   if (discrepancies.length === 0) return "";
@@ -163,6 +326,8 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
 
   let tableHtml: string;
   let chartHtml = "";
+  let incomeStatementHtml = "";
+  let cashFlowSummaryHtml = "";
   try {
     const [transactions, statements, periods] = await Promise.all([
       dataSource.getTransactions()
@@ -175,6 +340,12 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
     const derivedBalances = computeDerivedBalances(transactions, statements);
     const rows = buildAccountRows(transactions, statements, derivedBalances);
     tableHtml = renderAccountsTable(rows);
+
+    const report = computeIncomeStatementReport(transactions, Date.now());
+    if (report !== null) {
+      incomeStatementHtml = renderIncomeStatement(report);
+      cashFlowSummaryHtml = renderCashFlowSummary(report);
+    }
 
     try {
       const aggregateTrend = computeAggregateTrend(periods, transactions);
@@ -197,6 +368,8 @@ export async function renderAccounts(options: RenderPageOptions): Promise<string
   return `
     <h2>Accounts</h2>
     ${renderPageNotices(options, "accounts")}
+    ${incomeStatementHtml}
+    ${cashFlowSummaryHtml}
     ${chartHtml}
     ${tableHtml}
   `;
