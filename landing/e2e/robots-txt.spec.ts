@@ -26,4 +26,10 @@ test.describe("robots.txt", () => {
     const body = await response!.text();
     expect(body).toContain("User-agent");
   });
+
+  test("robots.txt references sitemap @smoke", async ({ page }) => {
+    const response = await page.goto("/robots.txt");
+    const body = await response!.text();
+    expect(body).toMatch(/^Sitemap:\s*https:\/\/commons\.systems\/sitemap\.xml\s*$/m);
+  });
 });
