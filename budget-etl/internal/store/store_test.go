@@ -42,6 +42,39 @@ func TestStatementDocID(t *testing.T) {
 	}
 }
 
+func TestStatementItemDocID(t *testing.T) {
+	tests := []string{
+		"pnc_5111_ATM0055566",
+		"chase_checking_202501011000001",
+		"chase_checking_CUSTOM-FITID",
+	}
+
+	for _, id := range tests {
+		t.Run(id, func(t *testing.T) {
+			docID := StatementItemDocID(id)
+
+			if len(docID) != 20 {
+				t.Errorf("len = %d, want 20", len(docID))
+			}
+			for _, c := range docID {
+				if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+					t.Errorf("non-hex character %c in doc ID %q", c, docID)
+				}
+			}
+
+			if docID != StatementItemDocID(id) {
+				t.Error("not deterministic")
+			}
+		})
+	}
+
+	a := StatementItemDocID("pnc_5111_ATM0055566")
+	b := StatementItemDocID("chase_checking_202501011000001")
+	if a == b {
+		t.Errorf("different statement-item IDs produced same doc ID: %q", a)
+	}
+}
+
 func TestTransactionDocID(t *testing.T) {
 	tests := []struct {
 		statementID   string

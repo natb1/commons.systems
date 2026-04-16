@@ -149,16 +149,81 @@ func (c *Client) UpsertStatements(ctx context.Context, stmts []StatementData) er
 
 // TransactionData holds the fields to write to a Firestore transaction document.
 type TransactionData struct {
-	Institution   string
-	Account       string
-	Description   string
-	Amount        int64 // cents; positive = spending, negative = income/credit
-	Timestamp     time.Time
-	StatementID   string
-	TransactionID string
-	Category      string // set by categorization rules; preserved across re-imports
-	Budget        string // set by budget assignment rules; preserved across re-imports
-	Virtual       bool   // true for ETL-generated virtual transactions
+	Institution     string
+	Account         string
+	Description     string
+	Amount          int64 // cents; positive = spending, negative = income/credit
+	Timestamp       time.Time
+	StatementID     string
+	StatementItemID string // immutable bank line id; empty for manual/virtual entries
+	TransactionID   string
+	Category        string // set by categorization rules; preserved across re-imports
+	Budget          string // set by budget assignment rules; preserved across re-imports
+	Virtual         bool   // true for ETL-generated virtual transactions
+}
+
+// StatementItemData holds the fields to write to a Firestore statement-item document.
+// Statement items are immutable — one per OFX line. Sign convention follows the bank
+// (negative = debit, positive = credit).
+type StatementItemData struct {
+	StatementItemID string // canonical id: "{institution}_{account}_{fitid}"
+	StatementID     string
+	Institution     string
+	Account         string
+	Period          string
+	Amount          int64 // cents; raw bank signed value
+	Timestamp       time.Time
+	Description     string
+	FITID           string
+	GroupID         string
+	MemberEmails    []string
+}
+
+// StatementItemDocID generates a deterministic document ID from a statement-item ID
+// using a truncated sha256 hash (10 bytes / 20 hex characters).
+func StatementItemDocID(statementItemID string) string {
+	if statementItemID == "" {
+		panic("statementItemDocID: empty statementItemID")
+	}
+	h := sha256.Sum256([]byte(statementItemID))
+	return fmt.Sprintf("%x", h[:10])
+}
+
+// UpsertStatementItems writes statement-item documents to Firestore in batches of 500.
+// Full overwrite — statement items are immutable bank records.
+func (c *Client) UpsertStatementItems(ctx context.Context, items []StatementItemData) error {
+	col := c.fs.Collection(fmt.Sprintf("budget/%s/statement-items", c.env))
+
+	const maxBatch = 500
+	for i := 0; i < len(items); i += maxBatch {
+		end := i + maxBatch
+		if end > len(items) {
+			end = len(items)
+		}
+		batch := c.fs.Batch()
+		for _, item := range items[i:end] {
+			ref := col.Doc(StatementItemDocID(item.StatementItemID))
+			batch.Set(ref, map[string]interface{}{
+				"statementItemId": item.StatementItemID,
+				"statementId":     item.StatementID,
+				"institution":     item.Institution,
+				"account":         item.Account,
+				"period":          item.Period,
+				"amount":          DollarAmount(item.Amount),
+				"timestamp":       item.Timestamp,
+				"description":     item.Description,
+				"fitid":           item.FITID,
+				"groupId":         item.GroupID,
+				"memberEmails":    item.MemberEmails,
+			})
+		}
+		if _, err := batch.Commit(ctx); err != nil {
+			return fmt.Errorf("committing statement-item batch: %w", err)
+		}
+	}
+
+	log.Printf("upserted %d statement items", len(items))
+	return nil
 }
 
 // NormTxn is a read-only view of a transaction used by normalization rules.
@@ -199,6 +264,7 @@ var importFieldPaths = []firestore.FieldPath{
 	{"amount"},
 	{"timestamp"},
 	{"statementId"},
+	{"statementItemId"},
 	{"groupId"},
 	{"memberEmails"},
 }
@@ -287,16 +353,23 @@ func allFields(txn TransactionData, group GroupInfo) map[string]interface{} {
 }
 
 // importFields returns a map of only the import-sourced fields for merge updates.
+// statementItemId is nil when empty (manual/virtual entries) so the client can
+// distinguish "not linked" from a missing field.
 func importFields(txn TransactionData, group GroupInfo) map[string]interface{} {
+	var stmtItemID interface{}
+	if txn.StatementItemID != "" {
+		stmtItemID = txn.StatementItemID
+	}
 	return map[string]interface{}{
-		"institution":  txn.Institution,
-		"account":      txn.Account,
-		"description":  txn.Description,
-		"amount":       DollarAmount(txn.Amount),
-		"timestamp":    txn.Timestamp,
-		"statementId":  txn.StatementID,
-		"groupId":      group.ID,
-		"memberEmails": group.MemberEmails,
+		"institution":     txn.Institution,
+		"account":         txn.Account,
+		"description":     txn.Description,
+		"amount":          DollarAmount(txn.Amount),
+		"timestamp":       txn.Timestamp,
+		"statementId":     txn.StatementID,
+		"statementItemId": stmtItemID,
+		"groupId":         group.ID,
+		"memberEmails":    group.MemberEmails,
 	}
 }
 

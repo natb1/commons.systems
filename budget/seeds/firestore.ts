@@ -2,7 +2,7 @@
 // The firestoreutil seed runner writes these specs to Firestore using the Admin SDK,
 // which converts Date objects to Timestamps on write.
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { Transaction, Statement, Budget, BudgetPeriod, Rule, NormalizationRule, WeeklyAggregate } from "../src/firestore.js";
+import type { Transaction, Statement, StatementItem, ReconciliationNote, Budget, BudgetPeriod, Rule, NormalizationRule, WeeklyAggregate } from "../src/firestore.js";
 import { TEST_USER } from "@commons-systems/authutil/seed";
 import type { Group } from "@commons-systems/authutil/groups";
 
@@ -13,11 +13,12 @@ type GroupSeedData = Omit<Group, "id"> & { members: string[] };
  *  not consumed through the typed client read path. This applies to all seed types below. */
 
 /** Seed transactions use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client Transaction type). */
-export type TransactionSeedData = Omit<Transaction, "id" | "timestamp" | "budget" | "statementId" | "groupId"> & {
+export type TransactionSeedData = Omit<Transaction, "id" | "timestamp" | "budget" | "statementId" | "statementItemId" | "groupId"> & {
   timestamp: Date;
   memberEmails: string[];
   budget: string | null;
   statementId: string | null;
+  statementItemId: string | null;
   groupId: string | null;
 };
 
@@ -42,6 +43,22 @@ export type NormalizationRuleSeedData = Omit<NormalizationRule, "id" | "groupId"
 
 /** Seed statements use plain string for statementId (not branded), Date instead of Timestamp for lastTransactionDate, require groupId (non-nullable), and add memberEmails for security rules. */
 export type StatementSeedData = Omit<Statement, "id" | "statementId" | "groupId" | "lastTransactionDate"> & { statementId: string; groupId: string; memberEmails: string[]; lastTransactionDate: Date | null };
+
+/** Seed statement items use Date instead of Timestamp, plain strings for branded ids, and add memberEmails for security rules. */
+export type StatementItemSeedData = Omit<StatementItem, "id" | "statementItemId" | "statementId" | "groupId" | "timestamp"> & {
+  statementItemId: string;
+  statementId: string;
+  timestamp: Date;
+  groupId: string;
+  memberEmails: string[];
+};
+
+/** Seed reconciliation notes use Date instead of Timestamp and add memberEmails for security rules. */
+export type ReconciliationNoteSeedData = Omit<ReconciliationNote, "id" | "updatedAt" | "groupId"> & {
+  updatedAt: Date;
+  groupId: string;
+  memberEmails: string[];
+};
 
 /** Seed weekly aggregates use Date instead of Timestamp and add `memberEmails` for security rules (not present in the client WeeklyAggregate type) */
 export type WeeklyAggregateSeedData = Omit<WeeklyAggregate, "id" | "weekStart" | "groupId"> & {
@@ -214,6 +231,7 @@ function txn(
       budget,
       timestamp: new Date(dateStr),
       statementId: `stmt-${stmtMonth}`,
+      statementItemId: null,
       groupId: "household",
       memberEmails: [TEST_USER.email],
       normalizedId: null,
@@ -428,6 +446,7 @@ const seedTransactionDocs = [
       budget: "food",
       timestamp: new Date("2025-01-22"),
       statementId: "stmt-2025-01",
+      statementItemId: null,
       groupId: "household",
       memberEmails: [TEST_USER.email],
       normalizedId: "norm-group-1",
@@ -449,6 +468,7 @@ const seedTransactionDocs = [
       budget: "food",
       timestamp: new Date("2025-01-22"),
       statementId: "stmt-2025-02",
+      statementItemId: null,
       groupId: "household",
       memberEmails: [TEST_USER.email],
       normalizedId: "norm-group-1",
@@ -457,7 +477,131 @@ const seedTransactionDocs = [
       virtual: false,
     } satisfies TransactionSeedData,
   },
+  // --- Reconciliation demo: three transactions on Example Bank / Checking 2025-02
+  // One linked (explicit match), one auto-matchable (suggested), one with no corresponding statement item.
+  {
+    id: "seed-recon-txn-linked",
+    data: {
+      institution: "Example Bank",
+      account: "Checking",
+      description: "Grocery Store",
+      amount: 84.50,
+      note: "",
+      category: "Food:Groceries",
+      reimbursement: 0,
+      budget: "food",
+      timestamp: new Date("2025-02-05"),
+      statementId: "stmt-checking-2025-02",
+      statementItemId: "Example Bank_Checking_FITID-RECON-LINKED",
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+      normalizedId: null,
+      normalizedPrimary: true,
+      normalizedDescription: null,
+      virtual: false,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-recon-txn-suggested",
+    data: {
+      institution: "Example Bank",
+      account: "Checking",
+      description: "Gas Station",
+      amount: 42.17,
+      note: "",
+      category: "Transportation:Fuel",
+      reimbursement: 0,
+      budget: null,
+      timestamp: new Date("2025-02-08"),
+      statementId: "stmt-checking-2025-02",
+      statementItemId: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+      normalizedId: null,
+      normalizedPrimary: true,
+      normalizedDescription: null,
+      virtual: false,
+    } satisfies TransactionSeedData,
+  },
+  {
+    id: "seed-recon-txn-unmatched",
+    data: {
+      institution: "Example Bank",
+      account: "Checking",
+      description: "Planned Transfer",
+      amount: 300,
+      note: "pending",
+      category: "Transfer:Savings",
+      reimbursement: 0,
+      budget: null,
+      timestamp: new Date("2025-02-18"),
+      statementId: "stmt-checking-2025-02",
+      statementItemId: null,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+      normalizedId: null,
+      normalizedPrimary: true,
+      normalizedDescription: null,
+      virtual: false,
+    } satisfies TransactionSeedData,
+  },
 ];
+
+// Statement items — the immutable bank record. Three items for Example Bank / Checking 2025-02:
+// one matches an existing transaction by explicit link, one by amount+date proximity, one has no
+// corresponding transaction (appears as "missing entry" in reconciliation view).
+const seedStatementItemDocs: { id: string; data: StatementItemSeedData }[] = [
+  {
+    id: "stmt-item-recon-linked",
+    data: {
+      statementItemId: "Example Bank_Checking_FITID-RECON-LINKED",
+      statementId: "Example Bank-Checking-2025-02",
+      institution: "Example Bank",
+      account: "Checking",
+      period: "2025-02",
+      amount: -84.50,
+      timestamp: new Date("2025-02-05"),
+      description: "GROCERY STORE #4421",
+      fitid: "FITID-RECON-LINKED",
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies StatementItemSeedData,
+  },
+  {
+    id: "stmt-item-recon-suggested",
+    data: {
+      statementItemId: "Example Bank_Checking_FITID-RECON-SUGGESTED",
+      statementId: "Example Bank-Checking-2025-02",
+      institution: "Example Bank",
+      account: "Checking",
+      period: "2025-02",
+      amount: -42.17,
+      timestamp: new Date("2025-02-07"),
+      description: "SHELL GAS #201",
+      fitid: "FITID-RECON-SUGGESTED",
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies StatementItemSeedData,
+  },
+  {
+    id: "stmt-item-recon-orphan",
+    data: {
+      statementItemId: "Example Bank_Checking_FITID-RECON-ORPHAN",
+      statementId: "Example Bank-Checking-2025-02",
+      institution: "Example Bank",
+      account: "Checking",
+      period: "2025-02",
+      amount: -18.99,
+      timestamp: new Date("2025-02-14"),
+      description: "UNKNOWN MERCHANT",
+      fitid: "FITID-RECON-ORPHAN",
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies StatementItemSeedData,
+  },
+];
+
+const seedReconciliationNoteDocs: { id: string; data: ReconciliationNoteSeedData }[] = [];
 
 const seedRuleDocs: { id: string; data: RuleSeedData }[] = [
   {
@@ -755,6 +899,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             budget: "food",
             timestamp: new Date("2025-02-10"),
             statementId: "stmt-2025-02",
+            statementItemId: null,
             groupId: "household",
             memberEmails: [TEST_USER.email],
             normalizedId: null,
@@ -776,6 +921,7 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
             budget: null,
             timestamp: new Date("2025-02-15"),
             statementId: null,
+            statementItemId: null,
             groupId: "household",
             memberEmails: [TEST_USER.email],
             normalizedId: null,
@@ -796,6 +942,10 @@ const appSeed: Omit<SeedSpec, "namespace"> = {
     { name: "normalization-rules", testOnly: true, documents: seedNormalizationRuleDocs },
     { name: "seed-statements", convergent: true, documents: seedStatementDocs },
     { name: "statements", testOnly: true, documents: seedStatementDocs },
+    { name: "seed-statement-items", convergent: true, documents: seedStatementItemDocs },
+    { name: "statement-items", testOnly: true, documents: seedStatementItemDocs },
+    { name: "seed-reconciliation-notes", convergent: true, documents: seedReconciliationNoteDocs },
+    { name: "reconciliation-notes", testOnly: true, documents: seedReconciliationNoteDocs },
     { name: "seed-weekly-aggregates", convergent: true, documents: weeklyAggregateDocs },
     { name: "weekly-aggregates", testOnly: true, documents: weeklyAggregateDocs },
   ],

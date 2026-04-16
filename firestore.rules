@@ -74,8 +74,59 @@ service cloud.firestore {
         && (!('normalizedId' in request.resource.data) || request.resource.data.normalizedId is string || request.resource.data.normalizedId == null)
         && (!('normalizedPrimary' in request.resource.data) || request.resource.data.normalizedPrimary is bool)
         && (!('normalizedDescription' in request.resource.data) || request.resource.data.normalizedDescription is string || request.resource.data.normalizedDescription == null)
-        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'groupId', 'memberEmails', 'note', 'category', 'budget', 'reimbursement', 'normalizedId', 'normalizedPrimary', 'normalizedDescription']);
+        && (!('statementItemId' in request.resource.data) || request.resource.data.statementItemId is string || request.resource.data.statementItemId == null)
+        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'statementItemId', 'groupId', 'memberEmails', 'note', 'category', 'budget', 'reimbursement', 'normalizedId', 'normalizedPrimary', 'normalizedDescription']);
       allow create, delete: if false;
+    }
+
+    // Seed statement items are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-statement-items/{itemId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Statement items are the immutable bank record. Read by group members via
+    // the denormalized memberEmails field. Writes are denied from the client;
+    // data is managed via the Admin SDK in the ETL pipeline.
+    match /budget/{env}/statement-items/{itemId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow write: if false;
+    }
+
+    // Seed reconciliation notes are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-reconciliation-notes/{noteId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Validates reconciliation note field types and constraints on both create and update.
+    function isValidReconciliationNoteData() {
+      return request.resource.data.entityType in ["transaction", "statementItem"]
+        && request.resource.data.entityId is string
+        && request.resource.data.entityId.size() > 0
+        && request.resource.data.classification in ["timing", "missing_entry", "discrepancy"]
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 2000
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.updatedBy is string
+        && request.resource.data.keys().hasOnly(['entityType', 'entityId', 'classification', 'note', 'updatedAt', 'updatedBy', 'groupId', 'memberEmails']);
+    }
+
+    // Reconciliation notes are scoped to group members via a denormalized `memberEmails` field.
+    // CRUD by group members; groupId and memberEmails are immutable on update.
+    match /budget/{env}/reconciliation-notes/{noteId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow create: if isBudgetGroupMember(env, request.resource.data.groupId, request.resource.data.memberEmails)
+        && isValidReconciliationNoteData();
+      allow update: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberEmails == resource.data.memberEmails
+        && isValidReconciliationNoteData();
+      allow delete: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
     }
 
     // Seed budgets are public read-only example data for unauthenticated users

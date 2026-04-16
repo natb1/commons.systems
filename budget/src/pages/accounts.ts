@@ -14,6 +14,7 @@ interface AccountRow {
   derivedBalance: number | null;
   hasDiscrepancy: boolean;
   virtual: boolean;
+  latestPeriod: string | null;
 }
 
 function buildAccountRows(
@@ -80,6 +81,7 @@ function buildAccountRows(
       derivedBalance: derived ? derived.derivedBalance : null,
       hasDiscrepancy: derived ? Math.abs(derived.discrepancy) > 0.01 : false,
       virtual: virtualAccounts.has(k),
+      latestPeriod: stmt ? stmt.period : null,
     });
   }
 
@@ -102,12 +104,16 @@ function renderAccountsTable(rows: AccountRow[]): string {
     const derivedCell = row.derivedBalance !== null ? escapeHtml(formatCurrency(row.derivedBalance)) : "";
     const rowClass = row.hasDiscrepancy ? ' class="discrepancy"' : "";
     const virtualBadge = row.virtual ? ' <span class="virtual-badge">virtual</span>' : "";
+    const reconcileCell = row.latestPeriod !== null
+      ? `<a class="reconcile-link" href="/accounts/reconcile?institution=${encodeURIComponent(row.institution)}&account=${encodeURIComponent(row.account)}&period=${encodeURIComponent(row.latestPeriod)}">Reconcile</a>`
+      : "";
     return `<tr${rowClass}>
       <td>${escapeHtml(row.institution)}</td>
       <td>${escapeHtml(row.account)}${virtualBadge}</td>
       <td>${escapeHtml(formatDate(row.mostRecentTimestamp))}</td>
       <td>${balanceCell}</td>
       <td>${derivedCell}</td>
+      <td>${reconcileCell}</td>
     </tr>`;
   }).join("\n");
 
@@ -119,6 +125,7 @@ function renderAccountsTable(rows: AccountRow[]): string {
         <th>Most recent transaction</th>
         <th>Balance</th>
         <th>Derived</th>
+        <th>Reconcile</th>
       </tr>
     </thead>
     <tbody>

@@ -2,6 +2,11 @@ import { Timestamp } from "firebase/firestore";
 import type {
   Transaction,
   Statement,
+  StatementItem,
+  StatementItemId,
+  ReconciliationNote,
+  ReconciliationEntityType,
+  ReconciliationClassification,
   Budget,
   BudgetOverride,
   BudgetPeriod,
@@ -16,17 +21,26 @@ import type {
 } from "./firestore.js";
 import seedData from "virtual:budget-seed-data";
 import { getAll, get, put, deleteRecord } from "./idb.js";
-import type { IdbTransaction, IdbStatement, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
-import { toTransaction, toBudget, toBudgetPeriod, toRule, toStatement, toWeeklyAggregate, toNormalizationRule, filterByTimestamp } from "./converters.js";
+import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
+import { toTransaction, toBudget, toBudgetPeriod, toRule, toStatement, toStatementItem, toReconciliationNote, toWeeklyAggregate, toNormalizationRule, filterByTimestamp } from "./converters.js";
 
 export interface TransactionQuery {
   since?: Timestamp;
   before?: Timestamp;
 }
 
+export interface ReconciliationNoteFields {
+  entityType: ReconciliationEntityType;
+  entityId: string;
+  classification: ReconciliationClassification;
+  note: string;
+}
+
 export interface DataSource {
   getTransactions(query?: TransactionQuery): Promise<Transaction[]>;
   getStatements(): Promise<Statement[]>;
+  getStatementItems(): Promise<StatementItem[]>;
+  getReconciliationNotes(): Promise<ReconciliationNote[]>;
   getBudgets(): Promise<Budget[]>;
   getBudgetPeriods(): Promise<BudgetPeriod[]>;
   getRules(): Promise<Rule[]>;
@@ -36,6 +50,9 @@ export interface DataSource {
     id: TransactionId,
     fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
   ): Promise<void>;
+  updateTransactionStatementItemLink(id: TransactionId, statementItemId: StatementItemId | null): Promise<void>;
+  upsertReconciliationNote(fields: ReconciliationNoteFields): Promise<void>;
+  deleteReconciliationNote(entityType: ReconciliationEntityType, entityId: string): Promise<void>;
   updateBudget(
     id: BudgetId,
     fields: Partial<Pick<Budget, "name" | "allowance" | "allowancePeriod" | "rollover">>,
@@ -66,6 +83,12 @@ export class SeedDataSource implements DataSource {
   async getStatements(): Promise<Statement[]> {
     return seedData.statements.map(toStatement);
   }
+  async getStatementItems(): Promise<StatementItem[]> {
+    return seedData.statementItems.map(toStatementItem);
+  }
+  async getReconciliationNotes(): Promise<ReconciliationNote[]> {
+    return seedData.reconciliationNotes.map(toReconciliationNote);
+  }
   async getBudgets(): Promise<Budget[]> {
     return seedData.budgets.map(toBudget);
   }
@@ -82,6 +105,15 @@ export class SeedDataSource implements DataSource {
     return seedData.weeklyAggregates.map(toWeeklyAggregate);
   }
   async updateTransaction(): Promise<void> {
+    throw new Error("Seed data is read-only");
+  }
+  async updateTransactionStatementItemLink(): Promise<void> {
+    throw new Error("Seed data is read-only");
+  }
+  async upsertReconciliationNote(): Promise<void> {
+    throw new Error("Seed data is read-only");
+  }
+  async deleteReconciliationNote(): Promise<void> {
     throw new Error("Seed data is read-only");
   }
   async updateBudget(): Promise<void> {
@@ -137,6 +169,16 @@ export class IdbDataSource implements DataSource {
     return rows.map(toStatement);
   }
 
+  async getStatementItems(): Promise<StatementItem[]> {
+    const rows = await getAll<IdbStatementItem>("statementItems");
+    return rows.map(toStatementItem);
+  }
+
+  async getReconciliationNotes(): Promise<ReconciliationNote[]> {
+    const rows = await getAll<IdbReconciliationNote>("reconciliationNotes");
+    return rows.map(toReconciliationNote);
+  }
+
   async getBudgets(): Promise<Budget[]> {
     const rows = await getAll<IdbBudget>("budgets");
     return rows.map(toBudget);
@@ -167,6 +209,37 @@ export class IdbDataSource implements DataSource {
     fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
   ): Promise<void> {
     await updateRecord<IdbTransaction>("transactions", id, "Transaction", fields);
+  }
+
+  async updateTransactionStatementItemLink(
+    id: TransactionId,
+    statementItemId: StatementItemId | null,
+  ): Promise<void> {
+    await updateRecord<IdbTransaction>("transactions", id, "Transaction", {
+      statementItemId: statementItemId as string | null,
+    });
+  }
+
+  async upsertReconciliationNote(fields: ReconciliationNoteFields): Promise<void> {
+    const id = `${fields.entityType}_${fields.entityId}`;
+    const record: IdbReconciliationNote = {
+      id,
+      entityType: fields.entityType,
+      entityId: fields.entityId,
+      classification: fields.classification,
+      note: fields.note,
+      updatedAtMs: Date.now(),
+      updatedBy: "local",
+    };
+    await put("reconciliationNotes", record as unknown as Record<string, unknown>);
+  }
+
+  async deleteReconciliationNote(
+    entityType: ReconciliationEntityType,
+    entityId: string,
+  ): Promise<void> {
+    const id = `${entityType}_${entityId}`;
+    await deleteRecord("reconciliationNotes", id);
   }
 
   async updateBudget(

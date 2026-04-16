@@ -14,6 +14,7 @@ declare module "virtual:budget-seed-data" {
     readonly budget: string | null;
     readonly timestampMs: number | null;
     readonly statementId: string | null;
+    readonly statementItemId: string | null;
     readonly normalizedId: string | null;
     readonly normalizedPrimary: boolean;
     readonly normalizedDescription: string | null;
@@ -81,6 +82,29 @@ declare module "virtual:budget-seed-data" {
     readonly virtual: boolean;
   }
 
+  export interface SeedStatementItem {
+    readonly id: string;
+    readonly statementItemId: string;
+    readonly statementId: string;
+    readonly institution: string;
+    readonly account: string;
+    readonly period: string;
+    readonly amount: number;
+    readonly timestampMs: number;
+    readonly description: string;
+    readonly fitid: string;
+  }
+
+  export interface SeedReconciliationNote {
+    readonly id: string;
+    readonly entityType: "transaction" | "statementItem";
+    readonly entityId: string;
+    readonly classification: "timing" | "missing_entry" | "discrepancy";
+    readonly note: string;
+    readonly updatedAtMs: number;
+    readonly updatedBy: string;
+  }
+
   export interface SeedWeeklyAggregate {
     readonly id: string;
     readonly weekStartMs: number;
@@ -95,6 +119,8 @@ declare module "virtual:budget-seed-data" {
     readonly rules: SeedRule[];
     readonly normalizationRules: SeedNormalizationRule[];
     readonly statements: SeedStatement[];
+    readonly statementItems: SeedStatementItem[];
+    readonly reconciliationNotes: SeedReconciliationNote[];
     readonly weeklyAggregates: SeedWeeklyAggregate[];
   }
 
