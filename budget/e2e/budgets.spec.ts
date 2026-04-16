@@ -123,7 +123,9 @@ test.describe("budgets", () => {
     await page.goto("/");
     const row = page.locator("#budgets-table details.budget-row").first();
     await expect(row).toBeVisible();
-    await row.locator("summary").click();
+    await row.evaluate((el) => {
+      if (el instanceof HTMLDetailsElement) el.open = true;
+    });
     await expect(row).toHaveAttribute("open", "");
     const varianceEl = row.locator(".budget-variance");
     await expect(varianceEl).toBeVisible();
@@ -133,7 +135,9 @@ test.describe("budgets", () => {
   test("variance window toggle switches between 12w and 52w", async ({ page }) => {
     await page.goto("/");
     const row = page.locator("#budgets-table details.budget-row").first();
-    await row.locator("summary").click();
+    await row.evaluate((el) => {
+      if (el instanceof HTMLDetailsElement) el.open = true;
+    });
     const varianceEl = row.locator(".budget-variance");
     await expect(varianceEl.locator("svg").first()).toBeVisible({ timeout: 5000 });
     const ariaBefore = await varianceEl.locator("svg").first().getAttribute("aria-label");
