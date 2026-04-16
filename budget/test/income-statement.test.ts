@@ -3,6 +3,7 @@ import {
   topLevelCategory,
   isTransferCategory,
   mostRecentCompleteMonth,
+  mostRecentMonthWithData,
   priorMonth,
   yearAgoMonth,
   monthRange,
@@ -101,6 +102,69 @@ describe("mostRecentCompleteMonth", () => {
 
   it("rolls back to December of the prior year from January", () => {
     expect(mostRecentCompleteMonth(Date.UTC(2025, 0, 10))).toEqual({ year: 2024, monthIdx0: 11 });
+  });
+});
+
+describe("mostRecentMonthWithData", () => {
+  it("returns the month of the latest transaction before the ceiling", () => {
+    // nowMs = mid-March 2025; ceiling exclusive = start of March 2025.
+    const txns = [
+      makeTxn({ id: "a" as any, timestamp: ts("2025-01-10") }),
+      makeTxn({ id: "b" as any, timestamp: ts("2025-02-05") }),
+    ];
+    expect(mostRecentMonthWithData(txns, Date.UTC(2025, 2, 15))).toEqual({ year: 2025, monthIdx0: 1 });
+  });
+
+  it("returns null for an empty transaction list", () => {
+    expect(mostRecentMonthWithData([], Date.UTC(2025, 2, 15))).toBeNull();
+  });
+
+  it("returns null when all transactions are in the current partial month", () => {
+    const txns = [makeTxn({ timestamp: ts("2025-03-10") })];
+    expect(mostRecentMonthWithData(txns, Date.UTC(2025, 2, 15))).toBeNull();
+  });
+
+  it("excludes a transaction on day 1 of the nowMs month (partial-month boundary)", () => {
+    const monthStartMs = Date.UTC(2025, 2, 1);
+    const txns = [
+      makeTxn({
+        id: "a" as any,
+        timestamp: { toDate: () => new Date(monthStartMs), toMillis: () => monthStartMs } as any,
+      }),
+      makeTxn({ id: "b" as any, timestamp: ts("2025-02-20") }),
+    ];
+    expect(mostRecentMonthWithData(txns, Date.UTC(2025, 2, 15))).toEqual({ year: 2025, monthIdx0: 1 });
+  });
+
+  it("picks the latest month even when older months carry more volume", () => {
+    const txns = [
+      makeTxn({ id: "big1" as any, amount: 9999, timestamp: ts("2024-12-01") }),
+      makeTxn({ id: "big2" as any, amount: 9999, timestamp: ts("2024-12-15") }),
+      makeTxn({ id: "small" as any, amount: 1, timestamp: ts("2025-02-28") }),
+    ];
+    expect(mostRecentMonthWithData(txns, Date.UTC(2025, 2, 15))).toEqual({ year: 2025, monthIdx0: 1 });
+  });
+
+  it("returns a December latest month when nowMs is in early January", () => {
+    const txns = [makeTxn({ timestamp: ts("2024-12-20") })];
+    expect(mostRecentMonthWithData(txns, Date.UTC(2025, 0, 10))).toEqual({ year: 2024, monthIdx0: 11 });
+  });
+
+  it("counts transfer-only months as having data", () => {
+    const txns = [makeTxn({ category: "Transfer:CardPayment", amount: 200, timestamp: ts("2025-02-05") })];
+    expect(mostRecentMonthWithData(txns, Date.UTC(2025, 2, 15))).toEqual({ year: 2025, monthIdx0: 1 });
+  });
+
+  it("skips non-primary normalized duplicates", () => {
+    const txns = [
+      makeTxn({
+        id: "dup" as any,
+        timestamp: ts("2025-02-10"),
+        normalizedId: "n1",
+        normalizedPrimary: false,
+      }),
+    ];
+    expect(mostRecentMonthWithData(txns, Date.UTC(2025, 2, 15))).toBeNull();
   });
 });
 
@@ -422,9 +486,21 @@ describe("computeIncomeStatementReport", () => {
     expect(computeIncomeStatementReport([], Date.UTC(2025, 2, 15))).toBeNull();
   });
 
-  it("returns null when no transactions fall in the most recent complete month", () => {
-    // nowMs = mid-March 2025, current month = Feb 2025. Only a January txn.
+  it("selects the latest month with data when the calendar-current month is empty", () => {
+    // nowMs = mid-March 2025; only a January txn exists. Feb 2025 is empty, so
+    // 'current' falls back to Jan 2025 (the latest complete month with data).
     const txns = [makeTxn({ amount: 100, category: "Food:Groceries", timestamp: ts("2025-01-15") })];
+    const report = computeIncomeStatementReport(txns, Date.UTC(2025, 2, 15));
+    expect(report).not.toBeNull();
+    if (!report) return;
+    expect(report.currentLabel).toBe("Jan 2025");
+    expect(report.priorLabel).toBe("Dec 2024");
+    expect(report.yoYLabel).toBe("Jan 2024");
+  });
+
+  it("returns null when all transactions are in the current partial month", () => {
+    // nowMs = mid-March 2025; only a March txn exists (partial current month).
+    const txns = [makeTxn({ amount: 100, category: "Food:Groceries", timestamp: ts("2025-03-05") })];
     expect(computeIncomeStatementReport(txns, Date.UTC(2025, 2, 15))).toBeNull();
   });
 

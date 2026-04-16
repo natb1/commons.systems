@@ -92,6 +92,30 @@ export function mostRecentCompleteMonth(nowMs: number): YearMonth {
   return { year, monthIdx0: monthIdx0 - 1 };
 }
 
+/**
+ * The most recent complete calendar month containing at least one transaction.
+ * Scans from the end of `mostRecentCompleteMonth(nowMs)` backwards, so the
+ * current partial month is never selected. Returns null when no transaction
+ * falls at or before that ceiling.
+ */
+export function mostRecentMonthWithData(
+  transactions: readonly Transaction[],
+  nowMs: number,
+): YearMonth | null {
+  const d = new Date(nowMs);
+  const ceilingExclusiveMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+
+  let latestMs = -Infinity;
+  for (const t of transactions) {
+    if (!isIncludable(t)) continue;
+    const tMs = t.timestamp!.toMillis();
+    if (tMs < ceilingExclusiveMs && tMs > latestMs) latestMs = tMs;
+  }
+  if (latestMs === -Infinity) return null;
+  const latest = new Date(latestMs);
+  return { year: latest.getUTCFullYear(), monthIdx0: latest.getUTCMonth() };
+}
+
 export function priorMonth({ year, monthIdx0 }: YearMonth): YearMonth {
   if (monthIdx0 === 0) return { year: year - 1, monthIdx0: 11 };
   return { year, monthIdx0: monthIdx0 - 1 };
@@ -221,7 +245,8 @@ export function computeIncomeStatementReport(
   transactions: Transaction[],
   nowMs: number,
 ): IncomeStatementReport | null {
-  const currentMonth = mostRecentCompleteMonth(nowMs);
+  const currentMonth = mostRecentMonthWithData(transactions, nowMs);
+  if (!currentMonth) return null;
   const priorMo = priorMonth(currentMonth);
   const yoYMo = yearAgoMonth(currentMonth);
 

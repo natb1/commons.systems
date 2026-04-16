@@ -159,13 +159,15 @@ describe("accounts page smoke — income statement and cash flow summary", () =>
     expect(trendChartIdx).toBeLessThan(tableIdx);
   });
 
-  it("returns no income statement section when there are no transactions in current month", async () => {
+  it("hides sections when all transactions are in the current partial month", async () => {
+    // nowMs = 2025-03-15; only March transactions exist (the current partial
+    // month is excluded), so no complete month has data.
     const transactions = [
-      txn({ id: "t-old-1" as any, timestamp: ts("2023-05-01"), amount: -1000, category: "Income:Salary" }),
-      txn({ id: "t-old-2" as any, timestamp: ts("2023-06-15"), amount: 300, category: "Food:Groceries" }),
+      txn({ id: "t-new-1" as any, timestamp: ts("2025-03-01"), amount: -1000, category: "Income:Salary" }),
+      txn({ id: "t-new-2" as any, timestamp: ts("2025-03-10"), amount: 300, category: "Food:Groceries" }),
     ];
     const statements = [
-      stmt({ period: "2023-06", balance: 500, lastTransactionDate: ts("2023-06-15") }),
+      stmt({ period: "2025-03", balance: 700, lastTransactionDate: ts("2025-03-10") }),
     ];
 
     const html = await renderAccounts(seedOptions({
@@ -236,6 +238,38 @@ describe("accounts page smoke — income statement and cash flow summary", () =>
     // Either "+$" (positive) or "\u2212$" (minus, U+2212) should appear for transfers.
     const hasSignedCurrency = cashFlowHtml.includes("+$") || cashFlowHtml.includes("\u2212$");
     expect(hasSignedCurrency).toBe(true);
+  });
+
+  it("renders sections against stale fixture data (nowMs well after latest transaction)", async () => {
+    // Simulate seed data that has not been refreshed: 'current' should still
+    // fall back to the latest complete month with data (Feb 2025), not hide.
+    vi.setSystemTime(new Date("2026-04-15T12:00:00Z"));
+
+    const transactions = [
+      // Feb 2025 — latest month with data
+      txn({ id: "t-cur-inc" as any, timestamp: ts("2025-02-10"), amount: -5000, category: "Income:Salary" }),
+      txn({ id: "t-cur-food" as any, timestamp: ts("2025-02-12"), amount: 400, category: "Food:Groceries" }),
+      // Jan 2025 — prior
+      txn({ id: "t-pri-inc" as any, timestamp: ts("2025-01-10"), amount: -5000, category: "Income:Salary" }),
+      txn({ id: "t-pri-food" as any, timestamp: ts("2025-01-12"), amount: 500, category: "Food:Groceries" }),
+      // Feb 2024 — YoY
+      txn({ id: "t-yoy-inc" as any, timestamp: ts("2024-02-10"), amount: -4800, category: "Income:Salary" }),
+      txn({ id: "t-yoy-food" as any, timestamp: ts("2024-02-12"), amount: 350, category: "Food:Groceries" }),
+    ];
+    const statements = [
+      stmt({ period: "2025-02", balance: 3500, lastTransactionDate: ts("2025-02-12") }),
+    ];
+
+    const html = await renderAccounts(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue(transactions),
+      getStatements: vi.fn().mockResolvedValue(statements),
+    }));
+
+    expect(html).toContain('id="accounts-income-statement"');
+    expect(html).toContain('id="accounts-cash-flow-summary"');
+    expect(html).toContain("Feb 2025");
+    expect(html).toContain("Jan 2025");
+    expect(html).toContain("Feb 2024");
   });
 
   it("excludes non-primary normalized duplicates from income/expense totals", async () => {
