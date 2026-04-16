@@ -358,7 +358,7 @@ describe("renderBudgets", () => {
         },
       ]),
     }));
-    expect(html).toMatch(/<span [^>]*>\$141\.67<\/span>/);
+    expect(html).toContain("$141.67");
     expect(html).not.toMatch(/<input[^>]*\$141\.67/);
   });
 
@@ -476,5 +476,123 @@ describe("renderBudgets", () => {
       ]),
     }));
     expect(html).toContain("disabled");
+  });
+
+  it("renders each budget row as an expand-row with variance data attributes", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget()]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: { "Food:Groceries": 100 },
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 50,
+          count: 1,
+          categoryBreakdown: { "Food:Groceries": 50 },
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('class="expand-row budget-row"');
+    expect(html).toContain('class="budget-variance"');
+    expect(html).toContain('data-weekly-allowance=');
+    expect(html).toContain('data-window12=');
+    expect(html).toContain('data-window52=');
+  });
+
+  it("favorable diff cell prefixes amount with a down arrow", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('aria-label="favorable"');
+    expect(html).toContain("▼");
+  });
+
+  it("unfavorable diff cell prefixes amount with an up arrow", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 2400,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 0,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('aria-label="unfavorable"');
+    expect(html).toContain("▲");
+  });
+
+  it("variance data-window12 contains serialized category rows", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: { "Food:Groceries": 100 },
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 0,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    const match = html.match(/data-window12="([^"]*)"/);
+    expect(match).not.toBeNull();
+    const unescaped = match![1].replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+    const parsed = JSON.parse(unescaped);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed[0].category).toBe("Food:Groceries");
+    expect(parsed[0].isOther).toBe(false);
   });
 });

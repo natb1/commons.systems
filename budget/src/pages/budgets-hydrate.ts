@@ -7,8 +7,10 @@ import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wir
 import { renderBudgetChart } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
+import { renderVarianceWaterfall } from "./budgets-waterfall-chart.js";
 import { computePanelWidth, filterToWindow } from "./chart-util.js";
-import { toSundayEntry, computeRollingAverage, type PerBudgetPoint } from "../balance.js";
+import { toSundayEntry, computeRollingAverage, type CategoryVariance, type PerBudgetPoint } from "../balance.js";
+import { formatCurrency } from "../format.js";
 import type { SerializedBudget, SerializedBudgetOverride } from "./budgets.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
@@ -17,7 +19,155 @@ function rowBudgetId(el: HTMLElement): BudgetId | null {
   return (row.dataset.budgetId ?? null) as BudgetId | null;
 }
 
+function deserializeCategoryVariance(raw: string, field: string): CategoryVariance[] {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch (e) {
+    throw new DataIntegrityError(`Invalid ${field} data: ${e instanceof Error ? e.message : e}`);
+  }
+  if (!Array.isArray(parsed)) throw new DataIntegrityError(`${field} is not an array`);
+  const result: CategoryVariance[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const el = parsed[i];
+    if (typeof el !== "object" || el === null) {
+      throw new DataIntegrityError(`${field}[${i}] is not an object`);
+    }
+    const row = el as Record<string, unknown>;
+    if (typeof row.category !== "string" || typeof row.avgWeekly !== "number"
+      || typeof row.percentOfActual !== "number" || typeof row.isOther !== "boolean") {
+      throw new DataIntegrityError(`${field}[${i}] missing or invalid fields`);
+    }
+    result.push({
+      category: row.category,
+      avgWeekly: row.avgWeekly,
+      percentOfActual: row.percentOfActual,
+      isOther: row.isOther,
+    });
+  }
+  return result;
+}
+
+function renderVarianceDetailsEmpty(container: HTMLElement): void {
+  const p = document.createElement("p");
+  p.className = "variance-empty";
+  p.textContent = "No category data in this window.";
+  container.replaceChildren(p);
+}
+
+function renderCategoryList(list: HTMLElement, categories: readonly CategoryVariance[]): void {
+  const dl = document.createElement("dl");
+  dl.className = "variance-breakdown";
+  for (const c of categories) {
+    const dt = document.createElement("dt");
+    dt.textContent = c.category;
+    if (c.isOther) dt.classList.add("variance-other");
+    const dd = document.createElement("dd");
+    dd.textContent = `${formatCurrency(c.avgWeekly)}/week · ${c.percentOfActual.toFixed(1)}%`;
+    dl.append(dt, dd);
+  }
+  list.replaceChildren(dl);
+}
+
+function buildWindowToggle(): HTMLFieldSetElement {
+  const fieldset = document.createElement("fieldset");
+  fieldset.className = "variance-toggle";
+
+  const legend = document.createElement("legend");
+  legend.textContent = "Window";
+  fieldset.appendChild(legend);
+
+  for (const value of ["12", "52"] as const) {
+    const label = document.createElement("label");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "variance-window";
+    radio.value = value;
+    if (value === "12") radio.checked = true;
+    label.append(radio, document.createTextNode(` ${value}w`));
+    fieldset.appendChild(label);
+  }
+  return fieldset;
+}
+
+function renderVarianceDetails(
+  container: HTMLElement,
+  weeklyAllowance: number,
+  w12: readonly CategoryVariance[],
+  w52: readonly CategoryVariance[],
+): void {
+  const wrapper = document.createElement("div");
+  wrapper.className = "variance-wrapper";
+
+  const toggle = buildWindowToggle();
+
+  const chart = document.createElement("div");
+  chart.className = "variance-chart";
+
+  const list = document.createElement("div");
+  list.className = "variance-list";
+
+  wrapper.append(toggle, chart, list);
+  container.replaceChildren(wrapper);
+
+  function draw(window: 12 | 52): void {
+    const categories = window === 12 ? w12 : w52;
+    if (categories.length === 0) {
+      chart.replaceChildren();
+      const msg = document.createElement("p");
+      msg.className = "variance-empty";
+      msg.textContent = "No category data in this window.";
+      list.replaceChildren(msg);
+      return;
+    }
+    renderVarianceWaterfall(chart, { weeklyAllowance, categories, window });
+    renderCategoryList(list, categories);
+  }
+
+  toggle.addEventListener("change", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.name !== "variance-window") return;
+    const value = target.value === "52" ? 52 : 12;
+    draw(value);
+  });
+
+  draw(12);
+}
+
+function hydrateVarianceDetails(row: HTMLDetailsElement): void {
+  const varianceEl = row.querySelector<HTMLElement>(".budget-variance");
+  if (!varianceEl) return;
+  if (varianceEl.dataset.hydrated === "true") return;
+
+  const allowRaw = varianceEl.dataset.weeklyAllowance;
+  const w12Raw = varianceEl.dataset.window12;
+  const w52Raw = varianceEl.dataset.window52;
+  if (allowRaw === undefined || w12Raw === undefined || w52Raw === undefined) {
+    throw new DataIntegrityError("budget-variance missing required data attributes");
+  }
+  const weeklyAllowance = Number(allowRaw);
+  if (!Number.isFinite(weeklyAllowance)) {
+    throw new DataIntegrityError(`Invalid data-weekly-allowance: ${allowRaw}`);
+  }
+  const w12 = deserializeCategoryVariance(w12Raw, "data-window12");
+  const w52 = deserializeCategoryVariance(w52Raw, "data-window52");
+
+  if (w12.length === 0 && w52.length === 0) {
+    renderVarianceDetailsEmpty(varianceEl);
+  } else {
+    renderVarianceDetails(varianceEl, weeklyAllowance, w12, w52);
+  }
+  varianceEl.dataset.hydrated = "true";
+}
+
 export function hydrateBudgetTable(container: HTMLElement): void {
+  container.addEventListener("toggle", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLDetailsElement)) return;
+    if (!target.classList.contains("budget-row")) return;
+    if (!target.open) return;
+    hydrateVarianceDetails(target);
+  }, true);
+
   container.addEventListener("blur", async (e) => {
     const target = e.target;
     if (!(target instanceof HTMLInputElement)) return;
