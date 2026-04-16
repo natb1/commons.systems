@@ -15,13 +15,18 @@ export interface SiteDefaults {
 export type OgTagEntry = { attr: "property" | "name"; key: string; content: string };
 
 export function siteDefaultOgEntries(siteUrl: string, defaults: SiteDefaults): OgTagEntry[] {
+  const imageUrl = `${siteUrl}${defaults.image}`;
   return [
     { attr: "name", key: "description", content: defaults.description },
     { attr: "property", key: "og:title", content: defaults.title },
     { attr: "property", key: "og:description", content: defaults.description },
-    { attr: "property", key: "og:image", content: `${siteUrl}${defaults.image}` },
+    { attr: "property", key: "og:image", content: imageUrl },
     { attr: "property", key: "og:type", content: "website" },
     { attr: "property", key: "og:url", content: siteUrl },
+    { attr: "name", key: "twitter:card", content: "summary_large_image" },
+    { attr: "name", key: "twitter:title", content: defaults.title },
+    { attr: "name", key: "twitter:description", content: defaults.description },
+    { attr: "name", key: "twitter:image", content: imageUrl },
   ];
 }
 
@@ -30,18 +35,24 @@ export function postOgEntries(siteUrl: string, post: PostMeta): OgTagEntry[] {
     { attr: "property", key: "og:title", content: post.title },
     { attr: "property", key: "og:url", content: `${siteUrl}/post/${encodeURIComponent(post.id)}` },
     { attr: "property", key: "og:type", content: "article" },
+    { attr: "name", key: "twitter:card", content: "summary_large_image" },
+    { attr: "name", key: "twitter:title", content: post.title },
   ];
   if (post.previewDescription) {
     entries.push({ attr: "property", key: "og:description", content: post.previewDescription });
     entries.push({ attr: "name", key: "description", content: post.previewDescription });
+    entries.push({ attr: "name", key: "twitter:description", content: post.previewDescription });
   }
   if (post.previewImage) {
-    entries.push({ attr: "property", key: "og:image", content: `${siteUrl}${post.previewImage}` });
+    const imageUrl = `${siteUrl}${post.previewImage}`;
+    entries.push({ attr: "property", key: "og:image", content: imageUrl });
+    entries.push({ attr: "name", key: "twitter:image", content: imageUrl });
   }
   return entries;
 }
 
 const OG_PROPERTIES = ["og:title", "og:description", "og:image", "og:type", "og:url"] as const;
+const TWITTER_NAMES = ["twitter:card", "twitter:title", "twitter:description", "twitter:image"] as const;
 
 function setMetaTag(attr: "property" | "name", value: string, content: string): void {
   let el = document.querySelector<HTMLMetaElement>(`meta[${attr}="${value}"]`);
@@ -56,6 +67,9 @@ function setMetaTag(attr: "property" | "name", value: string, content: string): 
 function removeOgTags(): void {
   for (const property of OG_PROPERTIES) {
     document.querySelector(`meta[property="${property}"]`)?.remove();
+  }
+  for (const name of TWITTER_NAMES) {
+    document.querySelector(`meta[name="${name}"]`)?.remove();
   }
 }
 
@@ -80,5 +94,6 @@ export function updateOgMeta(
   postOgEntries(siteUrl, post).forEach((e) => setMetaTag(e.attr, e.key, e.content));
   if (!post.previewImage) {
     document.querySelector('meta[property="og:image"]')?.remove();
+    document.querySelector('meta[name="twitter:image"]')?.remove();
   }
 }
