@@ -11,6 +11,37 @@ test.describe("blog smoke", () => {
     await page.goto("/");
     const desc = await page.getAttribute('meta[name="description"]', "content");
     expect(desc).toBeTruthy();
+    expect(desc!.length).toBeLessThanOrEqual(160);
+  });
+
+  test("Open Graph tags present @smoke", async ({ page }) => {
+    await page.goto("/");
+    for (const property of ["og:title", "og:description", "og:image", "og:type", "og:url"]) {
+      const content = await page.getAttribute(`meta[property="${property}"]`, "content");
+      expect(content, `missing ${property}`).toBeTruthy();
+    }
+    const image = await page.getAttribute('meta[property="og:image"]', "content");
+    expect(image).toMatch(/^https?:\/\//);
+    const type = await page.getAttribute('meta[property="og:type"]', "content");
+    expect(type).toBe("website");
+  });
+
+  test("Twitter Card tags present @smoke", async ({ page }) => {
+    await page.goto("/");
+    const card = await page.getAttribute('meta[name="twitter:card"]', "content");
+    expect(card).toBe("summary_large_image");
+    for (const name of ["twitter:title", "twitter:description", "twitter:image"]) {
+      const content = await page.getAttribute(`meta[name="${name}"]`, "content");
+      expect(content, `missing ${name}`).toBeTruthy();
+    }
+  });
+
+  test("og:image resolves @smoke", async ({ page, request }) => {
+    await page.goto("/");
+    const imageUrl = await page.getAttribute('meta[property="og:image"]', "content");
+    expect(imageUrl).toBeTruthy();
+    const response = await request.get(imageUrl!);
+    expect(response.status()).toBe(200);
   });
 
   test("homepage loads without JS errors @smoke", async ({ page }) => {
