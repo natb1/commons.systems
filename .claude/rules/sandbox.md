@@ -48,11 +48,14 @@ connectivity (e.g., `curl http://localhost:*`, `ss -tlnp`, readiness polls).
 `allowedTools` rules match from the start of the command string. Patterns that
 break prefix matching cause permission prompts. Avoid these patterns:
 
-### Avoid `cd && command`
+### Avoid `cd && command` for write/execute commands
 
-`cd /path && command` doesn't match rules like `Bash(npx vitest:*)`.
+As of Claude Code 2.1.111, read-only commands starting with `cd <project-dir> &&`
+are auto-approved (e.g. `cd print && ls`, `cd print && git status`).
 
-Use flags that accept a directory instead:
+For commands that execute code or modify files, `cd /path && command` still
+doesn't match rules like `Bash(npx vitest:*)`. Use flags that accept a directory
+instead:
 - `npm run build --prefix print` (npm `--prefix` flag)
 - `npm ci --prefix print`
 - `npx vitest run --root print` (vitest `--root` flag)
