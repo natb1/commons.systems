@@ -83,15 +83,15 @@ function injectNav(html: string, navHtml: string): string {
   return result;
 }
 
+function buildSeoHeadHtml(parts: string[]): string {
+  return parts.filter((s) => s.length > 0).join("\n    ");
+}
+
 // Build-time counterpart of og-meta.ts. Generates per-post HTML files with
 // OG tags, <meta name="description">, and <title>, plus injects rendered blog
 // content, info panel, and nav — enabling crawlers to see full content without
 // executing JS. Each post page includes all published articles (matching the
 // root index) so the client hydrates without a visible content shift.
-function buildSeoHeadHtml(parts: string[]): string {
-  return parts.filter((s) => s.length > 0).join("\n    ");
-}
-
 export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const {
     siteUrl,
@@ -128,10 +128,12 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const panelHtml = renderInfoPanel({ ...infoPanel, topPosts });
   const navHtml = renderNavHtml(navLinks);
 
+  const relMeHtml = relMe && relMe.length > 0 ? relMeLinkTags(relMe) : "";
+
   const rootSeoHead = buildSeoHeadHtml([
     canonicalLinkTag(`${siteUrl}/`),
     organization ? jsonLdScriptTag(organizationJsonLd(organization)) : "",
-    relMe && relMe.length > 0 ? relMeLinkTags(relMe) : "",
+    relMeHtml,
   ]);
 
   const allArticlesHtml = rendered.map((p) => p.articleHtml).join("\n      <hr>\n      ");
@@ -158,7 +160,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     const postSeoHead = buildSeoHeadHtml([
       canonicalLinkTag(`${siteUrl}/post/${encodeURIComponent(meta.id)}`),
       author ? jsonLdScriptTag(blogPostingJsonLd(meta, siteUrl, author)) : "",
-      relMe && relMe.length > 0 ? relMeLinkTags(relMe) : "",
+      relMeHtml,
     ]);
     let html = template;
     if (meta.previewDescription) {
@@ -168,7 +170,9 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     html = html.replace("</head>", `    ${ogBlock}\n  </head>`);
     if (html === beforeHead) throw new Error(`</head> marker not found in template`);
     if (postSeoHead) {
+      const beforeSeo = html;
       html = html.replace("</head>", `    ${postSeoHead}\n  </head>`);
+      if (html === beforeSeo) throw new Error("</head> marker not found in post template");
     }
     const beforeTitle = html;
     html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(formatPageTitle(titleSuffix, meta.title))}</title>`);

@@ -45,4 +45,8 @@ describe("updateCanonical", () => {
     const el = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     expect(el!.getAttribute("href")).toBe("https://example.com/post/a%20b");
   });
+
+  it("throws when siteUrl is empty", () => {
+    expect(() => updateCanonical("")).toThrow(/siteUrl is required/);
+  });
 });

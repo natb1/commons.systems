@@ -7,7 +7,7 @@ import { validatePublishedPosts } from "./post-types.ts";
 export interface SitemapConfig {
   siteUrl: string;
   seed: Pick<SeedSpec, "collections">;
-  /** Paths to include in addition to posts — always includes "/" unless overridden. */
+  /** Static URL paths to include alongside post URLs. Defaults to ["/"]; the homepage is dropped if you supply a list without it. */
   staticPaths?: string[];
   postLinkPrefix?: string;
 }
@@ -28,7 +28,7 @@ function urlEntry(entry: UrlEntry): string {
   </url>`;
 }
 
-/** Returns sitemap XML string from seed data. Pure function used by the Vite dev plugin and prerender script. */
+/** Returns sitemap XML for published posts. Pure: no I/O. */
 export function buildSitemapXml(config: SitemapConfig): string {
   const { siteUrl, seed, staticPaths = ["/"], postLinkPrefix = "/post/" } = config;
 
@@ -56,7 +56,7 @@ ${urls}
 </urlset>`;
 }
 
-/** Builds sitemap XML and writes sitemap.xml to distDir. Called by prerender scripts. */
+/** Writes sitemap.xml to distDir. */
 export function generateSitemapXml(config: SitemapFileConfig): void {
   const xml = buildSitemapXml(config);
   writeFileSync(join(config.distDir, "sitemap.xml"), xml);

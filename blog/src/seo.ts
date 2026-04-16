@@ -48,8 +48,8 @@ export function blogPostingJsonLd(
 }
 
 // Embedding JSON inside <script> requires escaping </script> sequences and
-// Unicode line separators that can break script parsing. JSON.stringify output
-// is safe otherwise — no need for full HTML escaping.
+// Unicode line separators that can break script parsing. Also escapes < > &
+// for defense-in-depth in case the JSON ends up in an unexpected context.
 export function jsonLdScriptTag(json: Record<string, unknown>): string {
   const safe = JSON.stringify(json)
     .replace(/</g, "\\u003c")
