@@ -601,7 +601,21 @@ const seedStatementItemDocs: { id: string; data: StatementItemSeedData }[] = [
   },
 ];
 
-const seedReconciliationNoteDocs: { id: string; data: ReconciliationNoteSeedData }[] = [];
+const seedReconciliationNoteDocs: { id: string; data: ReconciliationNoteSeedData }[] = [
+  {
+    id: "statementItem_Example-Bank_Checking_FITID-RECON-ORPHAN",
+    data: {
+      entityType: "statementItem",
+      entityId: "Example Bank_Checking_FITID-RECON-ORPHAN",
+      classification: "missing_entry",
+      note: "Unknown merchant — awaiting clarification",
+      updatedAt: new Date("2025-02-15T00:00:00Z"),
+      updatedBy: TEST_USER.email,
+      groupId: "household",
+      memberEmails: [TEST_USER.email],
+    } satisfies ReconciliationNoteSeedData,
+  },
+];
 
 const seedRuleDocs: { id: string; data: RuleSeedData }[] = [
   {
