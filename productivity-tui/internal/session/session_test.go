@@ -73,3 +73,41 @@ func TestReadSessions_MalformedJSON(t *testing.T) {
 		t.Fatal("expected error for malformed JSON")
 	}
 }
+
+func TestFilterLive(t *testing.T) {
+	dir := t.TempDir()
+
+	alivePath := filepath.Join(dir, "alive.jsonl")
+	aliveFile, err := os.OpenFile(alivePath, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { aliveFile.Close() })
+
+	deadPath := filepath.Join(dir, "dead.jsonl")
+	deadFile, err := os.OpenFile(deadPath, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := deadFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	sessions := map[string]Session{
+		"alive":       {WorkingDir: "/tmp/a", TranscriptPath: alivePath},
+		"dead":        {WorkingDir: "/tmp/b", TranscriptPath: deadPath},
+		"pre_upgrade": {WorkingDir: "/tmp/c"},
+	}
+
+	got := FilterLive(sessions)
+
+	if _, ok := got["alive"]; !ok {
+		t.Error("expected alive session to be kept")
+	}
+	if _, ok := got["dead"]; ok {
+		t.Error("expected dead session to be dropped")
+	}
+	if _, ok := got["pre_upgrade"]; !ok {
+		t.Error("expected pre-upgrade session (empty TranscriptPath) to be kept")
+	}
+}
