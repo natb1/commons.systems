@@ -49,4 +49,21 @@ test.describe("blog smoke", () => {
     // Draft posts must not appear for unauthenticated users
     await expect(page.locator("#posts")).not.toContainText("Draft Ideas");
   });
+
+  // Validates the CSS rule shipped, not the actual font load: font-display:
+  // optional intentionally skips the network fetch on first visit.
+  test("post body declares IBM Plex Serif @smoke", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector(
+      "#post-content-recovering-autonomy-with-coding-agents p",
+      { timeout: 30000 },
+    );
+    const family = await page.evaluate(() => {
+      const p = document.querySelector(
+        "#post-content-recovering-autonomy-with-coding-agents p",
+      );
+      return p ? getComputedStyle(p).fontFamily : null;
+    });
+    expect(family).toContain("IBM Plex Serif");
+  });
 });

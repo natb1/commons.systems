@@ -9,6 +9,19 @@
   text-shadow: none;
 }
 
+#posts article [id^="post-content-"] {
+  font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  line-height: 1.6;
+  max-width: 70ch;
+}
+
+#posts article [id^="post-content-"] code,
+#posts article [id^="post-content-"] pre,
+#posts article [id^="post-content-"] kbd,
+#posts article [id^="post-content-"] samp {
+  font-family: var(--font-body);
+}
+
 #posts article {
   margin-top: 4rem;
 }
