@@ -142,7 +142,7 @@ test.describe("budgets", () => {
     await expect(varianceEl.locator("svg").first()).toBeVisible({ timeout: 5000 });
     const ariaBefore = await varianceEl.locator("svg").first().getAttribute("aria-label");
     expect(ariaBefore).toContain("12");
-    await row.locator('input[name="variance-window"][value="52"]').check();
+    await row.locator('.variance-toggle input[value="52"]').check();
     await page.waitForFunction(
       () => {
         const svg = document

@@ -126,7 +126,9 @@ describe("renderBudgets", () => {
     }));
     expect(html).toContain('class="edit-name"');
     expect(html).toContain("disabled");
-    expect(html).not.toContain('data-budget-id=');
+    // data-budget-id is always emitted on the row element regardless of
+    // authorization so variance hydration can namespace its radio group.
+    expect(html).toContain('data-budget-id="food"');
     expect(html).toContain("Food");
     expect(html).toContain("150");
     expect(html).toContain("None");

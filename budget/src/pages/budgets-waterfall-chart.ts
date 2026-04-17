@@ -3,7 +3,7 @@ import { scaleOrdinal } from "d3-scale";
 import { schemeTableau10 } from "d3-scale-chromatic";
 import { isFavorableDiff, type CategoryActualRow, type VarianceWindow } from "../balance.js";
 import { formatCurrency } from "../format.js";
-import { getThemeFg, readThemeVar } from "./chart-util.js";
+import { readThemeVar } from "./chart-util.js";
 
 const ALLOWANCE_LABEL = "Allowance";
 const ACTUAL_LABEL = "Actual";
@@ -52,7 +52,7 @@ export function buildWaterfallBars(opts: WaterfallOptions): WaterfallBar[] {
     running = next;
   }
 
-  const totalActual = opts.categories.reduce((s, c) => s + c.avgWeekly, 0);
+  const totalActual = opts.weeklyAllowance - running;
   bars.push({
     label: ACTUAL_LABEL,
     y1: 0,
@@ -66,12 +66,13 @@ export function buildWaterfallBars(opts: WaterfallOptions): WaterfallBar[] {
 
 export function renderVarianceWaterfall(container: HTMLElement, options: WaterfallOptions): void {
   const bars = buildWaterfallBars(options);
-  const totalActual = options.categories.reduce((s, c) => s + c.avgWeekly, 0);
+  const totalActual = bars[bars.length - 1].amount;
   const favorable = isFavorableDiff(options.weeklyAllowance - totalActual);
 
-  const fg = getThemeFg(container);
-  const favorableColor = readThemeVar(container, "--favorable");
-  const unfavorableColor = readThemeVar(container, "--unfavorable");
+  const style = getComputedStyle(container);
+  const fg = readThemeVar(container, "--fg", style);
+  const favorableColor = readThemeVar(container, "--favorable", style);
+  const unfavorableColor = readThemeVar(container, "--unfavorable", style);
   const categoryNames = options.categories.map(c => c.kind === "other" ? OTHER_LABEL : c.category);
   const categoryColor = scaleOrdinal<string, string>()
     .domain(categoryNames)

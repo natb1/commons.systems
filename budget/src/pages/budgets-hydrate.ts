@@ -115,8 +115,8 @@ function renderVarianceDetails(
   wrapper.append(toggle, chart, list);
   container.replaceChildren(wrapper);
 
-  function draw(window: VarianceWindow): void {
-    const categories = window === 12 ? w12 : w52;
+  function draw(win: VarianceWindow): void {
+    const categories = win === 12 ? w12 : w52;
     if (categories.length === 0) {
       chart.replaceChildren();
       const msg = document.createElement("p");
@@ -125,7 +125,7 @@ function renderVarianceDetails(
       list.replaceChildren(msg);
       return;
     }
-    renderVarianceWaterfall(chart, { weeklyAllowance, categories, window });
+    renderVarianceWaterfall(chart, { weeklyAllowance, categories, window: win });
     renderCategoryList(list, categories);
   }
 
@@ -168,6 +168,8 @@ function hydrateVarianceDetails(row: HTMLDetailsElement): void {
 }
 
 export function hydrateBudgetTable(container: HTMLElement): void {
+  // `toggle` events on <details> do not bubble; use capture-phase delegation
+  // so a single listener can handle every expanded row.
   container.addEventListener("toggle", (e) => {
     const target = e.target;
     if (!(target instanceof HTMLDetailsElement)) return;

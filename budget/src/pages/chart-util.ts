@@ -33,8 +33,8 @@ export function getThemeFg(container: HTMLElement): string {
   return readThemeVar(container, "--fg");
 }
 
-export function readThemeVar(container: HTMLElement, name: string): string {
-  const value = getComputedStyle(container).getPropertyValue(name).trim();
+export function readThemeVar(container: HTMLElement, name: string, style?: CSSStyleDeclaration): string {
+  const value = (style ?? getComputedStyle(container)).getPropertyValue(name).trim();
   if (!value) throw new Error(`Missing required CSS custom property ${name}`);
   return value;
 }

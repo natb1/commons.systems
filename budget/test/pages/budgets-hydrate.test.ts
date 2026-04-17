@@ -441,11 +441,9 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).toThrow();
   });
 
-  it("throws when avgWeekly is Infinity", () => {
+  it("throws when avgWeekly is not a finite number", () => {
     const { container, details } = makeVarianceContainer({
       weeklyAllowance: "100",
-      // JSON cannot represent Infinity directly; emit as string and parse fails.
-      // Use a non-finite substitute the deserializer rejects: null avgWeekly.
       window12: JSON.stringify([{ kind: "category", category: "X", avgWeekly: null }]),
       window52: POPULATED_W52,
     });
@@ -494,6 +492,24 @@ describe("hydrateBudgetTable — variance", () => {
     expect(nextSvg).not.toBeNull();
     expect(nextSvg!.getAttribute("aria-label")).not.toBe(firstAria);
     expect(nextSvg!.getAttribute("aria-label")).toContain("52");
+  });
+
+  it("leaves a single svg/dl after repeated window toggling", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: POPULATED_W12,
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    openDetails(details);
+    const radio12 = varianceEl!.querySelector('input[value="12"]') as HTMLInputElement;
+    const radio52 = varianceEl!.querySelector('input[value="52"]') as HTMLInputElement;
+    for (const radio of [radio52, radio12, radio52, radio12]) {
+      radio.checked = true;
+      radio.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    expect(varianceEl!.querySelectorAll(".variance-chart svg")).toHaveLength(1);
+    expect(varianceEl!.querySelectorAll(".variance-breakdown")).toHaveLength(1);
   });
 
   it("throws when the window toggle receives an unexpected value", () => {

@@ -928,9 +928,11 @@ function indexPeriodsForBudgets(periods: BudgetPeriod[]): {
   return { latestWeekMs, periodsByBudget };
 }
 
-/** Compute per-budget diffs and averages over 12 and 52 week trailing windows.
- * Combines what were previously two separate passes (computeBudgetDiffs + computePerBudgetAverageSpending)
- * into a single traversal. */
+/**
+ * Compute diff (allowance minus trailing average) and the raw trailing averages
+ * over 12- and 52-week windows. The latest observed week across all budgets is
+ * excluded as typically incomplete.
+ */
 export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): Map<BudgetId, PerBudgetStats> {
   const { latestWeekMs, periodsByBudget } = indexPeriodsForBudgets(periods);
 
@@ -1006,6 +1008,8 @@ export function isFavorableDiff(n: number): boolean {
  *
  * The latest observed week (across all budgets) is excluded from both windows
  * because it is typically still in progress and would skew the average downward.
+ * Included weeks are those whose start falls within `weekCount * MS_PER_WEEK`
+ * of the latest week's start.
  *
  * Categories whose share falls below MATERIALITY_THRESHOLD are folded into a
  * single `kind: "other"` row appended after the sorted material rows.
@@ -1027,6 +1031,13 @@ export function computePerBudgetCategoryVariance(
   return result;
 }
 
+/**
+ * Returns material rows sorted descending by avgWeekly, with an "Other" row (if
+ * any sub-threshold categories were folded) appended last regardless of its
+ * magnitude. Downstream renderers (variance waterfall, category list) depend on
+ * this order. Signs in avgWeekly are preserved — a refund category appears with
+ * a negative value.
+ */
 function decomposeWindow(
   budgetPeriods: BudgetPeriod[],
   latestWeekMs: number | undefined,

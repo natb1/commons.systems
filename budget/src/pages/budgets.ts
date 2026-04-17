@@ -1,5 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod, type WeeklyAggregate } from "../firestore.js";
 import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetDiffs, computePerBudgetCategoryVariance, computePerBudgetTrend, isFavorableDiff, weeklyEquivalent, periodEquivalent, type CategoryActualRow, type PerBudgetCategoryVariance, type PerBudgetPoint, type PerBudgetStats } from "../balance.js";
@@ -54,7 +55,11 @@ function renderRow(
   stats: PerBudgetStats | undefined,
   variance: PerBudgetCategoryVariance,
 ): string {
-  const editIdAttr = editable ? ` data-budget-id="${escapeHtml(budget.id)}"` : "";
+  // data-budget-id is emitted for every row (anonymous and authorized) because
+  // the variance hydrator scopes the window-toggle radio-group name to the
+  // budget id. Historically it only flagged edit-eligible rows; that contract
+  // now lives purely in the `disabled` attribute on inputs/selects below.
+  const budgetIdAttr = ` data-budget-id="${escapeHtml(budget.id)}"`;
   const dis = editable ? "" : " disabled";
   const nameCell = `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name"${dis}>`;
   const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.allowance))}" min="0" aria-label="Allowance"${dis}>`;
@@ -71,7 +76,7 @@ function renderRow(
     ` data-window12="${serializeCategoryRows(variance.window12)}"` +
     ` data-window52="${serializeCategoryRows(variance.window52)}"`;
 
-  return `<details class="expand-row budget-row"${editIdAttr}>
+  return `<details class="expand-row budget-row"${budgetIdAttr}>
     <summary>
       <div class="expand-summary budget-summary-content">
         <span>${nameCell}</span>
@@ -101,7 +106,7 @@ function renderBudgetTable(
   const sorted = [...budgets].sort((a, b) => a.name.localeCompare(b.name));
   const rows = sorted.map(b => {
     const variance = variances.get(b.id);
-    if (!variance) throw new Error(`Missing variance for budget ${b.id}`);
+    if (!variance) throw new DataIntegrityError(`Missing variance for budget ${b.id}`);
     return renderRow(b, authorized, stats.get(b.id), variance);
   }).join("\n");
 
