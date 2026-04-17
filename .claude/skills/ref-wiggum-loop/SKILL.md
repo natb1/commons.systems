@@ -77,7 +77,7 @@ Before exiting plan mode, update issue state to set `wiggum_step` to 0:
 
 (Replace `...` with all existing state fields per State Persistence above.) If the state write fails, do not exit plan mode — report the error and retry up to 3 times. If all retries fail, report the failure to the user and halt.
 
-Execute plan, then immediately return to Step 0 without stopping. (Step 0, not Step 1: each iteration requires a fresh plan for the next execution cycle.) Do not output a summary or wait for user input between iterations — the loop is continuous.
+After the commit lands, your very next tool call must be the Step 0 state write followed by entering plan mode. Do not emit any user-facing text between the commit and the Step 0 state write. (Step 0, not Step 1: each iteration requires a fresh plan for the next execution cycle.) The loop is continuous.
 
 ## Step 4. Terminate
 
