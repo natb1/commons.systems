@@ -1,8 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -84,6 +87,57 @@ func TestViewEmptySessions(t *testing.T) {
 	if !strings.Contains(output, "No active sessions") {
 		t.Error("expected 'No active sessions' message")
 	}
+}
+
+func TestLoadSessionsFiltersDead(t *testing.T) {
+	if _, err := exec.LookPath("ps"); err != nil {
+		t.Skip("ps not available")
+	}
+
+	selfPID := os.Getpid()
+	selfStart, err := psLStartOf(selfPID)
+	if err != nil {
+		t.Fatalf("reading own start-time: %v", err)
+	}
+
+	cmd := exec.Command("sh", "-c", "exit 0")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("spawning dead process: %v", err)
+	}
+	deadPID := cmd.Process.Pid
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sessions.json")
+	data := fmt.Sprintf(`{
+		"live": {"working_dir": "/tmp/a", "pid": %d, "pid_start": %q, "idle": false, "last_activity": "2026-04-16T10:00:00Z"},
+		"dead": {"working_dir": "/tmp/b", "pid": %d, "pid_start": %q, "idle": false, "last_activity": "2026-04-16T10:00:00Z"}
+	}`, selfPID, selfStart, deadPID, selfStart)
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	msg := loadSessions(path)()
+	sm, ok := msg.(sessionsMsg)
+	if !ok {
+		t.Fatalf("expected sessionsMsg, got %T", msg)
+	}
+	if sm.err != nil {
+		t.Fatalf("unexpected error: %v", sm.err)
+	}
+	if _, ok := sm.sessions["live"]; !ok {
+		t.Error("expected live session to be kept")
+	}
+	if _, ok := sm.sessions["dead"]; ok {
+		t.Error("expected dead session to be dropped")
+	}
+}
+
+func psLStartOf(pid int) (string, error) {
+	out, err := exec.Command("ps", "-o", "lstart=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func TestTickReloadsSessions(t *testing.T) {

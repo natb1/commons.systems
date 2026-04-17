@@ -9,6 +9,8 @@ import (
 	"testing"
 )
 
+const mismatchedStart = "Thu Jan  1 00:00:00 1970"
+
 func TestReadSessions_ValidJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sessions.json")
@@ -97,7 +99,7 @@ func TestFilterLive(t *testing.T) {
 	sessions := map[string]Session{
 		"live":        {WorkingDir: "/tmp/a", PID: selfPID, PIDStart: selfStart},
 		"dead":        {WorkingDir: "/tmp/b", PID: deadPID, PIDStart: selfStart},
-		"recycled":    {WorkingDir: "/tmp/c", PID: selfPID, PIDStart: "Thu Jan  1 00:00:00 1970"},
+		"recycled":    {WorkingDir: "/tmp/c", PID: selfPID, PIDStart: mismatchedStart},
 		"pre_upgrade": {WorkingDir: "/tmp/d"},
 	}
 
