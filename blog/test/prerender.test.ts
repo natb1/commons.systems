@@ -392,6 +392,57 @@ describe("prerenderPosts", () => {
     expect(html).toContain('<meta property="og:type" content="website">');
     expect(html).toContain('<meta property="og:url" content="https://example.com">');
     expect(html).toContain('<meta name="description" content="Site description for OG">');
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
+    expect(html).toContain('<meta name="twitter:title" content="My Site">');
+    expect(html).toContain('<meta name="twitter:description" content="Site description for OG">');
+    expect(html).toContain('<meta name="twitter:image" content="https://example.com/og-image.jpg">');
+  });
+
+  it("injects twitter:* tags into per-post HTML when post has previewDescription and previewImage", async () => {
+    await prerenderPosts(makeConfig());
+
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
+    expect(html).toContain('<meta name="twitter:title" content="Hello World">');
+    expect(html).toContain('<meta name="twitter:description" content="A first post about hello world.">');
+    expect(html).toContain('<meta name="twitter:image" content="https://example.com/hello.jpg">');
+  });
+
+  it("omits twitter:image in per-post HTML when previewImage is absent", async () => {
+    const config = makeConfig();
+    const doc = config.seed.collections[0].documents[0];
+    delete (doc.data as Record<string, unknown>).previewImage;
+
+    await prerenderPosts(config);
+
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+    expect(html).not.toContain("twitter:image");
+    expect(html).toContain('<meta name="twitter:description"');
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
+  });
+
+  it("omits twitter:description in per-post HTML when previewDescription is absent", async () => {
+    const config = makeConfig();
+    const doc = config.seed.collections[0].documents[0];
+    delete (doc.data as Record<string, unknown>).previewDescription;
+    delete (doc.data as Record<string, unknown>).previewImage;
+
+    await prerenderPosts(config);
+
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+    expect(html).not.toContain("twitter:description");
+    expect(html).not.toContain("twitter:image");
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
+    expect(html).toContain('<meta name="twitter:title" content="Hello World">');
   });
 
   it("omits root OG tags when siteDefaults not provided", async () => {

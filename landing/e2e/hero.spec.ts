@@ -14,18 +14,19 @@ test.describe("hero band", () => {
 
     const taglineBox = await tagline.boundingBox();
     const viewport = page.viewportSize();
-    expect(taglineBox).not.toBeNull();
-    expect(viewport).not.toBeNull();
-    expect(taglineBox!.y + taglineBox!.height).toBeLessThan(viewport!.height);
+    if (!taglineBox) throw new Error("tagline has no bounding box");
+    if (!viewport) throw new Error("page has no viewport size");
+    expect(taglineBox.y + taglineBox.height).toBeLessThan(viewport.height);
   });
 
-  test("tagline is not uppercase", async ({ page }) => {
+  test("tagline renders without uppercase transform", async ({ page }) => {
     await page.goto("/");
 
-    const textTransform = await page
-      .locator(".page > header .tagline")
-      .evaluate((el) => getComputedStyle(el).textTransform);
-    expect(textTransform).toBe("none");
+    const tagline = page.locator(".page > header .tagline");
+    const innerText = await tagline.evaluate((el) => (el as HTMLElement).innerText);
+    const textContent = await tagline.evaluate((el) => el.textContent);
+    expect(innerText).toBe("Custom software you can understand.");
+    expect(innerText).toBe(textContent);
   });
 
   test("H1 does not overflow at viewport width", async ({ page }) => {
@@ -38,14 +39,15 @@ test.describe("hero band", () => {
     expect(overflow.scroll).toBeLessThanOrEqual(overflow.client);
   });
 
-  test("empty landing-hero scaffold sits between header and content-grid", async ({
+  test("landing-hero sits between header and content-grid", async ({
     page,
   }) => {
     await page.goto("/");
 
     const order = await page.evaluate(() => {
       const pageEl = document.querySelector(".page");
-      const children = Array.from(pageEl?.children ?? []).map(
+      if (!pageEl) throw new Error("root container .page not found");
+      const children = Array.from(pageEl.children).map(
         (c) => c.tagName.toLowerCase() + (c.className ? "." + c.className : ""),
       );
       const heroIdx = children.findIndex((c) => c.includes("landing-hero"));
@@ -57,5 +59,12 @@ test.describe("hero band", () => {
     expect(order.headerIdx).toBeGreaterThanOrEqual(0);
     expect(order.heroIdx).toBeGreaterThan(order.headerIdx);
     expect(order.gridIdx).toBeGreaterThan(order.heroIdx);
+  });
+
+  test("hero placeholder content renders", async ({ page }) => {
+    await page.goto("/");
+
+    await expect(page.locator(".landing-hero-band")).toContainText("OPEN-SOURCE");
+    await expect(page.locator(".landing-hero-card")).toHaveCount(3);
   });
 });

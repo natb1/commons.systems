@@ -10,8 +10,8 @@ test.describe("blog smoke", () => {
   test("meta description is present @smoke", async ({ page }) => {
     await page.goto("/");
     const desc = await page.getAttribute('meta[name="description"]', "content");
-    expect(desc).toBeTruthy();
-    expect(desc!.length).toBeLessThanOrEqual(160);
+    if (!desc) throw new Error("description meta tag missing content");
+    expect(desc.length).toBeLessThanOrEqual(160);
   });
 
   test("Open Graph tags present @smoke", async ({ page }) => {
@@ -39,8 +39,8 @@ test.describe("blog smoke", () => {
   test("og:image resolves @smoke", async ({ page, request }) => {
     await page.goto("/");
     const imageUrl = await page.getAttribute('meta[property="og:image"]', "content");
-    expect(imageUrl).toBeTruthy();
-    const response = await request.get(imageUrl!);
+    if (!imageUrl) throw new Error("og:image meta tag missing content");
+    const response = await request.get(imageUrl);
     expect(response.status()).toBe(200);
   });
 

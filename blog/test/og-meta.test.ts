@@ -210,6 +210,17 @@ describe("siteDefaultOgEntries", () => {
       { attr: "name", key: "twitter:image", content: "https://example.com/img.png" },
     ]);
   });
+
+  it("emits identical URLs for og:image and twitter:image", () => {
+    const entries = siteDefaultOgEntries("https://example.com", {
+      title: "Site",
+      description: "desc",
+      image: "/img.png",
+    });
+    const ogImage = entries.find((e) => e.key === "og:image")?.content;
+    const twitterImage = entries.find((e) => e.key === "twitter:image")?.content;
+    expect(ogImage).toBe(twitterImage);
+  });
 });
 
 describe("postOgEntries", () => {
@@ -229,5 +240,12 @@ describe("postOgEntries", () => {
     expect(minimal.find((e) => e.key === "twitter:title")?.content).toBe("Test Post");
     expect(minimal.find((e) => e.key === "twitter:description")).toBeUndefined();
     expect(minimal.find((e) => e.key === "twitter:image")).toBeUndefined();
+  });
+
+  it("emits identical URLs for og:image and twitter:image on full post", () => {
+    const entries = postOgEntries("https://example.com", basePost);
+    const ogImage = entries.find((e) => e.key === "og:image")?.content;
+    const twitterImage = entries.find((e) => e.key === "twitter:image")?.content;
+    expect(ogImage).toBe(twitterImage);
   });
 });

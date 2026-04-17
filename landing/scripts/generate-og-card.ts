@@ -1,6 +1,6 @@
 /**
  * Offline script to render the 1200x630 Open Graph / Twitter card from its SVG source.
- * Output goes to landing/public/og-card.png.
+ * Manual regeneration step; the PNG is checked in.
  *
  * Usage: npx tsx landing/scripts/generate-og-card.ts
  */
@@ -18,6 +18,9 @@ await sharp(svg, { density: 150 })
   .toFile(OUTPUT);
 
 const meta = await sharp(OUTPUT).metadata();
+if (meta.width === undefined || meta.height === undefined) {
+  throw new Error(`sharp returned no dimensions for ${OUTPUT}`);
+}
 if (meta.width !== 1200 || meta.height !== 630) {
   throw new Error(`Expected 1200x630, got ${meta.width}x${meta.height}`);
 }
