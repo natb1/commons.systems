@@ -36,11 +36,17 @@ test.describe("blog smoke", () => {
     }
   });
 
-  test("og:image resolves @smoke", async ({ page, request }) => {
+  // og:image is rendered as an absolute URL (https://commons.systems/og-card.png)
+  // for crawlers. To verify the asset actually ships under the tested build, rewrite
+  // the absolute URL onto the baseURL origin so the request hits the emulator (in
+  // acceptance) or the preview channel (in smoke) rather than production.
+  test("og:image resolves @smoke", async ({ page, request, baseURL }) => {
     await page.goto("/");
     const imageUrl = await page.getAttribute('meta[property="og:image"]', "content");
     if (!imageUrl) throw new Error("og:image meta tag missing content");
-    const response = await request.get(imageUrl);
+    if (!baseURL) throw new Error("playwright baseURL is not configured");
+    const rewritten = new URL(new URL(imageUrl).pathname, baseURL).toString();
+    const response = await request.get(rewritten);
     expect(response.status()).toBe(200);
     expect(response.headers()["content-type"]).toMatch(/^image\//);
   });
