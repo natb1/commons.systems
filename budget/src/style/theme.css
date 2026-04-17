@@ -4,6 +4,7 @@
 
 :root {
   color-scheme: dark;
+  --variance-positive: #2ca02c;
 }
 
 .content-grid {
@@ -593,7 +594,7 @@
 }
 
 .variance-positive {
-  color: #2ca02c;
+  color: var(--variance-positive);
 }
 
 .variance-negative {

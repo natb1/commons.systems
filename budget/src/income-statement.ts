@@ -7,8 +7,8 @@ export interface CategoryLine {
 }
 
 export interface MonthlyIncomeStatement {
-  readonly income: CategoryLine[];
-  readonly expenses: CategoryLine[];
+  readonly income: readonly CategoryLine[];
+  readonly expenses: readonly CategoryLine[];
   readonly totalIncome: number;
   readonly totalExpenses: number;
   readonly netIncome: number;
@@ -45,16 +45,16 @@ export interface SavingsRateTriplet {
 
 export interface CashFlowTriplet {
   readonly current: CashFlowSummary;
-  readonly prior: CashFlowSummary;
-  readonly yoY: CashFlowSummary;
+  readonly prior: CashFlowSummary | null;
+  readonly yoY: CashFlowSummary | null;
 }
 
 export interface IncomeStatementReport {
   readonly currentLabel: string;
   readonly priorLabel: string;
   readonly yoYLabel: string;
-  readonly incomeRows: VarianceRow[];
-  readonly expenseRows: VarianceRow[];
+  readonly incomeRows: readonly VarianceRow[];
+  readonly expenseRows: readonly VarianceRow[];
   readonly totalIncome: PeriodVariance;
   readonly totalExpenses: PeriodVariance;
   readonly netIncome: PeriodVariance;
@@ -83,7 +83,11 @@ export function monthRange({ year, monthIdx0 }: YearMonth): { startMs: number; e
   return { startMs, endMs };
 }
 
-/** The calendar month immediately preceding the month containing `nowMs`. */
+/**
+ * The calendar month immediately preceding the month containing `nowMs`.
+ * Kept exported for tests and e2e fixtures; production selects the current
+ * month via `mostRecentMonthWithData`.
+ */
 export function mostRecentCompleteMonth(nowMs: number): YearMonth {
   const d = new Date(nowMs);
   const year = d.getUTCFullYear();
@@ -93,10 +97,8 @@ export function mostRecentCompleteMonth(nowMs: number): YearMonth {
 }
 
 /**
- * The most recent complete calendar month containing at least one transaction.
- * Scans from the end of `mostRecentCompleteMonth(nowMs)` backwards, so the
- * current partial month is never selected. Returns null when no transaction
- * falls at or before that ceiling.
+ * The most recent calendar month strictly before the month containing `nowMs`
+ * that contains at least one includable transaction. Returns null if none exists.
  */
 export function mostRecentMonthWithData(
   transactions: readonly Transaction[],
@@ -131,7 +133,10 @@ export function formatMonthLabel({ year, monthIdx0 }: YearMonth): string {
   return `${MONTH_LABELS[monthIdx0]} ${year}`;
 }
 
-/** Transactions valid for inclusion: has a timestamp and is not a non-primary normalized duplicate. */
+/**
+ * Normalized-duplicate detection keeps one primary copy per normalizedId; non-primary
+ * copies are skipped to avoid double-counting. Null timestamps cannot be windowed.
+ */
 function isIncludable(t: Transaction): boolean {
   if (t.timestamp === null) return false;
   if (t.normalizedId !== null && !t.normalizedPrimary) return false;
@@ -140,13 +145,6 @@ function isIncludable(t: Transaction): boolean {
 
 function netAmount(t: Transaction): number {
   return computeNetAmount(t.amount, t.reimbursement);
-}
-
-function compareCategoryDesc(a: CategoryLine, b: CategoryLine): number {
-  if (b.amount !== a.amount) return b.amount - a.amount;
-  if (a.category < b.category) return -1;
-  if (a.category > b.category) return 1;
-  return 0;
 }
 
 export function computeMonthlyIncomeStatement(
@@ -173,12 +171,18 @@ export function computeMonthlyIncomeStatement(
     }
   }
 
+  const byAmountDescThenName = (a: CategoryLine, b: CategoryLine): number => {
+    if (b.amount !== a.amount) return b.amount - a.amount;
+    if (a.category < b.category) return -1;
+    if (a.category > b.category) return 1;
+    return 0;
+  };
   const income: CategoryLine[] = [...incomeByCategory.entries()]
     .map(([category, amount]) => ({ category, amount }))
-    .sort(compareCategoryDesc);
+    .sort(byAmountDescThenName);
   const expenses: CategoryLine[] = [...expenseByCategory.entries()]
     .map(([category, amount]) => ({ category, amount }))
-    .sort(compareCategoryDesc);
+    .sort(byAmountDescThenName);
 
   const totalIncome = income.reduce((s, l) => s + l.amount, 0);
   const totalExpenses = expenses.reduce((s, l) => s + l.amount, 0);
@@ -218,10 +222,11 @@ export function computeCashFlowSummary(
   return { operating, transfers, netChange };
 }
 
-function monthAmount(statement: MonthlyIncomeStatement, side: "income" | "expenses", category: string): number {
+function amountsByCategory(statement: MonthlyIncomeStatement, side: "income" | "expenses"): Map<string, number> {
   const rows = side === "income" ? statement.income : statement.expenses;
-  const found = rows.find((l) => l.category === category);
-  return found ? found.amount : 0;
+  const m = new Map<string, number>();
+  for (const r of rows) m.set(r.category, r.amount);
+  return m;
 }
 
 function buildVariance(current: number, prior: number | null, yoY: number | null): PeriodVariance {
@@ -254,11 +259,6 @@ export function computeIncomeStatementReport(
   const priorRange = monthRange(priorMo);
   const yoYRange = monthRange(yoYMo);
 
-  // Only render the report when the current period has data.
-  if (!hasAnyTransactionInMonth(transactions, currentRange.startMs, currentRange.endMs)) {
-    return null;
-  }
-
   const current = computeMonthlyIncomeStatement(transactions, currentRange.startMs, currentRange.endMs);
   const priorHas = hasAnyTransactionInMonth(transactions, priorRange.startMs, priorRange.endMs);
   const yoYHas = hasAnyTransactionInMonth(transactions, yoYRange.startMs, yoYRange.endMs);
@@ -266,10 +266,9 @@ export function computeIncomeStatementReport(
   const yoY = yoYHas ? computeMonthlyIncomeStatement(transactions, yoYRange.startMs, yoYRange.endMs) : null;
 
   const currentCash = computeCashFlowSummary(transactions, currentRange.startMs, currentRange.endMs);
-  const priorCash = computeCashFlowSummary(transactions, priorRange.startMs, priorRange.endMs);
-  const yoYCash = computeCashFlowSummary(transactions, yoYRange.startMs, yoYRange.endMs);
+  const priorCash = priorHas ? computeCashFlowSummary(transactions, priorRange.startMs, priorRange.endMs) : null;
+  const yoYCash = yoYHas ? computeCashFlowSummary(transactions, yoYRange.startMs, yoYRange.endMs) : null;
 
-  // Build the union of top-level categories seen in any of the three periods, per side.
   function unionCategories(side: "income" | "expenses"): string[] {
     const s = new Set<string>();
     for (const statement of [current, prior, yoY]) {
@@ -277,18 +276,20 @@ export function computeIncomeStatementReport(
       const rows = side === "income" ? statement.income : statement.expenses;
       for (const r of rows) s.add(r.category);
     }
-    return [...s].sort();
+    return [...s];
   }
 
   function buildRows(side: "income" | "expenses"): VarianceRow[] {
+    const currentMap = amountsByCategory(current, side);
+    const priorMap = prior === null ? null : amountsByCategory(prior, side);
+    const yoYMap = yoY === null ? null : amountsByCategory(yoY, side);
     const cats = unionCategories(side);
     const rows = cats.map((category) => {
-      const cur = monthAmount(current, side, category);
-      const pr = prior === null ? null : monthAmount(prior, side, category);
-      const yy = yoY === null ? null : monthAmount(yoY, side, category);
+      const cur = currentMap.get(category) ?? 0;
+      const pr = priorMap === null ? null : (priorMap.get(category) ?? 0);
+      const yy = yoYMap === null ? null : (yoYMap.get(category) ?? 0);
       return { category, variance: buildVariance(cur, pr, yy) };
     });
-    // Sort by current amount descending, stable by category name on ties.
     rows.sort((a, b) => {
       if (b.variance.current !== a.variance.current) return b.variance.current - a.variance.current;
       if (a.category < b.category) return -1;

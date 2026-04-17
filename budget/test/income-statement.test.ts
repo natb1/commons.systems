@@ -166,6 +166,11 @@ describe("mostRecentMonthWithData", () => {
     ];
     expect(mostRecentMonthWithData(txns, Date.UTC(2025, 2, 15))).toBeNull();
   });
+
+  it("returns null when all transactions have null timestamps", () => {
+    const txns = [makeTxn({ id: "a" as any, timestamp: null }), makeTxn({ id: "b" as any, timestamp: null })];
+    expect(mostRecentMonthWithData(txns, Date.UTC(2025, 2, 15))).toBeNull();
+  });
 });
 
 describe("monthRange", () => {
@@ -322,7 +327,25 @@ describe("computeMonthlyIncomeStatement", () => {
     expect(stmt.totalExpenses).toBe(50);
   });
 
-  it("applies reimbursement to the recorded amount", () => {
+  it("applies 25% reimbursement: amount 200 becomes expense 150", () => {
+    const txns = [
+      makeTxn({ amount: 200, reimbursement: 25, category: "Food:Groceries", timestamp: ts("2025-02-10") }),
+    ];
+    const stmt = computeMonthlyIncomeStatement(txns, febStart, febEnd);
+    expect(stmt.expenses).toEqual([{ category: "Food", amount: 150 }]);
+    expect(stmt.totalExpenses).toBe(150);
+  });
+
+  it("100% reimbursement contributes nothing to expenses", () => {
+    const txns = [
+      makeTxn({ amount: 200, reimbursement: 100, category: "Food:Groceries", timestamp: ts("2025-02-10") }),
+    ];
+    const stmt = computeMonthlyIncomeStatement(txns, febStart, febEnd);
+    expect(stmt.expenses).toEqual([]);
+    expect(stmt.totalExpenses).toBe(0);
+  });
+
+  it("applies 50% reimbursement to the recorded amount", () => {
     const txns = [
       makeTxn({ amount: 100, reimbursement: 50, category: "Food:Groceries", timestamp: ts("2025-02-10") }),
     ];
@@ -370,6 +393,33 @@ describe("computeMonthlyIncomeStatement", () => {
     expect(stmt.totalExpenses).toBe(400);
     expect(stmt.netIncome).toBe(600);
     expect(stmt.savingsRate).toBeCloseTo(0.6);
+  });
+
+  it("computes a negative savingsRate when expenses exceed income", () => {
+    const txns = [
+      makeTxn({ id: "t1" as any, amount: -1000, category: "Income:Salary", timestamp: ts("2025-02-01") }),
+      makeTxn({ id: "t2" as any, amount: 1500, category: "Food:Groceries", timestamp: ts("2025-02-10") }),
+    ];
+    const stmt = computeMonthlyIncomeStatement(txns, febStart, febEnd);
+    expect(stmt.totalIncome).toBe(1000);
+    expect(stmt.totalExpenses).toBe(1500);
+    expect(stmt.netIncome).toBe(-500);
+    expect(stmt.savingsRate).toBe(-0.5);
+  });
+
+  it("includes a Feb 29 transaction in the leap-year Feb window", () => {
+    const feb2024Start = Date.UTC(2024, 1, 1);
+    const feb2024End = Date.UTC(2024, 2, 1);
+    const feb29Ms = Date.UTC(2024, 1, 29);
+    const txns = [
+      makeTxn({
+        amount: 100,
+        category: "Food:Groceries",
+        timestamp: { toDate: () => new Date(feb29Ms), toMillis: () => feb29Ms } as any,
+      }),
+    ];
+    const stmt = computeMonthlyIncomeStatement(txns, feb2024Start, feb2024End);
+    expect(stmt.totalExpenses).toBe(100);
   });
 });
 
@@ -478,6 +528,17 @@ describe("computeCashFlowSummary", () => {
     const cash = computeCashFlowSummary(txns, febStart, febEnd);
     expect(cash.operating).toBe(0);
     expect(cash.transfers).toBe(0);
+  });
+
+  it("produces negative operating and netChange when expenses exceed income with no transfers", () => {
+    const txns = [
+      makeTxn({ id: "t1" as any, amount: -200, category: "Income:Salary", timestamp: ts("2025-02-01") }),
+      makeTxn({ id: "t2" as any, amount: 600, category: "Food:Groceries", timestamp: ts("2025-02-10") }),
+    ];
+    const cash = computeCashFlowSummary(txns, febStart, febEnd);
+    expect(cash.operating).toBe(-400);
+    expect(cash.transfers).toBe(0);
+    expect(cash.netChange).toBe(-400);
   });
 });
 
@@ -653,6 +714,46 @@ describe("computeIncomeStatementReport", () => {
     expect(foodRow?.variance.prior).toBe(0);
     expect(entRow?.variance.current).toBe(0);
     expect(entRow?.variance.prior).toBe(80);
+  });
+
+  it("uses Math.abs(prior) in variance pct so a negative-prior netIncome stays positive when current improves", () => {
+    const nowMs = Date.UTC(2025, 2, 15); // current = Feb 2025
+    const txns = [
+      // Current Feb 2025: positive netIncome = 3000
+      makeTxn({ id: "f-sal" as any, amount: -5000, category: "Income:Salary", timestamp: ts("2025-02-01") }),
+      makeTxn({ id: "f-rent" as any, amount: 2000, category: "Housing:Rent", timestamp: ts("2025-02-05") }),
+      // Prior Jan 2025: negative netIncome = -1000
+      makeTxn({ id: "j-sal" as any, amount: -1000, category: "Income:Salary", timestamp: ts("2025-01-01") }),
+      makeTxn({ id: "j-rent" as any, amount: 2000, category: "Housing:Rent", timestamp: ts("2025-01-05") }),
+      // YoY Feb 2024: negative netIncome = -500
+      makeTxn({ id: "y-sal" as any, amount: -1500, category: "Income:Salary", timestamp: ts("2024-02-01") }),
+      makeTxn({ id: "y-rent" as any, amount: 2000, category: "Housing:Rent", timestamp: ts("2024-02-05") }),
+    ];
+    const report = computeIncomeStatementReport(txns, nowMs);
+    expect(report).not.toBeNull();
+    if (!report) return;
+
+    expect(report.netIncome.current).toBe(3000);
+    expect(report.netIncome.prior).toBe(-1000);
+    expect(report.netIncome.yoY).toBe(-500);
+    expect(report.netIncome.priorVarianceAbs).toBe(4000);
+    expect(report.netIncome.priorVariancePct).toBeGreaterThan(0);
+    expect(report.netIncome.yoYVarianceAbs).toBe(3500);
+    expect(report.netIncome.yoYVariancePct).toBeGreaterThan(0);
+  });
+
+  it("returns a report with zero income/expense and non-zero cash flow when the current month only has transfers", () => {
+    const nowMs = Date.UTC(2025, 2, 15); // current = Feb 2025
+    const txns = [
+      makeTxn({ amount: 200, category: "Transfer:CardPayment", timestamp: ts("2025-02-05") }),
+    ];
+    const report = computeIncomeStatementReport(txns, nowMs);
+    expect(report).not.toBeNull();
+    if (!report) return;
+
+    expect(report.totalIncome.current).toBe(0);
+    expect(report.totalExpenses.current).toBe(0);
+    expect(report.cashFlow.current.netChange).not.toBe(0);
   });
 
   it("sorts rows by current amount descending", () => {

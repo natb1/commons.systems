@@ -202,8 +202,37 @@ describe("accounts page smoke — income statement and cash flow summary", () =>
     expect(html).toContain("$300.00");
 
     // Em dash appears in variance cells when prior and YoY are missing.
-    const emDashCount = (html.match(/\u2014/g) ?? []).length;
+    // Scope the count to the income table so unrelated em dashes (e.g.,
+    // savings-rate row, cash flow null cells) do not inflate the total.
+    const incomeTableStart = html.indexOf('id="accounts-income-table"');
+    const expensesTableStart = html.indexOf('id="accounts-expenses-table"');
+    expect(incomeTableStart).toBeGreaterThan(-1);
+    expect(expensesTableStart).toBeGreaterThan(incomeTableStart);
+    const incomeTableHtml = html.slice(incomeTableStart, expensesTableStart);
+    const emDashCount = (incomeTableHtml.match(/\u2014/g) ?? []).length;
     expect(emDashCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renders negative netChange with U+2212 minus and variance-negative class", async () => {
+    const transactions = [
+      // Feb 2025 — current month: expenses > income, producing negative operating + netChange
+      txn({ id: "t-cur-inc" as any, timestamp: ts("2025-02-10"), amount: -500, category: "Income:Salary" }),
+      txn({ id: "t-cur-food" as any, timestamp: ts("2025-02-12"), amount: 1000, category: "Food:Groceries" }),
+    ];
+    const statements = [
+      stmt({ period: "2025-02", balance: -500, lastTransactionDate: ts("2025-02-12") }),
+    ];
+
+    const html = await renderAccounts(seedOptions({
+      getTransactions: vi.fn().mockResolvedValue(transactions),
+      getStatements: vi.fn().mockResolvedValue(statements),
+    }));
+
+    const cashFlowStart = html.indexOf('id="accounts-cash-flow-table"');
+    expect(cashFlowStart).toBeGreaterThan(-1);
+    const cashFlowHtml = html.slice(cashFlowStart);
+    expect(cashFlowHtml).toContain("\u2212$");
+    expect(cashFlowHtml).toContain("variance-negative");
   });
 
   it("only-transfer month: income and expense tables empty, cash flow shows transfers", async () => {

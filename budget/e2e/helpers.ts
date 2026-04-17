@@ -75,16 +75,18 @@ export async function uploadEncryptedFixture(page: Page, password: string): Prom
  * the same current month one year earlier (YoY). This lets the income
  * statement + cash flow summary renderers exercise all three periods.
  *
- * The month selection matches `mostRecentCompleteMonth` in
- * `src/income-statement.ts`, which is the calendar month immediately
- * preceding the month containing `Date.now()`.
+ * Placing transactions in the calendar month immediately preceding
+ * `Date.now()` guarantees that month is the latest-with-data month selected
+ * by `mostRecentMonthWithData` in `src/income-statement.ts` (which scans
+ * for the most recent includable transaction strictly before the current
+ * calendar month).
  */
 function buildIncomeStatementFixtureBuffer(): Buffer {
   const now = new Date(Date.now());
   const nowYear = now.getUTCFullYear();
   const nowMonth0 = now.getUTCMonth();
 
-  // mostRecentCompleteMonth: month immediately preceding the current calendar month (UTC).
+  // Month immediately preceding the current calendar month (UTC).
   const currentYear = nowMonth0 === 0 ? nowYear - 1 : nowYear;
   const currentMonth0 = nowMonth0 === 0 ? 11 : nowMonth0 - 1;
 
