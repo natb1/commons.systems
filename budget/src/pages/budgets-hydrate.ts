@@ -3,7 +3,7 @@ import { type Budget, type BudgetId, type BudgetOverride, type BudgetPeriod, typ
 import { getActiveDataSource } from "../active-data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { escapeHtml } from "@commons-systems/htmlutil";
-import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, makeDebounced, toISODate } from "./hydrate-util.js";
+import { showInputError, handleSaveError, handleActionError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, makeDebounced, toISODate } from "./hydrate-util.js";
 import { renderBudgetChart } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
@@ -52,7 +52,7 @@ function deserializeCategoryRows(raw: string, field: string): CategoryActualRow[
 function renderCategoryList(list: HTMLElement, categories: readonly [CategoryActualRow, ...CategoryActualRow[]]): void {
   const absTotal = categories.reduce((s, c) => s + Math.abs(c.avgWeekly), 0);
   if (absTotal === 0) {
-    throw new DataIntegrityError("renderCategoryList received categories summing to zero; upstream decomposeWindow should have returned [] in that case");
+    throw new DataIntegrityError("Category rows sum to zero; expected an empty array in that case");
   }
   const dl = document.createElement("dl");
   dl.className = "variance-breakdown";
@@ -127,7 +127,9 @@ function renderVarianceDetails(
       list.replaceChildren(msg);
       return;
     }
-    const nonEmpty = categories as readonly [CategoryActualRow, ...CategoryActualRow[]];
+    const [first, ...rest] = categories;
+    if (first === undefined) return;
+    const nonEmpty: readonly [CategoryActualRow, ...CategoryActualRow[]] = [first, ...rest];
     renderVarianceWaterfall(chart, { weeklyAllowance, categories: nonEmpty }, win);
     renderCategoryList(list, nonEmpty);
   }
@@ -135,11 +137,15 @@ function renderVarianceDetails(
   toggle.addEventListener("change", (e) => {
     const target = e.target;
     if (!(target instanceof HTMLInputElement)) return;
-    if (target.value !== "12" && target.value !== "52") {
-      throw new DataIntegrityError(`Unexpected variance-window value: ${target.value}`);
+    try {
+      if (target.value !== "12" && target.value !== "52") {
+        throw new DataIntegrityError(`Unexpected variance-window value: ${target.value}`);
+      }
+      const value: VarianceWindow = target.value === "52" ? 52 : 12;
+      draw(value);
+    } catch (error) {
+      handleActionError(target, error, "variance-window-change");
     }
-    const value: VarianceWindow = target.value === "52" ? 52 : 12;
-    draw(value);
   });
 
   // Default window must match the radio marked `checked` in buildWindowToggle.
@@ -181,7 +187,13 @@ export function hydrateBudgetTable(container: HTMLElement): void {
     if (!(target instanceof HTMLDetailsElement)) return;
     if (!target.classList.contains("budget-row")) return;
     if (!target.open) return;
-    hydrateVarianceDetails(target);
+    try {
+      hydrateVarianceDetails(target);
+    } catch (error) {
+      const varianceEl = target.querySelector<HTMLElement>(".budget-variance");
+      if (varianceEl) varianceEl.dataset.hydrated = "error";
+      handleActionError(target, error, "variance-hydrate");
+    }
   }, true);
 
   container.addEventListener("blur", async (e) => {

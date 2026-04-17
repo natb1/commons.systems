@@ -55,10 +55,8 @@ function renderRow(
   stats: PerBudgetStats | undefined,
   variance: PerBudgetCategoryVariance,
 ): string {
-  // data-budget-id is emitted for every row (anonymous and authorized) because
-  // the variance hydrator scopes the window-toggle radio-group name to the
-  // budget id. Historically it only flagged edit-eligible rows; that contract
-  // now lives purely in the `disabled` attribute on inputs/selects below.
+  // data-budget-id is needed on every row regardless of edit permission so the
+  // variance hydrator can scope the window-toggle radio-group name to the budget.
   const budgetIdAttr = ` data-budget-id="${escapeHtml(budget.id)}"`;
   const dis = editable ? "" : " disabled";
   const nameCell = `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name"${dis}>`;

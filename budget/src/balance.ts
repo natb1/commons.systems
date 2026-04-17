@@ -1006,7 +1006,7 @@ export function isFavorableDiff(diff: number): boolean {
  * weeks with no data contribute zero rather than shrinking the divisor.
  *
  * The latest observed week (across all budgets) is excluded from both windows
- * because it is typically still in progress and would skew the average downward.
+ * because partial-week data would bias the average.
  * Included weeks are those whose start falls within `weekCount * MS_PER_WEEK`
  * of the latest week's start.
  *

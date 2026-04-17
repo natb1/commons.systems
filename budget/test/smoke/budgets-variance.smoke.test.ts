@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { timestampMockFactory, makeBudget, makePeriod, createMockDataSource, ts } from "../helpers";
 import type { DataSource } from "../../src/data-source";
+import type { Budget } from "../../src/firestore";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
@@ -17,7 +18,7 @@ describe("budgets variance smoke", () => {
 
   it("renders without errors when categoryBreakdown is populated", async () => {
     const html = await renderBudgets(seedOptions({
-      getBudgets: vi.fn().mockResolvedValue([makeBudget({ id: "food" as any, name: "Food", allowance: 150 })]),
+      getBudgets: vi.fn().mockResolvedValue([makeBudget({ id: "food" as Budget["id"], name: "Food", allowance: 150 })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         makePeriod({
           id: "food-w1", budgetId: "food",
@@ -50,7 +51,7 @@ describe("budgets variance smoke", () => {
 
   it("diff cell includes the favorable/unfavorable indicator arrow", async () => {
     const html = await renderBudgets(seedOptions({
-      getBudgets: vi.fn().mockResolvedValue([makeBudget({ id: "food" as any, allowance: 150 })]),
+      getBudgets: vi.fn().mockResolvedValue([makeBudget({ id: "food" as Budget["id"], allowance: 150 })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
         makePeriod({
           id: "food-w1", budgetId: "food",

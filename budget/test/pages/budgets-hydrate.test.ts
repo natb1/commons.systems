@@ -278,6 +278,7 @@ describe("hydrateBudgetTable — variance", () => {
   let originalClientWidth: PropertyDescriptor | undefined;
   let originalGetComputedStyle: typeof window.getComputedStyle;
   beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
     Object.defineProperty(HTMLElement.prototype, "clientWidth", {
       get() { return 640; },
@@ -342,123 +343,147 @@ describe("hydrateBudgetTable — variance", () => {
     expect(varianceEl!.dataset.hydrated).toBeUndefined();
   });
 
-  it("throws when data-weekly-allowance is missing", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error when data-weekly-allowance is missing", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       window12: POPULATED_W12,
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
-  it("throws when data-weekly-allowance is not finite", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error when data-weekly-allowance is not finite", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "NaN",
       window12: POPULATED_W12,
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
-  it("throws when data-window12 is not valid JSON", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error when data-window12 is not valid JSON", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
       window12: "not json",
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
-  it("throws when data-window12 decodes to a non-array", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error when data-window12 decodes to a non-array", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
       window12: "{}",
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
-  it("throws when a row is missing avgWeekly", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error when a row is missing avgWeekly", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
       window12: JSON.stringify([{ kind: "category", category: "X" }]),
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
-  it("throws on unknown row kind", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error on unknown row kind", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
       window12: JSON.stringify([{ kind: "zzz", avgWeekly: 0 }]),
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
-  it("throws when Other row has a non-integer groupedCount", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error when Other row has a non-integer groupedCount", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
       window12: JSON.stringify([{ kind: "other", avgWeekly: 10, groupedCount: 0.5 }]),
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
-  it("throws when Other row has groupedCount=0 (producer requires >=1)", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error when Other row has groupedCount=0 (producer requires >=1)", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
       window12: JSON.stringify([{ kind: "other", avgWeekly: 10, groupedCount: 0 }]),
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
-  it("throws when Other row has negative groupedCount", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error when Other row has negative groupedCount", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
       window12: JSON.stringify([{ kind: "other", avgWeekly: 10, groupedCount: -1 }]),
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
-  it("throws when a row is a non-object element", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error when a row is a non-object element", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
       window12: JSON.stringify([null]),
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
-  it("throws when avgWeekly is not a finite number", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error when avgWeekly is not a finite number", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
       window12: JSON.stringify([{ kind: "category", category: "X", avgWeekly: null }]),
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
-  it("throws when category variant has a non-string category field", () => {
-    const { container, details } = makeVarianceContainer({
+  it("routes error when category variant has a non-string category field", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
       window12: JSON.stringify([{ kind: "category", category: 123, avgWeekly: 5 }]),
       window52: POPULATED_W52,
     });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
   });
 
   it("hydrates and shows an empty message when both windows are empty", () => {
@@ -512,7 +537,7 @@ describe("hydrateBudgetTable — variance", () => {
     expect(varianceEl!.querySelectorAll(".variance-breakdown")).toHaveLength(1);
   });
 
-  it("throws when the window toggle receives an unexpected value", () => {
+  it("routes error when the window toggle receives an unexpected value", () => {
     const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
       window12: POPULATED_W12,
@@ -522,13 +547,15 @@ describe("hydrateBudgetTable — variance", () => {
     openDetails(details);
     const radio = varianceEl!.querySelector('input[value="12"]') as HTMLInputElement;
     radio.value = "99";
-    expect(() => radio.dispatchEvent(new Event("change", { bubbles: true }))).toThrow();
+    expect(() => radio.dispatchEvent(new Event("change", { bubbles: true }))).not.toThrow();
+    expect(radio.classList.contains("save-error")).toBe(true);
   });
 
-  it("throws when .budget-variance is missing from an expanded row", () => {
+  it("routes error when .budget-variance is missing from an expanded row", () => {
     const { container, details } = makeVarianceContainer({ omitVariance: true });
     hydrateBudgetTable(container);
-    expect(() => openDetails(details)).toThrow();
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
   });
 
   it("renders a breakdown DL with an entry per category and 'Other' marked", () => {

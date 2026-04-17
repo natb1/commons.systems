@@ -413,6 +413,50 @@ describe("renderBudgets", () => {
     expect(html).toContain('class="variance-unfavorable"');
   });
 
+  it("zero diff renders as favorable (equality case)", async () => {
+    // avg12 = 1800/12 = 150 == allowance=150 → diff = 0 → favorable.
+    // w2 is the excluded latest week; w1 contributes 1800.
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 1800,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 0,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('class="variance-favorable"');
+    expect(html).toContain("▼");
+    expect(html).toContain('aria-label="favorable"');
+  });
+
+  it("renders zero-period budget with data-budget-id and empty variance windows (anonymous-user path)", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([]),
+    }));
+    expect(html).toContain('class="expand-row budget-row"');
+    expect(html).toContain('data-budget-id="food"');
+    expect(html).toContain('data-window12="[]"');
+    expect(html).toContain('data-window52="[]"');
+  });
+
   it("renders overrides table when budgets have overrides", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([

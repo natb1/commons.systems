@@ -1,6 +1,7 @@
 import * as Plot from "@observablehq/plot";
 import { scaleOrdinal } from "d3-scale";
 import { schemeTableau10 } from "d3-scale-chromatic";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { isFavorableDiff, type CategoryActualRow, type VarianceWindow } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { readThemeVar } from "./chart-util.js";
@@ -83,14 +84,20 @@ export function renderVarianceWaterfall(container: HTMLElement, options: Waterfa
     .range(schemeTableau10);
 
   function fillFor(bar: WaterfallBar): string {
-    if (bar.kind === "allowance") return fg;
-    if (bar.kind === "actual") return favorable ? favorableColor : unfavorableColor;
-    return categoryColor(bar.label);
+    switch (bar.kind) {
+      case "allowance": return fg;
+      case "actual": return favorable ? favorableColor : unfavorableColor;
+      case "category": return categoryColor(bar.label);
+      default: {
+        const _exhaustive: never = bar.kind;
+        return _exhaustive;
+      }
+    }
   }
 
   const width = container.clientWidth;
   if (width === 0) {
-    throw new Error("renderVarianceWaterfall: container.clientWidth is zero");
+    throw new DataIntegrityError("renderVarianceWaterfall: container.clientWidth is zero");
   }
   const height = 240;
 
