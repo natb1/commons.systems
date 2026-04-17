@@ -40,18 +40,16 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 If `$CURRENT_BRANCH` already starts with `<issue-num>-`, skip to Section 4.
 
-Otherwise check for an existing worktree whose branch matches `<issue-num>-*` by parsing `git worktree list --porcelain`:
+Otherwise check for an existing worktree whose branch matches `<issue-num>-*` by parsing `git worktree list --porcelain`.
 
-```bash
-PORCELAIN=$(git worktree list --porcelain)
-# Parse blank-line-delimited records. Search for `branch refs/heads/<issue-num>-*`
-# and capture the preceding `worktree <path>` line.
-```
+Parse `$PORCELAIN` as blank-line-delimited records. For each record, capture the leading `worktree <path>` line and check whether the same record's `branch refs/heads/<name>` matches `<issue-num>-*`. If a record matches, its `<path>` is the existing worktree.
 
 - **Existing worktree found** → call `EnterWorktree` with `path: "<that worktree path>"`. Skip to Section 4.
 - **No existing worktree** → continue to Section 3.
 
 ## 3. Create Worktree
+
+`EnterWorktree` accepts exactly one of `name` (create a new worktree; triggers the `WorktreeCreate` hook) or `path` (switch to an existing worktree). Section 2 uses `path:`; Section 3 uses `name:`.
 
 Generate a sanitized branch name from the issue title:
 
@@ -74,6 +72,7 @@ The `WorktreeCreate` hook (`.claude/hooks/worktree-create.sh`) handles physical 
 - Detects bare vs. classic layout and computes `<project-root>/worktrees/<branch>/`.
 - Checks out the branch from `origin` if it already exists there, otherwise creates it from `origin/main`.
 - Runs `direnv allow` on the new path.
+- Runs `direnv exec` to evaluate `.envrc` so Claude's non-interactive subprocess shells land with node on PATH.
 - Prints the path to stdout so `EnterWorktree` switches into it.
 
 ## 4. Dispatch into Workflow
