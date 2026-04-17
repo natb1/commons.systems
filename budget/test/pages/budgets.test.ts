@@ -362,7 +362,7 @@ describe("renderBudgets", () => {
     expect(html).not.toMatch(/<input[^>]*\$141\.67/);
   });
 
-  it("surplus diff renders in green", async () => {
+  it("surplus diff renders with the favorable class", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
@@ -381,7 +381,7 @@ describe("renderBudgets", () => {
     expect(html).toContain('class="variance-favorable"');
   });
 
-  it("deficit diff renders in red", async () => {
+  it("deficit diff renders with the unfavorable class", async () => {
     // Two weeks: latest (w2) excluded. Completed w1 total=2400 → avg12=2400/12=200 > allowance=150 → deficit
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),

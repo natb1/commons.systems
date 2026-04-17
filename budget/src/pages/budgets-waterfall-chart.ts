@@ -25,7 +25,6 @@ export interface WaterfallOptions {
   readonly window: VarianceWindow;
 }
 
-/** Build bridge-chart bars: allowance bar, one running-total bar per category, and a final actual bar. */
 export function buildWaterfallBars(opts: WaterfallOptions): WaterfallBar[] {
   if (opts.categories.length === 0) {
     throw new Error("buildWaterfallBars: categories must not be empty");

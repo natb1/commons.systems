@@ -38,8 +38,8 @@ function deserializeCategoryRows(raw: string, field: string): CategoryActualRow[
       }
       result.push({ kind: "category", category: row.category, avgWeekly: row.avgWeekly });
     } else if (row.kind === "other") {
-      if (typeof row.groupedCount !== "number" || !Number.isInteger(row.groupedCount) || row.groupedCount < 0) {
-        throw new DataIntegrityError(`${field}[${i}].groupedCount must be a non-negative integer`);
+      if (typeof row.groupedCount !== "number" || !Number.isInteger(row.groupedCount) || row.groupedCount < 1) {
+        throw new DataIntegrityError(`${field}[${i}].groupedCount must be a positive integer`);
       }
       result.push({ kind: "other", avgWeekly: row.avgWeekly, groupedCount: row.groupedCount });
     } else {
@@ -50,7 +50,7 @@ function deserializeCategoryRows(raw: string, field: string): CategoryActualRow[
 }
 
 function renderCategoryList(list: HTMLElement, categories: readonly CategoryActualRow[]): void {
-  const totalActual = categories.reduce((s, c) => s + c.avgWeekly, 0);
+  const absTotal = categories.reduce((s, c) => s + Math.abs(c.avgWeekly), 0);
   const dl = document.createElement("dl");
   dl.className = "variance-breakdown";
   for (const c of categories) {
@@ -62,14 +62,14 @@ function renderCategoryList(list: HTMLElement, categories: readonly CategoryActu
       dt.textContent = c.category;
     }
     const dd = document.createElement("dd");
-    const pct = totalActual === 0 ? 0 : (c.avgWeekly / totalActual) * 100;
+    const pct = absTotal === 0 ? 0 : (Math.abs(c.avgWeekly) / absTotal) * 100;
     dd.textContent = `${formatCurrency(c.avgWeekly)}/week · ${pct.toFixed(1)}%`;
     dl.append(dt, dd);
   }
   list.replaceChildren(dl);
 }
 
-function buildWindowToggle(): HTMLFieldSetElement {
+function buildWindowToggle(budgetId: string): HTMLFieldSetElement {
   const fieldset = document.createElement("fieldset");
   fieldset.className = "variance-toggle";
 
@@ -77,11 +77,15 @@ function buildWindowToggle(): HTMLFieldSetElement {
   legend.textContent = "Window";
   fieldset.appendChild(legend);
 
+  // Radio name is budget-scoped so two simultaneously-expanded rows don't
+  // share a document-wide radio group (which would cause toggling one row to
+  // uncheck the other's radio).
+  const radioName = `variance-window-${budgetId}`;
   for (const value of ["12", "52"] as const) {
     const label = document.createElement("label");
     const radio = document.createElement("input");
     radio.type = "radio";
-    radio.name = "variance-window";
+    radio.name = radioName;
     radio.value = value;
     if (value === "12") radio.checked = true;
     label.append(radio, document.createTextNode(` ${value}w`));
@@ -92,6 +96,7 @@ function buildWindowToggle(): HTMLFieldSetElement {
 
 function renderVarianceDetails(
   container: HTMLElement,
+  budgetId: string,
   weeklyAllowance: number,
   w12: readonly CategoryActualRow[],
   w52: readonly CategoryActualRow[],
@@ -99,7 +104,7 @@ function renderVarianceDetails(
   const wrapper = document.createElement("div");
   wrapper.className = "variance-wrapper";
 
-  const toggle = buildWindowToggle();
+  const toggle = buildWindowToggle(budgetId);
 
   const chart = document.createElement("div");
   chart.className = "variance-chart";
@@ -127,7 +132,6 @@ function renderVarianceDetails(
   toggle.addEventListener("change", (e) => {
     const target = e.target;
     if (!(target instanceof HTMLInputElement)) return;
-    if (target.name !== "variance-window") return;
     if (target.value !== "12" && target.value !== "52") {
       throw new DataIntegrityError(`Unexpected variance-window value: ${target.value}`);
     }
@@ -143,6 +147,9 @@ function hydrateVarianceDetails(row: HTMLDetailsElement): void {
   if (!varianceEl) throw new DataIntegrityError(".budget-variance element missing from expanded budget row");
   if (varianceEl.dataset.hydrated === "true") return;
 
+  const budgetId = row.dataset.budgetId;
+  if (!budgetId) throw new DataIntegrityError("budget-row missing data-budget-id");
+
   const allowRaw = varianceEl.dataset.weeklyAllowance;
   const w12Raw = varianceEl.dataset.window12;
   const w52Raw = varianceEl.dataset.window52;
@@ -156,7 +163,7 @@ function hydrateVarianceDetails(row: HTMLDetailsElement): void {
   const w12 = deserializeCategoryRows(w12Raw, "data-window12");
   const w52 = deserializeCategoryRows(w52Raw, "data-window52");
 
-  renderVarianceDetails(varianceEl, weeklyAllowance, w12, w52);
+  renderVarianceDetails(varianceEl, budgetId, weeklyAllowance, w12, w52);
   varianceEl.dataset.hydrated = "true";
 }
 

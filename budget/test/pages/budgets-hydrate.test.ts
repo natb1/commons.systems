@@ -411,6 +411,58 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).toThrow();
   });
 
+  it("throws when Other row has groupedCount=0 (producer requires >=1)", () => {
+    const { container, details } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: JSON.stringify([{ kind: "other", avgWeekly: 10, groupedCount: 0 }]),
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
+  it("throws when Other row has negative groupedCount", () => {
+    const { container, details } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: JSON.stringify([{ kind: "other", avgWeekly: 10, groupedCount: -1 }]),
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
+  it("throws when a row is a non-object element", () => {
+    const { container, details } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: JSON.stringify([null]),
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
+  it("throws when avgWeekly is Infinity", () => {
+    const { container, details } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      // JSON cannot represent Infinity directly; emit as string and parse fails.
+      // Use a non-finite substitute the deserializer rejects: null avgWeekly.
+      window12: JSON.stringify([{ kind: "category", category: "X", avgWeekly: null }]),
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
+  it("throws when category variant has a non-string category field", () => {
+    const { container, details } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: JSON.stringify([{ kind: "category", category: 123, avgWeekly: 5 }]),
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
   it("hydrates and shows an empty message when both windows are empty", () => {
     const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",
@@ -461,5 +513,69 @@ describe("hydrateBudgetTable — variance", () => {
     const { container, details } = makeVarianceContainer({ omitVariance: true });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).toThrow();
+  });
+
+  it("renders a breakdown DL with an entry per category and 'Other' marked", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: JSON.stringify([
+        { kind: "category", category: "Food:Groceries", avgWeekly: 60 },
+        { kind: "other", avgWeekly: 20, groupedCount: 3 },
+      ]),
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    openDetails(details);
+    const dl = varianceEl!.querySelector(".variance-breakdown");
+    expect(dl).not.toBeNull();
+    const dts = dl!.querySelectorAll("dt");
+    const dds = dl!.querySelectorAll("dd");
+    expect(dts).toHaveLength(2);
+    expect(dds).toHaveLength(2);
+    expect(dts[0].textContent).toBe("Food:Groceries");
+    expect(dts[0].classList.contains("variance-other")).toBe(false);
+    expect(dts[1].textContent).toBe("Other");
+    expect(dts[1].classList.contains("variance-other")).toBe(true);
+    // absTotal = 60 + 20 = 80; shares are 75.0% and 25.0%
+    expect(dds[0].textContent).toContain("75.0%");
+    expect(dds[1].textContent).toContain("25.0%");
+  });
+
+  it("isolates radio groups across two simultaneously-expanded rows", () => {
+    const container = document.createElement("div");
+    container.id = "budgets-table";
+    function addRow(budgetId: string): HTMLDetailsElement {
+      const details = document.createElement("details") as HTMLDetailsElement;
+      details.classList.add("budget-row");
+      details.setAttribute("data-budget-id", budgetId);
+      details.appendChild(document.createElement("summary"));
+      const varianceEl = document.createElement("div");
+      varianceEl.classList.add("budget-variance");
+      varianceEl.setAttribute("data-weekly-allowance", "100");
+      varianceEl.setAttribute("data-window12", POPULATED_W12);
+      varianceEl.setAttribute("data-window52", POPULATED_W52);
+      details.appendChild(varianceEl);
+      container.appendChild(details);
+      return details;
+    }
+    const food = addRow("food");
+    const fun = addRow("fun");
+    document.body.appendChild(container);
+    hydrateBudgetTable(container);
+    openDetails(food);
+    openDetails(fun);
+
+    const foodRadios = food.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    const funRadios = fun.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    expect(foodRadios[0].name).not.toBe(funRadios[0].name);
+    expect(foodRadios[0].name).toContain("food");
+    expect(funRadios[0].name).toContain("fun");
+
+    const foodRadio52 = food.querySelector<HTMLInputElement>('input[value="52"]')!;
+    foodRadio52.checked = true;
+    foodRadio52.dispatchEvent(new Event("change", { bubbles: true }));
+
+    const funRadio12 = fun.querySelector<HTMLInputElement>('input[value="12"]')!;
+    expect(funRadio12.checked).toBe(true);
   });
 });

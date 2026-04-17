@@ -150,4 +150,21 @@ describe("renderVarianceWaterfall", () => {
     });
     expect(lastRectFill(container)).toBe(FAVORABLE.toLowerCase());
   });
+
+  it("throws when container.clientWidth is zero", () => {
+    const container = document.createElement("div");
+    container.style.setProperty("--fg", "#e0e0e0");
+    container.style.setProperty("--favorable", FAVORABLE);
+    container.style.setProperty("--unfavorable", UNFAVORABLE);
+    document.body.appendChild(container);
+    Object.defineProperty(container, "clientWidth", { value: 0, configurable: true });
+    expect(() =>
+      renderVarianceWaterfall(container, {
+        weeklyAllowance: 100,
+        categories: [cat("A", 50)],
+        window: 12,
+      }),
+    ).toThrow();
+    container.remove();
+  });
 });
