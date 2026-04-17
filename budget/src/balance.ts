@@ -965,24 +965,45 @@ export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): 
   return result;
 }
 
-/** Categories contributing below this share of a budget's total trailing-avg weekly spend are grouped into "Other". */
+/**
+ * A category's share is computed as abs(category.avgWeekly) / absTotal, where
+ * absTotal is the sum of abs(avgWeekly) across all categories in the window.
+ * Categories whose share is strictly below this threshold are folded into "Other".
+ */
 export const MATERIALITY_THRESHOLD = 0.05;
 
-/** A single row in the category-level variance decomposition for one budget and one trailing window. */
-export interface CategoryVariance {
-  readonly category: string;
-  readonly avgWeekly: number;
-  readonly percentOfActual: number;
-  readonly isOther: boolean;
-}
+/** Trailing-window sizes supported by the variance decomposition (weeks). */
+export type VarianceWindow = 12 | 52;
+
+/**
+ * One row in the per-category actuals decomposition: either a named category or
+ * the aggregate "Other" bucket of sub-threshold categories.
+ */
+export type CategoryActualRow =
+  | { readonly kind: "category"; readonly category: string; readonly avgWeekly: number }
+  | { readonly kind: "other"; readonly avgWeekly: number; readonly groupedCount: number };
 
 /** Per-budget category decomposition for both 12w and 52w trailing windows. */
 export interface PerBudgetCategoryVariance {
-  readonly window12: readonly CategoryVariance[];
-  readonly window52: readonly CategoryVariance[];
+  readonly window12: readonly CategoryActualRow[];
+  readonly window52: readonly CategoryActualRow[];
 }
 
-/** Aggregate per-category trailing-avg weekly spend from period.categoryBreakdown and group sub-threshold categories into "Other". */
+/** Favorable = actual under (or equal to) allowance, i.e. diff (allowance - actual) is non-negative. */
+export function isFavorableDiff(n: number): boolean {
+  return n >= 0;
+}
+
+/**
+ * Decompose each budget's trailing-window actual spending into per-category
+ * weekly averages. Each category's total across the window is divided by the
+ * fixed weekCount (12 or 52), matching the trailing-average semantics used by
+ * computeBudgetDiffs; weeks with no data contribute zero rather than shrinking
+ * the divisor.
+ *
+ * The latest observed week (across all budgets) is excluded from both windows
+ * because it is typically still in progress and would skew the average downward.
+ */
 export function computePerBudgetCategoryVariance(
   budgets: Budget[],
   periods: BudgetPeriod[],
@@ -1015,7 +1036,7 @@ function decomposeWindow(
   budgetPeriods: BudgetPeriod[],
   latestWeekMs: number | undefined,
   weekCount: number,
-): CategoryVariance[] {
+): CategoryActualRow[] {
   if (latestWeekMs === undefined) return [];
   const windowMs = weekCount * MS_PER_WEEK;
 
@@ -1036,36 +1057,33 @@ function decomposeWindow(
     avgWeekly: total / weekCount,
   }));
 
-  const totalActual = entries.reduce((s, e) => s + e.avgWeekly, 0);
-  if (totalActual === 0) return [];
-
   const absTotal = entries.reduce((s, e) => s + Math.abs(e.avgWeekly), 0);
   if (absTotal === 0) return [];
 
-  const material: CategoryVariance[] = [];
+  const material: CategoryActualRow[] = [];
   let otherTotal = 0;
+  let groupedCount = 0;
   for (const e of entries) {
     const share = Math.abs(e.avgWeekly) / absTotal;
     if (share < MATERIALITY_THRESHOLD) {
       otherTotal += e.avgWeekly;
+      groupedCount += 1;
     } else {
       material.push({
+        kind: "category",
         category: e.category,
         avgWeekly: e.avgWeekly,
-        percentOfActual: (e.avgWeekly / totalActual) * 100,
-        isOther: false,
       });
     }
   }
 
   material.sort((a, b) => b.avgWeekly - a.avgWeekly);
 
-  if (otherTotal !== 0) {
+  if (groupedCount > 0) {
     material.push({
-      category: "Other",
+      kind: "other",
       avgWeekly: otherTotal,
-      percentOfActual: (otherTotal / totalActual) * 100,
-      isOther: true,
+      groupedCount,
     });
   }
 

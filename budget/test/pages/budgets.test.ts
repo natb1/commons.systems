@@ -378,7 +378,7 @@ describe("renderBudgets", () => {
         },
       ]),
     }));
-    expect(html).toContain('color: #4caf50');
+    expect(html).toContain('class="variance-favorable"');
   });
 
   it("deficit diff renders in red", async () => {
@@ -408,7 +408,7 @@ describe("renderBudgets", () => {
         },
       ]),
     }));
-    expect(html).toContain('color: var(--error, #c00)');
+    expect(html).toContain('class="variance-unfavorable"');
   });
 
   it("renders overrides table when budgets have overrides", async () => {
@@ -593,6 +593,6 @@ describe("renderBudgets", () => {
     const parsed = JSON.parse(unescaped);
     expect(Array.isArray(parsed)).toBe(true);
     expect(parsed[0].category).toBe("Food:Groceries");
-    expect(parsed[0].isOther).toBe(false);
+    expect(parsed[0].kind).toBe("category");
   });
 });

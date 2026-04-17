@@ -1893,7 +1893,6 @@ describe("computePerBudgetCategoryVariance", () => {
 
   it("produces a single category with 100% share when only one category is present", () => {
     const budget = makeBudget({ id: "food" });
-    // Latest week (p3, Jan 20) is excluded; p1 is the only completed week within 12w window.
     const periods = [
       makePeriod({
         id: "p1", budgetId: "food",
@@ -1909,16 +1908,15 @@ describe("computePerBudgetCategoryVariance", () => {
     const result = computePerBudgetCategoryVariance([budget], periods);
     const w12 = result.get("food")!.window12;
     expect(w12).toHaveLength(1);
-    expect(w12[0].category).toBe("Food:Groceries");
+    expect(w12[0].kind).toBe("category");
+    if (w12[0].kind === "category") {
+      expect(w12[0].category).toBe("Food:Groceries");
+    }
     expect(w12[0].avgWeekly).toBeCloseTo(120 / 12);
-    expect(w12[0].percentOfActual).toBeCloseTo(100);
-    expect(w12[0].isOther).toBe(false);
   });
 
   it("groups sub-threshold categories into Other", () => {
     const budget = makeBudget({ id: "food" });
-    // One completed week (Jan 6); latest week (Jan 13) excluded.
-    // Restaurants: 95 = 95% share (material), Coffee: 4 = 4% (< 5%, grouped), Tip: 1 = 1% (grouped).
     const periods = [
       makePeriod({
         id: "p1", budgetId: "food",
@@ -1938,10 +1936,14 @@ describe("computePerBudgetCategoryVariance", () => {
     const result = computePerBudgetCategoryVariance([budget], periods);
     const w12 = result.get("food")!.window12;
     expect(w12).toHaveLength(2);
-    expect(w12[0].category).toBe("Food:Restaurants");
-    expect(w12[0].isOther).toBe(false);
-    expect(w12[1].category).toBe("Other");
-    expect(w12[1].isOther).toBe(true);
+    expect(w12[0].kind).toBe("category");
+    if (w12[0].kind === "category") {
+      expect(w12[0].category).toBe("Food:Restaurants");
+    }
+    expect(w12[1].kind).toBe("other");
+    if (w12[1].kind === "other") {
+      expect(w12[1].groupedCount).toBe(2);
+    }
     expect(w12[1].avgWeekly).toBeCloseTo(5 / 12);
   });
 
@@ -1964,13 +1966,37 @@ describe("computePerBudgetCategoryVariance", () => {
     ];
     const result = computePerBudgetCategoryVariance([budget], periods);
     const w12 = result.get("food")!.window12;
-    expect(w12.map(v => v.category)).toEqual(["Food:Restaurants", "Food:Coffee"]);
-    expect(w12.every(v => !v.isOther)).toBe(true);
+    expect(w12).toHaveLength(2);
+    expect(w12.every(v => v.kind === "category")).toBe(true);
+    const names = w12.map(v => v.kind === "category" ? v.category : "Other");
+    expect(names).toEqual(["Food:Restaurants", "Food:Coffee"]);
+  });
+
+  it("keeps a category whose share is exactly the materiality threshold", () => {
+    const budget = makeBudget({ id: "food" });
+    // Amounts are multiples of weekCount (12) so avgWeekly and absTotal are
+    // exact integers, giving share = 5/100 = 0.05 with no FP drift.
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: { "Food:Restaurants": 1140, "Food:Coffee": 60 },
+      }),
+      makePeriod({
+        id: "p2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: {},
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    const w12 = result.get("food")!.window12;
+    expect(w12).toHaveLength(2);
+    expect(w12.every(r => r.kind === "category")).toBe(true);
   });
 
   it("divides by the window weekCount, matching trailingAvg semantics", () => {
     const budget = makeBudget({ id: "food" });
-    // Create 14 completed weeks with 120 spent in one category each week; latest week is incomplete.
+    // Create 15 periods; the last is the excluded latest week, leaving 14 completed weeks.
     const periods: BudgetPeriod[] = [];
     for (let i = 0; i < 15; i++) {
       const start = new Date(Date.UTC(2025, 0, 6 + i * 7));
@@ -1984,7 +2010,7 @@ describe("computePerBudgetCategoryVariance", () => {
     const result = computePerBudgetCategoryVariance([budget], periods);
     const w12 = result.get("food")!.window12;
     const w52 = result.get("food")!.window52;
-    // 12w: last 12 completed weeks (weeks 2-13) × 120 = 1440 ÷ 12 = 120
+    // 12w: most recent 12 completed weeks × 120 = 1440 ÷ 12 = 120
     expect(w12[0].avgWeekly).toBeCloseTo(1440 / 12);
     // 52w: all 14 completed weeks × 120 = 1680 ÷ 52
     expect(w52[0].avgWeekly).toBeCloseTo(1680 / 52);
@@ -1995,7 +2021,6 @@ describe("computePerBudgetCategoryVariance", () => {
       makeBudget({ id: "food" }),
       makeBudget({ id: "fun" }),
     ];
-    // Global latest = Jan 13. Food has Jan 6 + Jan 13; Fun has only Jan 13. Fun should have 0 completed weeks.
     const periods = [
       makePeriod({
         id: "f1", budgetId: "food",
@@ -2038,7 +2063,6 @@ describe("computePerBudgetCategoryVariance", () => {
 
   it("separates window12 and window52 when data only exists in the 52w window", () => {
     const budget = makeBudget({ id: "transport" });
-    // Jan 6 is ~30 weeks before Aug 4 (latest week is Aug 11, excluded).
     const periods = [
       makePeriod({
         id: "p1", budgetId: "transport",

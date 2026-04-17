@@ -30,9 +30,14 @@ export function renderAxisSvg(options: {
 }
 
 export function getThemeFg(container: HTMLElement): string {
-  const fg = getComputedStyle(container).getPropertyValue("--fg").trim();
-  if (!fg) throw new Error("Missing required CSS custom property --fg");
-  return fg;
+  return readThemeVar(container, "--fg");
+}
+
+/** Read a required CSS custom property from a container, throwing if missing. */
+export function readThemeVar(container: HTMLElement, name: string): string {
+  const value = getComputedStyle(container).getPropertyValue(name).trim();
+  if (!value) throw new Error(`Missing required CSS custom property ${name}`);
+  return value;
 }
 
 export function computePanelWidth(budgetCount: number): number {

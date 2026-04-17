@@ -4,6 +4,8 @@
 
 :root {
   color-scheme: dark;
+  --favorable: #4caf50;
+  --unfavorable: #e45858;
 }
 
 .content-grid {
@@ -94,6 +96,9 @@
   font-size: 0.8em;
   margin-right: 0.1em;
 }
+
+.variance-favorable { color: var(--favorable); }
+.variance-unfavorable { color: var(--unfavorable); }
 
 .budget-variance {
   padding: 0.5rem 1rem 1rem 1.5rem;
@@ -234,8 +239,7 @@
 #budgets-chart-controls,
 #accounts-chart-controls { margin-bottom: 0.5rem; }
 #budgets-chart { width: 100%; margin-bottom: 1rem; }
-/* Observable Plot tooltips render light text by default; override for
-   the app's light tip background. [aria-label="tip"] is Plot-specific. */
+/* Override Plot's default light tip text for our light tip background. */
 [aria-label="tip"] text { fill: #222; }
 .chart-layout {
   display: flex;

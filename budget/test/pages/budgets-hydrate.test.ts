@@ -209,3 +209,257 @@ describe("hydrateBudgetTable", () => {
     expect(input.title).toContain("Value out of range");
   });
 });
+
+interface VarianceContainerOpts {
+  readonly weeklyAllowance?: string;
+  readonly window12?: string;
+  readonly window52?: string;
+  readonly omitVariance?: boolean;
+}
+
+function makeVarianceContainer(opts: VarianceContainerOpts = {}): { container: HTMLElement; details: HTMLDetailsElement; varianceEl: HTMLElement | null } {
+  const container = document.createElement("div");
+  container.id = "budgets-table";
+
+  const details = document.createElement("details") as HTMLDetailsElement;
+  details.classList.add("budget-row");
+  details.setAttribute("data-budget-id", "food");
+
+  const summary = document.createElement("summary");
+  details.appendChild(summary);
+
+  let varianceEl: HTMLElement | null = null;
+  if (!opts.omitVariance) {
+    varianceEl = document.createElement("div");
+    varianceEl.classList.add("budget-variance");
+    if (opts.weeklyAllowance !== undefined) {
+      varianceEl.setAttribute("data-weekly-allowance", opts.weeklyAllowance);
+    }
+    if (opts.window12 !== undefined) {
+      varianceEl.setAttribute("data-window12", opts.window12);
+    }
+    if (opts.window52 !== undefined) {
+      varianceEl.setAttribute("data-window52", opts.window52);
+    }
+    details.appendChild(varianceEl);
+  }
+
+  container.appendChild(details);
+  document.body.appendChild(container);
+  if (varianceEl) {
+    Object.defineProperty(varianceEl, "clientWidth", { value: 640, configurable: true });
+  }
+  return { container, details, varianceEl };
+}
+
+const POPULATED_W12 = JSON.stringify([
+  { kind: "category", category: "Food:Groceries", avgWeekly: 60 },
+  { kind: "category", category: "Food:Restaurants", avgWeekly: 30 },
+]);
+const POPULATED_W52 = JSON.stringify([
+  { kind: "category", category: "Food:Groceries", avgWeekly: 55 },
+  { kind: "category", category: "Food:Restaurants", avgWeekly: 25 },
+]);
+
+function openDetails(details: HTMLDetailsElement): void {
+  details.open = true;
+}
+
+function clearBody(): void {
+  while (document.body.firstChild) document.body.removeChild(document.body.firstChild);
+}
+
+describe("hydrateBudgetTable — variance", () => {
+  const THEME_VARS: Record<string, string> = {
+    "--fg": "#e0e0e0",
+    "--favorable": "#4caf50",
+    "--unfavorable": "#e45858",
+  };
+  let originalClientWidth: PropertyDescriptor | undefined;
+  let originalGetComputedStyle: typeof window.getComputedStyle;
+  beforeEach(() => {
+    originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      get() { return 640; },
+      configurable: true,
+    });
+    originalGetComputedStyle = window.getComputedStyle;
+    window.getComputedStyle = ((el: Element, pseudo?: string | null) => {
+      const cs = originalGetComputedStyle.call(window, el, pseudo ?? null);
+      const origGetPropertyValue = cs.getPropertyValue.bind(cs);
+      cs.getPropertyValue = (prop: string) => {
+        const direct = origGetPropertyValue(prop);
+        if (direct) return direct;
+        return THEME_VARS[prop] ?? "";
+      };
+      return cs;
+    }) as typeof window.getComputedStyle;
+  });
+  afterEach(() => {
+    if (originalClientWidth) {
+      Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
+    } else {
+      delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
+    }
+    window.getComputedStyle = originalGetComputedStyle;
+    clearBody();
+  });
+
+  it("hydrates variance details when the row is first expanded", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: POPULATED_W12,
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    openDetails(details);
+    expect(varianceEl!.dataset.hydrated).toBe("true");
+    expect(varianceEl!.querySelector(".variance-wrapper")).not.toBeNull();
+  });
+
+  it("does not re-hydrate when a row is re-opened", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: POPULATED_W12,
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    openDetails(details);
+    const firstWrapper = varianceEl!.querySelector(".variance-wrapper");
+    details.open = false;
+    openDetails(details);
+    expect(varianceEl!.querySelector(".variance-wrapper")).toBe(firstWrapper);
+  });
+
+  it("does not hydrate while the row remains closed", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: POPULATED_W12,
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    details.dispatchEvent(new Event("toggle"));
+    expect(varianceEl!.dataset.hydrated).toBeUndefined();
+  });
+
+  it("throws when data-weekly-allowance is missing", () => {
+    const { container, details } = makeVarianceContainer({
+      window12: POPULATED_W12,
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
+  it("throws when data-weekly-allowance is not finite", () => {
+    const { container, details } = makeVarianceContainer({
+      weeklyAllowance: "NaN",
+      window12: POPULATED_W12,
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
+  it("throws when data-window12 is not valid JSON", () => {
+    const { container, details } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: "not json",
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
+  it("throws when data-window12 decodes to a non-array", () => {
+    const { container, details } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: "{}",
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
+  it("throws when a row is missing avgWeekly", () => {
+    const { container, details } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: JSON.stringify([{ kind: "category", category: "X" }]),
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
+  it("throws on unknown row kind", () => {
+    const { container, details } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: JSON.stringify([{ kind: "zzz", avgWeekly: 0 }]),
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
+  it("throws when Other row has a non-integer groupedCount", () => {
+    const { container, details } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: JSON.stringify([{ kind: "other", avgWeekly: 10, groupedCount: 0.5 }]),
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+
+  it("hydrates and shows an empty message when both windows are empty", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: "[]",
+      window52: "[]",
+    });
+    hydrateBudgetTable(container);
+    openDetails(details);
+    expect(varianceEl!.dataset.hydrated).toBe("true");
+    expect(varianceEl!.querySelector(".variance-wrapper")).not.toBeNull();
+    expect(varianceEl!.querySelector(".variance-empty")).not.toBeNull();
+  });
+
+  it("re-renders the chart when the window toggle changes to 52", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: POPULATED_W12,
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    openDetails(details);
+    const firstSvg = varianceEl!.querySelector(".variance-chart svg");
+    expect(firstSvg).not.toBeNull();
+    const firstAria = firstSvg!.getAttribute("aria-label");
+    const radio52 = varianceEl!.querySelector('input[value="52"]') as HTMLInputElement;
+    radio52.checked = true;
+    radio52.dispatchEvent(new Event("change", { bubbles: true }));
+    const nextSvg = varianceEl!.querySelector(".variance-chart svg");
+    expect(nextSvg).not.toBeNull();
+    expect(nextSvg!.getAttribute("aria-label")).not.toBe(firstAria);
+    expect(nextSvg!.getAttribute("aria-label")).toContain("52");
+  });
+
+  it("throws when the window toggle receives an unexpected value", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: POPULATED_W12,
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    openDetails(details);
+    const radio = varianceEl!.querySelector('input[value="12"]') as HTMLInputElement;
+    radio.value = "99";
+    expect(() => radio.dispatchEvent(new Event("change", { bubbles: true }))).toThrow();
+  });
+
+  it("throws when .budget-variance is missing from an expanded row", () => {
+    const { container, details } = makeVarianceContainer({ omitVariance: true });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).toThrow();
+  });
+});

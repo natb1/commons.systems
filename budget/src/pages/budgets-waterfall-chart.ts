@@ -1,14 +1,13 @@
 import * as Plot from "@observablehq/plot";
 import { scaleOrdinal } from "d3-scale";
 import { schemeTableau10 } from "d3-scale-chromatic";
-import type { CategoryVariance } from "../balance.js";
+import { isFavorableDiff, type CategoryActualRow, type VarianceWindow } from "../balance.js";
 import { formatCurrency } from "../format.js";
-import { getThemeFg } from "./chart-util.js";
+import { getThemeFg, readThemeVar } from "./chart-util.js";
 
 const ALLOWANCE_LABEL = "Allowance";
 const ACTUAL_LABEL = "Actual";
-const FAVORABLE_COLOR = "#4caf50";
-const UNFAVORABLE_COLOR = "#e45858";
+const OTHER_LABEL = "Other";
 
 export type WaterfallKind = "allowance" | "category" | "actual";
 
@@ -22,12 +21,15 @@ export interface WaterfallBar {
 
 export interface WaterfallOptions {
   readonly weeklyAllowance: number;
-  readonly categories: readonly CategoryVariance[];
-  readonly window: 12 | 52;
+  readonly categories: readonly CategoryActualRow[];
+  readonly window: VarianceWindow;
 }
 
 /** Build bridge-chart bars: allowance bar, one running-total bar per category, and a final actual bar. */
 export function buildWaterfallBars(opts: WaterfallOptions): WaterfallBar[] {
+  if (opts.categories.length === 0) {
+    throw new Error("buildWaterfallBars: categories must not be empty");
+  }
   const bars: WaterfallBar[] = [];
   bars.push({
     label: ALLOWANCE_LABEL,
@@ -40,8 +42,9 @@ export function buildWaterfallBars(opts: WaterfallOptions): WaterfallBar[] {
   let running = opts.weeklyAllowance;
   for (const cat of opts.categories) {
     const next = running - cat.avgWeekly;
+    const label = cat.kind === "other" ? OTHER_LABEL : cat.category;
     bars.push({
-      label: cat.category,
+      label,
       y1: running,
       y2: next,
       kind: "category",
@@ -65,21 +68,26 @@ export function buildWaterfallBars(opts: WaterfallOptions): WaterfallBar[] {
 export function renderVarianceWaterfall(container: HTMLElement, options: WaterfallOptions): void {
   const bars = buildWaterfallBars(options);
   const totalActual = options.categories.reduce((s, c) => s + c.avgWeekly, 0);
-  const favorable = options.weeklyAllowance >= totalActual;
+  const favorable = isFavorableDiff(options.weeklyAllowance - totalActual);
 
   const fg = getThemeFg(container);
-  const categoryNames = options.categories.map(c => c.category);
+  const favorableColor = readThemeVar(container, "--favorable");
+  const unfavorableColor = readThemeVar(container, "--unfavorable");
+  const categoryNames = options.categories.map(c => c.kind === "other" ? OTHER_LABEL : c.category);
   const categoryColor = scaleOrdinal<string, string>()
     .domain(categoryNames)
     .range(schemeTableau10);
 
   function fillFor(bar: WaterfallBar): string {
     if (bar.kind === "allowance") return fg;
-    if (bar.kind === "actual") return favorable ? FAVORABLE_COLOR : UNFAVORABLE_COLOR;
+    if (bar.kind === "actual") return favorable ? favorableColor : unfavorableColor;
     return categoryColor(bar.label);
   }
 
-  const width = container.clientWidth || 640;
+  const width = container.clientWidth;
+  if (width === 0) {
+    throw new Error("renderVarianceWaterfall: container.clientWidth is zero");
+  }
   const height = 240;
 
   const svg = Plot.plot({
