@@ -413,4 +413,97 @@ describe("prerenderPosts", () => {
     const html = rootCall![1] as string;
     expect(html).toContain("Archive");
   });
+
+  it("injects canonical link on homepage", async () => {
+    await prerenderPosts(makeConfig());
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    expect(html).toContain('<link rel="canonical" href="https://example.com/">');
+  });
+
+  it("injects canonical link on post pages", async () => {
+    await prerenderPosts(makeConfig());
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+    expect(html).toContain('<link rel="canonical" href="https://example.com/post/hello-world">');
+  });
+
+  it("injects Organization JSON-LD on homepage when organization provided", async () => {
+    await prerenderPosts(makeConfig({
+      organization: {
+        name: "Example Org",
+        url: "https://example.com",
+        logo: "https://example.com/logo.svg",
+        sameAs: ["https://github.com/example"],
+      },
+    }));
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    expect(html).toContain('<script type="application/ld+json">');
+    expect(html).toContain('"@type":"Organization"');
+    expect(html).toContain("Example Org");
+  });
+
+  it("omits Organization JSON-LD when organization not provided", async () => {
+    await prerenderPosts(makeConfig());
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    expect(html).not.toContain("Organization");
+  });
+
+  it("injects BlogPosting JSON-LD on post pages when author provided", async () => {
+    await prerenderPosts(makeConfig({ author: { name: "Alice" } }));
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+    expect(html).toContain('<script type="application/ld+json">');
+    expect(html).toContain('"@type":"BlogPosting"');
+    expect(html).toContain('"headline":"Hello World"');
+    expect(html).toContain("Alice");
+  });
+
+  it("omits BlogPosting JSON-LD when author not provided", async () => {
+    await prerenderPosts(makeConfig());
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+    expect(html).not.toContain("BlogPosting");
+  });
+
+  it("injects rel=me links on homepage when relMe provided", async () => {
+    await prerenderPosts(makeConfig({ relMe: ["https://github.com/alice"] }));
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    expect(html).toContain('<link rel="me" href="https://github.com/alice">');
+  });
+
+  it("injects rel=me links on post pages when relMe provided", async () => {
+    await prerenderPosts(makeConfig({ relMe: ["https://github.com/alice"] }));
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+    expect(html).toContain('<link rel="me" href="https://github.com/alice">');
+  });
+
+  it("omits rel=me when relMe not provided or empty", async () => {
+    await prerenderPosts(makeConfig({ relMe: [] }));
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    expect(html).not.toContain('rel="me"');
+  });
 });
