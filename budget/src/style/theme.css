@@ -234,11 +234,9 @@
 #budgets-chart-controls,
 #accounts-chart-controls { margin-bottom: 0.5rem; }
 #budgets-chart { width: 100%; margin-bottom: 1rem; }
-#budgets-chart [aria-label="tip"] text,
-#budgets-area-chart [aria-label="tip"] text,
-#accounts-trend-chart [aria-label="tip"] text,
-#accounts-net-worth-chart [aria-label="tip"] text,
-#accounts-cash-flow-chart [aria-label="tip"] text { fill: #222; }
+/* Observable Plot tooltips render light text by default; override for
+   the app's light tip background. [aria-label="tip"] is Plot-specific. */
+[aria-label="tip"] text { fill: #222; }
 .chart-layout {
   display: flex;
   align-items: stretch;

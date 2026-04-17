@@ -89,6 +89,7 @@ export function renderVarianceWaterfall(container: HTMLElement, options: Waterfa
     marginLeft: 50,
     marginRight: 20,
     style: { background: "transparent", color: fg },
+    color: { type: "identity" },
     x: { label: null, tickRotate: -25, domain: bars.map(b => b.label) },
     y: { label: "$/week", grid: true },
     marks: [
@@ -101,9 +102,9 @@ export function renderVarianceWaterfall(container: HTMLElement, options: Waterfa
         fillOpacity: (b: WaterfallBar) => b.kind === "allowance" ? 0.4 : 1,
         inset: 4,
       }),
-      Plot.tip(bars, Plot.pointer({
+      Plot.tip(bars, Plot.pointerX({
         x: "label",
-        y: (b: WaterfallBar) => b.kind === "category" ? b.y2 : b.y2,
+        y: (b: WaterfallBar) => b.y2,
         title: (b: WaterfallBar) => `${b.label}\n${formatCurrency(b.amount)}/week`,
       })),
     ],
