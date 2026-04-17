@@ -24,6 +24,7 @@
     U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+/* font-display: optional — no FOIT, no late swap. Smoke test asserts the declared family string, not that the woff2 rendered. */
 @font-face {
   font-family: "IBM Plex Serif";
   font-style: normal;
@@ -68,4 +69,18 @@ body {
 main {
   min-width: 0;
   margin-inline: 0;
+}
+
+/* Post body: serif for long-form reading; code descendants revert to the mono body font for alignment. */
+#posts article [id^="post-content-"] {
+  font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  line-height: 1.6;
+  max-width: 70ch;
+}
+
+#posts article [id^="post-content-"] code,
+#posts article [id^="post-content-"] pre,
+#posts article [id^="post-content-"] kbd,
+#posts article [id^="post-content-"] samp {
+  font-family: var(--font-body);
 }

@@ -3,14 +3,14 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 
 const pkgRoot = join(dirname(new URL(import.meta.url).pathname), "..");
-const css = readFileSync(join(pkgRoot, "blog.css"), "utf-8");
+const css = readFileSync(join(pkgRoot, "src/style/theme.css"), "utf-8");
 
 const bodyRule = css.match(
   /#posts article \[id\^="post-content-"\]\s*\{[^}]*\}/,
 )?.[0];
 
 const codeRule = css.match(
-  /#posts article \[id\^="post-content-"\] code,[\s\S]*?\}/,
+  /#posts article \[id\^="post-content-"\] code,\s*#posts article \[id\^="post-content-"\] pre,\s*#posts article \[id\^="post-content-"\] kbd,\s*#posts article \[id\^="post-content-"\] samp\s*\{[^}]*\}/,
 )?.[0];
 
 describe("post body typography", () => {
@@ -41,6 +41,8 @@ describe("post body typography", () => {
       expect(codeRule).toBeDefined();
       expect(codeRule).toContain("code");
       expect(codeRule).toContain("pre");
+      expect(codeRule).toContain("kbd");
+      expect(codeRule).toContain("samp");
     });
 
     it("restores the body monospace font", () => {

@@ -41,8 +41,12 @@ describe("IBM Plex Serif @font-face declarations", () => {
         expect(block).toContain(`url("/fonts/${face.file}")`);
       });
 
-      it("ships the referenced woff2 file", () => {
-        expect(existsSync(join(fontsDir, face.file))).toBe(true);
+      it("ships a valid woff2 file", () => {
+        const filePath = join(fontsDir, face.file);
+        expect(existsSync(filePath)).toBe(true);
+        const buf = readFileSync(filePath);
+        expect(buf.length).toBeGreaterThan(1000);
+        expect(buf.subarray(0, 4).toString("ascii")).toBe("wOF2");
       });
     });
   }

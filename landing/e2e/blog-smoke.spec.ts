@@ -50,8 +50,9 @@ test.describe("blog smoke", () => {
     await expect(page.locator("#posts")).not.toContainText("Draft Ideas");
   });
 
-  // Validates the CSS rule shipped, not the actual font load: font-display:
-  // optional intentionally skips the network fetch on first visit.
+  // Asserts the CSS rule shipped, not that the woff2 rendered. With
+  // font-display: optional the browser may not swap to Plex Serif on a
+  // cold visit, but getComputedStyle still returns the declared family.
   test("post body declares IBM Plex Serif @smoke", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector(

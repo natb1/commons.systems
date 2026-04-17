@@ -63,6 +63,9 @@ test.describe("blog", () => {
     ).toBeVisible();
   });
 
+  // Asserts the CSS rule shipped, not that the woff2 rendered. With
+  // font-display: optional the browser may not swap to Plex Serif on a
+  // cold visit, but getComputedStyle still returns the declared family.
   test("post body renders in IBM Plex Serif", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector(
