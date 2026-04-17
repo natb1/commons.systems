@@ -64,7 +64,10 @@
       "Bash(npx playwright:*)",
       "Bash(npx tsx:*)",
       "Bash(npx vite:*)",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude-in-chrome__read_console_messages",
+      "mcp__claude-in-chrome__read_network_requests"
     ]
   },
   "hooks": {

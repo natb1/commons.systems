@@ -10,7 +10,45 @@ test.describe("blog smoke", () => {
   test("meta description is present @smoke", async ({ page }) => {
     await page.goto("/");
     const desc = await page.getAttribute('meta[name="description"]', "content");
-    expect(desc).toBeTruthy();
+    if (!desc) throw new Error("description meta tag missing content");
+    expect(desc.length).toBeLessThanOrEqual(160);
+  });
+
+  test("Open Graph tags present @smoke", async ({ page }) => {
+    await page.goto("/");
+    for (const property of ["og:title", "og:description", "og:image", "og:type", "og:url"]) {
+      const content = await page.getAttribute(`meta[property="${property}"]`, "content");
+      expect(content, `missing ${property}`).toBeTruthy();
+    }
+    const image = await page.getAttribute('meta[property="og:image"]', "content");
+    expect(image).toMatch(/^https?:\/\//);
+    const type = await page.getAttribute('meta[property="og:type"]', "content");
+    expect(type).toBe("website");
+  });
+
+  test("Twitter Card tags present @smoke", async ({ page }) => {
+    await page.goto("/");
+    const card = await page.getAttribute('meta[name="twitter:card"]', "content");
+    expect(card).toBe("summary_large_image");
+    for (const name of ["twitter:title", "twitter:description", "twitter:image"]) {
+      const content = await page.getAttribute(`meta[name="${name}"]`, "content");
+      expect(content, `missing ${name}`).toBeTruthy();
+    }
+  });
+
+  // og:image is rendered as an absolute URL (https://commons.systems/og-card.png)
+  // for crawlers. To verify the asset actually ships under the tested build, rewrite
+  // the absolute URL onto the baseURL origin so the request hits the emulator (in
+  // acceptance) or the preview channel (in smoke) rather than production.
+  test("og:image resolves @smoke", async ({ page, request, baseURL }) => {
+    await page.goto("/");
+    const imageUrl = await page.getAttribute('meta[property="og:image"]', "content");
+    if (!imageUrl) throw new Error("og:image meta tag missing content");
+    if (!baseURL) throw new Error("playwright baseURL is not configured");
+    const rewritten = new URL(new URL(imageUrl).pathname, baseURL).toString();
+    const response = await request.get(rewritten);
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toMatch(/^image\//);
   });
 
   test("homepage loads without JS errors @smoke", async ({ page }) => {

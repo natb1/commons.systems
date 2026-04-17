@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { updateOgMeta } from "../src/og-meta";
+import { updateOgMeta, siteDefaultOgEntries, postOgEntries } from "../src/og-meta";
 import type { PostMeta } from "../src/post-types";
 
 const SITE_URL = "https://example.com";
@@ -8,9 +8,19 @@ function getOgContent(property: string): string | null {
   return document.querySelector<HTMLMetaElement>(`meta[property="${property}"]`)?.getAttribute("content") ?? null;
 }
 
+function getNameContent(name: string): string | null {
+  return document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.getAttribute("content") ?? null;
+}
+
 function allOgMeta(): string[] {
   return Array.from(document.querySelectorAll('meta[property^="og:"]')).map(
     (el) => el.getAttribute("property")!,
+  );
+}
+
+function allTwitterMeta(): string[] {
+  return Array.from(document.querySelectorAll('meta[name^="twitter:"]')).map(
+    (el) => el.getAttribute("name")!,
   );
 }
 
@@ -28,6 +38,7 @@ describe("updateOgMeta", () => {
   beforeEach(() => {
     document.head.querySelectorAll('meta[property^="og:"]').forEach((el) => el.remove());
     document.head.querySelectorAll('meta[name="description"]').forEach((el) => el.remove());
+    document.head.querySelectorAll('meta[name^="twitter:"]').forEach((el) => el.remove());
     document.title = "";
   });
 
@@ -71,6 +82,7 @@ describe("updateOgMeta", () => {
     expect(allOgMeta().length).toBeGreaterThan(0);
     updateOgMeta(SITE_URL, undefined);
     expect(allOgMeta()).toHaveLength(0);
+    expect(allTwitterMeta()).toHaveLength(0);
   });
 
   it("removes all OG tags when post has no previewDescription", () => {
@@ -78,6 +90,7 @@ describe("updateOgMeta", () => {
     const postWithoutDescription = { ...basePost, previewDescription: undefined };
     updateOgMeta(SITE_URL, postWithoutDescription);
     expect(allOgMeta()).toHaveLength(0);
+    expect(allTwitterMeta()).toHaveLength(0);
   });
 
   it("removes og:image when navigating from post with image to post without", () => {
@@ -132,6 +145,9 @@ describe("updateOgMeta", () => {
     expect(getOgContent("og:image")).toBe("https://example.com/tile10-armadillo-crag.webp");
     expect(getOgContent("og:type")).toBe("website");
     expect(getOgContent("og:url")).toBe("https://example.com");
+    expect(allOgMeta()).toHaveLength(5);
+    expect(allTwitterMeta()).toHaveLength(4);
+    expect(document.querySelectorAll('meta[name="description"]')).toHaveLength(1);
   });
 
   it("post-specific tags override site defaults", () => {
@@ -154,5 +170,85 @@ describe("updateOgMeta", () => {
     expect(getOgContent("og:image")).toBe("https://example.com/tile10-armadillo-crag.webp");
     expect(getOgContent("og:type")).toBe("website");
     expect(getOgContent("og:url")).toBe("https://example.com");
+  });
+
+  it("sets twitter:* tags on site defaults", () => {
+    updateOgMeta(SITE_URL, undefined, "Fellspiral", siteDefaults);
+    expect(getNameContent("twitter:card")).toBe("summary_large_image");
+    expect(getNameContent("twitter:title")).toBe("fellspiral");
+    expect(getNameContent("twitter:description")).toBe("A TTRPG game blog by Nate.");
+    expect(getNameContent("twitter:image")).toBe("https://example.com/tile10-armadillo-crag.webp");
+  });
+
+  it("sets twitter:* tags on post pages", () => {
+    updateOgMeta(SITE_URL, basePost);
+    expect(getNameContent("twitter:card")).toBe("summary_large_image");
+    expect(getNameContent("twitter:title")).toBe("Test Post");
+    expect(getNameContent("twitter:description")).toBe("A test description");
+    expect(getNameContent("twitter:image")).toBe("https://example.com/images/test.png");
+  });
+
+  it("removes twitter:image when post has no previewImage", () => {
+    updateOgMeta(SITE_URL, basePost);
+    expect(getNameContent("twitter:image")).toBe("https://example.com/images/test.png");
+    const postWithoutImage = { ...basePost, previewImage: undefined };
+    updateOgMeta(SITE_URL, postWithoutImage);
+    expect(getNameContent("twitter:image")).toBeNull();
+    expect(getNameContent("twitter:title")).toBe("Test Post");
+  });
+});
+
+describe("siteDefaultOgEntries", () => {
+  it("emits twitter:card, twitter:title, twitter:description, twitter:image", () => {
+    const entries = siteDefaultOgEntries("https://example.com", {
+      title: "Site",
+      description: "desc",
+      image: "/img.png",
+    });
+    const twitter = entries.filter((e) => e.key.startsWith("twitter:"));
+    expect(twitter).toEqual([
+      { attr: "name", key: "twitter:card", content: "summary_large_image" },
+      { attr: "name", key: "twitter:title", content: "Site" },
+      { attr: "name", key: "twitter:description", content: "desc" },
+      { attr: "name", key: "twitter:image", content: "https://example.com/img.png" },
+    ]);
+  });
+
+  it("emits identical URLs for og:image and twitter:image", () => {
+    const entries = siteDefaultOgEntries("https://example.com", {
+      title: "Site",
+      description: "desc",
+      image: "/img.png",
+    });
+    const ogImage = entries.find((e) => e.key === "og:image")?.content;
+    const twitterImage = entries.find((e) => e.key === "twitter:image")?.content;
+    expect(ogImage).toBe(twitterImage);
+  });
+});
+
+describe("postOgEntries", () => {
+  it("emits twitter:card/title always; twitter:description and twitter:image only when preview fields present", () => {
+    const full = postOgEntries("https://example.com", basePost);
+    expect(full.find((e) => e.key === "twitter:card")?.content).toBe("summary_large_image");
+    expect(full.find((e) => e.key === "twitter:title")?.content).toBe("Test Post");
+    expect(full.find((e) => e.key === "twitter:description")?.content).toBe("A test description");
+    expect(full.find((e) => e.key === "twitter:image")?.content).toBe("https://example.com/images/test.png");
+
+    const minimal = postOgEntries("https://example.com", {
+      ...basePost,
+      previewDescription: undefined,
+      previewImage: undefined,
+    });
+    expect(minimal.find((e) => e.key === "twitter:card")?.content).toBe("summary_large_image");
+    expect(minimal.find((e) => e.key === "twitter:title")?.content).toBe("Test Post");
+    expect(minimal.find((e) => e.key === "twitter:description")).toBeUndefined();
+    expect(minimal.find((e) => e.key === "twitter:image")).toBeUndefined();
+  });
+
+  it("emits identical URLs for og:image and twitter:image on full post", () => {
+    const entries = postOgEntries("https://example.com", basePost);
+    const ogImage = entries.find((e) => e.key === "og:image")?.content;
+    const twitterImage = entries.find((e) => e.key === "twitter:image")?.content;
+    expect(ogImage).toBe(twitterImage);
   });
 });
