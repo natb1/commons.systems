@@ -100,8 +100,9 @@ test.describe("blog", () => {
   });
 
   test("post body code descendants stay in IBM Plex Mono", async ({ page }) => {
-    // Seeded posts contain no code, so inject a synthetic <code> element to
-    // verify the cascade override rule applies to code descendants.
+    // Inject a synthetic <code> to exercise the cascade override rule
+    // independently of which posts happen to contain code, so the test
+    // stays stable as seed data evolves.
     await page.goto("/");
     await page.waitForSelector(
       "#post-content-recovering-autonomy-with-coding-agents",

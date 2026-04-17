@@ -8,10 +8,13 @@ const fontsDir = join(srcDir, "public/fonts");
 
 const theme = readFileSync(themePath, "utf-8");
 
+type Weight = 400 | 700;
+type Style = "normal" | "italic";
+
 interface FaceSpec {
-  weight: 400 | 700;
-  style: "normal" | "italic";
-  file: string;
+  weight: Weight;
+  style: Style;
+  file: `ibm-plex-serif-latin-${Weight}-${Style}.woff2`;
 }
 
 const serifFaces: FaceSpec[] = [
@@ -47,6 +50,9 @@ describe("IBM Plex Serif @font-face declarations", () => {
         const buf = readFileSync(filePath);
         expect(buf.length).toBeGreaterThan(1000);
         expect(buf.subarray(0, 4).toString("ascii")).toBe("wOF2");
+        // woff2 header length field (bytes 8-11) must equal actual file size;
+        // catches truncation that the 4-byte signature check would miss.
+        expect(buf.readUInt32BE(8)).toBe(buf.length);
       });
     });
   }

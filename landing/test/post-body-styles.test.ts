@@ -23,11 +23,11 @@ describe("post body typography", () => {
       expect(bodyRule).toMatch(/font-family:\s*"IBM Plex Serif"/);
     });
 
-    it("falls back to a generic serif", () => {
-      expect(bodyRule).toMatch(/serif\s*;/);
+    it("ends the family stack with a generic serif", () => {
+      expect(bodyRule).toMatch(/font-family:[^;]*,\s*serif\s*;/);
     });
 
-    it("sets line-height to 1.6 for serif readability", () => {
+    it("sets line-height to 1.6", () => {
       expect(bodyRule).toMatch(/line-height:\s*1\.6/);
     });
 

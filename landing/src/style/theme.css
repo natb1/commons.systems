@@ -2,6 +2,9 @@
 @import "@commons-systems/style/layout.css";
 @import "@commons-systems/blog/blog.css";
 
+/* All @font-face blocks use font-display: optional — no FOIT, no late swap.
+   Smoke/acceptance tests assert the declared family string, not that the
+   woff2 rendered (uncached first visit may paint in fallback). */
 @font-face {
   font-family: "IBM Plex Mono";
   font-style: normal;
@@ -24,7 +27,6 @@
     U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* font-display: optional — no FOIT, no late swap. Smoke test asserts the declared family string, not that the woff2 rendered. */
 @font-face {
   font-family: "IBM Plex Serif";
   font-style: normal;
@@ -71,13 +73,16 @@ main {
   margin-inline: 0;
 }
 
-/* Post body: serif for long-form reading; code descendants revert to the mono body font for alignment. */
+/* Post body uses serif for long-form prose. Code descendants revert to the
+   monospace --font-body so code stays in a fixed-width grid. Both rules
+   must target the same #posts article [id^="post-content-"] scope. */
 #posts article [id^="post-content-"] {
   font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif;
   line-height: 1.6;
   max-width: 70ch;
 }
 
+/* Override: restore monospace for code-like elements inside the serif scope. */
 #posts article [id^="post-content-"] code,
 #posts article [id^="post-content-"] pre,
 #posts article [id^="post-content-"] kbd,
