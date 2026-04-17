@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # WorktreeCreate hook: replace Claude Code's default worktree creation with the
-# project's <project-root>/worktrees/<branch>/ convention, and run `direnv allow`
-# on the new path. Reads the WorktreeCreate hook payload from stdin (flat JSON
-# with .name holding the branch name) and prints the final worktree path to
-# stdout for Claude to switch into.
+# project's <project-root>/worktrees/<branch>/ convention, run `direnv allow`,
+# and run `direnv exec` once to evaluate .envrc (which activates the Nix flake
+# and installs npm deps). Without the exec step, Claude's subprocess shell
+# lands in the worktree without node on PATH, because direnv shell hooks only
+# run for interactive shells. Reads the WorktreeCreate hook payload from stdin
+# (flat JSON with .name holding the branch name) and prints the final worktree
+# path to stdout for Claude to switch into.
 set -uo pipefail
 trap 'echo "[worktree-create] WARNING: unexpected error on line $LINENO (exit $?)" >&2; exit 1' ERR
 
@@ -33,6 +36,7 @@ else
   git worktree add -b "$BRANCH" "$NEW_PATH" origin/main >&2
 fi
 
-direnv allow "$NEW_PATH" >&2 || echo "[worktree-create] WARNING: direnv allow failed for $NEW_PATH" >&2
+direnv allow "$NEW_PATH" >&2 || { echo "[worktree-create] ERROR: direnv allow failed for $NEW_PATH" >&2; exit 1; }
+direnv exec "$NEW_PATH" true >&2 || { echo "[worktree-create] ERROR: direnv exec failed for $NEW_PATH (flake or npm ci failure)" >&2; exit 1; }
 
 echo "$NEW_PATH"
