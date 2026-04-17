@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # WorktreeCreate hook: replace Claude Code's default worktree creation with the
 # project's <project-root>/worktrees/<branch>/ convention, and run `direnv allow`
-# on the new path. Reads the EnterWorktree tool input JSON from stdin and prints
-# the final worktree path to stdout for Claude to switch into.
+# on the new path. Reads the WorktreeCreate hook payload from stdin (flat JSON
+# with .branch_name) and prints the final worktree path to stdout for Claude
+# to switch into.
 set -uo pipefail
 trap 'echo "[worktree-create] WARNING: unexpected error on line $LINENO (exit $?)" >&2; exit 1' ERR
 
-BRANCH=$(jq -r '.tool_input.name // empty')
+BRANCH=$(jq -r '.branch_name // empty')
 [ -n "$BRANCH" ] || { echo "[worktree-create] ERROR: no branch in payload" >&2; exit 1; }
 
 PORCELAIN=$(git worktree list --porcelain) || { echo "[worktree-create] ERROR: git worktree list failed" >&2; exit 1; }
