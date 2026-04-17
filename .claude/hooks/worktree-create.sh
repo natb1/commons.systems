@@ -6,7 +6,7 @@
 set -uo pipefail
 trap 'echo "[worktree-create] WARNING: unexpected error on line $LINENO (exit $?)" >&2; exit 1' ERR
 
-BRANCH=$(jq -r '.tool_input.branch // .branch // empty')
+BRANCH=$(jq -r '.tool_input.name // empty')
 [ -n "$BRANCH" ] || { echo "[worktree-create] ERROR: no branch in payload" >&2; exit 1; }
 
 PORCELAIN=$(git worktree list --porcelain) || { echo "[worktree-create] ERROR: git worktree list failed" >&2; exit 1; }

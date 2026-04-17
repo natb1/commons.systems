@@ -68,7 +68,7 @@ Sanitize the title:
 
 Format: `<issue-num>-<sanitized-title>`
 
-Call `EnterWorktree` with `branch: "<sanitized-branch-name>"`.
+Call `EnterWorktree` with `name: "<sanitized-branch-name>"`.
 
 The `WorktreeCreate` hook (`.claude/hooks/worktree-create.sh`) handles physical creation:
 - Detects bare vs. classic layout and computes `<project-root>/worktrees/<branch>/`.
