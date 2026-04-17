@@ -61,10 +61,12 @@ test.describe("hero band", () => {
     expect(order.gridIdx).toBeGreaterThan(order.heroIdx);
   });
 
-  test("hero placeholder content renders", async ({ page }) => {
+  test("hero showcase content renders", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.locator(".landing-hero-band")).toContainText("OPEN-SOURCE");
-    await expect(page.locator(".landing-hero-card")).toHaveCount(3);
+    await expect(page.locator(".landing-hero-band")).toContainText(
+      "This is not an app.",
+    );
+    await expect(page.locator("a.app-card")).toHaveCount(3);
   });
 });

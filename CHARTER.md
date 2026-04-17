@@ -99,14 +99,7 @@ Skipping tiers does not just produce hollow claims — it accumulates teeth befo
 
 ### Dependency Self-Assessment
 
-The project applies its own framework to its own dependencies. This is not a one-time exercise — it should be revisited as conditions change, and pruned if it becomes a compliance exercise rather than a genuine assessment.
-
-| Dependency | Solves | Required or parasitic? | Exit path | Ratchet risk |
-|---|---|---|---|---|
-| **GitHub** | Hosting, issues, collaboration, discoverability | Required; self-hosting loses discoverability | Gitea or similar; repo is standard git, issues/PRs are the lock-in surface | Medium — terms could change |
-| **Firebase** | Hosting and deployment | Required, narrowly; data never depends on it | Cloudflare Pages, Netlify, self-hosted static hosting | Low — deployment convenience, not data dependency |
-| **Claude (Anthropic)** | Agentic coding | Required as construction tool (see Progressive Detachment) | Alternative LLMs; pattern is portable, skills are Claude-specific | Medium-high — access loss slows iteration, breaks nothing built |
-| **Open standards** (HTML, JS, Go, git) | Core stack | Required; the substrate, not an institution | N/A | Negligible |
+The project applies its own framework to its own dependencies. The current dependency self-assessment — what each dependency solves, whether it is required or parasitic, its exit path, and its ratchet risk — is rendered on the project landing page at [commons.systems](https://commons.systems) alongside the app demonstration, where a visitor can see both what the project gives away and what it still depends on. Revisit as conditions change; prune if it becomes a compliance exercise rather than a genuine assessment.
 
 For the current technical state of the project, see the [README](https://github.com/natb1/commons.systems/blob/main/README.md). For current priorities, see [ROADMAP.md](ROADMAP.md).
 

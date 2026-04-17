@@ -16,6 +16,19 @@ const TEMPLATE = `<!DOCTYPE html>
 </body>
 </html>`;
 
+const TEMPLATE_WITH_HERO = `<!DOCTYPE html>
+<html>
+<head>
+  <title>My Blog</title>
+</head>
+<body>
+  <nav><app-nav id="nav"></app-nav></nav>
+  <section class="landing-hero">default hero marker</section>
+  <main id="app"></main>
+  <aside id="info-panel" class="sidebar"></aside>
+</body>
+</html>`;
+
 const MARKDOWN_HELLO = `# Hello World Title
 This is the **hello world** post.`;
 
@@ -556,5 +569,91 @@ describe("prerenderPosts", () => {
     );
     const html = rootCall![1] as string;
     expect(html).not.toContain('rel="me"');
+  });
+
+  it("injects exactly 3 SoftwareApplication JSON-LD scripts on root when 3 apps provided", async () => {
+    await prerenderPosts(makeConfig({
+      softwareApplications: [
+        { name: "A", url: "https://a.example", applicationCategory: "FinanceApplication", operatingSystem: "Web" },
+        { name: "B", url: "https://b.example", applicationCategory: "MultimediaApplication", operatingSystem: "Web" },
+        { name: "C", url: "https://c.example", applicationCategory: "BookApplication", operatingSystem: "Web" },
+      ],
+    }));
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    const matches = html.match(/"@type":"SoftwareApplication"/g);
+    expect(matches).not.toBeNull();
+    expect(matches!.length).toBe(3);
+  });
+
+  it("does not inject SoftwareApplication JSON-LD on post pages", async () => {
+    await prerenderPosts(makeConfig({
+      softwareApplications: [
+        { name: "A", url: "https://a.example", applicationCategory: "FinanceApplication", operatingSystem: "Web" },
+      ],
+    }));
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+    expect(html).not.toContain("SoftwareApplication");
+  });
+
+  it("omits SoftwareApplication scripts when softwareApplications is undefined", async () => {
+    await prerenderPosts(makeConfig());
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    expect(html).not.toContain("SoftwareApplication");
+  });
+
+  it("replaces <section class=\"landing-hero\"> with homeExtraHtml on root", async () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_HERO;
+      return MARKDOWN_HELLO;
+    }) as typeof fs.readFileSync);
+
+    await prerenderPosts(makeConfig({ homeExtraHtml: "<div class=\"showcase-injected\">SHOWCASE</div>" }));
+    const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]) === "/dist/index.html",
+    );
+    const html = rootCall![1] as string;
+    expect(html).toContain('<div class="showcase-injected">SHOWCASE</div>');
+    expect(html).not.toContain("default hero marker");
+    expect(html).not.toContain('<section class="landing-hero">');
+  });
+
+  it("strips <section class=\"landing-hero\"> from post pages when homeExtraHtml is set", async () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_HERO;
+      return MARKDOWN_HELLO;
+    }) as typeof fs.readFileSync);
+
+    await prerenderPosts(makeConfig({ homeExtraHtml: "<div class=\"showcase-injected\">SHOWCASE</div>" }));
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+    expect(html).not.toContain('<section class="landing-hero">');
+    expect(html).not.toContain("default hero marker");
+    expect(html).not.toContain("SHOWCASE");
+  });
+
+  it("strips <section class=\"landing-hero\"> from post pages when homeExtraHtml is not set", async () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_HERO;
+      return MARKDOWN_HELLO;
+    }) as typeof fs.readFileSync);
+
+    await prerenderPosts(makeConfig());
+    const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
+      (c) => String(c[0]).includes("post/hello-world"),
+    );
+    const html = perPostCall![1] as string;
+    expect(html).not.toContain('<section class="landing-hero">');
+    expect(html).not.toContain("default hero marker");
   });
 });

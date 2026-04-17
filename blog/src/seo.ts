@@ -13,6 +13,27 @@ export interface Author {
   url?: string;
 }
 
+export interface SoftwareApplication {
+  name: string;
+  url: string;
+  applicationCategory: string;
+  operatingSystem: string;
+  description?: string;
+}
+
+export function softwareApplicationJsonLd(app: SoftwareApplication): Record<string, unknown> {
+  const json: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: app.name,
+    url: app.url,
+    applicationCategory: app.applicationCategory,
+    operatingSystem: app.operatingSystem,
+  };
+  if (app.description) json.description = app.description;
+  return json;
+}
+
 export function organizationJsonLd(org: Organization): Record<string, unknown> {
   const json: Record<string, unknown> = {
     "@context": "https://schema.org",

@@ -12,7 +12,10 @@ import {
   ORGANIZATION,
   AUTHOR,
   REL_ME,
+  APPS,
+  DEPENDENCIES,
 } from "../src/site-config.js";
+import { renderShowcase } from "../src/showcase-render.js";
 
 const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
 
@@ -33,6 +36,8 @@ await prerenderPosts({
   organization: ORGANIZATION,
   author: AUTHOR,
   relMe: REL_ME,
+  softwareApplications: APPS,
+  homeExtraHtml: renderShowcase(APPS, DEPENDENCIES),
 });
 
 generateFeedXml({
