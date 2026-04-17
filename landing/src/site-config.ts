@@ -9,8 +9,8 @@ export const NAV_LINKS: NavLink[] = [{ href: "/", label: "Home" }];
 
 export const SITE_DEFAULTS: SiteDefaults = {
   title: "commons.systems",
-  description: "Nate's agentic coding workflow. A monorepo for proof-of-concept apps built with Claude Code — personal finance, print media, game blogs. Fork it, argue with it, discard the parts that don't serve you.",
-  image: "/icons/rss.svg",
+  description: "Open-source, local-first apps for budgeting, reading, and publishing — built with AI, designed to fork and own. No accounts, no lock-in.",
+  image: "/og-card.png",
 };
 
 export const ORGANIZATION: Organization = {
