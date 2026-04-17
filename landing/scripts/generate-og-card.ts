@@ -7,21 +7,20 @@
 import sharp from "sharp";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
 
-const INPUT = path.resolve("landing/originals/og-card.svg");
-const OUTPUT = path.resolve("landing/public/og-card.png");
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const INPUT = path.resolve(SCRIPT_DIR, "../originals/og-card.svg");
+const OUTPUT = path.resolve(SCRIPT_DIR, "../public/og-card.png");
 
 const svg = readFileSync(INPUT);
-await sharp(svg, { density: 150 })
+const info = await sharp(svg, { density: 150 })
   .resize(1200, 630, { fit: "contain", background: "#1a1714" })
   .png({ quality: 90 })
   .toFile(OUTPUT);
 
-const meta = await sharp(OUTPUT).metadata();
-if (meta.width === undefined || meta.height === undefined) {
-  throw new Error(`sharp returned no dimensions for ${OUTPUT}`);
+if (info.width !== 1200 || info.height !== 630) {
+  throw new Error(`Expected 1200x630, got ${info.width}x${info.height}`);
 }
-if (meta.width !== 1200 || meta.height !== 630) {
-  throw new Error(`Expected 1200x630, got ${meta.width}x${meta.height}`);
-}
-console.log(`Generated ${OUTPUT}: ${meta.width}x${meta.height}`);
+console.log(`Generated ${OUTPUT}: ${info.width}x${info.height}`);

@@ -145,6 +145,9 @@ describe("updateOgMeta", () => {
     expect(getOgContent("og:image")).toBe("https://example.com/tile10-armadillo-crag.webp");
     expect(getOgContent("og:type")).toBe("website");
     expect(getOgContent("og:url")).toBe("https://example.com");
+    expect(allOgMeta()).toHaveLength(5);
+    expect(allTwitterMeta()).toHaveLength(4);
+    expect(document.querySelectorAll('meta[name="description"]')).toHaveLength(1);
   });
 
   it("post-specific tags override site defaults", () => {

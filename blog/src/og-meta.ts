@@ -14,6 +14,9 @@ export interface SiteDefaults {
 
 export type OgTagEntry = { attr: "property" | "name"; key: string; content: string };
 
+const OG_PROPERTIES = ["og:title", "og:description", "og:image", "og:type", "og:url"] as const;
+const TWITTER_NAMES = ["twitter:card", "twitter:title", "twitter:description", "twitter:image"] as const;
+
 export function siteDefaultOgEntries(siteUrl: string, defaults: SiteDefaults): OgTagEntry[] {
   const imageUrl = `${siteUrl}${defaults.image}`;
   return [
@@ -30,6 +33,8 @@ export function siteDefaultOgEntries(siteUrl: string, defaults: SiteDefaults): O
   ];
 }
 
+// Base twitter:card and twitter:title are emitted unconditionally here. Prerender reaches them for
+// every post; on the client updateOgMeta path they only apply when previewDescription is present.
 export function postOgEntries(siteUrl: string, post: PostMeta): OgTagEntry[] {
   const entries: OgTagEntry[] = [
     { attr: "property", key: "og:title", content: post.title },
@@ -50,9 +55,6 @@ export function postOgEntries(siteUrl: string, post: PostMeta): OgTagEntry[] {
   }
   return entries;
 }
-
-const OG_PROPERTIES = ["og:title", "og:description", "og:image", "og:type", "og:url"] as const;
-const TWITTER_NAMES = ["twitter:card", "twitter:title", "twitter:description", "twitter:image"] as const;
 
 function setMetaTag(attr: "property" | "name", value: string, content: string): void {
   let el = document.querySelector<HTMLMetaElement>(`meta[${attr}="${value}"]`);

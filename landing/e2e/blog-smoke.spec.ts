@@ -42,6 +42,7 @@ test.describe("blog smoke", () => {
     if (!imageUrl) throw new Error("og:image meta tag missing content");
     const response = await request.get(imageUrl);
     expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toMatch(/^image\//);
   });
 
   test("homepage loads without JS errors @smoke", async ({ page }) => {
