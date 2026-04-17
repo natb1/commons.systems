@@ -14,12 +14,13 @@ import buildTimeContent from "virtual:blog-post-content";
 import buildTimeMetadata from "virtual:blog-post-metadata";
 import { createFetchPost } from "@commons-systems/blog/github";
 import { updateOgMeta } from "@commons-systems/blog/og-meta";
+import { updateCanonical } from "@commons-systems/blog/canonical";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
 import { initPanelToggle } from "@commons-systems/style/panel-toggle";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
-import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS } from "./site-config.js";
+import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
@@ -47,7 +48,7 @@ let lastSkippedCount = 0;
 let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("landing/post");
-const RSS_CONFIG = { title: "commons.systems", siteUrl: "https://commons.systems" };
+const RSS_CONFIG = { title: "commons.systems", siteUrl: SITE_URL };
 const updateInfoPanel = (): void => {
   if (cachedPosts === lastRenderedPosts) return;
 
@@ -114,6 +115,7 @@ const router = createHistoryRouter(
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
         updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, RSS_CONFIG.title, SITE_DEFAULTS);
+        updateCanonical(RSS_CONFIG.siteUrl, slug);
         updateInfoPanel();
       },
     },
