@@ -14,13 +14,14 @@ import buildTimeContent from "virtual:blog-post-content";
 import buildTimeMetadata from "virtual:blog-post-metadata";
 import { createFetchPost } from "@commons-systems/blog/github";
 import { updateOgMeta } from "@commons-systems/blog/og-meta";
+import { updateCanonical } from "@commons-systems/blog/canonical";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
 import { initPanelToggle } from "@commons-systems/style/panel-toggle";
 import { initScrollIndicator } from "@commons-systems/style/scroll-indicator";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { createStrategies, BLOG_ROLL_ENTRIES } from "./blog-roll/config.js";
-import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS } from "./site-config.js";
+import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
@@ -52,7 +53,7 @@ let lastSkippedCount = 0;
 let lastRenderedPosts: PostMeta[] | undefined;
 const strategies = createStrategies();
 const boundFetchPost = createFetchPost("fellspiral/post");
-const RSS_CONFIG = { title: "fellspiral", siteUrl: "https://fellspiral.commons.systems" };
+const RSS_CONFIG = { title: "fellspiral", siteUrl: SITE_URL };
 // Skip the very first innerHTML replacement when pre-rendered content exists.
 // The pre-render script (prerender.ts) already injected identical panel markup,
 // so replacing it would cause a needless DOM teardown that can trigger CLS.
@@ -148,6 +149,7 @@ const router = createHistoryRouter(
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
         updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, "Fellspiral", SITE_DEFAULTS);
+        updateCanonical(RSS_CONFIG.siteUrl, slug);
         updateInfoPanel();
       },
     },
