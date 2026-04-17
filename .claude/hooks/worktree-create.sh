@@ -2,20 +2,13 @@
 # WorktreeCreate hook: replace Claude Code's default worktree creation with the
 # project's <project-root>/worktrees/<branch>/ convention, and run `direnv allow`
 # on the new path. Reads the WorktreeCreate hook payload from stdin (flat JSON
-# with .branch_name) and prints the final worktree path to stdout for Claude
-# to switch into.
+# with .name holding the branch name) and prints the final worktree path to
+# stdout for Claude to switch into.
 set -uo pipefail
 trap 'echo "[worktree-create] WARNING: unexpected error on line $LINENO (exit $?)" >&2; exit 1' ERR
 
-PAYLOAD=$(cat)
-echo "$PAYLOAD" >"${TMPDIR:-/tmp}/worktree-create-payload.json"
-BRANCH=$(printf '%s' "$PAYLOAD" | jq -r '.branch_name // empty')
-[ -n "$BRANCH" ] || {
-  echo "[worktree-create] ERROR: no branch in payload" >&2
-  echo "[worktree-create] payload dumped to ${TMPDIR:-/tmp}/worktree-create-payload.json" >&2
-  echo "[worktree-create] payload preview: $(printf '%s' "$PAYLOAD" | head -c 500)" >&2
-  exit 1
-}
+BRANCH=$(jq -r '.name // empty')
+[ -n "$BRANCH" ] || { echo "[worktree-create] ERROR: no branch in payload" >&2; exit 1; }
 
 PORCELAIN=$(git worktree list --porcelain) || { echo "[worktree-create] ERROR: git worktree list failed" >&2; exit 1; }
 FIRST_LINE=$(printf '%s\n' "$PORCELAIN" | head -1)
