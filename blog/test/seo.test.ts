@@ -114,6 +114,14 @@ describe("jsonLdScriptTag", () => {
     expect(tag).not.toContain("</script><script>");
     expect(tag).toContain("\\u003c/script\\u003e");
   });
+
+  it("escapes U+2028 and U+2029 line separators", () => {
+    const tag = jsonLdScriptTag({ text: "a\u2028b\u2029c" });
+    expect(tag).not.toContain("\u2028");
+    expect(tag).not.toContain("\u2029");
+    expect(tag).toContain("\\u2028");
+    expect(tag).toContain("\\u2029");
+  });
 });
 
 describe("canonicalLinkTag", () => {

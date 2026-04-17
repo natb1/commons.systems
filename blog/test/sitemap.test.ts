@@ -154,6 +154,24 @@ describe("buildSitemapXml", () => {
     expect(xml).toContain("<loc>https://example.com/about</loc>");
   });
 
+  it("drops homepage when staticPaths omits '/'", () => {
+    const xml = buildSitemapXml(makeConfig({ staticPaths: ["/about"] }));
+    expect(xml).not.toContain("<loc>https://example.com/</loc>");
+    expect(xml).toContain("<loc>https://example.com/about</loc>");
+  });
+
+  it("only includes post URLs when staticPaths is empty", () => {
+    const xml = buildSitemapXml(makeConfig({ staticPaths: [] }));
+    expect(xml).not.toContain("<loc>https://example.com/</loc>");
+    expect(xml).toContain("<loc>https://example.com/post/hello-world</loc>");
+  });
+
+  it("omits lastmod for non-homepage static paths", () => {
+    const xml = buildSitemapXml(makeConfig({ staticPaths: ["/", "/about"] }));
+    const aboutSection = xml.split("/about</loc>")[1].split("</url>")[0];
+    expect(aboutSection).not.toContain("<lastmod>");
+  });
+
   it("throws when posts collection is missing", () => {
     expect(() => buildSitemapXml(makeConfig({ seed: { collections: [] } }))).toThrow(
       "No 'posts' collection found",
