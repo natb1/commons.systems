@@ -29,7 +29,6 @@ describe("buildWaterfallBars", () => {
     const bars = buildWaterfallBars({
       weeklyAllowance: 100,
       categories: [cat("Food:Groceries", 60)],
-      window: 12,
     });
     expect(bars).toHaveLength(3);
     expect(bars[0]).toMatchObject({ label: "Allowance", y1: 0, y2: 100, kind: "allowance" });
@@ -41,7 +40,6 @@ describe("buildWaterfallBars", () => {
     const bars = buildWaterfallBars({
       weeklyAllowance: 150,
       categories: [cat("A", 100), cat("B", 40), other(10, 2)],
-      window: 12,
     });
     expect(bars).toHaveLength(5);
     expect(bars[1]).toMatchObject({ label: "A", y1: 150, y2: 50 });
@@ -54,27 +52,34 @@ describe("buildWaterfallBars", () => {
     const bars = buildWaterfallBars({
       weeklyAllowance: 50,
       categories: [cat("Food:Restaurants", 80)],
-      window: 12,
     });
     expect(bars[1]).toMatchObject({ label: "Food:Restaurants", y1: 50, y2: -30 });
     expect(bars[2]).toMatchObject({ label: "Actual", y1: 0, y2: 80 });
   });
 
-  it("throws when given zero categories", () => {
-    expect(() =>
-      buildWaterfallBars({ weeklyAllowance: 100, categories: [], window: 52 }),
-    ).toThrow();
-  });
-
   it("preserves the bridge invariant across multiple categories", () => {
     const weeklyAllowance = 200;
-    const categories: CategoryActualRow[] = [cat("A", 80), cat("B", 50), cat("C", 20)];
-    const bars = buildWaterfallBars({ weeklyAllowance, categories, window: 12 });
+    const categories = [cat("A", 80), cat("B", 50), cat("C", 20)] as const;
+    const bars = buildWaterfallBars({ weeklyAllowance, categories });
     const lastCategoryBar = bars[bars.length - 2];
     const actualBar = bars[bars.length - 1];
     const totalActual = categories.reduce((s, c) => s + c.avgWeekly, 0);
     expect(lastCategoryBar.y2 + totalActual).toBeCloseTo(weeklyAllowance);
     expect(actualBar.y2).toBeCloseTo(totalActual);
+  });
+
+  it("steps the running total up when a refund category has negative avgWeekly", () => {
+    // Allowance 100, spend 80 (A), refund -30 (B), spend 50 (C) -> net actual 100.
+    const bars = buildWaterfallBars({
+      weeklyAllowance: 100,
+      categories: [cat("A", 80), cat("B", -30), cat("C", 50)],
+    });
+    expect(bars[1]).toMatchObject({ label: "A", y1: 100, y2: 20, amount: 80 });
+    // Negative avgWeekly -> running total rises.
+    expect(bars[2]).toMatchObject({ label: "B", y1: 20, y2: 50, amount: -30 });
+    expect(bars[3]).toMatchObject({ label: "C", y1: 50, y2: 0, amount: 50 });
+    // Actual bar rebases to zero and reflects the signed sum (100).
+    expect(bars[4]).toMatchObject({ label: "Actual", y1: 0, y2: 100, amount: 100 });
   });
 });
 
@@ -95,8 +100,7 @@ describe("renderVarianceWaterfall", () => {
     renderVarianceWaterfall(container, {
       weeklyAllowance: 100,
       categories: [cat("Food:Groceries", 60), cat("Food:Restaurants", 20)],
-      window: 12,
-    });
+    }, 12);
     const svg = container.querySelector("svg");
     expect(svg).not.toBeNull();
     expect(svg!.getAttribute("aria-label")).toMatch(/variance waterfall/i);
@@ -108,8 +112,7 @@ describe("renderVarianceWaterfall", () => {
     renderVarianceWaterfall(container, {
       weeklyAllowance: 100,
       categories: [cat("Food:Groceries", 60)],
-      window: 52,
-    });
+    }, 52);
     const svg = container.querySelector("svg")!;
     expect(svg.getAttribute("aria-label")).toContain("52");
   });
@@ -126,8 +129,7 @@ describe("renderVarianceWaterfall", () => {
     renderVarianceWaterfall(container, {
       weeklyAllowance: 100,
       categories: [cat("A", 50)],
-      window: 12,
-    });
+    }, 12);
     expect(lastRectFill(container)).toBe(FAVORABLE.toLowerCase());
   });
 
@@ -136,8 +138,7 @@ describe("renderVarianceWaterfall", () => {
     renderVarianceWaterfall(container, {
       weeklyAllowance: 100,
       categories: [cat("A", 150)],
-      window: 12,
-    });
+    }, 12);
     expect(lastRectFill(container)).toBe(UNFAVORABLE.toLowerCase());
   });
 
@@ -146,8 +147,7 @@ describe("renderVarianceWaterfall", () => {
     renderVarianceWaterfall(container, {
       weeklyAllowance: 100,
       categories: [cat("A", 100)],
-      window: 12,
-    });
+    }, 12);
     expect(lastRectFill(container)).toBe(FAVORABLE.toLowerCase());
   });
 
@@ -162,8 +162,7 @@ describe("renderVarianceWaterfall", () => {
       renderVarianceWaterfall(container, {
         weeklyAllowance: 100,
         categories: [cat("A", 50)],
-        window: 12,
-      }),
+      }, 12),
     ).toThrow();
     container.remove();
   });

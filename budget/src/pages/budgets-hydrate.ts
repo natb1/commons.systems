@@ -9,7 +9,7 @@ import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
 import { renderVarianceWaterfall } from "./budgets-waterfall-chart.js";
 import { computePanelWidth, filterToWindow } from "./chart-util.js";
-import { toSundayEntry, computeRollingAverage, type CategoryActualRow, type PerBudgetPoint, type VarianceWindow } from "../balance.js";
+import { toSundayEntry, computeRollingAverage, type CategoryActualRow, type PerBudgetCategoryVariance, type PerBudgetPoint, type VarianceWindow } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import type { SerializedBudget, SerializedBudgetOverride } from "./budgets.js";
 
@@ -49,8 +49,11 @@ function deserializeCategoryRows(raw: string, field: string): CategoryActualRow[
   return result;
 }
 
-function renderCategoryList(list: HTMLElement, categories: readonly CategoryActualRow[]): void {
+function renderCategoryList(list: HTMLElement, categories: readonly [CategoryActualRow, ...CategoryActualRow[]]): void {
   const absTotal = categories.reduce((s, c) => s + Math.abs(c.avgWeekly), 0);
+  if (absTotal === 0) {
+    throw new DataIntegrityError("renderCategoryList received categories summing to zero; upstream decomposeWindow should have returned [] in that case");
+  }
   const dl = document.createElement("dl");
   dl.className = "variance-breakdown";
   for (const c of categories) {
@@ -62,7 +65,7 @@ function renderCategoryList(list: HTMLElement, categories: readonly CategoryActu
       dt.textContent = c.category;
     }
     const dd = document.createElement("dd");
-    const pct = absTotal === 0 ? 0 : (Math.abs(c.avgWeekly) / absTotal) * 100;
+    const pct = (Math.abs(c.avgWeekly) / absTotal) * 100;
     dd.textContent = `${formatCurrency(c.avgWeekly)}/week · ${pct.toFixed(1)}%`;
     dl.append(dt, dd);
   }
@@ -98,8 +101,7 @@ function renderVarianceDetails(
   container: HTMLElement,
   budgetId: string,
   weeklyAllowance: number,
-  w12: readonly CategoryActualRow[],
-  w52: readonly CategoryActualRow[],
+  rowsByWindow: PerBudgetCategoryVariance,
 ): void {
   const wrapper = document.createElement("div");
   wrapper.className = "variance-wrapper";
@@ -116,7 +118,7 @@ function renderVarianceDetails(
   container.replaceChildren(wrapper);
 
   function draw(win: VarianceWindow): void {
-    const categories = win === 12 ? w12 : w52;
+    const categories = rowsByWindow[win];
     if (categories.length === 0) {
       chart.replaceChildren();
       const msg = document.createElement("p");
@@ -125,8 +127,9 @@ function renderVarianceDetails(
       list.replaceChildren(msg);
       return;
     }
-    renderVarianceWaterfall(chart, { weeklyAllowance, categories, window: win });
-    renderCategoryList(list, categories);
+    const nonEmpty = categories as readonly [CategoryActualRow, ...CategoryActualRow[]];
+    renderVarianceWaterfall(chart, { weeklyAllowance, categories: nonEmpty }, win);
+    renderCategoryList(list, nonEmpty);
   }
 
   toggle.addEventListener("change", (e) => {
@@ -139,6 +142,7 @@ function renderVarianceDetails(
     draw(value);
   });
 
+  // Default window must match the radio marked `checked` in buildWindowToggle.
   draw(12);
 }
 
@@ -160,10 +164,12 @@ function hydrateVarianceDetails(row: HTMLDetailsElement): void {
   if (!Number.isFinite(weeklyAllowance)) {
     throw new DataIntegrityError(`Invalid data-weekly-allowance: ${allowRaw}`);
   }
-  const w12 = deserializeCategoryRows(w12Raw, "data-window12");
-  const w52 = deserializeCategoryRows(w52Raw, "data-window52");
+  const rowsByWindow: PerBudgetCategoryVariance = {
+    12: deserializeCategoryRows(w12Raw, "data-window12"),
+    52: deserializeCategoryRows(w52Raw, "data-window52"),
+  };
 
-  renderVarianceDetails(varianceEl, budgetId, weeklyAllowance, w12, w52);
+  renderVarianceDetails(varianceEl, budgetId, weeklyAllowance, rowsByWindow);
   varianceEl.dataset.hydrated = "true";
 }
 

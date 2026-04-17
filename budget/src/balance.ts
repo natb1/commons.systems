@@ -988,23 +988,22 @@ export type CategoryActualRow =
   | { readonly kind: "category"; readonly category: string; readonly avgWeekly: number }
   | { readonly kind: "other"; readonly avgWeekly: number; readonly groupedCount: number };
 
-/** Per-budget category decomposition for both 12w and 52w trailing windows. */
-export interface PerBudgetCategoryVariance {
-  readonly window12: readonly CategoryActualRow[];
-  readonly window52: readonly CategoryActualRow[];
-}
+/** Per-budget category decomposition for every trailing window (keyed by VarianceWindow). */
+export type PerBudgetCategoryVariance = Readonly<Record<VarianceWindow, readonly CategoryActualRow[]>>;
 
-/** Favorable = actual under (or equal to) allowance, i.e. diff (allowance - actual) is non-negative. */
-export function isFavorableDiff(n: number): boolean {
-  return n >= 0;
+/**
+ * Favorable = actual under (or equal to) allowance. `diff` is the raw signed
+ * difference `allowance - actual`; pass that, not an absolute amount.
+ */
+export function isFavorableDiff(diff: number): boolean {
+  return diff >= 0;
 }
 
 /**
  * Decompose each budget's trailing-window actual spending into per-category
  * weekly averages. Each category's total across the window is divided by the
- * fixed weekCount (12 or 52), matching the trailing-average semantics used by
- * computeBudgetDiffs; weeks with no data contribute zero rather than shrinking
- * the divisor.
+ * fixed weekCount (12 or 52) regardless of how many weeks contain data, so
+ * weeks with no data contribute zero rather than shrinking the divisor.
  *
  * The latest observed week (across all budgets) is excluded from both windows
  * because it is typically still in progress and would skew the average downward.
@@ -1024,8 +1023,8 @@ export function computePerBudgetCategoryVariance(
   for (const budget of budgets) {
     const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
     result.set(budget.id, {
-      window12: decomposeWindow(budgetPeriods, latestWeekMs, 12),
-      window52: decomposeWindow(budgetPeriods, latestWeekMs, 52),
+      12: decomposeWindow(budgetPeriods, latestWeekMs, 12),
+      52: decomposeWindow(budgetPeriods, latestWeekMs, 52),
     });
   }
   return result;

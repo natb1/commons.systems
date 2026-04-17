@@ -73,8 +73,8 @@ function renderRow(
   const weeklyAllow = weeklyEquivalent(budget.allowance, budget.allowancePeriod);
   const varianceAttrs =
     ` data-weekly-allowance="${escapeHtml(String(weeklyAllow))}"` +
-    ` data-window12="${serializeCategoryRows(variance.window12)}"` +
-    ` data-window52="${serializeCategoryRows(variance.window52)}"`;
+    ` data-window12="${serializeCategoryRows(variance[12])}"` +
+    ` data-window52="${serializeCategoryRows(variance[52])}"`;
 
   return `<details class="expand-row budget-row"${budgetIdAttr}>
     <summary>

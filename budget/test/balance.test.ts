@@ -1888,7 +1888,7 @@ describe("computePerBudgetCategoryVariance", () => {
   it("returns empty windows when no periods exist", () => {
     const budgets = [makeBudget({ id: "food" })];
     const result = computePerBudgetCategoryVariance(budgets, []);
-    expect(result.get("food")).toEqual({ window12: [], window52: [] });
+    expect(result.get("food")).toEqual({ 12: [], 52: [] });
   });
 
   it("produces a single category with 100% share when only one category is present", () => {
@@ -1906,7 +1906,7 @@ describe("computePerBudgetCategoryVariance", () => {
       }),
     ];
     const result = computePerBudgetCategoryVariance([budget], periods);
-    const w12 = result.get("food")!.window12;
+    const w12 = result.get("food")![12];
     expect(w12).toHaveLength(1);
     expect(w12[0].kind).toBe("category");
     if (w12[0].kind === "category") {
@@ -1934,7 +1934,7 @@ describe("computePerBudgetCategoryVariance", () => {
       }),
     ];
     const result = computePerBudgetCategoryVariance([budget], periods);
-    const w12 = result.get("food")!.window12;
+    const w12 = result.get("food")![12];
     expect(w12).toHaveLength(2);
     expect(w12[0].kind).toBe("category");
     if (w12[0].kind === "category") {
@@ -1965,7 +1965,7 @@ describe("computePerBudgetCategoryVariance", () => {
       }),
     ];
     const result = computePerBudgetCategoryVariance([budget], periods);
-    const w12 = result.get("food")!.window12;
+    const w12 = result.get("food")![12];
     expect(w12).toHaveLength(2);
     expect(w12.every(v => v.kind === "category")).toBe(true);
     const names = w12.map(v => v.kind === "category" ? v.category : "Other");
@@ -1989,7 +1989,7 @@ describe("computePerBudgetCategoryVariance", () => {
       }),
     ];
     const result = computePerBudgetCategoryVariance([budget], periods);
-    const w12 = result.get("food")!.window12;
+    const w12 = result.get("food")![12];
     expect(w12).toHaveLength(2);
     expect(w12.every(r => r.kind === "category")).toBe(true);
   });
@@ -2008,8 +2008,8 @@ describe("computePerBudgetCategoryVariance", () => {
       }));
     }
     const result = computePerBudgetCategoryVariance([budget], periods);
-    const w12 = result.get("food")!.window12;
-    const w52 = result.get("food")!.window52;
+    const w12 = result.get("food")![12];
+    const w52 = result.get("food")![52];
     // 12w: most recent 12 completed weeks × 120 = 1440 ÷ 12 = 120
     expect(w12[0].avgWeekly).toBeCloseTo(1440 / 12);
     // 52w: all 14 completed weeks × 120 = 1680 ÷ 52
@@ -2039,8 +2039,8 @@ describe("computePerBudgetCategoryVariance", () => {
       }),
     ];
     const result = computePerBudgetCategoryVariance(budgets, periods);
-    expect(result.get("food")!.window12[0].avgWeekly).toBeCloseTo(100 / 12);
-    expect(result.get("fun")!.window12).toEqual([]);
+    expect(result.get("food")![12][0].avgWeekly).toBeCloseTo(100 / 12);
+    expect(result.get("fun")![12]).toEqual([]);
   });
 
   it("returns empty when total actual is zero", () => {
@@ -2058,7 +2058,7 @@ describe("computePerBudgetCategoryVariance", () => {
       }),
     ];
     const result = computePerBudgetCategoryVariance([budget], periods);
-    expect(result.get("food")!.window12).toEqual([]);
+    expect(result.get("food")![12]).toEqual([]);
   });
 
   it("separates window12 and window52 when data only exists in the 52w window", () => {
@@ -2076,8 +2076,8 @@ describe("computePerBudgetCategoryVariance", () => {
       }),
     ];
     const result = computePerBudgetCategoryVariance([budget], periods);
-    expect(result.get("transport")!.window12).toEqual([]);
-    const w52 = result.get("transport")!.window52;
+    expect(result.get("transport")![12]).toEqual([]);
+    const w52 = result.get("transport")![52];
     expect(w52).toHaveLength(1);
     expect(w52[0].avgWeekly).toBeCloseTo(200 / 52);
   });
@@ -2103,7 +2103,7 @@ describe("computePerBudgetCategoryVariance", () => {
       }),
     ];
     const result = computePerBudgetCategoryVariance([budget], periods);
-    const w12 = result.get("food")!.window12;
+    const w12 = result.get("food")![12];
     const names = w12.map(r => r.kind === "category" ? r.category : "Other");
     expect(names).toEqual(["B", "C", "A"]);
   });
@@ -2127,7 +2127,7 @@ describe("computePerBudgetCategoryVariance", () => {
       }),
     ];
     const result = computePerBudgetCategoryVariance([budget], periods);
-    const w12 = result.get("food")!.window12;
+    const w12 = result.get("food")![12];
     expect(w12[w12.length - 1].kind).toBe("other");
   });
 
@@ -2151,7 +2151,34 @@ describe("computePerBudgetCategoryVariance", () => {
     const result = computePerBudgetCategoryVariance(budgets, periods);
     expect(result.has("food")).toBe(true);
     expect(result.has("fun")).toBe(true);
-    expect(result.get("fun")).toEqual({ window12: [], window52: [] });
+    expect(result.get("fun")).toEqual({ 12: [], 52: [] });
+  });
+
+  it("emits Other with groupedCount=1 when exactly one sub-threshold category is folded", () => {
+    const budget = makeBudget({ id: "food" });
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: {
+          "Food:Restaurants": 99,
+          "Food:Coffee": 1,
+        },
+      }),
+      makePeriod({
+        id: "p2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: {},
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    const w12 = result.get("food")![12];
+    expect(w12).toHaveLength(2);
+    const otherRow = w12[1];
+    expect(otherRow.kind).toBe("other");
+    if (otherRow.kind === "other") {
+      expect(otherRow.groupedCount).toBe(1);
+    }
   });
 
   it("throws when a categoryBreakdown value is not finite", () => {

@@ -21,14 +21,18 @@ export interface WaterfallBar {
 
 export interface WaterfallOptions {
   readonly weeklyAllowance: number;
-  readonly categories: readonly CategoryActualRow[];
-  readonly window: VarianceWindow;
+  readonly categories: readonly [CategoryActualRow, ...CategoryActualRow[]];
 }
 
+/**
+ * Build the bar sequence for a bridge chart: an `Allowance` bar from 0 to
+ * `weeklyAllowance`, one `category` bar per input row tracking the running
+ * balance (a positive `avgWeekly` steps down, a refund's negative `avgWeekly`
+ * steps up), and a trailing `Actual` bar re-anchored to 0 so the viewer can
+ * compare its height against the Allowance bar directly rather than against
+ * the final running-total endpoint.
+ */
 export function buildWaterfallBars(opts: WaterfallOptions): WaterfallBar[] {
-  if (opts.categories.length === 0) {
-    throw new Error("buildWaterfallBars: categories must not be empty");
-  }
   const bars: WaterfallBar[] = [];
   bars.push({
     label: ALLOWANCE_LABEL,
@@ -64,7 +68,7 @@ export function buildWaterfallBars(opts: WaterfallOptions): WaterfallBar[] {
   return bars;
 }
 
-export function renderVarianceWaterfall(container: HTMLElement, options: WaterfallOptions): void {
+export function renderVarianceWaterfall(container: HTMLElement, options: WaterfallOptions, windowSize: VarianceWindow): void {
   const bars = buildWaterfallBars(options);
   const totalActual = bars[bars.length - 1].amount;
   const favorable = isFavorableDiff(options.weeklyAllowance - totalActual);
@@ -116,7 +120,7 @@ export function renderVarianceWaterfall(container: HTMLElement, options: Waterfa
         title: (b: WaterfallBar) => `${b.label}\n${formatCurrency(b.amount)}/week`,
       })),
     ],
-    ariaLabel: `Variance waterfall, ${options.window}-week window`,
+    ariaLabel: `Variance waterfall, ${windowSize}-week window`,
   });
 
   container.replaceChildren(svg);
