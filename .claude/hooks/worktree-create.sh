@@ -7,8 +7,15 @@
 set -uo pipefail
 trap 'echo "[worktree-create] WARNING: unexpected error on line $LINENO (exit $?)" >&2; exit 1' ERR
 
-BRANCH=$(jq -r '.branch_name // empty')
-[ -n "$BRANCH" ] || { echo "[worktree-create] ERROR: no branch in payload" >&2; exit 1; }
+PAYLOAD=$(cat)
+echo "$PAYLOAD" >"${TMPDIR:-/tmp}/worktree-create-payload.json"
+BRANCH=$(printf '%s' "$PAYLOAD" | jq -r '.branch_name // empty')
+[ -n "$BRANCH" ] || {
+  echo "[worktree-create] ERROR: no branch in payload" >&2
+  echo "[worktree-create] payload dumped to ${TMPDIR:-/tmp}/worktree-create-payload.json" >&2
+  echo "[worktree-create] payload preview: $(printf '%s' "$PAYLOAD" | head -c 500)" >&2
+  exit 1
+}
 
 PORCELAIN=$(git worktree list --porcelain) || { echo "[worktree-create] ERROR: git worktree list failed" >&2; exit 1; }
 FIRST_LINE=$(printf '%s\n' "$PORCELAIN" | head -1)
