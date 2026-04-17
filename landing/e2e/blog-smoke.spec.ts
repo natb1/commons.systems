@@ -81,4 +81,22 @@ test.describe("blog smoke", () => {
     // Draft posts must not appear for unauthenticated users
     await expect(page.locator("#posts")).not.toContainText("Draft Ideas");
   });
+
+  // Asserts the CSS rule shipped, not that the woff2 rendered. With
+  // font-display: optional the browser may not swap to Plex Serif on a
+  // cold visit, but getComputedStyle still returns the declared family.
+  test("post body declares IBM Plex Serif @smoke", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector(
+      "#post-content-recovering-autonomy-with-coding-agents p",
+      { timeout: 30000 },
+    );
+    const family = await page.evaluate(() => {
+      const p = document.querySelector(
+        "#post-content-recovering-autonomy-with-coding-agents p",
+      );
+      return p ? getComputedStyle(p).fontFamily : null;
+    });
+    expect(family).toContain("IBM Plex Serif");
+  });
 });
