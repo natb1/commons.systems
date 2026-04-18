@@ -1,0 +1,22 @@
+{
+  "name": "@commons-systems/productivityutil",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./namespace": "./src/namespace.ts",
+    "./agenda-items": "./src/agenda-items.ts",
+    "./feed-entries": "./src/feed-entries.ts",
+    "./messages": "./src/messages.ts",
+    "./goals": "./src/goals.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@commons-systems/authutil": "*",
+    "@commons-systems/firestoreutil": "*"
+  }
+}
