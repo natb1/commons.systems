@@ -58,4 +58,9 @@ WORKTREE_REGISTERED=1
 direnv allow "$NEW_PATH" >&2 || { echo "[worktree-create] ERROR: direnv allow failed for $NEW_PATH" >&2; exit 1; }
 direnv exec "$NEW_PATH" true >&2 || { echo "[worktree-create] ERROR: direnv exec failed for $NEW_PATH (non-zero exit from .envrc evaluation)" >&2; exit 1; }
 
+# Branch regex above guarantees a leading <issue-num>- prefix.
+ISSUE_NUM="${BRANCH%%-*}"
+(cd "$NEW_PATH" && "$PROJECT_ROOT/.claude/skills/ref-pr-workflow/scripts/sync-issue-context" "$ISSUE_NUM") >&2 \
+  || { echo "[worktree-create] ERROR: sync-issue-context failed for issue $ISSUE_NUM" >&2; exit 1; }
+
 echo "$NEW_PATH"
