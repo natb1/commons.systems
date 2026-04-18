@@ -50,6 +50,8 @@ else
   if git ls-remote --heads --exit-code origin "$BRANCH" >/dev/null 2>&1; then
     git fetch origin "$BRANCH" >&2
     git worktree add "$NEW_PATH" "$BRANCH" >&2
+  elif git rev-parse --verify --quiet "$BRANCH" >/dev/null 2>&1; then
+    git worktree add "$NEW_PATH" "$BRANCH" >&2
   else
     git fetch origin main >&2
     git worktree add -b "$BRANCH" "$NEW_PATH" origin/main >&2
