@@ -128,7 +128,11 @@ function renderVarianceDetails(
       return;
     }
     const [first, ...rest] = categories;
-    if (first === undefined) return;
+    if (first === undefined) {
+      throw new DataIntegrityError(
+        `Non-empty category array destructured to undefined first element (length=${categories.length})`,
+      );
+    }
     const nonEmpty: readonly [CategoryActualRow, ...CategoryActualRow[]] = [first, ...rest];
     renderVarianceWaterfall(chart, { weeklyAllowance, categories: nonEmpty }, win);
     renderCategoryList(list, nonEmpty);

@@ -912,6 +912,7 @@ export interface PerBudgetStats {
   readonly avg: PerBudgetAverage;
 }
 
+/** Pre-group periods by budget ID and find the globally-latest week Sunday-start across all budgets. */
 function indexPeriodsForBudgets(periods: BudgetPeriod[]): {
   latestWeekMs: number | undefined;
   periodsByBudget: Map<BudgetId, BudgetPeriod[]>;

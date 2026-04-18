@@ -2088,8 +2088,8 @@ describe("computePerBudgetCategoryVariance", () => {
 
   it("sorts material categories by avgWeekly descending regardless of insertion order", () => {
     const budget = makeBudget({ id: "food" });
-    // Insert in ascending order: A=240, B=960, C=600 over 12 weeks.
-    // avgWeekly: A=20, B=80, C=50 → sorted descending: B, C, A.
+    // Insertion order is intentionally non-sorted to confirm the producer sorts the result.
+    // Values A=240, B=960, C=600 over 12 weeks → avgWeekly A=20, B=80, C=50 → sorted descending: B, C, A.
     const periods = [
       makePeriod({
         id: "p1", budgetId: "food",

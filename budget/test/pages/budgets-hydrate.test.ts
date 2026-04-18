@@ -7,8 +7,13 @@ const mockDataSource = {
 vi.mock("../../src/active-data-source.js", () => ({
   getActiveDataSource: () => mockDataSource,
 }));
+vi.mock("@commons-systems/errorutil/log", () => ({
+  logError: vi.fn(),
+  registerErrorSink: vi.fn(),
+}));
 
 import { hydrateBudgetTable } from "../../src/pages/budgets-hydrate";
+import { logError } from "@commons-systems/errorutil/log";
 
 function flush(): Promise<void> {
   return new Promise(r => setTimeout(r, 0));
@@ -278,6 +283,7 @@ describe("hydrateBudgetTable — variance", () => {
   let originalClientWidth: PropertyDescriptor | undefined;
   let originalGetComputedStyle: typeof window.getComputedStyle;
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
     originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
     Object.defineProperty(HTMLElement.prototype, "clientWidth", {
@@ -352,6 +358,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error when data-weekly-allowance is not finite", () => {
@@ -364,6 +374,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error when data-window12 is not valid JSON", () => {
@@ -376,6 +390,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error when data-window12 decodes to a non-array", () => {
@@ -388,6 +406,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error when a row is missing avgWeekly", () => {
@@ -400,6 +422,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error on unknown row kind", () => {
@@ -412,6 +438,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error when Other row has a non-integer groupedCount", () => {
@@ -424,6 +454,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error when Other row has groupedCount=0 (producer requires >=1)", () => {
@@ -436,6 +470,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error when Other row has negative groupedCount", () => {
@@ -448,6 +486,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error when a row is a non-object element", () => {
@@ -460,6 +502,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error when avgWeekly is not a finite number", () => {
@@ -472,6 +518,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error when category variant has a non-string category field", () => {
@@ -484,6 +534,10 @@ describe("hydrateBudgetTable — variance", () => {
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("hydrates and shows an empty message when both windows are empty", () => {
@@ -549,6 +603,10 @@ describe("hydrateBudgetTable — variance", () => {
     radio.value = "99";
     expect(() => radio.dispatchEvent(new Event("change", { bubbles: true }))).not.toThrow();
     expect(radio.classList.contains("save-error")).toBe(true);
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("routes error when .budget-variance is missing from an expanded row", () => {
@@ -556,6 +614,26 @@ describe("hydrateBudgetTable — variance", () => {
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
     expect(details.classList.contains("save-error")).toBe(true);
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
+  });
+
+  it("routes error when all categories sum to zero (violates producer contract)", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
+      weeklyAllowance: "100",
+      window12: JSON.stringify([{ kind: "category", category: "A", avgWeekly: 0 }]),
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    expect(() => openDetails(details)).not.toThrow();
+    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledWith(
+      expect.any(Error),
+      { operation: "action-data-integrity" },
+    );
   });
 
   it("renders a breakdown DL with an entry per category and 'Other' marked", () => {

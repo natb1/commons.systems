@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { timestampMockFactory, makeContainer } from "../helpers";
 import type { CategoryActualRow } from "../../src/balance";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
@@ -163,7 +164,7 @@ describe("renderVarianceWaterfall", () => {
         weeklyAllowance: 100,
         categories: [cat("A", 50)],
       }, 12),
-    ).toThrow();
+    ).toThrow(DataIntegrityError);
     container.remove();
   });
 });
