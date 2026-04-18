@@ -13,7 +13,7 @@ capture all three at a consistent 1200×800 (3:2) viewport:
 npx tsx landing/scripts/capture-screenshots.ts
 ```
 
-The script navigates each production URL, waits for the page to load, scrolls
+The script navigates each production URL, waits for `domcontentloaded` plus a 2.5 s timeout, scrolls
 past the app's own hero band to frame the actual UI, and writes each file into
 this directory.
 
@@ -25,8 +25,8 @@ this directory.
 | `audio.png`   | `https://audio.commons.systems/`            | 540           |
 | `print.png`   | `https://print.commons.systems/`            | 540           |
 
-The CSS in `landing/src/style/theme.css` locks the card image to a 3/2
-`aspect-ratio` with `object-fit: cover` / `object-position: top left`, so the
+The CSS in `landing/src/style/theme.css` crops to 3:2 at render time via
+`aspect-ratio: 3/2` with `object-fit: cover` / `object-position: top left`, so the
 top of each capture is what visitors see.
 
 ## When to regenerate

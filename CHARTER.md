@@ -99,7 +99,7 @@ Skipping tiers does not just produce hollow claims — it accumulates teeth befo
 
 ### Dependency Self-Assessment
 
-The project applies its own framework to its own dependencies. The current dependency self-assessment — what each dependency solves, whether it is required or parasitic, its exit path, and its ratchet risk — is rendered on the project landing page at [commons.systems](https://commons.systems) alongside the app demonstration, where a visitor can see both what the project gives away and what it still depends on. Revisit as conditions change; prune if it becomes a compliance exercise rather than a genuine assessment.
+The project applies its own framework to its own dependencies. The current dependency self-assessment lives as structured data in `landing/src/site-config.ts`, awaiting a dedicated place alongside the app showcase. Revisit as conditions change; prune if it becomes a compliance exercise rather than a genuine assessment.
 
 For the current technical state of the project, see the [README](https://github.com/natb1/commons.systems/blob/main/README.md). For current priorities, see [ROADMAP.md](ROADMAP.md).
 

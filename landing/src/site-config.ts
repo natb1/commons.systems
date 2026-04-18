@@ -37,13 +37,14 @@ export const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
 ];
 
 export interface AppCard extends SoftwareApplication {
+  description: string;
   screenshot: string;
   screenshotAlt: string;
   problem: string;
 }
 
 // App showcase source of truth. Screenshots are captured ad-hoc from production
-// subdomains and cropped to a ~3:2 aspect ratio (see public/screenshots/README.md).
+// subdomains at a 1200×800 viewport; CSS crops to 3:2 at render time (see public/screenshots/README.md).
 export const APPS: AppCard[] = [
   {
     name: "Budget",
@@ -85,9 +86,7 @@ export interface Dependency {
   ratchetRisk: string;
 }
 
-// Dependency self-assessment source of truth (previously CHARTER.md §Strategy).
-// Each row names a required dependency, how the project would exit it, and the
-// ratchet risk if the project became unable to exit.
+// Dependency self-assessment source of truth.
 export const DEPENDENCIES: Dependency[] = [
   {
     name: "GitHub",

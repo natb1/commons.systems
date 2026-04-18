@@ -39,6 +39,8 @@ export interface PrerenderConfig {
   author?: Author;
   relMe?: string[];
   softwareApplications?: SoftwareApplication[];
+  /** Replaces the `<section class="landing-hero">` block in the root index.html.
+   *  Has no effect on per-post pages (the landing-hero section is stripped there unconditionally). */
   homeExtraHtml?: string;
 }
 
@@ -98,6 +100,7 @@ function injectHomeExtra(html: string, extraHtml: string): string {
 
 function stripHomeExtra(html: string): string {
   const result = html.replace(/<section class="landing-hero"[^>]*>.*?<\/section>\s*/s, "");
+  if (result === html) throw new Error('<section class="landing-hero"> marker not found in template');
   return result;
 }
 
@@ -118,6 +121,10 @@ function buildSeoHeadHtml(parts: string[]): string {
 // nav — enabling crawlers to see full content without executing JS. Each post
 // page includes all published articles (matching the root index) so the
 // client hydrates without a visible content shift.
+// On the root page: injects SoftwareApplication JSON-LD for each entry in
+// softwareApplications, and replaces <section class="landing-hero"> with
+// homeExtraHtml when provided. On per-post pages: strips the landing-hero
+// section unconditionally.
 export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const {
     siteUrl,
@@ -156,14 +163,13 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const panelHtml = renderInfoPanel({ ...infoPanel, topPosts });
   const navHtml = renderNavHtml(navLinks);
 
-  const relMeHtml = relMe && relMe.length > 0 ? relMeLinkTags(relMe) : "";
+  const relMeHtml = relMe ? relMeLinkTags(relMe) : "";
 
-  const softwareApplicationTags =
-    softwareApplications && softwareApplications.length > 0
-      ? softwareApplications
-          .map((app) => jsonLdScriptTag(softwareApplicationJsonLd(app)))
-          .join("\n    ")
-      : "";
+  const softwareApplicationTags = softwareApplications
+    ? softwareApplications
+        .map((app) => jsonLdScriptTag(softwareApplicationJsonLd(app)))
+        .join("\n    ")
+    : "";
 
   const rootSeoHead = buildSeoHeadHtml([
     canonicalLinkTag(`${siteUrl}/`),

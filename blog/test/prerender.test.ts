@@ -76,7 +76,7 @@ function makeConfig(overrides: Partial<PrerenderConfig> = {}): PrerenderConfig {
 function mockReadFileSync(postDir: string, markdownByFilename: Record<string, string>) {
   return (path: string | URL) => {
     const p = String(path);
-    if (p.endsWith("index.html")) return TEMPLATE;
+    if (p.endsWith("index.html")) return TEMPLATE_WITH_HERO;
     for (const [filename, content] of Object.entries(markdownByFilename)) {
       if (p === `${postDir}/${filename}`) return content;
     }
@@ -131,7 +131,7 @@ describe("prerenderPosts", () => {
   });
 
   it("replaces template meta description with post-specific description", async () => {
-    const templateWithDesc = TEMPLATE.replace(
+    const templateWithDesc = TEMPLATE_WITH_HERO.replace(
       "<title>",
       '<meta name="description" content="Site description" />\n  <title>',
     );
@@ -655,5 +655,16 @@ describe("prerenderPosts", () => {
     const html = perPostCall![1] as string;
     expect(html).not.toContain('<section class="landing-hero">');
     expect(html).not.toContain("default hero marker");
+  });
+
+  it("throws when homeExtraHtml is set but <section class=\"landing-hero\"> is absent", async () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE;
+      return MARKDOWN_HELLO;
+    }) as typeof fs.readFileSync);
+
+    await expect(
+      prerenderPosts(makeConfig({ homeExtraHtml: '<div class="showcase">SHOWCASE</div>' })),
+    ).rejects.toThrow('<section class="landing-hero"> marker not found in template');
   });
 });
