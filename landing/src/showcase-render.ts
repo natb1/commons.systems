@@ -3,8 +3,8 @@ import type { AppCard, Dependency } from "./site-config.ts";
 
 function renderBand(): string {
   return `<div class="landing-hero-band">
-        <p class="landing-hero-band-headline">This is not an app.</p>
-        <p class="landing-hero-band-subline">No signup. No subscription. No data sharing.</p>
+        <p class="landing-hero-band-headline">Build with commons.systems. Run without.</p>
+        <p class="landing-hero-band-subline">Code you own. Data you control. A roadmap you set.</p>
       </div>`;
 }
 

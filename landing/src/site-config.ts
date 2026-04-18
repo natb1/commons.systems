@@ -9,7 +9,7 @@ export const NAV_LINKS: NavLink[] = [{ href: "/", label: "Home" }];
 
 export const SITE_DEFAULTS: SiteDefaults = {
   title: "commons.systems",
-  description: "Open-source, local-first apps for budgeting, reading, and publishing — built with AI, designed to fork and own. No accounts, no lock-in.",
+  description: "Know the software that runs your business. Forkable, local-first apps built with commons.systems — and running without it.",
   image: "/og-card.png",
 };
 

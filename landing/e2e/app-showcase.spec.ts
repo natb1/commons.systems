@@ -11,11 +11,11 @@ test.describe("app showcase", () => {
     await page.goto("/");
 
     const headline = page.locator(".landing-hero-band .landing-hero-band-headline");
-    await expect(headline).toHaveText("This is not an app.");
+    await expect(headline).toHaveText("Build with commons.systems. Run without.");
 
     const subline = page.locator(".landing-hero-band .landing-hero-band-subline");
     await expect(subline).toHaveText(
-      "No signup. No subscription. No data sharing.",
+      "Code you own. Data you control. A roadmap you set.",
     );
   });
 

@@ -52,7 +52,7 @@ const DEPS: Dependency[] = [
 describe("renderShowcase", () => {
   it("contains the hero band headline", () => {
     const html = renderShowcase(APPS, DEPS);
-    expect(html).toContain("This is not an app.");
+    expect(html).toContain("Build with commons.systems. Run without.");
   });
 
   it("contains exactly one <a class=\"app-card\" per app", () => {
