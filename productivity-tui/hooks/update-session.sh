@@ -50,9 +50,11 @@ CLAUDE_PID=""
 CLAUDE_START=""
 if pid=$(find_claude_pid); then
   CLAUDE_PID="$pid"
-  CLAUDE_START="$(ps -o lstart= -p "$CLAUDE_PID" 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//')"
+  CLAUDE_START="$(ps -o lstart= -p "$CLAUDE_PID" 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//' || true)"
   if [ -z "$CLAUDE_START" ]; then
     # lstart query failed — drop PID to keep (pid,start) coherent.
+    # || true above is load-bearing: errexit+pipefail would kill the hook
+    # before this branch could run on a ps race.
     echo "update-session: lstart query failed for pid=$CLAUDE_PID" >&2
     CLAUDE_PID=""
   fi
