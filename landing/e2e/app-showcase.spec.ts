@@ -15,7 +15,7 @@ test.describe("app showcase", () => {
 
     const subline = page.locator(".landing-hero-band .landing-hero-band-subline");
     await expect(subline).toHaveText(
-      "Code you own. Data you control. A roadmap you set.",
+      "Code you understand. Data you control. A roadmap you set.",
     );
   });
 

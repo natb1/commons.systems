@@ -4,7 +4,7 @@ import type { AppCard, Dependency } from "./site-config.ts";
 function renderBand(): string {
   return `<div class="landing-hero-band">
         <p class="landing-hero-band-headline">Build with commons.systems. Run without.</p>
-        <p class="landing-hero-band-subline">Code you own. Data you control. A roadmap you set.</p>
+        <p class="landing-hero-band-subline">Code you understand. Data you control. A roadmap you set.</p>
       </div>`;
 }
 
