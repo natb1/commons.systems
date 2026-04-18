@@ -1104,7 +1104,6 @@ function decomposeWindow(
 }
 
 /**
- * Compute both per-budget stats and category variance in a single pass over periods.
  * Equivalent to calling computeBudgetDiffs and computePerBudgetCategoryVariance separately,
  * but builds the period index only once.
  */

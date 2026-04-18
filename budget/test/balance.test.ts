@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetDiffs, computePerBudgetCategoryVariance, MATERIALITY_THRESHOLD } from "../src/balance";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetDiffs, computePerBudgetCategoryVariance, computeBudgetStatsAndVariances, MATERIALITY_THRESHOLD } from "../src/balance";
 import type { BudgetDiff, PerBudgetStats } from "../src/balance";
 import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
 
@@ -2196,5 +2196,55 @@ describe("computePerBudgetCategoryVariance", () => {
       }),
     ];
     expect(() => computePerBudgetCategoryVariance([budget], periods)).toThrow();
+  });
+});
+
+describe("computeBudgetStatsAndVariances", () => {
+  // Shared fixture: 15 weeks across two budgets, latest week excluded from averages.
+  // Weeks 0-11: food=200, fun=50. Weeks 12-13: food=100, fun=150. Week 14: latest (excluded).
+  const budgets = [
+    makeBudget({ id: "food", allowance: 150 }),
+    makeBudget({ id: "fun", name: "Fun", allowance: 100 }),
+  ];
+  const periods: ReturnType<typeof makePeriod>[] = [];
+  for (let i = 0; i < 15; i++) {
+    const weekSunday = new Date(Date.UTC(2025, 0, 5 + i * 7));
+    const nextSunday = new Date(Date.UTC(2025, 0, 12 + i * 7));
+    periods.push(
+      makePeriod({
+        id: `food-w${i}`, budgetId: "food",
+        periodStart: ts(weekSunday.toISOString()), periodEnd: ts(nextSunday.toISOString()),
+        total: i < 12 ? 200 : 100,
+        categoryBreakdown: { "Food:Groceries": i < 12 ? 200 : 100 },
+      }),
+      makePeriod({
+        id: `fun-w${i}`, budgetId: "fun",
+        periodStart: ts(weekSunday.toISOString()), periodEnd: ts(nextSunday.toISOString()),
+        total: i < 12 ? 50 : 150,
+        categoryBreakdown: { "Fun:Movies": i < 12 ? 50 : 150 },
+      }),
+    );
+  }
+
+  it("stats output matches computeBudgetDiffs for identical inputs", () => {
+    const { stats } = computeBudgetStatsAndVariances(budgets, periods);
+    const expected = computeBudgetDiffs(budgets, periods);
+    for (const budget of budgets) {
+      const actual = stats.get(budget.id)!;
+      const ref = expected.get(budget.id)!;
+      expect(actual.diff.diff12).toBeCloseTo(ref.diff.diff12, 10);
+      expect(actual.diff.diff52).toBeCloseTo(ref.diff.diff52, 10);
+      expect(actual.avg.avg12).toBeCloseTo(ref.avg.avg12, 10);
+      expect(actual.avg.avg52).toBeCloseTo(ref.avg.avg52, 10);
+    }
+  });
+
+  it("variances output matches computePerBudgetCategoryVariance for identical inputs", () => {
+    const { variances } = computeBudgetStatsAndVariances(budgets, periods);
+    const expected = computePerBudgetCategoryVariance(budgets, periods);
+    for (const budget of budgets) {
+      expect(variances.get(budget.id)![12]).toEqual(expected.get(budget.id)![12]);
+      expect(variances.get(budget.id)![52]).toEqual(expected.get(budget.id)![52]);
+    }
   });
 });
