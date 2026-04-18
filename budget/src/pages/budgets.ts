@@ -3,7 +3,7 @@ import { logError } from "@commons-systems/errorutil/log";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod, type WeeklyAggregate } from "../firestore.js";
-import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetDiffs, computePerBudgetCategoryVariance, computePerBudgetTrend, isFavorableDiff, weeklyEquivalent, periodEquivalent, type CategoryActualRow, type PerBudgetCategoryVariance, type PerBudgetPoint, type PerBudgetStats } from "../balance.js";
+import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetStatsAndVariances, computePerBudgetTrend, isFavorableDiff, weeklyEquivalent, periodEquivalent, type CategoryActualRow, type PerBudgetCategoryVariance, type PerBudgetPoint, type PerBudgetStats } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { toISODate } from "./hydrate-util.js";
 
@@ -262,8 +262,7 @@ export function renderBudgetsContent(
   const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
   const perBudgetTrend = computePerBudgetTrend(budgets, periods, weeklyAggregates);
   const chartHtml = renderChartContainer(budgets, periods, metricsHtml, perBudgetTrend, averageWeeklyCredits);
-  const budgetStats = computeBudgetDiffs(budgets, periods);
-  const budgetVariances = computePerBudgetCategoryVariance(budgets, periods);
+  const { stats: budgetStats, variances: budgetVariances } = computeBudgetStatsAndVariances(budgets, periods);
   const tableHtml = renderBudgetTable(budgets, authorized, budgetStats, budgetVariances);
   const overridesHtml = budgets.length > 0 ? renderOverridesTable(budgets, authorized) : "";
   const noticeHtml = renderPageNotices({ authorized }, "budgets");

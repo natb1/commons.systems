@@ -108,8 +108,6 @@ function renderVarianceDetails(
   const chart = document.createElement("div");
   chart.className = "variance-chart";
 
-  // Unstyled container: holds either a <dl.variance-breakdown> or <p.variance-empty>,
-  // swapped via replaceChildren on window toggle.
   const list = document.createElement("div");
 
   wrapper.append(toggle, chart, list);
@@ -126,6 +124,7 @@ function renderVarianceDetails(
       return;
     }
     const [first, ...rest] = categories;
+    // Unreachable: guaranteed by the length === 0 guard above and the non-empty tuple type.
     if (first === undefined) {
       throw new DataIntegrityError(
         `Non-empty category array destructured to undefined first element (length=${categories.length})`,
@@ -155,7 +154,12 @@ function renderVarianceDetails(
   });
 
   // Default window must match the radio marked `checked` in buildWindowToggle.
-  draw(12);
+  try {
+    draw(12);
+  } catch (error) {
+    container.dataset.hydrated = "error";
+    throw error;
+  }
 }
 
 function hydrateVarianceDetails(row: HTMLDetailsElement): void {

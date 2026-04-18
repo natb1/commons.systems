@@ -1023,7 +1023,6 @@ export function computePerBudgetCategoryVariance(
   const result = new Map<BudgetId, PerBudgetCategoryVariance>();
   for (const budget of budgets) {
     const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
-    // Hoist the per-period weekMs computation once; both windows consume it.
     const completed: { weekMs: number; period: BudgetPeriod }[] = [];
     for (const p of budgetPeriods) {
       const weekMs = toSundayEntry(p.periodStart.toDate()).ms;
@@ -1102,4 +1101,59 @@ function decomposeWindow(
   }
 
   return material;
+}
+
+/**
+ * Compute both per-budget stats and category variance in a single pass over periods.
+ * Equivalent to calling computeBudgetDiffs and computePerBudgetCategoryVariance separately,
+ * but builds the period index only once.
+ */
+export function computeBudgetStatsAndVariances(
+  budgets: Budget[],
+  periods: BudgetPeriod[],
+): { stats: Map<BudgetId, PerBudgetStats>; variances: Map<BudgetId, PerBudgetCategoryVariance> } {
+  const { latestWeekMs, periodsByBudget } = indexPeriodsForBudgets(periods);
+
+  const stats = new Map<BudgetId, PerBudgetStats>();
+  const variances = new Map<BudgetId, PerBudgetCategoryVariance>();
+
+  for (const budget of budgets) {
+    const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
+    const weeklyAllow = weeklyEquivalent(budget.allowance, budget.allowancePeriod);
+
+    // Build weekly spending map and completed-weeks list in one pass.
+    const weeklySpending = new Map<number, number>();
+    const completed: { weekMs: number; period: BudgetPeriod }[] = [];
+    for (const p of budgetPeriods) {
+      const weekMs = toSundayEntry(p.periodStart.toDate()).ms;
+      weeklySpending.set(weekMs, (weeklySpending.get(weekMs) ?? 0) + p.total);
+      if (weekMs !== latestWeekMs) completed.push({ weekMs, period: p });
+    }
+
+    const completedForAvg = [...weeklySpending.entries()]
+      .filter(([ms]) => latestWeekMs === undefined || ms !== latestWeekMs)
+      .sort((a, b) => a[0] - b[0]);
+
+    function trailingAvg(weekCount: number): number {
+      if (completedForAvg.length === 0 || latestWeekMs === undefined) return 0;
+      const windowMs = weekCount * MS_PER_WEEK;
+      const trailing = completedForAvg.filter(([ms]) => latestWeekMs - ms <= windowMs);
+      if (trailing.length === 0) return 0;
+      return trailing.reduce((acc, [, total]) => acc + total, 0) / weekCount;
+    }
+
+    const avg12 = trailingAvg(12);
+    const avg52 = trailingAvg(52);
+    stats.set(budget.id, {
+      diff: { diff12: weeklyAllow - avg12, diff52: weeklyAllow - avg52 },
+      avg: { avg12, avg52 },
+    });
+
+    variances.set(budget.id, {
+      12: decomposeWindow(completed, latestWeekMs, 12),
+      52: decomposeWindow(completed, latestWeekMs, 52),
+    });
+  }
+
+  return { stats, variances };
 }
