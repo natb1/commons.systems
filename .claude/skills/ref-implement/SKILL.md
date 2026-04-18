@@ -42,7 +42,7 @@ On completion → update state to step=3/phase=core, proceed to Step 3:
 
 Implement the approved plan. Create separate commits for each issue (minimum one commit per issue).
 
-Use the Task tool to launch parallel general-purpose subagents:
+Use the Task tool to launch parallel general-purpose subagents with `model: "sonnet"`:
 - Subagent 1: Write unit tests based on the plan
 - Subagent 2: Write acceptance tests based on the plan
 - Subagent 3: Write smoke tests based on the plan
