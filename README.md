@@ -44,7 +44,7 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 | Step | Name | Agent Pattern | Skill | Tooling |
 |------|------|---------------|-------|---------|
 | 0 | Issue Grooming | Augmented | [ref-ready](.claude/skills/ref-ready/SKILL.md) | |
-| 1 | Dev Env Management | Delegated | [worktree](.claude/skills/worktree/SKILL.md) | [nix](nix) |
+| 1 | Dev Env Management | Delegated | [pr-workflow](.claude/skills/pr-workflow/SKILL.md) | [nix](nix), [EnterWorktree](https://code.claude.com/docs/en/tools-reference#enterworktree) |
 | 2 | Planning | Delegated + QC | [ref-implement](.claude/skills/ref-implement/SKILL.md) | Claude Code Planning Tool |
 | 3 | Implementation | Delegated | [ref-implement](.claude/skills/ref-implement/SKILL.md) | |
 | 4 | Unit Tests + Lint | Delegated | [ref-unit-test](.claude/skills/ref-unit-test/SKILL.md) | [unit test framework](.claude/skills/ref-pr-workflow/run-unit-tests.sh) |
@@ -162,5 +162,5 @@ For using and/or extending the artifacts in this repo: forking is encouraged. To
 ```
 /plugin marketplace add natb1/commons.systems
 /plugin install pr-workflow-bundle@commons-systems
-/worktree <issue-number>
+/pr-workflow <issue-number>
 ```

@@ -15,7 +15,7 @@ Verify the working directory is a worktree for the requested issue:
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 ```
 
-If no issue number provided, or `$CURRENT_BRANCH` doesn't start with the issue number followed by `-`: invoke `/worktree` instead. Stop.
+If no issue number provided, or `$CURRENT_BRANCH` doesn't start with the issue number followed by `-`: invoke `/pr-workflow` instead. Stop.
 
 On completion → update state to step=2/phase=core, proceed to Step 2:
 ```bash
