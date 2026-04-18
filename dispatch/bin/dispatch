@@ -2,13 +2,11 @@
 # Out-of-process dispatcher for Claude Code implementation sessions.
 # Usage: dispatch <issue-num>
 #
-# Pre-flight: validates the issue, resolves or creates the worktree (via the
-# shared .claude/hooks/worktree-create.sh), hydrates a local cache at
-# tmp/dispatch-<num>.json, and exports DISPATCH_ISSUE_NUM +
-# DISPATCH_STATE_FILE. Then spawns `claude /dispatch-implement` in the
-# foreground while an `fswatch` subshell monitors the cache file; when the
-# phase skill writes `state.phase_signal == "complete"`, the watcher SIGTERMs
-# Claude and the dispatcher exits.
+# Validates the issue, computes the branch slug, and launches
+# `claude -w <branch> /dispatch-implement` — Claude's own --worktree flag
+# (via the WorktreeCreate hook) handles worktree creation / switching and
+# direnv. The dispatcher then watches the state cache file via fswatch and
+# SIGTERMs Claude when the phase skill writes phase_signal=complete.
 set -euo pipefail
 
 # --- sluggify --------------------------------------------------------------
@@ -25,7 +23,6 @@ make_slug() {
   local max_slug=$((32 - ${#num} - 1))
   if [ "${#slug}" -gt "$max_slug" ]; then
     slug="${slug:0:$max_slug}"
-    slug="${slug%%-}"
     while [[ "$slug" == *- ]]; do slug="${slug%-}"; done
   fi
   printf '%s-%s\n' "$num" "$slug"
@@ -39,15 +36,6 @@ main() {
     exit 1
   fi
 
-  local DISPATCH_ROOT
-  DISPATCH_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-  local REPO_ROOT
-  REPO_ROOT="$(git -C "$DISPATCH_ROOT" rev-parse --show-toplevel)"
-  local GIT_COMMON_DIR
-  GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)"
-  local PROJECT_ROOT
-  PROJECT_ROOT="$(dirname "$GIT_COMMON_DIR")"
-
   # Validate issue is open.
   local ISSUE_STATE
   ISSUE_STATE=$(gh issue view "$ISSUE_NUM" --json state --jq '.state') || {
@@ -59,59 +47,28 @@ main() {
     exit 1
   fi
 
-  # Compute target branch from title.
+  # Compute branch and the expected worktree path (convention enforced by
+  # .claude/hooks/worktree-create.sh).
   local TITLE BRANCH
   TITLE=$(gh issue view "$ISSUE_NUM" --json title --jq '.title')
   BRANCH=$(make_slug "$TITLE" "$ISSUE_NUM")
-  local WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
 
-  # Resolve or create worktree.
-  if [[ -e "$WORKTREE_PATH" ]]; then
-    local EXISTING_BRANCH
-    EXISTING_BRANCH=$(git -C "$WORKTREE_PATH" rev-parse --abbrev-ref HEAD)
-    if [[ ! "$EXISTING_BRANCH" =~ ^${ISSUE_NUM}- ]]; then
-      echo "error: $WORKTREE_PATH exists but is on branch '$EXISTING_BRANCH' (expected to start with '${ISSUE_NUM}-')" >&2
-      exit 1
-    fi
-    echo "[dispatch] reusing existing worktree $WORKTREE_PATH on branch $EXISTING_BRANCH" >&2
-  else
-    echo "[dispatch] creating worktree $WORKTREE_PATH (branch $BRANCH)" >&2
-    local HOOK="$REPO_ROOT/.claude/hooks/worktree-create.sh"
-    if [[ ! -x "$HOOK" ]]; then
-      echo "error: worktree-create hook not found or not executable at $HOOK" >&2
-      exit 1
-    fi
-    printf '{"name":"%s"}' "$BRANCH" | "$HOOK" >/dev/null
-  fi
+  local GIT_COMMON_DIR PROJECT_ROOT WORKTREE_PATH STATE_FILE
+  GIT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
+  PROJECT_ROOT="$(dirname "$GIT_COMMON_DIR")"
+  WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
+  STATE_FILE="$WORKTREE_PATH/tmp/dispatch-${ISSUE_NUM}.json"
 
-  cd "$WORKTREE_PATH"
-
-  # Hydrate local cache.
-  "$WORKTREE_PATH/dispatch/bin/sync-issue" "$ISSUE_NUM"
-
-  # Export handoff env for Claude + phase skills.
+  # Export handoff env for the Claude session and phase skills. The relative
+  # path resolves inside the worktree where the skill runs.
   export DISPATCH_ISSUE_NUM="$ISSUE_NUM"
   export DISPATCH_STATE_FILE="tmp/dispatch-${ISSUE_NUM}.json"
 
-  # Background watcher: when phase_signal flips to "complete", SIGTERM Claude.
   local CLAUDE_PID=0 WATCHER_PID=0
-
-  start_watcher() {
-    (
-      fswatch "$DISPATCH_STATE_FILE" | while IFS= read -r _; do
-        if jq -e '.state.phase_signal == "complete"' "$DISPATCH_STATE_FILE" >/dev/null 2>&1; then
-          [[ "$CLAUDE_PID" -gt 0 ]] && kill -TERM "$CLAUDE_PID" 2>/dev/null || true
-          break
-        fi
-      done
-    ) &
-    WATCHER_PID=$!
-  }
 
   cleanup() {
     if [[ "$WATCHER_PID" -gt 0 ]] && kill -0 "$WATCHER_PID" 2>/dev/null; then
       kill -TERM "$WATCHER_PID" 2>/dev/null || true
-      # Also terminate fswatch, which is the watcher subshell's child.
       pkill -TERM -P "$WATCHER_PID" 2>/dev/null || true
     fi
   }
@@ -125,14 +82,35 @@ main() {
   trap on_int INT
   trap cleanup EXIT
 
-  start_watcher
-
-  # Spawn Claude in foreground with the phase skill prompt.
-  claude "/dispatch-implement #${ISSUE_NUM}" &
+  # Launch Claude with --worktree — the WorktreeCreate hook handles physical
+  # creation, branch resolution, direnv. Claude inherits the dispatcher's TTY.
+  claude -w "$BRANCH" "/dispatch-implement #${ISSUE_NUM}" &
   CLAUDE_PID=$!
 
-  # Wait for Claude to exit (no timeout). Tolerate `wait` returning non-zero
-  # when the watcher SIGTERMs Claude.
+  # Wait for the skill's first sync-issue call to create the state file.
+  # Poll every second while Claude is still running. No timeout.
+  while [[ ! -f "$STATE_FILE" ]] && kill -0 "$CLAUDE_PID" 2>/dev/null; do
+    sleep 1
+  done
+
+  if [[ ! -f "$STATE_FILE" ]]; then
+    # Claude exited before producing a state file — nothing to watch.
+    local EARLY_EXIT=0
+    wait "$CLAUDE_PID" || EARLY_EXIT=$?
+    exit "$EARLY_EXIT"
+  fi
+
+  # Background watcher: SIGTERM Claude when phase_signal flips to complete.
+  (
+    fswatch "$STATE_FILE" | while IFS= read -r _; do
+      if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
+        kill -TERM "$CLAUDE_PID" 2>/dev/null || true
+        break
+      fi
+    done
+  ) &
+  WATCHER_PID=$!
+
   local CLAUDE_EXIT=0
   wait "$CLAUDE_PID" || CLAUDE_EXIT=$?
 
