@@ -44,19 +44,21 @@ PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
 
 NEW_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
 
-[ ! -e "$NEW_PATH" ] || { echo "[worktree-create] ERROR: $NEW_PATH already exists; run 'git worktree remove --force $NEW_PATH' or 'rm -rf $NEW_PATH && git worktree prune' to recover" >&2; exit 1; }
-
-if git ls-remote --heads --exit-code origin "$BRANCH" >/dev/null 2>&1; then
-  git fetch origin "$BRANCH" >&2
-  git worktree add "$NEW_PATH" "$BRANCH" >&2
+if [ -e "$NEW_PATH" ]; then
+  echo "[worktree-create] worktree $NEW_PATH already exists; re-syncing issue context" >&2
 else
-  git fetch origin main >&2
-  git worktree add -b "$BRANCH" "$NEW_PATH" origin/main >&2
-fi
-WORKTREE_REGISTERED=1
+  if git ls-remote --heads --exit-code origin "$BRANCH" >/dev/null 2>&1; then
+    git fetch origin "$BRANCH" >&2
+    git worktree add "$NEW_PATH" "$BRANCH" >&2
+  else
+    git fetch origin main >&2
+    git worktree add -b "$BRANCH" "$NEW_PATH" origin/main >&2
+  fi
+  WORKTREE_REGISTERED=1
 
-direnv allow "$NEW_PATH" >&2 || { echo "[worktree-create] ERROR: direnv allow failed for $NEW_PATH" >&2; exit 1; }
-direnv exec "$NEW_PATH" true >&2 || { echo "[worktree-create] ERROR: direnv exec failed for $NEW_PATH (non-zero exit from .envrc evaluation)" >&2; exit 1; }
+  direnv allow "$NEW_PATH" >&2 || { echo "[worktree-create] ERROR: direnv allow failed for $NEW_PATH" >&2; exit 1; }
+  direnv exec "$NEW_PATH" true >&2 || { echo "[worktree-create] ERROR: direnv exec failed for $NEW_PATH (non-zero exit from .envrc evaluation)" >&2; exit 1; }
+fi
 
 # Branch regex above guarantees a leading <issue-num>- prefix.
 ISSUE_NUM="${BRANCH%%-*}"
