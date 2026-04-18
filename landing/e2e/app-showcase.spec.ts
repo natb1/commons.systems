@@ -47,7 +47,6 @@ test.describe("app showcase", () => {
       await expect(img).toHaveAttribute("loading", "lazy");
       const alt = await img.getAttribute("alt");
       expect(alt).toBeTruthy();
-      expect((alt ?? "").length).toBeGreaterThan(0);
     }
   });
 
@@ -94,26 +93,8 @@ test.describe("app showcase", () => {
 
     await expect(page.locator("a.app-card")).toHaveCount(3);
 
-    const softwareAppCount = await page.evaluate(() => {
-      const scripts = Array.from(
-        document.querySelectorAll<HTMLScriptElement>(
-          'script[type="application/ld+json"]',
-        ),
-      );
-      let n = 0;
-      for (const s of scripts) {
-        const text = s.textContent;
-        if (!text) continue;
-        try {
-          const json = JSON.parse(text);
-          if (json["@type"] === "SoftwareApplication") n++;
-        } catch {
-          /* ignore malformed */
-        }
-      }
-      return n;
-    });
-
+    const scripts = await page.locator('script[type="application/ld+json"]').allTextContents();
+    const softwareAppCount = scripts.filter(t => JSON.parse(t)["@type"] === "SoftwareApplication").length;
     expect(softwareAppCount).toBe(3);
   });
 });

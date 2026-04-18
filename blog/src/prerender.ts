@@ -40,7 +40,7 @@ export interface PrerenderConfig {
   relMe?: string[];
   softwareApplications?: SoftwareApplication[];
   /** Replaces the `<section class="landing-hero">` block in the root index.html.
-   *  Has no effect on per-post pages (the landing-hero section is stripped there unconditionally). */
+   *  When set, per-post pages also strip the `landing-hero` section. */
   homeExtraHtml?: string;
 }
 
@@ -121,10 +121,6 @@ function buildSeoHeadHtml(parts: string[]): string {
 // nav — enabling crawlers to see full content without executing JS. Each post
 // page includes all published articles (matching the root index) so the
 // client hydrates without a visible content shift.
-// On the root page: injects SoftwareApplication JSON-LD for each entry in
-// softwareApplications, and replaces <section class="landing-hero"> with
-// homeExtraHtml when provided. On per-post pages: strips the landing-hero
-// section unconditionally.
 export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const {
     siteUrl,
@@ -165,11 +161,9 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
 
   const relMeHtml = relMe ? relMeLinkTags(relMe) : "";
 
-  const softwareApplicationTags = softwareApplications
-    ? softwareApplications
-        .map((app) => jsonLdScriptTag(softwareApplicationJsonLd(app)))
-        .join("\n    ")
-    : "";
+  const softwareApplicationTags = (softwareApplications ?? [])
+    .map((app) => jsonLdScriptTag(softwareApplicationJsonLd(app)))
+    .join("\n    ");
 
   const rootSeoHead = buildSeoHeadHtml([
     canonicalLinkTag(`${siteUrl}/`),
@@ -214,7 +208,9 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     html = injectMain(html, allArticlesHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
-    html = stripHomeExtra(html);
+    if (homeExtraHtml !== undefined) {
+      html = stripHomeExtra(html);
+    }
 
     const outDir = join(distDir, "post", meta.id);
     mkdirSync(outDir, { recursive: true });

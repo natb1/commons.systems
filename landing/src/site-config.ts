@@ -86,7 +86,7 @@ export interface Dependency {
   ratchetRisk: string;
 }
 
-// Dependency self-assessment source of truth.
+// Dependency self-assessment source of truth — temporary home until a dedicated panel is added to the app showcase.
 export const DEPENDENCIES: Dependency[] = [
   {
     name: "GitHub",

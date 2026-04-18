@@ -14,7 +14,7 @@ npx tsx landing/scripts/capture-screenshots.ts
 ```
 
 The script navigates each production URL, waits for `domcontentloaded` plus a 2.5 s timeout, scrolls
-past the app's own hero band to frame the actual UI, and writes each file into
+past the app's own hero band to frame the actual UI, waits 500 ms for the scroll to settle, and writes each file into
 this directory.
 
 ## Sources and framing

@@ -611,11 +611,6 @@ describe("prerenderPosts", () => {
   });
 
   it("replaces <section class=\"landing-hero\"> with homeExtraHtml on root", async () => {
-    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_HERO;
-      return MARKDOWN_HELLO;
-    }) as typeof fs.readFileSync);
-
     await prerenderPosts(makeConfig({ homeExtraHtml: "<div class=\"showcase-injected\">SHOWCASE</div>" }));
     const rootCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]) === "/dist/index.html",
@@ -627,11 +622,6 @@ describe("prerenderPosts", () => {
   });
 
   it("strips <section class=\"landing-hero\"> from post pages when homeExtraHtml is set", async () => {
-    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_HERO;
-      return MARKDOWN_HELLO;
-    }) as typeof fs.readFileSync);
-
     await prerenderPosts(makeConfig({ homeExtraHtml: "<div class=\"showcase-injected\">SHOWCASE</div>" }));
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
@@ -642,19 +632,22 @@ describe("prerenderPosts", () => {
     expect(html).not.toContain("SHOWCASE");
   });
 
-  it("strips <section class=\"landing-hero\"> from post pages when homeExtraHtml is not set", async () => {
-    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_HERO;
-      return MARKDOWN_HELLO;
-    }) as typeof fs.readFileSync);
-
+  it("does not strip <section class=\"landing-hero\"> from post pages when homeExtraHtml is not set", async () => {
     await prerenderPosts(makeConfig());
     const perPostCall = vi.mocked(fs.writeFileSync).mock.calls.find(
       (c) => String(c[0]).includes("post/hello-world"),
     );
     const html = perPostCall![1] as string;
-    expect(html).not.toContain('<section class="landing-hero">');
-    expect(html).not.toContain("default hero marker");
+    expect(html).toContain('<section class="landing-hero">');
+  });
+
+  it("does not throw when homeExtraHtml is not set and template lacks <section class=\"landing-hero\">", async () => {
+    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
+      if (String(path).endsWith("index.html")) return TEMPLATE;
+      return MARKDOWN_HELLO;
+    }) as typeof fs.readFileSync);
+
+    await expect(prerenderPosts(makeConfig())).resolves.toBeUndefined();
   });
 
   it("throws when homeExtraHtml is set but <section class=\"landing-hero\"> is absent", async () => {
