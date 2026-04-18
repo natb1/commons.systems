@@ -203,39 +203,19 @@ validate_command() {
     return 1
   fi
 
-  # Split on && and || first, validating each part independently.
-  # This allows chained commands like "git fetch && git merge" when both sides
-  # are individually approved.
-  if printf '%s\n' "$cleaned" | grep -qE '(&&|\|\|)'; then
-    local _chain_parts _chain_part
-    _chain_parts=$(printf '%s' "$cleaned" | sed 's/ *&& */\n/g; s/ *|| */\n/g')
-    while IFS= read -r _chain_part; do
-      _chain_part=$(printf '%s' "$_chain_part" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      [ -z "$_chain_part" ] && continue
-      if ! validate_command "$_chain_part" "$depth"; then
-        return 1
-      fi
-    done <<< "$_chain_parts"
-    return 0
-  fi
-
-  # Split on | then ; and validate each segment
-  local IFS_SAVE="$IFS"
-  IFS='|' read -ra _PIPE_STAGES <<< "$cleaned"
-  for _STAGE in "${_PIPE_STAGES[@]}"; do
-    IFS=';' read -ra _SEGS <<< "$_STAGE"
-    for _SEG in "${_SEGS[@]}"; do
-      _SEG=$(printf '%s' "$_SEG" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      [ -z "$_SEG" ] && continue
-      local cmd_token
-      cmd_token=$(printf '%s' "$_SEG" | awk '{print $1}' | sed "s/^[\"'(]*//; s/[)]*$//")
-      if ! is_allowed_cmd "$cmd_token" && ! is_allowed_git_c "$_SEG"; then
-        IFS="$IFS_SAVE"
-        return 1
-      fi
-    done
-  done
-  IFS="$IFS_SAVE"
+  # Split into top-level segments (respecting quotes) and validate each.
+  # The helper treats unquoted |, ;, &&, || as segment separators so that
+  # regex alternations like grep -E "foo|bar" stay intact.
+  local _SEGMENTS
+  _SEGMENTS=$(printf '%s' "$cleaned" | "$HOOK_DIR/split-command.py") || return 1
+  while IFS= read -r _SEG; do
+    [ -z "$_SEG" ] && continue
+    local cmd_token
+    cmd_token=$(printf '%s' "$_SEG" | awk '{print $1}' | sed "s/^[\"'(]*//; s/[)]*$//")
+    if ! is_allowed_cmd "$cmd_token" && ! is_allowed_git_c "$_SEG"; then
+      return 1
+    fi
+  done <<< "$_SEGMENTS"
   return 0
 }
 

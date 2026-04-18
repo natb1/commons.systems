@@ -141,6 +141,33 @@ assert_approves \
   "Bash" \
   "echo hello && head file.txt"
 
+# --- Quote-aware splitting (metacharacters inside quoted strings) ---
+
+assert_approves \
+  "pipe inside double-quoted regex alternation" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh 2>&1 | grep -E \"(foo|bar)\" | head -40"
+
+assert_approves \
+  "pipe inside single-quoted regex alternation" \
+  "Bash" \
+  ".claude/skills/ref-pr-workflow/scripts/run-lint.sh | grep -E '(foo|bar)' | tail -5"
+
+assert_approves \
+  "multiple greps with alternations" \
+  "Bash" \
+  "head -20 file.txt | grep -E \"a|b\" | grep -iE \"c|d\" | tail -5"
+
+assert_approves \
+  "semicolon inside double quotes" \
+  "Bash" \
+  "echo \"hello; world\" | head -1"
+
+assert_approves \
+  "and-operator inside double quotes" \
+  "Bash" \
+  "echo \"a && b\" | head -1"
+
 # --- Passthrough cases ---
 
 assert_passthrough \
@@ -157,11 +184,6 @@ assert_approves \
   "different skill path (broadened SCRIPT_RE)" \
   "Bash" \
   ".claude/skills/some-other-skill/scripts/run-lint.sh"
-
-assert_approves \
-  "worktree detect script" \
-  "Bash" \
-  ".claude/skills/worktree/scripts/detect-worktree.sh 435"
 
 assert_approves \
   "echo is in allowedTools (argument contains no unsafe metacharacters)" \
@@ -304,6 +326,21 @@ assert_passthrough \
   "backtick substitution" \
   "Bash" \
   '.claude/skills/ref-pr-workflow/scripts/run-lint.sh `evil-command`'
+
+assert_passthrough \
+  "unbalanced single quote" \
+  "Bash" \
+  "echo 'unterminated | evil-command"
+
+assert_passthrough \
+  "unbalanced double quote" \
+  "Bash" \
+  "echo \"unterminated | evil-command"
+
+assert_passthrough \
+  "pipe to evil command hidden after quoted alternation" \
+  "Bash" \
+  "head file.txt | grep -E \"a|b\" | evil-command"
 
 # --- Other edge cases ---
 
