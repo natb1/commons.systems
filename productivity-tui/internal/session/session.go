@@ -32,11 +32,10 @@ type Session struct {
 // ancestor. We keep them rather than drop them — dropping a legitimate
 // unknown is worse than preserving a potentially stale row.
 //
-// Liveness probe errors fall into two categories:
-//   - EPERM from kill(pid, 0) is a positive liveness signal: the process
-//     exists but is owned by a different user. Treated as live.
-//   - Genuine probe failures (ps unavailable, unexpected errno) fail open
-//     to live: a broken probe must not cause live sessions to disappear.
+// Non-ESRCH errors from kill(pid, 0) fail open to live. This includes
+// EPERM (process exists but is owned by a different user — a positive
+// liveness signal) and any other unexpected errno where a broken probe
+// must not evict live sessions.
 func FilterLive(sessions map[string]Session) map[string]Session {
 	live := make(map[string]Session, len(sessions))
 	for id, s := range sessions {
@@ -55,7 +54,9 @@ func isPIDLive(pid int, wantStart string) bool {
 		fmt.Fprintf(os.Stderr, "productivity-tui: kill(%d, 0) probe: %v (fail open)\n", pid, err)
 		return true
 	}
-	out, err := exec.Command("ps", "-o", "lstart=", "-p", strconv.Itoa(pid)).Output()
+	cmd := exec.Command("ps", "-o", "lstart=", "-p", strconv.Itoa(pid))
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	out, err := cmd.Output()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "productivity-tui: ps(%d) probe: %v (fail open)\n", pid, err)
 		return true

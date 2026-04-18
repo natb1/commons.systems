@@ -15,6 +15,9 @@ import (
 	"github.com/natb1/commons.systems/productivity-tui/internal/session"
 )
 
+// same sentinel as session_test.mismatchedStart; epoch zero will not match any real lstart
+const mismatchedStart = "Thu Jan  1 00:00:00 1970"
+
 func TestQuitKeyQ(t *testing.T) {
 	m := New("/dev/null")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
@@ -111,7 +114,7 @@ func TestLoadSessionsFiltersDead(t *testing.T) {
 	data := fmt.Sprintf(`{
 		"live": {"working_dir": "/tmp/a", "pid": %d, "pid_start": %q, "idle": false, "last_activity": "2026-04-16T10:00:00Z"},
 		"dead": {"working_dir": "/tmp/b", "pid": %d, "pid_start": %q, "idle": false, "last_activity": "2026-04-16T10:00:00Z"}
-	}`, selfPID, selfStart, deadPID, selfStart)
+	}`, selfPID, selfStart, deadPID, mismatchedStart)
 	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
 		t.Fatal(err)
 	}

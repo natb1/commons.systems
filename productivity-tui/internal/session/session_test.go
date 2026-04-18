@@ -9,6 +9,7 @@ import (
 	"testing"
 )
 
+// arbitrary sentinel that will not match any real lstart; epoch zero is recognizable
 const mismatchedStart = "Thu Jan  1 00:00:00 1970"
 
 func TestReadSessions_ValidJSON(t *testing.T) {
@@ -98,7 +99,7 @@ func TestFilterLive(t *testing.T) {
 
 	sessions := map[string]Session{
 		"live":             {WorkingDir: "/tmp/a", PID: selfPID, PIDStart: selfStart},
-		"dead":             {WorkingDir: "/tmp/b", PID: deadPID, PIDStart: selfStart},
+		"dead":             {WorkingDir: "/tmp/b", PID: deadPID, PIDStart: mismatchedStart},
 		"recycled":         {WorkingDir: "/tmp/c", PID: selfPID, PIDStart: mismatchedStart},
 		"pre_upgrade":      {WorkingDir: "/tmp/d"},
 		"empty_start":      {WorkingDir: "/tmp/e", PID: selfPID, PIDStart: ""},
