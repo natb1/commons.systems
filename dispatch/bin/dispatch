@@ -65,13 +65,6 @@ main() {
   export DISPATCH_ISSUE_NUM="$ISSUE_NUM"
   export DISPATCH_STATE_FILE="tmp/dispatch-${ISSUE_NUM}.json"
 
-  # Clear stale phase_signal when resuming an existing session so the previous
-  # completion does not immediately SIGTERM the new Claude process.
-  if [[ -f "$STATE_FILE" ]]; then
-    jq 'if .state then .state |= del(.phase_signal) else . end' "$STATE_FILE" > "${STATE_FILE}.tmp" \
-      && mv "${STATE_FILE}.tmp" "$STATE_FILE"
-  fi
-
   local CLAUDE_PID=0 WATCHER_PID=0
 
   cleanup() {
