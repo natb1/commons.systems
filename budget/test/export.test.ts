@@ -136,6 +136,10 @@ function setupMocks() {
         return Promise.resolve(idbNormalizationRules);
       case "statements":
         return Promise.resolve(idbStatements);
+      case "statementItems":
+        return Promise.resolve([]);
+      case "reconciliationNotes":
+        return Promise.resolve([]);
       default:
         throw new Error(`Unmocked store name in test: "${storeName}"`);
     }

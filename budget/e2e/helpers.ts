@@ -68,3 +68,191 @@ export async function uploadEncryptedFixture(page: Page, password: string): Prom
     buffer: encrypted,
   });
 }
+
+/**
+ * Builds a synthetic fixture whose transactions span three months: the
+ * most-recent-complete month (current), the month before that (prior), and
+ * the same current month one year earlier (YoY). This lets the income
+ * statement + cash flow summary renderers exercise all three periods.
+ *
+ * Placing transactions in the calendar month immediately preceding
+ * `Date.now()` guarantees that month is the latest-with-data month selected
+ * by `mostRecentMonthWithData` in `src/income-statement.ts` (which scans
+ * for the most recent includable transaction strictly before the current
+ * calendar month).
+ */
+function buildIncomeStatementFixtureBuffer(): Buffer {
+  const now = new Date(Date.now());
+  const nowYear = now.getUTCFullYear();
+  const nowMonth0 = now.getUTCMonth();
+
+  // Month immediately preceding the current calendar month (UTC).
+  const currentYear = nowMonth0 === 0 ? nowYear - 1 : nowYear;
+  const currentMonth0 = nowMonth0 === 0 ? 11 : nowMonth0 - 1;
+
+  // priorMonth: month before currentMonth.
+  const priorYear = currentMonth0 === 0 ? currentYear - 1 : currentYear;
+  const priorMonth0 = currentMonth0 === 0 ? 11 : currentMonth0 - 1;
+
+  // yoYMonth: currentMonth one year earlier.
+  const yoYYear = currentYear - 1;
+  const yoYMonth0 = currentMonth0;
+
+  const currentMonthDate = new Date(Date.UTC(currentYear, currentMonth0, 15));
+  const priorMonthDate = new Date(Date.UTC(priorYear, priorMonth0, 15));
+  const yearAgoDate = new Date(Date.UTC(yoYYear, yoYMonth0, 15));
+
+  const periodString = (year: number, month0: number): string => {
+    const mm = String(month0 + 1).padStart(2, "0");
+    return `${year}-${mm}`;
+  };
+
+  // Three periods: current, prior, yoY. For each: 1 income (negative amount),
+  // 2 expense, 1 transfer. Transfer rows must be filtered out of the income
+  // and expense tables by the renderer.
+  const makeTxns = (dateIso: string, period: "current" | "prior" | "yoy") => {
+    const incomeAmount = period === "yoy" ? -4800 : -5000;
+    const groceriesAmount = period === "current" ? 400 : period === "prior" ? 500 : 350;
+    return [
+      {
+        id: `txn-income-${period}`,
+        institution: "bankone",
+        account: "1234",
+        description: "EMPLOYER DIRECT DEP",
+        amount: incomeAmount,
+        timestamp: dateIso,
+        statementId: `bankone-1234-${period}`,
+        category: "Income:Salary",
+        budget: null,
+        note: "",
+        reimbursement: 0,
+        normalizedId: null,
+        normalizedPrimary: true,
+        normalizedDescription: null,
+      },
+      {
+        id: `txn-groceries-${period}`,
+        institution: "bankone",
+        account: "1234",
+        description: "KROGER #1234",
+        amount: groceriesAmount,
+        timestamp: dateIso,
+        statementId: `bankone-1234-${period}`,
+        category: "Food:Groceries",
+        budget: null,
+        note: "",
+        reimbursement: 0,
+        normalizedId: null,
+        normalizedPrimary: true,
+        normalizedDescription: null,
+      },
+      {
+        id: `txn-rent-${period}`,
+        institution: "bankone",
+        account: "1234",
+        description: "RENT PAYMENT",
+        amount: 1500,
+        timestamp: dateIso,
+        statementId: `bankone-1234-${period}`,
+        category: "Housing:Rent",
+        budget: null,
+        note: "",
+        reimbursement: 0,
+        normalizedId: null,
+        normalizedPrimary: true,
+        normalizedDescription: null,
+      },
+      {
+        id: `txn-transfer-${period}`,
+        institution: "banktwo",
+        account: "4444",
+        description: "CARD PAYMENT",
+        amount: 200,
+        timestamp: dateIso,
+        statementId: `banktwo-4444-${period}`,
+        category: "Transfer:CardPayment",
+        budget: null,
+        note: "",
+        reimbursement: 0,
+        normalizedId: null,
+        normalizedPrimary: true,
+        normalizedDescription: null,
+      },
+    ];
+  };
+
+  const transactions = [
+    ...makeTxns(currentMonthDate.toISOString(), "current"),
+    ...makeTxns(priorMonthDate.toISOString(), "prior"),
+    ...makeTxns(yearAgoDate.toISOString(), "yoy"),
+  ];
+
+  // Two statements per account spanning the fixture range so
+  // computeDerivedBalances has data to work with.
+  const statements = [
+    {
+      id: "stmt-bankone-1234-yoy",
+      statementId: `bankone-1234-${periodString(yoYYear, yoYMonth0)}`,
+      institution: "bankone",
+      account: "1234",
+      balance: 1000,
+      period: periodString(yoYYear, yoYMonth0),
+    },
+    {
+      id: "stmt-bankone-1234-current",
+      statementId: `bankone-1234-${periodString(currentYear, currentMonth0)}`,
+      institution: "bankone",
+      account: "1234",
+      balance: 1500,
+      period: periodString(currentYear, currentMonth0),
+    },
+    {
+      id: "stmt-banktwo-4444-yoy",
+      statementId: `banktwo-4444-${periodString(yoYYear, yoYMonth0)}`,
+      institution: "banktwo",
+      account: "4444",
+      balance: -100,
+      period: periodString(yoYYear, yoYMonth0),
+    },
+    {
+      id: "stmt-banktwo-4444-current",
+      statementId: `banktwo-4444-${periodString(currentYear, currentMonth0)}`,
+      institution: "banktwo",
+      account: "4444",
+      balance: -200,
+      period: periodString(currentYear, currentMonth0),
+    },
+  ];
+
+  const fixture = {
+    version: 1,
+    exportedAt: new Date(Date.now()).toISOString(),
+    groupId: "test-group",
+    groupName: "Test Household",
+    transactions,
+    statements,
+    budgets: [],
+    budgetPeriods: [],
+    rules: [],
+    normalizationRules: [],
+    weeklyAggregates: [],
+  };
+
+  return Buffer.from(JSON.stringify(fixture));
+}
+
+/**
+ * Uploads a synthetic fixture with transactions spanning the most-recent
+ * complete month, the prior month, and the same month one year earlier.
+ * Use this instead of `uploadFixture` when exercising features that render
+ * multi-period comparisons (e.g. the income statement and cash flow
+ * summary on /accounts).
+ */
+export async function uploadIncomeStatementFixture(page: Page): Promise<void> {
+  const fileInput = page.locator(".upload-input");
+  await fileInput.setInputFiles({
+    name: "income-statement-fixture.json",
+    mimeType: "application/json",
+    buffer: buildIncomeStatementFixtureBuffer(),
+  });
+}

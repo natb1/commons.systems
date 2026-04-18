@@ -152,11 +152,16 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 
 	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
-	// Build all TransactionData and StatementData across all files.
+	// Build all TransactionData, StatementItemData, and StatementData across all files.
 	// Dedup by doc ID: overlapping statement files (same statementId) can
-	// produce duplicate transactions with the same OFX FITID.
+	// produce duplicate transactions with the same OFX FITID. Statement items
+	// are deduped by their canonical id ({institution}_{account}_{fitid}), which
+	// collapses the same bank line appearing in multiple statement files
+	// (e.g., an item that crosses a month boundary).
 	seen := make(map[string]bool, totalTxns)
+	seenItems := make(map[string]bool, totalTxns)
 	allTxns := make([]store.TransactionData, 0, totalTxns)
+	allItems := make([]store.StatementItemData, 0, totalTxns)
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
 			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
@@ -164,14 +169,33 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 				continue
 			}
 			seen[docID] = true
+			stmtItemID := buildStatementItemID(pf.sf.Institution, pf.sf.Account, t.TransactionID)
 			allTxns = append(allTxns, store.TransactionData{
-				Institution:   pf.sf.Institution,
-				Account:       pf.sf.Account,
-				Description:   t.Description,
-				Amount:        t.Amount,
-				Timestamp:     t.Date,
-				StatementID:   pf.sf.StatementID(),
-				TransactionID: t.TransactionID,
+				Institution:     pf.sf.Institution,
+				Account:         pf.sf.Account,
+				Description:     t.Description,
+				Amount:          t.Amount,
+				Timestamp:       t.Date,
+				StatementID:     pf.sf.StatementID(),
+				StatementItemID: stmtItemID,
+				TransactionID:   t.TransactionID,
+			})
+			if seenItems[stmtItemID] {
+				continue
+			}
+			seenItems[stmtItemID] = true
+			// Statement items use the raw bank sign (negative = debit); TransactionData
+			// has already inverted it. Undo the inversion from convertRawTransaction.
+			allItems = append(allItems, store.StatementItemData{
+				StatementItemID: stmtItemID,
+				StatementID:     pf.sf.StatementID(),
+				Institution:     pf.sf.Institution,
+				Account:         pf.sf.Account,
+				Period:          pf.sf.Period,
+				Amount:          -t.Amount,
+				Timestamp:       t.Date,
+				Description:     t.Description,
+				FITID:           t.TransactionID,
 			})
 		}
 	}
@@ -239,7 +263,7 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 	// Apply budget assignment rules
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
 
-	return runFirestore(ctx, client, groupInfo, allTxns, allStmts, parsed)
+	return runFirestore(ctx, client, groupInfo, allTxns, allStmts, allItems, parsed)
 }
 
 // runOutputJSON writes parsed transactions and statements as a JSON file
@@ -1050,7 +1074,7 @@ func mergeStatements(dirStmts []store.StatementData, inputStmts []export.Stateme
 	return result
 }
 
-func runFirestore(ctx context.Context, client *store.Client, groupInfo store.GroupInfo, allTxns []store.TransactionData, allStmts []store.StatementData, parsed []parsedFile) error {
+func runFirestore(ctx context.Context, client *store.Client, groupInfo store.GroupInfo, allTxns []store.TransactionData, allStmts []store.StatementData, allItems []store.StatementItemData, parsed []parsedFile) error {
 	// Upsert all transactions
 	result, err := client.UpsertTransactions(ctx, groupInfo, allTxns)
 	if err != nil {
@@ -1065,6 +1089,15 @@ func runFirestore(ctx context.Context, client *store.Client, groupInfo store.Gro
 	}
 	if err := client.UpsertStatements(ctx, allStmts); err != nil {
 		return fmt.Errorf("upserting statements: %w", err)
+	}
+
+	// Upsert statement items (immutable bank record) with group info
+	for i := range allItems {
+		allItems[i].GroupID = groupInfo.ID
+		allItems[i].MemberEmails = groupInfo.MemberEmails
+	}
+	if err := client.UpsertStatementItems(ctx, allItems); err != nil {
+		return fmt.Errorf("upserting statement items: %w", err)
 	}
 
 	// Apply normalization (auto + rules, post-upsert, pre-recalculation)
@@ -1259,6 +1292,13 @@ func readFirebaseRC() (string, error) {
 // accountKey returns a composite map key for an (institution, account) pair.
 func accountKey(institution, account string) string {
 	return institution + "\x00" + account
+}
+
+// buildStatementItemID is the canonical statement-item id: "{institution}_{account}_{fitid}".
+// It is stable across statement-file boundaries so the same bank line appearing in multiple
+// OFX downloads produces a single statement-item document.
+func buildStatementItemID(institution, account, fitid string) string {
+	return institution + "_" + account + "_" + fitid
 }
 
 // maxTransactionDates computes the latest transaction date per (institution, account)

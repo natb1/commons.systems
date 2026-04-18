@@ -123,7 +123,10 @@ type sessionsMsg struct {
 func loadSessions(path string) tea.Cmd {
 	return func() tea.Msg {
 		sessions, err := session.ReadSessions(path)
-		return sessionsMsg{sessions: sessions, err: err}
+		if err != nil {
+			return sessionsMsg{err: err}
+		}
+		return sessionsMsg{sessions: session.FilterLive(sessions)}
 	}
 }
 

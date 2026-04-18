@@ -15,7 +15,7 @@ Verify the working directory is a worktree for the requested issue:
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 ```
 
-If no issue number provided, or `$CURRENT_BRANCH` doesn't start with the issue number followed by `-`: invoke `/worktree` instead. Stop.
+If no issue number provided, or `$CURRENT_BRANCH` doesn't start with the issue number followed by `-`: invoke `/pr-workflow` instead. Stop.
 
 On completion → update state to step=2/phase=core, proceed to Step 2:
 ```bash
@@ -42,7 +42,7 @@ On completion → update state to step=3/phase=core, proceed to Step 3:
 
 Implement the approved plan. Create separate commits for each issue (minimum one commit per issue).
 
-Use the Task tool to launch parallel general-purpose subagents:
+Use the Task tool to launch parallel general-purpose subagents with `model: "sonnet"`:
 - Subagent 1: Write unit tests based on the plan
 - Subagent 2: Write acceptance tests based on the plan
 - Subagent 3: Write smoke tests based on the plan

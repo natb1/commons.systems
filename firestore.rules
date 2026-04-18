@@ -16,6 +16,14 @@ service cloud.firestore {
         && memberEmails == group.members;
     }
 
+    // Productivity group member: verify actual membership via groups collection
+    function isProductivityGroupMember(env, groupId, memberEmails) {
+      let group = get(/databases/$(database)/documents/productivity/$(env)/groups/$(groupId)).data;
+      return request.auth != null
+        && request.auth.token.email in group.members
+        && memberEmails == group.members;
+    }
+
     // Groups are readable only by their members (email-based membership).
     // Uses resource.data directly instead of isGroupMember() because getUserGroups
     // performs a list query (where + getDocs) and Firestore cannot resolve get()
@@ -74,8 +82,59 @@ service cloud.firestore {
         && (!('normalizedId' in request.resource.data) || request.resource.data.normalizedId is string || request.resource.data.normalizedId == null)
         && (!('normalizedPrimary' in request.resource.data) || request.resource.data.normalizedPrimary is bool)
         && (!('normalizedDescription' in request.resource.data) || request.resource.data.normalizedDescription is string || request.resource.data.normalizedDescription == null)
-        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'groupId', 'memberEmails', 'note', 'category', 'budget', 'reimbursement', 'normalizedId', 'normalizedPrimary', 'normalizedDescription']);
+        && (!('statementItemId' in request.resource.data) || request.resource.data.statementItemId is string || request.resource.data.statementItemId == null)
+        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'statementItemId', 'groupId', 'memberEmails', 'note', 'category', 'budget', 'reimbursement', 'normalizedId', 'normalizedPrimary', 'normalizedDescription']);
       allow create, delete: if false;
+    }
+
+    // Seed statement items are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-statement-items/{itemId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Statement items are the immutable bank record. Read by group members via
+    // the denormalized memberEmails field. Writes are denied from the client;
+    // data is managed via the Admin SDK in the ETL pipeline.
+    match /budget/{env}/statement-items/{itemId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow write: if false;
+    }
+
+    // Seed reconciliation notes are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-reconciliation-notes/{noteId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Validates reconciliation note field types and constraints on both create and update.
+    function isValidReconciliationNoteData() {
+      return request.resource.data.entityType in ["transaction", "statementItem"]
+        && request.resource.data.entityId is string
+        && request.resource.data.entityId.size() > 0
+        && request.resource.data.classification in ["timing", "missing_entry", "discrepancy"]
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 2000
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.updatedBy is string
+        && request.resource.data.keys().hasOnly(['entityType', 'entityId', 'classification', 'note', 'updatedAt', 'updatedBy', 'groupId', 'memberEmails']);
+    }
+
+    // Reconciliation notes are scoped to group members via a denormalized `memberEmails` field.
+    // CRUD by group members; groupId and memberEmails are immutable on update.
+    match /budget/{env}/reconciliation-notes/{noteId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow create: if isBudgetGroupMember(env, request.resource.data.groupId, request.resource.data.memberEmails)
+        && isValidReconciliationNoteData();
+      allow update: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberEmails == resource.data.memberEmails
+        && isValidReconciliationNoteData();
+      allow delete: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
     }
 
     // Seed budgets are public read-only example data for unauthenticated users
@@ -329,6 +388,134 @@ service cloud.firestore {
     match /audio/{env}/errors/{errorId} {
       allow create: if isValidErrorLog();
       allow read, update, delete: if false;
+    }
+
+    // Groups are readable only by their members (email-based membership).
+    match /productivity/{env}/groups/{groupId} {
+      allow read: if request.auth != null && request.auth.token.email in resource.data.members;
+      allow write: if false;
+    }
+
+    // Validates agenda item field types and constraints on both create and update.
+    function isValidAgendaItemData() {
+      return request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.notes is string
+        && (!('scheduledAt' in request.resource.data) || request.resource.data.scheduledAt is timestamp || request.resource.data.scheduledAt == null)
+        && request.resource.data.status in ["todo", "done"]
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.keys().hasOnly(['title', 'notes', 'scheduledAt', 'status', 'createdAt', 'groupId', 'memberEmails']);
+    }
+
+    // Agenda items are scoped to group members via a denormalized `memberEmails` field.
+    // CRUD operations require membership. groupId, memberEmails, and createdAt are immutable on update.
+    match /productivity/{env}/agenda-items/{itemId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow create: if isProductivityGroupMember(env, request.resource.data.groupId, request.resource.data.memberEmails)
+        && isValidAgendaItemData();
+      allow update: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberEmails == resource.data.memberEmails
+        && request.resource.data.createdAt == resource.data.createdAt
+        && isValidAgendaItemData();
+      allow delete: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+    }
+
+    // Validates feed entry field types and constraints on both create and update.
+    function isValidFeedEntryData() {
+      return request.resource.data.source in ["rss", "hackernews", "reddit"]
+        && request.resource.data.sourceKey is string
+        && request.resource.data.title is string
+        && request.resource.data.url is string
+        && request.resource.data.snippet is string
+        && request.resource.data.publishedAt is timestamp
+        && request.resource.data.read is bool
+        && request.resource.data.saved is bool
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.keys().hasOnly(['source', 'sourceKey', 'title', 'url', 'snippet', 'publishedAt', 'read', 'saved', 'createdAt', 'groupId', 'memberEmails']);
+    }
+
+    // Feed entries are scoped to group members via a denormalized `memberEmails` field.
+    // CRUD operations require membership. groupId, memberEmails, and createdAt are immutable on update.
+    match /productivity/{env}/feed-entries/{entryId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow create: if isProductivityGroupMember(env, request.resource.data.groupId, request.resource.data.memberEmails)
+        && isValidFeedEntryData();
+      allow update: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberEmails == resource.data.memberEmails
+        && request.resource.data.createdAt == resource.data.createdAt
+        && isValidFeedEntryData();
+      allow delete: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+    }
+
+    // Validates message field types and constraints on both create and update.
+    function isValidMessageData() {
+      return request.resource.data.source in ["discord", "email", "claude-session"]
+        && request.resource.data.sourceKey is string
+        && request.resource.data.sender is string
+        && request.resource.data.body is string
+        && request.resource.data.sentAt is timestamp
+        && request.resource.data.read is bool
+        && request.resource.data.actioned is bool
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.keys().hasOnly(['source', 'sourceKey', 'sender', 'body', 'sentAt', 'read', 'actioned', 'createdAt', 'groupId', 'memberEmails']);
+    }
+
+    // Messages are scoped to group members via a denormalized `memberEmails` field.
+    // CRUD operations require membership. groupId, memberEmails, and createdAt are immutable on update.
+    match /productivity/{env}/messages/{messageId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow create: if isProductivityGroupMember(env, request.resource.data.groupId, request.resource.data.memberEmails)
+        && isValidMessageData();
+      allow update: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberEmails == resource.data.memberEmails
+        && request.resource.data.createdAt == resource.data.createdAt
+        && isValidMessageData();
+      allow delete: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+    }
+
+    // Validates goal field types and constraints on both create and update.
+    // priority must be non-negative; progress must be in [0, 100].
+    function isValidGoalData() {
+      return request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.horizon in ["weekly", "quarterly", "yearly"]
+        && request.resource.data.priority is number
+        && request.resource.data.priority >= 0
+        && request.resource.data.status in ["active", "done", "dropped"]
+        && request.resource.data.progress is number
+        && request.resource.data.progress >= 0
+        && request.resource.data.progress <= 100
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.keys().hasOnly(['title', 'horizon', 'priority', 'status', 'progress', 'createdAt', 'groupId', 'memberEmails']);
+    }
+
+    // Goals are scoped to group members via a denormalized `memberEmails` field.
+    // CRUD operations require membership. groupId, memberEmails, and createdAt are immutable on update.
+    match /productivity/{env}/goals/{goalId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow create: if isProductivityGroupMember(env, request.resource.data.groupId, request.resource.data.memberEmails)
+        && isValidGoalData();
+      allow update: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberEmails == resource.data.memberEmails
+        && request.resource.data.createdAt == resource.data.createdAt
+        && isValidGoalData();
+      allow delete: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
     }
 
     // SCAFFOLD MARKER: deny-all catch-all. Do not edit or move this comment.

@@ -25,10 +25,10 @@ test.describe("transactions", () => {
     await page.goto("/transactions");
     await expect(page.locator("#transactions-table")).toBeVisible();
     const rows = page.locator("#transactions-table .txn-row");
-    await expect(rows).toHaveCount(115);
+    await expect(rows).toHaveCount(118);
     await expect(rows.nth(0)).toContainText("Travel Bookshop");
     await expect(rows.nth(1)).toContainText("Electric Company");
-    await expect(rows.nth(114)).toContainText("Restaurant");
+    await expect(rows.nth(117)).toContainText("Restaurant");
   });
 
   test("seed transactions are read-only", async ({ page }) => {

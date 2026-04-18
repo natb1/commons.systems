@@ -1,5 +1,5 @@
 import { createDbConnection } from "@commons-systems/idbutil/connection";
-import type { Rollover, RuleType } from "./firestore.js";
+import type { Rollover, RuleType, ReconciliationClassification, ReconciliationEntityType } from "./firestore.js";
 
 const STORE_NAMES = [
   "transactions",
@@ -8,6 +8,8 @@ const STORE_NAMES = [
   "rules",
   "normalizationRules",
   "statements",
+  "statementItems",
+  "reconciliationNotes",
   "weeklyAggregates",
   "meta",
 ] as const;
@@ -16,7 +18,7 @@ export type StoreName = (typeof STORE_NAMES)[number];
 
 const { openDb, closeDb: closeDbConn } = createDbConnection({
   name: "budget",
-  version: 3,
+  version: 4,
   onUpgrade(db) {
     for (const name of STORE_NAMES) {
       if (!db.objectStoreNames.contains(name)) {
@@ -48,6 +50,7 @@ export interface IdbTransaction {
   budget: string | null;
   timestampMs: number | null;
   statementId: string | null;
+  statementItemId: string | null;
   normalizedId: string | null;
   normalizedPrimary: boolean;
   normalizedDescription: string | null;
@@ -117,6 +120,29 @@ export interface IdbWeeklyAggregate {
   unbudgetedTotal: number;
 }
 
+export interface IdbStatementItem {
+  id: string;
+  statementItemId: string;
+  statementId: string;
+  institution: string;
+  account: string;
+  period: string;
+  amount: number;
+  timestampMs: number;
+  description: string;
+  fitid: string;
+}
+
+export interface IdbReconciliationNote {
+  id: string;
+  entityType: ReconciliationEntityType;
+  entityId: string;
+  classification: ReconciliationClassification;
+  note: string;
+  updatedAtMs: number;
+  updatedBy: string;
+}
+
 export interface ParsedData {
   transactions: IdbTransaction[];
   budgets: IdbBudget[];
@@ -124,6 +150,8 @@ export interface ParsedData {
   rules: IdbRule[];
   normalizationRules: IdbNormalizationRule[];
   statements: IdbStatement[];
+  statementItems: IdbStatementItem[];
+  reconciliationNotes: IdbReconciliationNote[];
   weeklyAggregates: IdbWeeklyAggregate[];
   meta: UploadMeta;
 }
@@ -156,6 +184,8 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
   for (const record of data.rules) stores.rules.put(record);
   for (const record of data.normalizationRules) stores.normalizationRules.put(record);
   for (const record of data.statements) stores.statements.put(record);
+  for (const record of data.statementItems) stores.statementItems.put(record);
+  for (const record of data.reconciliationNotes) stores.reconciliationNotes.put(record);
   for (const record of data.weeklyAggregates) stores.weeklyAggregates.put(record);
   stores.meta.put(data.meta);
 

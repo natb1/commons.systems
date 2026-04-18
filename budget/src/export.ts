@@ -1,6 +1,6 @@
 /** Serializes IndexedDB stores back to the upload JSON format. Inverse of the upload pipeline (parseUploadedJson + toParsedData in upload.ts). */
 import { getAll, getMeta } from "./idb.js";
-import type { IdbTransaction, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbStatement } from "./idb.js";
+import type { IdbTransaction, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbStatement, IdbStatementItem, IdbReconciliationNote } from "./idb.js";
 
 function msToIso(ms: number | null): string {
   if (ms === null) return "";
@@ -12,13 +12,15 @@ function nullToEmpty(value: string | null): string {
 }
 
 export async function exportToJson(): Promise<string> {
-  const [transactions, budgets, budgetPeriods, rules, normalizationRules, statements, meta] = await Promise.all([
+  const [transactions, budgets, budgetPeriods, rules, normalizationRules, statements, statementItems, reconciliationNotes, meta] = await Promise.all([
     getAll<IdbTransaction>("transactions"),
     getAll<IdbBudget>("budgets"),
     getAll<IdbBudgetPeriod>("budgetPeriods"),
     getAll<IdbRule>("rules"),
     getAll<IdbNormalizationRule>("normalizationRules"),
     getAll<IdbStatement>("statements"),
+    getAll<IdbStatementItem>("statementItems"),
+    getAll<IdbReconciliationNote>("reconciliationNotes"),
     getMeta(),
   ]);
 
@@ -38,6 +40,7 @@ export async function exportToJson(): Promise<string> {
       amount: t.amount,
       timestamp: msToIso(t.timestampMs),
       statementId: nullToEmpty(t.statementId),
+      statementItemId: t.statementItemId ?? null,
       category: t.category,
       budget: t.budget,
       note: t.note,
@@ -100,6 +103,27 @@ export async function exportToJson(): Promise<string> {
       lastTransactionDate: s.lastTransactionDateMs != null
         ? msToIso(s.lastTransactionDateMs)
         : null,
+    })),
+    statementItems: statementItems.map((i) => ({
+      id: i.id,
+      statementItemId: i.statementItemId,
+      statementId: i.statementId,
+      institution: i.institution,
+      account: i.account,
+      period: i.period,
+      amount: i.amount,
+      timestamp: msToIso(i.timestampMs),
+      description: i.description,
+      fitid: i.fitid,
+    })),
+    reconciliationNotes: reconciliationNotes.map((n) => ({
+      id: n.id,
+      entityType: n.entityType,
+      entityId: n.entityId,
+      classification: n.classification,
+      note: n.note,
+      updatedAt: msToIso(n.updatedAtMs),
+      updatedBy: n.updatedBy,
     })),
   };
 

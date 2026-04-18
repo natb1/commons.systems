@@ -6,6 +6,7 @@
   color-scheme: dark;
   --favorable: #4caf50;
   --unfavorable: #e45858;
+  --variance-positive: #2ca02c;
 }
 
 .content-grid {
@@ -604,4 +605,82 @@ svg [aria-label="tip"] text { fill: #222; }
 
 .virtual-txn {
   opacity: 0.75;
+}
+
+/* --- Income statement & cash flow summary --- */
+
+#accounts-income-statement,
+#accounts-cash-flow-summary {
+  margin-block: 1.5rem;
+}
+
+#accounts-income-statement h3,
+#accounts-cash-flow-summary h3 {
+  margin-block-end: 0.5rem;
+}
+
+.income-statement-table,
+.cash-flow-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  margin-block-end: 1rem;
+}
+
+.income-statement-table caption {
+  text-align: start;
+  font-weight: bold;
+  padding-block: 0.5rem;
+}
+
+.income-statement-table th,
+.income-statement-table td,
+.cash-flow-summary-table th,
+.cash-flow-summary-table td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.income-statement-table th,
+.cash-flow-summary-table th {
+  text-align: start;
+  font-weight: bold;
+  border-bottom: 2px solid var(--border);
+}
+
+.income-statement-table td.num,
+.income-statement-table th.num,
+.cash-flow-summary-table td.num,
+.cash-flow-summary-table th.num {
+  text-align: end;
+  white-space: nowrap;
+}
+
+.income-statement-table .total-row,
+.income-statement-table .savings-rate-row {
+  font-weight: bold;
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+
+.income-statement-table .total-label,
+.cash-flow-summary-table tbody tr:last-child td:first-child {
+  font-weight: bold;
+}
+
+.income-statement-table .empty-row {
+  text-align: center;
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.variance-positive {
+  color: var(--variance-positive);
+}
+
+.variance-negative {
+  color: var(--error, #e15759);
+}
+
+.variance-neutral {
+  opacity: 0.6;
 }
