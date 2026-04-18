@@ -338,6 +338,20 @@ describe("hydrateBudgetTable — variance", () => {
     expect(varianceEl!.querySelector(".variance-wrapper")).toBe(firstWrapper);
   });
 
+  it("does not re-hydrate after a prior error", () => {
+    const { container, details, varianceEl } = makeVarianceContainer({
+      window12: POPULATED_W12,
+      window52: POPULATED_W52,
+    });
+    hydrateBudgetTable(container);
+    openDetails(details);
+    expect(varianceEl!.dataset.hydrated).toBe("error");
+    expect(logError).toHaveBeenCalledTimes(1);
+    details.open = false;
+    openDetails(details);
+    expect(logError).toHaveBeenCalledTimes(1);
+  });
+
   it("does not hydrate while the row remains closed", () => {
     const { container, details, varianceEl } = makeVarianceContainer({
       weeklyAllowance: "100",

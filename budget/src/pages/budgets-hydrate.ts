@@ -123,17 +123,10 @@ function renderVarianceDetails(
       list.replaceChildren(msg);
       return;
     }
-    const [first, ...rest] = categories;
-    // Unreachable: guaranteed by the length === 0 guard above and the non-empty tuple type.
-    if (first === undefined) {
-      throw new DataIntegrityError(
-        `Non-empty category array destructured to undefined first element (length=${categories.length})`,
-      );
-    }
-    const nonEmpty: readonly [CategoryActualRow, ...CategoryActualRow[]] = [first, ...rest];
+    const nonEmpty = categories as readonly [CategoryActualRow, ...CategoryActualRow[]];
     const absTotal = nonEmpty.reduce((s, c) => s + Math.abs(c.avgWeekly), 0);
     if (absTotal === 0) {
-      throw new DataIntegrityError("Category rows sum to zero; expected an empty array in that case");
+      throw new DataIntegrityError(`Category rows for budget ${budgetId} (window ${win}) sum to zero; expected an empty array in that case`);
     }
     renderVarianceWaterfall(chart, { weeklyAllowance, categories: nonEmpty }, win);
     renderCategoryList(list, nonEmpty);
@@ -165,7 +158,7 @@ function renderVarianceDetails(
 function hydrateVarianceDetails(row: HTMLDetailsElement): void {
   const varianceEl = row.querySelector<HTMLElement>(".budget-variance");
   if (!varianceEl) throw new DataIntegrityError(".budget-variance element missing from expanded budget row");
-  if (varianceEl.dataset.hydrated === "true") return;
+  if (varianceEl.dataset.hydrated === "true" || varianceEl.dataset.hydrated === "error") return;
 
   const budgetId = row.dataset.budgetId;
   if (!budgetId) throw new DataIntegrityError("budget-row missing data-budget-id");
@@ -190,8 +183,8 @@ function hydrateVarianceDetails(row: HTMLDetailsElement): void {
 }
 
 export function hydrateBudgetTable(container: HTMLElement): void {
-  // `toggle` events on <details> do not bubble; use capture-phase delegation
-  // so a single listener can handle every expanded row.
+  // Capture-phase delegation lets a single listener handle every expanded row
+  // before any row-level handlers fire.
   container.addEventListener("toggle", (e) => {
     const target = e.target;
     if (!(target instanceof HTMLDetailsElement)) return;
