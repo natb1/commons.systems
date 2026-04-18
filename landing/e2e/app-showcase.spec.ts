@@ -66,19 +66,6 @@ test.describe("app showcase", () => {
     }
   });
 
-  test("dependency table renders below the showcase with at least 4 rows", async ({
-    page,
-  }) => {
-    await page.goto("/");
-
-    const heading = page.locator(".dependency-assessment h2");
-    await expect(heading).toBeVisible();
-
-    const rows = page.locator(".dependency-assessment table tbody tr");
-    const count = await rows.count();
-    expect(count).toBeGreaterThanOrEqual(4);
-  });
-
   test.describe("mobile viewport", () => {
     test.use({ viewport: { width: 375, height: 800 } });
 

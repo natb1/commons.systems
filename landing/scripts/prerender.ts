@@ -13,7 +13,6 @@ import {
   AUTHOR,
   REL_ME,
   APPS,
-  DEPENDENCIES,
 } from "../src/site-config.js";
 import { renderShowcase } from "../src/showcase-render.js";
 
@@ -37,7 +36,7 @@ await prerenderPosts({
   author: AUTHOR,
   relMe: REL_ME,
   softwareApplications: APPS,
-  homeExtraHtml: renderShowcase(APPS, DEPENDENCIES),
+  homeExtraHtml: renderShowcase(APPS),
 });
 
 generateFeedXml({
