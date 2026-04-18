@@ -60,7 +60,7 @@ Re-invoke each skill listed in `active_skills` from the issue state that is not 
 
 ## Fork Delegation (Steps 4, 6, 7, 11)
 
-Steps 4, 6, 7, and 11 are fully automated — invoke fork skills instead of in-thread phase skills:
+Steps 4, 6, 7, and 11 are fully automated — invoke fork skills instead of in-thread phase skills. Launch via the Agent tool with `model: "sonnet"`:
 - Step 4 → `/ref-unit-test`
 - Steps 6, 7, 11 → `/ref-pr-check`
 
