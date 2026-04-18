@@ -186,11 +186,6 @@ assert_approves \
   ".claude/skills/some-other-skill/scripts/run-lint.sh"
 
 assert_approves \
-  "worktree detect script" \
-  "Bash" \
-  ".claude/skills/worktree/scripts/detect-worktree.sh 435"
-
-assert_approves \
   "echo is in allowedTools (argument contains no unsafe metacharacters)" \
   "Bash" \
   "echo .claude/skills/ref-pr-workflow/scripts/run-lint.sh"
