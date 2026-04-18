@@ -101,6 +101,7 @@ func TestFilterLive(t *testing.T) {
 		"dead":        {WorkingDir: "/tmp/b", PID: deadPID, PIDStart: selfStart},
 		"recycled":    {WorkingDir: "/tmp/c", PID: selfPID, PIDStart: mismatchedStart},
 		"pre_upgrade": {WorkingDir: "/tmp/d"},
+		"empty_start": {WorkingDir: "/tmp/e", PID: selfPID, PIDStart: ""},
 	}
 
 	got := FilterLive(sessions)
@@ -116,6 +117,27 @@ func TestFilterLive(t *testing.T) {
 	}
 	if _, ok := got["pre_upgrade"]; !ok {
 		t.Error("expected pre-upgrade session (PID == 0) to be kept")
+	}
+	if _, ok := got["empty_start"]; !ok {
+		t.Error("expected empty-PIDStart session to be kept (unknown-identity contract)")
+	}
+}
+
+func TestFilterLiveEmptyAndNilInput(t *testing.T) {
+	got := FilterLive(nil)
+	if got == nil {
+		t.Error("FilterLive(nil) returned nil; expected non-nil empty map")
+	}
+	if len(got) != 0 {
+		t.Errorf("FilterLive(nil) returned %d entries; expected 0", len(got))
+	}
+
+	got = FilterLive(map[string]Session{})
+	if got == nil {
+		t.Error("FilterLive(empty) returned nil; expected non-nil empty map")
+	}
+	if len(got) != 0 {
+		t.Errorf("FilterLive(empty) returned %d entries; expected 0", len(got))
 	}
 }
 

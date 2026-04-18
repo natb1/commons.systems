@@ -27,10 +27,10 @@ type Session struct {
 // FilterLive returns only sessions whose recorded Claude CLI PID is still
 // live (process exists and its start-time matches the recorded value).
 //
-// Sessions with PID == 0 represent records where the hook could not identify
-// a Claude ancestor (including records written before this field existed).
-// We keep them rather than drop them — dropping a legitimate unknown is
-// worse than preserving a potentially stale row.
+// Sessions with PID == 0 or empty PIDStart represent records where the
+// hook could not capture a coherent (pid, start-time) pair for the Claude
+// ancestor. We keep them rather than drop them — dropping a legitimate
+// unknown is worse than preserving a potentially stale row.
 //
 // Liveness probe errors fall into two categories:
 //   - EPERM from kill(pid, 0) is a positive liveness signal: the process
@@ -40,7 +40,7 @@ type Session struct {
 func FilterLive(sessions map[string]Session) map[string]Session {
 	live := make(map[string]Session, len(sessions))
 	for id, s := range sessions {
-		if s.PID == 0 || isPIDLive(s.PID, s.PIDStart) {
+		if s.PID == 0 || s.PIDStart == "" || isPIDLive(s.PID, s.PIDStart) {
 			live[id] = s
 		}
 	}

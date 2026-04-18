@@ -23,16 +23,17 @@ WORK_DIR="${WORK_DIR:-$PWD}"
 #   *.claude-unwrapped* — unwrapped nix store binary
 #   */claude            — direct binary invocation without args
 #   */claude\ *         — direct binary invocation with args
-#   claude              — bare argv[0] when resolved through PATH (no slash)
+#   claude              — bare argv[0] without args, resolved through PATH
+#   claude\ *           — bare argv[0] with args, resolved through PATH
 find_claude_pid() {
   local pid="$PPID"
   local hops=0
   # 20 hops is well beyond any observed parent chain; bounds runaway loops.
-  # On failure we fall through to writing pid=0, which FilterLive preserves
-  # (see comment in session.go), so a rare miss is recoverable.
+  # On failure we fall through to writing pid=0; FilterLive treats pid=0 as
+  # "unknown ancestor" and keeps the session, so a rare miss is recoverable.
   while [ -n "$pid" ] && [ "$pid" != "1" ] && [ "$hops" -lt 20 ]; do
     local cmd
-    cmd=$(ps -ww -o command= -p "$pid" 2>/dev/null || true)
+    cmd=$(ps -ww -o command= -p "$pid" 2>/dev/null)
     case "$cmd" in
       *claude-code*|*.claude-unwrapped*|*/claude|*/claude\ *|claude|claude\ *)
         printf '%s\n' "$pid"
@@ -49,11 +50,9 @@ CLAUDE_PID=""
 CLAUDE_START=""
 if pid=$(find_claude_pid); then
   CLAUDE_PID="$pid"
-  CLAUDE_START="$(ps -o lstart= -p "$CLAUDE_PID" 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//' || true)"
+  CLAUDE_START="$(ps -o lstart= -p "$CLAUDE_PID" 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//')"
   if [ -z "$CLAUDE_START" ]; then
-    # lstart query failed — drop PID to keep (pid,start) coherent. An empty
-    # start-time in the state file would make FilterLive misclassify live
-    # sessions as dead.
+    # lstart query failed — drop PID to keep (pid,start) coherent.
     echo "update-session: lstart query failed for pid=$CLAUDE_PID" >&2
     CLAUDE_PID=""
   fi
@@ -66,8 +65,7 @@ mkdir -p "$STATE_DIR"
 
 tmp="$(mktemp "$STATE_DIR/sessions.XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
-# Explicit schema: fields not listed here are dropped (including legacy
-# transcript_path from earlier hook versions).
+# Explicit schema: fields not listed in this object are dropped.
 jq --arg id "$SESSION_ID" \
    --arg dir "$WORK_DIR" \
    --argjson pid "${CLAUDE_PID:-0}" \
