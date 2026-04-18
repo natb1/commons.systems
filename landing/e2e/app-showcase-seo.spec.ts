@@ -31,7 +31,12 @@ async function getSoftwareApplicationJsonLd(
   for (const s of scripts) {
     const text = await s.textContent();
     if (!text) continue;
-    const json = JSON.parse(text);
+    let json: Record<string, unknown>;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new Error(`Failed to parse JSON-LD script: ${text}\n${e}`);
+    }
     if (json["@type"] === "SoftwareApplication") out.push(json);
   }
   return out;

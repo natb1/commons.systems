@@ -30,7 +30,7 @@ export function softwareApplicationJsonLd(app: SoftwareApplication): Record<stri
     applicationCategory: app.applicationCategory,
     operatingSystem: app.operatingSystem,
   };
-  if (app.description) json.description = app.description;
+  if (app.description !== undefined) json.description = app.description;
   return json;
 }
 

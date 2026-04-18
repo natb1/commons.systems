@@ -24,19 +24,22 @@ async function main() {
   const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT } });
   const page = await context.newPage();
 
-  for (const shot of shots) {
-    console.log(`Capturing ${shot.name} from ${shot.url}`);
-    await page.goto(shot.url, { waitUntil: "domcontentloaded", timeout: 60000 });
-    if (shot.wait) await page.waitForTimeout(shot.wait);
-    if (shot.scrollY) await page.evaluate((y) => window.scrollTo(0, y), shot.scrollY);
-    await page.waitForTimeout(500);
-    await page.screenshot({
-      path: join(outDir, `${shot.name}.png`),
-      clip: { x: 0, y: 0, width: WIDTH, height: HEIGHT },
-    });
-    console.log(`  wrote ${shot.name}.png`);
+  try {
+    for (const shot of shots) {
+      console.log(`Capturing ${shot.name} from ${shot.url}`);
+      await page.goto(shot.url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      if (shot.wait) await page.waitForTimeout(shot.wait);
+      if (shot.scrollY) await page.evaluate((y) => window.scrollTo(0, y), shot.scrollY);
+      await page.waitForTimeout(500);
+      await page.screenshot({
+        path: join(outDir, `${shot.name}.png`),
+        clip: { x: 0, y: 0, width: WIDTH, height: HEIGHT },
+      });
+      console.log(`  wrote ${shot.name}.png`);
+    }
+  } finally {
+    await browser.close();
   }
-  await browser.close();
 }
 
 main().catch((err) => {

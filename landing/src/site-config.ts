@@ -36,6 +36,7 @@ export const INFO_PANEL_LINK_SECTIONS: LinkSection[] = [
   },
 ];
 
+/** Extends SoftwareApplication for JSON-LD reuse; overrides `description` to required and adds visual card fields. */
 export interface AppCard extends SoftwareApplication {
   description: string;
   screenshot: string;
@@ -44,7 +45,7 @@ export interface AppCard extends SoftwareApplication {
 }
 
 // App showcase source of truth. Screenshots are captured ad-hoc from production
-// subdomains at a 1200×800 viewport; CSS crops to 3:2 at render time (see public/screenshots/README.md).
+// subdomains at a 1200×800 viewport; .app-card-screenshot enforces the ratio at render time with object-fit: cover (see public/screenshots/README.md).
 export const APPS: AppCard[] = [
   {
     name: "Budget",
@@ -86,7 +87,7 @@ export interface Dependency {
   ratchetRisk: string;
 }
 
-// Dependency self-assessment source of truth — temporary home until a dedicated panel is added to the app showcase.
+// Dependency self-assessment source of truth. Exported for future use in a dedicated dependency panel; currently unused in any rendered output.
 export const DEPENDENCIES: Dependency[] = [
   {
     name: "GitHub",

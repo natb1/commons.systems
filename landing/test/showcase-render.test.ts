@@ -55,9 +55,6 @@ describe("renderShowcase", () => {
         `<img[^>]*alt="${app.screenshotAlt}"[^>]*src="${app.screenshot}"[^>]*loading="lazy"`,
       );
       expect(imgRegex.test(html) || altFirstRegex.test(html)).toBe(true);
-      expect(html).toContain(`src="${app.screenshot}"`);
-      expect(html).toContain(`alt="${app.screenshotAlt}"`);
-      expect(html).toContain(`loading="lazy"`);
     }
   });
 
@@ -71,5 +68,17 @@ describe("renderShowcase", () => {
     const html = renderShowcase(apps);
     expect(html).not.toContain("<script>alert");
     expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("HTML-escapes special characters in app.url", () => {
+    const apps: AppCard[] = [
+      {
+        ...APPS[0],
+        url: 'https://example.com/"onmouseover="alert(1)',
+      },
+    ];
+    const html = renderShowcase(apps);
+    expect(html).not.toContain('"onmouseover=');
+    expect(html).toContain("&quot;");
   });
 });

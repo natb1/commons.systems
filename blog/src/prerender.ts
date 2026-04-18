@@ -38,9 +38,11 @@ export interface PrerenderConfig {
   organization?: Organization;
   author?: Author;
   relMe?: string[];
+  /** When provided, also set `homeExtraHtml` so JSON-LD apps have a visual representation on the page. */
   softwareApplications?: SoftwareApplication[];
-  /** Replaces the `<section class="landing-hero">` block in the root index.html.
-   *  When set, per-post pages also strip the `landing-hero` section. */
+  /** Replaces the `<section class="landing-hero">` block when rendering the root page.
+   *  When set, per-post pages also strip the `landing-hero` section.
+   *  Throws if the marker is absent from the template. */
   homeExtraHtml?: string;
 }
 
