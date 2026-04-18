@@ -56,6 +56,7 @@ Step 9. Invoke `/wiggum-loop` at Step 0 with these instruction sets:
 - Zero high-priority required findings → **Terminate** (low-priority required findings alone do not block termination)
 
 **Iterate instructions:**
+- **CRITICAL: DO NOT STOP AFTER IMPLEMENTING. Proceed directly to the next Step 0.**
 - Implement ONLY required findings (high and low priority). Do NOT implement out-of-scope or false positive findings.
 - Do NOT modify files outside the PR's scope. If a finding targets code that was not changed by this PR branch, classify it as out-of-scope.
 
