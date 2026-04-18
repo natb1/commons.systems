@@ -31,8 +31,9 @@ make_slug() {
 # --- main -------------------------------------------------------------------
 main() {
   local ISSUE_NUM="${1:-}"
+  local MODEL="${2:-}"
   if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
-    echo "error: usage: dispatch <issue-num> (got: '${ISSUE_NUM}')" >&2
+    echo "error: usage: dispatch <issue-num> [<model>] (got: '${ISSUE_NUM}')" >&2
     exit 1
   fi
 
@@ -84,7 +85,10 @@ main() {
 
   # Launch Claude with --worktree — the WorktreeCreate hook handles physical
   # creation, branch resolution, direnv. Claude inherits the dispatcher's TTY.
-  claude -w "$BRANCH" "/dispatch-implement #${ISSUE_NUM}" &
+  local CLAUDE_ARGS=(-w "$BRANCH")
+  [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
+  CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}")
+  claude "${CLAUDE_ARGS[@]}" &
   CLAUDE_PID=$!
 
   # Wait for the state file to appear. phase-complete seeds it on first write,
