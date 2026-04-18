@@ -75,8 +75,11 @@ describe("accounts page smoke — multi-account aggregation", () => {
 
     expect(html).toContain('id="accounts-table"');
 
-    // 3 accounts → 3 <tr> rows in <tbody>
-    const tbody = html.slice(html.indexOf("<tbody>"), html.indexOf("</tbody>"));
+    // 3 accounts → 3 <tr> rows in the accounts-table <tbody>
+    const accountsTableStart = html.indexOf('id="accounts-table"');
+    const accountsTableTbodyStart = html.indexOf("<tbody>", accountsTableStart);
+    const accountsTableTbodyEnd = html.indexOf("</tbody>", accountsTableTbodyStart);
+    const tbody = html.slice(accountsTableTbodyStart, accountsTableTbodyEnd);
     const rowCount = (tbody.match(/<tr[\s>]/g) ?? []).length;
     expect(rowCount).toBe(3);
 
