@@ -240,7 +240,7 @@
 #accounts-chart-controls { margin-bottom: 0.5rem; }
 #budgets-chart { width: 100%; margin-bottom: 1rem; }
 /* Plot's built-in tip background is light; force tip text dark so it remains readable on every chart. */
-[aria-label="tip"] text { fill: #222; }
+svg [aria-label="tip"] text { fill: #222; }
 .chart-layout {
   display: flex;
   align-items: stretch;

@@ -915,7 +915,7 @@ export interface PerBudgetStats {
 /** Pre-group periods by budget ID and find the globally-latest week Sunday-start across all budgets. */
 function indexPeriodsForBudgets(periods: BudgetPeriod[]): {
   latestWeekMs: number | undefined;
-  periodsByBudget: Map<BudgetId, BudgetPeriod[]>;
+  periodsByBudget: ReadonlyMap<BudgetId, readonly BudgetPeriod[]>;
 } {
   const allWeekMs = new Set<number>();
   const periodsByBudget = new Map<BudgetId, BudgetPeriod[]>();
@@ -1023,9 +1023,16 @@ export function computePerBudgetCategoryVariance(
   const result = new Map<BudgetId, PerBudgetCategoryVariance>();
   for (const budget of budgets) {
     const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
+    // Hoist the per-period weekMs computation once; both windows consume it.
+    const completed: { weekMs: number; period: BudgetPeriod }[] = [];
+    for (const p of budgetPeriods) {
+      const weekMs = toSundayEntry(p.periodStart.toDate()).ms;
+      if (weekMs === latestWeekMs) continue;
+      completed.push({ weekMs, period: p });
+    }
     result.set(budget.id, {
-      12: decomposeWindow(budgetPeriods, latestWeekMs, 12),
-      52: decomposeWindow(budgetPeriods, latestWeekMs, 52),
+      12: decomposeWindow(completed, latestWeekMs, 12),
+      52: decomposeWindow(completed, latestWeekMs, 52),
     });
   }
   return result;
@@ -1039,7 +1046,7 @@ export function computePerBudgetCategoryVariance(
  * a negative value.
  */
 function decomposeWindow(
-  budgetPeriods: BudgetPeriod[],
+  completed: readonly { weekMs: number; period: BudgetPeriod }[],
   latestWeekMs: number | undefined,
   weekCount: number,
 ): CategoryActualRow[] {
@@ -1047,9 +1054,7 @@ function decomposeWindow(
   const windowMs = weekCount * MS_PER_WEEK;
 
   const catTotals = new Map<string, number>();
-  for (const p of budgetPeriods) {
-    const weekMs = toSundayEntry(p.periodStart.toDate()).ms;
-    if (weekMs === latestWeekMs) continue;
+  for (const { weekMs, period: p } of completed) {
     if (latestWeekMs - weekMs > windowMs) continue;
     for (const [cat, amount] of Object.entries(p.categoryBreakdown)) {
       if (!Number.isFinite(amount)) {

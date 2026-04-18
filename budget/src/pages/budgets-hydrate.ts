@@ -51,9 +51,6 @@ function deserializeCategoryRows(raw: string, field: string): CategoryActualRow[
 
 function renderCategoryList(list: HTMLElement, categories: readonly [CategoryActualRow, ...CategoryActualRow[]]): void {
   const absTotal = categories.reduce((s, c) => s + Math.abs(c.avgWeekly), 0);
-  if (absTotal === 0) {
-    throw new DataIntegrityError("Category rows sum to zero; expected an empty array in that case");
-  }
   const dl = document.createElement("dl");
   dl.className = "variance-breakdown";
   for (const c of categories) {
@@ -111,8 +108,9 @@ function renderVarianceDetails(
   const chart = document.createElement("div");
   chart.className = "variance-chart";
 
+  // Unstyled container: holds either a <dl.variance-breakdown> or <p.variance-empty>,
+  // swapped via replaceChildren on window toggle.
   const list = document.createElement("div");
-  list.className = "variance-list";
 
   wrapper.append(toggle, chart, list);
   container.replaceChildren(wrapper);
@@ -134,6 +132,10 @@ function renderVarianceDetails(
       );
     }
     const nonEmpty: readonly [CategoryActualRow, ...CategoryActualRow[]] = [first, ...rest];
+    const absTotal = nonEmpty.reduce((s, c) => s + Math.abs(c.avgWeekly), 0);
+    if (absTotal === 0) {
+      throw new DataIntegrityError("Category rows sum to zero; expected an empty array in that case");
+    }
     renderVarianceWaterfall(chart, { weeklyAllowance, categories: nonEmpty }, win);
     renderCategoryList(list, nonEmpty);
   }
@@ -196,7 +198,7 @@ export function hydrateBudgetTable(container: HTMLElement): void {
     } catch (error) {
       const varianceEl = target.querySelector<HTMLElement>(".budget-variance");
       if (varianceEl) varianceEl.dataset.hydrated = "error";
-      handleActionError(target, error, "variance-hydrate");
+      handleActionError(varianceEl ?? target, error, "variance-hydrate");
     }
   }, true);
 

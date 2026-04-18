@@ -356,7 +356,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -372,7 +372,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -388,7 +388,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -404,7 +404,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -420,7 +420,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -436,7 +436,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -452,7 +452,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -468,7 +468,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -484,7 +484,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -500,7 +500,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -516,7 +516,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -532,7 +532,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
@@ -628,7 +628,7 @@ describe("hydrateBudgetTable — variance", () => {
     });
     hydrateBudgetTable(container);
     expect(() => openDetails(details)).not.toThrow();
-    expect(details.classList.contains("save-error")).toBe(true);
+    expect(varianceEl!.classList.contains("save-error")).toBe(true);
     expect(varianceEl!.dataset.hydrated).toBe("error");
     expect(logError).toHaveBeenCalledWith(
       expect.any(Error),
