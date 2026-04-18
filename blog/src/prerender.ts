@@ -12,11 +12,13 @@ import { renderArticle } from "./pages/home.ts";
 import {
   organizationJsonLd,
   blogPostingJsonLd,
+  softwareApplicationJsonLd,
   jsonLdScriptTag,
   canonicalLinkTag,
   relMeLinkTags,
   type Organization,
   type Author,
+  type SoftwareApplication,
 } from "./seo.ts";
 
 export interface NavLink {
@@ -36,6 +38,12 @@ export interface PrerenderConfig {
   organization?: Organization;
   author?: Author;
   relMe?: string[];
+  /** When provided, also set `homeExtraHtml` so JSON-LD apps have a visual representation on the page. */
+  softwareApplications?: SoftwareApplication[];
+  /** Replaces the `<section class="landing-hero">` block when rendering the root page.
+   *  When set, per-post pages also strip the `landing-hero` section.
+   *  Throws if the marker is absent from the template. */
+  homeExtraHtml?: string;
 }
 
 function ogTagsToHtml(entries: OgTagEntry[]): string {
@@ -83,6 +91,21 @@ function injectNav(html: string, navHtml: string): string {
   return result;
 }
 
+function injectHomeExtra(html: string, extraHtml: string): string {
+  const result = html.replace(
+    /<section class="landing-hero"[^>]*>.*?<\/section>/s,
+    extraHtml,
+  );
+  if (result === html) throw new Error('<section class="landing-hero"> marker not found in template');
+  return result;
+}
+
+function stripHomeExtra(html: string): string {
+  const result = html.replace(/<section class="landing-hero"[^>]*>.*?<\/section>\s*/s, "");
+  if (result === html) throw new Error('<section class="landing-hero"> marker not found in template');
+  return result;
+}
+
 function injectBeforeHead(html: string, block: string, context: string): string {
   const result = html.replace("</head>", `    ${block}\n  </head>`);
   if (result === html) throw new Error(`</head> marker not found in ${context}`);
@@ -113,6 +136,8 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     organization,
     author,
     relMe,
+    softwareApplications,
+    homeExtraHtml,
   } = config;
 
   const template = readFileSync(join(distDir, "index.html"), "utf-8");
@@ -136,11 +161,16 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   const panelHtml = renderInfoPanel({ ...infoPanel, topPosts });
   const navHtml = renderNavHtml(navLinks);
 
-  const relMeHtml = relMe && relMe.length > 0 ? relMeLinkTags(relMe) : "";
+  const relMeHtml = relMe ? relMeLinkTags(relMe) : "";
+
+  const softwareApplicationTags = (softwareApplications ?? [])
+    .map((app) => jsonLdScriptTag(softwareApplicationJsonLd(app)))
+    .join("\n    ");
 
   const rootSeoHead = buildSeoHeadHtml([
     canonicalLinkTag(`${siteUrl}/`),
     organization ? jsonLdScriptTag(organizationJsonLd(organization)) : "",
+    softwareApplicationTags,
     relMeHtml,
   ]);
 
@@ -148,6 +178,9 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   let rootHtml = injectMain(template, allArticlesHtml);
   rootHtml = injectInfoPanel(rootHtml, panelHtml);
   rootHtml = injectNav(rootHtml, navHtml);
+  if (homeExtraHtml !== undefined) {
+    rootHtml = injectHomeExtra(rootHtml, homeExtraHtml);
+  }
   if (siteDefaults) {
     rootHtml = rootHtml.replace(/\s*<meta name="description"[^>]*>/, "");
     const rootOgTags = ogTagsToHtml(siteDefaultOgEntries(siteUrl, siteDefaults));
@@ -177,6 +210,9 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     html = injectMain(html, allArticlesHtml);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
+    if (homeExtraHtml !== undefined) {
+      html = stripHomeExtra(html);
+    }
 
     const outDir = join(distDir, "post", meta.id);
     mkdirSync(outDir, { recursive: true });

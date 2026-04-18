@@ -93,21 +93,66 @@ main {
 .landing-hero-band {
   background: var(--accent);
   color: var(--bg);
-  padding: 1rem 1.5rem;
+  padding: 1.25rem 1.5rem;
   margin-block-end: 1.5rem;
   text-align: center;
+}
+.landing-hero-band-headline {
+  margin: 0;
+  font-weight: 700;
+  font-size: clamp(1.1rem, 3vw, 1.5rem);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.landing-hero-band-subline {
+  margin: 0.25rem 0 0;
+  font-size: clamp(0.85rem, 2.2vw, 1rem);
+  opacity: 0.9;
 }
 .landing-hero-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
 }
-.landing-hero-card {
-  border: 1px solid rgba(224, 216, 200, 0.15);
-  padding: 2rem 1rem;
-  text-align: center;
-  color: var(--muted);
+
+.app-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  transition: border-color 0.15s ease, outline-color 0.15s ease;
 }
+.app-card:hover,
+.app-card:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.app-card-screenshot {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  object-position: top left;
+  border-block-end: 1px solid var(--border);
+}
+.app-name {
+  padding: 0.75rem 1rem 0.25rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.app-problem {
+  margin: 0;
+  padding: 0 1rem 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
 @media (max-width: 768px) {
   .landing-hero-grid { grid-template-columns: 1fr; }
 }
