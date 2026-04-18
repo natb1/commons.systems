@@ -5,6 +5,7 @@ import { hydrateOnce } from "@commons-systems/router/hydrate";
 import { renderHome } from "./pages/home.js";
 import { renderBudgets } from "./pages/budgets.js";
 import { renderAccounts } from "./pages/accounts.js";
+import { renderAccountsReconcile } from "./pages/accounts-reconcile.js";
 import { renderRules } from "./pages/rules.js";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
@@ -14,6 +15,7 @@ import { hydrateCategorySankey } from "./pages/home-chart.js";
 import { hydrateBudgetTable, hydrateBudgetChart, hydrateOverridesTable } from "./pages/budgets-hydrate.js";
 import { hydrateRulesTable } from "./pages/rules-hydrate.js";
 import { hydrateAccountsCharts } from "./pages/accounts-hydrate.js";
+import { hydrateAccountsReconcile } from "./pages/accounts-reconcile-hydrate.js";
 import { mountHero } from "@commons-systems/style/hero";
 import { renderHero } from "./pages/hero.js";
 import { trackPageView, initAppCheck } from "./firebase.js";
@@ -119,6 +121,7 @@ const router = createHistoryRouter(
     { path: "/", render: () => renderBudgets(renderOptions()) },
     { path: "/transactions", render: () => renderHome(renderOptions()) },
     { path: "/accounts", render: () => renderAccounts(renderOptions()) },
+    { path: "/accounts/reconcile", render: () => renderAccountsReconcile(renderOptions()) },
     { path: "/rules", render: () => renderRules(renderOptions()) },
   ],
   {
@@ -173,6 +176,7 @@ const observer = new MutationObserver(() => {
   hydrateTable("#overrides-table", hydrateOverridesTable);
   hydrateTable("#rules-table", hydrateRulesTable);
   hydrateTable("#accounts-trend-chart", hydrateAccountsCharts, "Chart rendering");
+  hydrateTable("#reconcile-container", hydrateAccountsReconcile);
 });
 observer.observe(app, { childList: true, subtree: true });
 

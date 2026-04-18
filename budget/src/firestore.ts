@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, query, updateDoc, where, increment, Timestamp, addDoc, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, increment, Timestamp, addDoc, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { requireString, requireNumber, requireNonNegativeNumber, optionalString, optionalNumber } from "@commons-systems/firestoreutil/validate";
 
@@ -9,10 +9,15 @@ import type { Brand } from "@commons-systems/firestoreutil/brand";
 
 export type TransactionId = Brand<"TransactionId">;
 export type StatementId = Brand<"StatementId">;
+export type StatementItemId = Brand<"StatementItemId">;
 export type BudgetId = Brand<"BudgetId">;
 export type BudgetPeriodId = Brand<"BudgetPeriodId">;
 export type RuleId = Brand<"RuleId">;
 export type NormalizationRuleId = Brand<"NormalizationRuleId">;
+
+/** Classification applied to unmatched statement items or transactions during reconciliation. */
+export type ReconciliationClassification = "timing" | "missing_entry" | "discrepancy";
+export type ReconciliationEntityType = "transaction" | "statementItem";
 
 export type { GroupId } from "@commons-systems/authutil/groups";
 
@@ -99,11 +104,44 @@ export interface Transaction {
   readonly budget: BudgetId | null;
   readonly timestamp: Timestamp | null;
   readonly statementId: StatementId | null;
+  /** Explicit link to the immutable statement line item this transaction was imported from. Null or undefined for manually entered transactions and older records written before the statement-items backfill. */
+  readonly statementItemId?: StatementItemId | null;
   readonly groupId: GroupId | null;
   readonly normalizedId: string | null;
   readonly normalizedPrimary: boolean;
   readonly normalizedDescription: string | null;
   readonly virtual: boolean;
+}
+
+/**
+ * Immutable bank-record line item. One document per OFX transaction line.
+ * Amount uses the raw bank sign convention: negative = debit, positive = credit.
+ * Transactions invert this (positive = spending), so reconciliation must sign-flip when matching.
+ */
+export interface StatementItem {
+  readonly id: string;
+  readonly statementItemId: StatementItemId;
+  readonly statementId: StatementId;
+  readonly institution: string;
+  readonly account: string;
+  readonly period: string;
+  readonly amount: number;
+  readonly timestamp: Timestamp;
+  readonly description: string;
+  readonly fitid: string;
+  readonly groupId: GroupId | null;
+}
+
+/** User annotation on an unmatched reconciliation entity. Document id = `{entityType}_{entityId}`. */
+export interface ReconciliationNote {
+  readonly id: string;
+  readonly entityType: ReconciliationEntityType;
+  readonly entityId: string;
+  readonly classification: ReconciliationClassification;
+  readonly note: string;
+  readonly updatedAt: Timestamp;
+  readonly updatedBy: string;
+  readonly groupId: GroupId | null;
 }
 
 function validateReimbursementRange(n: number): void {
@@ -241,6 +279,7 @@ export async function getTransactions(groupId: GroupId | null, email?: string, f
       budget: optionalString(data.budget, "budget") as BudgetId | null,
       timestamp: optionalTimestamp(data.timestamp, "timestamp"),
       statementId: optionalString(data.statementId, "statementId") as StatementId | null,
+      statementItemId: optionalString(data.statementItemId, "statementItemId") as StatementItemId | null,
       groupId: optionalString(data.groupId, "groupId") as GroupId | null,
       normalizedId: optionalString(data.normalizedId, "normalizedId"),
       // Defaults to true for un-normalized transactions (field may be missing or null)
@@ -288,6 +327,115 @@ export async function updateTransaction(
   const path = nsCollectionPath(NAMESPACE, "transactions");
   const ref = doc(db, path, txnId);
   await updateDoc(ref, fields);
+}
+
+export async function updateTransactionStatementItemLink(
+  txnId: TransactionId,
+  statementItemId: StatementItemId | null,
+): Promise<void> {
+  requireDocId(txnId, "transaction");
+  const path = nsCollectionPath(NAMESPACE, "transactions");
+  const ref = doc(db, path, txnId);
+  await updateDoc(ref, { statementItemId });
+}
+
+export async function getStatementItems(groupId: null): Promise<StatementItem[]>;
+export async function getStatementItems(groupId: GroupId, email: string): Promise<StatementItem[]>;
+export async function getStatementItems(groupId: GroupId | null, email?: string): Promise<StatementItem[]> {
+  const docs = await queryGroupCollection("statement-items", "seed-", groupId, email);
+  return docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      statementItemId: requireString(data.statementItemId, "statementItemId") as StatementItemId,
+      statementId: requireString(data.statementId, "statementId") as StatementId,
+      institution: requireString(data.institution, "institution"),
+      account: requireString(data.account, "account"),
+      period: requireString(data.period, "period"),
+      amount: requireNumber(data.amount, "amount"),
+      timestamp: requireTimestamp(data.timestamp, "timestamp"),
+      description: requireString(data.description, "description"),
+      fitid: requireString(data.fitid, "fitid"),
+      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
+    };
+  });
+}
+
+function requireReconciliationClassification(value: unknown): ReconciliationClassification {
+  if (value === "timing" || value === "missing_entry" || value === "discrepancy") return value;
+  throw new DataIntegrityError(`Expected classification to be timing | missing_entry | discrepancy, got ${value}`);
+}
+
+function requireReconciliationEntityType(value: unknown): ReconciliationEntityType {
+  if (value === "transaction" || value === "statementItem") return value;
+  throw new DataIntegrityError(`Expected entityType to be transaction | statementItem, got ${value}`);
+}
+
+export function reconciliationNoteDocId(
+  entityType: ReconciliationEntityType,
+  entityId: string,
+): string {
+  if (!entityId || entityId.includes("/")) throw new Error(`Invalid reconciliation entity id: ${entityId}`);
+  return `${entityType}_${entityId}`;
+}
+
+export async function getReconciliationNotes(groupId: null): Promise<ReconciliationNote[]>;
+export async function getReconciliationNotes(groupId: GroupId, email: string): Promise<ReconciliationNote[]>;
+export async function getReconciliationNotes(groupId: GroupId | null, email?: string): Promise<ReconciliationNote[]> {
+  const docs = await queryGroupCollection("reconciliation-notes", "seed-", groupId, email);
+  return docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      entityType: requireReconciliationEntityType(data.entityType),
+      entityId: requireString(data.entityId, "entityId"),
+      classification: requireReconciliationClassification(data.classification),
+      note: typeof data.note === "string" ? data.note : "",
+      updatedAt: requireTimestamp(data.updatedAt, "updatedAt"),
+      updatedBy: requireString(data.updatedBy, "updatedBy"),
+      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
+    };
+  });
+}
+
+export async function upsertReconciliationNote(
+  groupId: GroupId,
+  memberEmails: string[],
+  updatedBy: string,
+  fields: {
+    entityType: ReconciliationEntityType;
+    entityId: string;
+    classification: ReconciliationClassification;
+    note: string;
+  },
+): Promise<string> {
+  requireReconciliationEntityType(fields.entityType);
+  requireReconciliationClassification(fields.classification);
+  if (!fields.entityId) throw new Error("entityId is required");
+  const id = reconciliationNoteDocId(fields.entityType, fields.entityId);
+  const path = nsCollectionPath(NAMESPACE, "reconciliation-notes");
+  const ref = doc(db, path, id);
+  await setDoc(ref, {
+    entityType: fields.entityType,
+    entityId: fields.entityId,
+    classification: fields.classification,
+    note: fields.note,
+    updatedAt: Timestamp.now(),
+    updatedBy,
+    groupId,
+    memberEmails,
+  });
+  return id;
+}
+
+export async function deleteReconciliationNote(
+  entityType: ReconciliationEntityType,
+  entityId: string,
+): Promise<void> {
+  const id = reconciliationNoteDocId(entityType, entityId);
+  const path = nsCollectionPath(NAMESPACE, "reconciliation-notes");
+  const ref = doc(db, path, id);
+  await deleteDoc(ref);
 }
 
 export async function getBudgets(groupId: null): Promise<Budget[]>;

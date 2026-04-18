@@ -7,6 +7,8 @@ import type {
   RuleSeedData,
   NormalizationRuleSeedData,
   StatementSeedData,
+  StatementItemSeedData,
+  ReconciliationNoteSeedData,
   WeeklyAggregateSeedData,
 } from "../seeds/firestore.js";
 import type {
@@ -18,6 +20,8 @@ import type {
   SeedRule,
   SeedNormalizationRule,
   SeedStatement,
+  SeedStatementItem,
+  SeedReconciliationNote,
   SeedWeeklyAggregate,
 } from "virtual:budget-seed-data";
 
@@ -88,6 +92,7 @@ export function serializeSeedData(): SeedData {
       budget: d.budget ?? null,
       timestampMs: toMs(d.timestamp),
       statementId: d.statementId ?? null,
+      statementItemId: d.statementItemId ?? null,
       normalizedId: d.normalizedId,
       normalizedPrimary: d.normalizedPrimary,
       normalizedDescription: d.normalizedDescription,
@@ -184,6 +189,41 @@ export function serializeSeedData(): SeedData {
     };
   });
 
+  const statementItems: SeedStatementItem[] = findCollection("seed-statement-items").map(({ id, data: raw }) => {
+    const d = raw as unknown as StatementItemSeedData;
+    return {
+      id,
+      statementItemId: requireString(d.statementItemId, "statementItemId"),
+      statementId: requireString(d.statementId, "statementId"),
+      institution: requireString(d.institution, "institution"),
+      account: requireString(d.account, "account"),
+      period: requireString(d.period, "period"),
+      amount: requireNumber(d.amount, "amount"),
+      timestampMs: requireMs(d.timestamp, "timestamp"),
+      description: requireString(d.description, "description"),
+      fitid: requireString(d.fitid, "fitid"),
+    };
+  });
+
+  const reconciliationNotes: SeedReconciliationNote[] = findCollection("seed-reconciliation-notes").map(({ id, data: raw }) => {
+    const d = raw as unknown as ReconciliationNoteSeedData;
+    const entityType = d.entityType === "transaction" || d.entityType === "statementItem"
+      ? d.entityType
+      : (() => { throw new Error(`Invalid reconciliation entityType: ${d.entityType}`); })();
+    const classification = d.classification === "timing" || d.classification === "missing_entry" || d.classification === "discrepancy"
+      ? d.classification
+      : (() => { throw new Error(`Invalid reconciliation classification: ${d.classification}`); })();
+    return {
+      id,
+      entityType,
+      entityId: requireString(d.entityId, "entityId"),
+      classification,
+      note: requireString(d.note, "note"),
+      updatedAtMs: requireMs(d.updatedAt, "updatedAt"),
+      updatedBy: requireString(d.updatedBy, "updatedBy"),
+    };
+  });
+
   return {
     transactions,
     budgets,
@@ -191,6 +231,8 @@ export function serializeSeedData(): SeedData {
     rules,
     normalizationRules,
     statements,
+    statementItems,
+    reconciliationNotes,
     weeklyAggregates,
   };
 }

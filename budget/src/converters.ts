@@ -3,6 +3,8 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type {
   Transaction,
   Statement,
+  StatementItem,
+  ReconciliationNote,
   Budget,
   BudgetPeriod,
   Rule,
@@ -10,6 +12,7 @@ import type {
   WeeklyAggregate,
   TransactionId,
   StatementId,
+  StatementItemId,
   BudgetId,
   BudgetPeriodId,
   RuleId,
@@ -17,7 +20,7 @@ import type {
   GroupId,
   AllowancePeriod,
 } from "./firestore.js";
-import type { IdbTransaction, IdbStatement, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
+import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
 
 export function toTransaction(row: IdbTransaction): Transaction {
   return {
@@ -32,6 +35,7 @@ export function toTransaction(row: IdbTransaction): Transaction {
     budget: (row.budget ?? null) as BudgetId | null,
     timestamp: row.timestampMs != null ? Timestamp.fromMillis(row.timestampMs) : null,
     statementId: (row.statementId ?? null) as StatementId | null,
+    statementItemId: (row.statementItemId ?? null) as StatementItemId | null,
     groupId: null as GroupId | null,
     normalizedId: row.normalizedId,
     normalizedPrimary: row.normalizedPrimary,
@@ -88,6 +92,35 @@ export function toRule(row: IdbRule): Rule {
     maxAmount: row.maxAmount,
     excludeCategory: row.excludeCategory,
     matchCategory: row.matchCategory,
+    groupId: null as GroupId | null,
+  };
+}
+
+export function toStatementItem(row: IdbStatementItem): StatementItem {
+  return {
+    id: row.id,
+    statementItemId: row.statementItemId as StatementItemId,
+    statementId: row.statementId as StatementId,
+    institution: row.institution,
+    account: row.account,
+    period: row.period,
+    amount: row.amount,
+    timestamp: Timestamp.fromMillis(row.timestampMs),
+    description: row.description,
+    fitid: row.fitid,
+    groupId: null as GroupId | null,
+  };
+}
+
+export function toReconciliationNote(row: IdbReconciliationNote): ReconciliationNote {
+  return {
+    id: row.id,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    classification: row.classification,
+    note: row.note,
+    updatedAt: Timestamp.fromMillis(row.updatedAtMs),
+    updatedBy: row.updatedBy,
     groupId: null as GroupId | null,
   };
 }
