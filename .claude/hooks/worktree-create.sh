@@ -60,7 +60,7 @@ direnv exec "$NEW_PATH" true >&2 || { echo "[worktree-create] ERROR: direnv exec
 
 # Branch regex above guarantees a leading <issue-num>- prefix.
 ISSUE_NUM="${BRANCH%%-*}"
-(cd "$NEW_PATH" && "$PROJECT_ROOT/.claude/skills/ref-pr-workflow/scripts/sync-issue-context" "$ISSUE_NUM") >&2 \
+(cd "$NEW_PATH" && ".claude/skills/ref-pr-workflow/scripts/sync-issue-context" "$ISSUE_NUM") >&2 \
   || { echo "[worktree-create] ERROR: sync-issue-context failed for issue $ISSUE_NUM" >&2; exit 1; }
 
 echo "$NEW_PATH"
