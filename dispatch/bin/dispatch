@@ -83,30 +83,30 @@ main() {
   trap on_int INT
   trap cleanup EXIT
 
-  # Launch Claude with --worktree — the WorktreeCreate hook handles physical
-  # creation, branch resolution, direnv. Claude inherits the dispatcher's TTY.
+  # Enable job control so fg can make Claude the terminal foreground process.
+  # Without this, Claude detects it is backgrounded (tcgetpgrp mismatch) and
+  # buffers all output until exit.
+  set -m
+
   local CLAUDE_ARGS=(-w "$BRANCH")
   [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
   CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}")
   claude "${CLAUDE_ARGS[@]}" &
   CLAUDE_PID=$!
 
-  # Wait for the state file to appear. phase-complete seeds it on first write,
-  # so the poll terminates as soon as the phase signal begins. Poll every
-  # second while Claude is still running. No timeout.
-  while [[ ! -f "$STATE_FILE" ]] && kill -0 "$CLAUDE_PID" 2>/dev/null; do
-    sleep 1
-  done
-
-  if [[ ! -f "$STATE_FILE" ]]; then
-    # Claude exited before producing a state file — nothing to watch.
-    local EARLY_EXIT=0
-    wait "$CLAUDE_PID" || EARLY_EXIT=$?
-    exit "$EARLY_EXIT"
-  fi
-
-  # Background watcher: SIGTERM Claude when phase_signal flips to complete.
+  # Background watcher: polls until the state file appears, then SIGTERMs Claude
+  # when phase_signal flips to complete. Handles both phases internally so Claude
+  # can be brought to the foreground immediately after launch.
   (
+    while [[ ! -f "$STATE_FILE" ]]; do
+      kill -0 "$CLAUDE_PID" 2>/dev/null || exit 0
+      sleep 1
+    done
+    # One-shot race-check: phase-complete may have written before fswatch attaches.
+    if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
+      kill -TERM "$CLAUDE_PID" 2>/dev/null || true
+      exit 0
+    fi
     fswatch "$STATE_FILE" | while IFS= read -r _; do
       if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
         kill -TERM "$CLAUDE_PID" 2>/dev/null || true
@@ -116,16 +116,10 @@ main() {
   ) &
   WATCHER_PID=$!
 
-  # One-shot race-check: phase-complete may have fully written the signal
-  # between the poll terminating and fswatch attaching. Without this, fswatch
-  # has no further events to consume and the session hangs until the user
-  # interrupts.
-  if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
-    kill -TERM "$CLAUDE_PID" 2>/dev/null || true
-  fi
-
+  # Move Claude to the terminal foreground so its output is live.
   local CLAUDE_EXIT=0
-  wait "$CLAUDE_PID" || CLAUDE_EXIT=$?
+  fg %1 2>/dev/null || CLAUDE_EXIT=$?
+  set +m
 
   cleanup
   trap - EXIT
