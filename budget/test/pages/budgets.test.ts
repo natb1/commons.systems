@@ -126,7 +126,9 @@ describe("renderBudgets", () => {
     }));
     expect(html).toContain('class="edit-name"');
     expect(html).toContain("disabled");
-    expect(html).not.toContain('data-budget-id=');
+    // data-budget-id is always emitted on the row element regardless of
+    // authorization so variance hydration can namespace its radio group.
+    expect(html).toContain('data-budget-id="food"');
     expect(html).toContain("Food");
     expect(html).toContain("150");
     expect(html).toContain("None");
@@ -358,11 +360,11 @@ describe("renderBudgets", () => {
         },
       ]),
     }));
-    expect(html).toMatch(/<span [^>]*>\$141\.67<\/span>/);
+    expect(html).toContain("$141.67");
     expect(html).not.toMatch(/<input[^>]*\$141\.67/);
   });
 
-  it("surplus diff renders in green", async () => {
+  it("surplus diff renders with the favorable class", async () => {
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
       getBudgetPeriods: vi.fn().mockResolvedValue([
@@ -378,10 +380,10 @@ describe("renderBudgets", () => {
         },
       ]),
     }));
-    expect(html).toContain('color: #4caf50');
+    expect(html).toContain('class="variance-favorable"');
   });
 
-  it("deficit diff renders in red", async () => {
+  it("deficit diff renders with the unfavorable class", async () => {
     // Two weeks: latest (w2) excluded. Completed w1 total=2400 → avg12=2400/12=200 > allowance=150 → deficit
     const html = await renderBudgets(seedOptions({
       getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
@@ -408,7 +410,51 @@ describe("renderBudgets", () => {
         },
       ]),
     }));
-    expect(html).toContain('color: var(--error, #c00)');
+    expect(html).toContain('class="variance-unfavorable"');
+  });
+
+  it("zero diff renders as favorable (equality case)", async () => {
+    // avg12 = 1800/12 = 150 == allowance=150 → diff = 0 → favorable.
+    // w2 is the excluded latest week; w1 contributes 1800.
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 1800,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 0,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('class="variance-favorable"');
+    expect(html).toContain("▼");
+    expect(html).toContain('aria-label="favorable"');
+  });
+
+  it("renders zero-period budget with data-budget-id and empty variance windows (anonymous-user path)", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([]),
+    }));
+    expect(html).toContain('class="expand-row budget-row"');
+    expect(html).toContain('data-budget-id="food"');
+    expect(html).toContain('data-window12="[]"');
+    expect(html).toContain('data-window52="[]"');
   });
 
   it("renders overrides table when budgets have overrides", async () => {
@@ -476,5 +522,123 @@ describe("renderBudgets", () => {
       ]),
     }));
     expect(html).toContain("disabled");
+  });
+
+  it("renders each budget row as an expand-row with variance data attributes", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget()]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: { "Food:Groceries": 100 },
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 50,
+          count: 1,
+          categoryBreakdown: { "Food:Groceries": 50 },
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('class="expand-row budget-row"');
+    expect(html).toContain('class="budget-variance"');
+    expect(html).toContain('data-weekly-allowance=');
+    expect(html).toContain('data-window12=');
+    expect(html).toContain('data-window52=');
+  });
+
+  it("favorable diff cell prefixes amount with a down arrow", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('aria-label="favorable"');
+    expect(html).toContain("▼");
+  });
+
+  it("unfavorable diff cell prefixes amount with an up arrow", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 2400,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 0,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    expect(html).toContain('aria-label="unfavorable"');
+    expect(html).toContain("▲");
+  });
+
+  it("variance data-window12 contains serialized category rows", async () => {
+    const html = await renderBudgets(seedOptions({
+      getBudgets: vi.fn().mockResolvedValue([budget({ id: "food" as Budget["id"], allowance: 150 })]),
+      getBudgetPeriods: vi.fn().mockResolvedValue([
+        {
+          id: "food-w1",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-06")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-13")),
+          total: 100,
+          count: 1,
+          categoryBreakdown: { "Food:Groceries": 100 },
+          groupId: null,
+        },
+        {
+          id: "food-w2",
+          budgetId: "food",
+          periodStart: Timestamp.fromDate(new Date("2025-01-13")),
+          periodEnd: Timestamp.fromDate(new Date("2025-01-20")),
+          total: 0,
+          count: 1,
+          categoryBreakdown: {},
+          groupId: null,
+        },
+      ]),
+    }));
+    const match = html.match(/data-window12="([^"]*)"/);
+    expect(match).not.toBeNull();
+    const unescaped = match![1].replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+    const parsed = JSON.parse(unescaped);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed[0].category).toBe("Food:Groceries");
+    expect(parsed[0].kind).toBe("category");
   });
 });

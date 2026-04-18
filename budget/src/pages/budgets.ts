@@ -1,8 +1,9 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import { type Budget, type BudgetOverride, type BudgetPeriod, type Rollover, type AllowancePeriod, type SerializedBudgetPeriod, type WeeklyAggregate } from "../firestore.js";
-import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetDiffs, computePerBudgetTrend, weeklyEquivalent, periodEquivalent, type PerBudgetPoint, type PerBudgetStats } from "../balance.js";
+import { computeAverageWeeklyCredits, computeAverageWeeklySpending, computeBudgetStatsAndVariances, computePerBudgetTrend, isFavorableDiff, weeklyEquivalent, periodEquivalent, type CategoryActualRow, type PerBudgetCategoryVariance, type PerBudgetPoint, type PerBudgetStats } from "../balance.js";
 import { formatCurrency } from "../format.js";
 import { toISODate } from "./hydrate-util.js";
 
@@ -36,41 +37,76 @@ function renderRolloverCell(budget: Budget, editable: boolean): string {
   return `<select class="edit-rollover" aria-label="Rollover"${dis}>${options}</select>`;
 }
 
-function diffStyle(value: number): string {
-  return value >= 0 ? 'style="color: #4caf50"' : 'style="color: var(--error, #c00)"';
+function renderDiffCell(value: number): string {
+  const favorable = isFavorableDiff(value);
+  const arrow = favorable ? "▼" : "▲";
+  const label = favorable ? "favorable" : "unfavorable";
+  const cls = favorable ? "variance-favorable" : "variance-unfavorable";
+  return `<span class="${cls}"><span class="variance-indicator" aria-label="${label}">${arrow}</span> ${formatCurrency(value)}</span>`;
 }
 
-function renderRow(budget: Budget, editable: boolean, stats: PerBudgetStats | undefined): string {
-  const idAttr = editable ? ` data-budget-id="${escapeHtml(budget.id)}"` : "";
+function serializeCategoryRows(rows: readonly CategoryActualRow[]): string {
+  return escapeHtml(JSON.stringify(rows));
+}
+
+function renderRow(
+  budget: Budget,
+  editable: boolean,
+  stats: PerBudgetStats | undefined,
+  variance: PerBudgetCategoryVariance,
+): string {
+  // data-budget-id is needed on every row regardless of edit permission so the
+  // variance hydrator can scope the window-toggle radio-group name to the budget.
+  const budgetIdAttr = ` data-budget-id="${escapeHtml(budget.id)}"`;
   const dis = editable ? "" : " disabled";
   const nameCell = `<input type="text" class="edit-name" value="${escapeHtml(budget.name)}" aria-label="Name"${dis}>`;
   const allowanceCell = `<input type="number" class="edit-allowance" value="${escapeHtml(String(budget.allowance))}" min="0" aria-label="Allowance"${dis}>`;
   const periodCell = renderPeriodCell(budget, editable);
   const rolloverCell = renderRolloverCell(budget, editable);
-  const diff12 = stats ? `<span ${diffStyle(stats.diff.diff12)}>${formatCurrency(stats.diff.diff12)}</span>` : `<span></span>`;
-  const diff52 = stats ? `<span ${diffStyle(stats.diff.diff52)}>${formatCurrency(stats.diff.diff52)}</span>` : `<span></span>`;
+  const diff12 = stats ? renderDiffCell(stats.diff.diff12) : `<span></span>`;
+  const diff52 = stats ? renderDiffCell(stats.diff.diff52) : `<span></span>`;
   const avg12 = stats ? formatCurrency(periodEquivalent(stats.avg.avg12, budget.allowancePeriod)) : "$0";
   const avg52 = stats ? formatCurrency(periodEquivalent(stats.avg.avg52, budget.allowancePeriod)) : "$0";
 
-  return `<div class="budget-row"${idAttr}>
-    <span>${nameCell}</span>
-    <span>${allowanceCell}</span>
-    <span>${periodCell}</span>
-    <span>${diff12}</span>
-    <span>${diff52}</span>
-    <span>${rolloverCell}</span>
-    <span class="avg-col">${avg12}</span>
-    <span class="avg-col">${avg52}</span>
-  </div>`;
+  const weeklyAllow = weeklyEquivalent(budget.allowance, budget.allowancePeriod);
+  const varianceAttrs =
+    ` data-weekly-allowance="${escapeHtml(String(weeklyAllow))}"` +
+    ` data-window12="${serializeCategoryRows(variance[12])}"` +
+    ` data-window52="${serializeCategoryRows(variance[52])}"`;
+
+  return `<details class="expand-row budget-row"${budgetIdAttr}>
+    <summary>
+      <div class="expand-summary budget-summary-content">
+        <span>${nameCell}</span>
+        <span>${allowanceCell}</span>
+        <span>${periodCell}</span>
+        <span>${diff12}</span>
+        <span>${diff52}</span>
+        <span>${rolloverCell}</span>
+        <span class="avg-col">${avg12}</span>
+        <span class="avg-col">${avg52}</span>
+      </div>
+    </summary>
+    <div class="budget-variance"${varianceAttrs}></div>
+  </details>`;
 }
 
-function renderBudgetTable(budgets: Budget[], authorized: boolean, stats: Map<Budget["id"], PerBudgetStats>): string {
+function renderBudgetTable(
+  budgets: Budget[],
+  authorized: boolean,
+  stats: Map<Budget["id"], PerBudgetStats>,
+  variances: Map<Budget["id"], PerBudgetCategoryVariance>,
+): string {
   if (budgets.length === 0) {
     return "<p>No budgets found.</p>";
   }
 
   const sorted = [...budgets].sort((a, b) => a.name.localeCompare(b.name));
-  const rows = sorted.map(b => renderRow(b, authorized, stats.get(b.id))).join("\n");
+  const rows = sorted.map(b => {
+    const variance = variances.get(b.id);
+    if (!variance) throw new DataIntegrityError(`Missing variance for budget ${b.id}`);
+    return renderRow(b, authorized, stats.get(b.id), variance);
+  }).join("\n");
 
   return `<div id="budgets-table">
       <div class="budget-header">
@@ -226,8 +262,8 @@ export function renderBudgetsContent(
   const metricsHtml = renderMetrics(averageWeeklyCredits, totalWeeklyBudget, averageWeeklySpending);
   const perBudgetTrend = computePerBudgetTrend(budgets, periods, weeklyAggregates);
   const chartHtml = renderChartContainer(budgets, periods, metricsHtml, perBudgetTrend, averageWeeklyCredits);
-  const budgetStats = computeBudgetDiffs(budgets, periods);
-  const tableHtml = renderBudgetTable(budgets, authorized, budgetStats);
+  const { stats: budgetStats, variances: budgetVariances } = computeBudgetStatsAndVariances(budgets, periods);
+  const tableHtml = renderBudgetTable(budgets, authorized, budgetStats, budgetVariances);
   const overridesHtml = budgets.length > 0 ? renderOverridesTable(budgets, authorized) : "";
   const noticeHtml = renderPageNotices({ authorized }, "budgets");
 

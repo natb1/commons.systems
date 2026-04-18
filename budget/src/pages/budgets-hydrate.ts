@@ -3,12 +3,14 @@ import { type Budget, type BudgetId, type BudgetOverride, type BudgetPeriod, typ
 import { getActiveDataSource } from "../active-data-source.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { escapeHtml } from "@commons-systems/htmlutil";
-import { showInputError, handleSaveError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, makeDebounced, toISODate } from "./hydrate-util.js";
+import { showInputError, handleSaveError, handleActionError, deserializeJSON, attachScrollSync, wireChartDatePicker, wireChartResize, makeDebounced, toISODate } from "./hydrate-util.js";
 import { renderBudgetChart } from "./budgets-chart.js";
 import { renderBudgetPieChart } from "./budgets-pie-chart.js";
 import { renderPerBudgetAreaChart } from "./budgets-area-chart.js";
+import { renderVarianceWaterfall } from "./budgets-waterfall-chart.js";
 import { computePanelWidth, filterToWindow } from "./chart-util.js";
-import { toSundayEntry, computeRollingAverage, type PerBudgetPoint } from "../balance.js";
+import { toSundayEntry, computeRollingAverage, type CategoryActualRow, type PerBudgetCategoryVariance, type PerBudgetPoint, type VarianceWindow } from "../balance.js";
+import { formatCurrency } from "../format.js";
 import type { SerializedBudget, SerializedBudgetOverride } from "./budgets.js";
 
 function rowBudgetId(el: HTMLElement): BudgetId | null {
@@ -17,7 +19,186 @@ function rowBudgetId(el: HTMLElement): BudgetId | null {
   return (row.dataset.budgetId ?? null) as BudgetId | null;
 }
 
+function deserializeCategoryRows(raw: string, field: string): CategoryActualRow[] {
+  const parsed = deserializeJSON(raw, field);
+  if (!Array.isArray(parsed)) throw new DataIntegrityError(`${field} is not an array`);
+  const result: CategoryActualRow[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const el = parsed[i];
+    if (typeof el !== "object" || el === null) {
+      throw new DataIntegrityError(`${field}[${i}] is not an object`);
+    }
+    const row = el as Record<string, unknown>;
+    if (typeof row.avgWeekly !== "number" || !Number.isFinite(row.avgWeekly)) {
+      throw new DataIntegrityError(`${field}[${i}].avgWeekly must be a finite number`);
+    }
+    if (row.kind === "category") {
+      if (typeof row.category !== "string") {
+        throw new DataIntegrityError(`${field}[${i}].category must be a string`);
+      }
+      result.push({ kind: "category", category: row.category, avgWeekly: row.avgWeekly });
+    } else if (row.kind === "other") {
+      if (typeof row.groupedCount !== "number" || !Number.isInteger(row.groupedCount) || row.groupedCount < 1) {
+        throw new DataIntegrityError(`${field}[${i}].groupedCount must be a positive integer`);
+      }
+      result.push({ kind: "other", avgWeekly: row.avgWeekly, groupedCount: row.groupedCount });
+    } else {
+      throw new DataIntegrityError(`${field}[${i}].kind must be "category" or "other"`);
+    }
+  }
+  return result;
+}
+
+function renderCategoryList(list: HTMLElement, categories: readonly [CategoryActualRow, ...CategoryActualRow[]]): void {
+  const absTotal = categories.reduce((s, c) => s + Math.abs(c.avgWeekly), 0);
+  const dl = document.createElement("dl");
+  dl.className = "variance-breakdown";
+  for (const c of categories) {
+    const dt = document.createElement("dt");
+    if (c.kind === "other") {
+      dt.textContent = "Other";
+      dt.classList.add("variance-other");
+    } else {
+      dt.textContent = c.category;
+    }
+    const dd = document.createElement("dd");
+    const pct = (Math.abs(c.avgWeekly) / absTotal) * 100;
+    dd.textContent = `${formatCurrency(c.avgWeekly)}/week · ${pct.toFixed(1)}%`;
+    dl.append(dt, dd);
+  }
+  list.replaceChildren(dl);
+}
+
+function buildWindowToggle(budgetId: string): HTMLFieldSetElement {
+  const fieldset = document.createElement("fieldset");
+  fieldset.className = "variance-toggle";
+
+  const legend = document.createElement("legend");
+  legend.textContent = "Window";
+  fieldset.appendChild(legend);
+
+  // Radio name is budget-scoped so two simultaneously-expanded rows don't
+  // share a document-wide radio group (which would cause toggling one row to
+  // uncheck the other's radio).
+  const radioName = `variance-window-${budgetId}`;
+  for (const value of ["12", "52"] as const) {
+    const label = document.createElement("label");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = radioName;
+    radio.value = value;
+    if (value === "12") radio.checked = true;
+    label.append(radio, document.createTextNode(` ${value}w`));
+    fieldset.appendChild(label);
+  }
+  return fieldset;
+}
+
+function renderVarianceDetails(
+  container: HTMLElement,
+  budgetId: string,
+  weeklyAllowance: number,
+  rowsByWindow: PerBudgetCategoryVariance,
+): void {
+  const wrapper = document.createElement("div");
+  wrapper.className = "variance-wrapper";
+
+  const toggle = buildWindowToggle(budgetId);
+
+  const chart = document.createElement("div");
+  chart.className = "variance-chart";
+
+  const list = document.createElement("div");
+
+  wrapper.append(toggle, chart, list);
+  container.replaceChildren(wrapper);
+
+  function draw(win: VarianceWindow): void {
+    const categories = rowsByWindow[win];
+    if (categories.length === 0) {
+      chart.replaceChildren();
+      const msg = document.createElement("p");
+      msg.className = "variance-empty";
+      msg.textContent = "No category data in this window.";
+      list.replaceChildren(msg);
+      return;
+    }
+    const nonEmpty = categories as readonly [CategoryActualRow, ...CategoryActualRow[]];
+    const absTotal = nonEmpty.reduce((s, c) => s + Math.abs(c.avgWeekly), 0);
+    if (absTotal === 0) {
+      throw new DataIntegrityError(`Category rows for budget ${budgetId} (window ${win}) sum to zero; expected an empty array in that case`);
+    }
+    renderVarianceWaterfall(chart, { weeklyAllowance, categories: nonEmpty }, win);
+    renderCategoryList(list, nonEmpty);
+  }
+
+  toggle.addEventListener("change", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    try {
+      if (target.value !== "12" && target.value !== "52") {
+        throw new DataIntegrityError(`Unexpected variance-window value: ${target.value}`);
+      }
+      const value: VarianceWindow = target.value === "52" ? 52 : 12;
+      draw(value);
+    } catch (error) {
+      handleActionError(target, error, "variance-window-change");
+    }
+  });
+
+  // Default window must match the radio marked `checked` in buildWindowToggle.
+  try {
+    draw(12);
+  } catch (error) {
+    container.dataset.hydrated = "error";
+    throw error;
+  }
+}
+
+function hydrateVarianceDetails(row: HTMLDetailsElement): void {
+  const varianceEl = row.querySelector<HTMLElement>(".budget-variance");
+  if (!varianceEl) throw new DataIntegrityError(".budget-variance element missing from expanded budget row");
+  if (varianceEl.dataset.hydrated === "true" || varianceEl.dataset.hydrated === "error") return;
+
+  const budgetId = row.dataset.budgetId;
+  if (!budgetId) throw new DataIntegrityError("budget-row missing data-budget-id");
+
+  const allowRaw = varianceEl.dataset.weeklyAllowance;
+  const w12Raw = varianceEl.dataset.window12;
+  const w52Raw = varianceEl.dataset.window52;
+  if (allowRaw === undefined || w12Raw === undefined || w52Raw === undefined) {
+    throw new DataIntegrityError("budget-variance missing required data attributes");
+  }
+  const weeklyAllowance = Number(allowRaw);
+  if (!Number.isFinite(weeklyAllowance)) {
+    throw new DataIntegrityError(`Invalid data-weekly-allowance: ${allowRaw}`);
+  }
+  const rowsByWindow: PerBudgetCategoryVariance = {
+    12: deserializeCategoryRows(w12Raw, "data-window12"),
+    52: deserializeCategoryRows(w52Raw, "data-window52"),
+  };
+
+  renderVarianceDetails(varianceEl, budgetId, weeklyAllowance, rowsByWindow);
+  varianceEl.dataset.hydrated = "true";
+}
+
 export function hydrateBudgetTable(container: HTMLElement): void {
+  // Capture-phase delegation lets a single listener handle every expanded row
+  // before any row-level handlers fire.
+  container.addEventListener("toggle", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLDetailsElement)) return;
+    if (!target.classList.contains("budget-row")) return;
+    if (!target.open) return;
+    try {
+      hydrateVarianceDetails(target);
+    } catch (error) {
+      const varianceEl = target.querySelector<HTMLElement>(".budget-variance");
+      if (varianceEl) varianceEl.dataset.hydrated = "error";
+      handleActionError(varianceEl ?? target, error, "variance-hydrate");
+    }
+  }, true);
+
   container.addEventListener("blur", async (e) => {
     const target = e.target;
     if (!(target instanceof HTMLInputElement)) return;

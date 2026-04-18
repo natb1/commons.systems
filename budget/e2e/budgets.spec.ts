@@ -108,4 +108,50 @@ test.describe("budgets", () => {
     const hasCurrency = rowTexts.some((text) => text.includes("$"));
     expect(hasCurrency).toBe(true);
   });
+
+  test("favorable/unfavorable indicator visible in diff cells", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#budgets-table")).toBeVisible();
+    const indicators = page.locator("#budgets-table .variance-indicator");
+    await expect(indicators.first()).toBeVisible();
+    const texts = await indicators.allTextContents();
+    const hasArrow = texts.some((t) => t.includes("▲") || t.includes("▼"));
+    expect(hasArrow).toBe(true);
+  });
+
+  test("budget row expands to show variance details", async ({ page }) => {
+    await page.goto("/");
+    const row = page.locator("#budgets-table details.budget-row").first();
+    await expect(row).toBeVisible();
+    await row.evaluate((el) => {
+      if (el instanceof HTMLDetailsElement) el.open = true;
+    });
+    await expect(row).toHaveAttribute("open", "");
+    const varianceEl = row.locator(".budget-variance");
+    await expect(varianceEl).toBeVisible();
+    await expect(varianceEl.locator("svg").first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test("variance window toggle switches between 12w and 52w", async ({ page }) => {
+    await page.goto("/");
+    const row = page.locator("#budgets-table details.budget-row").first();
+    await row.evaluate((el) => {
+      if (el instanceof HTMLDetailsElement) el.open = true;
+    });
+    const varianceEl = row.locator(".budget-variance");
+    await expect(varianceEl.locator("svg").first()).toBeVisible({ timeout: 5000 });
+    const ariaBefore = await varianceEl.locator("svg").first().getAttribute("aria-label");
+    expect(ariaBefore).toContain("12");
+    await row.locator('.variance-toggle input[value="52"]').check();
+    await page.waitForFunction(
+      () => {
+        const svg = document
+          .querySelector("#budgets-table details.budget-row .variance-chart svg");
+        const label = svg?.getAttribute("aria-label") ?? "";
+        return label.includes("52");
+      },
+      null,
+      { timeout: 5000 },
+    );
+  });
 });
