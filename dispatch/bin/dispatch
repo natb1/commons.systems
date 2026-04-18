@@ -87,8 +87,9 @@ main() {
   claude -w "$BRANCH" "/dispatch-implement #${ISSUE_NUM}" &
   CLAUDE_PID=$!
 
-  # Wait for the skill's first sync-issue call to create the state file.
-  # Poll every second while Claude is still running. No timeout.
+  # Wait for the state file to appear. phase-complete seeds it on first write,
+  # so the poll terminates as soon as the phase signal begins. Poll every
+  # second while Claude is still running. No timeout.
   while [[ ! -f "$STATE_FILE" ]] && kill -0 "$CLAUDE_PID" 2>/dev/null; do
     sleep 1
   done
@@ -110,6 +111,14 @@ main() {
     done
   ) &
   WATCHER_PID=$!
+
+  # One-shot race-check: phase-complete may have fully written the signal
+  # between the poll terminating and fswatch attaching. Without this, fswatch
+  # has no further events to consume and the session hangs until the user
+  # interrupts.
+  if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
+    kill -TERM "$CLAUDE_PID" 2>/dev/null || true
+  fi
 
   local CLAUDE_EXIT=0
   wait "$CLAUDE_PID" || CLAUDE_EXIT=$?
