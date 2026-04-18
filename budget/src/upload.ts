@@ -9,6 +9,7 @@ import type {
   WeeklyAggregate,
   TransactionId,
   StatementId,
+  StatementItemId,
   BudgetId,
   BudgetPeriodId,
   RuleId,
@@ -49,6 +50,7 @@ interface RawTransaction {
   amount: number;
   timestamp: string;
   statementId: string;
+  statementItemId?: string | null;
   category: string;
   budget: string | null;
   note: string;
@@ -231,6 +233,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
     budget: (t.budget || null) as BudgetId | null,
     timestamp: t.timestamp ? parseTimestamp(t.timestamp, "transaction.timestamp") : null,
     statementId: (t.statementId || null) as StatementId | null,
+    statementItemId: (t.statementItemId || null) as StatementItemId | null,
     groupId: null as GroupId | null,
     normalizedId: t.normalizedId || null,
     normalizedPrimary: t.normalizedPrimary !== false,
@@ -355,6 +358,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       budget: t.budget,
       timestampMs: t.timestamp?.toMillis() ?? null,
       statementId: t.statementId,
+      statementItemId: t.statementItemId ?? null,
       normalizedId: t.normalizedId,
       normalizedPrimary: t.normalizedPrimary,
       normalizedDescription: t.normalizedDescription,
@@ -411,6 +415,8 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       lastTransactionDateMs: s.lastTransactionDate?.toMillis() ?? null,
       virtual: s.virtual,
     })),
+    statementItems: [],
+    reconciliationNotes: [],
     weeklyAggregates: parsed.weeklyAggregates.map((a) => ({
       id: a.id,
       weekStartMs: a.weekStart.toMillis(),

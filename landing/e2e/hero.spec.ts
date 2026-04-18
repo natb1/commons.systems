@@ -10,7 +10,7 @@ test.describe("hero band", () => {
 
     const tagline = page.locator(".page > header .tagline");
     await expect(tagline).toBeVisible();
-    await expect(tagline).toHaveText("Custom software you can understand.");
+    await expect(tagline).toHaveText("Know the software that runs your business.");
 
     const taglineBox = await tagline.boundingBox();
     const viewport = page.viewportSize();
@@ -25,7 +25,7 @@ test.describe("hero band", () => {
     const tagline = page.locator(".page > header .tagline");
     const innerText = await tagline.evaluate((el) => (el as HTMLElement).innerText);
     const textContent = await tagline.evaluate((el) => el.textContent);
-    expect(innerText).toBe("Custom software you can understand.");
+    expect(innerText).toBe("Know the software that runs your business.");
     expect(innerText).toBe(textContent);
   });
 
@@ -61,10 +61,12 @@ test.describe("hero band", () => {
     expect(order.gridIdx).toBeGreaterThan(order.heroIdx);
   });
 
-  test("hero placeholder content renders", async ({ page }) => {
+  test("hero showcase content renders", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.locator(".landing-hero-band")).toContainText("OPEN-SOURCE");
-    await expect(page.locator(".landing-hero-card")).toHaveCount(3);
+    await expect(page.locator(".landing-hero-band")).toContainText(
+      "Build with commons.systems. Run without.",
+    );
+    await expect(page.locator("a.app-card")).toHaveCount(3);
   });
 });

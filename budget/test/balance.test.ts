@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetDiffs } from "../src/balance";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetDiffs, computePerBudgetCategoryVariance, computeBudgetStatsAndVariances, MATERIALITY_THRESHOLD } from "../src/balance";
 import type { BudgetDiff, PerBudgetStats } from "../src/balance";
 import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
 
@@ -1881,5 +1881,370 @@ describe("computeBudgetDiffs", () => {
     expect(avg.avg12).toBe(0);
     // But within 52w window -> 500/52
     expect(avg.avg52).toBeCloseTo(500 / 52);
+  });
+});
+
+describe("computePerBudgetCategoryVariance", () => {
+  it("returns empty windows when no periods exist", () => {
+    const budgets = [makeBudget({ id: "food" })];
+    const result = computePerBudgetCategoryVariance(budgets, []);
+    expect(result.get("food")).toEqual({ 12: [], 52: [] });
+  });
+
+  it("produces a single category with 100% share when only one category is present", () => {
+    const budget = makeBudget({ id: "food" });
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: { "Food:Groceries": 120 },
+      }),
+      makePeriod({
+        id: "p3", budgetId: "food",
+        periodStart: ts("2025-01-20"), periodEnd: ts("2025-01-27"),
+        categoryBreakdown: { "Food:Groceries": 999 },
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    const w12 = result.get("food")![12];
+    expect(w12).toHaveLength(1);
+    expect(w12[0].kind).toBe("category");
+    if (w12[0].kind === "category") {
+      expect(w12[0].category).toBe("Food:Groceries");
+    }
+    expect(w12[0].avgWeekly).toBeCloseTo(120 / 12);
+  });
+
+  it("groups sub-threshold categories into Other", () => {
+    const budget = makeBudget({ id: "food" });
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: {
+          "Food:Restaurants": 95,
+          "Food:Coffee": 4,
+          "Food:Tip": 1,
+        },
+      }),
+      makePeriod({
+        id: "p2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: {},
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    const w12 = result.get("food")![12];
+    expect(w12).toHaveLength(2);
+    expect(w12[0].kind).toBe("category");
+    if (w12[0].kind === "category") {
+      expect(w12[0].category).toBe("Food:Restaurants");
+    }
+    expect(w12[1].kind).toBe("other");
+    if (w12[1].kind === "other") {
+      expect(w12[1].groupedCount).toBe(2);
+    }
+    expect(w12[1].avgWeekly).toBeCloseTo(5 / 12);
+  });
+
+  it("keeps both categories when each meets the materiality threshold", () => {
+    const budget = makeBudget({ id: "food" });
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: {
+          "Food:Restaurants": 94,
+          "Food:Coffee": 6,
+        },
+      }),
+      makePeriod({
+        id: "p2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: {},
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    const w12 = result.get("food")![12];
+    expect(w12).toHaveLength(2);
+    expect(w12.every(v => v.kind === "category")).toBe(true);
+    const names = w12.map(v => v.kind === "category" ? v.category : "Other");
+    expect(names).toEqual(["Food:Restaurants", "Food:Coffee"]);
+  });
+
+  it("keeps a category whose share is exactly the materiality threshold", () => {
+    const budget = makeBudget({ id: "food" });
+    // Amounts are multiples of weekCount (12) so avgWeekly and absTotal are
+    // exact integers, giving share = 5/100 = 0.05 with no FP drift.
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: { "Food:Restaurants": 1140, "Food:Coffee": 60 },
+      }),
+      makePeriod({
+        id: "p2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: {},
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    const w12 = result.get("food")![12];
+    expect(w12).toHaveLength(2);
+    expect(w12.every(r => r.kind === "category")).toBe(true);
+  });
+
+  it("divides by the window weekCount, matching trailingAvg semantics", () => {
+    const budget = makeBudget({ id: "food" });
+    // Create 15 periods; the last is the excluded latest week, leaving 14 completed weeks.
+    const periods: BudgetPeriod[] = [];
+    for (let i = 0; i < 15; i++) {
+      const start = new Date(Date.UTC(2025, 0, 6 + i * 7));
+      const end = new Date(Date.UTC(2025, 0, 13 + i * 7));
+      periods.push(makePeriod({
+        id: `p${i}`, budgetId: "food",
+        periodStart: ts(start.toISOString()), periodEnd: ts(end.toISOString()),
+        categoryBreakdown: { "Food:Groceries": 120 },
+      }));
+    }
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    const w12 = result.get("food")![12];
+    const w52 = result.get("food")![52];
+    // 12w: most recent 12 completed weeks × 120 = 1440 ÷ 12 = 120
+    expect(w12[0].avgWeekly).toBeCloseTo(1440 / 12);
+    // 52w: all 14 completed weeks × 120 = 1680 ÷ 52
+    expect(w52[0].avgWeekly).toBeCloseTo(1680 / 52);
+  });
+
+  it("excludes the global latest week", () => {
+    const budgets = [
+      makeBudget({ id: "food" }),
+      makeBudget({ id: "fun" }),
+    ];
+    const periods = [
+      makePeriod({
+        id: "f1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: { "Food:Groceries": 100 },
+      }),
+      makePeriod({
+        id: "f2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: { "Food:Groceries": 999 },
+      }),
+      makePeriod({
+        id: "n1", budgetId: "fun",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: { "Fun:Games": 50 },
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance(budgets, periods);
+    expect(result.get("food")![12][0].avgWeekly).toBeCloseTo(100 / 12);
+    expect(result.get("fun")![12]).toEqual([]);
+  });
+
+  it("returns empty when total actual is zero", () => {
+    const budget = makeBudget({ id: "food" });
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: { "Food:Groceries": 0 },
+      }),
+      makePeriod({
+        id: "p2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: {},
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    expect(result.get("food")![12]).toEqual([]);
+  });
+
+  it("separates window12 and window52 when data only exists in the 52w window", () => {
+    const budget = makeBudget({ id: "transport" });
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "transport",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: { "Transport:Gas": 200 },
+      }),
+      makePeriod({
+        id: "p2", budgetId: "transport",
+        periodStart: ts("2025-08-11"), periodEnd: ts("2025-08-18"),
+        categoryBreakdown: { "Transport:Gas": 999 },
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    expect(result.get("transport")![12]).toEqual([]);
+    const w52 = result.get("transport")![52];
+    expect(w52).toHaveLength(1);
+    expect(w52[0].avgWeekly).toBeCloseTo(200 / 52);
+  });
+
+  it("exposes MATERIALITY_THRESHOLD as 5%", () => {
+    expect(MATERIALITY_THRESHOLD).toBe(0.05);
+  });
+
+  it("sorts material categories by avgWeekly descending regardless of insertion order", () => {
+    const budget = makeBudget({ id: "food" });
+    // Insertion order is intentionally non-sorted to confirm the producer sorts the result.
+    // Values A=240, B=960, C=600 over 12 weeks → avgWeekly A=20, B=80, C=50 → sorted descending: B, C, A.
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: { "A": 240, "B": 960, "C": 600 },
+      }),
+      makePeriod({
+        id: "p2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: {},
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    const w12 = result.get("food")![12];
+    const names = w12.map(r => r.kind === "category" ? r.category : "Other");
+    expect(names).toEqual(["B", "C", "A"]);
+  });
+
+  it("places Other last even when its avgWeekly exceeds a material row's", () => {
+    const budget = makeBudget({ id: "food" });
+    // One large material category plus many tiny sub-threshold categories whose
+    // sum exceeds the smallest material row — Other must still be last.
+    const breakdown: Record<string, number> = { Material: 1200 };
+    for (let i = 0; i < 20; i++) breakdown[`tiny${i}`] = 30;
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: breakdown,
+      }),
+      makePeriod({
+        id: "p2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: {},
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    const w12 = result.get("food")![12];
+    expect(w12[w12.length - 1].kind).toBe("other");
+  });
+
+  it("emits a window entry for every budget, even budgets with no periods", () => {
+    const budgets = [
+      makeBudget({ id: "food" }),
+      makeBudget({ id: "fun" }),
+    ];
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: { "Food:Groceries": 100 },
+      }),
+      makePeriod({
+        id: "p2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: {},
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance(budgets, periods);
+    expect(result.has("food")).toBe(true);
+    expect(result.has("fun")).toBe(true);
+    expect(result.get("fun")).toEqual({ 12: [], 52: [] });
+  });
+
+  it("emits Other with groupedCount=1 when exactly one sub-threshold category is folded", () => {
+    const budget = makeBudget({ id: "food" });
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: {
+          "Food:Restaurants": 99,
+          "Food:Coffee": 1,
+        },
+      }),
+      makePeriod({
+        id: "p2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: {},
+      }),
+    ];
+    const result = computePerBudgetCategoryVariance([budget], periods);
+    const w12 = result.get("food")![12];
+    expect(w12).toHaveLength(2);
+    const otherRow = w12[1];
+    expect(otherRow.kind).toBe("other");
+    if (otherRow.kind === "other") {
+      expect(otherRow.groupedCount).toBe(1);
+    }
+  });
+
+  it("throws when a categoryBreakdown value is not finite", () => {
+    const budget = makeBudget({ id: "food" });
+    const periods = [
+      makePeriod({
+        id: "p1", budgetId: "food",
+        periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"),
+        categoryBreakdown: { "Food:Groceries": NaN },
+      }),
+      makePeriod({
+        id: "p2", budgetId: "food",
+        periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"),
+        categoryBreakdown: {},
+      }),
+    ];
+    expect(() => computePerBudgetCategoryVariance([budget], periods)).toThrow();
+  });
+});
+
+describe("computeBudgetStatsAndVariances", () => {
+  // Shared fixture: 15 weeks across two budgets, latest week excluded from averages.
+  // Weeks 0-11: food=200, fun=50. Weeks 12-13: food=100, fun=150. Week 14: latest (excluded).
+  const budgets = [
+    makeBudget({ id: "food", allowance: 150 }),
+    makeBudget({ id: "fun", name: "Fun", allowance: 100 }),
+  ];
+  const periods: ReturnType<typeof makePeriod>[] = [];
+  for (let i = 0; i < 15; i++) {
+    const weekSunday = new Date(Date.UTC(2025, 0, 5 + i * 7));
+    const nextSunday = new Date(Date.UTC(2025, 0, 12 + i * 7));
+    periods.push(
+      makePeriod({
+        id: `food-w${i}`, budgetId: "food",
+        periodStart: ts(weekSunday.toISOString()), periodEnd: ts(nextSunday.toISOString()),
+        total: i < 12 ? 200 : 100,
+        categoryBreakdown: { "Food:Groceries": i < 12 ? 200 : 100 },
+      }),
+      makePeriod({
+        id: `fun-w${i}`, budgetId: "fun",
+        periodStart: ts(weekSunday.toISOString()), periodEnd: ts(nextSunday.toISOString()),
+        total: i < 12 ? 50 : 150,
+        categoryBreakdown: { "Fun:Movies": i < 12 ? 50 : 150 },
+      }),
+    );
+  }
+
+  it("stats output matches computeBudgetDiffs for identical inputs", () => {
+    const { stats } = computeBudgetStatsAndVariances(budgets, periods);
+    const expected = computeBudgetDiffs(budgets, periods);
+    for (const budget of budgets) {
+      const actual = stats.get(budget.id)!;
+      const ref = expected.get(budget.id)!;
+      expect(actual.diff.diff12).toBeCloseTo(ref.diff.diff12, 10);
+      expect(actual.diff.diff52).toBeCloseTo(ref.diff.diff52, 10);
+      expect(actual.avg.avg12).toBeCloseTo(ref.avg.avg12, 10);
+      expect(actual.avg.avg52).toBeCloseTo(ref.avg.avg52, 10);
+    }
+  });
+
+  it("variances output matches computePerBudgetCategoryVariance for identical inputs", () => {
+    const { variances } = computeBudgetStatsAndVariances(budgets, periods);
+    const expected = computePerBudgetCategoryVariance(budgets, periods);
+    for (const budget of budgets) {
+      expect(variances.get(budget.id)![12]).toEqual(expected.get(budget.id)![12]);
+      expect(variances.get(budget.id)![52]).toEqual(expected.get(budget.id)![52]);
+    }
   });
 });

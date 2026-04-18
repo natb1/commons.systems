@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   organizationJsonLd,
   blogPostingJsonLd,
+  softwareApplicationJsonLd,
   jsonLdScriptTag,
   canonicalLinkTag,
   relMeLinkTags,
@@ -88,6 +89,44 @@ describe("blogPostingJsonLd", () => {
     const post: PublishedPost = { ...basePost, id: "a/b c" };
     const json = blogPostingJsonLd(post, "https://example.com", { name: "Alice" });
     expect(json.url).toBe("https://example.com/post/a%2Fb%20c");
+  });
+});
+
+describe("softwareApplicationJsonLd", () => {
+  it("returns required schema.org fields", () => {
+    const json = softwareApplicationJsonLd({
+      name: "Budget",
+      url: "https://budget.example.com",
+      applicationCategory: "FinanceApplication",
+      operatingSystem: "Web",
+    });
+    expect(json["@context"]).toBe("https://schema.org");
+    expect(json["@type"]).toBe("SoftwareApplication");
+    expect(json.name).toBe("Budget");
+    expect(json.url).toBe("https://budget.example.com");
+    expect(json.applicationCategory).toBe("FinanceApplication");
+    expect(json.operatingSystem).toBe("Web");
+  });
+
+  it("includes description when provided", () => {
+    const json = softwareApplicationJsonLd({
+      name: "Budget",
+      url: "https://budget.example.com",
+      applicationCategory: "FinanceApplication",
+      operatingSystem: "Web",
+      description: "A local-first budgeting app.",
+    });
+    expect(json.description).toBe("A local-first budgeting app.");
+  });
+
+  it("omits description when undefined", () => {
+    const json = softwareApplicationJsonLd({
+      name: "Budget",
+      url: "https://budget.example.com",
+      applicationCategory: "FinanceApplication",
+      operatingSystem: "Web",
+    });
+    expect(json.description).toBeUndefined();
   });
 });
 

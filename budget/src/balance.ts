@@ -912,24 +912,30 @@ export interface PerBudgetStats {
   readonly avg: PerBudgetAverage;
 }
 
-/** Compute per-budget diffs and averages over 12 and 52 week trailing windows.
- * Combines what were previously two separate passes (computeBudgetDiffs + computePerBudgetAverageSpending)
- * into a single traversal. */
-export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): Map<BudgetId, PerBudgetStats> {
-  // Determine global latest week across all budgets (to exclude incomplete week).
+/** Pre-group periods by budget ID and find the globally-latest week Sunday-start across all budgets. */
+function indexPeriodsForBudgets(periods: BudgetPeriod[]): {
+  latestWeekMs: number | undefined;
+  periodsByBudget: ReadonlyMap<BudgetId, readonly BudgetPeriod[]>;
+} {
   const allWeekMs = new Set<number>();
-  for (const p of periods) {
-    allWeekMs.add(toSundayEntry(p.periodStart.toDate()).ms);
-  }
-  const latestWeekMs = allWeekMs.size > 0 ? Math.max(...allWeekMs) : undefined;
-
-  // Pre-group periods by budgetId to avoid re-filtering per budget per window.
   const periodsByBudget = new Map<BudgetId, BudgetPeriod[]>();
   for (const p of periods) {
+    allWeekMs.add(toSundayEntry(p.periodStart.toDate()).ms);
     const existing = periodsByBudget.get(p.budgetId);
     if (existing) existing.push(p);
     else periodsByBudget.set(p.budgetId, [p]);
   }
+  const latestWeekMs = allWeekMs.size > 0 ? Math.max(...allWeekMs) : undefined;
+  return { latestWeekMs, periodsByBudget };
+}
+
+/**
+ * Compute diff (allowance minus trailing average) and the raw trailing averages
+ * over 12- and 52-week windows. The latest observed week across all budgets is
+ * excluded as typically incomplete.
+ */
+export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): Map<BudgetId, PerBudgetStats> {
+  const { latestWeekMs, periodsByBudget } = indexPeriodsForBudgets(periods);
 
   const result = new Map<BudgetId, PerBudgetStats>();
   for (const budget of budgets) {
@@ -963,4 +969,190 @@ export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): 
     });
   }
   return result;
+}
+
+/**
+ * A category's share is computed as abs(category.avgWeekly) / absTotal, where
+ * absTotal is the sum of abs(avgWeekly) across all categories in the window.
+ * Categories whose share is strictly below this threshold are folded into "Other".
+ */
+export const MATERIALITY_THRESHOLD = 0.05;
+
+/** Trailing-window sizes supported by the variance decomposition (weeks). */
+export type VarianceWindow = 12 | 52;
+
+/**
+ * One row in the per-category actuals decomposition: either a named category or
+ * the aggregate "Other" bucket of sub-threshold categories.
+ */
+export type CategoryActualRow =
+  | { readonly kind: "category"; readonly category: string; readonly avgWeekly: number }
+  | { readonly kind: "other"; readonly avgWeekly: number; readonly groupedCount: number };
+
+/** Per-budget category decomposition for every trailing window (keyed by VarianceWindow). */
+export type PerBudgetCategoryVariance = Readonly<Record<VarianceWindow, readonly CategoryActualRow[]>>;
+
+/**
+ * Favorable = actual under (or equal to) allowance. `diff` is the raw signed
+ * difference `allowance - actual`; pass that, not an absolute amount.
+ */
+export function isFavorableDiff(diff: number): boolean {
+  return diff >= 0;
+}
+
+/**
+ * Decompose each budget's trailing-window actual spending into per-category
+ * weekly averages. Each category's total across the window is divided by the
+ * fixed weekCount (12 or 52) regardless of how many weeks contain data, so
+ * weeks with no data contribute zero rather than shrinking the divisor.
+ *
+ * The latest observed week (across all budgets) is excluded from both windows
+ * because partial-week data would bias the average.
+ * Included weeks are those whose start falls within `weekCount * MS_PER_WEEK`
+ * of the latest week's start.
+ *
+ * Categories whose share falls below MATERIALITY_THRESHOLD are folded into a
+ * single `kind: "other"` row appended after the sorted material rows.
+ */
+export function computePerBudgetCategoryVariance(
+  budgets: Budget[],
+  periods: BudgetPeriod[],
+): Map<BudgetId, PerBudgetCategoryVariance> {
+  const { latestWeekMs, periodsByBudget } = indexPeriodsForBudgets(periods);
+
+  const result = new Map<BudgetId, PerBudgetCategoryVariance>();
+  for (const budget of budgets) {
+    const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
+    const completed: { weekMs: number; period: BudgetPeriod }[] = [];
+    for (const p of budgetPeriods) {
+      const weekMs = toSundayEntry(p.periodStart.toDate()).ms;
+      if (weekMs === latestWeekMs) continue;
+      completed.push({ weekMs, period: p });
+    }
+    result.set(budget.id, {
+      12: decomposeWindow(completed, latestWeekMs, 12),
+      52: decomposeWindow(completed, latestWeekMs, 52),
+    });
+  }
+  return result;
+}
+
+/**
+ * Returns material rows sorted descending by avgWeekly, with an "Other" row (if
+ * any sub-threshold categories were folded) appended last regardless of its
+ * magnitude. Downstream renderers (variance waterfall, category list) depend on
+ * this order. Signs in avgWeekly are preserved — a refund category appears with
+ * a negative value.
+ */
+function decomposeWindow(
+  completed: readonly { weekMs: number; period: BudgetPeriod }[],
+  latestWeekMs: number | undefined,
+  weekCount: number,
+): CategoryActualRow[] {
+  if (latestWeekMs === undefined) return [];
+  const windowMs = weekCount * MS_PER_WEEK;
+
+  const catTotals = new Map<string, number>();
+  for (const { weekMs, period: p } of completed) {
+    if (latestWeekMs - weekMs > windowMs) continue;
+    for (const [cat, amount] of Object.entries(p.categoryBreakdown)) {
+      if (!Number.isFinite(amount)) {
+        throw new DataIntegrityError(`BudgetPeriod ${p.id} categoryBreakdown.${cat} is not a finite number: ${amount}`);
+      }
+      catTotals.set(cat, (catTotals.get(cat) ?? 0) + amount);
+    }
+  }
+
+  if (catTotals.size === 0) return [];
+
+  const entries = [...catTotals.entries()].map(([category, total]) => ({
+    category,
+    avgWeekly: total / weekCount,
+  }));
+
+  const absTotal = entries.reduce((s, e) => s + Math.abs(e.avgWeekly), 0);
+  if (absTotal === 0) return [];
+
+  const material: CategoryActualRow[] = [];
+  let otherTotal = 0;
+  let groupedCount = 0;
+  for (const e of entries) {
+    const share = Math.abs(e.avgWeekly) / absTotal;
+    if (share < MATERIALITY_THRESHOLD) {
+      otherTotal += e.avgWeekly;
+      groupedCount += 1;
+    } else {
+      material.push({
+        kind: "category",
+        category: e.category,
+        avgWeekly: e.avgWeekly,
+      });
+    }
+  }
+
+  material.sort((a, b) => b.avgWeekly - a.avgWeekly);
+
+  if (groupedCount > 0) {
+    material.push({
+      kind: "other",
+      avgWeekly: otherTotal,
+      groupedCount,
+    });
+  }
+
+  return material;
+}
+
+/**
+ * Equivalent to calling computeBudgetDiffs and computePerBudgetCategoryVariance separately,
+ * but builds the period index only once.
+ */
+export function computeBudgetStatsAndVariances(
+  budgets: Budget[],
+  periods: BudgetPeriod[],
+): { stats: Map<BudgetId, PerBudgetStats>; variances: Map<BudgetId, PerBudgetCategoryVariance> } {
+  const { latestWeekMs, periodsByBudget } = indexPeriodsForBudgets(periods);
+
+  const stats = new Map<BudgetId, PerBudgetStats>();
+  const variances = new Map<BudgetId, PerBudgetCategoryVariance>();
+
+  for (const budget of budgets) {
+    const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
+    const weeklyAllow = weeklyEquivalent(budget.allowance, budget.allowancePeriod);
+
+    // Build weekly spending map and completed-weeks list in one pass.
+    const weeklySpending = new Map<number, number>();
+    const completed: { weekMs: number; period: BudgetPeriod }[] = [];
+    for (const p of budgetPeriods) {
+      const weekMs = toSundayEntry(p.periodStart.toDate()).ms;
+      weeklySpending.set(weekMs, (weeklySpending.get(weekMs) ?? 0) + p.total);
+      if (weekMs !== latestWeekMs) completed.push({ weekMs, period: p });
+    }
+
+    const completedForAvg = [...weeklySpending.entries()]
+      .filter(([ms]) => latestWeekMs === undefined || ms !== latestWeekMs)
+      .sort((a, b) => a[0] - b[0]);
+
+    function trailingAvg(weekCount: number): number {
+      if (completedForAvg.length === 0 || latestWeekMs === undefined) return 0;
+      const windowMs = weekCount * MS_PER_WEEK;
+      const trailing = completedForAvg.filter(([ms]) => latestWeekMs - ms <= windowMs);
+      if (trailing.length === 0) return 0;
+      return trailing.reduce((acc, [, total]) => acc + total, 0) / weekCount;
+    }
+
+    const avg12 = trailingAvg(12);
+    const avg52 = trailingAvg(52);
+    stats.set(budget.id, {
+      diff: { diff12: weeklyAllow - avg12, diff52: weeklyAllow - avg52 },
+      avg: { avg12, avg52 },
+    });
+
+    variances.set(budget.id, {
+      12: decomposeWindow(completed, latestWeekMs, 12),
+      52: decomposeWindow(completed, latestWeekMs, 52),
+    });
+  }
+
+  return { stats, variances };
 }

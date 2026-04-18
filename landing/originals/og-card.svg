@@ -35,7 +35,7 @@
     fill="#e0d8c8"
     text-anchor="middle"
     opacity="0.85"
-  >Custom software you can understand.</text>
+  >Know the software that runs your business.</text>
 
   <line x1="540" y1="430" x2="660" y2="430" stroke="#e8943a" stroke-width="2" opacity="0.5"/>
 
@@ -47,5 +47,5 @@
     fill="#8a7d6e"
     text-anchor="middle"
     letter-spacing="2"
-  >OPEN-SOURCE · LOCAL-FIRST · FORK AND OWN</text>
+  >FORKABLE CODE · LOCAL DATA · YOUR ROADMAP</text>
 </svg>
