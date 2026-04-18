@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Signal dispatcher that the current phase is complete.
+# Merges `phase_signal: "complete"` into the current issue state and writes
+# back via issue-state-write (which updates both Firestore and the local
+# tmp/dispatch-<num>.json cache).
+set -euo pipefail
+
+: "${DISPATCH_ISSUE_NUM:?DISPATCH_ISSUE_NUM must be set (exported by dispatch)}"
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+STATE_WRITE="$REPO_ROOT/.claude/skills/ref-pr-workflow/scripts/issue-state-write"
+STATE_READ="$REPO_ROOT/.claude/skills/ref-pr-workflow/scripts/issue-state-read"
+
+CURRENT=$("$STATE_READ" "$DISPATCH_ISSUE_NUM")
+MERGED=$(jq '. + {phase_signal: "complete"}' <<<"$CURRENT")
+"$STATE_WRITE" "$DISPATCH_ISSUE_NUM" "$MERGED"
