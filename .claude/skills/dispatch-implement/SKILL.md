@@ -29,8 +29,8 @@ Invoked by `./dispatch/bin/dispatch <issue-num>` as the opening message. The dis
    a. **Launch an implementation subagent** via the Agent tool using the plan-specified `model` (`opus` or `sonnet`). Prompt includes the full plan context, this unit's scope, and the explicit constraint: *the subagent must edit the working tree only — no commits, no pushes.*
 
    b. **Invoke `/commit-merge-push`** via the Agent tool (fork subagent; its frontmatter sets `model: sonnet`, so do not pass a model override). If it returns an error:
-      - **Conflict** → launch another implementation subagent to resolve, then re-invoke `/commit-merge-push`.
-      - **Pre-commit hook failure** → launch another implementation subagent to fix the underlying issue (do not `--amend`; create a new commit), then re-invoke `/commit-merge-push`.
+      - **Conflict** → launch another implementation subagent with the opus model to resolve, then re-invoke `/commit-merge-push`.
+      - **Pre-commit hook failure** → launch another implementation subagent with the sonnet model to fix the underlying issue (do not `--amend`; create a new commit), then re-invoke `/commit-merge-push`.
       - **Push rejection** (non-fast-forward, server hook) → surface to user; do not force-push.
 
 3. Run `./dispatch/bin/phase-complete` with `dangerouslyDisableSandbox: true` — the script calls `issue-state-write` which uses tsx and requires network access for Firestore. The dispatcher SIGTERMs this session shortly after.
