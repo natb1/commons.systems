@@ -84,11 +84,14 @@ main() {
   trap cleanup EXIT
 
   # Launch Claude with --worktree — the WorktreeCreate hook handles physical
-  # creation, branch resolution, direnv. Claude inherits the dispatcher's TTY.
+  # creation, branch resolution, direnv. Explicitly redirect stdin from
+  # /dev/tty so Claude gets a real TTY; without this, bash redirects stdin to
+  # /dev/null for background jobs, causing Claude to run non-interactively and
+  # buffer all output until exit.
   local CLAUDE_ARGS=(-w "$BRANCH")
   [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
   CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}")
-  claude "${CLAUDE_ARGS[@]}" &
+  claude "${CLAUDE_ARGS[@]}" < /dev/tty &
   CLAUDE_PID=$!
 
   # Wait for the state file to appear. phase-complete seeds it on first write,
