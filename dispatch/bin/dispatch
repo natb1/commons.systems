@@ -7,10 +7,9 @@
 # process with Claude so Claude is the terminal foreground process with
 # full interactive TTY access. Before exec, a background watcher subshell
 # is forked with $$ (the dispatcher PID, which exec preserves as Claude's
-# PID). The watcher sleep-polls until the state file appears, then polls
-# for phase_signal=complete and SIGTERMs Claude on match. Polling exits
-# cleanly when kill -0 on the PID fails (Claude exited), so no orphaned
-# background processes remain after the session ends.
+# PID). The watcher sleep-polls for phase_signal=complete and SIGTERMs
+# Claude on match. The loop exits cleanly when kill -0 on the PID fails
+# (Claude exited), so no orphaned background processes remain.
 set -euo pipefail
 
 # --- sluggify --------------------------------------------------------------
@@ -102,15 +101,12 @@ main() {
   # The watcher uses DISPATCHER_PID (= $$) to monitor and SIGTERM Claude.
   local DISPATCHER_PID=$$
 
-  # Background watcher: sleep-polls until the state file appears, then polls
-  # for phase_signal=complete, SIGTERMing Claude on match. Both loops exit via
-  # kill -0 when Claude dies, so no orphaned processes remain after the session.
+  # Background watcher: sleep-polls for phase_signal=complete and SIGTERMs
+  # Claude on match. jq silently returns false when the file doesn't exist
+  # yet, so no separate file-existence loop is needed. kill -0 detects when
+  # Claude exits, so no orphaned processes remain after the session.
   (
     set -euo pipefail
-    while [[ ! -f "$STATE_FILE" ]]; do
-      kill -0 "$DISPATCHER_PID" 2>/dev/null || exit 0
-      sleep 1
-    done
     while kill -0 "$DISPATCHER_PID" 2>/dev/null; do
       if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
         kill -TERM "$DISPATCHER_PID" 2>/dev/null || true

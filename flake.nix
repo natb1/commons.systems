@@ -34,7 +34,6 @@
               openjdk
               go
               jq
-              fswatch
               playwright-driver.browsers
             ];
             shellHook = ''

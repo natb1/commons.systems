@@ -33,9 +33,10 @@ render_issue_body() {
 }
 
 # Render a related-issue JSON stream (one object per issue) as ### headings
-# followed by body text. Input on stdin; output on stdout.
+# followed by body text. Body is omitted when absent (e.g., closed siblings
+# are summary-only). Input on stdin; output on stdout.
 render_related_issues() {
-  jq -r '"### #" + (.number|tostring) + " (" + .state + "): " + .title + "\n\n" + (.body // "")'
+  jq -r '"### #" + (.number|tostring) + " (" + .state + "): " + .title + (if .body then "\n\n" + .body else "" end)'
 }
 
 # Fetch primary issue first so we can title the top section.
@@ -78,12 +79,7 @@ trap 'rm -f "$TMP_OUT"' EXIT
     if [[ -z "$SIBS" ]]; then
       printf '_None._\n'
     else
-      # Open siblings have a body; closed siblings are summary-only.
-      jq -r 'if .body then
-               "### #" + (.number|tostring) + " (" + .state + "): " + .title + "\n\n" + .body
-             else
-               "### #" + (.number|tostring) + " (" + .state + "): " + .title
-             end' <<<"$SIBS"
+      render_related_issues <<<"$SIBS"
     fi
   fi
 } > "$TMP_OUT"
