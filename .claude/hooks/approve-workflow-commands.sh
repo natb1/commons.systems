@@ -23,7 +23,7 @@ fi
 
 APPROVE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"auto-approved by workflow hook"}}'
 
-SCRIPT_RE='(^|/)\.claude/skills/[a-zA-Z0-9_-]+/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$'
+SCRIPT_RE='(^|/)(\.claude/skills/[a-zA-Z0-9_-]+/scripts/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*|dispatch/bin/[a-zA-Z0-9_-]*)$'
 
 # --- Settings-derived allow lists ----------------------------------------
 

@@ -33,7 +33,7 @@ Invoked by `./dispatch/bin/dispatch <issue-num>` as the opening message. The dis
       - **Pre-commit hook failure** → launch another implementation subagent to fix the underlying issue (do not `--amend`; create a new commit), then re-invoke `/commit-merge-push`.
       - **Push rejection** (non-fast-forward, server hook) → surface to user; do not force-push.
 
-3. Run `./dispatch/bin/phase-complete`. The dispatcher SIGTERMs this session shortly after.
+3. Run `./dispatch/bin/phase-complete` with `dangerouslyDisableSandbox: true` — the script calls `issue-state-write` which uses tsx and requires network access for Firestore. The dispatcher SIGTERMs this session shortly after.
 
 4. Stop.
 
