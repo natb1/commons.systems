@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -97,9 +98,9 @@ func (m Model) View() string {
 	for _, id := range keys {
 		s := m.sessions[id]
 		if s.Idle {
-			b.WriteString(idleStyle.Render(fmt.Sprintf(" %s %s", idleIndicator, s.WorkingDir)))
+			b.WriteString(idleStyle.Render(fmt.Sprintf(" %s %s", idleIndicator, filepath.Base(s.WorkingDir))))
 		} else {
-			b.WriteString(activeStyle.Render(fmt.Sprintf("   %s", s.WorkingDir)))
+			b.WriteString(activeStyle.Render(fmt.Sprintf("   %s", filepath.Base(s.WorkingDir))))
 		}
 		b.WriteString("\n")
 	}
