@@ -18,6 +18,6 @@ STATE_READ="$REPO_ROOT/.claude/skills/ref-pr-workflow/scripts/issue-state-read"
 CACHE_FILE="$REPO_ROOT/tmp/dispatch-${DISPATCH_ISSUE_NUM}.json"
 [ -f "$CACHE_FILE" ] || { mkdir -p "$REPO_ROOT/tmp" && printf '{}' > "$CACHE_FILE"; }
 
-CURRENT=$("$STATE_READ" "$DISPATCH_ISSUE_NUM")
+CURRENT=$("$STATE_READ" "$DISPATCH_ISSUE_NUM" 2>/dev/null || printf '{}')
 MERGED=$(jq '. + {phase_signal: "complete"}' <<<"$CURRENT")
 "$STATE_WRITE" "$DISPATCH_ISSUE_NUM" "$MERGED"
