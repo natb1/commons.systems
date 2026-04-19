@@ -14,8 +14,23 @@ fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
-if [ -n "$JSON_INPUT" ]; then
-  exec npx tsx "$REPO_ROOT/firestoreutil/bin/run-issue-state-write.ts" "$ISSUE_NUM" "$JSON_INPUT"
-else
-  exec npx tsx "$REPO_ROOT/firestoreutil/bin/run-issue-state-write.ts" "$ISSUE_NUM"
+# Resolve the JSON state that will be written — prefer the explicit argument,
+# else consume stdin.
+if [ -z "$JSON_INPUT" ]; then
+  JSON_INPUT="$(cat)"
+fi
+
+# Write to Firestore first.
+npx tsx "$REPO_ROOT/firestoreutil/bin/run-issue-state-write.ts" "$ISSUE_NUM" "$JSON_INPUT"
+
+# Mirror state into the dispatcher's local cache if one exists for this
+# issue in the current worktree. No-op when the file is absent so callers
+# outside a dispatched session (e.g. legacy /pr-workflow) are unaffected.
+CACHE_FILE="$REPO_ROOT/tmp/dispatch-${ISSUE_NUM}.json"
+if [ -f "$CACHE_FILE" ]; then
+  TMP_CACHE=$(mktemp)
+  trap 'rm -f "$TMP_CACHE"' EXIT
+  jq --argjson state "$JSON_INPUT" '.state = $state' "$CACHE_FILE" > "$TMP_CACHE"
+  mv "$TMP_CACHE" "$CACHE_FILE"
+  trap - EXIT
 fi

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Signal dispatcher that the current phase is complete.
+# Merges `phase_signal: "complete"` into the current issue state and writes
+# back via issue-state-write (which updates both Firestore and the local
+# tmp/dispatch-<num>.json cache).
+set -euo pipefail
+
+: "${DISPATCH_ISSUE_NUM:?DISPATCH_ISSUE_NUM must be set (exported by dispatch)}"
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+STATE_WRITE="$REPO_ROOT/.claude/skills/ref-pr-workflow/scripts/issue-state-write"
+STATE_READ="$REPO_ROOT/.claude/skills/ref-pr-workflow/scripts/issue-state-read"
+
+# Seed the local cache if absent. issue-state-write mirrors incoming JSON under
+# a .state key in this file (producing { "state": { ... } }), so the seed is a
+# bare {} — the first write produces the correct shape for the dispatcher's
+# phase_signal check (.state.phase_signal). No-op when the file already exists.
+CACHE_FILE="$REPO_ROOT/tmp/dispatch-${DISPATCH_ISSUE_NUM}.json"
+[ -f "$CACHE_FILE" ] || { mkdir -p "$REPO_ROOT/tmp" && printf '{}' > "$CACHE_FILE"; }
+
+# Fall back to empty state when no Firestore record exists yet (first dispatch
+# before any workflow state has been written). Auth and network errors still
+# print to stderr so the user can diagnose them.
+CURRENT=$("$STATE_READ" "$DISPATCH_ISSUE_NUM" || printf '{}')
+MERGED=$(jq '. + {phase_signal: "complete"}' <<<"$CURRENT")
+"$STATE_WRITE" "$DISPATCH_ISSUE_NUM" "$MERGED"

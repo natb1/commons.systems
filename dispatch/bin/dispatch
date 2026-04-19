@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# Out-of-process dispatcher for Claude Code implementation sessions.
+# Usage: dispatch <issue-num> [<model>]
+#
+# Validates the issue, computes the branch slug, and launches
+# `claude -w <branch> /dispatch-implement` via exec — replacing this
+# process with Claude so Claude is the terminal foreground process with
+# full interactive TTY access. Before exec, a background watcher subshell
+# is forked with $$ (the dispatcher PID, which exec preserves as Claude's
+# PID). The watcher sleep-polls for phase_signal=complete and SIGTERMs
+# Claude on match. The loop exits cleanly when kill -0 on the PID fails
+# (Claude exited), so no orphaned background processes remain.
+set -euo pipefail
+
+# --- sluggify --------------------------------------------------------------
+# Lowercase, replace non-alnum with `-`, collapse consecutive `-`, strip
+# edges, then truncate so `<issue-num>-<slug>` is at most 32 chars. Strips
+# trailing `-` after truncation.
+# Args: $1 = title, $2 = issue-num
+# Output: branch name to stdout (`<issue-num>-<slug>`)
+make_slug() {
+  local title="$1" num="$2"
+  local slug
+  slug=$(printf '%s' "$title" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+  slug=$(printf '%s' "$slug" | LC_ALL=C sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
+  local max_slug=$((32 - ${#num} - 1))
+  if [ "${#slug}" -gt "$max_slug" ]; then
+    slug="${slug:0:$max_slug}"
+    while [[ "$slug" == *- ]]; do slug="${slug%-}"; done
+  fi
+  if [[ -z "$slug" ]]; then
+    echo "error: title '$title' produces an empty slug — cannot compute a valid branch name" >&2
+    return 1
+  fi
+  printf '%s-%s\n' "$num" "$slug"
+}
+
+# --- main -------------------------------------------------------------------
+main() {
+  local ISSUE_NUM="${1:-}"
+  local MODEL="${2:-}"
+  if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
+    echo "error: usage: dispatch <issue-num> [<model>] (got: '${ISSUE_NUM}')" >&2
+    exit 1
+  fi
+
+  # Fetch state + title in a single gh call; validate issue is open.
+  echo "[dispatch] Fetching issue #${ISSUE_NUM}..." >&2
+  local ISSUE_JSON ISSUE_STATE TITLE BRANCH
+  ISSUE_JSON=$(gh issue view "$ISSUE_NUM" --json state,title) || {
+    echo "error: gh issue view $ISSUE_NUM failed" >&2
+    exit 1
+  }
+  ISSUE_STATE=$(jq -r '.state' <<<"$ISSUE_JSON")
+  TITLE=$(jq -r '.title' <<<"$ISSUE_JSON")
+  echo "[dispatch] state: $ISSUE_STATE" >&2
+  if [[ "$ISSUE_STATE" != "OPEN" ]]; then
+    echo "error: issue #$ISSUE_NUM is $ISSUE_STATE, not OPEN" >&2
+    exit 1
+  fi
+
+  # Compute branch and the expected worktree path (convention enforced by
+  # .claude/hooks/worktree-create.sh).
+  echo "[dispatch] title: $TITLE" >&2
+  BRANCH=$(make_slug "$TITLE" "$ISSUE_NUM")
+  echo "[dispatch] branch: $BRANCH" >&2
+
+  local GIT_COMMON_DIR PROJECT_ROOT WORKTREE_PATH STATE_FILE
+  GIT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir)" || {
+    echo "error: git rev-parse --git-common-dir failed — run dispatch from within the project repo" >&2
+    exit 1
+  }
+  PROJECT_ROOT="$(dirname "$GIT_COMMON_DIR")"
+  WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
+  STATE_FILE="$WORKTREE_PATH/tmp/dispatch-${ISSUE_NUM}.json"
+
+  # Export handoff env for the Claude session and phase skills.
+  # STATE_FILE is absolute (used by the watcher here); DISPATCH_STATE_FILE is
+  # relative so the skill resolves it from within the worktree's CWD.
+  export DISPATCH_ISSUE_NUM="$ISSUE_NUM"
+  export DISPATCH_STATE_FILE="tmp/dispatch-${ISSUE_NUM}.json"
+
+  local WATCHER_PID=0
+
+  cleanup() {
+    if [[ "$WATCHER_PID" -gt 0 ]] && kill -0 "$WATCHER_PID" 2>/dev/null; then
+      kill -TERM "$WATCHER_PID" 2>/dev/null || true
+      pkill -TERM -P "$WATCHER_PID" 2>/dev/null || true
+    fi
+  }
+
+  on_int() {
+    echo "[dispatch] Ctrl-C received — stopping watcher" >&2
+    cleanup
+    exit 130
+  }
+  trap on_int INT
+  trap cleanup EXIT
+
+  # exec below replaces this process with Claude, preserving the PID.
+  # The watcher uses DISPATCHER_PID (= $$) to monitor and SIGTERM Claude.
+  local DISPATCHER_PID=$$
+
+  # Background watcher: sleep-polls for phase_signal=complete and SIGTERMs
+  # Claude on match. jq silently returns false when the file doesn't exist
+  # yet, so no separate file-existence loop is needed. kill -0 detects when
+  # Claude exits, so no orphaned processes remain after the session.
+  (
+    set -euo pipefail
+    while kill -0 "$DISPATCHER_PID" 2>/dev/null; do
+      if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
+        kill -TERM "$DISPATCHER_PID" 2>/dev/null || true
+        exit 0
+      fi
+      sleep 1
+    done
+  ) &
+  WATCHER_PID=$!
+
+  # Replace this process with Claude. exec preserves the PID so the watcher's
+  # DISPATCHER_PID reference stays valid. Claude inherits the terminal directly —
+  # no backgrounding, no stdin redirection, full interactive access.
+  local CLAUDE_ARGS=(-w "$BRANCH")
+  [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
+  CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}")
+  echo "[dispatch] launching claude -w $BRANCH${MODEL:+ --model $MODEL}..." >&2
+  exec claude "${CLAUDE_ARGS[@]}"
+}
+
+# Only run main() when executed directly — allows tests to `source` this
+# file for access to `make_slug`.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
