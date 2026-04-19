@@ -8,6 +8,7 @@ export interface IssueState {
   active_skills?: string[];
   wiggum_step?: number;
   wiggum_step_label?: string;
+  phase_signal?: "complete"; // dispatcher termination signal (dispatch/bin/phase-complete)
   [key: string]: unknown;
 }
 
