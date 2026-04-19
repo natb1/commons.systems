@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Out-of-process dispatcher for Claude Code implementation sessions.
-# Usage: dispatch <issue-num>
+# Usage: dispatch <issue-num> [<model>]
 #
 # Validates the issue, computes the branch slug, and launches
-# `claude -w <branch> /dispatch-implement` — Claude's own --worktree flag
-# (via the WorktreeCreate hook) handles worktree creation / switching and
-# direnv. The dispatcher then watches the state cache file via fswatch and
-# SIGTERMs Claude when the phase skill writes phase_signal=complete.
+# `claude -w <branch> /dispatch-implement` via exec — replacing this
+# process with Claude so Claude is the terminal foreground process with
+# full interactive TTY access. Before exec, a background watcher subshell
+# is forked with $$ (the dispatcher PID, which exec preserves as Claude's
+# PID). The watcher monitors the state cache file via fswatch and SIGTERMs
+# Claude when the phase skill writes phase_signal=complete.
 set -euo pipefail
 
 # --- sluggify --------------------------------------------------------------
@@ -38,11 +40,13 @@ main() {
   fi
 
   # Validate issue is open.
+  echo "[dispatch] Fetching issue #${ISSUE_NUM}..." >&2
   local ISSUE_STATE
   ISSUE_STATE=$(gh issue view "$ISSUE_NUM" --json state --jq '.state') || {
     echo "error: gh issue view $ISSUE_NUM failed" >&2
     exit 1
   }
+  echo "[dispatch] state: $ISSUE_STATE" >&2
   if [[ "$ISSUE_STATE" != "OPEN" ]]; then
     echo "error: issue #$ISSUE_NUM is $ISSUE_STATE, not OPEN" >&2
     exit 1
@@ -52,7 +56,9 @@ main() {
   # .claude/hooks/worktree-create.sh).
   local TITLE BRANCH
   TITLE=$(gh issue view "$ISSUE_NUM" --json title --jq '.title')
+  echo "[dispatch] title: $TITLE" >&2
   BRANCH=$(make_slug "$TITLE" "$ISSUE_NUM")
+  echo "[dispatch] branch: $BRANCH" >&2
 
   local GIT_COMMON_DIR PROJECT_ROOT WORKTREE_PATH STATE_FILE
   GIT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
@@ -65,7 +71,7 @@ main() {
   export DISPATCH_ISSUE_NUM="$ISSUE_NUM"
   export DISPATCH_STATE_FILE="tmp/dispatch-${ISSUE_NUM}.json"
 
-  local CLAUDE_PID=0 WATCHER_PID=0
+  local WATCHER_PID=0
 
   cleanup() {
     if [[ "$WATCHER_PID" -gt 0 ]] && kill -0 "$WATCHER_PID" 2>/dev/null; then
@@ -75,62 +81,47 @@ main() {
   }
 
   on_int() {
-    echo "[dispatch] Ctrl-C received — stopping Claude and watcher" >&2
-    [[ "$CLAUDE_PID" -gt 0 ]] && kill -TERM "$CLAUDE_PID" 2>/dev/null || true
+    echo "[dispatch] Ctrl-C received — stopping watcher" >&2
     cleanup
     exit 130
   }
   trap on_int INT
   trap cleanup EXIT
 
-  # Launch Claude with --worktree — the WorktreeCreate hook handles physical
-  # creation, branch resolution, direnv. Explicitly redirect stdin from
-  # /dev/tty so Claude gets a real TTY; without this, bash redirects stdin to
-  # /dev/null for background jobs, causing Claude to run non-interactively and
-  # buffer all output until exit.
-  local CLAUDE_ARGS=(-w "$BRANCH")
-  [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
-  CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}")
-  claude "${CLAUDE_ARGS[@]}" < /dev/tty &
-  CLAUDE_PID=$!
+  # exec below replaces this process with Claude, preserving the PID.
+  # The watcher uses DISPATCHER_PID (= $$) to monitor and SIGTERM Claude.
+  local DISPATCHER_PID=$$
 
-  # Wait for the state file to appear. phase-complete seeds it on first write,
-  # so the poll terminates as soon as the phase signal begins. Poll every
-  # second while Claude is still running. No timeout.
-  while [[ ! -f "$STATE_FILE" ]] && kill -0 "$CLAUDE_PID" 2>/dev/null; do
-    sleep 1
-  done
-
-  if [[ ! -f "$STATE_FILE" ]]; then
-    # Claude exited before producing a state file — nothing to watch.
-    local EARLY_EXIT=0
-    wait "$CLAUDE_PID" || EARLY_EXIT=$?
-    exit "$EARLY_EXIT"
-  fi
-
-  # Background watcher: SIGTERM Claude when phase_signal flips to complete.
+  # Background watcher: polls until the state file appears, then SIGTERMs
+  # Claude (via DISPATCHER_PID) when phase_signal flips to complete.
   (
+    while [[ ! -f "$STATE_FILE" ]]; do
+      kill -0 "$DISPATCHER_PID" 2>/dev/null || exit 0
+      sleep 1
+    done
+    # One-shot race-check: phase-complete may have written before fswatch attaches.
+    if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
+      kill -TERM "$DISPATCHER_PID" 2>/dev/null || true
+      exit 0
+    fi
     fswatch "$STATE_FILE" | while IFS= read -r _; do
+      kill -0 "$DISPATCHER_PID" 2>/dev/null || break
       if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
-        kill -TERM "$CLAUDE_PID" 2>/dev/null || true
+        kill -TERM "$DISPATCHER_PID" 2>/dev/null || true
         break
       fi
     done
   ) &
   WATCHER_PID=$!
 
-  # One-shot race-check: phase-complete may have fully written the signal
-  # between the poll terminating and fswatch attaching.
-  if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
-    kill -TERM "$CLAUDE_PID" 2>/dev/null || true
-  fi
-
-  local CLAUDE_EXIT=0
-  wait "$CLAUDE_PID" || CLAUDE_EXIT=$?
-
-  cleanup
-  trap - EXIT
-  exit "$CLAUDE_EXIT"
+  # Replace this process with Claude. exec preserves the PID so the watcher's
+  # DISPATCHER_PID reference stays valid. Claude inherits the terminal directly —
+  # no backgrounding, no stdin redirection, full interactive access.
+  local CLAUDE_ARGS=(-w "$BRANCH")
+  [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
+  CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}")
+  echo "[dispatch] launching claude -w $BRANCH${MODEL:+ --model $MODEL}..." >&2
+  exec claude "${CLAUDE_ARGS[@]}"
 }
 
 # Only run main() when executed directly — allows tests to `source` this

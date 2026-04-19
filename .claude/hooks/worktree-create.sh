@@ -13,6 +13,10 @@ set -euo pipefail
 WORKTREE_REGISTERED=0
 NEW_PATH=""
 
+# Claude captures hook stderr for error reporting; writing progress to /dev/tty
+# bypasses that capture so the user sees setup output in real time.
+LOG=/dev/tty
+
 cleanup_worktree() {
   [ -n "$NEW_PATH" ] || return 0
   git worktree remove --force "$NEW_PATH" >&2 \
@@ -45,26 +49,26 @@ PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
 NEW_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
 
 if [ -e "$NEW_PATH" ]; then
-  echo "[worktree-create] worktree $NEW_PATH already exists; re-syncing issue context" >&2
+  echo "[worktree-create] worktree $NEW_PATH already exists; re-syncing issue context" >"$LOG"
 else
   if git ls-remote --heads --exit-code origin "$BRANCH" >/dev/null 2>&1; then
-    git fetch origin "$BRANCH" >&2
-    git worktree add "$NEW_PATH" "$BRANCH" >&2
+    git fetch origin "$BRANCH" >"$LOG" 2>&1
+    git worktree add "$NEW_PATH" "$BRANCH" >"$LOG" 2>&1
   elif git rev-parse --verify --quiet "$BRANCH" >/dev/null 2>&1; then
-    git worktree add "$NEW_PATH" "$BRANCH" >&2
+    git worktree add "$NEW_PATH" "$BRANCH" >"$LOG" 2>&1
   else
-    git fetch origin main >&2
-    git worktree add -b "$BRANCH" "$NEW_PATH" origin/main >&2
+    git fetch origin main >"$LOG" 2>&1
+    git worktree add -b "$BRANCH" "$NEW_PATH" origin/main >"$LOG" 2>&1
   fi
   WORKTREE_REGISTERED=1
 
-  direnv allow "$NEW_PATH" >&2 || { echo "[worktree-create] ERROR: direnv allow failed for $NEW_PATH" >&2; exit 1; }
-  direnv exec "$NEW_PATH" true >&2 || { echo "[worktree-create] ERROR: direnv exec failed for $NEW_PATH (non-zero exit from .envrc evaluation)" >&2; exit 1; }
+  direnv allow "$NEW_PATH" >"$LOG" 2>&1 || { echo "[worktree-create] ERROR: direnv allow failed for $NEW_PATH" >&2; exit 1; }
+  direnv exec "$NEW_PATH" true >"$LOG" 2>&1 || { echo "[worktree-create] ERROR: direnv exec failed for $NEW_PATH (non-zero exit from .envrc evaluation)" >&2; exit 1; }
 fi
 
 # Branch regex above guarantees a leading <issue-num>- prefix.
 ISSUE_NUM="${BRANCH%%-*}"
-(cd "$NEW_PATH" && "$(cd "$(dirname "$0")" && pwd)/../skills/ref-pr-workflow/scripts/sync-issue-context" "$ISSUE_NUM") >&2 \
+(cd "$NEW_PATH" && "$(cd "$(dirname "$0")" && pwd)/../skills/ref-pr-workflow/scripts/sync-issue-context" "$ISSUE_NUM") >"$LOG" 2>&1 \
   || { echo "[worktree-create] ERROR: sync-issue-context failed for issue $ISSUE_NUM" >&2; exit 1; }
 
 echo "$NEW_PATH"
