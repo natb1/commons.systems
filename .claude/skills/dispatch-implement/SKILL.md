@@ -11,7 +11,15 @@ Invoked by `./dispatch/bin/dispatch <issue-num>` as the opening message. The dis
 
 ## Steps
 
-1. **Plan.** Invoke `EnterPlanMode` and produce a plan whose implementation section is an ordered list of **logical units of work**. Each unit specifies:
+1. **Plan.** Before entering plan mode, seed the dispatcher state file if it does not yet exist — this is what the `SessionStart:clear` hook (`.claude/hooks/restore-dispatch-skill.sh`) watches for when the user accepts a plan and clears the context:
+
+   ```bash
+   [ -f "$DISPATCH_STATE_FILE" ] || { mkdir -p "$(dirname "$DISPATCH_STATE_FILE")" && printf '{}' > "$DISPATCH_STATE_FILE"; }
+   ```
+
+   Then invoke `EnterPlanMode` and produce a plan whose implementation section is an ordered list of **logical units of work**. Each unit specifies:
+
+   If an approved plan for this dispatch is already present in context (typical after `showClearContextOnPlanAccept` fires — the user accepted a plan and then cleared the context, causing this skill to be re-invoked), skip this step and proceed to Step 2. The plan file persists on disk across context clears, so the unit list remains visible even though the planning conversation is gone.
 
    1. **Scope.** What files/behavior change, what is explicitly out of scope.
    2. **Implementation model.** `opus` or `sonnet`, chosen per the heuristic below.
