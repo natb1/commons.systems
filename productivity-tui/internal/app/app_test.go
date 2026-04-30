@@ -243,6 +243,40 @@ func TestViewRateLimitsHeader_OmittedOnError(t *testing.T) {
 	}
 }
 
+func TestViewRateLimitsHeader_CountdownOnSecondLine(t *testing.T) {
+	m := New("/dev/null", "/dev/null")
+	m.width = 80
+	future := time.Now().Add(32 * time.Minute).Unix()
+	m.rateLimits = ratelimits.RateLimits{
+		FiveHour: &ratelimits.Window{UsedPercentage: 18, ResetsAt: future},
+	}
+	output := m.View()
+	lines := strings.Split(output, "\n")
+
+	var labelIdx = -1
+	for i, line := range lines {
+		if strings.Contains(line, "5h") {
+			labelIdx = i
+			break
+		}
+	}
+	if labelIdx == -1 {
+		t.Fatal("expected a line containing '5h'")
+	}
+	if !strings.Contains(lines[labelIdx], "%") {
+		t.Errorf("expected '%%' on the same line as '5h', got: %q", lines[labelIdx])
+	}
+	if strings.Contains(lines[labelIdx], "resets in") {
+		t.Errorf("expected 'resets in' NOT on the bar line, got: %q", lines[labelIdx])
+	}
+	if labelIdx+1 >= len(lines) {
+		t.Fatalf("expected a line after the bar line for the countdown")
+	}
+	if !strings.Contains(lines[labelIdx+1], "resets in") {
+		t.Errorf("expected 'resets in' on the line after the bar, got: %q", lines[labelIdx+1])
+	}
+}
+
 func TestLoadRateLimitsMissingFile(t *testing.T) {
 	msg := loadRateLimits("/nonexistent/path/rate_limits.json")()
 	rlMsg, ok := msg.(rateLimitsMsg)

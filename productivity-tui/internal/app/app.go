@@ -97,6 +97,9 @@ func (m Model) View() string {
 			b.WriteString(renderRateLimitRow("5h", m.rateLimits.FiveHour, now))
 			b.WriteString("\n")
 		}
+		if m.rateLimits.FiveHour != nil && m.rateLimits.SevenDay != nil {
+			b.WriteString("\n")
+		}
 		if m.rateLimits.SevenDay != nil {
 			b.WriteString(renderRateLimitRow("7d", m.rateLimits.SevenDay, now))
 			b.WriteString("\n")
@@ -134,9 +137,10 @@ func (m Model) View() string {
 	return b.String()
 }
 
-// renderRateLimitRow renders a single rate-limit row:
+// renderRateLimitRow renders a single rate-limit row across two lines:
 //
-//	  5h  ████▌                       18%  resets in 0h 32m
+//	  5h  ████▌                       18%
+//	        resets in 0h 32m
 func renderRateLimitRow(label string, w *ratelimits.Window, now time.Time) string {
 	pct := w.UsedPercentage
 	if pct < 0 {
@@ -163,7 +167,7 @@ func renderRateLimitRow(label string, w *ratelimits.Window, now time.Time) strin
 
 	countdown := formatCountdown(w.ResetIn(now))
 
-	return fmt.Sprintf("  %s  %s  %s  %s",
+	return fmt.Sprintf("  %s  %s  %s\n        %s",
 		labelStyle.Render(label),
 		barStr,
 		pctStr,
