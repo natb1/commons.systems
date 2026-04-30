@@ -1,11 +1,23 @@
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, increment, Timestamp, addDoc, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
-import { requireString, requireNumber, requireNonNegativeNumber, optionalString, optionalNumber } from "@commons-systems/firestoreutil/validate";
+import { requireString, requireNumber, requireNonNegativeNumber, optionalString, optionalNumber, requireOneOf } from "@commons-systems/firestoreutil/validate";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
+import {
+  ROLLOVERS,
+  ALLOWANCE_PERIODS,
+  RECONCILIATION_CLASSIFICATIONS,
+  RECONCILIATION_ENTITY_TYPES,
+  RULE_TYPES,
+  type Rollover,
+  type AllowancePeriod,
+  type ReconciliationClassification,
+  type ReconciliationEntityType,
+  type RuleType,
+} from "./schema/enums.js";
 
 export type TransactionId = Brand<"TransactionId">;
 export type StatementId = Brand<"StatementId">;
@@ -16,19 +28,10 @@ export type RuleId = Brand<"RuleId">;
 export type NormalizationRuleId = Brand<"NormalizationRuleId">;
 
 /** Classification applied to unmatched statement items or transactions during reconciliation. */
-export type ReconciliationClassification = "timing" | "missing_entry" | "discrepancy";
-export type ReconciliationEntityType = "transaction" | "statementItem";
+export type { ReconciliationClassification, ReconciliationEntityType, Rollover, AllowancePeriod, RuleType } from "./schema/enums.js";
+export { ROLLOVERS, ALLOWANCE_PERIODS, RECONCILIATION_CLASSIFICATIONS, RECONCILIATION_ENTITY_TYPES, RULE_TYPES } from "./schema/enums.js";
 
 export type { GroupId } from "@commons-systems/authutil/groups";
-
-/**
- * Budget rollover strategy:
- * - "none": balance resets to the allowance each period (no carry-forward)
- * - "debt": only negative balances carry to next period
- * - "balance": full balance (positive or negative) carries over
- */
-export type Rollover = "none" | "debt" | "balance";
-export type AllowancePeriod = "weekly" | "monthly" | "quarterly";
 
 export interface BudgetOverride {
   readonly date: Timestamp;
@@ -209,14 +212,16 @@ function requireOverrides(value: unknown): BudgetOverride[] {
 }
 
 function requireRollover(value: unknown): Rollover {
-  if (value === "none" || value === "debt" || value === "balance") return value;
-  throw new DataIntegrityError(`Expected rollover to be one of none, debt, balance, got ${value}`);
+  const s = requireString(value, "rollover");
+  if (!(ROLLOVERS as readonly string[]).includes(s)) {
+    throw new DataIntegrityError(`Expected rollover to be one of ${ROLLOVERS.join(", ")}, got ${value}`);
+  }
+  return s as Rollover;
 }
 
 function requireAllowancePeriod(value: unknown): AllowancePeriod {
   if (value == null) return "weekly";
-  if (value === "weekly" || value === "monthly" || value === "quarterly") return value;
-  throw new DataIntegrityError(`Expected allowancePeriod to be weekly, monthly, or quarterly, got ${value}`);
+  return requireOneOf(value, ALLOWANCE_PERIODS, "allowancePeriod");
 }
 
 /**
@@ -362,13 +367,11 @@ export async function getStatementItems(groupId: GroupId | null, email?: string)
 }
 
 function requireReconciliationClassification(value: unknown): ReconciliationClassification {
-  if (value === "timing" || value === "missing_entry" || value === "discrepancy") return value;
-  throw new DataIntegrityError(`Expected classification to be timing | missing_entry | discrepancy, got ${value}`);
+  return requireOneOf(value, RECONCILIATION_CLASSIFICATIONS, "classification");
 }
 
 function requireReconciliationEntityType(value: unknown): ReconciliationEntityType {
-  if (value === "transaction" || value === "statementItem") return value;
-  throw new DataIntegrityError(`Expected entityType to be transaction | statementItem, got ${value}`);
+  return requireOneOf(value, RECONCILIATION_ENTITY_TYPES, "entityType");
 }
 
 export function reconciliationNoteDocId(
@@ -549,9 +552,7 @@ export async function updateBudget(
     }
   }
   if (fields.allowancePeriod !== undefined) {
-    if (fields.allowancePeriod !== "weekly" && fields.allowancePeriod !== "monthly" && fields.allowancePeriod !== "quarterly") {
-      throw new Error("Allowance period must be weekly, monthly, or quarterly");
-    }
+    requireAllowancePeriod(fields.allowancePeriod);
   }
   if (fields.rollover !== undefined) {
     requireRollover(fields.rollover);
@@ -580,8 +581,6 @@ export async function updateBudgetOverrides(
 
 // --- Rules ---
 
-export type RuleType = "categorization" | "budget_assignment";
-
 export interface Rule {
   readonly id: RuleId;
   readonly type: RuleType;
@@ -598,8 +597,11 @@ export interface Rule {
 }
 
 function requireRuleType(value: unknown): RuleType {
-  if (value === "categorization" || value === "budget_assignment") return value;
-  throw new DataIntegrityError(`Expected rule type to be categorization or budget_assignment, got ${value}`);
+  const s = requireString(value, "rule type");
+  if (!(RULE_TYPES as readonly string[]).includes(s)) {
+    throw new DataIntegrityError(`Expected rule type to be ${RULE_TYPES.join(" or ")}, got ${value}`);
+  }
+  return s as RuleType;
 }
 
 export async function getRules(groupId: GroupId, email: string): Promise<Rule[]>;

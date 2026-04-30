@@ -1,5 +1,6 @@
 import type { Plugin } from "vite";
 import { findCollection } from "../seeds/find-collection.js";
+import { ROLLOVERS, ALLOWANCE_PERIODS, RULE_TYPES, RECONCILIATION_ENTITY_TYPES, RECONCILIATION_CLASSIFICATIONS } from "./schema/enums.js";
 import type {
   TransactionSeedData,
   BudgetSeedData,
@@ -63,18 +64,24 @@ function requireReimbursement(value: unknown): number {
 }
 
 function requireAllowancePeriod(value: unknown): "weekly" | "monthly" | "quarterly" {
-  if (value === "weekly" || value === "monthly" || value === "quarterly") return value;
-  throw new Error(`Expected allowancePeriod to be "weekly" | "monthly" | "quarterly", got ${JSON.stringify(value)}`);
+  if (!(ALLOWANCE_PERIODS as readonly unknown[]).includes(value)) {
+    throw new Error(`Expected allowancePeriod to be "weekly" | "monthly" | "quarterly", got ${JSON.stringify(value)}`);
+  }
+  return value as "weekly" | "monthly" | "quarterly";
 }
 
 function requireRollover(value: unknown): "none" | "debt" | "balance" {
-  if (value === "none" || value === "debt" || value === "balance") return value;
-  throw new Error(`Expected rollover to be "none" | "debt" | "balance", got ${JSON.stringify(value)}`);
+  if (!(ROLLOVERS as readonly unknown[]).includes(value)) {
+    throw new Error(`Expected rollover to be "none" | "debt" | "balance", got ${JSON.stringify(value)}`);
+  }
+  return value as "none" | "debt" | "balance";
 }
 
 function requireRuleType(value: unknown): "categorization" | "budget_assignment" {
-  if (value === "categorization" || value === "budget_assignment") return value;
-  throw new Error(`Expected rule type to be "categorization" | "budget_assignment", got ${JSON.stringify(value)}`);
+  if (!(RULE_TYPES as readonly unknown[]).includes(value)) {
+    throw new Error(`Expected rule type to be "categorization" | "budget_assignment", got ${JSON.stringify(value)}`);
+  }
+  return value as "categorization" | "budget_assignment";
 }
 
 export function serializeSeedData(): SeedData {
@@ -207,12 +214,14 @@ export function serializeSeedData(): SeedData {
 
   const reconciliationNotes: SeedReconciliationNote[] = findCollection("seed-reconciliation-notes").map(({ id, data: raw }) => {
     const d = raw as unknown as ReconciliationNoteSeedData;
-    const entityType = d.entityType === "transaction" || d.entityType === "statementItem"
-      ? d.entityType
-      : (() => { throw new Error(`Invalid reconciliation entityType: ${d.entityType}`); })();
-    const classification = d.classification === "timing" || d.classification === "missing_entry" || d.classification === "discrepancy"
-      ? d.classification
-      : (() => { throw new Error(`Invalid reconciliation classification: ${d.classification}`); })();
+    if (!(RECONCILIATION_ENTITY_TYPES as readonly unknown[]).includes(d.entityType)) {
+      throw new Error(`Invalid reconciliation entityType: ${d.entityType}`);
+    }
+    const entityType = d.entityType as "transaction" | "statementItem";
+    if (!(RECONCILIATION_CLASSIFICATIONS as readonly unknown[]).includes(d.classification)) {
+      throw new Error(`Invalid reconciliation classification: ${d.classification}`);
+    }
+    const classification = d.classification as "timing" | "missing_entry" | "discrepancy";
     return {
       id,
       entityType,

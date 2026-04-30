@@ -19,6 +19,7 @@ import type {
   AllowancePeriod,
   RuleType,
 } from "./firestore.js";
+import { ROLLOVERS, ALLOWANCE_PERIODS, RULE_TYPES } from "./schema/enums.js";
 import type { ParsedData } from "./idb.js";
 
 export class UploadValidationError extends Error {
@@ -153,15 +154,18 @@ function emptyToNull(value: string): string | null {
 }
 
 function requireRollover(value: string): Rollover {
-  if (value === "none" || value === "debt" || value === "balance") return value;
-  throw new UploadValidationError(`Invalid rollover value: "${value}"`);
+  if (!(ROLLOVERS as readonly string[]).includes(value)) {
+    throw new UploadValidationError(`Invalid rollover value: "${value}"`);
+  }
+  return value as Rollover;
 }
 
 function requireAllowancePeriod(value: string | undefined): AllowancePeriod {
   if (value == null || value === "weekly") return "weekly";
-  if (value === "monthly") return "monthly";
-  if (value === "quarterly") return "quarterly";
-  throw new UploadValidationError(`Invalid allowancePeriod value: "${value}"`);
+  if (!(ALLOWANCE_PERIODS as readonly string[]).includes(value)) {
+    throw new UploadValidationError(`Invalid allowancePeriod value: "${value}"`);
+  }
+  return value as AllowancePeriod;
 }
 
 function requireId(value: unknown, entity: string, index: number): string {
@@ -186,8 +190,10 @@ function requireFiniteNumber(value: unknown, entity: string, index: number, fiel
 }
 
 function requireRuleType(value: string): RuleType {
-  if (value === "categorization" || value === "budget_assignment") return value;
-  throw new UploadValidationError(`Invalid rule type: "${value}"`);
+  if (!(RULE_TYPES as readonly string[]).includes(value)) {
+    throw new UploadValidationError(`Invalid rule type: "${value}"`);
+  }
+  return value as RuleType;
 }
 
 export function parseUploadedJson(text: string): ParsedUpload {
