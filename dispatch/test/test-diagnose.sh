@@ -191,7 +191,7 @@ PATH="$STUB_DIR:$ORIGINAL_PATH"
 export STUB_GH_OUTCOME=no-pr
 pushd "$REPO" >/dev/null
 STATE_FILE="$REPO/state.json"
-ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || true)
+ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
 popd >/dev/null
 assert_eq "fresh: 0 commits ahead, no PR -> 'fresh'" "fresh" "$ACTUAL"
 unset STUB_GH_OUTCOME
@@ -221,7 +221,7 @@ echo '{"phase_signal":"complete"}' >"$STUB_FIRESTORE_FILE"
 export STUB_LOCAL_CACHE_FILE="$TEST_ROOT/wrong-cache.json"
 
 pushd "$REPO" >/dev/null
-ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || true)
+ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
 assert_eq "audit-and-pr: HEAD on main, branch 1 commit ahead, no PR -> 'audit-and-pr'" "audit-and-pr" "$ACTUAL"
 
 reconcile_phase_signal both "$STATE_FILE" "569"
@@ -250,7 +250,7 @@ PATH="$STUB_DIR:$ORIGINAL_PATH"
 export STUB_GH_OUTCOME=open-pr
 pushd "$REPO" >/dev/null
 STATE_FILE="$REPO/state.json"
-ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || true)
+ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
 popd >/dev/null
 assert_eq "verify: open PR -> 'verify' (no second line)" "verify" "$ACTUAL"
 unset STUB_GH_OUTCOME
@@ -266,7 +266,7 @@ PATH="$STUB_DIR:$ORIGINAL_PATH"
 export STUB_GH_OUTCOME=merged-pr
 pushd "$REPO" >/dev/null
 STATE_FILE="$REPO/state.json"
-ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || true)
+ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
 popd >/dev/null
 EXPECTED=$'done\n99'
 assert_eq "done: merged PR -> 'done' + PR number on second line" "$EXPECTED" "$ACTUAL"
@@ -288,8 +288,7 @@ PATH="$STUB_DIR:$ORIGINAL_PATH"
 export STUB_GH_OUTCOME=no-pr
 pushd "$REPO" >/dev/null
 STATE_FILE="$REPO/state.json"
-# Capture both stdout (mode) and ensure the function exits 0 despite fetch failure.
-ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || echo "FAILED")
+ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || echo "FAILED")
 popd >/dev/null
 assert_eq "fetch failure non-fatal: still returns 'fresh'" "fresh" "$ACTUAL"
 unset STUB_GH_OUTCOME
@@ -308,7 +307,7 @@ PATH="$STUB_DIR:$ORIGINAL_PATH"
 export STUB_GH_OUTCOME=closed-pr
 pushd "$REPO" >/dev/null
 STATE_FILE="$REPO/state.json"
-ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || true)
+ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
 popd >/dev/null
 assert_eq "closed PR + 0 commits ahead -> 'fresh'" "fresh" "$ACTUAL"
 unset STUB_GH_OUTCOME
@@ -324,7 +323,7 @@ PATH="$STUB_DIR:$ORIGINAL_PATH"
 export STUB_GH_OUTCOME=closed-pr
 pushd "$REPO" >/dev/null
 STATE_FILE="$REPO/state.json"
-ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || true)
+ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
 popd >/dev/null
 assert_eq "closed PR + 1 commit ahead -> 'audit-and-pr'" "audit-and-pr" "$ACTUAL"
 unset STUB_GH_OUTCOME
