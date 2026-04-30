@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -132,6 +133,124 @@ func TestLoadSessionsFiltersDead(t *testing.T) {
 	}
 	if _, ok := sm.sessions["dead"]; ok {
 		t.Error("expected dead session to be dropped")
+	}
+}
+
+func TestViewWithWeztermTabNumber(t *testing.T) {
+	m := New("/dev/null")
+	m.width = 80
+	m.height = 24
+	m.sessions = map[string]session.Session{
+		"sess_1": {WorkingDir: "/tmp/active", Idle: false, WeztermPane: "9"},
+	}
+	m.weztermTabs = map[string]int{"9": 3}
+	output := m.View()
+	if !strings.Contains(output, "[3]") {
+		t.Errorf("expected tab number [3] in output, got: %s", output)
+	}
+}
+
+func TestViewWithMissingPaneId(t *testing.T) {
+	m := New("/dev/null")
+	m.width = 80
+	m.height = 24
+	m.sessions = map[string]session.Session{
+		"sess_1": {WorkingDir: "/tmp/active", Idle: false, WeztermPane: "99"},
+	}
+	m.weztermTabs = map[string]int{"7": 1}
+	output := m.View()
+	if strings.Contains(output, "[") {
+		t.Errorf("expected no tab prefix when pane id not in map, got: %s", output)
+	}
+}
+
+func TestViewWithEmptyWeztermTabs(t *testing.T) {
+	m := New("/dev/null")
+	m.width = 80
+	m.height = 24
+	m.sessions = map[string]session.Session{
+		"sess_1": {WorkingDir: "/tmp/active", Idle: false, WeztermPane: "9"},
+	}
+	// nil weztermTabs — fail open, no tab prefix
+	output := m.View()
+	if strings.Contains(output, "[") {
+		t.Errorf("expected no tab prefix when weztermTabs is nil, got: %s", output)
+	}
+	// output should match a model with no WeztermPane at all
+	mBaseline := New("/dev/null")
+	mBaseline.width = 80
+	mBaseline.height = 24
+	mBaseline.sessions = map[string]session.Session{
+		"sess_1": {WorkingDir: "/tmp/active", Idle: false},
+	}
+	baseline := mBaseline.View()
+	if output != baseline {
+		t.Errorf("expected output identical to baseline without wezterm fields\ngot:      %q\nbaseline: %q", output, baseline)
+	}
+}
+
+func TestViewMixedSessionsAlign(t *testing.T) {
+	m := New("/dev/null")
+	m.width = 80
+	m.height = 24
+	m.sessions = map[string]session.Session{
+		"sess_1": {WorkingDir: "/tmp/with-tab", Idle: false, WeztermPane: "9"},
+		"sess_2": {WorkingDir: "/tmp/no-tab", Idle: false},
+	}
+	m.weztermTabs = map[string]int{"9": 3}
+	output := m.View()
+
+	lines := strings.Split(output, "\n")
+	// Find the lines containing each working dir.
+	var lineWithTab, lineWithoutTab string
+	for _, l := range lines {
+		if strings.Contains(l, "/tmp/with-tab") {
+			lineWithTab = l
+		}
+		if strings.Contains(l, "/tmp/no-tab") {
+			lineWithoutTab = l
+		}
+	}
+	if lineWithTab == "" || lineWithoutTab == "" {
+		t.Fatalf("could not find session lines in output:\n%s", output)
+	}
+
+	idxWithTab := strings.Index(lineWithTab, "/tmp/with-tab")
+	idxWithoutTab := strings.Index(lineWithoutTab, "/tmp/no-tab")
+	if idxWithTab != idxWithoutTab {
+		t.Errorf("working dirs not column-aligned: with-tab at col %d, no-tab at col %d\nwith-tab line:    %q\nno-tab line:      %q",
+			idxWithTab, idxWithoutTab, lineWithTab, lineWithoutTab)
+	}
+}
+
+func TestUpdateWeztermTabsMsg(t *testing.T) {
+	m := New("/dev/null")
+
+	// Success case: tabs are set.
+	updated, _ := m.Update(weztermTabsMsg{tabs: map[string]int{"9": 3}})
+	model := updated.(Model)
+	if model.weztermTabs["9"] != 3 {
+		t.Errorf("expected weztermTabs[9] == 3, got %d", model.weztermTabs["9"])
+	}
+	if model.weztermErrLogged {
+		t.Error("expected weztermErrLogged to be false after success")
+	}
+
+	// Error case: tabs are cleared.
+	updated2, _ := model.Update(weztermTabsMsg{err: errors.New("boom")})
+	model2 := updated2.(Model)
+	if model2.weztermTabs != nil {
+		t.Errorf("expected weztermTabs to be nil after error, got %v", model2.weztermTabs)
+	}
+	if !model2.weztermErrLogged {
+		t.Error("expected weztermErrLogged to be true after first error")
+	}
+
+	// Second error: should NOT log again (flag stays true).
+	updated3, _ := model2.Update(weztermTabsMsg{err: errors.New("boom again")})
+	model3 := updated3.(Model)
+	if model3.weztermTabs != nil {
+		t.Errorf("expected weztermTabs to be nil after second error, got %v", model3.weztermTabs)
 	}
 }
 

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/natb1/commons.systems/productivity-tui/internal/session"
+	"github.com/natb1/commons.systems/productivity-tui/internal/wezterm"
 )
 
 var (
@@ -32,11 +34,13 @@ const idleIndicator = "✳"
 type tickMsg time.Time
 
 type Model struct {
-	sessions      map[string]session.Session
-	stateFilePath string
-	width         int
-	height        int
-	err           error
+	sessions         map[string]session.Session
+	stateFilePath    string
+	width            int
+	height           int
+	err              error
+	weztermTabs      map[string]int
+	weztermErrLogged bool
 }
 
 func New(stateFilePath string) Model {
@@ -47,7 +51,7 @@ func New(stateFilePath string) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tick(), loadSessions(m.stateFilePath))
+	return tea.Batch(tick(), loadSessions(m.stateFilePath), loadWeztermTabs())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -61,7 +65,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 	case tickMsg:
-		return m, tea.Batch(tick(), loadSessions(m.stateFilePath))
+		return m, tea.Batch(tick(), loadSessions(m.stateFilePath), loadWeztermTabs())
 	case sessionsMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -69,6 +73,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.err = nil
 			m.sessions = msg.sessions
+		}
+	case weztermTabsMsg:
+		if msg.err == nil {
+			m.weztermTabs = msg.tabs
+			m.weztermErrLogged = false
+		} else {
+			m.weztermTabs = nil
+			if !m.weztermErrLogged {
+				fmt.Fprintf(os.Stderr, "productivity-tui: wezterm cli list failed: %v\n", msg.err)
+				m.weztermErrLogged = true
+			}
 		}
 	}
 	return m, nil
@@ -94,12 +109,38 @@ func (m Model) View() string {
 	}
 
 	keys := sortedKeys(m.sessions)
-	for _, id := range keys {
+
+	// Compute tab prefixes for each session.
+	tabPrefixes := make([]string, len(keys))
+	maxWidth := 0
+	for i, id := range keys {
 		s := m.sessions[id]
+		if s.WeztermPane != "" {
+			if idx, ok := m.weztermTabs[s.WeztermPane]; ok {
+				tabPrefixes[i] = fmt.Sprintf("[%d]", idx)
+				if len(tabPrefixes[i]) > maxWidth {
+					maxWidth = len(tabPrefixes[i])
+				}
+			}
+		}
+	}
+
+	for i, id := range keys {
+		s := m.sessions[id]
+
+		var prefix string
+		if maxWidth > 0 {
+			if tabPrefixes[i] != "" {
+				prefix = fmt.Sprintf("%-*s ", maxWidth, tabPrefixes[i])
+			} else {
+				prefix = strings.Repeat(" ", maxWidth+1)
+			}
+		}
+
 		if s.Idle {
-			b.WriteString(idleStyle.Render(fmt.Sprintf(" %s %s", idleIndicator, s.WorkingDir)))
+			b.WriteString(idleStyle.Render(prefix + fmt.Sprintf(" %s %s", idleIndicator, s.WorkingDir)))
 		} else {
-			b.WriteString(activeStyle.Render(fmt.Sprintf("   %s", s.WorkingDir)))
+			b.WriteString(activeStyle.Render(prefix + fmt.Sprintf("   %s", s.WorkingDir)))
 		}
 		b.WriteString("\n")
 	}
@@ -120,6 +161,11 @@ type sessionsMsg struct {
 	err      error
 }
 
+type weztermTabsMsg struct {
+	tabs map[string]int
+	err  error
+}
+
 func loadSessions(path string) tea.Cmd {
 	return func() tea.Msg {
 		sessions, err := session.ReadSessions(path)
@@ -127,6 +173,13 @@ func loadSessions(path string) tea.Cmd {
 			return sessionsMsg{err: err}
 		}
 		return sessionsMsg{sessions: session.FilterLive(sessions)}
+	}
+}
+
+func loadWeztermTabs() tea.Cmd {
+	return func() tea.Msg {
+		tabs, err := wezterm.QueryTabIndex()
+		return weztermTabsMsg{tabs: tabs, err: err}
 	}
 }
 
