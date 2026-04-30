@@ -109,6 +109,22 @@ main {
   font-size: clamp(0.85rem, 2.2vw, 1rem);
   opacity: 0.9;
 }
+.landing-hero-band-cta {
+  margin: 0.25rem 0 0;
+  font-size: clamp(0.85rem, 2.2vw, 1rem);
+}
+.landing-hero-band-cta a {
+  color: inherit;
+  text-decoration: underline;
+}
+.landing-hero-band-cta a:hover,
+.landing-hero-band-cta a:focus-visible {
+  color: var(--bg);
+  opacity: 0.75;
+}
+.landing-hero-band-cta span {
+  opacity: 0.6;
+}
 .landing-hero-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

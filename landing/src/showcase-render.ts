@@ -15,6 +15,11 @@ export function renderShowcase(apps: AppCard[]): string {
       <div class="landing-hero-band">
         <p class="landing-hero-band-headline">Build with commons.systems. Run without.</p>
         <p class="landing-hero-band-subline">Code you understand. Data you control. A roadmap you set.</p>
+        <p class="landing-hero-band-cta">
+          <a href="/about">Learn More</a>
+          <span aria-hidden="true"> · </span>
+          <a href="https://github.com/natb1/commons.systems">Source</a>
+        </p>
       </div>
       <div class="landing-hero-grid">
         ${cards}
