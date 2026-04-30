@@ -13,14 +13,15 @@ import { renderInfoPanel, hydrateInfoPanel } from "@commons-systems/blog/compone
 import buildTimeContent from "virtual:blog-post-content";
 import buildTimeMetadata from "virtual:blog-post-metadata";
 import { createFetchPost } from "@commons-systems/blog/github";
-import { updateOgMeta } from "@commons-systems/blog/og-meta";
+import { updateOgMeta, updateStaticPageMeta } from "@commons-systems/blog/og-meta";
 import { updateCanonical } from "@commons-systems/blog/canonical";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
 import { initPanelToggle } from "@commons-systems/style/panel-toggle";
 import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
-import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
+import { ABOUT_PAGE_META, INFO_PANEL_LINK_SECTIONS, NAV_LINKS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
+import { renderAboutHtml } from "./pages/about.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
@@ -64,7 +65,7 @@ const updateInfoPanel = (): void => {
   lastRenderedPosts = cachedPosts;
 }
 
-navEl.links = [{ href: "/", label: "Home" }];
+navEl.links = NAV_LINKS;
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => void signOut());
 
@@ -116,6 +117,15 @@ const router = createHistoryRouter(
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
         updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, RSS_CONFIG.title, SITE_DEFAULTS);
         updateCanonical(RSS_CONFIG.siteUrl, slug);
+        updateInfoPanel();
+      },
+    },
+    {
+      path: "/about",
+      render: () => renderAboutHtml(),
+      afterRender: () => {
+        updateStaticPageMeta(RSS_CONFIG.siteUrl, ABOUT_PAGE_META, RSS_CONFIG.title);
+        updateCanonical(RSS_CONFIG.siteUrl, undefined, "/about");
         updateInfoPanel();
       },
     },
