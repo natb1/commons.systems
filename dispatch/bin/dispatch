@@ -35,6 +35,104 @@ make_slug() {
   printf '%s-%s\n' "$num" "$slug"
 }
 
+# --- diagnose_state ---------------------------------------------------------
+# Diagnose the worktree's resume mode against ground truth (open PR, commits
+# ahead of origin/main, merged PR). Echoes one of: fresh | audit-and-pr |
+# verify | done. For `done`, also echoes the PR number on a second line.
+# Args: $1 = branch
+diagnose_state() {
+  local branch="$1"
+  local gh_output pr_state pr_number rc commits_ahead
+
+  git fetch --quiet origin main 2>/dev/null || \
+    echo "[dispatch] warning: git fetch origin main failed; using local refs" >&2
+
+  set +e
+  gh_output=$(gh pr view "$branch" --json number,state 2>&1)
+  rc=$?
+  set -e
+
+  if [[ $rc -eq 0 ]]; then
+    { read -r pr_state; read -r pr_number; } < <(jq -r '.state, .number' <<<"$gh_output")
+    case "$pr_state" in
+      MERGED)
+        echo "done"
+        echo "$pr_number"
+        return 0
+        ;;
+      OPEN)
+        echo "verify"
+        return 0
+        ;;
+      CLOSED)
+        # Closed-not-merged PR: user abandoned this PR. Fall through to the
+        # no-PR logic below — fresh or audit-and-pr based on commits ahead.
+        ;;
+      *)
+        echo "error: gh pr view returned unexpected state: '$pr_state'" >&2
+        return 1
+        ;;
+    esac
+  elif [[ "$gh_output" != *"no pull requests found"* ]]; then
+    echo "$gh_output" >&2
+    return 1
+  fi
+
+  # dispatch runs from the project root with HEAD on main, so we use the
+  # branch ref explicitly. On a truly fresh issue the ref doesn't exist yet
+  # — rev-list errors silently → 0.
+  commits_ahead=$(git rev-list --count "origin/main..$branch" 2>/dev/null || echo 0)
+
+  if [[ "$commits_ahead" -eq 0 ]]; then
+    echo "fresh"
+  else
+    echo "audit-and-pr"
+  fi
+}
+
+# --- reconcile_phase_signal -------------------------------------------------
+# Drop a stale phase_signal so the watcher doesn't fire at launch.
+# Args: $1 = scope (local-only | both), $2 = state file path (absolute),
+#       $3 = issue number (defaults to $DISPATCH_ISSUE_NUM)
+reconcile_phase_signal() {
+  local scope="$1" state_file="$2"
+  local issue_num="${3:-${DISPATCH_ISSUE_NUM:-}}"
+  local tmp_file repo_root read_script write_script remote_json rc
+
+  if [[ "$scope" == "local-only" ]]; then
+    if [[ -f "$state_file" ]] && jq -e '.state.phase_signal' "$state_file" >/dev/null 2>&1; then
+      tmp_file=$(mktemp)
+      jq 'if .state then .state |= del(.phase_signal) else . end' "$state_file" >"$tmp_file"
+      mv "$tmp_file" "$state_file"
+    fi
+    return 0
+  fi
+
+  if [[ "$scope" == "both" ]]; then
+    repo_root="$(git rev-parse --show-toplevel)"
+    read_script="$repo_root/.claude/skills/ref-pr-workflow/scripts/issue-state-read"
+    write_script="$repo_root/.claude/skills/ref-pr-workflow/scripts/issue-state-write"
+    set +e
+    remote_json=$("$read_script" "$issue_num" 2>/dev/null)
+    rc=$?
+    set -e
+    if [[ $rc -ne 0 ]]; then
+      reconcile_phase_signal local-only "$state_file" "$issue_num"
+      return 0
+    fi
+    remote_json=$(jq 'del(.phase_signal)' <<<"$remote_json")
+    "$write_script" "$issue_num" <<<"$remote_json"
+    # issue-state-write mirrors only into the cache resolved via its CWD's
+    # git toplevel (the project root), not the worktree. Clear the worktree
+    # state file directly so the watcher doesn't fire on stale local state.
+    reconcile_phase_signal local-only "$state_file" "$issue_num"
+    return 0
+  fi
+
+  echo "error: reconcile_phase_signal: unknown scope '$scope'" >&2
+  return 1
+}
+
 # --- main -------------------------------------------------------------------
 main() {
   local ISSUE_NUM="${1:-}"
@@ -73,6 +171,37 @@ main() {
   PROJECT_ROOT="$(dirname "$GIT_COMMON_DIR")"
   WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
   STATE_FILE="$WORKTREE_PATH/tmp/dispatch-${ISSUE_NUM}.json"
+
+  # Diagnose worktree state against ground truth (PR existence, commits ahead,
+  # PR merge status). Reconcile stale phase_signal in local cache + Firestore
+  # when needed, and select a resume instruction to pass to the skill.
+  local DIAGNOSIS MODE PR_NUM="" RESUME_INSTRUCTION=""
+  DIAGNOSIS=$(diagnose_state "$BRANCH") || {
+    echo "error: diagnose_state failed" >&2
+    exit 1
+  }
+  { read -r MODE; read -r PR_NUM || PR_NUM=""; } <<<"$DIAGNOSIS"
+  case "$MODE" in
+    fresh)
+      reconcile_phase_signal local-only "$STATE_FILE" "$ISSUE_NUM"
+      ;;
+    audit-and-pr)
+      reconcile_phase_signal both "$STATE_FILE" "$ISSUE_NUM"
+      RESUME_INSTRUCTION="Audit the diff against acceptance criteria; fix any gaps; then proceed to Step 2.5 to create the PR."
+      ;;
+    verify)
+      reconcile_phase_signal both "$STATE_FILE" "$ISSUE_NUM"
+      RESUME_INSTRUCTION="An open PR exists for this branch. Skip planning and Step 2; resume at Step 2.5.2 (monitor checks). If all green, run phase-complete."
+      ;;
+    done)
+      echo "[dispatch] issue #${ISSUE_NUM} already shipped via PR #${PR_NUM}" >&2
+      exit 0
+      ;;
+    *)
+      echo "error: diagnose_state returned unexpected mode: '$MODE'" >&2
+      exit 1
+      ;;
+  esac
 
   # Export handoff env for the Claude session and phase skills.
   # STATE_FILE is absolute (used by the watcher here); DISPATCH_STATE_FILE is
@@ -122,7 +251,9 @@ main() {
   # no backgrounding, no stdin redirection, full interactive access.
   local CLAUDE_ARGS=(-w "$BRANCH")
   [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
-  CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}")
+  CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}${RESUME_INSTRUCTION:+
+
+${RESUME_INSTRUCTION}}")
   echo "[dispatch] launching claude -w $BRANCH${MODEL:+ --model $MODEL}..." >&2
   exec claude "${CLAUDE_ARGS[@]}"
 }
