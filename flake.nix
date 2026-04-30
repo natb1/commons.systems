@@ -68,9 +68,13 @@
       # Home Manager configurations (not per-system in flake schema)
       mkHomeConfig = system:
         let
+          # direnv 2.37.1 checkPhase hangs when built from source; skip tests.
+          direnvSkipTestsOverlay = final: prev: {
+            direnv = prev.direnv.overrideAttrs (_: { doCheck = false; });
+          };
           pkgs = import nixpkgs {
             inherit system;
-            overlays = [ claude-code-nix.overlays.default ];
+            overlays = [ claude-code-nix.overlays.default direnvSkipTestsOverlay ];
             config.allowUnfreePredicate = pkg:
               builtins.elem (nixpkgs.lib.getName pkg) [
                 "claude-code"
