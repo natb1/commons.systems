@@ -75,6 +75,41 @@ function removeOgTags(): void {
   }
 }
 
+export function staticPageOgEntries(
+  siteUrl: string,
+  page: { url: string; title: string; description: string; image?: string; type?: "website" | "profile" },
+): OgTagEntry[] {
+  const entries: OgTagEntry[] = [
+    { attr: "name", key: "description", content: page.description },
+    { attr: "property", key: "og:title", content: page.title },
+    { attr: "property", key: "og:description", content: page.description },
+    { attr: "property", key: "og:type", content: page.type ?? "website" },
+    { attr: "property", key: "og:url", content: `${siteUrl}${page.url}` },
+    { attr: "name", key: "twitter:card", content: "summary_large_image" },
+    { attr: "name", key: "twitter:title", content: page.title },
+    { attr: "name", key: "twitter:description", content: page.description },
+  ];
+  if (page.image !== undefined) {
+    const imageUrl = `${siteUrl}${page.image}`;
+    entries.push({ attr: "property", key: "og:image", content: imageUrl });
+    entries.push({ attr: "name", key: "twitter:image", content: imageUrl });
+  }
+  return entries;
+}
+
+export function updateStaticPageMeta(
+  siteUrl: string,
+  page: { url: string; title: string; description: string; image?: string; type?: "website" | "profile" },
+  titleSuffix?: string,
+): void {
+  document.title = titleSuffix ? formatPageTitle(titleSuffix, page.title) : page.title;
+  staticPageOgEntries(siteUrl, page).forEach((e) => setMetaTag(e.attr, e.key, e.content));
+  if (page.image === undefined) {
+    document.querySelector('meta[property="og:image"]')?.remove();
+    document.querySelector('meta[name="twitter:image"]')?.remove();
+  }
+}
+
 export function updateOgMeta(
   siteUrl: string,
   post: PostMeta | undefined,

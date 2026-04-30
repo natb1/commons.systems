@@ -6,6 +6,7 @@ import {
   jsonLdScriptTag,
   canonicalLinkTag,
   relMeLinkTags,
+  personJsonLd,
 } from "../src/seo";
 import type { PublishedPost } from "../src/post-types";
 
@@ -173,6 +174,37 @@ describe("canonicalLinkTag", () => {
   it("escapes HTML special characters in href", () => {
     expect(canonicalLinkTag('https://example.com/"><script>')).toContain("&quot;");
     expect(canonicalLinkTag('https://example.com/"><script>')).not.toContain("<script>");
+  });
+});
+
+describe("personJsonLd", () => {
+  it("includes schema context and @type Person with required fields only", () => {
+    const json = personJsonLd({ name: "Nathan", url: "https://example.com" });
+    expect(json["@context"]).toBe("https://schema.org");
+    expect(json["@type"]).toBe("Person");
+    expect(json.name).toBe("Nathan");
+    expect(json.url).toBe("https://example.com");
+    expect(json.email).toBeUndefined();
+    expect(json.jobTitle).toBeUndefined();
+    expect(json.sameAs).toBeUndefined();
+  });
+
+  it("includes optional fields when provided", () => {
+    const json = personJsonLd({
+      name: "Nathan",
+      url: "https://example.com",
+      email: "nathan@example.com",
+      jobTitle: "Independent contractor",
+      sameAs: ["https://github.com/natb1"],
+    });
+    expect(json.email).toBe("nathan@example.com");
+    expect(json.jobTitle).toBe("Independent contractor");
+    expect(json.sameAs).toEqual(["https://github.com/natb1"]);
+  });
+
+  it("omits sameAs when empty array", () => {
+    const json = personJsonLd({ name: "Nathan", url: "https://example.com", sameAs: [] });
+    expect(json.sameAs).toBeUndefined();
   });
 });
 
