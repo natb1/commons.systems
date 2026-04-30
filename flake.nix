@@ -27,22 +27,27 @@
           productivity-tui = pkgs.callPackage ./nix/packages/productivity-tui.nix { };
         });
 
-        devShells = forAllSystems ({ pkgs, ... }: {
-          default = pkgs.mkShell {
-            packages = with pkgs; [
-              nodejs_22
-              openjdk
-              go
-              jq
-              fswatch
-              playwright-driver.browsers
-            ];
-            shellHook = ''
-              export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
-              export PATH="$PWD/dispatch/bin:$PATH"
-            '';
-          };
-        });
+        devShells = forAllSystems ({ pkgs, ... }:
+          let
+            productivity-tui = pkgs.callPackage ./nix/packages/productivity-tui.nix { };
+          in
+          {
+            default = pkgs.mkShell {
+              packages = with pkgs; [
+                nodejs_22
+                openjdk
+                go
+                jq
+                fswatch
+                playwright-driver.browsers
+              ];
+              shellHook = ''
+                export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+                export PATH="$PWD/dispatch/bin:$PATH"
+                export PATH="${productivity-tui}/bin:$PATH"
+              '';
+            };
+          });
 
         apps = forAllSystems ({ pkgs, ... }:
           let
