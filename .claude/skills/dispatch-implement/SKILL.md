@@ -9,6 +9,10 @@ Invoked by `./dispatch/bin/dispatch <issue-num>` as the opening message. The dis
 
 **The main thread never edits files.** It plans, delegates implementation to subagents via the Agent tool, and forks `/commit-merge-push` after each unit. Every code change happens in a subagent.
 
+## Resume hints from the dispatcher
+
+The dispatcher may include a free-form resume instruction in the opening message after the slash command. When present, follow it: it names the step to start at and the already-completed work to assume. Skip earlier steps when the hint says they're done.
+
 ## Steps
 
 1. **Plan.** Before entering plan mode, seed the dispatcher state file if it does not yet exist — this is what the `SessionStart:clear` hook (`.claude/hooks/restore-dispatch-skill.sh`) watches for when the user accepts a plan and clears the context:
