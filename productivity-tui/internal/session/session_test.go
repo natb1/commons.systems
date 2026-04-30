@@ -117,14 +117,14 @@ func TestFilterLive(t *testing.T) {
 	if _, ok := got["recycled"]; ok {
 		t.Error("expected recycled session (PID-start mismatch) to be dropped")
 	}
-	if _, ok := got["pre_upgrade"]; !ok {
-		t.Error("expected pre-upgrade session (PID == 0) to be kept (unknown-identity contract)")
+	if _, ok := got["pre_upgrade"]; ok {
+		t.Error("expected pre-upgrade session (PID == 0) to be dropped")
 	}
-	if _, ok := got["empty_start"]; !ok {
-		t.Error("expected empty-PIDStart session to be kept (unknown-identity contract)")
+	if _, ok := got["empty_start"]; ok {
+		t.Error("expected empty-PIDStart session to be dropped")
 	}
-	if _, ok := got["dead_empty_start"]; !ok {
-		t.Error("expected dead-PID empty-PIDStart session to be kept (unknown-identity contract)")
+	if _, ok := got["dead_empty_start"]; ok {
+		t.Error("expected dead-PID empty-PIDStart session to be dropped")
 	}
 }
 
