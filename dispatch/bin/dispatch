@@ -70,7 +70,6 @@ diagnose_state() {
       CLOSED)
         # Closed-not-merged PR: user abandoned this PR. Fall through to the
         # no-PR logic below — fresh or audit-and-pr based on commits ahead.
-        # The skill's Step 2.5.1 will create a new PR.
         ;;
       *)
         echo "error: gh pr view returned unexpected state: '$pr_state'" >&2
@@ -194,8 +193,7 @@ main() {
     echo "error: diagnose_state failed" >&2
     exit 1
   }
-  MODE=$(printf '%s\n' "$DIAGNOSIS" | head -n1)
-  PR_NUM=$(printf '%s\n' "$DIAGNOSIS" | sed -n '2p')
+  { read -r MODE; read -r PR_NUM || PR_NUM=""; } <<<"$DIAGNOSIS"
   case "$MODE" in
     fresh)
       reconcile_phase_signal local-only "$STATE_FILE" "$ISSUE_NUM"
