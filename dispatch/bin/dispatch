@@ -7,8 +7,9 @@
 # process with Claude so Claude is the terminal foreground process with
 # full interactive TTY access. Before exec, a background watcher subshell
 # is forked with $$ (the dispatcher PID, which exec preserves as Claude's
-# PID). The watcher monitors the state cache file via fswatch and SIGTERMs
-# Claude when the phase skill writes phase_signal=complete.
+# PID). The watcher sleep-polls for phase_signal=complete and SIGTERMs
+# Claude on match. The loop exits cleanly when kill -0 on the PID fails
+# (Claude exited), so no orphaned background processes remain.
 set -euo pipefail
 
 # --- sluggify --------------------------------------------------------------
@@ -27,6 +28,10 @@ make_slug() {
     slug="${slug:0:$max_slug}"
     while [[ "$slug" == *- ]]; do slug="${slug%-}"; done
   fi
+  if [[ -z "$slug" ]]; then
+    echo "error: title '$title' produces an empty slug — cannot compute a valid branch name" >&2
+    return 1
+  fi
   printf '%s-%s\n' "$num" "$slug"
 }
 
@@ -39,13 +44,15 @@ main() {
     exit 1
   fi
 
-  # Validate issue is open.
+  # Fetch state + title in a single gh call; validate issue is open.
   echo "[dispatch] Fetching issue #${ISSUE_NUM}..." >&2
-  local ISSUE_STATE
-  ISSUE_STATE=$(gh issue view "$ISSUE_NUM" --json state --jq '.state') || {
+  local ISSUE_JSON ISSUE_STATE TITLE BRANCH
+  ISSUE_JSON=$(gh issue view "$ISSUE_NUM" --json state,title) || {
     echo "error: gh issue view $ISSUE_NUM failed" >&2
     exit 1
   }
+  ISSUE_STATE=$(jq -r '.state' <<<"$ISSUE_JSON")
+  TITLE=$(jq -r '.title' <<<"$ISSUE_JSON")
   echo "[dispatch] state: $ISSUE_STATE" >&2
   if [[ "$ISSUE_STATE" != "OPEN" ]]; then
     echo "error: issue #$ISSUE_NUM is $ISSUE_STATE, not OPEN" >&2
@@ -54,20 +61,22 @@ main() {
 
   # Compute branch and the expected worktree path (convention enforced by
   # .claude/hooks/worktree-create.sh).
-  local TITLE BRANCH
-  TITLE=$(gh issue view "$ISSUE_NUM" --json title --jq '.title')
   echo "[dispatch] title: $TITLE" >&2
   BRANCH=$(make_slug "$TITLE" "$ISSUE_NUM")
   echo "[dispatch] branch: $BRANCH" >&2
 
   local GIT_COMMON_DIR PROJECT_ROOT WORKTREE_PATH STATE_FILE
-  GIT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
+  GIT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir)" || {
+    echo "error: git rev-parse --git-common-dir failed — run dispatch from within the project repo" >&2
+    exit 1
+  }
   PROJECT_ROOT="$(dirname "$GIT_COMMON_DIR")"
   WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
   STATE_FILE="$WORKTREE_PATH/tmp/dispatch-${ISSUE_NUM}.json"
 
-  # Export handoff env for the Claude session and phase skills. The relative
-  # path resolves inside the worktree where the skill runs.
+  # Export handoff env for the Claude session and phase skills.
+  # STATE_FILE is absolute (used by the watcher here); DISPATCH_STATE_FILE is
+  # relative so the skill resolves it from within the worktree's CWD.
   export DISPATCH_ISSUE_NUM="$ISSUE_NUM"
   export DISPATCH_STATE_FILE="tmp/dispatch-${ISSUE_NUM}.json"
 
@@ -92,24 +101,18 @@ main() {
   # The watcher uses DISPATCHER_PID (= $$) to monitor and SIGTERM Claude.
   local DISPATCHER_PID=$$
 
-  # Background watcher: polls until the state file appears, then SIGTERMs
-  # Claude (via DISPATCHER_PID) when phase_signal flips to complete.
+  # Background watcher: sleep-polls for phase_signal=complete and SIGTERMs
+  # Claude on match. jq silently returns false when the file doesn't exist
+  # yet, so no separate file-existence loop is needed. kill -0 detects when
+  # Claude exits, so no orphaned processes remain after the session.
   (
-    while [[ ! -f "$STATE_FILE" ]]; do
-      kill -0 "$DISPATCHER_PID" 2>/dev/null || exit 0
-      sleep 1
-    done
-    # One-shot race-check: phase-complete may have written before fswatch attaches.
-    if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
-      kill -TERM "$DISPATCHER_PID" 2>/dev/null || true
-      exit 0
-    fi
-    fswatch "$STATE_FILE" | while IFS= read -r _; do
-      kill -0 "$DISPATCHER_PID" 2>/dev/null || break
+    set -euo pipefail
+    while kill -0 "$DISPATCHER_PID" 2>/dev/null; do
       if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
         kill -TERM "$DISPATCHER_PID" 2>/dev/null || true
-        break
+        exit 0
       fi
+      sleep 1
     done
   ) &
   WATCHER_PID=$!

@@ -32,6 +32,13 @@ render_issue_body() {
   fi
 }
 
+# Render a related-issue JSON stream (one object per issue) as ### headings
+# followed by body text. Body is omitted when absent (e.g., closed siblings
+# are summary-only). Input on stdin; output on stdout.
+render_related_issues() {
+  jq -r '"### #" + (.number|tostring) + " (" + .state + "): " + .title + (if .body then "\n\n" + .body else "" end)'
+}
+
 # Fetch primary issue first so we can title the top section.
 PRIMARY_JSON=$("$SCRIPT_DIR/issue-primary" "$ISSUE_NUM")
 PRIMARY_TITLE=$(jq -r '.title' <<<"$PRIMARY_JSON")
@@ -47,37 +54,32 @@ trap 'rm -f "$TMP_OUT"' EXIT
   render_issue_body "$PRIMARY_JSON"
 
   printf '\n## Blocking Issues\n\n'
-  BLOCKING=$("$SCRIPT_DIR/issue-blocking" "$ISSUE_NUM" || true)
+  BLOCKING=$("$SCRIPT_DIR/issue-blocking" "$ISSUE_NUM")
   if [[ -z "$BLOCKING" ]]; then
     printf '_None._\n'
   else
-    jq -r '"### #" + (.number|tostring) + " (" + .state + "): " + .title + "\n\n" + (.body // "")' <<<"$BLOCKING"
+    render_related_issues <<<"$BLOCKING"
   fi
 
   printf '\n## Sub-issues\n\n'
-  SUBS=$("$SCRIPT_DIR/issue-sub-issues" "$ISSUE_NUM" || true)
+  SUBS=$("$SCRIPT_DIR/issue-sub-issues" "$ISSUE_NUM")
   if [[ -z "$SUBS" ]]; then
     printf '_None._\n'
   else
-    jq -r '"### #" + (.number|tostring) + " (" + .state + "): " + .title + "\n\n" + (.body // "")' <<<"$SUBS"
+    render_related_issues <<<"$SUBS"
   fi
 
-  PARENT=$("$SCRIPT_DIR/issue-parent" "$ISSUE_NUM" || true)
+  PARENT=$("$SCRIPT_DIR/issue-parent" "$ISSUE_NUM")
   if [[ -n "$PARENT" ]]; then
     printf '\n## Parent Issue\n\n'
-    jq -r '"### #" + (.number|tostring) + " (" + .state + "): " + .title + "\n\n" + (.body // "")' <<<"$PARENT"
+    render_related_issues <<<"$PARENT"
 
     printf '\n## Sibling Issues\n\n'
-    SIBS=$("$SCRIPT_DIR/issue-siblings" "$ISSUE_NUM" || true)
+    SIBS=$("$SCRIPT_DIR/issue-siblings" "$ISSUE_NUM")
     if [[ -z "$SIBS" ]]; then
       printf '_None._\n'
     else
-      # Open siblings have a body; closed siblings are summary-only.
-      jq -r 'if .body then
-               "### #" + (.number|tostring) + " (" + .state + "): " + .title + "\n\n" + .body
-             else
-               "### #" + (.number|tostring) + " (" + .state + "): " + .title
-             end' <<<"$SIBS"
+      render_related_issues <<<"$SIBS"
     fi
   fi
 } > "$TMP_OUT"

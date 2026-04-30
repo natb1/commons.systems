@@ -29,6 +29,8 @@ npx tsx "$REPO_ROOT/firestoreutil/bin/run-issue-state-write.ts" "$ISSUE_NUM" "$J
 CACHE_FILE="$REPO_ROOT/tmp/dispatch-${ISSUE_NUM}.json"
 if [ -f "$CACHE_FILE" ]; then
   TMP_CACHE=$(mktemp)
+  trap 'rm -f "$TMP_CACHE"' EXIT
   jq --argjson state "$JSON_INPUT" '.state = $state' "$CACHE_FILE" > "$TMP_CACHE"
   mv "$TMP_CACHE" "$CACHE_FILE"
+  trap - EXIT
 fi

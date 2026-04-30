@@ -64,12 +64,16 @@ assert_eq "unicode emoji treated as non-alnum" \
   "7-emoji-test" \
   "$(make_slug "Emoji 🚀 test" 7)"
 
-# All-non-alnum input produces empty slug; result is "<num>-".
-# (This is a degenerate case — caller's responsibility to avoid, but verify
-# the function doesn't crash.)
-assert_eq "all-symbol input yields num + trailing dash stripped" \
-  "99-" \
-  "$(make_slug "!!!" 99)"
+# All-non-alnum input produces an empty slug; make_slug now exits non-zero
+# with an error message rather than producing a bare "<num>-" branch name.
+TOTAL=$((TOTAL + 1))
+if ! make_slug "!!!" 99 >/dev/null 2>&1; then
+  PASS=$((PASS + 1))
+  echo "  PASS: all-symbol input exits non-zero (empty slug rejected)"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: all-symbol input should have exited non-zero"
+fi
 
 # Output length sanity: must never exceed 32.
 BIG=$(make_slug "$(printf 'word %.0s' {1..50})" 123)
