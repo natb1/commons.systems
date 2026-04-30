@@ -1,14 +1,11 @@
 import type { Plugin } from "vite";
 import { findCollection } from "../seeds/find-collection.js";
-import { ROLLOVERS, ALLOWANCE_PERIODS, RULE_TYPES, RECONCILIATION_ENTITY_TYPES, RECONCILIATION_CLASSIFICATIONS } from "./schema/enums.js";
+import { ROLLOVERS, ALLOWANCE_PERIODS, RULE_TYPES } from "./schema/enums.js";
 import type {
   BudgetSeedData,
   BudgetPeriodSeedData,
   RuleSeedData,
   NormalizationRuleSeedData,
-  StatementSeedData,
-  StatementItemSeedData,
-  ReconciliationNoteSeedData,
   WeeklyAggregateSeedData,
 } from "../seeds/firestore.js";
 import type {
@@ -18,12 +15,15 @@ import type {
   SeedBudgetPeriod,
   SeedRule,
   SeedNormalizationRule,
-  SeedStatement,
-  SeedStatementItem,
-  SeedReconciliationNote,
   SeedWeeklyAggregate,
 } from "virtual:budget-seed-data";
 import { serializeSeedTransaction } from "./entities/transaction.js";
+import { serializeSeedStatement } from "./entities/statement.js";
+import type { StatementSeedData } from "./entities/statement.js";
+import { serializeSeedStatementItem } from "./entities/statement-item.js";
+import type { StatementItemSeedData } from "./entities/statement-item.js";
+import { serializeSeedReconciliationNote } from "./entities/reconciliation-note.js";
+import type { ReconciliationNoteSeedData } from "./entities/reconciliation-note.js";
 
 const VIRTUAL_MODULE_ID = "virtual:budget-seed-data";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
@@ -146,20 +146,9 @@ export function serializeSeedData(): SeedData {
     };
   });
 
-  const statements: SeedStatement[] = findCollection("seed-statements").map(({ id, data: raw }) => {
-    const d = raw as unknown as StatementSeedData;
-    return {
-      id,
-      statementId: requireString(d.statementId, "statementId"),
-      institution: requireString(d.institution, "institution"),
-      account: requireString(d.account, "account"),
-      balance: requireNumber(d.balance, "balance"),
-      period: requireString(d.period, "period"),
-      balanceDate: d.balanceDate ?? null,
-      lastTransactionDateMs: toMs(d.lastTransactionDate),
-      virtual: d.virtual,
-    };
-  });
+  const statements = findCollection("seed-statements").map(({ id, data: raw }) =>
+    serializeSeedStatement(raw as unknown as StatementSeedData, id)
+  );
 
   const weeklyAggregates: SeedWeeklyAggregate[] = findCollection("seed-weekly-aggregates").map(({ id, data: raw }) => {
     const d = raw as unknown as WeeklyAggregateSeedData;
@@ -171,42 +160,13 @@ export function serializeSeedData(): SeedData {
     };
   });
 
-  const statementItems: SeedStatementItem[] = findCollection("seed-statement-items").map(({ id, data: raw }) => {
-    const d = raw as unknown as StatementItemSeedData;
-    return {
-      id,
-      statementItemId: requireString(d.statementItemId, "statementItemId"),
-      statementId: requireString(d.statementId, "statementId"),
-      institution: requireString(d.institution, "institution"),
-      account: requireString(d.account, "account"),
-      period: requireString(d.period, "period"),
-      amount: requireNumber(d.amount, "amount"),
-      timestampMs: requireMs(d.timestamp, "timestamp"),
-      description: requireString(d.description, "description"),
-      fitid: requireString(d.fitid, "fitid"),
-    };
-  });
+  const statementItems = findCollection("seed-statement-items").map(({ id, data: raw }) =>
+    serializeSeedStatementItem(raw as unknown as StatementItemSeedData, id)
+  );
 
-  const reconciliationNotes: SeedReconciliationNote[] = findCollection("seed-reconciliation-notes").map(({ id, data: raw }) => {
-    const d = raw as unknown as ReconciliationNoteSeedData;
-    if (!(RECONCILIATION_ENTITY_TYPES as readonly unknown[]).includes(d.entityType)) {
-      throw new Error(`Invalid reconciliation entityType: ${d.entityType}`);
-    }
-    const entityType = d.entityType as "transaction" | "statementItem";
-    if (!(RECONCILIATION_CLASSIFICATIONS as readonly unknown[]).includes(d.classification)) {
-      throw new Error(`Invalid reconciliation classification: ${d.classification}`);
-    }
-    const classification = d.classification as "timing" | "missing_entry" | "discrepancy";
-    return {
-      id,
-      entityType,
-      entityId: requireString(d.entityId, "entityId"),
-      classification,
-      note: requireString(d.note, "note"),
-      updatedAtMs: requireMs(d.updatedAt, "updatedAt"),
-      updatedBy: requireString(d.updatedBy, "updatedBy"),
-    };
-  });
+  const reconciliationNotes = findCollection("seed-reconciliation-notes").map(({ id, data: raw }) =>
+    serializeSeedReconciliationNote(raw as unknown as ReconciliationNoteSeedData, id)
+  );
 
   return {
     transactions,

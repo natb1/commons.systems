@@ -7,7 +7,6 @@ import type {
   Rule,
   NormalizationRule,
   WeeklyAggregate,
-  StatementId,
   BudgetId,
   BudgetPeriodId,
   RuleId,
@@ -22,6 +21,8 @@ import type { ParsedData } from "./idb.js";
 import type { RawTransaction } from "./entities/transaction.js";
 import { parseRawTransaction, transactionToIdbRecord } from "./entities/transaction.js";
 import { UploadValidationError } from "./entities/_helpers.js";
+import type { RawStatement } from "./entities/statement.js";
+import { parseRawStatement, statementToIdbRecord } from "./entities/statement.js";
 // Re-export so existing import sites keep working.
 export { UploadValidationError };
 
@@ -88,18 +89,6 @@ interface RawNormalizationRule {
   priority: number;
 }
 
-interface RawStatement {
-  id: string;
-  statementId: string;
-  institution: string;
-  account: string;
-  balance: number;
-  period: string;
-  balanceDate?: string;
-  lastTransactionDate?: string | null;
-  virtual?: boolean;
-}
-
 interface RawWeeklyAggregate {
   id: string;
   weekStart: string;
@@ -148,13 +137,6 @@ function requireAllowancePeriod(value: string | undefined): AllowancePeriod {
 function requireId(value: unknown, entity: string, index: number): string {
   if (typeof value !== "string" || value === "") {
     throw new UploadValidationError(`${entity}[${index}] is missing a valid id`);
-  }
-  return value;
-}
-
-function requireString(value: unknown, entity: string, index: number, field: string): string {
-  if (typeof value !== "string" || value === "") {
-    throw new UploadValidationError(`${entity}[${index}].${field} is missing or empty`);
   }
   return value;
 }
@@ -268,20 +250,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
   );
 
   const statements: Statement[] = (raw.statements ?? []).map(
-    (s: RawStatement, i: number) => ({
-      id: requireId(s.id, "statement", i),
-      statementId: requireId(s.statementId, "statement.statementId", i) as StatementId,
-      institution: requireString(s.institution, "statement", i, "institution"),
-      account: requireString(s.account, "statement", i, "account"),
-      balance: requireFiniteNumber(s.balance, "statement", i, "balance"),
-      period: requireString(s.period, "statement", i, "period"),
-      balanceDate: s.balanceDate || null,
-      lastTransactionDate: s.lastTransactionDate
-        ? parseTimestamp(s.lastTransactionDate, `statement[${i}].lastTransactionDate`)
-        : null,
-      groupId: null as GroupId | null,
-      virtual: s.virtual ?? false,
-    }),
+    (s: RawStatement, i: number) => parseRawStatement(s, i),
   );
 
   const weeklyAggregates: WeeklyAggregate[] = (raw.weeklyAggregates ?? []).map(
@@ -352,17 +321,7 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
       account: r.account,
       priority: r.priority,
     })),
-    statements: parsed.statements.map((s) => ({
-      id: s.id,
-      statementId: s.statementId,
-      institution: s.institution,
-      account: s.account,
-      balance: s.balance,
-      period: s.period,
-      balanceDate: s.balanceDate,
-      lastTransactionDateMs: s.lastTransactionDate?.toMillis() ?? null,
-      virtual: s.virtual,
-    })),
+    statements: parsed.statements.map(statementToIdbRecord),
     statementItems: [],
     reconciliationNotes: [],
     weeklyAggregates: parsed.weeklyAggregates.map((a) => ({

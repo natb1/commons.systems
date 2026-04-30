@@ -1,7 +1,13 @@
 import { createDbConnection } from "@commons-systems/idbutil/connection";
-import type { Rollover, RuleType, ReconciliationClassification, ReconciliationEntityType } from "./firestore.js";
+import type { Rollover, RuleType } from "./firestore.js";
 import type { IdbTransaction } from "./entities/transaction.js";
 export type { IdbTransaction };
+import type { IdbStatement } from "./entities/statement.js";
+export type { IdbStatement };
+import type { IdbStatementItem } from "./entities/statement-item.js";
+export type { IdbStatementItem };
+import type { IdbReconciliationNote } from "./entities/reconciliation-note.js";
+export type { IdbReconciliationNote };
 
 const STORE_NAMES = [
   "transactions",
@@ -84,46 +90,11 @@ export interface IdbNormalizationRule {
   priority: number;
 }
 
-export interface IdbStatement {
-  id: string;
-  statementId: string;
-  institution: string;
-  account: string;
-  balance: number;
-  period: string;
-  balanceDate: string | null;
-  lastTransactionDateMs: number | null;
-  virtual: boolean;
-}
-
 export interface IdbWeeklyAggregate {
   id: string;
   weekStartMs: number;
   creditTotal: number;
   unbudgetedTotal: number;
-}
-
-export interface IdbStatementItem {
-  id: string;
-  statementItemId: string;
-  statementId: string;
-  institution: string;
-  account: string;
-  period: string;
-  amount: number;
-  timestampMs: number;
-  description: string;
-  fitid: string;
-}
-
-export interface IdbReconciliationNote {
-  id: string;
-  entityType: ReconciliationEntityType;
-  entityId: string;
-  classification: ReconciliationClassification;
-  note: string;
-  updatedAtMs: number;
-  updatedBy: string;
 }
 
 export interface ParsedData {

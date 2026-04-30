@@ -1,8 +1,14 @@
 /** Serializes IndexedDB stores back to the upload JSON format. Inverse of the upload pipeline (parseUploadedJson + toParsedData in upload.ts). */
 import { getAll, getMeta } from "./idb.js";
-import type { IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbStatement, IdbStatementItem, IdbReconciliationNote } from "./idb.js";
+import type { IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule } from "./idb.js";
 import type { IdbTransaction } from "./entities/transaction.js";
 import { transactionToRawJson } from "./entities/transaction.js";
+import type { IdbStatement } from "./entities/statement.js";
+import { statementToRawJson } from "./entities/statement.js";
+import type { IdbStatementItem } from "./entities/statement-item.js";
+import { statementItemToRawJson } from "./entities/statement-item.js";
+import type { IdbReconciliationNote } from "./entities/reconciliation-note.js";
+import { reconciliationNoteToRawJson } from "./entities/reconciliation-note.js";
 import { msToISO as msToIso, nullToEmpty } from "./entities/_helpers.js";
 
 export async function exportToJson(): Promise<string> {
@@ -70,39 +76,9 @@ export async function exportToJson(): Promise<string> {
       account: nullToEmpty(r.account),
       priority: r.priority,
     })),
-    statements: statements.map((s) => ({
-      id: s.id,
-      statementId: s.statementId,
-      institution: s.institution,
-      account: s.account,
-      balance: s.balance,
-      period: s.period,
-      balanceDate: s.balanceDate ?? "",
-      lastTransactionDate: s.lastTransactionDateMs != null
-        ? msToIso(s.lastTransactionDateMs)
-        : null,
-    })),
-    statementItems: statementItems.map((i) => ({
-      id: i.id,
-      statementItemId: i.statementItemId,
-      statementId: i.statementId,
-      institution: i.institution,
-      account: i.account,
-      period: i.period,
-      amount: i.amount,
-      timestamp: msToIso(i.timestampMs),
-      description: i.description,
-      fitid: i.fitid,
-    })),
-    reconciliationNotes: reconciliationNotes.map((n) => ({
-      id: n.id,
-      entityType: n.entityType,
-      entityId: n.entityId,
-      classification: n.classification,
-      note: n.note,
-      updatedAt: msToIso(n.updatedAtMs),
-      updatedBy: n.updatedBy,
-    })),
+    statements: statements.map(statementToRawJson),
+    statementItems: statementItems.map(statementItemToRawJson),
+    reconciliationNotes: reconciliationNotes.map(reconciliationNoteToRawJson),
   };
 
   return JSON.stringify(output, null, 2) + "\n";

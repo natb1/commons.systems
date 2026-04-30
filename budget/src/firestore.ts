@@ -21,9 +21,16 @@ import {
 import { parseFirestoreTransaction, validateReimbursementRange } from "./entities/transaction.js";
 import type { Transaction, TransactionId } from "./entities/transaction.js";
 export type { Transaction, IdbTransaction, TransactionId } from "./entities/transaction.js";
+import { parseFirestoreStatement } from "./entities/statement.js";
+import type { Statement } from "./entities/statement.js";
+export type { Statement, IdbStatement, StatementId } from "./entities/statement.js";
+import { parseFirestoreStatementItem } from "./entities/statement-item.js";
+import type { StatementItem, StatementItemId } from "./entities/statement-item.js";
+export type { StatementItem, IdbStatementItem, StatementItemId } from "./entities/statement-item.js";
+import { parseFirestoreReconciliationNote } from "./entities/reconciliation-note.js";
+import type { ReconciliationNote } from "./entities/reconciliation-note.js";
+export type { ReconciliationNote, IdbReconciliationNote } from "./entities/reconciliation-note.js";
 
-export type StatementId = Brand<"StatementId">;
-export type StatementItemId = Brand<"StatementItemId">;
 export type BudgetId = Brand<"BudgetId">;
 export type BudgetPeriodId = Brand<"BudgetPeriodId">;
 export type RuleId = Brand<"RuleId">;
@@ -74,50 +81,6 @@ export interface SerializedBudgetPeriod {
   readonly total: number;
   readonly count: number;
   readonly categoryBreakdown: Record<string, number>;
-}
-
-export interface Statement {
-  readonly id: string;
-  readonly statementId: StatementId;
-  readonly institution: string;
-  readonly account: string;
-  readonly balance: number;
-  readonly period: string;
-  readonly balanceDate: string | null;
-  readonly lastTransactionDate: Timestamp | null;
-  readonly groupId: GroupId | null;
-  readonly virtual: boolean;
-}
-
-/**
- * Immutable bank-record line item. One document per OFX transaction line.
- * Amount uses the raw bank sign convention: negative = debit, positive = credit.
- * Transactions invert this (positive = spending), so reconciliation must sign-flip when matching.
- */
-export interface StatementItem {
-  readonly id: string;
-  readonly statementItemId: StatementItemId;
-  readonly statementId: StatementId;
-  readonly institution: string;
-  readonly account: string;
-  readonly period: string;
-  readonly amount: number;
-  readonly timestamp: Timestamp;
-  readonly description: string;
-  readonly fitid: string;
-  readonly groupId: GroupId | null;
-}
-
-/** User annotation on an unmatched reconciliation entity. Document id = `{entityType}_{entityId}`. */
-export interface ReconciliationNote {
-  readonly id: string;
-  readonly entityType: ReconciliationEntityType;
-  readonly entityId: string;
-  readonly classification: ReconciliationClassification;
-  readonly note: string;
-  readonly updatedAt: Timestamp;
-  readonly updatedBy: string;
-  readonly groupId: GroupId | null;
 }
 
 function optionalTimestamp(value: unknown, field: string): Timestamp | null {
@@ -238,21 +201,7 @@ export async function getStatements(groupId: null): Promise<Statement[]>;
 export async function getStatements(groupId: GroupId, email: string): Promise<Statement[]>;
 export async function getStatements(groupId: GroupId | null, email?: string): Promise<Statement[]> {
   const docs = await queryGroupCollection("statements", "seed-", groupId, email);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id,
-      statementId: requireString(data.statementId, "statementId") as StatementId,
-      institution: requireString(data.institution, "institution"),
-      account: requireString(data.account, "account"),
-      balance: requireNumber(data.balance, "balance"),
-      period: requireString(data.period, "period"),
-      balanceDate: optionalString(data.balanceDate, "balanceDate"),
-      lastTransactionDate: optionalTimestamp(data.lastTransactionDate, "lastTransactionDate"),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-      virtual: data.virtual === true,
-    };
-  });
+  return docs.map(parseFirestoreStatement);
 }
 
 function requireDocId(id: string, label: string): void {
@@ -287,30 +236,7 @@ export async function getStatementItems(groupId: null): Promise<StatementItem[]>
 export async function getStatementItems(groupId: GroupId, email: string): Promise<StatementItem[]>;
 export async function getStatementItems(groupId: GroupId | null, email?: string): Promise<StatementItem[]> {
   const docs = await queryGroupCollection("statement-items", "seed-", groupId, email);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id,
-      statementItemId: requireString(data.statementItemId, "statementItemId") as StatementItemId,
-      statementId: requireString(data.statementId, "statementId") as StatementId,
-      institution: requireString(data.institution, "institution"),
-      account: requireString(data.account, "account"),
-      period: requireString(data.period, "period"),
-      amount: requireNumber(data.amount, "amount"),
-      timestamp: requireTimestamp(data.timestamp, "timestamp"),
-      description: requireString(data.description, "description"),
-      fitid: requireString(data.fitid, "fitid"),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-    };
-  });
-}
-
-function requireReconciliationClassification(value: unknown): ReconciliationClassification {
-  return requireOneOf(value, RECONCILIATION_CLASSIFICATIONS, "classification");
-}
-
-function requireReconciliationEntityType(value: unknown): ReconciliationEntityType {
-  return requireOneOf(value, RECONCILIATION_ENTITY_TYPES, "entityType");
+  return docs.map(parseFirestoreStatementItem);
 }
 
 export function reconciliationNoteDocId(
@@ -325,19 +251,7 @@ export async function getReconciliationNotes(groupId: null): Promise<Reconciliat
 export async function getReconciliationNotes(groupId: GroupId, email: string): Promise<ReconciliationNote[]>;
 export async function getReconciliationNotes(groupId: GroupId | null, email?: string): Promise<ReconciliationNote[]> {
   const docs = await queryGroupCollection("reconciliation-notes", "seed-", groupId, email);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id,
-      entityType: requireReconciliationEntityType(data.entityType),
-      entityId: requireString(data.entityId, "entityId"),
-      classification: requireReconciliationClassification(data.classification),
-      note: typeof data.note === "string" ? data.note : "",
-      updatedAt: requireTimestamp(data.updatedAt, "updatedAt"),
-      updatedBy: requireString(data.updatedBy, "updatedBy"),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-    };
-  });
+  return docs.map(parseFirestoreReconciliationNote);
 }
 
 export async function upsertReconciliationNote(
@@ -351,8 +265,8 @@ export async function upsertReconciliationNote(
     note: string;
   },
 ): Promise<string> {
-  requireReconciliationEntityType(fields.entityType);
-  requireReconciliationClassification(fields.classification);
+  requireOneOf(fields.entityType, RECONCILIATION_ENTITY_TYPES, "entityType");
+  requireOneOf(fields.classification, RECONCILIATION_CLASSIFICATIONS, "classification");
   if (!fields.entityId) throw new Error("entityId is required");
   const id = reconciliationNoteDocId(fields.entityType, fields.entityId);
   const path = nsCollectionPath(NAMESPACE, "reconciliation-notes");
