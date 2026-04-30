@@ -38,6 +38,7 @@
             ];
             shellHook = ''
               export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+              export PATH="$PWD/dispatch/bin:$PATH"
             '';
           };
         });
