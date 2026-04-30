@@ -8,7 +8,6 @@ import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
 import type { BudgetPeriodSeedData } from "../../seeds/firestore.js";
-import type { SeedBudgetPeriod } from "virtual:budget-seed-data";
 import type { BudgetId } from "./budget.js";
 
 // ── Local validation helpers ──────────────────────────────────────────────────
@@ -86,6 +85,18 @@ export interface RawBudgetPeriod {
 
 // ── Seed data type alias ──────────────────────────────────────────────────────
 export type { BudgetPeriodSeedData };
+
+// ── Seed output type ──────────────────────────────────────────────────────────
+// Defined here so budget-seed-data.d.ts can re-export it without circular refs.
+export interface SeedBudgetPeriod {
+  readonly id: string;
+  readonly budgetId: string;
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly total: number;
+  readonly count: number;
+  readonly categoryBreakdown: Record<string, number>;
+}
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 

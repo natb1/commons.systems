@@ -9,7 +9,6 @@ import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
 import { msToTs } from "./_helpers.js";
 import type { StatementItemSeedData } from "../../seeds/firestore.js";
-import type { SeedStatementItem } from "virtual:budget-seed-data";
 import type { StatementId } from "./statement.js";
 
 // No upload/Raw shape — upload pipeline doesn't ingest these yet.
@@ -80,6 +79,21 @@ export interface IdbStatementItem {
 
 // ── Seed data type alias ──────────────────────────────────────────────────────
 export type { StatementItemSeedData };
+
+// ── Seed output type ──────────────────────────────────────────────────────────
+// Defined here so budget-seed-data.d.ts can re-export it without circular refs.
+export interface SeedStatementItem {
+  readonly id: string;
+  readonly statementItemId: string;
+  readonly statementId: string;
+  readonly institution: string;
+  readonly account: string;
+  readonly period: string;
+  readonly amount: number;
+  readonly timestampMs: number;
+  readonly description: string;
+  readonly fitid: string;
+}
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 

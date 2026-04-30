@@ -8,7 +8,6 @@ import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import { msToTs } from "./_helpers.js";
 import type { ReconciliationNoteSeedData } from "../../seeds/firestore.js";
-import type { SeedReconciliationNote } from "virtual:budget-seed-data";
 import {
   RECONCILIATION_CLASSIFICATIONS,
   RECONCILIATION_ENTITY_TYPES,
@@ -65,6 +64,18 @@ export interface IdbReconciliationNote {
 
 // ── Seed data type alias ──────────────────────────────────────────────────────
 export type { ReconciliationNoteSeedData };
+
+// ── Seed output type ──────────────────────────────────────────────────────────
+// Defined here so budget-seed-data.d.ts can re-export it without circular refs.
+export interface SeedReconciliationNote {
+  readonly id: string;
+  readonly entityType: "transaction" | "statementItem";
+  readonly entityId: string;
+  readonly classification: "timing" | "missing_entry" | "discrepancy";
+  readonly note: string;
+  readonly updatedAtMs: number;
+  readonly updatedBy: string;
+}
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 

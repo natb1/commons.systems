@@ -9,8 +9,28 @@ import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
 import { msToTs, parseISOTimestamp, msToISO, nullToEmpty, UploadValidationError } from "./_helpers.js";
 import type { TransactionSeedData } from "../../seeds/firestore.js";
-import type { SeedTransaction } from "virtual:budget-seed-data";
 import type { BudgetId } from "../firestore.js";
+
+// ── Seed output type ──────────────────────────────────────────────────────────
+// Defined here so budget-seed-data.d.ts can re-export it without circular refs.
+export interface SeedTransaction {
+  readonly id: string;
+  readonly institution: string;
+  readonly account: string;
+  readonly description: string;
+  readonly amount: number;
+  readonly note: string;
+  readonly category: string;
+  readonly reimbursement: number;
+  readonly budget: string | null;
+  readonly timestampMs: number | null;
+  readonly statementId: string | null;
+  readonly statementItemId: string | null;
+  readonly normalizedId: string | null;
+  readonly normalizedPrimary: boolean;
+  readonly normalizedDescription: string | null;
+  readonly virtual: boolean;
+}
 
 // ── Local validation helpers ──────────────────────────────────────────────────
 // Inlined here to avoid importing @commons-systems/firestoreutil/validate,

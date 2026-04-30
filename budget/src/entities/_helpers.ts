@@ -53,3 +53,22 @@ export class UploadValidationError extends Error {
     this.name = "UploadValidationError";
   }
 }
+
+/**
+ * Filter a list of IDB records by a millisecond timestamp range.
+ * Records with a null timestamp are excluded when a `sinceMs` bound is present.
+ */
+export function filterByTimestamp<T extends { timestampMs: number | null }>(
+  rows: T[], sinceMs: number | undefined, beforeMs: number | undefined,
+): T[] {
+  return rows.filter(row => {
+    if (sinceMs !== undefined) {
+      if (row.timestampMs === null) return false;
+      if (row.timestampMs < sinceMs) return false;
+    }
+    if (beforeMs !== undefined) {
+      if (row.timestampMs !== null && row.timestampMs >= beforeMs) return false;
+    }
+    return true;
+  });
+}

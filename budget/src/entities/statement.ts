@@ -9,7 +9,6 @@ import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
 import { msToTs } from "./_helpers.js";
 import type { StatementSeedData } from "../../seeds/firestore.js";
-import type { SeedStatement } from "virtual:budget-seed-data";
 
 // ── Local validation helpers ──────────────────────────────────────────────────
 // Inlined here to avoid importing @commons-systems/firestoreutil/validate and
@@ -84,6 +83,20 @@ export interface RawStatement {
 
 // ── Seed data type alias ──────────────────────────────────────────────────────
 export type { StatementSeedData };
+
+// ── Seed output type ──────────────────────────────────────────────────────────
+// Defined here so budget-seed-data.d.ts can re-export it without circular refs.
+export interface SeedStatement {
+  readonly id: string;
+  readonly statementId: string;
+  readonly institution: string;
+  readonly account: string;
+  readonly balance: number;
+  readonly period: string;
+  readonly balanceDate: string | null;
+  readonly lastTransactionDateMs: number | null;
+  readonly virtual: boolean;
+}
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 

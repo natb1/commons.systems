@@ -1,6 +1,5 @@
 /** Serializes IndexedDB stores back to the upload JSON format. Inverse of the upload pipeline (parseUploadedJson + toParsedData in upload.ts). */
 import { getAll, getMeta } from "./idb.js";
-import type { IdbRule, IdbNormalizationRule } from "./idb.js";
 import type { IdbTransaction } from "./entities/transaction.js";
 import { transactionToRawJson } from "./entities/transaction.js";
 import type { IdbStatement } from "./entities/statement.js";
@@ -13,7 +12,10 @@ import type { IdbBudget } from "./entities/budget.js";
 import { budgetToRawJson } from "./entities/budget.js";
 import type { IdbBudgetPeriod } from "./entities/budget-period.js";
 import { budgetPeriodToRawJson } from "./entities/budget-period.js";
-import { nullToEmpty } from "./entities/_helpers.js";
+import type { IdbRule } from "./entities/rule.js";
+import { ruleToRawJson } from "./entities/rule.js";
+import type { IdbNormalizationRule } from "./entities/normalization-rule.js";
+import { normalizationRuleToRawJson } from "./entities/normalization-rule.js";
 
 export async function exportToJson(): Promise<string> {
   const [transactions, budgets, budgetPeriods, rules, normalizationRules, statements, statementItems, reconciliationNotes, meta] = await Promise.all([
@@ -39,29 +41,8 @@ export async function exportToJson(): Promise<string> {
     transactions: transactions.map(transactionToRawJson),
     budgets: budgets.map(budgetToRawJson),
     budgetPeriods: budgetPeriods.map(budgetPeriodToRawJson),
-    rules: rules.map((r) => ({
-      id: r.id,
-      type: r.type,
-      pattern: r.pattern,
-      target: r.target,
-      priority: r.priority,
-      institution: nullToEmpty(r.institution),
-      account: nullToEmpty(r.account),
-      ...(r.minAmount != null ? { minAmount: r.minAmount } : {}),
-      ...(r.maxAmount != null ? { maxAmount: r.maxAmount } : {}),
-      ...(r.excludeCategory ? { excludeCategory: r.excludeCategory } : {}),
-      ...(r.matchCategory ? { matchCategory: r.matchCategory } : {}),
-    })),
-    normalizationRules: normalizationRules.map((r) => ({
-      id: r.id,
-      pattern: r.pattern,
-      patternType: nullToEmpty(r.patternType),
-      canonicalDescription: r.canonicalDescription,
-      dateWindowDays: r.dateWindowDays,
-      institution: nullToEmpty(r.institution),
-      account: nullToEmpty(r.account),
-      priority: r.priority,
-    })),
+    rules: rules.map(ruleToRawJson),
+    normalizationRules: normalizationRules.map(normalizationRuleToRawJson),
     statements: statements.map(statementToRawJson),
     statementItems: statementItems.map(statementItemToRawJson),
     reconciliationNotes: reconciliationNotes.map(reconciliationNoteToRawJson),

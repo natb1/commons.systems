@@ -1,5 +1,4 @@
 import { createDbConnection } from "@commons-systems/idbutil/connection";
-import type { RuleType } from "./firestore.js";
 import type { IdbTransaction } from "./entities/transaction.js";
 export type { IdbTransaction };
 import type { IdbStatement } from "./entities/statement.js";
@@ -12,6 +11,12 @@ import type { IdbBudget } from "./entities/budget.js";
 export type { IdbBudget };
 import type { IdbBudgetPeriod } from "./entities/budget-period.js";
 export type { IdbBudgetPeriod };
+import type { IdbRule } from "./entities/rule.js";
+export type { IdbRule };
+import type { IdbNormalizationRule } from "./entities/normalization-rule.js";
+export type { IdbNormalizationRule };
+import type { IdbWeeklyAggregate } from "./entities/weekly-aggregate.js";
+export type { IdbWeeklyAggregate };
 
 const STORE_NAMES = [
   "transactions",
@@ -48,38 +53,6 @@ export interface UploadMeta {
   groupName: string;
   version: number;
   exportedAt: string;
-}
-
-export interface IdbRule {
-  id: string;
-  type: RuleType;
-  pattern: string;
-  target: string;
-  priority: number;
-  institution: string | null;
-  account: string | null;
-  minAmount: number | null;
-  maxAmount: number | null;
-  excludeCategory: string | null;
-  matchCategory: string | null;
-}
-
-export interface IdbNormalizationRule {
-  id: string;
-  pattern: string;
-  patternType: string | null;
-  canonicalDescription: string;
-  dateWindowDays: number;
-  institution: string | null;
-  account: string | null;
-  priority: number;
-}
-
-export interface IdbWeeklyAggregate {
-  id: string;
-  weekStartMs: number;
-  creditTotal: number;
-  unbudgetedTotal: number;
 }
 
 export interface ParsedData {

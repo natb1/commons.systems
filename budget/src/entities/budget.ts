@@ -9,7 +9,6 @@ import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
 import { msToTs, UploadValidationError } from "./_helpers.js";
 import type { BudgetSeedData } from "../../seeds/firestore.js";
-import type { SeedBudget } from "virtual:budget-seed-data";
 import {
   ROLLOVERS,
   ALLOWANCE_PERIODS,
@@ -99,6 +98,22 @@ export interface RawBudget {
 
 // ── Seed data type alias ──────────────────────────────────────────────────────
 export type { BudgetSeedData };
+
+// ── Seed output types ─────────────────────────────────────────────────────────
+// Defined here so budget-seed-data.d.ts can re-export them without circular refs.
+export interface SeedBudgetOverride {
+  readonly dateMs: number;
+  readonly balance: number;
+}
+
+export interface SeedBudget {
+  readonly id: string;
+  readonly name: string;
+  readonly allowance: number;
+  readonly allowancePeriod: "weekly" | "monthly" | "quarterly";
+  readonly rollover: "none" | "debt" | "balance";
+  readonly overrides: SeedBudgetOverride[];
+}
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
