@@ -1,5 +1,5 @@
 import { createDbConnection } from "@commons-systems/idbutil/connection";
-import type { Rollover, RuleType } from "./firestore.js";
+import type { RuleType } from "./firestore.js";
 import type { IdbTransaction } from "./entities/transaction.js";
 export type { IdbTransaction };
 import type { IdbStatement } from "./entities/statement.js";
@@ -8,6 +8,10 @@ import type { IdbStatementItem } from "./entities/statement-item.js";
 export type { IdbStatementItem };
 import type { IdbReconciliationNote } from "./entities/reconciliation-note.js";
 export type { IdbReconciliationNote };
+import type { IdbBudget } from "./entities/budget.js";
+export type { IdbBudget };
+import type { IdbBudgetPeriod } from "./entities/budget-period.js";
+export type { IdbBudgetPeriod };
 
 const STORE_NAMES = [
   "transactions",
@@ -44,25 +48,6 @@ export interface UploadMeta {
   groupName: string;
   version: number;
   exportedAt: string;
-}
-
-export interface IdbBudget {
-  id: string;
-  name: string;
-  allowance: number;
-  allowancePeriod?: string;
-  rollover: Rollover;
-  overrides?: Array<{ dateMs: number; balance: number }>;
-}
-
-export interface IdbBudgetPeriod {
-  id: string;
-  budgetId: string;
-  periodStartMs: number;
-  periodEndMs: number;
-  total: number;
-  count: number;
-  categoryBreakdown: Record<string, number>;
 }
 
 export interface IdbRule {

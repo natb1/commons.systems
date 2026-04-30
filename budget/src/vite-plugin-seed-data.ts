@@ -1,18 +1,13 @@
 import type { Plugin } from "vite";
 import { findCollection } from "../seeds/find-collection.js";
-import { ROLLOVERS, ALLOWANCE_PERIODS, RULE_TYPES } from "./schema/enums.js";
+import { RULE_TYPES } from "./schema/enums.js";
 import type {
-  BudgetSeedData,
-  BudgetPeriodSeedData,
   RuleSeedData,
   NormalizationRuleSeedData,
   WeeklyAggregateSeedData,
 } from "../seeds/firestore.js";
 import type {
   SeedData,
-  SeedBudget,
-  SeedBudgetOverride,
-  SeedBudgetPeriod,
   SeedRule,
   SeedNormalizationRule,
   SeedWeeklyAggregate,
@@ -24,6 +19,10 @@ import { serializeSeedStatementItem } from "./entities/statement-item.js";
 import type { StatementItemSeedData } from "./entities/statement-item.js";
 import { serializeSeedReconciliationNote } from "./entities/reconciliation-note.js";
 import type { ReconciliationNoteSeedData } from "./entities/reconciliation-note.js";
+import { serializeSeedBudget } from "./entities/budget.js";
+import type { BudgetSeedData } from "./entities/budget.js";
+import { serializeSeedBudgetPeriod } from "./entities/budget-period.js";
+import type { BudgetPeriodSeedData } from "./entities/budget-period.js";
 
 const VIRTUAL_MODULE_ID = "virtual:budget-seed-data";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
@@ -50,26 +49,6 @@ function requireNumber(value: unknown, field: string): number {
   return value;
 }
 
-function requireNonNegativeNumber(value: unknown, field: string): number {
-  const n = requireNumber(value, field);
-  if (n < 0) throw new Error(`Expected non-negative number for ${field}, got ${n}`);
-  return n;
-}
-
-function requireAllowancePeriod(value: unknown): "weekly" | "monthly" | "quarterly" {
-  if (!(ALLOWANCE_PERIODS as readonly unknown[]).includes(value)) {
-    throw new Error(`Expected allowancePeriod to be "weekly" | "monthly" | "quarterly", got ${JSON.stringify(value)}`);
-  }
-  return value as "weekly" | "monthly" | "quarterly";
-}
-
-function requireRollover(value: unknown): "none" | "debt" | "balance" {
-  if (!(ROLLOVERS as readonly unknown[]).includes(value)) {
-    throw new Error(`Expected rollover to be "none" | "debt" | "balance", got ${JSON.stringify(value)}`);
-  }
-  return value as "none" | "debt" | "balance";
-}
-
 function requireRuleType(value: unknown): "categorization" | "budget_assignment" {
   if (!(RULE_TYPES as readonly unknown[]).includes(value)) {
     throw new Error(`Expected rule type to be "categorization" | "budget_assignment", got ${JSON.stringify(value)}`);
@@ -82,38 +61,13 @@ export function serializeSeedData(): SeedData {
     serializeSeedTransaction(raw as unknown as import("../seeds/firestore.js").TransactionSeedData, id)
   );
 
-  const budgets: SeedBudget[] = findCollection("seed-budgets").map(({ id, data: raw }) => {
-    const d = raw as unknown as BudgetSeedData;
-    const name = requireString(d.name, "name");
-    if (!name) throw new Error("Budget name must be non-empty");
-    const overrides: SeedBudgetOverride[] = Array.isArray(raw.overrides)
-      ? (raw.overrides as { date: unknown; balance: number }[]).map((o) => ({
-          dateMs: requireMs(o.date, "overrides.date"),
-          balance: requireNumber(o.balance, "overrides.balance"),
-        }))
-      : [];
-    return {
-      id,
-      name,
-      allowance: requireNonNegativeNumber(d.allowance, "allowance"),
-      allowancePeriod: requireAllowancePeriod(d.allowancePeriod),
-      rollover: requireRollover(d.rollover),
-      overrides,
-    };
-  });
+  const budgets = findCollection("seed-budgets").map(({ id, data: raw }) =>
+    serializeSeedBudget(raw as unknown as BudgetSeedData, id)
+  );
 
-  const budgetPeriods: SeedBudgetPeriod[] = findCollection("seed-budget-periods").map(({ id, data: raw }) => {
-    const d = raw as unknown as BudgetPeriodSeedData;
-    return {
-      id,
-      budgetId: d.budgetId,
-      periodStartMs: requireMs(d.periodStart, "periodStart"),
-      periodEndMs: requireMs(d.periodEnd, "periodEnd"),
-      total: requireNumber(d.total, "total"),
-      count: requireNumber(d.count, "count"),
-      categoryBreakdown: d.categoryBreakdown,
-    };
-  });
+  const budgetPeriods = findCollection("seed-budget-periods").map(({ id, data: raw }) =>
+    serializeSeedBudgetPeriod(raw as unknown as BudgetPeriodSeedData, id)
+  );
 
   const rules: SeedRule[] = findCollection("seed-rules").map(({ id, data: raw }) => {
     const d = raw as unknown as RuleSeedData;

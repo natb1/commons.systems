@@ -1,6 +1,6 @@
 /** Serializes IndexedDB stores back to the upload JSON format. Inverse of the upload pipeline (parseUploadedJson + toParsedData in upload.ts). */
 import { getAll, getMeta } from "./idb.js";
-import type { IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule } from "./idb.js";
+import type { IdbRule, IdbNormalizationRule } from "./idb.js";
 import type { IdbTransaction } from "./entities/transaction.js";
 import { transactionToRawJson } from "./entities/transaction.js";
 import type { IdbStatement } from "./entities/statement.js";
@@ -9,7 +9,11 @@ import type { IdbStatementItem } from "./entities/statement-item.js";
 import { statementItemToRawJson } from "./entities/statement-item.js";
 import type { IdbReconciliationNote } from "./entities/reconciliation-note.js";
 import { reconciliationNoteToRawJson } from "./entities/reconciliation-note.js";
-import { msToISO as msToIso, nullToEmpty } from "./entities/_helpers.js";
+import type { IdbBudget } from "./entities/budget.js";
+import { budgetToRawJson } from "./entities/budget.js";
+import type { IdbBudgetPeriod } from "./entities/budget-period.js";
+import { budgetPeriodToRawJson } from "./entities/budget-period.js";
+import { nullToEmpty } from "./entities/_helpers.js";
 
 export async function exportToJson(): Promise<string> {
   const [transactions, budgets, budgetPeriods, rules, normalizationRules, statements, statementItems, reconciliationNotes, meta] = await Promise.all([
@@ -33,26 +37,8 @@ export async function exportToJson(): Promise<string> {
     groupId: "",
     groupName: meta.groupName,
     transactions: transactions.map(transactionToRawJson),
-    budgets: budgets.map((b) => ({
-      id: b.id,
-      name: b.name,
-      allowance: b.allowance,
-      allowancePeriod: b.allowancePeriod,
-      rollover: b.rollover,
-      overrides: (b.overrides ?? []).map(o => ({
-        date: msToIso(o.dateMs),
-        balance: o.balance,
-      })),
-    })),
-    budgetPeriods: budgetPeriods.map((p) => ({
-      id: p.id,
-      budgetId: p.budgetId,
-      periodStart: msToIso(p.periodStartMs),
-      periodEnd: msToIso(p.periodEndMs),
-      total: p.total,
-      count: p.count,
-      categoryBreakdown: p.categoryBreakdown,
-    })),
+    budgets: budgets.map(budgetToRawJson),
+    budgetPeriods: budgetPeriods.map(budgetPeriodToRawJson),
     rules: rules.map((r) => ({
       id: r.id,
       type: r.type,

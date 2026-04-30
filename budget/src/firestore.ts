@@ -1,6 +1,6 @@
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, increment, Timestamp, addDoc, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
-import { requireString, requireNumber, requireNonNegativeNumber, optionalString, optionalNumber, requireOneOf } from "@commons-systems/firestoreutil/validate";
+import { requireString, requireNumber, optionalString, optionalNumber, requireOneOf } from "@commons-systems/firestoreutil/validate";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
@@ -30,9 +30,13 @@ export type { StatementItem, IdbStatementItem, StatementItemId } from "./entitie
 import { parseFirestoreReconciliationNote } from "./entities/reconciliation-note.js";
 import type { ReconciliationNote } from "./entities/reconciliation-note.js";
 export type { ReconciliationNote, IdbReconciliationNote } from "./entities/reconciliation-note.js";
+import { parseFirestoreBudget } from "./entities/budget.js";
+import type { Budget, BudgetOverride, BudgetId } from "./entities/budget.js";
+export type { Budget, BudgetOverride, IdbBudget, BudgetId } from "./entities/budget.js";
+import { parseFirestoreBudgetPeriod } from "./entities/budget-period.js";
+import type { BudgetPeriod, BudgetPeriodId } from "./entities/budget-period.js";
+export type { BudgetPeriod, IdbBudgetPeriod, BudgetPeriodId } from "./entities/budget-period.js";
 
-export type BudgetId = Brand<"BudgetId">;
-export type BudgetPeriodId = Brand<"BudgetPeriodId">;
 export type RuleId = Brand<"RuleId">;
 export type NormalizationRuleId = Brand<"NormalizationRuleId">;
 
@@ -41,36 +45,6 @@ export type { ReconciliationClassification, ReconciliationEntityType, Rollover, 
 export { ROLLOVERS, ALLOWANCE_PERIODS, RECONCILIATION_CLASSIFICATIONS, RECONCILIATION_ENTITY_TYPES, RULE_TYPES } from "./schema/enums.js";
 
 export type { GroupId } from "@commons-systems/authutil/groups";
-
-export interface BudgetOverride {
-  readonly date: Timestamp;
-  readonly balance: number;
-}
-
-export interface Budget {
-  readonly id: BudgetId;
-  readonly name: string;
-  readonly allowance: number;
-  readonly allowancePeriod: AllowancePeriod;
-  readonly rollover: Rollover;
-  /** Sorted by date ascending. findLatestOverride assumes this ordering. */
-  readonly overrides: BudgetOverride[];
-  readonly groupId: GroupId | null;
-}
-
-export interface BudgetPeriod {
-  readonly id: BudgetPeriodId;
-  readonly budgetId: BudgetId;
-  readonly periodStart: Timestamp;
-  readonly periodEnd: Timestamp;
-  /** Sum of net transaction amounts (after reimbursement) in this period. May be negative when credits/refunds exceed debits. Client-updatable. */
-  readonly total: number;
-  /** Number of transactions in this period. Non-negative, immutable by client. */
-  readonly count: number;
-  /** Net amounts broken down by category. Immutable by client. */
-  readonly categoryBreakdown: Record<string, number>;
-  readonly groupId: GroupId | null;
-}
 
 /** Serialized form of BudgetPeriod for HTML data attributes. Serialized by page renderers and deserialized by their hydration counterparts. */
 export interface SerializedBudgetPeriod {
@@ -95,44 +69,6 @@ function requireTimestamp(value: unknown, field: string): Timestamp {
   const ts = optionalTimestamp(value, field);
   if (ts === null) throw new DataIntegrityError(`Expected Timestamp for ${field}, got null`);
   return ts;
-}
-
-function requireCategoryBreakdown(value: unknown): Record<string, number> {
-  if (value == null) return {};
-  if (typeof value !== "object" || Array.isArray(value)) {
-    throw new DataIntegrityError(`Expected object for categoryBreakdown, got ${typeof value}`);
-  }
-  const result: Record<string, number> = {};
-  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof val !== "number" || !Number.isFinite(val)) {
-      throw new DataIntegrityError(`categoryBreakdown[${key}] is not a finite number`);
-    }
-    result[key] = val;
-  }
-  return result;
-}
-
-function requireOverrides(value: unknown): BudgetOverride[] {
-  if (value == null) return [];
-  if (!Array.isArray(value)) {
-    throw new DataIntegrityError(`Expected array for overrides, got ${typeof value}`);
-  }
-  const result: BudgetOverride[] = [];
-  for (let i = 0; i < value.length; i++) {
-    const entry = value[i];
-    if (entry == null || typeof entry !== "object") {
-      throw new DataIntegrityError(`overrides[${i}] is not an object`);
-    }
-    const date = requireTimestamp(entry.date, `overrides[${i}].date`);
-    const balance = requireNumber(entry.balance, `overrides[${i}].balance`);
-    result.push({ date, balance });
-  }
-  for (let i = 1; i < result.length; i++) {
-    if (result[i].date.toMillis() <= result[i - 1].date.toMillis()) {
-      throw new DataIntegrityError(`overrides not sorted by date ascending at index ${i}`);
-    }
-  }
-  return result;
 }
 
 function requireRollover(value: unknown): Rollover {
@@ -298,20 +234,7 @@ export async function getBudgets(groupId: null): Promise<Budget[]>;
 export async function getBudgets(groupId: GroupId, email: string): Promise<Budget[]>;
 export async function getBudgets(groupId: GroupId | null, email?: string): Promise<Budget[]> {
   const docs = await queryGroupCollection("budgets", "seed-", groupId, email);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    const name = requireString(data.name, "name");
-    if (!name) throw new DataIntegrityError("Budget name must be non-empty");
-    return {
-      id: docSnap.id as BudgetId,
-      name,
-      allowance: requireNonNegativeNumber(data.allowance, "allowance"),
-      allowancePeriod: requireAllowancePeriod(data.allowancePeriod),
-      rollover: requireRollover(data.rollover),
-      overrides: requireOverrides(data.overrides),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-    };
-  });
+  return docs.map(parseFirestoreBudget);
 }
 
 function validateNoOverlappingPeriods(periods: BudgetPeriod[]): void {
@@ -337,27 +260,7 @@ export async function getBudgetPeriods(groupId: null): Promise<BudgetPeriod[]>;
 export async function getBudgetPeriods(groupId: GroupId, email: string): Promise<BudgetPeriod[]>;
 export async function getBudgetPeriods(groupId: GroupId | null, email?: string): Promise<BudgetPeriod[]> {
   const docs = await queryGroupCollection("budget-periods", "seed-", groupId, email);
-  const periods = docs.map((docSnap) => {
-    const data = docSnap.data();
-    const periodStart = requireTimestamp(data.periodStart, "periodStart");
-    const periodEnd = requireTimestamp(data.periodEnd, "periodEnd");
-    if (periodStart.toMillis() >= periodEnd.toMillis()) {
-      throw new DataIntegrityError(
-        `periodStart must be before periodEnd for budget period ${docSnap.id}`
-      );
-    }
-    return {
-      id: docSnap.id as BudgetPeriodId,
-      budgetId: requireString(data.budgetId, "budgetId") as BudgetId,
-      periodStart,
-      periodEnd,
-      total: requireNumber(data.total, "total"),
-      count: requireNonNegativeNumber(data.count, "count"),
-      categoryBreakdown: requireCategoryBreakdown(data.categoryBreakdown),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-    };
-  });
-
+  const periods = docs.map(parseFirestoreBudgetPeriod);
   validateNoOverlappingPeriods(periods);
   return periods;
 }

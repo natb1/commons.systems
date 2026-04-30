@@ -7,22 +7,22 @@ import type {
   Rule,
   NormalizationRule,
   WeeklyAggregate,
-  BudgetId,
-  BudgetPeriodId,
   RuleId,
   NormalizationRuleId,
   GroupId,
-  Rollover,
-  AllowancePeriod,
   RuleType,
 } from "./firestore.js";
-import { ROLLOVERS, ALLOWANCE_PERIODS, RULE_TYPES } from "./schema/enums.js";
+import { RULE_TYPES } from "./schema/enums.js";
 import type { ParsedData } from "./idb.js";
 import type { RawTransaction } from "./entities/transaction.js";
 import { parseRawTransaction, transactionToIdbRecord } from "./entities/transaction.js";
 import { UploadValidationError } from "./entities/_helpers.js";
 import type { RawStatement } from "./entities/statement.js";
 import { parseRawStatement, statementToIdbRecord } from "./entities/statement.js";
+import type { RawBudget } from "./entities/budget.js";
+import { parseRawBudget, budgetToIdbRecord } from "./entities/budget.js";
+import type { RawBudgetPeriod } from "./entities/budget-period.js";
+import { parseRawBudgetPeriod, budgetPeriodToIdbRecord } from "./entities/budget-period.js";
 // Re-export so existing import sites keep working.
 export { UploadValidationError };
 
@@ -38,30 +38,6 @@ interface RawOutput {
   normalizationRules: RawNormalizationRule[];
   statements: RawStatement[];
   weeklyAggregates?: RawWeeklyAggregate[];
-}
-
-interface RawBudgetOverride {
-  date: string;
-  balance: number;
-}
-
-interface RawBudget {
-  id: string;
-  name: string;
-  allowance: number;
-  allowancePeriod?: string;
-  rollover: string;
-  overrides?: RawBudgetOverride[];
-}
-
-interface RawBudgetPeriod {
-  id: string;
-  budgetId: string;
-  periodStart: string;
-  periodEnd: string;
-  total: number;
-  count: number;
-  categoryBreakdown: Record<string, number>;
 }
 
 interface RawRule {
@@ -119,21 +95,6 @@ function emptyToNull(value: string): string | null {
   return value === "" ? null : value;
 }
 
-function requireRollover(value: string): Rollover {
-  if (!(ROLLOVERS as readonly string[]).includes(value)) {
-    throw new UploadValidationError(`Invalid rollover value: "${value}"`);
-  }
-  return value as Rollover;
-}
-
-function requireAllowancePeriod(value: string | undefined): AllowancePeriod {
-  if (value == null || value === "weekly") return "weekly";
-  if (!(ALLOWANCE_PERIODS as readonly string[]).includes(value)) {
-    throw new UploadValidationError(`Invalid allowancePeriod value: "${value}"`);
-  }
-  return value as AllowancePeriod;
-}
-
 function requireId(value: unknown, entity: string, index: number): string {
   if (typeof value !== "string" || value === "") {
     throw new UploadValidationError(`${entity}[${index}] is missing a valid id`);
@@ -188,37 +149,9 @@ export function parseUploadedJson(text: string): ParsedUpload {
 
   const transactions: Transaction[] = raw.transactions.map(parseRawTransaction);
 
-  const budgets: Budget[] = (raw.budgets ?? []).map((b: RawBudget, i: number) => ({
-    id: requireId(b.id, "budget", i) as BudgetId,
-    name: b.name,
-    allowance: b.allowance ?? 0,
-    allowancePeriod: requireAllowancePeriod(b.allowancePeriod),
-    rollover: requireRollover(b.rollover ?? "none"),
-    overrides: ((rawOverrides: Array<{date: string; balance: number}>) => {
-      const parsed = rawOverrides.map(o => ({
-        date: parseTimestamp(o.date, "budget.overrides.date"),
-        balance: o.balance,
-      }));
-      for (let j = 1; j < parsed.length; j++) {
-        if (parsed[j].date.toMillis() <= parsed[j - 1].date.toMillis()) {
-          throw new UploadValidationError(`budget[${i}].overrides not sorted by date ascending at index ${j}`);
-        }
-      }
-      return parsed;
-    })(b.overrides ?? []),
-    groupId: null as GroupId | null,
-  }));
+  const budgets: Budget[] = (raw.budgets ?? []).map((b: RawBudget, i: number) => parseRawBudget(b, i));
 
-  const budgetPeriods: BudgetPeriod[] = (raw.budgetPeriods ?? []).map((p: RawBudgetPeriod, i: number) => ({
-    id: requireId(p.id, "budgetPeriod", i) as BudgetPeriodId,
-    budgetId: requireId(p.budgetId, "budgetPeriod.budgetId", i) as BudgetId,
-    periodStart: parseTimestamp(p.periodStart, "budgetPeriod.periodStart"),
-    periodEnd: parseTimestamp(p.periodEnd, "budgetPeriod.periodEnd"),
-    total: p.total ?? 0,
-    count: p.count ?? 0,
-    categoryBreakdown: p.categoryBreakdown ?? {},
-    groupId: null as GroupId | null,
-  }));
+  const budgetPeriods: BudgetPeriod[] = (raw.budgetPeriods ?? []).map((p: RawBudgetPeriod, i: number) => parseRawBudgetPeriod(p, i));
 
   const rules: Rule[] = (raw.rules ?? []).map((r: RawRule, i: number) => ({
     id: requireId(r.id, "rule", i) as RuleId,
@@ -281,23 +214,8 @@ export function parseUploadedJson(text: string): ParsedUpload {
 export function toParsedData(parsed: ParsedUpload): ParsedData {
   return {
     transactions: parsed.transactions.map(transactionToIdbRecord),
-    budgets: parsed.budgets.map((b) => ({
-      id: b.id,
-      name: b.name,
-      allowance: b.allowance,
-      allowancePeriod: b.allowancePeriod,
-      rollover: b.rollover,
-      overrides: b.overrides.map(o => ({ dateMs: o.date.toMillis(), balance: o.balance })),
-    })),
-    budgetPeriods: parsed.budgetPeriods.map((p) => ({
-      id: p.id,
-      budgetId: p.budgetId,
-      periodStartMs: p.periodStart.toMillis(),
-      periodEndMs: p.periodEnd.toMillis(),
-      total: p.total,
-      count: p.count,
-      categoryBreakdown: p.categoryBreakdown,
-    })),
+    budgets: parsed.budgets.map(budgetToIdbRecord),
+    budgetPeriods: parsed.budgetPeriods.map(budgetPeriodToIdbRecord),
     rules: parsed.rules.map((r) => ({
       id: r.id,
       type: r.type,
