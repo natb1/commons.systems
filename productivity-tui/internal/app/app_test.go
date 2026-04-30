@@ -68,18 +68,45 @@ func TestViewIdleIndicator(t *testing.T) {
 	m.width = 80
 	m.height = 24
 	m.sessions = map[string]session.Session{
-		"sess_1": {WorkingDir: "/tmp/active", Idle: false},
-		"sess_2": {WorkingDir: "/tmp/idle", Idle: true},
+		"sess_1": {WorkingDir: "/Users/n8/worktrees/active-branch", Idle: false},
+		"sess_2": {WorkingDir: "/Users/n8/worktrees/idle-branch", Idle: true},
 	}
 	output := m.View()
 	if !strings.Contains(output, "✳") {
 		t.Error("expected idle indicator ✳ in output")
 	}
-	if !strings.Contains(output, "/tmp/idle") {
-		t.Error("expected idle session working dir in output")
+	if !strings.Contains(output, "idle-branch") {
+		t.Error("expected idle worktree name in output")
 	}
-	if !strings.Contains(output, "/tmp/active") {
-		t.Error("expected active session working dir in output")
+	if !strings.Contains(output, "active-branch") {
+		t.Error("expected active worktree name in output")
+	}
+	if strings.Contains(output, "/Users/n8/worktrees/") {
+		t.Error("expected parent path to be stripped from output")
+	}
+}
+
+func TestViewEdgeCasePaths(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"root", "/"},
+		{"single-component-no-slash", "foo"},
+		{"single-component-with-slash", "/foo"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := New("/dev/null")
+			m.width = 80
+			m.sessions = map[string]session.Session{
+				"sess_1": {WorkingDir: tc.path, Idle: false},
+			}
+			output := m.View()
+			if !strings.Contains(output, tc.path) {
+				t.Errorf("expected full path %q in output, got: %s", tc.path, output)
+			}
+		})
 	}
 }
 
