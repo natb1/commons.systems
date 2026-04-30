@@ -26,11 +26,7 @@ type Session struct {
 
 // FilterLive returns only sessions whose recorded Claude CLI PID is still
 // live (process exists and its start-time matches the recorded value).
-//
-// Sessions with PID == 0 or empty PIDStart represent records where the
-// hook could not capture a coherent (pid, start-time) pair for the Claude
-// ancestor. We keep them rather than drop them — dropping a legitimate
-// unknown is worse than preserving a potentially stale row.
+// Sessions missing a coherent (pid, start-time) pair are dropped.
 //
 // Non-ESRCH errors from kill(pid, 0) fail open to live. This includes
 // EPERM (process exists but is owned by a different user — a positive
@@ -39,7 +35,10 @@ type Session struct {
 func FilterLive(sessions map[string]Session) map[string]Session {
 	live := make(map[string]Session, len(sessions))
 	for id, s := range sessions {
-		if s.PID == 0 || s.PIDStart == "" || isPIDLive(s.PID, s.PIDStart) {
+		if s.PID == 0 || s.PIDStart == "" {
+			continue
+		}
+		if isPIDLive(s.PID, s.PIDStart) {
 			live[id] = s
 		}
 	}
