@@ -1,7 +1,6 @@
 import { Timestamp } from "firebase/firestore";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type {
-  Transaction,
   Statement,
   StatementItem,
   ReconciliationNote,
@@ -10,7 +9,6 @@ import type {
   Rule,
   NormalizationRule,
   WeeklyAggregate,
-  TransactionId,
   StatementId,
   StatementItemId,
   BudgetId,
@@ -20,29 +18,10 @@ import type {
   GroupId,
   AllowancePeriod,
 } from "./firestore.js";
-import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
+import type { IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
+import { idbToTransaction } from "./entities/transaction.js";
 
-export function toTransaction(row: IdbTransaction): Transaction {
-  return {
-    id: row.id as TransactionId,
-    institution: row.institution,
-    account: row.account,
-    description: row.description,
-    amount: row.amount,
-    note: row.note,
-    category: row.category,
-    reimbursement: row.reimbursement,
-    budget: (row.budget ?? null) as BudgetId | null,
-    timestamp: row.timestampMs != null ? Timestamp.fromMillis(row.timestampMs) : null,
-    statementId: (row.statementId ?? null) as StatementId | null,
-    statementItemId: (row.statementItemId ?? null) as StatementItemId | null,
-    groupId: null as GroupId | null,
-    normalizedId: row.normalizedId,
-    normalizedPrimary: row.normalizedPrimary,
-    normalizedDescription: row.normalizedDescription,
-    virtual: row.virtual ?? false,
-  };
-}
+export { idbToTransaction as toTransaction };
 
 function toAllowancePeriod(value: string | undefined): AllowancePeriod {
   if (value === "monthly") return "monthly";

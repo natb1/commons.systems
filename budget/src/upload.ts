@@ -7,9 +7,7 @@ import type {
   Rule,
   NormalizationRule,
   WeeklyAggregate,
-  TransactionId,
   StatementId,
-  StatementItemId,
   BudgetId,
   BudgetPeriodId,
   RuleId,
@@ -21,13 +19,11 @@ import type {
 } from "./firestore.js";
 import { ROLLOVERS, ALLOWANCE_PERIODS, RULE_TYPES } from "./schema/enums.js";
 import type { ParsedData } from "./idb.js";
-
-export class UploadValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "UploadValidationError";
-  }
-}
+import type { RawTransaction } from "./entities/transaction.js";
+import { parseRawTransaction, transactionToIdbRecord } from "./entities/transaction.js";
+import { UploadValidationError } from "./entities/_helpers.js";
+// Re-export so existing import sites keep working.
+export { UploadValidationError };
 
 interface RawOutput {
   version: number;
@@ -41,25 +37,6 @@ interface RawOutput {
   normalizationRules: RawNormalizationRule[];
   statements: RawStatement[];
   weeklyAggregates?: RawWeeklyAggregate[];
-}
-
-interface RawTransaction {
-  id: string;
-  institution: string;
-  account: string;
-  description: string;
-  amount: number;
-  timestamp: string;
-  statementId: string;
-  statementItemId?: string | null;
-  category: string;
-  budget: string | null;
-  note: string;
-  reimbursement: number;
-  normalizedId: string | null;
-  normalizedPrimary: boolean;
-  normalizedDescription: string | null;
-  virtual?: boolean;
 }
 
 interface RawBudgetOverride {
@@ -227,25 +204,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
     throw new UploadValidationError("Missing required field: transactions");
   }
 
-  const transactions: Transaction[] = raw.transactions.map((t: RawTransaction, i: number) => ({
-    id: requireId(t.id, "transaction", i) as TransactionId,
-    institution: t.institution ?? "",
-    account: t.account ?? "",
-    description: t.description ?? "",
-    amount: t.amount ?? 0,
-    note: t.note ?? "",
-    category: t.category ?? "",
-    reimbursement: t.reimbursement ?? 0,
-    budget: (t.budget || null) as BudgetId | null,
-    timestamp: t.timestamp ? parseTimestamp(t.timestamp, "transaction.timestamp") : null,
-    statementId: (t.statementId || null) as StatementId | null,
-    statementItemId: (t.statementItemId || null) as StatementItemId | null,
-    groupId: null as GroupId | null,
-    normalizedId: t.normalizedId || null,
-    normalizedPrimary: t.normalizedPrimary !== false,
-    normalizedDescription: t.normalizedDescription || null,
-    virtual: t.virtual ?? false,
-  }));
+  const transactions: Transaction[] = raw.transactions.map(parseRawTransaction);
 
   const budgets: Budget[] = (raw.budgets ?? []).map((b: RawBudget, i: number) => ({
     id: requireId(b.id, "budget", i) as BudgetId,
@@ -352,24 +311,7 @@ export function parseUploadedJson(text: string): ParsedUpload {
 /** Convert a ParsedUpload to the format expected by storeParsedData. Converts Timestamps to milliseconds and drops fields not stored in IDB (e.g. groupId). */
 export function toParsedData(parsed: ParsedUpload): ParsedData {
   return {
-    transactions: parsed.transactions.map((t) => ({
-      id: t.id,
-      institution: t.institution,
-      account: t.account,
-      description: t.description,
-      amount: t.amount,
-      note: t.note,
-      category: t.category,
-      reimbursement: t.reimbursement,
-      budget: t.budget,
-      timestampMs: t.timestamp?.toMillis() ?? null,
-      statementId: t.statementId,
-      statementItemId: t.statementItemId ?? null,
-      normalizedId: t.normalizedId,
-      normalizedPrimary: t.normalizedPrimary,
-      normalizedDescription: t.normalizedDescription,
-      virtual: t.virtual,
-    })),
+    transactions: parsed.transactions.map(transactionToIdbRecord),
     budgets: parsed.budgets.map((b) => ({
       id: b.id,
       name: b.name,

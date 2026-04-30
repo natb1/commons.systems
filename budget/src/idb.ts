@@ -1,5 +1,7 @@
 import { createDbConnection } from "@commons-systems/idbutil/connection";
 import type { Rollover, RuleType, ReconciliationClassification, ReconciliationEntityType } from "./firestore.js";
+import type { IdbTransaction } from "./entities/transaction.js";
+export type { IdbTransaction };
 
 const STORE_NAMES = [
   "transactions",
@@ -36,25 +38,6 @@ export interface UploadMeta {
   groupName: string;
   version: number;
   exportedAt: string;
-}
-
-export interface IdbTransaction {
-  id: string;
-  institution: string;
-  account: string;
-  description: string;
-  amount: number;
-  note: string;
-  category: string;
-  reimbursement: number;
-  budget: string | null;
-  timestampMs: number | null;
-  statementId: string | null;
-  statementItemId: string | null;
-  normalizedId: string | null;
-  normalizedPrimary: boolean;
-  normalizedDescription: string | null;
-  virtual: boolean;
 }
 
 export interface IdbBudget {

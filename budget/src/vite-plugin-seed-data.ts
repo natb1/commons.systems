@@ -2,7 +2,6 @@ import type { Plugin } from "vite";
 import { findCollection } from "../seeds/find-collection.js";
 import { ROLLOVERS, ALLOWANCE_PERIODS, RULE_TYPES, RECONCILIATION_ENTITY_TYPES, RECONCILIATION_CLASSIFICATIONS } from "./schema/enums.js";
 import type {
-  TransactionSeedData,
   BudgetSeedData,
   BudgetPeriodSeedData,
   RuleSeedData,
@@ -14,7 +13,6 @@ import type {
 } from "../seeds/firestore.js";
 import type {
   SeedData,
-  SeedTransaction,
   SeedBudget,
   SeedBudgetOverride,
   SeedBudgetPeriod,
@@ -25,6 +23,7 @@ import type {
   SeedReconciliationNote,
   SeedWeeklyAggregate,
 } from "virtual:budget-seed-data";
+import { serializeSeedTransaction } from "./entities/transaction.js";
 
 const VIRTUAL_MODULE_ID = "virtual:budget-seed-data";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
@@ -57,12 +56,6 @@ function requireNonNegativeNumber(value: unknown, field: string): number {
   return n;
 }
 
-function requireReimbursement(value: unknown): number {
-  const n = requireNumber(value, "reimbursement");
-  if (n < 0 || n > 100) throw new RangeError(`reimbursement must be between 0 and 100, got ${n}`);
-  return n;
-}
-
 function requireAllowancePeriod(value: unknown): "weekly" | "monthly" | "quarterly" {
   if (!(ALLOWANCE_PERIODS as readonly unknown[]).includes(value)) {
     throw new Error(`Expected allowancePeriod to be "weekly" | "monthly" | "quarterly", got ${JSON.stringify(value)}`);
@@ -85,27 +78,9 @@ function requireRuleType(value: unknown): "categorization" | "budget_assignment"
 }
 
 export function serializeSeedData(): SeedData {
-  const transactions: SeedTransaction[] = findCollection("seed-transactions").map(({ id, data: raw }) => {
-    const d = raw as unknown as TransactionSeedData;
-    return {
-      id,
-      institution: requireString(d.institution, "institution"),
-      account: requireString(d.account, "account"),
-      description: requireString(d.description, "description"),
-      amount: requireNumber(d.amount, "amount"),
-      note: requireString(d.note, "note"),
-      category: requireString(d.category, "category"),
-      reimbursement: requireReimbursement(d.reimbursement),
-      budget: d.budget ?? null,
-      timestampMs: toMs(d.timestamp),
-      statementId: d.statementId ?? null,
-      statementItemId: d.statementItemId ?? null,
-      normalizedId: d.normalizedId,
-      normalizedPrimary: d.normalizedPrimary,
-      normalizedDescription: d.normalizedDescription,
-      virtual: d.virtual,
-    };
-  });
+  const transactions = findCollection("seed-transactions").map(({ id, data: raw }) =>
+    serializeSeedTransaction(raw as unknown as import("../seeds/firestore.js").TransactionSeedData, id)
+  );
 
   const budgets: SeedBudget[] = findCollection("seed-budgets").map(({ id, data: raw }) => {
     const d = raw as unknown as BudgetSeedData;

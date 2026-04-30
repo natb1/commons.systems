@@ -1,15 +1,9 @@
 /** Serializes IndexedDB stores back to the upload JSON format. Inverse of the upload pipeline (parseUploadedJson + toParsedData in upload.ts). */
 import { getAll, getMeta } from "./idb.js";
-import type { IdbTransaction, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbStatement, IdbStatementItem, IdbReconciliationNote } from "./idb.js";
-
-function msToIso(ms: number | null): string {
-  if (ms === null) return "";
-  return new Date(ms).toISOString();
-}
-
-function nullToEmpty(value: string | null): string {
-  return value ?? "";
-}
+import type { IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbStatement, IdbStatementItem, IdbReconciliationNote } from "./idb.js";
+import type { IdbTransaction } from "./entities/transaction.js";
+import { transactionToRawJson } from "./entities/transaction.js";
+import { msToISO as msToIso, nullToEmpty } from "./entities/_helpers.js";
 
 export async function exportToJson(): Promise<string> {
   const [transactions, budgets, budgetPeriods, rules, normalizationRules, statements, statementItems, reconciliationNotes, meta] = await Promise.all([
@@ -32,23 +26,7 @@ export async function exportToJson(): Promise<string> {
     // groupId is not stored locally; empty string for format compatibility
     groupId: "",
     groupName: meta.groupName,
-    transactions: transactions.map((t) => ({
-      id: t.id,
-      institution: nullToEmpty(t.institution),
-      account: nullToEmpty(t.account),
-      description: t.description,
-      amount: t.amount,
-      timestamp: msToIso(t.timestampMs),
-      statementId: nullToEmpty(t.statementId),
-      statementItemId: t.statementItemId ?? null,
-      category: t.category,
-      budget: t.budget,
-      note: t.note,
-      reimbursement: t.reimbursement,
-      normalizedId: t.normalizedId,
-      normalizedPrimary: t.normalizedPrimary,
-      normalizedDescription: t.normalizedDescription,
-    })),
+    transactions: transactions.map(transactionToRawJson),
     budgets: budgets.map((b) => ({
       id: b.id,
       name: b.name,

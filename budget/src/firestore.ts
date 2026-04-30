@@ -18,8 +18,10 @@ import {
   type ReconciliationEntityType,
   type RuleType,
 } from "./schema/enums.js";
+import { parseFirestoreTransaction, validateReimbursementRange } from "./entities/transaction.js";
+import type { Transaction, TransactionId } from "./entities/transaction.js";
+export type { Transaction, IdbTransaction, TransactionId } from "./entities/transaction.js";
 
-export type TransactionId = Brand<"TransactionId">;
 export type StatementId = Brand<"StatementId">;
 export type StatementItemId = Brand<"StatementItemId">;
 export type BudgetId = Brand<"BudgetId">;
@@ -87,35 +89,6 @@ export interface Statement {
   readonly virtual: boolean;
 }
 
-export interface Transaction {
-  readonly id: TransactionId;
-  readonly institution: string;
-  readonly account: string;
-  readonly description: string;
-  /** Transaction amount. May be negative for credits/refunds. */
-  readonly amount: number;
-  readonly note: string;
-  readonly category: string;
-  /**
-   * Percentage, range [0, 100]. Validated at read and write boundaries:
-   * read via requireReimbursement (throws RangeError for out-of-range values),
-   * write via validateReimbursementRange in updateTransaction.
-   * Server-side enforcement via Firestore security rules ensures the type
-   * and range constraints hold even if client validation is bypassed.
-   */
-  readonly reimbursement: number;
-  readonly budget: BudgetId | null;
-  readonly timestamp: Timestamp | null;
-  readonly statementId: StatementId | null;
-  /** Explicit link to the immutable statement line item this transaction was imported from. Null or undefined for manually entered transactions and older records written before the statement-items backfill. */
-  readonly statementItemId?: StatementItemId | null;
-  readonly groupId: GroupId | null;
-  readonly normalizedId: string | null;
-  readonly normalizedPrimary: boolean;
-  readonly normalizedDescription: string | null;
-  readonly virtual: boolean;
-}
-
 /**
  * Immutable bank-record line item. One document per OFX transaction line.
  * Amount uses the raw bank sign convention: negative = debit, positive = credit.
@@ -145,18 +118,6 @@ export interface ReconciliationNote {
   readonly updatedAt: Timestamp;
   readonly updatedBy: string;
   readonly groupId: GroupId | null;
-}
-
-function validateReimbursementRange(n: number): void {
-  if (!Number.isFinite(n) || n < 0 || n > 100) {
-    throw new RangeError(`reimbursement must be between 0 and 100, got ${n}`);
-  }
-}
-
-function requireReimbursement(value: unknown): number {
-  const n = requireNumber(value, "reimbursement");
-  validateReimbursementRange(n);
-  return n;
 }
 
 function optionalTimestamp(value: unknown, field: string): Timestamp | null {
@@ -270,29 +231,7 @@ export async function getTransactions(groupId: null, email?: undefined, filters?
 export async function getTransactions(groupId: GroupId, email: string, filters?: { since?: Timestamp; before?: Timestamp }): Promise<Transaction[]>;
 export async function getTransactions(groupId: GroupId | null, email?: string, filters?: { since?: Timestamp; before?: Timestamp }): Promise<Transaction[]> {
   const docs = await queryGroupCollection("transactions", "seed-", groupId, email, filters);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id as TransactionId,
-      institution: requireString(data.institution, "institution"),
-      account: requireString(data.account, "account"),
-      description: requireString(data.description, "description"),
-      amount: requireNumber(data.amount, "amount"),
-      note: requireString(data.note, "note"),
-      category: requireString(data.category, "category"),
-      reimbursement: requireReimbursement(data.reimbursement),
-      budget: optionalString(data.budget, "budget") as BudgetId | null,
-      timestamp: optionalTimestamp(data.timestamp, "timestamp"),
-      statementId: optionalString(data.statementId, "statementId") as StatementId | null,
-      statementItemId: optionalString(data.statementItemId, "statementItemId") as StatementItemId | null,
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-      normalizedId: optionalString(data.normalizedId, "normalizedId"),
-      // Defaults to true for un-normalized transactions (field may be missing or null)
-      normalizedPrimary: data.normalizedPrimary !== false,
-      normalizedDescription: optionalString(data.normalizedDescription, "normalizedDescription"),
-      virtual: data.virtual === true,
-    };
-  });
+  return docs.map(parseFirestoreTransaction);
 }
 
 export async function getStatements(groupId: null): Promise<Statement[]>;
