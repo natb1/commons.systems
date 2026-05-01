@@ -133,6 +133,12 @@ reconcile_phase_signal() {
   return 1
 }
 
+# --- prompt_is_tty ----------------------------------------------------------
+# Testability hook: returns 0 when stdin is a TTY. Tests override this
+# function to force the interactive path without needing a real TTY.
+# Default behavior preserved: identical to `[[ -t 0 ]]`.
+prompt_is_tty() { [[ -t 0 ]]; }
+
 # --- should_run_post_stages -------------------------------------------------
 # Gate the post-implementation stage sequence: only proceed when the verify
 # loop signaled completion AND stdin is a TTY (interactive run).
@@ -140,7 +146,8 @@ reconcile_phase_signal() {
 # Returns: 0 if post-stages should run, non-zero otherwise.
 should_run_post_stages() {
   local state_file="$1"
-  if [[ ! -t 0 ]]; then
+  # Testability hook; default behavior preserved (prompt_is_tty wraps [[ -t 0 ]]).
+  if ! prompt_is_tty; then
     return 1
   fi
   if [[ ! -f "$state_file" ]]; then
@@ -159,27 +166,40 @@ should_run_post_stages() {
 # Args: $1 = label (e.g. "Run claude /simplify?")
 prompt_yes_skip() {
   local label="$1"
-  if [[ ! -t 0 ]]; then
+  # Testability hook; default behavior preserved (prompt_is_tty wraps [[ -t 0 ]]).
+  if ! prompt_is_tty; then
     return 1
   fi
 
+  # Testability hook: PROMPT_INPUT defaults to /dev/tty; tests set it to a
+  # temp file containing scripted input. Open once as FD 3 so sequential reads
+  # advance through the file rather than re-opening from position 0. Default
+  # behavior preserved (/dev/tty is a character device that always delivers the
+  # next keystroke regardless of how many times it is opened).
+  local _prompt_input_fd
+  exec {_prompt_input_fd}<"${PROMPT_INPUT:-/dev/tty}" || return 1
+
   local ans=""
   printf '%s' "[dispatch] ${label} [Enter=yes, s=skip]: " >&2
-  read -r -n 1 ans </dev/tty || return 1
+  read -r -n 1 ans <&"$_prompt_input_fd" || { exec {_prompt_input_fd}<&-; return 1; }
 
   if [[ -z "$ans" ]]; then
     # User pressed Enter alone — read -n 1 returned with no character read.
+    exec {_prompt_input_fd}<&-
     return 0
   fi
   printf '\n' >&2
   if [[ "$ans" == "s" || "$ans" == "S" ]]; then
+    exec {_prompt_input_fd}<&-
     return 1
   fi
 
   # Any other key — re-prompt once with stricter semantics.
   ans=""
   printf '%s' "[dispatch] ${label} [Enter=yes, s=skip]: " >&2
-  read -r -n 1 ans </dev/tty || return 1
+  read -r -n 1 ans <&"$_prompt_input_fd" || { exec {_prompt_input_fd}<&-; return 1; }
+
+  exec {_prompt_input_fd}<&-
 
   if [[ -z "$ans" ]]; then
     return 0
@@ -201,6 +221,30 @@ prompt_yes_skip() {
 launch_claude_stage() {
   local slash="$1"
   claude -w "$BRANCH" "$slash" </dev/tty
+}
+
+# --- mark_pr_ready ----------------------------------------------------------
+# Resolve the PR number for $1 (branch name) and flip it from draft to
+# ready-for-review. Exits non-zero with a descriptive error when the PR
+# cannot be found or the gh call fails.
+# Args: $1 = branch name
+mark_pr_ready() {
+  local branch="$1"
+  local pr_num=""
+  set +e
+  pr_num=$(gh pr view "$branch" --json number -q .number 2>/dev/null)
+  local rc=$?
+  set -e
+  if [[ $rc -ne 0 || -z "$pr_num" ]]; then
+    echo "error: could not resolve PR number for branch '$branch' — cannot mark ready" >&2
+    return 1
+  fi
+  if ! gh pr ready "$pr_num"; then
+    echo "error: gh pr ready $pr_num failed" >&2
+    return 1
+  fi
+  echo "[dispatch] PR #${pr_num} marked ready for review" >&2
+  return 0
 }
 
 # --- main -------------------------------------------------------------------
@@ -383,20 +427,9 @@ ${RESUME_INSTRUCTION}}")
 
   # Stage 6: Mark PR ready (not a Claude invocation; one gh call).
   if prompt_yes_skip "Mark PR ready for review?"; then
-    local pr_num=""
-    set +e
-    pr_num=$(gh pr view "$BRANCH" --json number -q .number 2>/dev/null)
-    local pr_rc=$?
-    set -e
-    if [[ $pr_rc -ne 0 || -z "$pr_num" ]]; then
-      echo "error: could not resolve PR number for branch '$BRANCH' — cannot mark ready" >&2
+    if ! mark_pr_ready "$BRANCH"; then
       exit 1
     fi
-    if ! gh pr ready "$pr_num"; then
-      echo "error: gh pr ready $pr_num failed" >&2
-      exit 1
-    fi
-    echo "[dispatch] PR #${pr_num} marked ready for review" >&2
   fi
 
   exit 0
