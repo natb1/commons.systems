@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -127,9 +128,9 @@ func (m Model) View() string {
 	for _, id := range keys {
 		s := m.sessions[id]
 		if s.Idle {
-			b.WriteString(idleStyle.Render(fmt.Sprintf(" %s %s", idleIndicator, s.WorkingDir)))
+			b.WriteString(idleStyle.Render(fmt.Sprintf(" %s %s", idleIndicator, displayName(s.WorkingDir))))
 		} else {
-			b.WriteString(activeStyle.Render(fmt.Sprintf("   %s", s.WorkingDir)))
+			b.WriteString(activeStyle.Render(fmt.Sprintf("   %s", displayName(s.WorkingDir))))
 		}
 		b.WriteString("\n")
 	}
@@ -235,6 +236,17 @@ func tick() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
+}
+
+// displayName renders the worktree name for a session's working dir. For
+// root or single-component paths (where Dir is "/", ".", or empty), the full
+// path is returned to avoid a confusing relabel.
+func displayName(p string) string {
+	switch filepath.Dir(p) {
+	case "/", ".", "":
+		return p
+	}
+	return filepath.Base(p)
 }
 
 func sortedKeys(m map[string]session.Session) []string {
