@@ -30,6 +30,7 @@ import {
 export interface NavLink {
   readonly href: string;
   readonly label: string;
+  readonly align?: "end";
 }
 
 export interface PrerenderConfig {
@@ -89,7 +90,10 @@ function ogTagsToHtml(entries: OgTagEntry[]): string {
 
 function renderNavHtml(links: NavLink[]): string {
   const anchors = links
-    .map((l) => `<a href="${escapeHtml(l.href)}">${escapeHtml(l.label)}</a>`)
+    .map((l) => {
+      const alignAttr = l.align === "end" ? ` data-align="end"` : "";
+      return `<a href="${escapeHtml(l.href)}"${alignAttr}>${escapeHtml(l.label)}</a>`;
+    })
     .join("");
   return `<span class="nav-links">${anchors}</span>`;
 }

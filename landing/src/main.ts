@@ -21,7 +21,7 @@ import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { ABOUT_PAGE_META, INFO_PANEL_LINK_SECTIONS, NAV_LINKS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
-import { renderAboutHtml } from "./pages/about.js";
+import { renderAboutHtml, mountAboutPanel } from "./pages/about.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
@@ -72,6 +72,7 @@ navEl.addEventListener("sign-out", () => void signOut());
 function updateNav(path: string): void {
   navEl.showAuth = path === "/admin";
   navEl.user = currentUser;
+  document.body.dataset.route = path === "/" ? "home" : path === "/about" ? "about" : "other";
 }
 
 const toggle = document.getElementById("panel-toggle");
@@ -126,7 +127,8 @@ const router = createHistoryRouter(
       afterRender: () => {
         updateStaticPageMeta(RSS_CONFIG.siteUrl, ABOUT_PAGE_META, RSS_CONFIG.title);
         updateCanonical(RSS_CONFIG.siteUrl, undefined, "/about");
-        updateInfoPanel();
+        mountAboutPanel(infoPanel);
+        lastRenderedPosts = undefined;
       },
     },
     {

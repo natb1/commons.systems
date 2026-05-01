@@ -17,7 +17,7 @@ describe("SITE_DEFAULTS", () => {
 
 describe("NAV_LINKS", () => {
   it("includes the About link", () => {
-    expect(NAV_LINKS).toContainEqual({ href: "/about", label: "About" });
+    expect(NAV_LINKS).toContainEqual({ href: "/about", label: "About", align: "end" });
   });
 
   it("includes the Home link", () => {

@@ -1,6 +1,5 @@
 import { dirname, join } from "node:path";
 import {
-  loadPostsForPrerender,
   prerenderPosts,
   prerenderStaticPage,
 } from "@commons-systems/blog/prerender";
@@ -21,7 +20,7 @@ import {
   SITE_DEFAULTS,
   SITE_URL,
 } from "../src/site-config.js";
-import { renderAboutHtml } from "../src/pages/about.js";
+import { renderAboutHtml, renderAboutPanelHtml } from "../src/pages/about.js";
 import { renderShowcase } from "../src/showcase-render.js";
 
 const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
@@ -37,12 +36,6 @@ const infoPanel = {
 // Static pages must run before prerenderPosts: prerenderPosts overwrites
 // dist/index.html (the shared template source) with home content, after which
 // prerenderStaticPage's marker-based injectors find the slots already filled.
-const { panelHtml } = await loadPostsForPrerender({
-  seed: appSeed,
-  postDir,
-  infoPanel,
-});
-
 prerenderStaticPage({
   siteUrl: SITE_URL,
   titleSuffix,
@@ -53,7 +46,7 @@ prerenderStaticPage({
   pageType: ABOUT_PAGE_META.type,
   bodyHtml: renderAboutHtml(),
   navLinks: NAV_LINKS,
-  panelHtml,
+  panelHtml: renderAboutPanelHtml(),
   jsonLdBlocks: [personJsonLd(PERSON)],
   relMe: REL_ME,
 });

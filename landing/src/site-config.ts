@@ -7,7 +7,7 @@ export const SITE_URL = "https://commons.systems";
 
 export const NAV_LINKS: NavLink[] = [
   { href: "/", label: "Home" },
-  { href: "/about", label: "About" },
+  { href: "/about", label: "About", align: "end" },
 ];
 
 export const ABOUT_PAGE_META = {

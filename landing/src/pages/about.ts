@@ -9,3 +9,19 @@ export function renderAboutHtml(): string {
     <p><a href="https://github.com/natb1/commons.systems/blob/main/CHARTER.md">Read the charter</a> for the full framing, or head <a href="/">back to the homepage</a>.</p>
   `;
 }
+
+export function renderAboutPanelHtml(): string {
+  return `
+    <section class="panel-section profile-card">
+      <img class="profile-photo" src="/nathan.jpg" alt="Nathan Buesgens" width="240" height="240">
+      <p class="profile-name">Nathan Buesgens</p>
+      <p class="profile-location">Baltimore, MD</p>
+      <p class="profile-email"><a href="mailto:nathan@natb1.com">nathan@natb1.com</a></p>
+    </section>
+  `;
+}
+
+export function mountAboutPanel(panel: HTMLElement): void {
+  const fragment = document.createRange().createContextualFragment(renderAboutPanelHtml());
+  panel.replaceChildren(fragment);
+}
