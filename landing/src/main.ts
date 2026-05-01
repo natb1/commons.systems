@@ -21,6 +21,7 @@ import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { ABOUT_PAGE_META, INFO_PANEL_LINK_SECTIONS, NAV_LINKS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
+import { mountHero } from "./showcase-render.js";
 import { renderAboutHtml, mountAboutPanel } from "./pages/about.js";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
@@ -33,6 +34,8 @@ const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 const infoPanel = document.getElementById("info-panel");
 if (!infoPanel) throw new Error("#info-panel element not found");
+const hero = document.querySelector<HTMLElement>(".landing-hero");
+if (!hero) throw new Error(".landing-hero element not found");
 
 const header = document.querySelector(".page > header");
 if (!header) throw new Error(".page > header element not found");
@@ -116,6 +119,7 @@ const router = createHistoryRouter(
       afterRender: (outlet, path) => {
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
+        if (!slug) mountHero(hero);
         updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, RSS_CONFIG.title, SITE_DEFAULTS);
         updateCanonical(RSS_CONFIG.siteUrl, slug);
         updateInfoPanel();
