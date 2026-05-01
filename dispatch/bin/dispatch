@@ -247,6 +247,24 @@ mark_pr_ready() {
   return 0
 }
 
+# --- remove_worktree --------------------------------------------------------
+# Remove the local worktree at $1 via `git worktree remove` (without --force).
+# Force-removal is intentionally not used: by Stage 7 the verify loop has
+# succeeded and all work is committed, so any dirty state — or a CWD pointing
+# at the worktree being removed — is unexpected and worth surfacing instead of
+# silently destroying. Returns non-zero on git failure with the underlying
+# error left visible on stderr (git's own message).
+# Args: $1 = absolute worktree path
+remove_worktree() {
+  local path="$1"
+  if ! git worktree remove "$path"; then
+    echo "error: git worktree remove '$path' failed — inspect the worktree before retrying with --force manually" >&2
+    return 1
+  fi
+  echo "[dispatch] removed worktree $path" >&2
+  return 0
+}
+
 # --- main -------------------------------------------------------------------
 main() {
   local ISSUE_NUM="${1:-}"
@@ -428,6 +446,13 @@ ${RESUME_INSTRUCTION}}")
   # Stage 6: Mark PR ready (not a Claude invocation; one gh call).
   if prompt_yes_skip "Mark PR ready for review?"; then
     if ! mark_pr_ready "$BRANCH"; then
+      exit 1
+    fi
+  fi
+
+  # Stage 7: Remove local worktree (not a Claude invocation; one git call).
+  if prompt_yes_skip "Remove local worktree?"; then
+    if ! remove_worktree "$WORKTREE_PATH"; then
       exit 1
     fi
   fi

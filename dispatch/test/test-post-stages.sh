@@ -2,8 +2,9 @@
 # Unit tests for the post-implementation stage helpers in dispatch:
 #   - prompt_yes_skip  (A1–A5)
 #   - should_run_post_stages  (B1–B5)
-#   - structural sequencing of all six stages  (C1)
+#   - structural sequencing of all seven stages  (C1)
 #   - mark_pr_ready  (D1a–D1c)
+#   - remove_worktree  (E1a–E1b)
 #
 # Uses two testability hooks added to dispatch/bin/dispatch:
 #   1. prompt_is_tty()       — overridden here to return 0 (force interactive
@@ -160,13 +161,13 @@ rm -rf "$B_TMP"
 prompt_is_tty() { [[ -t 0 ]]; }
 
 # ---------------------------------------------------------------------------
-# C. Sequencing — all six stage prompts are present and ordered
+# C. Sequencing — all seven stage prompts are present and ordered
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- C. stage sequencing (structural) ---"
 
 # Extract the first line number where each expected label appears in dispatch.
-# All six must be present and in the correct order.
+# All seven must be present and in the correct order.
 declare -a LABELS=(
   "Run dispatch-qa?"
   "Run claude /simplify?"
@@ -174,6 +175,7 @@ declare -a LABELS=(
   "Run claude /ultrareview?"
   "Run claude /security-review?"
   "Mark PR ready for review?"
+  "Remove local worktree?"
 )
 declare -a LINE_NUMS=()
 all_found=1
@@ -202,7 +204,7 @@ if [[ "$all_found" -eq 1 ]]; then
   done
   if [[ "$in_order" -eq 1 ]]; then
     PASS=$((PASS + 1))
-    echo "  PASS: C1: all six stage labels present in correct order (lines: ${LINE_NUMS[*]})"
+    echo "  PASS: C1: all seven stage labels present in correct order (lines: ${LINE_NUMS[*]})"
   else
     FAIL=$((FAIL + 1))
     echo "  FAIL: C1: stage labels out of order (lines: ${LINE_NUMS[*]})"
@@ -286,6 +288,67 @@ assert_returns_zero "D1c: success returns 0" mark_pr_ready "test-branch"
 PATH="$ORIGINAL_PATH"
 rm -rf "$D_STUB_DIR"
 unset STUB_GH_PR_VIEW STUB_GH_PR_NUMBER STUB_GH_PR_READY
+
+# ---------------------------------------------------------------------------
+# E. remove_worktree
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- E. remove_worktree ---"
+
+# PATH-injected git stub. Behaviour driven by:
+#   STUB_GIT_WT_REMOVE — "success" | "fail" (default: "success")
+# The stub also fails loudly with exit 99 if `--force` is ever passed —
+# that property is part of the design (no silent retry), so violating it
+# must surface as a test failure, not a passing test.
+E_STUB_DIR=$(mktemp -d)
+cat >"$E_STUB_DIR/git" <<'GITSTUB'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "worktree remove")
+    for arg in "$@"; do
+      if [[ "$arg" == "--force" || "$arg" == "-f" ]]; then
+        echo "stub git: --force passed to git worktree remove (forbidden by design)" >&2
+        exit 99
+      fi
+    done
+    case "${STUB_GIT_WT_REMOVE:-success}" in
+      success)
+        exit 0
+        ;;
+      fail)
+        echo "fatal: '$3' contains modified or untracked files, use --force to delete it" >&2
+        exit 1
+        ;;
+      *)
+        echo "stub git: unknown STUB_GIT_WT_REMOVE='${STUB_GIT_WT_REMOVE}'" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  *)
+    echo "stub git: unexpected invocation: $*" >&2
+    exit 2
+    ;;
+esac
+GITSTUB
+chmod +x "$E_STUB_DIR/git"
+
+ORIGINAL_PATH="$PATH"
+PATH="$E_STUB_DIR:$ORIGINAL_PATH"
+
+# E1a: success → returns 0
+export STUB_GIT_WT_REMOVE=success
+assert_returns_zero "E1a: git worktree remove succeeds returns 0" \
+  remove_worktree "/some/worktree/path"
+
+# E1b: dirty refusal → returns non-zero (and stub asserts no --force retry)
+export STUB_GIT_WT_REMOVE=fail
+assert_returns_nonzero "E1b: dirty refusal returns non-zero (no --force retry)" \
+  remove_worktree "/some/worktree/path"
+
+PATH="$ORIGINAL_PATH"
+rm -rf "$E_STUB_DIR"
+unset STUB_GIT_WT_REMOVE
 
 # ---------------------------------------------------------------------------
 # Report
