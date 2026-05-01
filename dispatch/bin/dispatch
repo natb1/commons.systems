@@ -133,6 +133,76 @@ reconcile_phase_signal() {
   return 1
 }
 
+# --- should_run_post_stages -------------------------------------------------
+# Gate the post-implementation stage sequence: only proceed when the verify
+# loop signaled completion AND stdin is a TTY (interactive run).
+# Args: $1 = state file path (absolute)
+# Returns: 0 if post-stages should run, non-zero otherwise.
+should_run_post_stages() {
+  local state_file="$1"
+  if [[ ! -t 0 ]]; then
+    return 1
+  fi
+  if [[ ! -f "$state_file" ]]; then
+    return 1
+  fi
+  if ! jq -e '.state.phase_signal == "complete"' "$state_file" >/dev/null 2>&1; then
+    return 1
+  fi
+  return 0
+}
+
+# --- prompt_yes_skip --------------------------------------------------------
+# Single-keystroke prompt: Enter = yes (return 0), `s`/`S` = skip (return 1).
+# Any other key re-prompts once; on second miss, returns skip. When stdin is
+# not a TTY, short-circuits to skip without reading.
+# Args: $1 = label (e.g. "Run claude /simplify?")
+prompt_yes_skip() {
+  local label="$1"
+  if [[ ! -t 0 ]]; then
+    return 1
+  fi
+
+  local ans=""
+  printf '%s' "[dispatch] ${label} [Enter=yes, s=skip]: " >&2
+  read -r -n 1 ans </dev/tty || return 1
+
+  if [[ -z "$ans" ]]; then
+    # User pressed Enter alone — read -n 1 returned with no character read.
+    return 0
+  fi
+  printf '\n' >&2
+  if [[ "$ans" == "s" || "$ans" == "S" ]]; then
+    return 1
+  fi
+
+  # Any other key — re-prompt once with stricter semantics.
+  ans=""
+  printf '%s' "[dispatch] ${label} [Enter=yes, s=skip]: " >&2
+  read -r -n 1 ans </dev/tty || return 1
+
+  if [[ -z "$ans" ]]; then
+    return 0
+  fi
+  printf '\n' >&2
+  if [[ "$ans" == "s" || "$ans" == "S" ]]; then
+    return 1
+  fi
+  # Second miss → skip.
+  return 1
+}
+
+# --- launch_claude_stage ----------------------------------------------------
+# Launch a foreground Claude session for a post-implementation stage. The
+# user terminates the session (e.g. /exit) to return control. No watcher —
+# post-stages are not gated by phase_signal.
+# Requires $BRANCH to be set in the caller's scope.
+# Args: $1 = slash-command argument (e.g. "/simplify", "/dispatch-qa #123")
+launch_claude_stage() {
+  local slash="$1"
+  claude -w "$BRANCH" "$slash" </dev/tty
+}
+
 # --- main -------------------------------------------------------------------
 main() {
   local ISSUE_NUM="${1:-}"
@@ -270,7 +340,66 @@ ${RESUME_INSTRUCTION}}")
   CLAUDE_RC=$?
   set -e
 
-  exit "$CLAUDE_RC"
+  # Post-implementation stage gating. The watcher SIGTERMs Claude on
+  # phase_signal=complete, which surfaces as exit 143 (128+SIGTERM); a clean
+  # /exit after phase-complete is 0. Either way, the authoritative gate is
+  # `state.phase_signal == "complete"` in the state file (checked by
+  # should_run_post_stages). Other non-zero exits (genuine errors, Ctrl-C
+  # before completion) skip the post-stages.
+  if [[ "$CLAUDE_RC" -ne 0 && "$CLAUDE_RC" -ne 143 ]]; then
+    exit "$CLAUDE_RC"
+  fi
+
+  if ! should_run_post_stages "$STATE_FILE"; then
+    exit "$CLAUDE_RC"
+  fi
+
+  echo "[dispatch] implementation phase complete — entering post-implementation stages" >&2
+
+  # Stage 1: Dispatch QA
+  if prompt_yes_skip "Run dispatch-qa?"; then
+    launch_claude_stage "/dispatch-qa #${ISSUE_NUM}"
+  fi
+
+  # Stage 2: Simplify
+  if prompt_yes_skip "Run claude /simplify?"; then
+    launch_claude_stage "/simplify"
+  fi
+
+  # Stage 3: Review
+  if prompt_yes_skip "Run claude /review?"; then
+    launch_claude_stage "/review"
+  fi
+
+  # Stage 4: Ultrareview
+  if prompt_yes_skip "Run claude /ultrareview?"; then
+    launch_claude_stage "/ultrareview"
+  fi
+
+  # Stage 5: Security review
+  if prompt_yes_skip "Run claude /security-review?"; then
+    launch_claude_stage "/security-review"
+  fi
+
+  # Stage 6: Mark PR ready (not a Claude invocation; one gh call).
+  if prompt_yes_skip "Mark PR ready for review?"; then
+    local pr_num=""
+    set +e
+    pr_num=$(gh pr view "$BRANCH" --json number -q .number 2>/dev/null)
+    local pr_rc=$?
+    set -e
+    if [[ $pr_rc -ne 0 || -z "$pr_num" ]]; then
+      echo "error: could not resolve PR number for branch '$BRANCH' — cannot mark ready" >&2
+      exit 1
+    fi
+    if ! gh pr ready "$pr_num"; then
+      echo "error: gh pr ready $pr_num failed" >&2
+      exit 1
+    fi
+    echo "[dispatch] PR #${pr_num} marked ready for review" >&2
+  fi
+
+  exit 0
 }
 
 # Only run main() when executed directly — allows tests to `source` this
