@@ -139,7 +139,7 @@ func (m Model) View() string {
 
 // renderRateLimitRow renders a single rate-limit row across two lines:
 //
-//	  5h  ████▌                       18%
+//	  5h  ████▌                       17%
 //	        resets in 0h 32m
 func renderRateLimitRow(label string, w *ratelimits.Window, now time.Time) string {
 	pct := w.UsedPercentage
@@ -163,7 +163,7 @@ func renderRateLimitRow(label string, w *ratelimits.Window, now time.Time) strin
 	emptyCount := 28 - full - half
 	barStr := activeStyle.Render(filledStr) + strings.Repeat(" ", emptyCount)
 
-	pctStr := fmt.Sprintf("%3d%%", w.UsedPercentage)
+	pctStr := fmt.Sprintf("%3d%%", pct)
 
 	countdown := formatCountdown(w.ResetIn(now))
 
