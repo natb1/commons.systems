@@ -89,6 +89,10 @@ main {
 .landing-hero {
   margin-block: 2rem;
 }
+body[data-route="about"] .landing-hero,
+body[data-route="other"] .landing-hero {
+  display: none;
+}
 
 .landing-hero-band {
   background: var(--accent);
@@ -108,6 +112,22 @@ main {
   margin: 0.25rem 0 0;
   font-size: clamp(0.85rem, 2.2vw, 1rem);
   opacity: 0.9;
+}
+.landing-hero-band-cta {
+  margin: 0.25rem 0 0;
+  font-size: clamp(0.85rem, 2.2vw, 1rem);
+}
+.landing-hero-band-cta a {
+  color: inherit;
+  text-decoration: underline;
+}
+.landing-hero-band-cta a:hover,
+.landing-hero-band-cta a:focus-visible {
+  color: var(--bg);
+  opacity: 0.75;
+}
+.landing-hero-band-cta span {
+  opacity: 0.6;
 }
 .landing-hero-grid {
   display: grid;
@@ -155,6 +175,28 @@ main {
 
 @media (max-width: 768px) {
   .landing-hero-grid { grid-template-columns: 1fr; }
+}
+
+.profile-card {
+  text-align: center;
+}
+.profile-photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 240px;
+  margin: 0 auto 0.75rem;
+  border: 1px solid var(--border);
+}
+.profile-card .profile-name {
+  margin: 0;
+  font-weight: 700;
+}
+.profile-card .profile-location,
+.profile-card .profile-email {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 /* Post body uses serif for long-form prose. Code descendants revert to the

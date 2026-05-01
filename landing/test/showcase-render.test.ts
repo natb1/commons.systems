@@ -81,4 +81,25 @@ describe("renderShowcase", () => {
     expect(html).not.toContain('"onmouseover=');
     expect(html).toContain("&quot;");
   });
+
+  describe("band CTAs", () => {
+    it("renders Learn More link to /about", () => {
+      const html = renderShowcase(APPS);
+      expect(html).toContain('href="/about"');
+      expect(html).toContain("Learn More");
+    });
+
+    it("renders Source link to the GitHub repo", () => {
+      const html = renderShowcase(APPS);
+      expect(html).toContain('href="https://github.com/natb1/commons.systems"');
+      expect(html).toContain("Source");
+    });
+
+    it("CTA row appears after the subline", () => {
+      const html = renderShowcase(APPS);
+      const sublineIndex = html.indexOf("landing-hero-band-subline");
+      const ctaIndex = html.indexOf("landing-hero-band-cta");
+      expect(ctaIndex).toBeGreaterThan(sublineIndex);
+    });
+  });
 });

@@ -3,7 +3,13 @@ import { join } from "node:path";
 import { escapeHtml } from "@commons-systems/htmlutil";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 import type { InfoPanelData } from "./components/info-panel.ts";
-import { siteDefaultOgEntries, postOgEntries, type OgTagEntry, type SiteDefaults } from "./og-meta.ts";
+import {
+  siteDefaultOgEntries,
+  postOgEntries,
+  staticPageOgEntries,
+  type OgTagEntry,
+  type SiteDefaults,
+} from "./og-meta.ts";
 import { validatePublishedPosts, type PostMeta, type PublishedPost } from "./post-types.ts";
 import { formatPageTitle } from "./page-title.ts";
 import { renderInfoPanel } from "./components/info-panel.ts";
@@ -24,6 +30,7 @@ import {
 export interface NavLink {
   readonly href: string;
   readonly label: string;
+  readonly align?: "end";
 }
 
 export interface PrerenderConfig {
@@ -46,6 +53,35 @@ export interface PrerenderConfig {
   homeExtraHtml?: string;
 }
 
+export interface StaticPageConfig {
+  siteUrl: string;
+  titleSuffix: string;
+  distDir: string;
+  /** e.g. "/about" — leading slash required, no trailing slash. */
+  path: string;
+  pageTitle: string;
+  pageDescription: string;
+  /** Absolute path from site root; included in og:image / twitter:image when provided. */
+  pageImage?: string;
+  pageType?: "website" | "profile";
+  /** Injected into `<main id="app">`. */
+  bodyHtml: string;
+  navLinks: NavLink[];
+  /** Pre-rendered info panel HTML — produced by `loadPostsForPrerender`. */
+  panelHtml: string;
+  jsonLdBlocks?: Record<string, unknown>[];
+  relMe?: string[];
+  /** Defaults to true. Set false to keep the landing-hero block in this static page. */
+  stripHero?: boolean;
+}
+
+export interface PostsArtifacts {
+  topPosts: PostMeta[];
+  panelHtml: string;
+  allArticlesHtml: string;
+  rendered: RenderedPost[];
+}
+
 function ogTagsToHtml(entries: OgTagEntry[]): string {
   return entries
     .map((e) => `<meta ${e.attr}="${e.key}" content="${escapeHtml(e.content)}">`)
@@ -54,7 +90,10 @@ function ogTagsToHtml(entries: OgTagEntry[]): string {
 
 function renderNavHtml(links: NavLink[]): string {
   const anchors = links
-    .map((l) => `<a href="${escapeHtml(l.href)}">${escapeHtml(l.label)}</a>`)
+    .map((l) => {
+      const alignAttr = l.align === "end" ? ` data-align="end"` : "";
+      return `<a href="${escapeHtml(l.href)}"${alignAttr}>${escapeHtml(l.label)}</a>`;
+    })
     .join("");
   return `<span class="nav-links">${anchors}</span>`;
 }
@@ -64,10 +103,10 @@ interface RenderedPost {
   articleHtml: string;
 }
 
-function injectMain(html: string, articlesHtml: string): string {
+function injectMain(html: string, innerHtml: string): string {
   const result = html.replace(
     /<main id="app">.*?<\/main>/s,
-    `<main id="app"><div id="posts">${articlesHtml}</div></main>`,
+    `<main id="app">${innerHtml}</main>`,
   );
   if (result === html) throw new Error('<main id="app"> marker not found in template');
   return result;
@@ -116,6 +155,36 @@ function buildSeoHeadHtml(parts: string[]): string {
   return parts.filter((s) => s.length > 0).join("\n    ");
 }
 
+/** Loads, validates, and renders all published posts plus the info panel HTML.
+ *  Both `prerenderPosts` and static-page callers can use this to avoid loading
+ *  posts and rendering the panel twice. */
+export async function loadPostsForPrerender(args: {
+  seed: Pick<SeedSpec, "collections">;
+  postDir: string;
+  infoPanel: Omit<InfoPanelData, "topPosts">;
+}): Promise<PostsArtifacts> {
+  const marked = createMarked();
+  const published = validatePublishedPosts(args.seed);
+  published.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+
+  const contentMap = await renderPostContents(
+    published,
+    (filename) => readFileSync(join(args.postDir, filename), "utf-8"),
+    marked,
+  );
+
+  const rendered: RenderedPost[] = published.map((meta) => ({
+    meta,
+    articleHtml: renderArticle(meta, "/post/", contentMap[meta.id]),
+  }));
+
+  const topPosts: PostMeta[] = rendered.map((p) => p.meta);
+  const panelHtml = renderInfoPanel({ ...args.infoPanel, topPosts });
+  const allArticlesHtml = rendered.map((p) => p.articleHtml).join("\n      <hr>\n      ");
+
+  return { topPosts, panelHtml, allArticlesHtml, rendered };
+}
+
 // Build-time counterpart of og-meta.ts. Generates per-post HTML files with
 // OG tags, <meta name="description">, <title>, canonical link, JSON-LD
 // structured data (Organization on the root, BlogPosting per post), and
@@ -141,24 +210,13 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   } = config;
 
   const template = readFileSync(join(distDir, "index.html"), "utf-8");
-  const marked = createMarked();
 
-  const published = validatePublishedPosts(seed);
-  published.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+  const { panelHtml, allArticlesHtml, rendered } = await loadPostsForPrerender({
+    seed,
+    postDir,
+    infoPanel,
+  });
 
-  const contentMap = await renderPostContents(
-    published,
-    (filename) => readFileSync(join(postDir, filename), "utf-8"),
-    marked,
-  );
-
-  const rendered: RenderedPost[] = published.map((meta) => ({
-    meta,
-    articleHtml: renderArticle(meta, "/post/", contentMap[meta.id]),
-  }));
-
-  const topPosts: PostMeta[] = rendered.map((p) => p.meta);
-  const panelHtml = renderInfoPanel({ ...infoPanel, topPosts });
   const navHtml = renderNavHtml(navLinks);
 
   const relMeHtml = relMe ? relMeLinkTags(relMe) : "";
@@ -174,8 +232,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     relMeHtml,
   ]);
 
-  const allArticlesHtml = rendered.map((p) => p.articleHtml).join("\n      <hr>\n      ");
-  let rootHtml = injectMain(template, allArticlesHtml);
+  let rootHtml = injectMain(template, `<div id="posts">${allArticlesHtml}</div>`);
   rootHtml = injectInfoPanel(rootHtml, panelHtml);
   rootHtml = injectNav(rootHtml, navHtml);
   if (homeExtraHtml !== undefined) {
@@ -190,7 +247,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
   writeFileSync(join(distDir, "index.html"), rootHtml);
   console.log("Pre-rendered: /index.html");
 
-  for (const meta of published) {
+  for (const { meta } of rendered) {
     const ogBlock = ogTagsToHtml(postOgEntries(siteUrl, meta));
     const postSeoHead = buildSeoHeadHtml([
       canonicalLinkTag(`${siteUrl}/post/${encodeURIComponent(meta.id)}`),
@@ -207,7 +264,7 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     html = html.replace(/<title>.*?<\/title>/, `<title>${escapeHtml(formatPageTitle(titleSuffix, meta.title))}</title>`);
     if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
-    html = injectMain(html, allArticlesHtml);
+    html = injectMain(html, `<div id="posts">${allArticlesHtml}</div>`);
     html = injectInfoPanel(html, panelHtml);
     html = injectNav(html, navHtml);
     if (homeExtraHtml !== undefined) {
@@ -219,4 +276,73 @@ export async function prerenderPosts(config: PrerenderConfig): Promise<void> {
     writeFileSync(join(outDir, "index.html"), html);
     console.log(`Pre-rendered: /post/${meta.id}/index.html`);
   }
+}
+
+/** Emit a static page (e.g. `/about`) with full SEO parity to `prerenderPosts`.
+ *  The caller supplies a pre-rendered info panel via `panelHtml` — typically
+ *  obtained from `loadPostsForPrerender` — so posts are loaded only once. */
+export function prerenderStaticPage(config: StaticPageConfig): void {
+  const {
+    siteUrl,
+    titleSuffix,
+    distDir,
+    path,
+    pageTitle,
+    pageDescription,
+    pageImage,
+    pageType,
+    bodyHtml,
+    navLinks,
+    panelHtml,
+    jsonLdBlocks,
+    relMe,
+    stripHero,
+  } = config;
+
+  const template = readFileSync(join(distDir, "index.html"), "utf-8");
+
+  const ogBlock = ogTagsToHtml(
+    staticPageOgEntries(siteUrl, {
+      url: path,
+      title: pageTitle,
+      description: pageDescription,
+      image: pageImage,
+      type: pageType,
+    }),
+  );
+
+  const jsonLdHtml = (jsonLdBlocks ?? [])
+    .map((block) => jsonLdScriptTag(block))
+    .join("\n    ");
+
+  const seoHead = buildSeoHeadHtml([
+    canonicalLinkTag(`${siteUrl}${path}`),
+    jsonLdHtml,
+    relMe && relMe.length > 0 ? relMeLinkTags(relMe) : "",
+  ]);
+
+  let html = template.replace(/\s*<meta name="description"[^>]*>/, "");
+
+  const beforeTitle = html;
+  html = html.replace(
+    /<title>.*?<\/title>/,
+    `<title>${escapeHtml(formatPageTitle(titleSuffix, pageTitle))}</title>`,
+  );
+  if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
+
+  html = injectBeforeHead(html, ogBlock, "static page template");
+  html = injectBeforeHead(html, seoHead, "static page template");
+
+  html = injectMain(html, bodyHtml);
+  html = injectInfoPanel(html, panelHtml);
+  html = injectNav(html, renderNavHtml(navLinks));
+
+  if (stripHero !== false) {
+    html = stripHomeExtra(html);
+  }
+
+  const outDir = join(distDir, path);
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(join(outDir, "index.html"), html);
+  console.log(`Pre-rendered: ${path}/index.html`);
 }

@@ -3,6 +3,7 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 export interface NavLink {
   readonly href: string;
   readonly label: string;
+  readonly align?: "end";
 }
 
 /** Minimal user shape for the nav, decoupled from any auth provider. */
@@ -54,7 +55,10 @@ class AppNavElement extends HTMLElement {
     const linksContainer = this.#ensureContainer("nav-links", "prepend");
 
     linksContainer.innerHTML = this.#links
-      .map((l) => `<a href="${escapeHtml(l.href)}">${escapeHtml(l.label)}</a>`)
+      .map((l) => {
+        const alignAttr = l.align === "end" ? ` data-align="end"` : "";
+        return `<a href="${escapeHtml(l.href)}"${alignAttr}>${escapeHtml(l.label)}</a>`;
+      })
       .join("");
 
     const authContainer = this.#ensureContainer("nav-auth", "append");

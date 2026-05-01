@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { updateOgMeta, siteDefaultOgEntries, postOgEntries } from "../src/og-meta";
+import { updateOgMeta, siteDefaultOgEntries, postOgEntries, staticPageOgEntries, updateStaticPageMeta } from "../src/og-meta";
 import type { PostMeta } from "../src/post-types";
 
 const SITE_URL = "https://example.com";
@@ -250,5 +250,88 @@ describe("postOgEntries", () => {
     const ogImage = entries.find((e) => e.key === "og:image")?.content;
     const twitterImage = entries.find((e) => e.key === "twitter:image")?.content;
     expect(ogImage).toBe(twitterImage);
+  });
+});
+
+describe("staticPageOgEntries", () => {
+  it("omits og:image and twitter:image when page has no image, defaults og:type to website", () => {
+    const entries = staticPageOgEntries("https://example.com", {
+      url: "/about",
+      title: "About",
+      description: "About page",
+    });
+    expect(entries.find((e) => e.key === "og:type")?.content).toBe("website");
+    expect(entries.find((e) => e.key === "og:image")).toBeUndefined();
+    expect(entries.find((e) => e.key === "twitter:image")).toBeUndefined();
+  });
+
+  it("includes og:image and twitter:image when page has image", () => {
+    const entries = staticPageOgEntries("https://example.com", {
+      url: "/about",
+      title: "About",
+      description: "About page",
+      image: "/og-card.png",
+      type: "profile",
+    });
+    expect(entries.find((e) => e.key === "og:type")?.content).toBe("profile");
+    expect(entries.find((e) => e.key === "og:image")?.content).toBe("https://example.com/og-card.png");
+    expect(entries.find((e) => e.key === "twitter:image")?.content).toBe("https://example.com/og-card.png");
+  });
+
+  it("twitter:title and twitter:description match og counterparts", () => {
+    const entries = staticPageOgEntries("https://example.com", {
+      url: "/about",
+      title: "About Nathan",
+      description: "Independent contractor.",
+    });
+    expect(entries.find((e) => e.key === "twitter:title")?.content).toBe(
+      entries.find((e) => e.key === "og:title")?.content,
+    );
+    expect(entries.find((e) => e.key === "twitter:description")?.content).toBe(
+      entries.find((e) => e.key === "og:description")?.content,
+    );
+  });
+});
+
+describe("updateStaticPageMeta", () => {
+  beforeEach(() => {
+    document.head.querySelectorAll('meta[property^="og:"]').forEach((el) => el.remove());
+    document.head.querySelectorAll('meta[name="description"]').forEach((el) => el.remove());
+    document.head.querySelectorAll('meta[name^="twitter:"]').forEach((el) => el.remove());
+    document.title = "";
+  });
+
+  it("sets document.title with suffix when provided", () => {
+    updateStaticPageMeta("https://example.com", { url: "/about", title: "About", description: "desc" }, "Site");
+    expect(document.title).toBe("Site - About");
+  });
+
+  it("sets document.title to page title when no suffix", () => {
+    updateStaticPageMeta("https://example.com", { url: "/about", title: "About", description: "desc" });
+    expect(document.title).toBe("About");
+  });
+
+  it("updates existing meta tags rather than appending duplicates on repeated calls", () => {
+    updateStaticPageMeta("https://example.com", { url: "/about", title: "About", description: "desc" });
+    updateStaticPageMeta("https://example.com", { url: "/about", title: "About v2", description: "desc2" });
+    const titles = document.querySelectorAll('meta[property="og:title"]');
+    expect(titles).toHaveLength(1);
+    expect(titles[0].getAttribute("content")).toBe("About v2");
+  });
+
+  it("clears existing og:image and twitter:image when called with a page lacking an image", () => {
+    updateStaticPageMeta("https://example.com", {
+      url: "/about",
+      title: "About",
+      description: "desc",
+      image: "/og-card.png",
+    });
+    expect(document.querySelector('meta[property="og:image"]')).not.toBeNull();
+    expect(document.querySelector('meta[name="twitter:image"]')).not.toBeNull();
+
+    updateStaticPageMeta("https://example.com", { url: "/about", title: "About", description: "desc" });
+    expect(document.querySelector('meta[property="og:image"]')).toBeNull();
+    expect(document.querySelector('meta[name="twitter:image"]')).toBeNull();
+    expect(document.querySelector('meta[property="og:title"]')).not.toBeNull();
   });
 });

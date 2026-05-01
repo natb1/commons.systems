@@ -1,11 +1,29 @@
 import type { LinkSection } from "@commons-systems/blog/components/info-panel";
 import type { NavLink } from "@commons-systems/blog/prerender";
 import type { SiteDefaults } from "@commons-systems/blog/og-meta";
-import type { Organization, Author, SoftwareApplication } from "@commons-systems/blog/seo";
+import type { Organization, Author, Person, SoftwareApplication } from "@commons-systems/blog/seo";
 
 export const SITE_URL = "https://commons.systems";
 
-export const NAV_LINKS: NavLink[] = [{ href: "/", label: "Home" }];
+export const NAV_LINKS: NavLink[] = [
+  { href: "/", label: "Home" },
+  { href: "/about", label: "About", align: "end" },
+];
+
+export const ABOUT_PAGE_META = {
+  url: `${SITE_URL}/about`,
+  title: "About",
+  description: "Nathan Buesgens — independent contractor focused on training the AI skills that decouple a business from professional services and platform vendors.",
+  type: "profile" as const,
+};
+
+export const PERSON: Person = {
+  name: "Nathan Buesgens",
+  url: `${SITE_URL}/about`,
+  email: "nathan@natb1.com",
+  jobTitle: "Independent contractor",
+  sameAs: ["https://github.com/natb1"],
+};
 
 export const SITE_DEFAULTS: SiteDefaults = {
   title: "commons.systems",
