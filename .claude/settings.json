@@ -155,6 +155,10 @@
       }
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/statusline.sh"
+  },
   "enabledPlugins": {
     "security-guidance@claude-plugins-official": true,
     "marketing@knowledge-work-plugins": false
