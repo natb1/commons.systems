@@ -44,7 +44,7 @@ diagnose_state() {
   local branch="$1" state_file="$2" issue_num="$3"
   local pr_json pr_state pr_number stderr_file rc commits_ahead
 
-  git fetch --quiet origin main 2>/dev/null || \
+  git fetch --quiet origin main || \
     echo "[dispatch] warning: git fetch origin main failed; using local refs" >&2
 
   stderr_file=$(mktemp)
@@ -103,15 +103,22 @@ reconcile_phase_signal() {
     read_script="$repo_root/.claude/skills/ref-pr-workflow/scripts/issue-state-read"
     write_script="$repo_root/.claude/skills/ref-pr-workflow/scripts/issue-state-write"
     set +e
-    remote_json=$("$read_script" "$issue_num" 2>/dev/null)
+    remote_json=$("$read_script" "$issue_num")
     rc=$?
     set -e
     if [[ $rc -ne 0 ]]; then
+      echo "[dispatch] warning: issue-state-read exit $rc; reconciling local cache only" >&2
       reconcile_phase_signal local-only "$state_file" "$issue_num"
       return 0
     fi
-    remote_json=$(jq 'del(.phase_signal)' <<<"$remote_json")
-    "$write_script" "$issue_num" <<<"$remote_json"
+    if jq -e 'has("phase_signal")' <<<"$remote_json" >/dev/null; then
+      remote_json=$(jq 'del(.phase_signal)' <<<"$remote_json")
+      "$write_script" "$issue_num" <<<"$remote_json"
+    fi
+    # issue-state-write mirrors into the cache resolved via its CWD's git
+    # toplevel (the project root), not the worktree. Clear the worktree
+    # state file directly so the watcher doesn't fire on stale local state.
+    reconcile_phase_signal local-only "$state_file" "$issue_num"
     return 0
   fi
 
