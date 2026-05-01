@@ -7,7 +7,20 @@ import { Timestamp } from "firebase/firestore";
 import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
-import { msToTs, parseISOTimestamp, msToISO, nullToEmpty, UploadValidationError } from "./_helpers.js";
+import {
+  msToTs,
+  msToISO,
+  nullToEmpty,
+  optionalString,
+  optionalTimestamp,
+  parseISOTimestamp,
+  requireNumber,
+  requireSeedNumber,
+  requireSeedString,
+  requireString,
+  requireUploadId,
+  toMs,
+} from "./_helpers.js";
 import type { TransactionSeedData } from "../../seeds/firestore.js";
 import type { BudgetId } from "../firestore.js";
 
@@ -32,43 +45,9 @@ export interface SeedTransaction {
   readonly virtual: boolean;
 }
 
-// ── Local validation helpers ──────────────────────────────────────────────────
-// Inlined here to avoid importing @commons-systems/firestoreutil/validate,
-// which uses .js extension imports that break Node.js ESM resolution when
-// this module is loaded during vite config startup (for the seed data plugin).
-
-class DataIntegrityError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DataIntegrityError";
-  }
-}
-
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new DataIntegrityError(`Expected string for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
-
-function requireNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new DataIntegrityError(`Expected finite number for ${field}, got ${value}`);
-  }
-  return value;
-}
-
-function optionalString(value: unknown, field: string): string | null {
-  if (value == null) return null;
-  return requireString(value, field);
-}
-
 export type TransactionId = Brand<"TransactionId">;
 export type StatementId = Brand<"StatementId">;
 export type StatementItemId = Brand<"StatementItemId">;
-
-// Re-export UploadValidationError so upload.ts can import it from here (or from _helpers.ts directly).
-export { UploadValidationError };
 
 // ── Domain interface ──────────────────────────────────────────────────────────
 
@@ -161,14 +140,6 @@ function requireReimbursement(value: unknown): number {
   return n;
 }
 
-function optionalTimestamp(value: unknown, field: string): Timestamp | null {
-  if (value == null) return null;
-  if (!(value instanceof Timestamp)) {
-    throw new DataIntegrityError(`Expected Timestamp for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
-
 // ── Firestore → Transaction ───────────────────────────────────────────────────
 
 export function parseFirestoreTransaction(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): Transaction {
@@ -196,13 +167,6 @@ export function parseFirestoreTransaction(docSnap: QueryDocumentSnapshot<Documen
 }
 
 // ── Raw upload → Transaction ──────────────────────────────────────────────────
-
-function requireUploadId(value: unknown, entity: string, index: number): string {
-  if (typeof value !== "string" || value === "") {
-    throw new UploadValidationError(`${entity}[${index}] is missing a valid id`);
-  }
-  return value;
-}
 
 export function parseRawTransaction(t: RawTransaction, i: number): Transaction {
   return {
@@ -296,22 +260,6 @@ export function transactionToRawJson(t: IdbTransaction): RawTransaction {
 }
 
 // ── TransactionSeedData → SeedTransaction (build-time) ───────────────────────
-
-function toMs(d: unknown): number | null {
-  if (d instanceof Date) return d.getTime();
-  if (d != null && typeof d === "object" && "toMillis" in d) return (d as { toMillis(): number }).toMillis();
-  return null;
-}
-
-function requireSeedString(value: unknown, field: string): string {
-  if (typeof value !== "string") throw new Error(`Expected string for ${field}, got ${typeof value}`);
-  return value;
-}
-
-function requireSeedNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`Expected finite number for ${field}, got ${value}`);
-  return value;
-}
 
 function requireSeedReimbursement(value: unknown): number {
   const n = requireSeedNumber(value, "reimbursement");

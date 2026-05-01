@@ -6,7 +6,15 @@
 import { Timestamp } from "firebase/firestore";
 import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
-import { msToTs } from "./_helpers.js";
+import {
+  optionalString,
+  requireEnum,
+  requireMs,
+  requireSeedEnum,
+  requireSeedString,
+  requireString,
+  requireTimestamp,
+} from "./_helpers.js";
 import type { ReconciliationNoteSeedData } from "../../seeds/firestore.js";
 import {
   RECONCILIATION_CLASSIFICATIONS,
@@ -16,25 +24,6 @@ import {
 } from "../schema/enums.js";
 
 // No upload/Raw shape — upload pipeline doesn't ingest these yet.
-
-// ── Local validation helpers ──────────────────────────────────────────────────
-// Inlined here to avoid importing @commons-systems/firestoreutil/validate and
-// @commons-systems/firestoreutil/errors, which use .js extension imports that
-// break Node.js ESM resolution when this module is loaded during vite config startup.
-
-class DataIntegrityError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DataIntegrityError";
-  }
-}
-
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new DataIntegrityError(`Expected string for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
 
 // ── Domain interface ──────────────────────────────────────────────────────────
 
@@ -69,40 +58,12 @@ export type { ReconciliationNoteSeedData };
 // Defined here so budget-seed-data.d.ts can re-export it without circular refs.
 export interface SeedReconciliationNote {
   readonly id: string;
-  readonly entityType: "transaction" | "statementItem";
+  readonly entityType: ReconciliationEntityType;
   readonly entityId: string;
-  readonly classification: "timing" | "missing_entry" | "discrepancy";
+  readonly classification: ReconciliationClassification;
   readonly note: string;
   readonly updatedAtMs: number;
   readonly updatedBy: string;
-}
-
-// ── Internal helpers ──────────────────────────────────────────────────────────
-
-function optionalString(value: unknown, field: string): string | null {
-  if (value == null) return null;
-  return requireString(value, field);
-}
-
-function requireTimestamp(value: unknown, field: string): Timestamp {
-  if (value == null || !(value instanceof Timestamp)) {
-    throw new DataIntegrityError(`Expected Timestamp for ${field}, got ${value == null ? "null" : typeof value}`);
-  }
-  return value;
-}
-
-function requireReconciliationClassification(value: unknown): ReconciliationClassification {
-  if (!(RECONCILIATION_CLASSIFICATIONS as readonly unknown[]).includes(value)) {
-    throw new DataIntegrityError(`Expected classification to be one of ${RECONCILIATION_CLASSIFICATIONS.join(", ")}, got ${value}`);
-  }
-  return value as ReconciliationClassification;
-}
-
-function requireReconciliationEntityType(value: unknown): ReconciliationEntityType {
-  if (!(RECONCILIATION_ENTITY_TYPES as readonly unknown[]).includes(value)) {
-    throw new DataIntegrityError(`Expected entityType to be one of ${RECONCILIATION_ENTITY_TYPES.join(", ")}, got ${value}`);
-  }
-  return value as ReconciliationEntityType;
 }
 
 // ── Firestore → ReconciliationNote ────────────────────────────────────────────
@@ -111,9 +72,9 @@ export function parseFirestoreReconciliationNote(docSnap: QueryDocumentSnapshot<
   const data = docSnap.data();
   return {
     id: docSnap.id,
-    entityType: requireReconciliationEntityType(data.entityType),
+    entityType: requireEnum(data.entityType, RECONCILIATION_ENTITY_TYPES, "entityType"),
     entityId: requireString(data.entityId, "entityId"),
-    classification: requireReconciliationClassification(data.classification),
+    classification: requireEnum(data.classification, RECONCILIATION_CLASSIFICATIONS, "classification"),
     // Preserves existing tolerance for non-string note field (existing inconsistency in Firestore data).
     note: typeof data.note === "string" ? data.note : "",
     updatedAt: requireTimestamp(data.updatedAt, "updatedAt"),
@@ -145,7 +106,7 @@ export function idbToReconciliationNote(row: IdbReconciliationNote): Reconciliat
     entityId: row.entityId,
     classification: row.classification,
     note: row.note,
-    updatedAt: msToTs(row.updatedAtMs) ?? Timestamp.fromMillis(row.updatedAtMs),
+    updatedAt: Timestamp.fromMillis(row.updatedAtMs),
     updatedBy: row.updatedBy,
     groupId: null as GroupId | null,
   };
@@ -167,37 +128,12 @@ export function reconciliationNoteToRawJson(n: IdbReconciliationNote): object {
 
 // ── ReconciliationNoteSeedData → SeedReconciliationNote (build-time) ──────────
 
-function toMs(d: unknown): number | null {
-  if (d instanceof Date) return d.getTime();
-  if (d != null && typeof d === "object" && "toMillis" in d) return (d as { toMillis(): number }).toMillis();
-  return null;
-}
-
-function requireMs(d: unknown, field: string): number {
-  const ms = toMs(d);
-  if (ms === null) throw new Error(`Expected Date or Timestamp for ${field}, got ${d}`);
-  return ms;
-}
-
-function requireSeedString(value: unknown, field: string): string {
-  if (typeof value !== "string") throw new Error(`Expected string for ${field}, got ${typeof value}`);
-  return value;
-}
-
 export function serializeSeedReconciliationNote(raw: ReconciliationNoteSeedData, id: string): SeedReconciliationNote {
-  if (!(RECONCILIATION_ENTITY_TYPES as readonly unknown[]).includes(raw.entityType)) {
-    throw new Error(`Invalid reconciliation entityType: ${raw.entityType}`);
-  }
-  const entityType = raw.entityType as ReconciliationEntityType;
-  if (!(RECONCILIATION_CLASSIFICATIONS as readonly unknown[]).includes(raw.classification)) {
-    throw new Error(`Invalid reconciliation classification: ${raw.classification}`);
-  }
-  const classification = raw.classification as ReconciliationClassification;
   return {
     id,
-    entityType,
+    entityType: requireSeedEnum(raw.entityType, RECONCILIATION_ENTITY_TYPES, "entityType"),
     entityId: requireSeedString(raw.entityId, "entityId"),
-    classification,
+    classification: requireSeedEnum(raw.classification, RECONCILIATION_CLASSIFICATIONS, "classification"),
     note: requireSeedString(raw.note, "note"),
     updatedAtMs: requireMs(raw.updatedAt, "updatedAt"),
     updatedBy: requireSeedString(raw.updatedBy, "updatedBy"),

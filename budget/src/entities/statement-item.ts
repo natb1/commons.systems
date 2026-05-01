@@ -7,37 +7,19 @@ import { Timestamp } from "firebase/firestore";
 import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
-import { msToTs } from "./_helpers.js";
+import {
+  optionalString,
+  requireMs,
+  requireNumber,
+  requireSeedNumber,
+  requireSeedString,
+  requireString,
+  requireTimestamp,
+} from "./_helpers.js";
 import type { StatementItemSeedData } from "../../seeds/firestore.js";
 import type { StatementId } from "./statement.js";
 
 // No upload/Raw shape — upload pipeline doesn't ingest these yet.
-
-// ── Local validation helpers ──────────────────────────────────────────────────
-// Inlined here to avoid importing @commons-systems/firestoreutil/validate and
-// @commons-systems/firestoreutil/errors, which use .js extension imports that
-// break Node.js ESM resolution when this module is loaded during vite config startup.
-
-class DataIntegrityError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DataIntegrityError";
-  }
-}
-
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new DataIntegrityError(`Expected string for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
-
-function requireNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new DataIntegrityError(`Expected finite number for ${field}, got ${value}`);
-  }
-  return value;
-}
 
 export type StatementItemId = Brand<"StatementItemId">;
 
@@ -95,20 +77,6 @@ export interface SeedStatementItem {
   readonly fitid: string;
 }
 
-// ── Internal helpers ──────────────────────────────────────────────────────────
-
-function optionalString(value: unknown, field: string): string | null {
-  if (value == null) return null;
-  return requireString(value, field);
-}
-
-function requireTimestamp(value: unknown, field: string): Timestamp {
-  if (value == null || !(value instanceof Timestamp)) {
-    throw new DataIntegrityError(`Expected Timestamp for ${field}, got ${value == null ? "null" : typeof value}`);
-  }
-  return value;
-}
-
 // ── Firestore → StatementItem ─────────────────────────────────────────────────
 
 export function parseFirestoreStatementItem(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): StatementItem {
@@ -156,7 +124,7 @@ export function idbToStatementItem(row: IdbStatementItem): StatementItem {
     account: row.account,
     period: row.period,
     amount: row.amount,
-    timestamp: msToTs(row.timestampMs) ?? Timestamp.fromMillis(row.timestampMs),
+    timestamp: Timestamp.fromMillis(row.timestampMs),
     description: row.description,
     fitid: row.fitid,
     groupId: null as GroupId | null,
@@ -181,28 +149,6 @@ export function statementItemToRawJson(i: IdbStatementItem): object {
 }
 
 // ── StatementItemSeedData → SeedStatementItem (build-time) ────────────────────
-
-function toMs(d: unknown): number | null {
-  if (d instanceof Date) return d.getTime();
-  if (d != null && typeof d === "object" && "toMillis" in d) return (d as { toMillis(): number }).toMillis();
-  return null;
-}
-
-function requireMs(d: unknown, field: string): number {
-  const ms = toMs(d);
-  if (ms === null) throw new Error(`Expected Date or Timestamp for ${field}, got ${d}`);
-  return ms;
-}
-
-function requireSeedString(value: unknown, field: string): string {
-  if (typeof value !== "string") throw new Error(`Expected string for ${field}, got ${typeof value}`);
-  return value;
-}
-
-function requireSeedNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`Expected finite number for ${field}, got ${value}`);
-  return value;
-}
 
 export function serializeSeedStatementItem(raw: StatementItemSeedData, id: string): SeedStatementItem {
   return {

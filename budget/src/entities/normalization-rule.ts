@@ -6,39 +6,17 @@
 import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
-import { UploadValidationError, nullToEmpty } from "./_helpers.js";
+import {
+  emptyToNull,
+  nullToEmpty,
+  optionalString,
+  requireNumber,
+  requireSeedNumber,
+  requireSeedString,
+  requireString,
+  requireUploadId,
+} from "./_helpers.js";
 import type { NormalizationRuleSeedData } from "../../seeds/firestore.js";
-
-// ── Local validation helpers ──────────────────────────────────────────────────
-// Inlined here to avoid importing @commons-systems/firestoreutil/validate and
-// @commons-systems/firestoreutil/errors, which use .js extension imports that
-// break Node.js ESM resolution when this module is loaded during vite config startup.
-
-class DataIntegrityError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DataIntegrityError";
-  }
-}
-
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new DataIntegrityError(`Expected string for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
-
-function requireNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new DataIntegrityError(`Expected finite number for ${field}, got ${value}`);
-  }
-  return value;
-}
-
-function optionalString(value: unknown, field: string): string | null {
-  if (value == null) return null;
-  return requireString(value, field);
-}
 
 // ── Branded ID ────────────────────────────────────────────────────────────────
 
@@ -100,19 +78,6 @@ export interface SeedNormalizationRule {
   readonly priority: number;
 }
 
-// ── Internal upload helpers ───────────────────────────────────────────────────
-
-function requireId(value: unknown, entity: string, index: number): string {
-  if (typeof value !== "string" || value === "") {
-    throw new UploadValidationError(`${entity}[${index}] is missing a valid id`);
-  }
-  return value;
-}
-
-function emptyToNull(value: string): string | null {
-  return value === "" ? null : value;
-}
-
 // ── Firestore → NormalizationRule ─────────────────────────────────────────────
 
 export function parseFirestoreNormalizationRule(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): NormalizationRule {
@@ -134,7 +99,7 @@ export function parseFirestoreNormalizationRule(docSnap: QueryDocumentSnapshot<D
 
 export function parseRawNormalizationRule(r: RawNormalizationRule, i: number): NormalizationRule {
   return {
-    id: requireId(r.id, "normalizationRule", i) as NormalizationRuleId,
+    id: requireUploadId(r.id, "normalizationRule", i) as NormalizationRuleId,
     pattern: r.pattern ?? "",
     patternType: emptyToNull(r.patternType ?? ""),
     canonicalDescription: r.canonicalDescription ?? "",
@@ -193,16 +158,6 @@ export function normalizationRuleToRawJson(r: IdbNormalizationRule): object {
 }
 
 // ── NormalizationRuleSeedData → SeedNormalizationRule (build-time) ────────────
-
-function requireSeedString(value: unknown, field: string): string {
-  if (typeof value !== "string") throw new Error(`Expected string for ${field}, got ${typeof value}`);
-  return value;
-}
-
-function requireSeedNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`Expected finite number for ${field}, got ${value}`);
-  return value;
-}
 
 export function serializeSeedNormalizationRule(raw: NormalizationRuleSeedData, id: string): SeedNormalizationRule {
   return {

@@ -7,39 +7,20 @@ import { Timestamp } from "firebase/firestore";
 import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
+import {
+  DataIntegrityError,
+  optionalString,
+  parseISOTimestamp,
+  requireMs,
+  requireNonNegativeNumber,
+  requireNumber,
+  requireSeedNumber,
+  requireString,
+  requireTimestamp,
+  requireUploadId,
+} from "./_helpers.js";
 import type { BudgetPeriodSeedData } from "../../seeds/firestore.js";
 import type { BudgetId } from "./budget.js";
-
-// ── Local validation helpers ──────────────────────────────────────────────────
-// Inlined here to avoid importing @commons-systems/firestoreutil/validate and
-// @commons-systems/firestoreutil/errors, which use .js extension imports that
-// break Node.js ESM resolution when this module is loaded during vite config startup.
-
-class DataIntegrityError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DataIntegrityError";
-  }
-}
-
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new DataIntegrityError(`Expected string for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
-
-function requireNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new DataIntegrityError(`Expected finite number for ${field}, got ${value}`);
-  }
-  return value;
-}
-
-function optionalString(value: unknown, field: string): string | null {
-  if (value == null) return null;
-  return requireString(value, field);
-}
 
 export type BudgetPeriodId = Brand<"BudgetPeriodId">;
 
@@ -100,22 +81,6 @@ export interface SeedBudgetPeriod {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-function requireTimestamp(value: unknown, field: string): Timestamp {
-  if (value == null) {
-    throw new DataIntegrityError(`Expected Timestamp for ${field}, got null`);
-  }
-  if (!(value instanceof Timestamp)) {
-    throw new DataIntegrityError(`Expected Timestamp for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
-
-function requireNonNegativeNumber(value: unknown, field: string): number {
-  const n = requireNumber(value, field);
-  if (n < 0) throw new DataIntegrityError(`Expected non-negative number for ${field}, got ${n}`);
-  return n;
-}
-
 function requireCategoryBreakdown(value: unknown): Record<string, number> {
   if (value == null) return {};
   if (typeof value !== "object" || Array.isArray(value)) {
@@ -129,12 +94,6 @@ function requireCategoryBreakdown(value: unknown): Record<string, number> {
     result[key] = val;
   }
   return result;
-}
-
-function parseTimestamp(iso: string, field: string): Timestamp {
-  const ms = Date.parse(iso);
-  if (isNaN(ms)) throw new Error(`Invalid timestamp for ${field}: "${iso}"`);
-  return Timestamp.fromMillis(ms);
 }
 
 // ── Firestore → BudgetPeriod ──────────────────────────────────────────────────
@@ -162,19 +121,12 @@ export function parseFirestoreBudgetPeriod(docSnap: QueryDocumentSnapshot<Docume
 
 // ── Raw upload → BudgetPeriod ─────────────────────────────────────────────────
 
-function requireUploadId(value: unknown, entity: string, index: number): string {
-  if (typeof value !== "string" || value === "") {
-    throw new Error(`${entity}[${index}] is missing a valid id`);
-  }
-  return value;
-}
-
 export function parseRawBudgetPeriod(p: RawBudgetPeriod, i: number): BudgetPeriod {
   return {
     id: requireUploadId(p.id, "budgetPeriod", i) as BudgetPeriodId,
     budgetId: requireUploadId(p.budgetId, "budgetPeriod.budgetId", i) as BudgetId,
-    periodStart: parseTimestamp(p.periodStart, "budgetPeriod.periodStart"),
-    periodEnd: parseTimestamp(p.periodEnd, "budgetPeriod.periodEnd"),
+    periodStart: parseISOTimestamp(p.periodStart, "budgetPeriod.periodStart"),
+    periodEnd: parseISOTimestamp(p.periodEnd, "budgetPeriod.periodEnd"),
     total: p.total ?? 0,
     count: p.count ?? 0,
     categoryBreakdown: p.categoryBreakdown ?? {},
@@ -226,23 +178,6 @@ export function budgetPeriodToRawJson(p: IdbBudgetPeriod): object {
 }
 
 // ── BudgetPeriodSeedData → SeedBudgetPeriod (build-time) ──────────────────────
-
-function toMs(d: unknown): number | null {
-  if (d instanceof Date) return d.getTime();
-  if (d != null && typeof d === "object" && "toMillis" in d) return (d as { toMillis(): number }).toMillis();
-  return null;
-}
-
-function requireMs(d: unknown, field: string): number {
-  const ms = toMs(d);
-  if (ms === null) throw new Error(`Expected Date or Timestamp for ${field}, got ${d}`);
-  return ms;
-}
-
-function requireSeedNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`Expected finite number for ${field}, got ${value}`);
-  return value;
-}
 
 export function serializeSeedBudgetPeriod(raw: BudgetPeriodSeedData, id: string): SeedBudgetPeriod {
   return {
