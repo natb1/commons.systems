@@ -3,13 +3,13 @@
 # Usage: dispatch <issue-num> [<model>]
 #
 # Validates the issue, computes the branch slug, and launches
-# `claude -w <branch> /dispatch-implement` via exec — replacing this
-# process with Claude so Claude is the terminal foreground process with
-# full interactive TTY access. Before exec, a background watcher subshell
-# is forked with $$ (the dispatcher PID, which exec preserves as Claude's
-# PID). The watcher sleep-polls for phase_signal=complete and SIGTERMs
-# Claude on match. The loop exits cleanly when kill -0 on the PID fails
-# (Claude exited), so no orphaned background processes remain.
+# `claude -w <branch> /dispatch-implement` as a child process — Claude
+# inherits the controlling TTY directly so the user retains full
+# interactive access. A background watcher subshell tracks Claude's PID,
+# sleep-polls for phase_signal=complete, and SIGTERMs Claude on match.
+# The watcher exits cleanly when kill -0 on Claude's PID fails (Claude
+# exited), so no orphaned background processes remain. The dispatcher
+# waits for Claude and exits with Claude's status.
 set -euo pipefail
 
 # --- sluggify --------------------------------------------------------------
@@ -210,6 +210,7 @@ main() {
   export DISPATCH_STATE_FILE="tmp/dispatch-${ISSUE_NUM}.json"
 
   local WATCHER_PID=0
+  local CLAUDE_PID=0
 
   cleanup() {
     if [[ "$WATCHER_PID" -gt 0 ]] && kill -0 "$WATCHER_PID" 2>/dev/null; then
@@ -220,25 +221,39 @@ main() {
 
   on_int() {
     echo "[dispatch] Ctrl-C received — stopping watcher" >&2
+    if [[ "$CLAUDE_PID" -gt 0 ]] && kill -0 "$CLAUDE_PID" 2>/dev/null; then
+      kill -TERM "$CLAUDE_PID" 2>/dev/null || true
+    fi
     cleanup
     exit 130
   }
   trap on_int INT
   trap cleanup EXIT
 
-  # exec below replaces this process with Claude, preserving the PID.
-  # The watcher uses DISPATCHER_PID (= $$) to monitor and SIGTERM Claude.
-  local DISPATCHER_PID=$$
+  # Build the Claude argv. Claude is launched as a child process so the
+  # dispatcher survives to run any post-implementation work after Claude exits.
+  local CLAUDE_ARGS=(-w "$BRANCH")
+  [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
+  CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}${RESUME_INSTRUCTION:+
 
-  # Background watcher: sleep-polls for phase_signal=complete and SIGTERMs
+${RESUME_INSTRUCTION}}")
+  echo "[dispatch] launching claude -w $BRANCH${MODEL:+ --model $MODEL}..." >&2
+
+  # Launch Claude as a child. It inherits the controlling TTY directly — no
+  # stdin redirection, no nohup — so the user retains full interactive access
+  # and Ctrl-C is delivered to Claude (the foreground job) by the shell.
+  claude "${CLAUDE_ARGS[@]}" &
+  CLAUDE_PID=$!
+
+  # Background watcher: polls phase_signal=complete and SIGTERMs the child
   # Claude on match. jq silently returns false when the file doesn't exist
-  # yet, so no separate file-existence loop is needed. kill -0 detects when
-  # Claude exits, so no orphaned processes remain after the session.
+  # yet, so no separate file-existence loop is needed. kill -0 on CLAUDE_PID
+  # detects when Claude exits, so the watcher self-terminates cleanly.
   (
     set -euo pipefail
-    while kill -0 "$DISPATCHER_PID" 2>/dev/null; do
+    while kill -0 "$CLAUDE_PID" 2>/dev/null; do
       if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
-        kill -TERM "$DISPATCHER_PID" 2>/dev/null || true
+        kill -TERM "$CLAUDE_PID" 2>/dev/null || true
         exit 0
       fi
       sleep 1
@@ -246,16 +261,16 @@ main() {
   ) &
   WATCHER_PID=$!
 
-  # Replace this process with Claude. exec preserves the PID so the watcher's
-  # DISPATCHER_PID reference stays valid. Claude inherits the terminal directly —
-  # no backgrounding, no stdin redirection, full interactive access.
-  local CLAUDE_ARGS=(-w "$BRANCH")
-  [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
-  CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}${RESUME_INSTRUCTION:+
+  # Wait for Claude. set +e around `wait` so a non-zero exit (including the
+  # SIGTERM the watcher delivers on phase_signal=complete — the success path)
+  # doesn't trip set -e and kill the dispatcher before it can run post-stages.
+  local CLAUDE_RC=0
+  set +e
+  wait "$CLAUDE_PID"
+  CLAUDE_RC=$?
+  set -e
 
-${RESUME_INSTRUCTION}}")
-  echo "[dispatch] launching claude -w $BRANCH${MODEL:+ --model $MODEL}..." >&2
-  exec claude "${CLAUDE_ARGS[@]}"
+  exit "$CLAUDE_RC"
 }
 
 # Only run main() when executed directly — allows tests to `source` this
