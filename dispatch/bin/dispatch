@@ -3,13 +3,13 @@
 # Usage: dispatch <issue-num> [<model>]
 #
 # Validates the issue, computes the branch slug, and launches
-# `claude -w <branch> /dispatch-implement` via exec — replacing this
-# process with Claude so Claude is the terminal foreground process with
-# full interactive TTY access. Before exec, a background watcher subshell
-# is forked with $$ (the dispatcher PID, which exec preserves as Claude's
-# PID). The watcher sleep-polls for phase_signal=complete and SIGTERMs
-# Claude on match. The loop exits cleanly when kill -0 on the PID fails
-# (Claude exited), so no orphaned background processes remain.
+# `claude -w <branch> /dispatch-implement` as a child process — Claude
+# inherits the controlling TTY directly so the user retains full
+# interactive access. A background watcher subshell tracks Claude's PID,
+# sleep-polls for phase_signal=complete, and SIGTERMs Claude on match.
+# The watcher exits cleanly when kill -0 on Claude's PID fails (Claude
+# exited), so no orphaned background processes remain. The dispatcher
+# waits for Claude and exits with Claude's status.
 set -euo pipefail
 
 # --- sluggify --------------------------------------------------------------
@@ -126,6 +126,169 @@ reconcile_phase_signal() {
   return 1
 }
 
+# --- prompt_is_tty ----------------------------------------------------------
+# Testability hook: returns 0 when stdin is a TTY. Tests override this
+# function to force the interactive path without needing a real TTY.
+# Default behavior preserved: identical to `[[ -t 0 ]]`.
+prompt_is_tty() { [[ -t 0 ]]; }
+
+# --- phase_signal_complete --------------------------------------------------
+# Returns 0 iff `state.phase_signal == "complete"` in the JSON file at $1.
+# Returns non-zero when the file is absent, unreadable, or the predicate is
+# false. This is the protocol-level gate set by `dispatch/bin/phase-complete`
+# and consumed by both the watcher (to SIGTERM Claude) and the post-stage
+# gating in `should_run_post_stages`.
+phase_signal_complete() {
+  jq -e '.state.phase_signal == "complete"' "$1" >/dev/null 2>&1
+}
+
+# --- should_run_post_stages -------------------------------------------------
+# Gate the post-implementation stage sequence: only proceed when the verify
+# loop signaled completion AND stdin is a TTY (interactive run).
+# Args: $1 = state file path (absolute)
+# Returns: 0 if post-stages should run, non-zero otherwise.
+should_run_post_stages() {
+  local state_file="$1"
+  # Testability hook; default behavior preserved (prompt_is_tty wraps [[ -t 0 ]]).
+  if ! prompt_is_tty; then
+    return 1
+  fi
+  if [[ ! -f "$state_file" ]]; then
+    return 1
+  fi
+  phase_signal_complete "$state_file"
+}
+
+# --- prompt_yes_skip --------------------------------------------------------
+# Single-keystroke prompt: Enter = yes (return 0), `s`/`S` = skip (return 1).
+# Any other key re-prompts once; on second miss, returns skip. When stdin is
+# not a TTY, short-circuits to skip without reading.
+# Args: $1 = label (e.g. "Run claude /simplify?")
+prompt_yes_skip() {
+  local label="$1"
+  # Testability hook; default behavior preserved (prompt_is_tty wraps [[ -t 0 ]]).
+  if ! prompt_is_tty; then
+    return 1
+  fi
+
+  # Testability hook: PROMPT_INPUT defaults to /dev/tty; tests set it to a
+  # temp file containing scripted input. Open once as FD 3 so sequential reads
+  # advance through the file rather than re-opening from position 0. Default
+  # behavior preserved (/dev/tty is a character device that always delivers the
+  # next keystroke regardless of how many times it is opened).
+  local _prompt_input_fd
+  exec {_prompt_input_fd}<"${PROMPT_INPUT:-/dev/tty}" || return 1
+
+  local ans=""
+  printf '%s' "[dispatch] ${label} [Enter=yes, s=skip]: " >&2
+  read -r -n 1 ans <&"$_prompt_input_fd" || { exec {_prompt_input_fd}<&-; return 1; }
+
+  if [[ -z "$ans" ]]; then
+    # User pressed Enter alone — read -n 1 returned with no character read.
+    exec {_prompt_input_fd}<&-
+    return 0
+  fi
+  printf '\n' >&2
+  if [[ "$ans" == "s" || "$ans" == "S" ]]; then
+    exec {_prompt_input_fd}<&-
+    return 1
+  fi
+
+  # Any other key — re-prompt once with stricter semantics.
+  ans=""
+  printf '%s' "[dispatch] ${label} [Enter=yes, s=skip]: " >&2
+  read -r -n 1 ans <&"$_prompt_input_fd" || { exec {_prompt_input_fd}<&-; return 1; }
+
+  exec {_prompt_input_fd}<&-
+
+  if [[ -z "$ans" ]]; then
+    return 0
+  fi
+  printf '\n' >&2
+  if [[ "$ans" == "s" || "$ans" == "S" ]]; then
+    return 1
+  fi
+  # Second miss → skip.
+  return 1
+}
+
+# --- launch_claude_stage ----------------------------------------------------
+# Launch a foreground Claude session for a post-implementation stage. The
+# user terminates the session (e.g. /exit) to return control. Backgrounded +
+# wait so we can track the child's PID in $CLAUDE_PID for the on_int trap,
+# and so a non-zero stage exit (crash, error) doesn't trip set -e and abort
+# the remaining post-stages. CLAUDE_PID is intentionally not local-declared
+# so it updates the main()-scoped variable that on_int reads.
+# Requires $BRANCH and $CLAUDE_PID to be set in the caller's scope. $MODEL is
+# read via dynamic scoping from main() so a user-supplied --model arg applies
+# to every post-stage Claude invocation, not just the implementation phase.
+# Args: $1 = slash-command argument (e.g. "/simplify", "/dispatch-qa #123")
+launch_claude_stage() {
+  local slash="$1"
+  local args=(-w "$BRANCH")
+  [[ -n "${MODEL:-}" ]] && args+=(--model "$MODEL")
+  args+=("$slash")
+  claude "${args[@]}" &
+  CLAUDE_PID=$!
+  set +e
+  wait "$CLAUDE_PID"
+  local rc=$?
+  set -e
+  CLAUDE_PID=0
+  if [[ $rc -ne 0 && $rc -ne 130 && $rc -ne 143 ]]; then
+    echo "[dispatch] warning: claude $slash exited with status $rc — continuing to next stage" >&2
+  fi
+  return 0
+}
+
+# --- mark_pr_ready ----------------------------------------------------------
+# Resolve the PR number for $1 (branch name) and flip it from draft to
+# ready-for-review. Exits non-zero with a descriptive error when the PR
+# cannot be found or the gh call fails. Captures gh stderr to a temp file
+# and surfaces it on failure so the user can distinguish "no PR found"
+# from auth / network / rate-limit errors (mirrors diagnose_state's pattern).
+# Args: $1 = branch name
+mark_pr_ready() {
+  local branch="$1"
+  local pr_num="" stderr_file rc
+  stderr_file=$(mktemp)
+  set +e
+  pr_num=$(gh pr view "$branch" --json number -q .number 2>"$stderr_file")
+  rc=$?
+  set -e
+  if [[ $rc -ne 0 || -z "$pr_num" ]]; then
+    cat "$stderr_file" >&2
+    rm -f "$stderr_file"
+    echo "error: could not resolve PR number for branch '$branch' — cannot mark ready" >&2
+    return 1
+  fi
+  rm -f "$stderr_file"
+  if ! gh pr ready "$pr_num"; then
+    echo "error: gh pr ready $pr_num failed" >&2
+    return 1
+  fi
+  echo "[dispatch] PR #${pr_num} marked ready for review" >&2
+  return 0
+}
+
+# --- remove_worktree --------------------------------------------------------
+# Remove the local worktree at $1 via `git worktree remove` (without --force).
+# Force-removal is intentionally not used: by Stage 7 the verify loop has
+# succeeded and all work is committed, so any dirty state — or a CWD pointing
+# at the worktree being removed — is unexpected and worth surfacing instead of
+# silently destroying. Returns non-zero on git failure with the underlying
+# error left visible on stderr (git's own message).
+# Args: $1 = absolute worktree path
+remove_worktree() {
+  local path="$1"
+  if ! git worktree remove "$path"; then
+    echo "error: git worktree remove '$path' failed — inspect the worktree before retrying with --force manually" >&2
+    return 1
+  fi
+  echo "[dispatch] removed worktree $path" >&2
+  return 0
+}
+
 # --- main -------------------------------------------------------------------
 main() {
   local ISSUE_NUM="${1:-}"
@@ -204,6 +367,7 @@ main() {
   export DISPATCH_STATE_FILE="tmp/dispatch-${ISSUE_NUM}.json"
 
   local WATCHER_PID=0
+  local CLAUDE_PID=0
 
   cleanup() {
     if [[ "$WATCHER_PID" -gt 0 ]] && kill -0 "$WATCHER_PID" 2>/dev/null; then
@@ -214,25 +378,40 @@ main() {
 
   on_int() {
     echo "[dispatch] Ctrl-C received — stopping watcher" >&2
+    if [[ "$CLAUDE_PID" -gt 0 ]] && kill -0 "$CLAUDE_PID" 2>/dev/null; then
+      kill -TERM "$CLAUDE_PID" 2>/dev/null || true
+    fi
     cleanup
     exit 130
   }
   trap on_int INT
   trap cleanup EXIT
 
-  # exec below replaces this process with Claude, preserving the PID.
-  # The watcher uses DISPATCHER_PID (= $$) to monitor and SIGTERM Claude.
-  local DISPATCHER_PID=$$
+  # Build the Claude argv. Claude is launched as a child process so the
+  # dispatcher survives to run any post-implementation work after Claude exits.
+  local CLAUDE_ARGS=(-w "$BRANCH")
+  [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
+  CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}${RESUME_INSTRUCTION:+
 
-  # Background watcher: sleep-polls for phase_signal=complete and SIGTERMs
-  # Claude on match. jq silently returns false when the file doesn't exist
-  # yet, so no separate file-existence loop is needed. kill -0 detects when
-  # Claude exits, so no orphaned processes remain after the session.
+${RESUME_INSTRUCTION}}")
+  echo "[dispatch] launching claude -w $BRANCH${MODEL:+ --model $MODEL}..." >&2
+
+  # Launch Claude as a child. It inherits the controlling TTY directly — no
+  # stdin redirection, no nohup — so the user retains full interactive access
+  # and Ctrl-C is delivered to Claude (the foreground job) by the shell.
+  claude "${CLAUDE_ARGS[@]}" &
+  CLAUDE_PID=$!
+
+  # Background watcher: polls phase_signal=complete and SIGTERMs the child
+  # Claude on match. phase_signal_complete silently returns false when the
+  # file doesn't exist yet, so no separate file-existence loop is needed.
+  # kill -0 on CLAUDE_PID detects when Claude exits, so the watcher
+  # self-terminates cleanly.
   (
     set -euo pipefail
-    while kill -0 "$DISPATCHER_PID" 2>/dev/null; do
-      if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
-        kill -TERM "$DISPATCHER_PID" 2>/dev/null || true
+    while kill -0 "$CLAUDE_PID" 2>/dev/null; do
+      if phase_signal_complete "$STATE_FILE"; then
+        kill -TERM "$CLAUDE_PID" 2>/dev/null || true
         exit 0
       fi
       sleep 1
@@ -240,16 +419,79 @@ main() {
   ) &
   WATCHER_PID=$!
 
-  # Replace this process with Claude. exec preserves the PID so the watcher's
-  # DISPATCHER_PID reference stays valid. Claude inherits the terminal directly —
-  # no backgrounding, no stdin redirection, full interactive access.
-  local CLAUDE_ARGS=(-w "$BRANCH")
-  [[ -n "$MODEL" ]] && CLAUDE_ARGS+=(--model "$MODEL")
-  CLAUDE_ARGS+=("/dispatch-implement #${ISSUE_NUM}${RESUME_INSTRUCTION:+
+  # Wait for Claude. set +e around `wait` so a non-zero exit (including the
+  # SIGTERM the watcher delivers on phase_signal=complete — the success path)
+  # doesn't trip set -e and kill the dispatcher before it can run post-stages.
+  local CLAUDE_RC=0
+  set +e
+  wait "$CLAUDE_PID"
+  CLAUDE_RC=$?
+  set -e
 
-${RESUME_INSTRUCTION}}")
-  echo "[dispatch] launching claude -w $BRANCH${MODEL:+ --model $MODEL}..." >&2
-  exec claude "${CLAUDE_ARGS[@]}"
+  # Post-implementation stage gating. The watcher SIGTERMs Claude on
+  # phase_signal=complete, which surfaces as exit 143 (128+SIGTERM); a clean
+  # /exit after phase-complete is 0. Either way, the authoritative gate is
+  # `state.phase_signal == "complete"` in the state file (checked by
+  # should_run_post_stages). Other non-zero exits (genuine errors, Ctrl-C
+  # before completion) skip the post-stages.
+  if [[ "$CLAUDE_RC" -ne 0 && "$CLAUDE_RC" -ne 143 ]]; then
+    exit "$CLAUDE_RC"
+  fi
+
+  if ! should_run_post_stages "$STATE_FILE"; then
+    exit "$CLAUDE_RC"
+  fi
+
+  echo "[dispatch] implementation phase complete — entering post-implementation stages" >&2
+
+  # Stage 1: Dispatch QA
+  if prompt_yes_skip "Run dispatch-qa?"; then
+    launch_claude_stage "/dispatch-qa #${ISSUE_NUM}"
+  fi
+
+  # Stage 2: Simplify
+  if prompt_yes_skip "Run claude /simplify?"; then
+    launch_claude_stage "/simplify"
+  fi
+
+  # Stage 3: Review
+  if prompt_yes_skip "Run claude /review?"; then
+    launch_claude_stage "/review"
+  fi
+
+  # Stage 4: Ultrareview
+  if prompt_yes_skip "Run claude /ultrareview?"; then
+    launch_claude_stage "/ultrareview"
+  fi
+
+  # Stage 5: Security review
+  if prompt_yes_skip "Run claude /security-review?"; then
+    launch_claude_stage "/security-review"
+  fi
+
+  # Stages 6 and 7 are conceptually independent (remote PR state vs. local
+  # worktree state). A Stage 6 failure must not skip the Stage 7 prompt — the
+  # commonest Stage 6 failure is `gh pr ready` on an already-ready PR (re-run
+  # case), which has no bearing on whether the worktree should be cleaned up.
+  # Track failures and exit non-zero at the end instead of aborting mid-sequence.
+  local POSTSTAGE_RC=0
+
+  # Stage 6: Mark PR ready (not a Claude invocation; one gh call).
+  if prompt_yes_skip "Mark PR ready for review?"; then
+    if ! mark_pr_ready "$BRANCH"; then
+      echo "[dispatch] warning: mark_pr_ready failed — continuing to next stage" >&2
+      POSTSTAGE_RC=1
+    fi
+  fi
+
+  # Stage 7: Remove local worktree (not a Claude invocation; one git call).
+  if prompt_yes_skip "Remove local worktree?"; then
+    if ! remove_worktree "$WORKTREE_PATH"; then
+      POSTSTAGE_RC=1
+    fi
+  fi
+
+  exit "$POSTSTAGE_RC"
 }
 
 # Only run main() when executed directly — allows tests to `source` this
