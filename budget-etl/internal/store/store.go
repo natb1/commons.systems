@@ -418,6 +418,70 @@ func optionalFloat(d map[string]interface{}, docID, field string) (*float64, err
 	return nil, nil
 }
 
+// requireString reads a required string field from a Firestore document map.
+// Returns an error if the field is absent or null, or if it is present but not a string.
+func requireString(d map[string]interface{}, docID, field string) (string, error) {
+	raw, ok := d[field]
+	if !ok || raw == nil {
+		return "", fmt.Errorf("%s: missing required field '%s'", docID, field)
+	}
+	v, ok := raw.(string)
+	if !ok {
+		return "", fmt.Errorf("%s: field '%s' is not a string (got %T)", docID, field, raw)
+	}
+	return v, nil
+}
+
+// optionalString reads an optional string field from a Firestore document map.
+// Returns "" if the field is absent or null. Returns an error if the field is
+// present but not a string.
+func optionalString(d map[string]interface{}, docID, field string) (string, error) {
+	raw, ok := d[field]
+	if !ok || raw == nil {
+		return "", nil
+	}
+	v, ok := raw.(string)
+	if !ok {
+		return "", fmt.Errorf("%s: field '%s' is not a string (got %T)", docID, field, raw)
+	}
+	return v, nil
+}
+
+// requireInt reads a required integer field from a Firestore document map,
+// accepting both int64 and float64 representations (Firestore numeric type
+// ambiguity). Returns an error if the field is absent or null, or if it is
+// present but not numeric.
+func requireInt(d map[string]interface{}, docID, field string) (int, error) {
+	raw, ok := d[field]
+	if !ok || raw == nil {
+		return 0, fmt.Errorf("%s: missing required field '%s'", docID, field)
+	}
+	if v, ok := raw.(int64); ok {
+		return int(v), nil
+	}
+	if v, ok := raw.(float64); ok {
+		return int(v), nil
+	}
+	return 0, fmt.Errorf("%s: field '%s' is not a number (got %T)", docID, field, raw)
+}
+
+// optionalInt reads an optional integer field from a Firestore document map,
+// accepting both int64 and float64 representations. Returns 0 if the field is
+// absent or null. Returns an error if the field is present but not numeric.
+func optionalInt(d map[string]interface{}, docID, field string) (int, error) {
+	raw, ok := d[field]
+	if !ok || raw == nil {
+		return 0, nil
+	}
+	if v, ok := raw.(int64); ok {
+		return int(v), nil
+	}
+	if v, ok := raw.(float64); ok {
+		return int(v), nil
+	}
+	return 0, fmt.Errorf("%s: field '%s' is not a number (got %T)", docID, field, raw)
+}
+
 // LoadRules reads rules from budget/{env}/rules, filtered by groupId.
 func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, error) {
 	col := c.fs.Collection(fmt.Sprintf("budget/%s/rules", c.env))
