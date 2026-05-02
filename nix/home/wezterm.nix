@@ -114,6 +114,35 @@
         return index .. ': ' .. title
       end)
 
+      wezterm.on('update-status', function(window, pane)
+        -- Only the NixOS-side mux process owns the pane->tab mapping the
+        -- Linux-side productivity-tui reads. On the Windows-side GUI process
+        -- (WSL deployment), HOME points at the Windows profile and the file
+        -- would never reach the WSL filesystem the reader queries.
+        if wezterm.target_triple:find('windows') then return end
+        pcall(function()
+          local mapping = {}
+          for _, mux_win in ipairs(wezterm.mux.all_windows()) do
+            for i, tab in ipairs(mux_win:tabs()) do
+              for _, mux_pane in ipairs(tab:panes()) do
+                mapping[tostring(mux_pane:pane_id())] = i
+              end
+            end
+          end
+          local home = os.getenv('HOME')
+          if not home then return end
+          local dir = home .. '/.local/share/productivity-tui'
+          wezterm.run_child_process({ 'mkdir', '-p', dir })
+          local path = dir .. '/wezterm-tabs.json'
+          local tmp = path .. '.tmp'
+          local f = io.open(tmp, 'w')
+          if not f then return end
+          f:write(wezterm.json_encode(mapping))
+          f:close()
+          os.rename(tmp, path)
+        end)
+      end)
+
       return config
     '';
   };

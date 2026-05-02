@@ -67,6 +67,8 @@ if pid=$(find_claude_pid); then
   fi
 fi
 
+WEZTERM_PANE_VAL="${WEZTERM_PANE:-}"
+
 mkdir -p "$STATE_DIR"
 [ -f "$STATE_FILE" ] || echo '{}' > "$STATE_FILE"
 
@@ -79,6 +81,7 @@ jq --arg id "$SESSION_ID" \
    --arg pid_start "$CLAUDE_START" \
    --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
    --argjson idle "$IDLE" \
-   '.[$id] = {working_dir: $dir, pid: $pid, pid_start: $pid_start, idle: $idle, last_activity: $now}' \
+   --arg wezterm_pane "$WEZTERM_PANE_VAL" \
+   '.[$id] = {working_dir: $dir, pid: $pid, pid_start: $pid_start, idle: $idle, last_activity: $now, wezterm_pane: $wezterm_pane}' \
    "$STATE_FILE" > "$tmp"
 mv "$tmp" "$STATE_FILE"

@@ -21,7 +21,7 @@ import (
 const mismatchedStart = "Thu Jan  1 00:00:00 1970"
 
 func TestQuitKeyQ(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if cmd == nil {
 		t.Error("expected quit command for 'q' key")
@@ -29,7 +29,7 @@ func TestQuitKeyQ(t *testing.T) {
 }
 
 func TestQuitKeyCtrlC(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if cmd == nil {
 		t.Error("expected quit command for ctrl+c")
@@ -37,14 +37,14 @@ func TestQuitKeyCtrlC(t *testing.T) {
 }
 
 func TestInitialState(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	if len(m.Sessions()) != 0 {
 		t.Errorf("expected empty sessions, got %d", len(m.Sessions()))
 	}
 }
 
 func TestWindowSizeUpdate(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model := updated.(Model)
 	if model.width != 80 || model.height != 24 {
@@ -53,7 +53,7 @@ func TestWindowSizeUpdate(t *testing.T) {
 }
 
 func TestSessionsMsg(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	sessions := map[string]session.Session{
 		"sess_1": {WorkingDir: "/tmp/a", Idle: false, LastActivity: time.Now()},
 		"sess_2": {WorkingDir: "/tmp/b", Idle: true, LastActivity: time.Now()},
@@ -66,7 +66,7 @@ func TestSessionsMsg(t *testing.T) {
 }
 
 func TestViewIdleIndicator(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	m.height = 24
 	m.sessions = map[string]session.Session{
@@ -99,7 +99,7 @@ func TestViewEdgeCasePaths(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := New("/dev/null", "/dev/null")
+			m := New("/dev/null", "/dev/null", "/dev/null")
 			m.width = 80
 			m.sessions = map[string]session.Session{
 				"sess_1": {WorkingDir: tc.path, Idle: false},
@@ -113,7 +113,7 @@ func TestViewEdgeCasePaths(t *testing.T) {
 }
 
 func TestViewEmptySessions(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	output := m.View()
 	if !strings.Contains(output, "No active sessions") {
@@ -164,6 +164,124 @@ func TestLoadSessionsFiltersDead(t *testing.T) {
 	}
 }
 
+func TestViewWithWeztermTabNumber(t *testing.T) {
+	m := New("/dev/null", "/dev/null", "/dev/null")
+	m.width = 80
+	m.height = 24
+	m.sessions = map[string]session.Session{
+		"sess_1": {WorkingDir: "/tmp/active", Idle: false, WeztermPane: "9"},
+	}
+	m.weztermTabs = map[string]int{"9": 3}
+	output := m.View()
+	if !strings.Contains(output, "[3]") {
+		t.Errorf("expected tab number [3] in output, got: %s", output)
+	}
+}
+
+func TestViewWithMissingPaneId(t *testing.T) {
+	m := New("/dev/null", "/dev/null", "/dev/null")
+	m.width = 80
+	m.height = 24
+	m.sessions = map[string]session.Session{
+		"sess_1": {WorkingDir: "/tmp/active", Idle: false, WeztermPane: "99"},
+	}
+	m.weztermTabs = map[string]int{"7": 1}
+	output := m.View()
+	if strings.Contains(output, "[") {
+		t.Errorf("expected no tab prefix when pane id not in map, got: %s", output)
+	}
+}
+
+func TestViewWithEmptyWeztermTabs(t *testing.T) {
+	m := New("/dev/null", "/dev/null", "/dev/null")
+	m.width = 80
+	m.height = 24
+	m.sessions = map[string]session.Session{
+		"sess_1": {WorkingDir: "/tmp/active", Idle: false, WeztermPane: "9"},
+	}
+	// nil weztermTabs — fail open, no tab prefix
+	output := m.View()
+	if strings.Contains(output, "[") {
+		t.Errorf("expected no tab prefix when weztermTabs is nil, got: %s", output)
+	}
+	// output should match a model with no WeztermPane at all
+	mBaseline := New("/dev/null", "/dev/null", "/dev/null")
+	mBaseline.width = 80
+	mBaseline.height = 24
+	mBaseline.sessions = map[string]session.Session{
+		"sess_1": {WorkingDir: "/tmp/active", Idle: false},
+	}
+	baseline := mBaseline.View()
+	if output != baseline {
+		t.Errorf("expected output identical to baseline without wezterm fields\ngot:      %q\nbaseline: %q", output, baseline)
+	}
+}
+
+func TestViewMixedSessionsAlign(t *testing.T) {
+	m := New("/dev/null", "/dev/null", "/dev/null")
+	m.width = 80
+	m.height = 24
+	m.sessions = map[string]session.Session{
+		"sess_1": {WorkingDir: "/tmp/with-tab", Idle: false, WeztermPane: "9"},
+		"sess_2": {WorkingDir: "/tmp/no-tab", Idle: false},
+	}
+	m.weztermTabs = map[string]int{"9": 3}
+	output := m.View()
+
+	lines := strings.Split(output, "\n")
+	// Find the lines containing each working dir (rendered as basename via displayName).
+	var lineWithTab, lineWithoutTab string
+	for _, l := range lines {
+		if strings.Contains(l, "with-tab") {
+			lineWithTab = l
+		}
+		if strings.Contains(l, "no-tab") {
+			lineWithoutTab = l
+		}
+	}
+	if lineWithTab == "" || lineWithoutTab == "" {
+		t.Fatalf("could not find session lines in output:\n%s", output)
+	}
+
+	idxWithTab := strings.Index(lineWithTab, "with-tab")
+	idxWithoutTab := strings.Index(lineWithoutTab, "no-tab")
+	if idxWithTab != idxWithoutTab {
+		t.Errorf("working dirs not column-aligned: with-tab at col %d, no-tab at col %d\nwith-tab line:    %q\nno-tab line:      %q",
+			idxWithTab, idxWithoutTab, lineWithTab, lineWithoutTab)
+	}
+}
+
+func TestUpdateWeztermTabsMsg(t *testing.T) {
+	m := New("/dev/null", "/dev/null", "/dev/null")
+
+	// Success case: tabs are set.
+	updated, _ := m.Update(weztermTabsMsg{tabs: map[string]int{"9": 3}})
+	model := updated.(Model)
+	if model.weztermTabs["9"] != 3 {
+		t.Errorf("expected weztermTabs[9] == 3, got %d", model.weztermTabs["9"])
+	}
+	if model.weztermErrLogged {
+		t.Error("expected weztermErrLogged to be false after success")
+	}
+
+	// Error case: tabs are cleared.
+	updated2, _ := model.Update(weztermTabsMsg{err: errors.New("boom")})
+	model2 := updated2.(Model)
+	if model2.weztermTabs != nil {
+		t.Errorf("expected weztermTabs to be nil after error, got %v", model2.weztermTabs)
+	}
+	if !model2.weztermErrLogged {
+		t.Error("expected weztermErrLogged to be true after first error")
+	}
+
+	// Second error: should NOT log again (flag stays true).
+	updated3, _ := model2.Update(weztermTabsMsg{err: errors.New("boom again")})
+	model3 := updated3.(Model)
+	if model3.weztermTabs != nil {
+		t.Errorf("expected weztermTabs to be nil after second error, got %v", model3.weztermTabs)
+	}
+}
+
 func psLStartOf(pid int) (string, error) {
 	out, err := exec.Command("ps", "-o", "lstart=", "-p", strconv.Itoa(pid)).Output()
 	if err != nil {
@@ -180,7 +298,7 @@ func TestTickReloadsSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m := New(path, "/dev/null")
+	m := New(path, "/dev/null", "/dev/null")
 	_, cmd := m.Update(tickMsg(time.Now()))
 	if cmd == nil {
 		t.Error("expected batch command from tick")
@@ -190,7 +308,7 @@ func TestTickReloadsSessions(t *testing.T) {
 // --- Rate-limits header tests ---
 
 func TestViewRateLimitsHeader_BothWindows(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	future := time.Now().Add(32 * time.Minute).Unix()
 	m.rateLimits = ratelimits.RateLimits{
@@ -213,7 +331,7 @@ func TestViewRateLimitsHeader_BothWindows(t *testing.T) {
 }
 
 func TestViewRateLimitsHeader_FiveHourOnly(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	future := time.Now().Add(1 * time.Hour).Unix()
 	m.rateLimits = ratelimits.RateLimits{
@@ -229,7 +347,7 @@ func TestViewRateLimitsHeader_FiveHourOnly(t *testing.T) {
 }
 
 func TestViewRateLimitsHeader_OmittedWhenAbsent(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	// Both windows nil (zero value) — header must be omitted.
 	output := m.View()
@@ -244,7 +362,7 @@ func TestViewRateLimitsHeader_OmittedWhenAbsent(t *testing.T) {
 }
 
 func TestViewRateLimitsHeader_ResetsNow(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	// Timestamp in the past → resets now.
 	m.rateLimits = ratelimits.RateLimits{
@@ -257,7 +375,7 @@ func TestViewRateLimitsHeader_ResetsNow(t *testing.T) {
 }
 
 func TestViewRateLimitsHeader_OmittedOnError(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	m.rateLimitsErr = errors.New("boom")
 	// Set windows too — they should be ignored when err is set.
@@ -271,7 +389,7 @@ func TestViewRateLimitsHeader_OmittedOnError(t *testing.T) {
 }
 
 func TestViewRateLimitsHeader_CountdownOnSecondLine(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	future := time.Now().Add(32 * time.Minute).Unix()
 	m.rateLimits = ratelimits.RateLimits{
@@ -319,7 +437,7 @@ func TestLoadRateLimitsMissingFile(t *testing.T) {
 }
 
 func TestLoadRateLimitsMessageDispatch(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	fiveHour := &ratelimits.Window{UsedPercentage: 42, ResetsAt: time.Now().Add(time.Hour).Unix()}
 	updated, _ := m.Update(rateLimitsMsg{rl: ratelimits.RateLimits{FiveHour: fiveHour}})
 	model := updated.(Model)
