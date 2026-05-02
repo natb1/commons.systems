@@ -3,7 +3,7 @@ import type { AggregatePoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
 import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
-export interface TrendChartOptions {
+interface TrendChartOptions {
   readonly data: AggregatePoint[];
   readonly containerWidth: number;
   readonly panelWidth: number;

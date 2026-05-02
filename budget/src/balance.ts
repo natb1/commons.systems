@@ -24,6 +24,12 @@ export function weekStart(ms: number): number {
 
 const CREDIT_WEEKS = 12;
 
+const WEEKS_PER_PERIOD: Record<AllowancePeriod, number> = {
+  weekly: 1,
+  monthly: 52 / 12,
+  quarterly: 52 / 4,
+};
+
 export function computeNetAmount(amount: number, reimbursement: number): number {
   if (reimbursement < 0 || reimbursement > 100) {
     throw new RangeError(`reimbursement must be between 0 and 100, got ${reimbursement}`);
@@ -126,21 +132,15 @@ export function periodAllowance(
 
 /** Convert an allowance to its weekly equivalent for apples-to-apples comparison. */
 export function weeklyEquivalent(allowance: number, allowancePeriod: AllowancePeriod): number {
-  if (allowancePeriod === "weekly") return allowance;
-  if (allowancePeriod === "monthly") return allowance * 12 / 52;
-  if (allowancePeriod === "quarterly") return allowance * 4 / 52;
-  throw new DataIntegrityError(`Unrecognized allowancePeriod: ${allowancePeriod}`);
+  return allowance / WEEKS_PER_PERIOD[allowancePeriod];
 }
 
 /** Convert a weekly amount to the budget's native period scale (inverse of weeklyEquivalent). */
 export function periodEquivalent(weeklyAmount: number, allowancePeriod: AllowancePeriod): number {
-  if (allowancePeriod === "weekly") return weeklyAmount;
-  if (allowancePeriod === "monthly") return weeklyAmount * 52 / 12;
-  if (allowancePeriod === "quarterly") return weeklyAmount * 52 / 4;
-  throw new DataIntegrityError(`Unrecognized allowancePeriod: ${allowancePeriod}`);
+  return weeklyAmount * WEEKS_PER_PERIOD[allowancePeriod];
 }
 
-export function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
+function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
   return periods
     .filter((p) => p.budgetId === budgetId)
     .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
@@ -525,7 +525,7 @@ export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
   return trailing.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / 12;
 }
 
-export interface PerBudgetAverage {
+interface PerBudgetAverage {
   readonly avg12: number;
   readonly avg52: number;
 }
@@ -704,7 +704,7 @@ export function computeCashFlow(points: NetWorthPoint[]): CashFlowPoint[] {
   }));
 }
 
-export interface BalanceDivergence {
+interface BalanceDivergence {
   readonly institution: string;
   readonly account: string;
   readonly period: string;
@@ -712,7 +712,7 @@ export interface BalanceDivergence {
   readonly derivedBalance: number;
 }
 
-export interface NetWorthResult {
+interface NetWorthResult {
   readonly points: NetWorthPoint[];
   readonly divergences: BalanceDivergence[];
 }

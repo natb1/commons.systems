@@ -10,9 +10,9 @@ const ALLOWANCE_LABEL = "Allowance";
 const ACTUAL_LABEL = "Actual";
 const OTHER_LABEL = "Other";
 
-export type WaterfallKind = "allowance" | "category" | "actual";
+type WaterfallKind = "allowance" | "category" | "actual";
 
-export interface WaterfallBar {
+interface WaterfallBar {
   readonly label: string;
   readonly y1: number;
   readonly y2: number;
@@ -20,7 +20,7 @@ export interface WaterfallBar {
   readonly amount: number;
 }
 
-export interface WaterfallOptions {
+interface WaterfallOptions {
   readonly weeklyAllowance: number;
   readonly categories: readonly [CategoryActualRow, ...CategoryActualRow[]];
 }
