@@ -496,40 +496,29 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 		r := RuleDoc{
 			ID: doc.Ref.ID,
 		}
-		v, ok := d["type"].(string)
-		if !ok {
-			return nil, fmt.Errorf("rule %s: field 'type' is not a string (got %T)", doc.Ref.ID, d["type"])
+		ruleID := fmt.Sprintf("rule %s", doc.Ref.ID)
+		ruleType, err := requireString(d, ruleID, "type")
+		if err != nil {
+			return nil, err
 		}
-		r.Type = v
-		if v != "categorization" && v != "budget_assignment" {
-			return nil, fmt.Errorf("rule %s: unknown type %q (expected categorization or budget_assignment)", doc.Ref.ID, v)
+		r.Type = ruleType
+		if ruleType != "categorization" && ruleType != "budget_assignment" {
+			return nil, fmt.Errorf("rule %s: unknown type %q (expected categorization or budget_assignment)", doc.Ref.ID, ruleType)
 		}
-		v, ok = d["pattern"].(string)
-		if !ok {
-			return nil, fmt.Errorf("rule %s: field 'pattern' is not a string (got %T)", doc.Ref.ID, d["pattern"])
+		if r.Pattern, err = requireString(d, ruleID, "pattern"); err != nil {
+			return nil, err
 		}
-		r.Pattern = v
-		v, ok = d["target"].(string)
-		if !ok {
-			return nil, fmt.Errorf("rule %s: field 'target' is not a string (got %T)", doc.Ref.ID, d["target"])
+		if r.Target, err = requireString(d, ruleID, "target"); err != nil {
+			return nil, err
 		}
-		r.Target = v
-		if p, ok := d["priority"].(int64); ok {
-			r.Priority = int(p)
-		} else if p, ok := d["priority"].(float64); ok {
-			r.Priority = int(p)
-		} else {
-			return nil, fmt.Errorf("rule %s: field 'priority' is not a number (got %T)", doc.Ref.ID, d["priority"])
+		if r.Priority, err = requireInt(d, ruleID, "priority"); err != nil {
+			return nil, err
 		}
-		if v, ok := d["institution"].(string); ok {
-			r.Institution = v
-		} else if d["institution"] != nil {
-			return nil, fmt.Errorf("rule %s: field 'institution' is not a string (got %T)", doc.Ref.ID, d["institution"])
+		if r.Institution, err = optionalString(d, ruleID, "institution"); err != nil {
+			return nil, err
 		}
-		if v, ok := d["account"].(string); ok {
-			r.Account = v
-		} else if d["account"] != nil {
-			return nil, fmt.Errorf("rule %s: field 'account' is not a string (got %T)", doc.Ref.ID, d["account"])
+		if r.Account, err = optionalString(d, ruleID, "account"); err != nil {
+			return nil, err
 		}
 		if r.MinAmount, err = optionalFloat(d, doc.Ref.ID, "minAmount"); err != nil {
 			return nil, err
@@ -537,20 +526,14 @@ func (c *Client) LoadRules(ctx context.Context, groupID string) ([]RuleDoc, erro
 		if r.MaxAmount, err = optionalFloat(d, doc.Ref.ID, "maxAmount"); err != nil {
 			return nil, err
 		}
-		if v, ok := d["excludeCategory"].(string); ok {
-			r.ExcludeCategory = v
-		} else if d["excludeCategory"] != nil {
-			return nil, fmt.Errorf("rule %s: field 'excludeCategory' is not a string (got %T)", doc.Ref.ID, d["excludeCategory"])
+		if r.ExcludeCategory, err = optionalString(d, ruleID, "excludeCategory"); err != nil {
+			return nil, err
 		}
-		if v, ok := d["matchCategory"].(string); ok {
-			r.MatchCategory = v
-		} else if d["matchCategory"] != nil {
-			return nil, fmt.Errorf("rule %s: field 'matchCategory' is not a string (got %T)", doc.Ref.ID, d["matchCategory"])
+		if r.MatchCategory, err = optionalString(d, ruleID, "matchCategory"); err != nil {
+			return nil, err
 		}
-		if v, ok := d["category"].(string); ok {
-			r.Category = v
-		} else if d["category"] != nil {
-			return nil, fmt.Errorf("rule %s: field 'category' is not a string (got %T)", doc.Ref.ID, d["category"])
+		if r.Category, err = optionalString(d, ruleID, "category"); err != nil {
+			return nil, err
 		}
 		result = append(result, r)
 	}
@@ -914,44 +897,27 @@ func (c *Client) LoadNormalizationRules(ctx context.Context, groupID string) ([]
 	for _, doc := range docs {
 		d := doc.Data()
 		r := NormalizationRuleDoc{ID: doc.Ref.ID}
-		v, ok := d["pattern"].(string)
-		if !ok {
-			return nil, fmt.Errorf("normalization rule %s: field 'pattern' is not a string (got %T)", doc.Ref.ID, d["pattern"])
+		normID := fmt.Sprintf("normalization rule %s", doc.Ref.ID)
+		if r.Pattern, err = requireString(d, normID, "pattern"); err != nil {
+			return nil, err
 		}
-		r.Pattern = v
-		if v, ok := d["patternType"].(string); ok {
-			r.PatternType = v
-		} else if d["patternType"] != nil {
-			return nil, fmt.Errorf("normalization rule %s: field 'patternType' is not a string (got %T)", doc.Ref.ID, d["patternType"])
+		if r.PatternType, err = optionalString(d, normID, "patternType"); err != nil {
+			return nil, err
 		}
-		v, ok = d["canonicalDescription"].(string)
-		if !ok {
-			return nil, fmt.Errorf("normalization rule %s: field 'canonicalDescription' is not a string (got %T)", doc.Ref.ID, d["canonicalDescription"])
+		if r.CanonicalDescription, err = requireString(d, normID, "canonicalDescription"); err != nil {
+			return nil, err
 		}
-		r.CanonicalDescription = v
-		if p, ok := d["dateWindowDays"].(int64); ok {
-			r.DateWindowDays = int(p)
-		} else if p, ok := d["dateWindowDays"].(float64); ok {
-			r.DateWindowDays = int(p)
-		} else if d["dateWindowDays"] != nil {
-			return nil, fmt.Errorf("normalization rule %s: field 'dateWindowDays' is not a number (got %T)", doc.Ref.ID, d["dateWindowDays"])
+		if r.DateWindowDays, err = optionalInt(d, normID, "dateWindowDays"); err != nil {
+			return nil, err
 		}
-		if v, ok := d["institution"].(string); ok {
-			r.Institution = v
-		} else if d["institution"] != nil {
-			return nil, fmt.Errorf("normalization rule %s: field 'institution' is not a string (got %T)", doc.Ref.ID, d["institution"])
+		if r.Institution, err = optionalString(d, normID, "institution"); err != nil {
+			return nil, err
 		}
-		if v, ok := d["account"].(string); ok {
-			r.Account = v
-		} else if d["account"] != nil {
-			return nil, fmt.Errorf("normalization rule %s: field 'account' is not a string (got %T)", doc.Ref.ID, d["account"])
+		if r.Account, err = optionalString(d, normID, "account"); err != nil {
+			return nil, err
 		}
-		if p, ok := d["priority"].(int64); ok {
-			r.Priority = int(p)
-		} else if p, ok := d["priority"].(float64); ok {
-			r.Priority = int(p)
-		} else {
-			return nil, fmt.Errorf("normalization rule %s: field 'priority' is not a number (got %T)", doc.Ref.ID, d["priority"])
+		if r.Priority, err = requireInt(d, normID, "priority"); err != nil {
+			return nil, err
 		}
 		result = append(result, r)
 	}
