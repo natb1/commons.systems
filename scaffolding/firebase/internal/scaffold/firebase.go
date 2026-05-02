@@ -58,45 +58,61 @@ func (h HostingEntry) Validate() error {
 	return nil
 }
 
-func (h *HostingEntry) UnmarshalJSON(data []byte) error {
-	type Alias HostingEntry
-	var alias Alias
-	if err := json.Unmarshal(data, &alias); err != nil {
+// unmarshalWithExtra unmarshals data into target (which must be an alias type
+// without its own UnmarshalJSON to avoid recursion), then captures any
+// remaining JSON keys (those not in knownKeys) into *extra.
+func unmarshalWithExtra[T any](data []byte, target *T, extra *map[string]json.RawMessage, knownKeys ...string) error {
+	if err := json.Unmarshal(data, target); err != nil {
 		return err
 	}
-	*h = HostingEntry(alias)
-
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	delete(raw, "target")
-	delete(raw, "public")
-	delete(raw, "ignore")
-	delete(raw, "rewrites")
+	for _, k := range knownKeys {
+		delete(raw, k)
+	}
 	if len(raw) > 0 {
-		h.extra = raw
+		*extra = raw
 	}
 	return nil
 }
 
-func (h HostingEntry) MarshalJSON() ([]byte, error) {
-	type Alias HostingEntry
-	data, err := json.Marshal(Alias(h))
+// marshalWithExtra marshals typed (which must be an alias type without its own
+// MarshalJSON to avoid recursion) and merges in extra keys for round-trip.
+func marshalWithExtra[T any](typed T, extra map[string]json.RawMessage) ([]byte, error) {
+	data, err := json.Marshal(typed)
 	if err != nil {
 		return nil, err
 	}
-	if len(h.extra) == 0 {
+	if len(extra) == 0 {
 		return data, nil
 	}
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return nil, err
 	}
-	for k, v := range h.extra {
+	for k, v := range extra {
 		obj[k] = v
 	}
 	return json.Marshal(obj)
+}
+
+func (h *HostingEntry) UnmarshalJSON(data []byte) error {
+	type Alias HostingEntry
+	var alias Alias
+	var extra map[string]json.RawMessage
+	if err := unmarshalWithExtra(data, &alias, &extra, "target", "public", "ignore", "rewrites"); err != nil {
+		return err
+	}
+	*h = HostingEntry(alias)
+	h.extra = extra
+	return nil
+}
+
+func (h HostingEntry) MarshalJSON() ([]byte, error) {
+	type Alias HostingEntry
+	return marshalWithExtra(Alias(h), h.extra)
 }
 
 type FirestoreConfig struct {
@@ -110,50 +126,21 @@ type FirebaseConfig struct {
 	extra map[string]json.RawMessage
 }
 
-// UnmarshalJSON and MarshalJSON use the alias-and-raw-map pattern to preserve
-// unknown JSON keys during round-trip. FirebaseConfig and FirebaseRC both need
-// this, and the implementations are intentionally similar. Go generics cannot
-// easily abstract over struct-specific known/unknown field separation.
-
 func (c *FirebaseConfig) UnmarshalJSON(data []byte) error {
-	// Unmarshal known fields via alias to avoid infinite recursion.
 	type Alias FirebaseConfig
 	var alias Alias
-	if err := json.Unmarshal(data, &alias); err != nil {
+	var extra map[string]json.RawMessage
+	if err := unmarshalWithExtra(data, &alias, &extra, "hosting", "firestore"); err != nil {
 		return err
 	}
 	*c = FirebaseConfig(alias)
-
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	delete(raw, "hosting")
-	delete(raw, "firestore")
-	if len(raw) > 0 {
-		c.extra = raw
-	}
+	c.extra = extra
 	return nil
 }
 
 func (c FirebaseConfig) MarshalJSON() ([]byte, error) {
-	// Marshal known fields via alias to avoid infinite recursion.
 	type Alias FirebaseConfig
-	data, err := json.Marshal(Alias(c))
-	if err != nil {
-		return nil, err
-	}
-	if len(c.extra) == 0 {
-		return data, nil
-	}
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(data, &obj); err != nil {
-		return nil, err
-	}
-	for k, v := range c.extra {
-		obj[k] = v
-	}
-	return json.Marshal(obj)
+	return marshalWithExtra(Alias(c), c.extra)
 }
 
 // ProjectTargets maps target types to their app-site mappings.
@@ -170,40 +157,18 @@ type FirebaseRC struct {
 func (rc *FirebaseRC) UnmarshalJSON(data []byte) error {
 	type Alias FirebaseRC
 	var alias Alias
-	if err := json.Unmarshal(data, &alias); err != nil {
+	var extra map[string]json.RawMessage
+	if err := unmarshalWithExtra(data, &alias, &extra, "projects", "targets"); err != nil {
 		return err
 	}
 	*rc = FirebaseRC(alias)
-
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	delete(raw, "projects")
-	delete(raw, "targets")
-	if len(raw) > 0 {
-		rc.extra = raw
-	}
+	rc.extra = extra
 	return nil
 }
 
 func (rc FirebaseRC) MarshalJSON() ([]byte, error) {
 	type Alias FirebaseRC
-	data, err := json.Marshal(Alias(rc))
-	if err != nil {
-		return nil, err
-	}
-	if len(rc.extra) == 0 {
-		return data, nil
-	}
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(data, &obj); err != nil {
-		return nil, err
-	}
-	for k, v := range rc.extra {
-		obj[k] = v
-	}
-	return json.Marshal(obj)
+	return marshalWithExtra(Alias(rc), rc.extra)
 }
 
 // HostingSiteMap maps app names to their hosting site IDs ([]string).
@@ -378,41 +343,18 @@ type PackageJSON struct {
 func (p *PackageJSON) UnmarshalJSON(data []byte) error {
 	type Alias PackageJSON
 	var alias Alias
-	if err := json.Unmarshal(data, &alias); err != nil {
+	var extra map[string]json.RawMessage
+	if err := unmarshalWithExtra(data, &alias, &extra, "name", "private", "workspaces"); err != nil {
 		return err
 	}
 	*p = PackageJSON(alias)
-
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	delete(raw, "name")
-	delete(raw, "private")
-	delete(raw, "workspaces")
-	if len(raw) > 0 {
-		p.extra = raw
-	}
+	p.extra = extra
 	return nil
 }
 
 func (p PackageJSON) MarshalJSON() ([]byte, error) {
 	type Alias PackageJSON
-	data, err := json.Marshal(Alias(p))
-	if err != nil {
-		return nil, err
-	}
-	if len(p.extra) == 0 {
-		return data, nil
-	}
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(data, &obj); err != nil {
-		return nil, err
-	}
-	for k, v := range p.extra {
-		obj[k] = v
-	}
-	return json.Marshal(obj)
+	return marshalWithExtra(Alias(p), p.extra)
 }
 
 func ReadPackageJSON(repoRoot string) (*PackageJSON, error) {
