@@ -140,7 +140,7 @@ export function periodEquivalent(weeklyAmount: number, allowancePeriod: Allowanc
   return weeklyAmount * WEEKS_PER_PERIOD[allowancePeriod];
 }
 
-export function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
+function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
   return periods
     .filter((p) => p.budgetId === budgetId)
     .sort((a, b) => a.periodStart.toMillis() - b.periodStart.toMillis());
@@ -525,7 +525,7 @@ export function computeAverageWeeklySpending(periods: BudgetPeriod[]): number {
   return trailing.reduce((sum, [ms]) => sum + (weeklySpending.get(ms) ?? 0), 0) / 12;
 }
 
-export interface PerBudgetAverage {
+interface PerBudgetAverage {
   readonly avg12: number;
   readonly avg52: number;
 }
@@ -704,7 +704,7 @@ export function computeCashFlow(points: NetWorthPoint[]): CashFlowPoint[] {
   }));
 }
 
-export interface BalanceDivergence {
+interface BalanceDivergence {
   readonly institution: string;
   readonly account: string;
   readonly period: string;
@@ -712,7 +712,7 @@ export interface BalanceDivergence {
   readonly derivedBalance: number;
 }
 
-export interface NetWorthResult {
+interface NetWorthResult {
   readonly points: NetWorthPoint[];
   readonly divergences: BalanceDivergence[];
 }
