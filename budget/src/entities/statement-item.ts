@@ -96,23 +96,6 @@ export function parseFirestoreStatementItem(docSnap: QueryDocumentSnapshot<Docum
   };
 }
 
-// ── StatementItem → IdbStatementItem ──────────────────────────────────────────
-
-export function statementItemToIdbRecord(item: StatementItem): IdbStatementItem {
-  return {
-    id: item.id,
-    statementItemId: item.statementItemId,
-    statementId: item.statementId,
-    institution: item.institution,
-    account: item.account,
-    period: item.period,
-    amount: item.amount,
-    timestampMs: item.timestamp.toMillis(),
-    description: item.description,
-    fitid: item.fitid,
-  };
-}
-
 // ── IdbStatementItem → StatementItem ──────────────────────────────────────────
 
 export function idbToStatementItem(row: IdbStatementItem): StatementItem {

@@ -5,7 +5,7 @@ import {
   nsCollectionPath,
   type Namespace,
 } from "@commons-systems/firestoreutil/namespace";
-import { DataIntegrityError } from "./errors.js";
+import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
 
 export type GroupId = Brand<"GroupId">;
