@@ -12,23 +12,35 @@
 # camelCase variant in print's prior local upload script was a divergence bug
 # that left uploads failing the public-read rule check.
 #
-# Cleanup: register every temp file via core::register_temp_file. The EXIT
-# trap is installed once at source-time and removes every registered file.
-# Wrappers must NOT install their own EXIT traps — doing so overwrites the
-# library's trap and leaks temp files.
+# Cleanup: register every temp file via core::register_temp_file. Registrations
+# are appended to a file-backed registry ($CORE_CLEANUP_REGISTRY) created at
+# source-time, so registrations survive subshell boundaries — core functions
+# called via $(...) command substitution still register paths the parent's
+# EXIT trap will see. The EXIT trap is installed once at source-time and
+# removes every registered file plus the registry. Wrappers must NOT install
+# their own EXIT traps — doing so overwrites the library's trap and leaks
+# temp files.
 
 set -euo pipefail
 
-declare -a CLEANUP_FILES=()
+CORE_CLEANUP_REGISTRY="$(mktemp)"
 
 core::register_temp_file() {
   local path="$1"
-  CLEANUP_FILES+=("$path")
+  printf '%s\n' "$path" >> "$CORE_CLEANUP_REGISTRY"
 }
 
 core::cleanup_temp_files() {
-  if [ "${#CLEANUP_FILES[@]}" -gt 0 ]; then
-    rm -f "${CLEANUP_FILES[@]}"
+  # Runs in EXIT trap; must not corrupt exit status. Use `|| true` only on
+  # reads that may legitimately race with concurrent removal.
+  if [ -n "${CORE_CLEANUP_REGISTRY:-}" ] && [ -s "$CORE_CLEANUP_REGISTRY" ]; then
+    local path
+    while IFS= read -r path || [ -n "$path" ]; do
+      [ -n "$path" ] && rm -f "$path"
+    done < "$CORE_CLEANUP_REGISTRY"
+  fi
+  if [ -n "${CORE_CLEANUP_REGISTRY:-}" ] && [ -e "$CORE_CLEANUP_REGISTRY" ]; then
+    rm -f "$CORE_CLEANUP_REGISTRY"
   fi
 }
 
