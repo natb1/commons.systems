@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "scripts": {
+    "lint": "echo 'CSS-only package, nothing to lint'"
+  },
   "exports": {
     "./default.css": "./default.css",
     "./layout.css": "./layout.css",
