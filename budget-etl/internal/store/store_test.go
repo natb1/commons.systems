@@ -483,6 +483,242 @@ func TestComputePeriods(t *testing.T) {
 	})
 }
 
+func TestRequireString(t *testing.T) {
+	tests := []struct {
+		name    string
+		d       map[string]interface{}
+		docID   string
+		field   string
+		want    string
+		wantErr string
+	}{
+		{
+			name:  "present and correct type",
+			d:     map[string]interface{}{"k": "hello"},
+			docID: "rule abc", field: "k",
+			want: "hello",
+		},
+		{
+			name:    "present but wrong type",
+			d:       map[string]interface{}{"k": 42},
+			docID:   "rule abc", field: "k",
+			wantErr: "rule abc: field 'k' is not a string (got int)",
+		},
+		{
+			name:    "missing key",
+			d:       map[string]interface{}{},
+			docID:   "rule abc", field: "k",
+			wantErr: "rule abc: missing required field 'k'",
+		},
+		{
+			name:    "nil value",
+			d:       map[string]interface{}{"k": nil},
+			docID:   "rule abc", field: "k",
+			wantErr: "rule abc: missing required field 'k'",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := requireString(tt.d, tt.docID, tt.field)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Errorf("requireString() error = %v, want %q", err, tt.wantErr)
+				}
+				if got != "" {
+					t.Errorf("requireString() = %q, want empty string on error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("requireString() unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("requireString() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOptionalString(t *testing.T) {
+	tests := []struct {
+		name    string
+		d       map[string]interface{}
+		docID   string
+		field   string
+		want    string
+		wantErr string
+	}{
+		{
+			name:  "present and correct type",
+			d:     map[string]interface{}{"k": "world"},
+			docID: "rule abc", field: "k",
+			want: "world",
+		},
+		{
+			name:    "present but wrong type",
+			d:       map[string]interface{}{"k": true},
+			docID:   "rule abc", field: "k",
+			wantErr: "rule abc: field 'k' is not a string (got bool)",
+		},
+		{
+			name:  "missing key returns empty string",
+			d:     map[string]interface{}{},
+			docID: "rule abc", field: "k",
+			want: "",
+		},
+		{
+			name:  "nil value returns empty string",
+			d:     map[string]interface{}{"k": nil},
+			docID: "rule abc", field: "k",
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := optionalString(tt.d, tt.docID, tt.field)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Errorf("optionalString() error = %v, want %q", err, tt.wantErr)
+				}
+				if got != "" {
+					t.Errorf("optionalString() = %q, want empty string on error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("optionalString() unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("optionalString() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRequireInt(t *testing.T) {
+	tests := []struct {
+		name    string
+		d       map[string]interface{}
+		docID   string
+		field   string
+		want    int
+		wantErr string
+	}{
+		{
+			name:  "present as int64",
+			d:     map[string]interface{}{"k": int64(7)},
+			docID: "rule abc", field: "k",
+			want: 7,
+		},
+		{
+			name:  "present as float64",
+			d:     map[string]interface{}{"k": float64(42)},
+			docID: "rule abc", field: "k",
+			want: 42,
+		},
+		{
+			name:    "present but wrong type",
+			d:       map[string]interface{}{"k": "nope"},
+			docID:   "rule abc", field: "k",
+			wantErr: "rule abc: field 'k' is not a number (got string)",
+		},
+		{
+			name:    "missing key",
+			d:       map[string]interface{}{},
+			docID:   "rule abc", field: "k",
+			wantErr: "rule abc: missing required field 'k'",
+		},
+		{
+			name:    "nil value",
+			d:       map[string]interface{}{"k": nil},
+			docID:   "rule abc", field: "k",
+			wantErr: "rule abc: missing required field 'k'",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := requireInt(tt.d, tt.docID, tt.field)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Errorf("requireInt() error = %v, want %q", err, tt.wantErr)
+				}
+				if got != 0 {
+					t.Errorf("requireInt() = %d, want 0 on error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("requireInt() unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("requireInt() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOptionalInt(t *testing.T) {
+	tests := []struct {
+		name    string
+		d       map[string]interface{}
+		docID   string
+		field   string
+		want    int
+		wantErr string
+	}{
+		{
+			name:  "present as int64",
+			d:     map[string]interface{}{"k": int64(3)},
+			docID: "rule abc", field: "k",
+			want: 3,
+		},
+		{
+			name:  "present as float64",
+			d:     map[string]interface{}{"k": float64(99)},
+			docID: "rule abc", field: "k",
+			want: 99,
+		},
+		{
+			name:    "present but wrong type",
+			d:       map[string]interface{}{"k": []string{"x"}},
+			docID:   "rule abc", field: "k",
+			wantErr: "rule abc: field 'k' is not a number (got []string)",
+		},
+		{
+			name:  "missing key returns zero",
+			d:     map[string]interface{}{},
+			docID: "rule abc", field: "k",
+			want: 0,
+		},
+		{
+			name:  "nil value returns zero",
+			d:     map[string]interface{}{"k": nil},
+			docID: "rule abc", field: "k",
+			want: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := optionalInt(tt.d, tt.docID, tt.field)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Errorf("optionalInt() error = %v, want %q", err, tt.wantErr)
+				}
+				if got != 0 {
+					t.Errorf("optionalInt() = %d, want 0 on error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("optionalInt() unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("optionalInt() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestComputeWeeklyAggregates(t *testing.T) {
 	mon := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)     // Monday
 	wed := time.Date(2025, 1, 8, 10, 0, 0, 0, time.UTC)     // Wednesday same week
