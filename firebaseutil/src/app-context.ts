@@ -9,8 +9,10 @@ import type { FirebaseApp } from "firebase/app";
 import type { Firestore } from "firebase/firestore";
 import type { AppCheck } from "firebase/app-check";
 import type { FirebaseStorage } from "firebase/storage";
+import type { User } from "firebase/auth";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError, registerErrorSink } from "@commons-systems/errorutil/log";
+import { createDeferredAppAuth } from "@commons-systems/authutil/deferred-app-auth";
 import { firebaseConfig } from "./config.js";
 import {
   validateNamespace,
@@ -31,6 +33,18 @@ export interface AppContextBase {
 export interface AppContextWithStorage extends AppContextBase {
   storage: FirebaseStorage;
   STORAGE_NAMESPACE: Namespace;
+}
+
+export interface AppContextWithAuth extends AppContextBase {
+  signIn(): Promise<void>;
+  signOut(): Promise<void>;
+  onAuthStateChanged(cb: (user: User | null) => void): Promise<() => void>;
+}
+
+export interface AppContextWithStorageAndAuth extends AppContextWithStorage {
+  signIn(): Promise<void>;
+  signOut(): Promise<void>;
+  onAuthStateChanged(cb: (user: User | null) => void): Promise<() => void>;
 }
 
 function parseEmulatorHost(
@@ -71,8 +85,14 @@ export interface AppContextOptions {
    *  always returns `{}` and `initAppCheck` is undefined. */
   deferAppCheck?: boolean;
   storageModule?: StorageModule;
-  /** Optional; error logs omit user info when not provided. */
+  /** Optional; error logs omit user info when not provided.
+   *  Mutually exclusive with `enableAuth`. */
   getCurrentUser?: ErrorSinkOptions["getCurrentUser"];
+  /** Wire in the shared deferred-auth shim (`createDeferredAppAuth`). When
+   *  true, the returned context exposes `signIn`/`signOut`/`onAuthStateChanged`
+   *  and the error sink uses the shim's `getCurrentUser` for user info.
+   *  Mutually exclusive with `getCurrentUser`. */
+  enableAuth?: boolean;
 }
 
 /**
@@ -92,6 +112,19 @@ export interface AppContextOptions {
 export function createAppContext(
   appName: string,
   appId: string,
+  options: AppContextOptions & {
+    storageModule: StorageModule;
+    enableAuth: true;
+  },
+): AppContextWithStorageAndAuth;
+export function createAppContext(
+  appName: string,
+  appId: string,
+  options: AppContextOptions & { enableAuth: true },
+): AppContextWithAuth;
+export function createAppContext(
+  appName: string,
+  appId: string,
   options: AppContextOptions & { storageModule: StorageModule },
 ): AppContextWithStorage;
 export function createAppContext(
@@ -103,7 +136,13 @@ export function createAppContext(
   appName: string,
   appId: string,
   options?: AppContextOptions,
-): AppContextBase | AppContextWithStorage {
+): AppContextBase | AppContextWithStorage | AppContextWithAuth | AppContextWithStorageAndAuth {
+  if (options?.enableAuth && options.getCurrentUser) {
+    throw new Error(
+      "createAppContext: enableAuth and getCurrentUser are mutually exclusive",
+    );
+  }
+
   const app = initializeApp({
     ...firebaseConfig,
     appId,
@@ -219,16 +258,29 @@ export function createAppContext(
   }
   const NAMESPACE = validateNamespace(envNamespace || `${appName}/prod`);
 
+  const deferredAuth = options?.enableAuth ? createDeferredAppAuth(app) : undefined;
+  const errorSinkGetCurrentUser = deferredAuth
+    ? deferredAuth.getCurrentUser
+    : options?.getCurrentUser;
+
   // Errors logged before this point (e.g., appcheck-init) go to console only.
   registerErrorSink(
     createFirestoreErrorSink({
       db,
       namespace: NAMESPACE,
-      getCurrentUser: options?.getCurrentUser,
+      getCurrentUser: errorSinkGetCurrentUser,
     }),
   );
 
   const trackPageView = initAnalyticsSafe(app);
+
+  const authMethods = deferredAuth
+    ? {
+        signIn: deferredAuth.signIn,
+        signOut: deferredAuth.signOut,
+        onAuthStateChanged: deferredAuth.onAuthStateChanged,
+      }
+    : {};
 
   if (options?.storageModule) {
     const storage = options.storageModule.getStorage(app);
@@ -245,8 +297,8 @@ export function createAppContext(
     // Storage paths always use prod — media binaries are not duplicated per preview branch.
     const STORAGE_NAMESPACE = validateNamespace(`${appName}/prod`);
 
-    return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, initAppCheck, storage, STORAGE_NAMESPACE };
+    return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, initAppCheck, storage, STORAGE_NAMESPACE, ...authMethods };
   }
 
-  return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, initAppCheck };
+  return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, initAppCheck, ...authMethods };
 }
