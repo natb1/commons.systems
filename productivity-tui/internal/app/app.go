@@ -293,10 +293,19 @@ func tick() tea.Cmd {
 	})
 }
 
-// displayName renders the worktree name for a session's working dir. For
-// root or single-component paths (where Dir is "/", ".", or empty), the full
-// path is returned to avoid a confusing relabel.
+// displayName renders the worktree name for a session's working dir. When the
+// path has a `worktrees/` ancestor (the convention used in this repo), the
+// segment immediately below it is returned so sessions launched from a
+// subdirectory still display the worktree name. For root or single-component
+// paths (where Dir is "/", ".", or empty), the full path is returned to avoid
+// a confusing relabel.
 func displayName(p string) string {
+	parts := strings.Split(filepath.Clean(p), string(filepath.Separator))
+	for i, part := range parts {
+		if part == "worktrees" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
 	switch filepath.Dir(p) {
 	case "/", ".", "":
 		return p
