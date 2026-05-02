@@ -11,9 +11,13 @@
       url = "github:sadjow/claude-code-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    wezterm-windows-zip = {
+      url = "https://github.com/wez/wezterm/releases/download/nightly/WezTerm-windows-nightly.zip";
+      flake = false;
+    };
   };
 
-  outputs = { nixpkgs, home-manager, claude-code-nix, ... }:
+  outputs = inputs@{ nixpkgs, home-manager, claude-code-nix, ... }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = fn: nixpkgs.lib.genAttrs systems (system: fn {
@@ -93,6 +97,9 @@
           modules = [
             ./nix/home/default.nix
           ];
+          extraSpecialArgs = {
+            inherit inputs;
+          };
         };
 
       homeConfigurations = builtins.listToAttrs (

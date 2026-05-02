@@ -207,9 +207,10 @@ test.describe("home page infinite scroll", () => {
 
       // Scroll to load more
       await page.locator("#scroll-sentinel").scrollIntoViewIfNeeded();
+      const hiddenRows = page.locator('#transactions-table .txn-row[style*="display: none"]');
       await expect(async () => {
         const totalRows = await page.locator("#transactions-table .txn-row").count();
-        expect(totalRows).toBeGreaterThan(initialVisible);
+        expect(totalRows).toBeGreaterThan(initialVisible + await hiddenRows.count());
       }).toPass({ timeout: 10000 });
 
       // Verify ALL visible rows match the budget filter
