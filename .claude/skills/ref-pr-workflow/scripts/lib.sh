@@ -170,11 +170,12 @@ _ancestor_pids() {
 # Output: one PID per line, leaves first (children listed before their parent)
 _collect_tree_pids() {
   local pid="$1"
-  local children
+  local children child
   children=$(pgrep -P "$pid" 2>/dev/null) || true
-  for child in $children; do
+  while IFS= read -r child; do
+    [ -z "$child" ] && continue
     _collect_tree_pids "$child"
-  done
+  done <<< "$children"
   echo "$pid"
 }
 
@@ -189,17 +190,19 @@ kill_tree() {
 
   # SIGTERM pass
   local p
-  for p in $pids; do
+  while IFS= read -r p; do
+    [ -z "$p" ] && continue
     kill "$p" 2>/dev/null || true
-  done
+  done <<< "$pids"
 
   # Grace period, then SIGKILL survivors
   sleep 2
-  for p in $pids; do
+  while IFS= read -r p; do
+    [ -z "$p" ] && continue
     if kill -0 "$p" 2>/dev/null; then
       kill -9 "$p" 2>/dev/null || true
     fi
-  done
+  done <<< "$pids"
 }
 
 # Resolve which apps are affected by a set of changed files.
@@ -345,6 +348,14 @@ cleanup_stale_hub() {
   fi
 }
 
+# Print PIDs whose command-line args contain the given fixed-string substring.
+# Uses ps + grep -F instead of `pgrep -f` so it works under the macOS sandbox
+# (which blocks pgrep's sysmond IPC). Output: one PID per line; empty if none.
+_pids_matching_arg() {
+  local needle="${1:?_pids_matching_arg requires a substring}"
+  ps -axo pid=,args= 2>/dev/null | grep -F "$needle" | awk '{print $1}' || true
+}
+
 # Kill all processes whose command-line args contain the given worktree path.
 # Uses fixed-string substring matching on process args.
 # Excludes the current process and its ancestors to avoid self-termination.
@@ -352,23 +363,22 @@ cleanup_stale_hub() {
 kill_worktree_processes() {
   local wt_path="${1:?kill_worktree_processes requires a worktree path}"
 
-  local ps_output pids
-  ps_output=$(ps -axo pid=,args= 2>/dev/null) || true
-  pids=$(printf '%s\n' "$ps_output" | grep -F "$wt_path/" | awk '{print $1}') || true
+  local pids
+  pids=$(_pids_matching_arg "$wt_path/")
   [ -z "$pids" ] && return 0
 
   local exclude_pids
   exclude_pids=$(_ancestor_pids)
 
-  local pid
-  for pid in $pids; do
+  while IFS= read -r pid; do
+    [ -z "$pid" ] && continue
     if [[ "$exclude_pids" == *" $pid "* ]]; then
       continue
     fi
     kill -0 "$pid" 2>/dev/null || continue
     echo "Killing worktree process: PID $pid"
     kill_tree "$pid"
-  done
+  done <<< "$pids"
 }
 
 # Kill processes belonging to worktrees that no longer exist.
@@ -383,6 +393,9 @@ cleanup_stale_worktree_processes() {
   }
   # Resolve to absolute path; worktrees live as siblings of the git common dir
   worktree_root="$(cd "$git_common_dir/.." && pwd)/worktrees"
+
+  # Prune stale admin entries so the list below reflects on-disk worktrees only.
+  git worktree prune 2>/dev/null || true
 
   # Build set of active worktree paths
   local active_paths=""
@@ -402,14 +415,14 @@ cleanup_stale_worktree_processes() {
 
   # Find PIDs with this repo's worktree root in their command args
   local pids
-  pids=$(pgrep -f "$worktree_root/" 2>/dev/null) || true
+  pids=$(_pids_matching_arg "$worktree_root/")
   [ -z "$pids" ] && return 0
 
   local exclude_pids
   exclude_pids=$(_ancestor_pids)
 
-  local pid
-  for pid in $pids; do
+  while IFS= read -r pid; do
+    [ -z "$pid" ] && continue
     [[ "$exclude_pids" == *" $pid "* ]] && continue
 
     # Extract the worktree path from this process's command line
@@ -426,7 +439,7 @@ cleanup_stale_worktree_processes() {
       echo "Stale worktree process: PID $pid (worktree: $wt_path)"
       kill_tree "$pid"
     fi
-  done
+  done <<< "$pids"
 }
 
 # Find N available TCP ports by binding to port 0 simultaneously.

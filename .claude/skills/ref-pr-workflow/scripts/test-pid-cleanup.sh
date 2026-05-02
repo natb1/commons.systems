@@ -228,6 +228,48 @@ echo "=== Test: cleanup_stale_hub keeps live hub file ==="
   rm -f "$hub_file"
 )
 
+echo ""
+echo "=== Test: cleanup_stale_worktree_processes prunes before listing ==="
+(
+  source "$SCRIPT_DIR/lib.sh"
+
+  # Mock `git worktree list` so its output flips based on whether prune ran first:
+  # without the prune call, list reports the stale path as still-active and the
+  # orphan would survive. The test passes only if the production code prunes first.
+  STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/worktrees/612-prune-test-fixture-$$"
+  REAL_WT="$(git rev-parse --show-toplevel)"
+  PRUNE_CALLED_MARKER="${TEST_TMPDIR}/prune_called_$$"
+  REAL_ENTRY=$(printf 'worktree %s\nHEAD abc123\nbranch refs/heads/main\n\n' "$REAL_WT")
+  STALE_ENTRY=$(printf 'worktree %s\nHEAD def456\nbranch refs/heads/612-prune-test\nprunable gitdir file points to non-existent location\n\n' "$STALE_WT")
+
+  git() {
+    if [ "$1" = "worktree" ] && [ "$2" = "prune" ]; then
+      touch "$PRUNE_CALLED_MARKER"
+      return 0
+    fi
+    if [ "$1" = "worktree" ] && [ "$2" = "list" ]; then
+      printf '%s\n' "$REAL_ENTRY"
+      [ -f "$PRUNE_CALLED_MARKER" ] || printf '%s\n' "$STALE_ENTRY"
+      return 0
+    fi
+    command git "$@"
+  }
+
+  perl -e 'sleep 300' -- "$STALE_WT/sentinel" &
+  FIXTURE_PID=$!
+  trap 'kill -9 $FIXTURE_PID 2>/dev/null || true' EXIT
+  sleep 0.3
+
+  cleanup_stale_worktree_processes
+
+  if kill -0 "$FIXTURE_PID" 2>/dev/null; then
+    fail "cleanup_stale_worktree_processes left fixture alive (prune-before-list not working)"
+    kill -9 "$FIXTURE_PID" 2>/dev/null || true
+  else
+    pass "cleanup_stale_worktree_processes kills process from deleted-but-not-pruned worktree"
+  fi
+)
+
 FINAL_PASS=$(cat "$PASS_FILE")
 FINAL_FAIL=$(cat "$FAIL_FILE")
 
