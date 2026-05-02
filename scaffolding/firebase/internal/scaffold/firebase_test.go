@@ -626,3 +626,163 @@ func TestRemoveWorkspaceNotFound(t *testing.T) {
 		t.Errorf("expected workspaces unchanged, got %v", pkg.Workspaces)
 	}
 }
+
+type testStruct struct {
+	A     string `json:"a"`
+	B     int    `json:"b"`
+	extra map[string]json.RawMessage
+}
+
+func TestUnmarshalWithExtra(t *testing.T) {
+	t.Run("known fields only", func(t *testing.T) {
+		type Alias testStruct
+		var alias Alias
+		var extra map[string]json.RawMessage
+		if err := unmarshalWithExtra([]byte(`{"a":"hello","b":42}`), &alias, &extra, "a", "b"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if alias.A != "hello" || alias.B != 42 {
+			t.Errorf("expected hello/42, got %s/%d", alias.A, alias.B)
+		}
+		if extra != nil {
+			t.Errorf("expected no extra, got %v", extra)
+		}
+	})
+
+	t.Run("extra fields only", func(t *testing.T) {
+		type Alias testStruct
+		var alias Alias
+		var extra map[string]json.RawMessage
+		if err := unmarshalWithExtra([]byte(`{"x":1,"y":"two"}`), &alias, &extra, "a", "b"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, ok := extra["x"]; !ok {
+			t.Errorf("expected x key in extra, got %v", extra)
+		}
+		if _, ok := extra["y"]; !ok {
+			t.Errorf("expected y key in extra, got %v", extra)
+		}
+	})
+
+	t.Run("known and extra mixed", func(t *testing.T) {
+		type Alias testStruct
+		var alias Alias
+		var extra map[string]json.RawMessage
+		if err := unmarshalWithExtra([]byte(`{"a":"hi","b":7,"x":1}`), &alias, &extra, "a", "b"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if alias.A != "hi" || alias.B != 7 {
+			t.Errorf("expected hi/7, got %s/%d", alias.A, alias.B)
+		}
+		if _, ok := extra["x"]; !ok {
+			t.Errorf("expected x key in extra, got %v", extra)
+		}
+		if _, ok := extra["a"]; ok {
+			t.Errorf("did not expect a in extra (it is a known key)")
+		}
+	})
+
+	t.Run("malformed input", func(t *testing.T) {
+		type Alias testStruct
+		var alias Alias
+		var extra map[string]json.RawMessage
+		if err := unmarshalWithExtra([]byte(`{not json`), &alias, &extra, "a", "b"); err == nil {
+			t.Error("expected error for malformed input, got nil")
+		}
+	})
+}
+
+func TestMarshalWithExtra(t *testing.T) {
+	t.Run("no extra", func(t *testing.T) {
+		type Alias testStruct
+		typed := Alias{A: "hello", B: 42}
+		data, err := marshalWithExtra(typed, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var got map[string]json.RawMessage
+		if err := json.Unmarshal(data, &got); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if string(got["a"]) != `"hello"` || string(got["b"]) != `42` {
+			t.Errorf("unexpected output: %s", data)
+		}
+	})
+
+	t.Run("with extra", func(t *testing.T) {
+		type Alias testStruct
+		typed := Alias{A: "hello", B: 42}
+		extra := map[string]json.RawMessage{
+			"x": json.RawMessage(`"extra-value"`),
+		}
+		data, err := marshalWithExtra(typed, extra)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var got map[string]json.RawMessage
+		if err := json.Unmarshal(data, &got); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if string(got["a"]) != `"hello"` {
+			t.Errorf("expected a=hello, got %s", got["a"])
+		}
+		if string(got["x"]) != `"extra-value"` {
+			t.Errorf("expected x=extra-value, got %s", got["x"])
+		}
+	})
+
+	t.Run("extra and known mixed", func(t *testing.T) {
+		type Alias testStruct
+		typed := Alias{A: "hi", B: 7}
+		extra := map[string]json.RawMessage{
+			"x": json.RawMessage(`1`),
+			"y": json.RawMessage(`"two"`),
+		}
+		data, err := marshalWithExtra(typed, extra)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var got map[string]json.RawMessage
+		if err := json.Unmarshal(data, &got); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if string(got["a"]) != `"hi"` || string(got["b"]) != `7` {
+			t.Errorf("expected known fields preserved, got %s", data)
+		}
+		if string(got["x"]) != `1` || string(got["y"]) != `"two"` {
+			t.Errorf("expected extra fields preserved, got %s", data)
+		}
+	})
+}
+
+func TestFirebaseConfigPreservesExtraKeys(t *testing.T) {
+	input := `{
+  "hosting": [{"target":"hello","public":"hello/dist","ignore":["firebase.json"]}],
+  "firestore": {"rules":"firestore.rules"},
+  "emulators": {"firestore": {"port": 8080}}
+}`
+
+	var config FirebaseConfig
+	if err := json.Unmarshal([]byte(input), &config); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	out, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(out, &raw); err != nil {
+		t.Fatalf("re-unmarshal error: %v", err)
+	}
+	if _, ok := raw["emulators"]; !ok {
+		t.Errorf("expected 'emulators' key to survive round-trip; got: %s", out)
+	}
+	if _, ok := raw["hosting"]; !ok {
+		t.Errorf("expected 'hosting' key to be present; got: %s", out)
+	}
+	if _, ok := raw["firestore"]; !ok {
+		t.Errorf("expected 'firestore' key to be present; got: %s", out)
+	}
+}
