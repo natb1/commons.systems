@@ -24,9 +24,12 @@ func TestQueryTabIndex_ReadsJSON(t *testing.T) {
 }
 
 func TestQueryTabIndex_MissingFile(t *testing.T) {
-	_, err := QueryTabIndex(filepath.Join(t.TempDir(), "does-not-exist.json"))
-	if err == nil {
-		t.Fatal("expected error for missing file")
+	got, err := QueryTabIndex(filepath.Join(t.TempDir(), "does-not-exist.json"))
+	if err != nil {
+		t.Fatalf("expected nil error for missing file, got: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil map for missing file, got %v", got)
 	}
 }
 

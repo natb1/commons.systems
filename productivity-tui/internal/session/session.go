@@ -19,9 +19,9 @@ type Session struct {
 	// PIDStart is the verbatim `ps -o lstart=` output recorded at session start.
 	// Compared byte-for-byte to detect PID recycling. Opaque string — do not
 	// reformat or parse (locale/format drift would silently break equality).
-	PIDStart     string `json:"pid_start,omitempty"`
-	WeztermPane  string `json:"wezterm_pane,omitempty"`
-	Idle         bool   `json:"idle"`
+	PIDStart     string    `json:"pid_start,omitempty"`
+	WeztermPane  string    `json:"wezterm_pane,omitempty"`
+	Idle         bool      `json:"idle"`
 	LastActivity time.Time `json:"last_activity"`
 }
 
