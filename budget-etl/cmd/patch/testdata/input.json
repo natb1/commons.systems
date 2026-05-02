@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "exportedAt": "2026-05-02T00:00:00Z",
+  "groupId": "test-group",
+  "groupName": "Test",
+  "transactions": [],
+  "statements": [],
+  "budgets": [],
+  "budgetPeriods": [],
+  "rules": [
+    {
+      "id": "existing-unrelated",
+      "type": "categorization",
+      "pattern": "ZZZ_DOES_NOT_MATCH",
+      "target": "Other",
+      "priority": 1000,
+      "institution": "",
+      "account": ""
+    }
+  ],
+  "normalizationRules": [],
+  "weeklyAggregates": []
+}
