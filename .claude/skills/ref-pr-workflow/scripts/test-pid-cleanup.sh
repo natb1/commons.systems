@@ -228,6 +228,63 @@ echo "=== Test: cleanup_stale_hub keeps live hub file ==="
   rm -f "$hub_file"
 )
 
+echo ""
+echo "=== Test: cleanup_stale_worktree_processes prunes before listing ==="
+(
+  source "$SCRIPT_DIR/lib.sh"
+
+  # Simulate a worktree whose directory was deleted but whose git admin entry still exists.
+  # We mock `git worktree prune` (no-op) and `git worktree list --porcelain` so the test
+  # controls exactly what the active-worktree set looks like, isolating the prune-before-list
+  # logic from filesystem and sandbox constraints.
+  #
+  # The mock returns two states depending on call order:
+  #   1st list call (before prune in cleanup): includes the stale path (prunable)
+  #   After prune: list excludes the stale path
+  # We simulate this by having the mock check a sentinel file left by the prune call.
+
+  STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/worktrees/612-prune-test-fixture-$$"
+  REAL_WT="$(git rev-parse --show-toplevel)"
+  PRUNE_CALLED_MARKER="${TEST_TMPDIR}/prune_called_$$"
+
+  git() {
+    local subcmd="$1"
+    if [ "$subcmd" = "worktree" ]; then
+      local action="$2"
+      if [ "$action" = "prune" ]; then
+        touch "$PRUNE_CALLED_MARKER"
+        return 0
+      elif [ "$action" = "list" ]; then
+        if [ -f "$PRUNE_CALLED_MARKER" ]; then
+          printf 'worktree %s\nHEAD abc123\nbranch refs/heads/main\n\n' "$REAL_WT"
+        else
+          printf 'worktree %s\nHEAD abc123\nbranch refs/heads/main\n\n' "$REAL_WT"
+          printf 'worktree %s\nHEAD def456\nbranch refs/heads/612-prune-test\nprunable gitdir file points to non-existent location\n\n' "$STALE_WT"
+        fi
+        return 0
+      fi
+    elif [ "$subcmd" = "rev-parse" ]; then
+      command git rev-parse "${@:2}"
+      return $?
+    fi
+    command git "$@"
+  }
+
+  perl -e 'sleep 300' -- "$STALE_WT/sentinel" &
+  FIXTURE_PID=$!
+  trap 'kill -9 $FIXTURE_PID 2>/dev/null || true' EXIT
+  sleep 0.3
+
+  cleanup_stale_worktree_processes
+
+  if kill -0 "$FIXTURE_PID" 2>/dev/null; then
+    fail "cleanup_stale_worktree_processes left fixture alive (prune-before-list not working)"
+    kill -9 "$FIXTURE_PID" 2>/dev/null || true
+  else
+    pass "cleanup_stale_worktree_processes kills process from deleted-but-not-pruned worktree"
+  fi
+)
+
 FINAL_PASS=$(cat "$PASS_FILE")
 FINAL_FAIL=$(cat "$FAIL_FILE")
 

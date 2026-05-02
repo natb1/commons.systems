@@ -360,15 +360,15 @@ kill_worktree_processes() {
   local exclude_pids
   exclude_pids=$(_ancestor_pids)
 
-  local pid
-  for pid in $pids; do
+  while IFS= read -r pid; do
+    [ -z "$pid" ] && continue
     if [[ "$exclude_pids" == *" $pid "* ]]; then
       continue
     fi
     kill -0 "$pid" 2>/dev/null || continue
     echo "Killing worktree process: PID $pid"
     kill_tree "$pid"
-  done
+  done <<< "$pids"
 }
 
 # Kill processes belonging to worktrees that no longer exist.
@@ -383,6 +383,10 @@ cleanup_stale_worktree_processes() {
   }
   # Resolve to absolute path; worktrees live as siblings of the git common dir
   worktree_root="$(cd "$git_common_dir/.." && pwd)/worktrees"
+
+  # Prune admin entries for worktrees whose directories no longer exist, so
+  # the subsequent list reflects only worktrees that are actually on disk.
+  git worktree prune 2>/dev/null || true
 
   # Build set of active worktree paths
   local active_paths=""
@@ -401,15 +405,16 @@ cleanup_stale_worktree_processes() {
   fi
 
   # Find PIDs with this repo's worktree root in their command args
-  local pids
-  pids=$(pgrep -f "$worktree_root/" 2>/dev/null) || true
+  local ps_output pids
+  ps_output=$(ps -axo pid=,args= 2>/dev/null) || true
+  pids=$(printf '%s\n' "$ps_output" | grep -F "$worktree_root/" | awk '{print $1}') || true
   [ -z "$pids" ] && return 0
 
   local exclude_pids
   exclude_pids=$(_ancestor_pids)
 
-  local pid
-  for pid in $pids; do
+  while IFS= read -r pid; do
+    [ -z "$pid" ] && continue
     [[ "$exclude_pids" == *" $pid "* ]] && continue
 
     # Extract the worktree path from this process's command line
@@ -426,7 +431,7 @@ cleanup_stale_worktree_processes() {
       echo "Stale worktree process: PID $pid (worktree: $wt_path)"
       kill_tree "$pid"
     fi
-  done
+  done <<< "$pids"
 }
 
 # Find N available TCP ports by binding to port 0 simultaneously.
