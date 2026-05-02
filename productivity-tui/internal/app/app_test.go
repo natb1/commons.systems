@@ -112,6 +112,33 @@ func TestViewEdgeCasePaths(t *testing.T) {
 	}
 }
 
+func TestDisplayName(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"worktree root", "/Users/n8/natb1/commons.systems/worktrees/main", "main"},
+		{"subdir under worktree", "/Users/n8/natb1/commons.systems/worktrees/main/productivity-tui", "main"},
+		{"deeper subdir", "/Users/n8/natb1/commons.systems/worktrees/main/internal/app", "main"},
+		{"no worktrees ancestor (worktrees-like)", "/Users/n8/worktrees-like-but-not/foo", "foo"},
+		{"no worktrees ancestor (plain)", "/Users/n8/projects/myrepo", "myrepo"},
+		{"root", "/", "/"},
+		{"single-component-no-slash", "foo", "foo"},
+		{"single-component-with-slash", "/foo", "/foo"},
+		{"empty", "", ""},
+		{"worktrees at leaf", "/a/b/worktrees", "worktrees"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := displayName(tc.path)
+			if got != tc.want {
+				t.Errorf("displayName(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestViewEmptySessions(t *testing.T) {
 	m := New("/dev/null", "/dev/null")
 	m.width = 80
