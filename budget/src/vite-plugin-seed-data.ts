@@ -1,228 +1,64 @@
 import type { Plugin } from "vite";
 import { findCollection } from "../seeds/find-collection.js";
-import type {
-  TransactionSeedData,
-  BudgetSeedData,
-  BudgetPeriodSeedData,
-  RuleSeedData,
-  NormalizationRuleSeedData,
-  StatementSeedData,
-  StatementItemSeedData,
-  ReconciliationNoteSeedData,
-  WeeklyAggregateSeedData,
-} from "../seeds/firestore.js";
-import type {
-  SeedData,
-  SeedTransaction,
-  SeedBudget,
-  SeedBudgetOverride,
-  SeedBudgetPeriod,
-  SeedRule,
-  SeedNormalizationRule,
-  SeedStatement,
-  SeedStatementItem,
-  SeedReconciliationNote,
-  SeedWeeklyAggregate,
-} from "virtual:budget-seed-data";
+import type { SeedData } from "virtual:budget-seed-data";
+import { serializeSeedTransaction } from "./entities/transaction.js";
+import type { TransactionSeedData } from "../seeds/firestore.js";
+import { serializeSeedStatement } from "./entities/statement.js";
+import type { StatementSeedData } from "./entities/statement.js";
+import { serializeSeedStatementItem } from "./entities/statement-item.js";
+import type { StatementItemSeedData } from "./entities/statement-item.js";
+import { serializeSeedReconciliationNote } from "./entities/reconciliation-note.js";
+import type { ReconciliationNoteSeedData } from "./entities/reconciliation-note.js";
+import { serializeSeedBudget } from "./entities/budget.js";
+import type { BudgetSeedData } from "./entities/budget.js";
+import { serializeSeedBudgetPeriod } from "./entities/budget-period.js";
+import type { BudgetPeriodSeedData } from "./entities/budget-period.js";
+import { serializeSeedRule } from "./entities/rule.js";
+import type { RuleSeedData } from "./entities/rule.js";
+import { serializeSeedNormalizationRule } from "./entities/normalization-rule.js";
+import type { NormalizationRuleSeedData } from "./entities/normalization-rule.js";
+import { serializeSeedWeeklyAggregate } from "./entities/weekly-aggregate.js";
+import type { WeeklyAggregateSeedData } from "./entities/weekly-aggregate.js";
 
 const VIRTUAL_MODULE_ID = "virtual:budget-seed-data";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
 
-function toMs(d: unknown): number | null {
-  if (d instanceof Date) return d.getTime();
-  if (d != null && typeof d === "object" && "toMillis" in d) return (d as { toMillis(): number }).toMillis();
-  return null;
-}
-
-function requireMs(d: unknown, field: string): number {
-  const ms = toMs(d);
-  if (ms === null) throw new Error(`Expected Date or Timestamp for ${field}, got ${d}`);
-  return ms;
-}
-
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") throw new Error(`Expected string for ${field}, got ${typeof value}`);
-  return value;
-}
-
-function requireNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`Expected finite number for ${field}, got ${value}`);
-  return value;
-}
-
-function requireNonNegativeNumber(value: unknown, field: string): number {
-  const n = requireNumber(value, field);
-  if (n < 0) throw new Error(`Expected non-negative number for ${field}, got ${n}`);
-  return n;
-}
-
-function requireReimbursement(value: unknown): number {
-  const n = requireNumber(value, "reimbursement");
-  if (n < 0 || n > 100) throw new RangeError(`reimbursement must be between 0 and 100, got ${n}`);
-  return n;
-}
-
-function requireAllowancePeriod(value: unknown): "weekly" | "monthly" | "quarterly" {
-  if (value === "weekly" || value === "monthly" || value === "quarterly") return value;
-  throw new Error(`Expected allowancePeriod to be "weekly" | "monthly" | "quarterly", got ${JSON.stringify(value)}`);
-}
-
-function requireRollover(value: unknown): "none" | "debt" | "balance" {
-  if (value === "none" || value === "debt" || value === "balance") return value;
-  throw new Error(`Expected rollover to be "none" | "debt" | "balance", got ${JSON.stringify(value)}`);
-}
-
-function requireRuleType(value: unknown): "categorization" | "budget_assignment" {
-  if (value === "categorization" || value === "budget_assignment") return value;
-  throw new Error(`Expected rule type to be "categorization" | "budget_assignment", got ${JSON.stringify(value)}`);
-}
-
 export function serializeSeedData(): SeedData {
-  const transactions: SeedTransaction[] = findCollection("seed-transactions").map(({ id, data: raw }) => {
-    const d = raw as unknown as TransactionSeedData;
-    return {
-      id,
-      institution: requireString(d.institution, "institution"),
-      account: requireString(d.account, "account"),
-      description: requireString(d.description, "description"),
-      amount: requireNumber(d.amount, "amount"),
-      note: requireString(d.note, "note"),
-      category: requireString(d.category, "category"),
-      reimbursement: requireReimbursement(d.reimbursement),
-      budget: d.budget ?? null,
-      timestampMs: toMs(d.timestamp),
-      statementId: d.statementId ?? null,
-      statementItemId: d.statementItemId ?? null,
-      normalizedId: d.normalizedId,
-      normalizedPrimary: d.normalizedPrimary,
-      normalizedDescription: d.normalizedDescription,
-      virtual: d.virtual,
-    };
-  });
+  const transactions = findCollection("seed-transactions").map(({ id, data: raw }) =>
+    serializeSeedTransaction(raw as unknown as TransactionSeedData, id)
+  );
 
-  const budgets: SeedBudget[] = findCollection("seed-budgets").map(({ id, data: raw }) => {
-    const d = raw as unknown as BudgetSeedData;
-    const name = requireString(d.name, "name");
-    if (!name) throw new Error("Budget name must be non-empty");
-    const overrides: SeedBudgetOverride[] = Array.isArray(raw.overrides)
-      ? (raw.overrides as { date: unknown; balance: number }[]).map((o) => ({
-          dateMs: requireMs(o.date, "overrides.date"),
-          balance: requireNumber(o.balance, "overrides.balance"),
-        }))
-      : [];
-    return {
-      id,
-      name,
-      allowance: requireNonNegativeNumber(d.allowance, "allowance"),
-      allowancePeriod: requireAllowancePeriod(d.allowancePeriod),
-      rollover: requireRollover(d.rollover),
-      overrides,
-    };
-  });
+  const budgets = findCollection("seed-budgets").map(({ id, data: raw }) =>
+    serializeSeedBudget(raw as unknown as BudgetSeedData, id)
+  );
 
-  const budgetPeriods: SeedBudgetPeriod[] = findCollection("seed-budget-periods").map(({ id, data: raw }) => {
-    const d = raw as unknown as BudgetPeriodSeedData;
-    return {
-      id,
-      budgetId: d.budgetId,
-      periodStartMs: requireMs(d.periodStart, "periodStart"),
-      periodEndMs: requireMs(d.periodEnd, "periodEnd"),
-      total: requireNumber(d.total, "total"),
-      count: requireNumber(d.count, "count"),
-      categoryBreakdown: d.categoryBreakdown,
-    };
-  });
+  const budgetPeriods = findCollection("seed-budget-periods").map(({ id, data: raw }) =>
+    serializeSeedBudgetPeriod(raw as unknown as BudgetPeriodSeedData, id)
+  );
 
-  const rules: SeedRule[] = findCollection("seed-rules").map(({ id, data: raw }) => {
-    const d = raw as unknown as RuleSeedData;
-    return {
-      id,
-      type: requireRuleType(d.type),
-      pattern: requireString(d.pattern, "pattern"),
-      target: requireString(d.target, "target"),
-      priority: requireNumber(d.priority, "priority"),
-      institution: d.institution,
-      account: d.account,
-      minAmount: d.minAmount,
-      maxAmount: d.maxAmount,
-      excludeCategory: d.excludeCategory,
-      matchCategory: d.matchCategory,
-    };
-  });
+  const rules = findCollection("seed-rules").map(({ id, data: raw }) =>
+    serializeSeedRule(raw as unknown as RuleSeedData, id)
+  );
 
-  const normalizationRules: SeedNormalizationRule[] = findCollection("seed-normalization-rules").map(({ id, data: raw }) => {
-    const d = raw as unknown as NormalizationRuleSeedData;
-    return {
-      id,
-      pattern: requireString(d.pattern, "pattern"),
-      patternType: d.patternType,
-      canonicalDescription: requireString(d.canonicalDescription, "canonicalDescription"),
-      dateWindowDays: d.dateWindowDays,
-      institution: d.institution,
-      account: d.account,
-      priority: requireNumber(d.priority, "priority"),
-    };
-  });
+  const normalizationRules = findCollection("seed-normalization-rules").map(({ id, data: raw }) =>
+    serializeSeedNormalizationRule(raw as unknown as NormalizationRuleSeedData, id)
+  );
 
-  const statements: SeedStatement[] = findCollection("seed-statements").map(({ id, data: raw }) => {
-    const d = raw as unknown as StatementSeedData;
-    return {
-      id,
-      statementId: requireString(d.statementId, "statementId"),
-      institution: requireString(d.institution, "institution"),
-      account: requireString(d.account, "account"),
-      balance: requireNumber(d.balance, "balance"),
-      period: requireString(d.period, "period"),
-      balanceDate: d.balanceDate ?? null,
-      lastTransactionDateMs: toMs(d.lastTransactionDate),
-      virtual: d.virtual,
-    };
-  });
+  const statements = findCollection("seed-statements").map(({ id, data: raw }) =>
+    serializeSeedStatement(raw as unknown as StatementSeedData, id)
+  );
 
-  const weeklyAggregates: SeedWeeklyAggregate[] = findCollection("seed-weekly-aggregates").map(({ id, data: raw }) => {
-    const d = raw as unknown as WeeklyAggregateSeedData;
-    return {
-      id,
-      weekStartMs: requireMs(d.weekStart, "weekStart"),
-      creditTotal: requireNumber(d.creditTotal, "creditTotal"),
-      unbudgetedTotal: requireNumber(d.unbudgetedTotal, "unbudgetedTotal"),
-    };
-  });
+  const weeklyAggregates = findCollection("seed-weekly-aggregates").map(({ id, data: raw }) =>
+    serializeSeedWeeklyAggregate(raw as unknown as WeeklyAggregateSeedData, id)
+  );
 
-  const statementItems: SeedStatementItem[] = findCollection("seed-statement-items").map(({ id, data: raw }) => {
-    const d = raw as unknown as StatementItemSeedData;
-    return {
-      id,
-      statementItemId: requireString(d.statementItemId, "statementItemId"),
-      statementId: requireString(d.statementId, "statementId"),
-      institution: requireString(d.institution, "institution"),
-      account: requireString(d.account, "account"),
-      period: requireString(d.period, "period"),
-      amount: requireNumber(d.amount, "amount"),
-      timestampMs: requireMs(d.timestamp, "timestamp"),
-      description: requireString(d.description, "description"),
-      fitid: requireString(d.fitid, "fitid"),
-    };
-  });
+  const statementItems = findCollection("seed-statement-items").map(({ id, data: raw }) =>
+    serializeSeedStatementItem(raw as unknown as StatementItemSeedData, id)
+  );
 
-  const reconciliationNotes: SeedReconciliationNote[] = findCollection("seed-reconciliation-notes").map(({ id, data: raw }) => {
-    const d = raw as unknown as ReconciliationNoteSeedData;
-    const entityType = d.entityType === "transaction" || d.entityType === "statementItem"
-      ? d.entityType
-      : (() => { throw new Error(`Invalid reconciliation entityType: ${d.entityType}`); })();
-    const classification = d.classification === "timing" || d.classification === "missing_entry" || d.classification === "discrepancy"
-      ? d.classification
-      : (() => { throw new Error(`Invalid reconciliation classification: ${d.classification}`); })();
-    return {
-      id,
-      entityType,
-      entityId: requireString(d.entityId, "entityId"),
-      classification,
-      note: requireString(d.note, "note"),
-      updatedAtMs: requireMs(d.updatedAt, "updatedAt"),
-      updatedBy: requireString(d.updatedBy, "updatedBy"),
-    };
-  });
+  const reconciliationNotes = findCollection("seed-reconciliation-notes").map(({ id, data: raw }) =>
+    serializeSeedReconciliationNote(raw as unknown as ReconciliationNoteSeedData, id)
+  );
 
   return {
     transactions,
