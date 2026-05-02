@@ -4,6 +4,10 @@
 # Usage: upload-media.sh <file> <title> <mediaType> [--public | --group <groupId>]
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../../scaffolding/scripts/upload-media-core.sh
+source "$SCRIPT_DIR/../../scaffolding/scripts/upload-media-core.sh"
+
 BUCKET="gs://commons-systems.firebasestorage.app"
 PROJECT="commons-systems"
 COLLECTION_PATH="print/prod/media"
@@ -25,12 +29,7 @@ EOF
   exit 1
 }
 
-for cmd in gsutil gcloud curl jq; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "error: required command not found: $cmd" >&2
-    exit 1
-  fi
-done
+core::require_tools gsutil gcloud curl jq
 
 if [ $# -lt 3 ]; then
   usage
@@ -87,77 +86,31 @@ else
   usage
 fi
 
-# Get auth token early — needed for both group lookup and Firestore doc creation
-if ! TOKEN="$(gcloud auth print-access-token 2>&1)"; then
-  echo "error: failed to get auth token. Run 'gcloud auth login' first." >&2
-  exit 1
-fi
+TOKEN="$(core::get_auth_token)"
 
-# Resolve group members if in group mode
-EMAILS=()
+declare -a EMAILS=()
 if [ -n "$GROUP_ID" ]; then
-  GROUPS_URL="https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${GROUPS_PATH}/${GROUP_ID}"
-  GROUP_RESP_FILE=$(mktemp)
-  trap 'rm -f "$GROUP_RESP_FILE"' EXIT
-  GROUP_HTTP=$(curl -sS -o "$GROUP_RESP_FILE" -w '%{http_code}' "$GROUPS_URL" \
-    --config <(echo "header = \"Authorization: Bearer ${TOKEN}\""))
-
-  if [ "$GROUP_HTTP" -lt 200 ] || [ "$GROUP_HTTP" -ge 300 ]; then
-    echo "error: group '${GROUP_ID}' not found (HTTP ${GROUP_HTTP})" >&2
-    exit 1
-  fi
-
-  GROUP_DOC=$(cat "$GROUP_RESP_FILE")
-  rm -f "$GROUP_RESP_FILE"
-  trap - EXIT
-
-  MEMBER_LIST=$(echo "$GROUP_DOC" | jq -r '.fields.members.arrayValue.values[]?.stringValue // empty')
-  if [ -z "$MEMBER_LIST" ]; then
-    echo "error: group '${GROUP_ID}' has no members" >&2
-    exit 1
-  fi
-
-  while IFS= read -r email; do
-    EMAILS+=("$email")
-  done <<< "$MEMBER_LIST"
+  # Use command substitution (not process substitution) so a non-zero exit
+  # inside core::lookup_group_members propagates to this script via set -e.
+  # Process substitution would mask the failure: mapfile would return 0 and
+  # leave EMAILS empty, hiding the error.
+  MEMBER_LIST="$(core::lookup_group_members "$PROJECT" "$GROUPS_PATH" "$GROUP_ID" "$TOKEN")"
+  mapfile -t EMAILS <<< "$MEMBER_LIST"
 fi
 
 FILENAME="$(basename "$FILE_PATH")"
 GCS_DEST="${BUCKET}/${COLLECTION_PATH}/${FILENAME}"
 ADDED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-# Check for existing object at destination
-if STAT_OUTPUT=$(gsutil stat "$GCS_DEST" 2>&1); then
-  echo "error: object already exists at ${GCS_DEST}" >&2
-  echo "Rename the file or remove the existing object: gsutil rm ${GCS_DEST}" >&2
-  exit 1
-fi
-if ! echo "$STAT_OUTPUT" | grep -q "No URLs matched"; then
-  echo "error: could not verify object status at ${GCS_DEST}:" >&2
-  echo "$STAT_OUTPUT" >&2
-  exit 1
-fi
+core::check_gcs_no_collision "$GCS_DEST"
 
-# Upload file to GCS with metadata
 echo "Uploading ${FILENAME} to GCS..."
-META_ARGS=()
-if [ "$PUBLIC" = true ]; then
-  META_ARGS+=(-h "x-goog-meta-publicDomain:true")
-else
-  META_ARGS+=(-h "x-goog-meta-publicDomain:false")
-  META_ARGS+=(-h "x-goog-meta-groupId:${GROUP_ID}")
-fi
-for i in "${!EMAILS[@]}"; do
-  META_ARGS+=(-h "x-goog-meta-member_${i}:${EMAILS[$i]}")
-done
-gsutil "${META_ARGS[@]}" cp "$FILE_PATH" "$GCS_DEST"
+core::upload_to_gcs "$GCS_DEST" "$FILE_PATH" "$PUBLIC" "$GROUP_ID" EMAILS
 
-# Verify GCS upload
 echo ""
 echo "=== GCS Object ==="
 gsutil stat "$GCS_DEST"
 
-# Build Firestore document JSON
 echo ""
 echo "Creating Firestore document..."
 
@@ -197,32 +150,8 @@ FIRESTORE_BODY=$(jq -n \
     }
   }')
 
-FIRESTORE_URL="https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${COLLECTION_PATH}"
-
-RESP_FILE=$(mktemp)
-trap 'rm -f "$RESP_FILE"' EXIT
-HTTP_CODE=$(curl -sS -o "$RESP_FILE" -w '%{http_code}' -X POST "$FIRESTORE_URL" \
-  --config <(echo "header = \"Authorization: Bearer ${TOKEN}\"") \
-  -H "Content-Type: application/json" \
-  -d "$FIRESTORE_BODY")
-
-if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-  echo "error: Firestore API returned HTTP ${HTTP_CODE}:" >&2
-  cat "$RESP_FILE" >&2
-  echo "" >&2
-  echo "The file was uploaded to GCS at: ${GCS_DEST}" >&2
-  echo "To clean up: gsutil rm ${GCS_DEST}" >&2
-  exit 1
-fi
-
-RESPONSE=$(cat "$RESP_FILE")
-
-DOC_ID=$(echo "$RESPONSE" | jq -r '.name | split("/") | last')
-if [ -z "$DOC_ID" ] || [ "$DOC_ID" = "null" ]; then
-  echo "error: unexpected Firestore response — could not extract document ID" >&2
-  echo "Raw response: $RESPONSE" >&2
-  exit 1
-fi
+RESPONSE=$(core::create_firestore_doc "$PROJECT" "$COLLECTION_PATH" "$TOKEN" "$FIRESTORE_BODY" "$GCS_DEST")
+DOC_ID=$(core::extract_doc_id "$RESPONSE")
 
 echo ""
 echo "=== Firestore Document ==="
