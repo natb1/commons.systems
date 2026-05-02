@@ -32,18 +32,37 @@ func main() {
 	firestoreFlag := flag.Bool("firestore", false, "Write to Firestore (required when --output is not set)")
 	inputPath := flag.String("input", "", "Read rules/budgets/transactions from existing JSON file")
 	keychainFlag := flag.String("keychain", "", "macOS Keychain account name for encrypt/decrypt password")
+	reportPath := flag.String("report", "", "Write JSON inspection report instead of merging. Requires --allow-uncategorized; --output is ignored.")
+	allowUncategorized := flag.Bool("allow-uncategorized", false, "Allow report mode to emit uncategorized transactions as data instead of erroring. Use only with --report.")
 
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--keychain <name>] [--env <env>] [--dry-run]")
+		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--keychain <name>] [--env <env>] [--dry-run] [--report <path> --allow-uncategorized]")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if *reportPath != "" && !*allowUncategorized {
+		fmt.Fprintln(os.Stderr, "Error: --report requires --allow-uncategorized")
+		os.Exit(1)
+	}
+	if *allowUncategorized && *reportPath == "" {
+		fmt.Fprintln(os.Stderr, "Error: --allow-uncategorized requires --report")
+		os.Exit(1)
+	}
+	if *reportPath != "" && *inputPath == "" {
+		fmt.Fprintln(os.Stderr, "Error: --report requires --input")
+		os.Exit(1)
+	}
+	if *reportPath != "" && *dir == "" {
+		fmt.Fprintln(os.Stderr, "Error: --report requires --dir")
+		os.Exit(1)
+	}
 
 	if *inputPath != "" && *firestoreFlag {
 		fmt.Fprintln(os.Stderr, "Error: --input and --firestore are mutually exclusive")
 		os.Exit(1)
 	}
-	if *inputPath != "" && *outputPath == "" {
+	if *inputPath != "" && *outputPath == "" && *reportPath == "" {
 		fmt.Fprintln(os.Stderr, "Error: --input requires --output")
 		os.Exit(1)
 	}
@@ -58,6 +77,14 @@ func main() {
 		}
 		password = pw
 		log.Printf("retrieved password from keychain (account: %s)", *keychainFlag)
+	}
+
+	if *reportPath != "" {
+		if err := runReport(fileOpts{path: *inputPath, password: password}, *dir, *reportPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	if *inputPath != "" && *dir != "" {
@@ -1042,6 +1069,76 @@ func parseAndClassify(input *export.Output, dir string) (
 	}
 
 	return
+}
+
+// runReport parses statement files, classifies new transactions against input rules,
+// and writes a JSON inspection report. It exits 0 even when uncategorized transactions
+// exist — the caller decides how to handle them. The encrypted output write is skipped;
+// only the report file is written.
+func runReport(input fileOpts, dir, reportPath string) error {
+	inp, err := export.ReadFile(input.path, input.password)
+	if err != nil {
+		return fmt.Errorf("reading input: %w", err)
+	}
+	if inp.Version != 1 {
+		return fmt.Errorf("unsupported input version %d (expected 1)", inp.Version)
+	}
+
+	_, uncategorized, summary, err := parseAndClassify(&inp, dir)
+	if err != nil {
+		return err
+	}
+
+	report := struct {
+		NewStatements   []NewStatement        `json:"new_statements"`
+		Uncategorized   []UncategorizedTxn    `json:"uncategorized"`
+		NewTransactions []NewTransactionEntry `json:"new_transactions"`
+	}{
+		NewStatements:   summary.NewStatements,
+		Uncategorized:   uncategorized,
+		NewTransactions: summary.NewTransactions,
+	}
+
+	// Ensure nil slices marshal as [] not null
+	if report.NewStatements == nil {
+		report.NewStatements = []NewStatement{}
+	}
+	if report.Uncategorized == nil {
+		report.Uncategorized = []UncategorizedTxn{}
+	}
+	if report.NewTransactions == nil {
+		report.NewTransactions = []NewTransactionEntry{}
+	}
+
+	b, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling report: %w", err)
+	}
+	b = append(b, '\n')
+
+	rdir := filepath.Dir(reportPath)
+	tmp, err := os.CreateTemp(rdir, ".budget-etl-report-*.json")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("writing temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("closing temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, reportPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("renaming temp file: %w", err)
+	}
+
+	log.Printf("wrote report: %d new statements, %d uncategorized, %d new transactions to %s",
+		len(summary.NewStatements), len(uncategorized), len(summary.NewTransactions), reportPath)
+	return nil
 }
 
 // runMerge combines new transactions from statement files (--dir) with existing
