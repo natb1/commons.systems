@@ -32,18 +32,37 @@ func main() {
 	firestoreFlag := flag.Bool("firestore", false, "Write to Firestore (required when --output is not set)")
 	inputPath := flag.String("input", "", "Read rules/budgets/transactions from existing JSON file")
 	keychainFlag := flag.String("keychain", "", "macOS Keychain account name for encrypt/decrypt password")
+	reportPath := flag.String("report", "", "Write JSON inspection report instead of merging. Requires --allow-uncategorized; --output is ignored.")
+	allowUncategorized := flag.Bool("allow-uncategorized", false, "Allow report mode to emit uncategorized transactions as data instead of erroring. Use only with --report.")
 
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--keychain <name>] [--env <env>] [--dry-run]")
+		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--keychain <name>] [--env <env>] [--dry-run] [--report <path> --allow-uncategorized]")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if *reportPath != "" && !*allowUncategorized {
+		fmt.Fprintln(os.Stderr, "Error: --report requires --allow-uncategorized")
+		os.Exit(1)
+	}
+	if *allowUncategorized && *reportPath == "" {
+		fmt.Fprintln(os.Stderr, "Error: --allow-uncategorized requires --report")
+		os.Exit(1)
+	}
+	if *reportPath != "" && *inputPath == "" {
+		fmt.Fprintln(os.Stderr, "Error: --report requires --input")
+		os.Exit(1)
+	}
+	if *reportPath != "" && *dir == "" {
+		fmt.Fprintln(os.Stderr, "Error: --report requires --dir")
+		os.Exit(1)
+	}
 
 	if *inputPath != "" && *firestoreFlag {
 		fmt.Fprintln(os.Stderr, "Error: --input and --firestore are mutually exclusive")
 		os.Exit(1)
 	}
-	if *inputPath != "" && *outputPath == "" {
+	if *inputPath != "" && *outputPath == "" && *reportPath == "" {
 		fmt.Fprintln(os.Stderr, "Error: --input requires --output")
 		os.Exit(1)
 	}
@@ -58,6 +77,14 @@ func main() {
 		}
 		password = pw
 		log.Printf("retrieved password from keychain (account: %s)", *keychainFlag)
+	}
+
+	if *reportPath != "" {
+		if err := runReport(fileOpts{path: *inputPath, password: password}, *dir, *reportPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	if *inputPath != "" && *dir != "" {
@@ -256,8 +283,8 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 	}
 
 	// Apply categorization rules (error if <100% coverage)
-	if err := rules.ApplyCategorization(allTxns, ruleSet); err != nil {
-		return fmt.Errorf("categorization: %w", err)
+	if uncategorized := rules.ApplyCategorization(allTxns, ruleSet); len(uncategorized) > 0 {
+		return fmt.Errorf("categorization: %w", formatUncategorizedError(uncategorized))
 	}
 
 	// Apply budget assignment rules
@@ -487,8 +514,8 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	}
 
 	// Apply general categorization (skips transactions assigned by transaction-specific rules)
-	if err := rules.ApplyCategorization(allTxns, ruleSet); err != nil {
-		return fmt.Errorf("categorization: %w", err)
+	if uncategorized := rules.ApplyCategorization(allTxns, ruleSet); len(uncategorized) > 0 {
+		return fmt.Errorf("categorization: %w", formatUncategorizedError(uncategorized))
 	}
 
 	// Apply general budget assignment (skips transactions assigned by transaction-specific rules)
@@ -818,6 +845,17 @@ func computeExportWeeklyAggregatesFromFull(fullTxns []store.FullTransaction) []e
 	return result
 }
 
+// formatUncategorizedError formats UncategorizedRecord entries into the standard
+// error message: "{N} uncategorized transactions:\n  {stmtID}/{txnID}: "{desc}"..."
+func formatUncategorizedError(records []rules.UncategorizedRecord) error {
+	msgs := make([]string, len(records))
+	for i, r := range records {
+		msgs[i] = fmt.Sprintf("%s/%s: %q", r.StatementID, r.TransactionID, r.Description)
+	}
+	return fmt.Errorf("%d uncategorized transactions:\n  %s",
+		len(records), strings.Join(msgs, "\n  "))
+}
+
 // writeOutputAndLog writes the export output to a file and logs a summary.
 func writeOutputAndLog(output fileOpts, out export.Output) error {
 	if err := export.WriteFile(output.path, out, output.password); err != nil {
@@ -838,6 +876,268 @@ func writeOutputAndLog(output fileOpts, out export.Output) error {
 	}
 	log.Printf("wrote %d transactions (%d categorized, %d budgeted, %d non-primary normalized), %d budget periods to %s",
 		len(out.Transactions), categorized, budgeted, normalized, len(out.BudgetPeriods), output.path)
+	return nil
+}
+
+type UncategorizedTxn struct {
+	Institution string  `json:"institution"`
+	Account     string  `json:"account"`
+	StatementID string  `json:"statement_id"`
+	FITID       string  `json:"fitid"`
+	DocID       string  `json:"doc_id"`
+	Date        string  `json:"date"`
+	Amount      float64 `json:"amount"`
+	Description string  `json:"description"`
+}
+
+type NewStatement struct {
+	Institution string    `json:"institution"`
+	Account     string    `json:"account"`
+	Period      string    `json:"period"`
+	TxnCount    int       `json:"txn_count"`
+	DateRange   [2]string `json:"date_range"`
+	Balance     float64   `json:"balance"`
+}
+
+type NewTransactionEntry struct {
+	Institution string  `json:"institution"`
+	Account     string  `json:"account"`
+	StatementID string  `json:"statement_id"`
+	FITID       string  `json:"fitid"`
+	DocID       string  `json:"doc_id"`
+	Date        string  `json:"date"`
+	Amount      float64 `json:"amount"`
+	Description string  `json:"description"`
+	Category    string  `json:"category"`
+	Budget      string  `json:"budget,omitempty"`
+}
+
+type StatementSummary struct {
+	NewStatements   []NewStatement        `json:"new_statements"`
+	NewTransactions []NewTransactionEntry `json:"new_transactions"`
+}
+
+// parseAndClassify discovers and parses statement files in dir, then identifies
+// transactions not already present in input. It applies rules to classify the
+// new transactions, collecting (rather than erroring on) uncategorized ones.
+// Returns the parsed files, uncategorized transaction details, a summary of new
+// statements and transactions, and any fatal error.
+func parseAndClassify(input *export.Output, dir string) (
+	parsed []parsedFile,
+	uncategorized []UncategorizedTxn,
+	summary StatementSummary,
+	err error,
+) {
+	files, ferr := parse.DiscoverFiles(dir)
+	if ferr != nil {
+		err = fmt.Errorf("discovering files in %s: %w", dir, ferr)
+		return
+	}
+	log.Printf("discovered %d statement files", len(files))
+
+	type fileResult struct {
+		sf     parse.StatementFile
+		result parse.ParseResult
+		err    error
+	}
+	ch := make(chan fileResult, len(files))
+	for _, sf := range files {
+		go func() {
+			result, perr := parse.ParseFile(sf.Path)
+			ch <- fileResult{sf: sf, result: result, err: perr}
+		}()
+	}
+
+	var skipped int
+	for range files {
+		r := <-ch
+		if r.err != nil {
+			err = r.err
+			return
+		}
+		if r.result.Skipped {
+			log.Printf("skipping %s: %s", r.sf.Path, r.result.SkipReason)
+			skipped++
+			continue
+		}
+		if inferred := r.result.InferPeriod(); inferred != "" {
+			r.sf.Period = inferred
+		} else {
+			log.Printf("could not infer period from document data for %s, using path-derived period %q", r.sf.Path, r.sf.Period)
+		}
+		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
+	}
+	log.Printf("parsed files: %d usable, %d skipped", len(parsed), skipped)
+
+	// Build set of doc IDs already in input
+	inputIDs := make(map[string]bool, len(input.Transactions))
+	for _, t := range input.Transactions {
+		inputIDs[t.ID] = true
+	}
+
+	// Build new (dir-only) transactions, deduplicating within dir
+	dirSeen := make(map[string]bool)
+	var newTxns []store.TransactionData
+	var newDocIDs []string
+
+	for _, pf := range parsed {
+		for _, t := range pf.result.Transactions {
+			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			if dirSeen[docID] || inputIDs[docID] {
+				continue
+			}
+			dirSeen[docID] = true
+			newTxns = append(newTxns, store.TransactionData{
+				Institution:   pf.sf.Institution,
+				Account:       pf.sf.Account,
+				Description:   t.Description,
+				Amount:        t.Amount,
+				Timestamp:     t.Date,
+				StatementID:   pf.sf.StatementID(),
+				TransactionID: t.TransactionID,
+			})
+			newDocIDs = append(newDocIDs, docID)
+		}
+	}
+
+	// Apply rules to new transactions
+	txnRules, generalExportRules := splitRules(input.Rules)
+	ruleSet, rerr := convertExportRules(generalExportRules)
+	if rerr != nil {
+		err = rerr
+		return
+	}
+	if aerr := applyTransactionRules(newTxns, newDocIDs, txnRules); aerr != nil {
+		err = aerr
+		return
+	}
+	uncatRecords := rules.ApplyCategorization(newTxns, ruleSet)
+	rules.ApplyBudgetAssignment(newTxns, ruleSet)
+
+	// Build UncategorizedTxn list
+	for _, rec := range uncatRecords {
+		txn := newTxns[rec.Index]
+		uncategorized = append(uncategorized, UncategorizedTxn{
+			Institution: txn.Institution,
+			Account:     txn.Account,
+			StatementID: txn.StatementID,
+			FITID:       txn.TransactionID,
+			DocID:       newDocIDs[rec.Index],
+			Date:        txn.Timestamp.Format("2006-01-02"),
+			Amount:      store.DollarAmount(txn.Amount),
+			Description: txn.Description,
+		})
+	}
+
+	// Build NewStatements summary
+	for _, pf := range parsed {
+		var first, last string
+		for _, t := range pf.result.Transactions {
+			d := t.Date.Format("2006-01-02")
+			if first == "" || d < first {
+				first = d
+			}
+			if last == "" || d > last {
+				last = d
+			}
+		}
+		summary.NewStatements = append(summary.NewStatements, NewStatement{
+			Institution: pf.sf.Institution,
+			Account:     pf.sf.Account,
+			Period:      pf.sf.Period,
+			TxnCount:    len(pf.result.Transactions),
+			DateRange:   [2]string{first, last},
+			Balance:     store.DollarAmount(pf.result.Balance),
+		})
+	}
+
+	// Build NewTransactions summary
+	for i, txn := range newTxns {
+		entry := NewTransactionEntry{
+			Institution: txn.Institution,
+			Account:     txn.Account,
+			StatementID: txn.StatementID,
+			FITID:       txn.TransactionID,
+			DocID:       newDocIDs[i],
+			Date:        txn.Timestamp.Format("2006-01-02"),
+			Amount:      store.DollarAmount(txn.Amount),
+			Description: txn.Description,
+			Category:    txn.Category,
+			Budget:      txn.Budget,
+		}
+		summary.NewTransactions = append(summary.NewTransactions, entry)
+	}
+
+	return
+}
+
+// runReport parses statement files, classifies new transactions against input rules,
+// and writes a JSON inspection report. It exits 0 even when uncategorized transactions
+// exist — the caller decides how to handle them. The encrypted output write is skipped;
+// only the report file is written.
+func runReport(input fileOpts, dir, reportPath string) error {
+	inp, err := export.ReadFile(input.path, input.password)
+	if err != nil {
+		return fmt.Errorf("reading input: %w", err)
+	}
+	if inp.Version != 1 {
+		return fmt.Errorf("unsupported input version %d (expected 1)", inp.Version)
+	}
+
+	_, uncategorized, summary, err := parseAndClassify(&inp, dir)
+	if err != nil {
+		return err
+	}
+
+	report := struct {
+		NewStatements   []NewStatement        `json:"new_statements"`
+		Uncategorized   []UncategorizedTxn    `json:"uncategorized"`
+		NewTransactions []NewTransactionEntry `json:"new_transactions"`
+	}{
+		NewStatements:   summary.NewStatements,
+		Uncategorized:   uncategorized,
+		NewTransactions: summary.NewTransactions,
+	}
+
+	// Ensure nil slices marshal as [] not null
+	if report.NewStatements == nil {
+		report.NewStatements = []NewStatement{}
+	}
+	if report.Uncategorized == nil {
+		report.Uncategorized = []UncategorizedTxn{}
+	}
+	if report.NewTransactions == nil {
+		report.NewTransactions = []NewTransactionEntry{}
+	}
+
+	b, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling report: %w", err)
+	}
+	b = append(b, '\n')
+
+	rdir := filepath.Dir(reportPath)
+	tmp, err := os.CreateTemp(rdir, ".budget-etl-report-*.json")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("writing temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("closing temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, reportPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("renaming temp file: %w", err)
+	}
+
+	log.Printf("wrote report: %d new statements, %d uncategorized, %d new transactions to %s",
+		len(summary.NewStatements), len(uncategorized), len(summary.NewTransactions), reportPath)
 	return nil
 }
 
@@ -865,50 +1165,22 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		return fmt.Errorf("--group is required when input file has no groupName")
 	}
 
-	// Parse statements from dir
-	files, err := parse.DiscoverFiles(dir)
+	// Parse and classify new (dir-only) transactions
+	parsed, uncatTxns, _, err := parseAndClassify(&inp, dir)
 	if err != nil {
-		return fmt.Errorf("discovering files in %s: %w", dir, err)
+		return err
 	}
-	log.Printf("discovered %d statement files", len(files))
-
-	type fileResult struct {
-		sf     parse.StatementFile
-		result parse.ParseResult
-		err    error
-	}
-	ch := make(chan fileResult, len(files))
-	for _, sf := range files {
-		go func() {
-			result, err := parse.ParseFile(sf.Path)
-			ch <- fileResult{sf: sf, result: result, err: err}
-		}()
-	}
-
-	var parsed []parsedFile
-	var totalTxns int
-	var skipped int
-	for range files {
-		r := <-ch
-		if r.err != nil {
-			return r.err
+	if len(uncatTxns) > 0 {
+		recs := make([]rules.UncategorizedRecord, len(uncatTxns))
+		for i, u := range uncatTxns {
+			recs[i] = rules.UncategorizedRecord{
+				StatementID:   u.StatementID,
+				TransactionID: u.FITID,
+				Description:   u.Description,
+			}
 		}
-		if r.result.Skipped {
-			log.Printf("skipping %s: %s", r.sf.Path, r.result.SkipReason)
-			skipped++
-			continue
-		}
-		// Override path-derived period with document-inferred period before any
-		// downstream use of sf (StatementID, buildStatementData, etc.).
-		if inferred := r.result.InferPeriod(); inferred != "" {
-			r.sf.Period = inferred
-		} else {
-			log.Printf("could not infer period from document data for %s, using path-derived period %q", r.sf.Path, r.sf.Period)
-		}
-		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
-		totalTxns += len(r.result.Transactions)
+		return fmt.Errorf("categorization: %w", formatUncategorizedError(recs))
 	}
-	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
 	// Build statements from dir-parsed files (maxDates computed later after merge)
 	dirStmts := buildStatementData(parsed, nil)
@@ -921,7 +1193,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	}
 
 	// Build TransactionData from dir, tracking which input IDs are covered
-	dirDocIDs := make(map[string]bool, totalTxns)
+	dirDocIDs := make(map[string]bool)
 	editsMap := make(map[string]txnEdits)
 
 	var allTxns []store.TransactionData
@@ -985,7 +1257,8 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	log.Printf("merged: %d from dir, %d input-only, %d total",
 		len(dirDocIDs), len(allTxns)-len(dirDocIDs), len(allTxns))
 
-	// Split rules and apply
+	// Split rules and apply to merged set (input txns start with empty Category/Budget
+	// so rules re-apply to honor any rule changes).
 	txnRules, generalExportRules := splitRules(inp.Rules)
 	ruleSet, err := convertExportRules(generalExportRules)
 	if err != nil {
@@ -996,8 +1269,8 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		return err
 	}
 
-	if err := rules.ApplyCategorization(allTxns, ruleSet); err != nil {
-		return fmt.Errorf("categorization: %w", err)
+	if uncategorized := rules.ApplyCategorization(allTxns, ruleSet); len(uncategorized) > 0 {
+		return fmt.Errorf("categorization: %w", formatUncategorizedError(uncategorized))
 	}
 	rules.ApplyBudgetAssignment(allTxns, ruleSet)
 

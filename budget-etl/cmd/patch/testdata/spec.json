@@ -1,0 +1,26 @@
+{
+  "remove": {
+    "by_id": [],
+    "by_predicate": []
+  },
+  "add": [
+    {
+      "id": "cat-grocery",
+      "type": "categorization",
+      "pattern": "GROCERY STORE",
+      "target": "Food:Groceries",
+      "priority": 10,
+      "institution": "",
+      "account": ""
+    },
+    {
+      "id": "cat-payment",
+      "type": "categorization",
+      "pattern": "PAYMENT RECEIVED",
+      "target": "Income:Payment",
+      "priority": 10,
+      "institution": "",
+      "account": ""
+    }
+  ]
+}
