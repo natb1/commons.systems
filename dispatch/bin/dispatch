@@ -39,55 +39,45 @@ make_slug() {
 # Diagnose the worktree's resume mode against ground truth (open PR, commits
 # ahead of origin/main, merged PR). Echoes one of: fresh | audit-and-pr |
 # verify | done. For `done`, also echoes the PR number on a second line.
-# Args: $1 = branch
+# Args: $1 = branch, $2 = state file path (absolute), $3 = issue num
 diagnose_state() {
-  local branch="$1"
-  local gh_output pr_state pr_number rc commits_ahead
+  local branch="$1" state_file="$2" issue_num="$3"
+  local pr_json pr_state pr_number stderr_file rc commits_ahead
 
-  git fetch --quiet origin main 2>/dev/null || \
+  git fetch --quiet origin main || \
     echo "[dispatch] warning: git fetch origin main failed; using local refs" >&2
 
+  stderr_file=$(mktemp)
   set +e
-  gh_output=$(gh pr view "$branch" --json number,state 2>&1)
+  pr_json=$(gh pr view "$branch" --json number,state 2>"$stderr_file")
   rc=$?
   set -e
-
-  if [[ $rc -eq 0 ]]; then
-    { read -r pr_state; read -r pr_number; } < <(jq -r '.state, .number' <<<"$gh_output")
-    case "$pr_state" in
-      MERGED)
-        echo "done"
-        echo "$pr_number"
-        return 0
-        ;;
-      OPEN)
-        echo "verify"
-        return 0
-        ;;
-      CLOSED)
-        # Closed-not-merged PR: user abandoned this PR. Fall through to the
-        # no-PR logic below — fresh or audit-and-pr based on commits ahead.
-        ;;
-      *)
-        echo "error: gh pr view returned unexpected state: '$pr_state'" >&2
-        return 1
-        ;;
-    esac
-  elif [[ "$gh_output" != *"no pull requests found"* ]]; then
-    echo "$gh_output" >&2
+  if [[ $rc -ne 0 ]]; then
+    if grep -q "no pull requests found" "$stderr_file"; then
+      rm -f "$stderr_file"
+      commits_ahead=$(git rev-list --count origin/main..HEAD)
+      if [[ "$commits_ahead" -eq 0 ]]; then
+        echo "fresh"
+      else
+        echo "audit-and-pr"
+      fi
+      return 0
+    fi
+    cat "$stderr_file" >&2
+    rm -f "$stderr_file"
     return 1
   fi
+  rm -f "$stderr_file"
 
-  # dispatch runs from the project root with HEAD on main, so we use the
-  # branch ref explicitly. On a truly fresh issue the ref doesn't exist yet
-  # — rev-list errors silently → 0.
-  commits_ahead=$(git rev-list --count "origin/main..$branch" 2>/dev/null || echo 0)
-
-  if [[ "$commits_ahead" -eq 0 ]]; then
-    echo "fresh"
+  pr_state=$(jq -r '.state' <<<"$pr_json")
+  pr_number=$(jq -r '.number' <<<"$pr_json")
+  if [[ "$pr_state" == "MERGED" ]]; then
+    echo "done"
+    echo "$pr_number"
   else
-    echo "audit-and-pr"
+    echo "verify"
   fi
+  return 0
 }
 
 # --- reconcile_phase_signal -------------------------------------------------
@@ -113,17 +103,20 @@ reconcile_phase_signal() {
     read_script="$repo_root/.claude/skills/ref-pr-workflow/scripts/issue-state-read"
     write_script="$repo_root/.claude/skills/ref-pr-workflow/scripts/issue-state-write"
     set +e
-    remote_json=$("$read_script" "$issue_num" 2>/dev/null)
+    remote_json=$("$read_script" "$issue_num")
     rc=$?
     set -e
     if [[ $rc -ne 0 ]]; then
+      echo "[dispatch] warning: issue-state-read exit $rc; reconciling local cache only" >&2
       reconcile_phase_signal local-only "$state_file" "$issue_num"
       return 0
     fi
-    remote_json=$(jq 'del(.phase_signal)' <<<"$remote_json")
-    "$write_script" "$issue_num" <<<"$remote_json"
-    # issue-state-write mirrors only into the cache resolved via its CWD's
-    # git toplevel (the project root), not the worktree. Clear the worktree
+    if jq -e 'has("phase_signal")' <<<"$remote_json" >/dev/null; then
+      remote_json=$(jq 'del(.phase_signal)' <<<"$remote_json")
+      "$write_script" "$issue_num" <<<"$remote_json"
+    fi
+    # issue-state-write mirrors into the cache resolved via its CWD's git
+    # toplevel (the project root), not the worktree. Clear the worktree
     # state file directly so the watcher doesn't fire on stale local state.
     reconcile_phase_signal local-only "$state_file" "$issue_num"
     return 0
@@ -308,11 +301,12 @@ main() {
   # PR merge status). Reconcile stale phase_signal in local cache + Firestore
   # when needed, and select a resume instruction to pass to the skill.
   local DIAGNOSIS MODE PR_NUM="" RESUME_INSTRUCTION=""
-  DIAGNOSIS=$(diagnose_state "$BRANCH") || {
+  DIAGNOSIS=$(diagnose_state "$BRANCH" "$STATE_FILE" "$ISSUE_NUM") || {
     echo "error: diagnose_state failed" >&2
     exit 1
   }
-  { read -r MODE; read -r PR_NUM || PR_NUM=""; } <<<"$DIAGNOSIS"
+  MODE=$(printf '%s\n' "$DIAGNOSIS" | head -n1)
+  PR_NUM=$(printf '%s\n' "$DIAGNOSIS" | sed -n '2p')
   case "$MODE" in
     fresh)
       reconcile_phase_signal local-only "$STATE_FILE" "$ISSUE_NUM"

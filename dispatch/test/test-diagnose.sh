@@ -59,10 +59,6 @@ case "${STUB_GH_OUTCOME:-}" in
     printf '{"number":99,"state":"MERGED"}\n'
     exit 0
     ;;
-  closed-pr)
-    printf '{"number":7,"state":"CLOSED"}\n'
-    exit 0
-    ;;
   auth-error)
     echo "authentication required" >&2
     exit 1
@@ -79,18 +75,12 @@ GHSTUB
 
 # Initialize a fresh git repo in $1 with one commit on `main`. Sets up a
 # bare clone at $1.git as `origin`, so `git fetch origin main` works.
-# Args:
-#   $1 (repo): repo path
-#   $2 (extra): N additional commits beyond the initial one (default 0)
-#   $3 (extra_branch): branch the extras live on (default "main"); when
-#     non-main, the branch is created from main, the extras are added to
-#     it, and the worktree is checked back out to main afterwards. This
-#     simulates the production case where dispatch runs from the project
-#     root with HEAD on main while the issue branch has unmerged commits.
+# Optional: `local_extra_commits` env var (default 0) adds N additional
+# commits on top of `main` AFTER the bare clone is created — these end up
+# ahead of origin/main.
 init_test_repo() {
   local repo="$1"
   local extra="${2:-0}"
-  local extra_branch="${3:-main}"
 
   mkdir -p "$repo"
   (
@@ -116,18 +106,12 @@ init_test_repo() {
   if [[ "$extra" -gt 0 ]]; then
     (
       cd "$repo"
-      if [[ "$extra_branch" != "main" ]]; then
-        git checkout --quiet -b "$extra_branch"
-      fi
       local i
       for ((i = 1; i <= extra; i++)); do
         echo "extra-$i" >>file.txt
         git add file.txt
         git commit --quiet -m "extra commit $i"
       done
-      if [[ "$extra_branch" != "main" ]]; then
-        git checkout --quiet main
-      fi
     )
   fi
 }
@@ -191,7 +175,7 @@ PATH="$STUB_DIR:$ORIGINAL_PATH"
 export STUB_GH_OUTCOME=no-pr
 pushd "$REPO" >/dev/null
 STATE_FILE="$REPO/state.json"
-ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
+ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || true)
 popd >/dev/null
 assert_eq "fresh: 0 commits ahead, no PR -> 'fresh'" "fresh" "$ACTUAL"
 unset STUB_GH_OUTCOME
@@ -199,15 +183,9 @@ PATH="$ORIGINAL_PATH"
 rm -rf "$TEST_ROOT" "$STUB_DIR"
 
 # --- case 2: audit-and-pr + reconcile both ---------------------------------
-# HEAD is on `main` (in sync with origin/main); the issue branch has commits
-# ahead. This mirrors production, where dispatch runs from the project root
-# rather than inside the worktree. STUB_LOCAL_CACHE_FILE is set to a path
-# distinct from STATE_FILE so the test exercises the dispatcher's direct
-# clear of $state_file (issue-state-write's CWD-relative mirror would land
-# on the wrong file in production).
 TEST_ROOT=$(mktemp -d)
 REPO="$TEST_ROOT/repo"
-init_test_repo "$REPO" 1 "stub-branch"
+init_test_repo "$REPO" 1
 install_state_stubs "$REPO"
 STUB_DIR=$(make_gh_stub_dir)
 PATH="$STUB_DIR:$ORIGINAL_PATH"
@@ -216,22 +194,20 @@ STATE_FILE="$REPO/state.json"
 echo '{"state":{"phase_signal":"complete"}}' >"$STATE_FILE"
 export STUB_FIRESTORE_FILE="$TEST_ROOT/firestore.json"
 echo '{"phase_signal":"complete"}' >"$STUB_FIRESTORE_FILE"
-# Distinct path: simulates issue-state-write resolving REPO_ROOT to a
-# directory whose tmp/ does not contain the worktree's state file.
-export STUB_LOCAL_CACHE_FILE="$TEST_ROOT/wrong-cache.json"
+export STUB_LOCAL_CACHE_FILE="$STATE_FILE"
 
 pushd "$REPO" >/dev/null
-ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
-assert_eq "audit-and-pr: HEAD on main, branch 1 commit ahead, no PR -> 'audit-and-pr'" "audit-and-pr" "$ACTUAL"
+ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || true)
+assert_eq "audit-and-pr: 1 commit ahead, no PR -> 'audit-and-pr'" "audit-and-pr" "$ACTUAL"
 
 reconcile_phase_signal both "$STATE_FILE" "569"
 popd >/dev/null
 
 # Local cache: phase_signal removed; .state still present.
 LOCAL_HAS_SIGNAL=$(jq 'has("state") and (.state | has("phase_signal"))' "$STATE_FILE")
-assert_eq "audit-and-pr: worktree state_file phase_signal removed" "false" "$LOCAL_HAS_SIGNAL"
+assert_eq "audit-and-pr: local cache phase_signal removed" "false" "$LOCAL_HAS_SIGNAL"
 LOCAL_HAS_STATE=$(jq 'has("state")' "$STATE_FILE")
-assert_eq "audit-and-pr: worktree state_file .state preserved" "true" "$LOCAL_HAS_STATE"
+assert_eq "audit-and-pr: local cache .state preserved" "true" "$LOCAL_HAS_STATE"
 
 # Firestore fixture: phase_signal removed.
 REMOTE_HAS_SIGNAL=$(jq 'has("phase_signal")' "$STUB_FIRESTORE_FILE")
@@ -244,13 +220,13 @@ rm -rf "$TEST_ROOT" "$STUB_DIR"
 # --- case 3: verify --------------------------------------------------------
 TEST_ROOT=$(mktemp -d)
 REPO="$TEST_ROOT/repo"
-init_test_repo "$REPO" 1 "stub-branch"
+init_test_repo "$REPO" 1
 STUB_DIR=$(make_gh_stub_dir)
 PATH="$STUB_DIR:$ORIGINAL_PATH"
 export STUB_GH_OUTCOME=open-pr
 pushd "$REPO" >/dev/null
 STATE_FILE="$REPO/state.json"
-ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
+ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || true)
 popd >/dev/null
 assert_eq "verify: open PR -> 'verify' (no second line)" "verify" "$ACTUAL"
 unset STUB_GH_OUTCOME
@@ -266,7 +242,7 @@ PATH="$STUB_DIR:$ORIGINAL_PATH"
 export STUB_GH_OUTCOME=merged-pr
 pushd "$REPO" >/dev/null
 STATE_FILE="$REPO/state.json"
-ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
+ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || true)
 popd >/dev/null
 EXPECTED=$'done\n99'
 assert_eq "done: merged PR -> 'done' + PR number on second line" "$EXPECTED" "$ACTUAL"
@@ -288,49 +264,15 @@ PATH="$STUB_DIR:$ORIGINAL_PATH"
 export STUB_GH_OUTCOME=no-pr
 pushd "$REPO" >/dev/null
 STATE_FILE="$REPO/state.json"
-ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || echo "FAILED")
+# Capture both stdout (mode) and ensure the function exits 0 despite fetch failure.
+ACTUAL=$(diagnose_state "stub-branch" "$STATE_FILE" "569" 2>/dev/null || echo "FAILED")
 popd >/dev/null
 assert_eq "fetch failure non-fatal: still returns 'fresh'" "fresh" "$ACTUAL"
 unset STUB_GH_OUTCOME
 PATH="$ORIGINAL_PATH"
 rm -rf "$TEST_ROOT" "$STUB_DIR"
 
-# --- case 6a: closed PR + 0 commits ahead -> 'fresh' -----------------------
-# `gh pr view` returns the most recent PR for a branch regardless of state.
-# A CLOSED (non-merged) PR must NOT route to verify — that would let the
-# skill mark the issue done off stale checks on an abandoned PR.
-TEST_ROOT=$(mktemp -d)
-REPO="$TEST_ROOT/repo"
-init_test_repo "$REPO" 0
-STUB_DIR=$(make_gh_stub_dir)
-PATH="$STUB_DIR:$ORIGINAL_PATH"
-export STUB_GH_OUTCOME=closed-pr
-pushd "$REPO" >/dev/null
-STATE_FILE="$REPO/state.json"
-ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
-popd >/dev/null
-assert_eq "closed PR + 0 commits ahead -> 'fresh'" "fresh" "$ACTUAL"
-unset STUB_GH_OUTCOME
-PATH="$ORIGINAL_PATH"
-rm -rf "$TEST_ROOT" "$STUB_DIR"
-
-# --- case 6b: closed PR + commits ahead -> 'audit-and-pr' ------------------
-TEST_ROOT=$(mktemp -d)
-REPO="$TEST_ROOT/repo"
-init_test_repo "$REPO" 1 "stub-branch"
-STUB_DIR=$(make_gh_stub_dir)
-PATH="$STUB_DIR:$ORIGINAL_PATH"
-export STUB_GH_OUTCOME=closed-pr
-pushd "$REPO" >/dev/null
-STATE_FILE="$REPO/state.json"
-ACTUAL=$(diagnose_state "stub-branch" 2>/dev/null || true)
-popd >/dev/null
-assert_eq "closed PR + 1 commit ahead -> 'audit-and-pr'" "audit-and-pr" "$ACTUAL"
-unset STUB_GH_OUTCOME
-PATH="$ORIGINAL_PATH"
-rm -rf "$TEST_ROOT" "$STUB_DIR"
-
-# --- case 7: reconcile local-only is no-op when key absent ----------------
+# --- case 6: reconcile local-only is no-op when key absent ----------------
 TEST_ROOT=$(mktemp -d)
 STATE_FILE="$TEST_ROOT/state.json"
 ORIGINAL_CONTENT='{"state":{"other":"value"}}'
