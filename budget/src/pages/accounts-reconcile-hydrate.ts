@@ -5,7 +5,6 @@ import type {
   StatementItemId,
   TransactionId,
 } from "../firestore.js";
-import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 
@@ -80,7 +79,6 @@ export function hydrateAccountsReconcile(container: HTMLElement): void {
       .catch((error) => {
         target.disabled = false;
         if (deferProgrammerError(error)) return;
-        if (classifyError(error) === "programmer") throw error;
         logError(error, { operation: "reconcile-confirm-match" });
       });
   });
@@ -122,7 +120,6 @@ async function persistClassification(select: HTMLSelectElement): Promise<void> {
     });
   } catch (error) {
     if (deferProgrammerError(error)) return;
-    if (classifyError(error) === "programmer") throw error;
     logError(error, { operation: "reconcile-classify" });
   }
 }
@@ -147,7 +144,6 @@ async function persistNote(input: HTMLInputElement): Promise<void> {
     });
   } catch (error) {
     if (deferProgrammerError(error)) return;
-    if (classifyError(error) === "programmer") throw error;
     logError(error, { operation: "reconcile-note" });
   }
 }
