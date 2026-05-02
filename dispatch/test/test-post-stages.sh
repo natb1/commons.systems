@@ -211,6 +211,18 @@ if [[ "$all_found" -eq 1 ]]; then
   fi
 fi
 
+# C2: launch_claude_stage must not redirect stdin — Claude's TUI requires an
+# RW tty on fd 0 for raw mode (cf. #576 bug fix).
+TOTAL=$((TOTAL + 1))
+fn_body=$(awk '/^launch_claude_stage\(\)/,/^}/' "$DISPATCH")
+if grep -qE '<\s*/dev/tty|<&\s*[0-9]' <<<"$fn_body"; then
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: C2 — launch_claude_stage redirects stdin (breaks claude TUI raw mode)"
+else
+  PASS=$((PASS + 1))
+  echo "  PASS: C2: launch_claude_stage does not redirect stdin"
+fi
+
 # ---------------------------------------------------------------------------
 # D. mark_pr_ready
 # ---------------------------------------------------------------------------

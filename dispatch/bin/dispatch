@@ -220,7 +220,7 @@ prompt_yes_skip() {
 # Args: $1 = slash-command argument (e.g. "/simplify", "/dispatch-qa #123")
 launch_claude_stage() {
   local slash="$1"
-  claude -w "$BRANCH" "$slash" </dev/tty
+  claude -w "$BRANCH" "$slash"
 }
 
 # --- mark_pr_ready ----------------------------------------------------------
