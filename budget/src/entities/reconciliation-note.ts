@@ -83,20 +83,6 @@ export function parseFirestoreReconciliationNote(docSnap: QueryDocumentSnapshot<
   };
 }
 
-// ── ReconciliationNote → IdbReconciliationNote ────────────────────────────────
-
-export function reconciliationNoteToIdbRecord(n: ReconciliationNote): IdbReconciliationNote {
-  return {
-    id: n.id,
-    entityType: n.entityType,
-    entityId: n.entityId,
-    classification: n.classification,
-    note: n.note,
-    updatedAtMs: n.updatedAt.toMillis(),
-    updatedBy: n.updatedBy,
-  };
-}
-
 // ── IdbReconciliationNote → ReconciliationNote ────────────────────────────────
 
 export function idbToReconciliationNote(row: IdbReconciliationNote): ReconciliationNote {

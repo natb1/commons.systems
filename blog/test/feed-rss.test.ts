@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateRssXml, type RssPost, type RssConfig } from "../src/index";
+import { generateRssXml, type RssPost, type RssConfig } from "../src/feed-rss";
 
 const config: RssConfig = {
   title: "commons.systems",

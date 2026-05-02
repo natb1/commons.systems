@@ -10,19 +10,9 @@ import { Timestamp } from "firebase/firestore";
 
 // ── Timestamp / millis converters ─────────────────────────────────────────────
 
-/** Convert a Firestore Timestamp (or null) to milliseconds (or null). */
-export function tsToMs(ts: Timestamp | null): number | null {
-  return ts != null ? ts.toMillis() : null;
-}
-
 /** Convert milliseconds (or null) to a Firestore Timestamp (or null). */
 export function msToTs(ms: number | null): Timestamp | null {
   return ms != null ? Timestamp.fromMillis(ms) : null;
-}
-
-/** Convert a JS Date to milliseconds. */
-export function dateToMs(d: Date): number {
-  return d.getTime();
 }
 
 /**
