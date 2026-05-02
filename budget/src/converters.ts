@@ -1,182 +1,27 @@
-import { Timestamp } from "firebase/firestore";
-import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import type {
-  Transaction,
-  Statement,
-  StatementItem,
-  ReconciliationNote,
-  Budget,
-  BudgetPeriod,
-  Rule,
-  NormalizationRule,
-  WeeklyAggregate,
-  TransactionId,
-  StatementId,
-  StatementItemId,
-  BudgetId,
-  BudgetPeriodId,
-  RuleId,
-  NormalizationRuleId,
-  GroupId,
-  AllowancePeriod,
-} from "./firestore.js";
-import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
+/** Re-exports entity idb→domain converters under the legacy `toX` names used by data-source.ts. */
+import { idbToTransaction } from "./entities/transaction.js";
+import { idbToStatement } from "./entities/statement.js";
+import { idbToStatementItem } from "./entities/statement-item.js";
+import { idbToReconciliationNote } from "./entities/reconciliation-note.js";
+import { idbToBudget } from "./entities/budget.js";
+import type { Budget, IdbBudget } from "./entities/budget.js";
+import { idbToBudgetPeriod } from "./entities/budget-period.js";
+import type { BudgetPeriod, IdbBudgetPeriod } from "./entities/budget-period.js";
+import { idbToRule } from "./entities/rule.js";
+import { idbToNormalizationRule } from "./entities/normalization-rule.js";
+import { idbToWeeklyAggregate } from "./entities/weekly-aggregate.js";
 
-export function toTransaction(row: IdbTransaction): Transaction {
-  return {
-    id: row.id as TransactionId,
-    institution: row.institution,
-    account: row.account,
-    description: row.description,
-    amount: row.amount,
-    note: row.note,
-    category: row.category,
-    reimbursement: row.reimbursement,
-    budget: (row.budget ?? null) as BudgetId | null,
-    timestamp: row.timestampMs != null ? Timestamp.fromMillis(row.timestampMs) : null,
-    statementId: (row.statementId ?? null) as StatementId | null,
-    statementItemId: (row.statementItemId ?? null) as StatementItemId | null,
-    groupId: null as GroupId | null,
-    normalizedId: row.normalizedId,
-    normalizedPrimary: row.normalizedPrimary,
-    normalizedDescription: row.normalizedDescription,
-    virtual: row.virtual ?? false,
-  };
-}
+export { idbToTransaction as toTransaction };
+export { idbToStatement as toStatement };
+export { idbToStatementItem as toStatementItem };
+export { idbToReconciliationNote as toReconciliationNote };
+export { idbToBudget as toBudget };
+export { idbToBudgetPeriod as toBudgetPeriod };
+export { idbToRule as toRule };
+export { idbToNormalizationRule as toNormalizationRule };
+export { idbToWeeklyAggregate as toWeeklyAggregate };
 
-function toAllowancePeriod(value: string | undefined): AllowancePeriod {
-  if (value === "monthly") return "monthly";
-  if (value === "quarterly") return "quarterly";
-  if (value == null || value === "weekly") return "weekly";
-  throw new DataIntegrityError(`Invalid allowancePeriod: ${value}`);
-}
+// Re-export types used by data-source.ts and other consumers
+export type { Budget, IdbBudget, BudgetPeriod, IdbBudgetPeriod };
 
-export function toBudget(row: IdbBudget): Budget {
-  return {
-    id: row.id as BudgetId,
-    name: row.name,
-    allowance: row.allowance,
-    allowancePeriod: toAllowancePeriod(row.allowancePeriod),
-    rollover: row.rollover,
-    overrides: (row.overrides ?? []).map(o => ({
-      date: Timestamp.fromMillis(o.dateMs),
-      balance: o.balance,
-    })),
-    groupId: null as GroupId | null,
-  };
-}
-
-export function toBudgetPeriod(row: IdbBudgetPeriod): BudgetPeriod {
-  return {
-    id: row.id as BudgetPeriodId,
-    budgetId: row.budgetId as BudgetId,
-    periodStart: Timestamp.fromMillis(row.periodStartMs),
-    periodEnd: Timestamp.fromMillis(row.periodEndMs),
-    total: row.total,
-    count: row.count,
-    categoryBreakdown: row.categoryBreakdown,
-    groupId: null as GroupId | null,
-  };
-}
-
-export function toRule(row: IdbRule): Rule {
-  return {
-    id: row.id as RuleId,
-    type: row.type,
-    pattern: row.pattern,
-    target: row.target,
-    priority: row.priority,
-    institution: row.institution,
-    account: row.account,
-    minAmount: row.minAmount,
-    maxAmount: row.maxAmount,
-    excludeCategory: row.excludeCategory,
-    matchCategory: row.matchCategory,
-    groupId: null as GroupId | null,
-  };
-}
-
-export function toStatementItem(row: IdbStatementItem): StatementItem {
-  return {
-    id: row.id,
-    statementItemId: row.statementItemId as StatementItemId,
-    statementId: row.statementId as StatementId,
-    institution: row.institution,
-    account: row.account,
-    period: row.period,
-    amount: row.amount,
-    timestamp: Timestamp.fromMillis(row.timestampMs),
-    description: row.description,
-    fitid: row.fitid,
-    groupId: null as GroupId | null,
-  };
-}
-
-export function toReconciliationNote(row: IdbReconciliationNote): ReconciliationNote {
-  return {
-    id: row.id,
-    entityType: row.entityType,
-    entityId: row.entityId,
-    classification: row.classification,
-    note: row.note,
-    updatedAt: Timestamp.fromMillis(row.updatedAtMs),
-    updatedBy: row.updatedBy,
-    groupId: null as GroupId | null,
-  };
-}
-
-export function toStatement(row: IdbStatement): Statement {
-  return {
-    id: row.id,
-    statementId: row.statementId as StatementId,
-    institution: row.institution,
-    account: row.account,
-    balance: row.balance,
-    period: row.period,
-    balanceDate: row.balanceDate ?? null,
-    lastTransactionDate: row.lastTransactionDateMs != null
-      ? Timestamp.fromMillis(row.lastTransactionDateMs)
-      : null,
-    groupId: null as GroupId | null,
-    virtual: row.virtual ?? false,
-  };
-}
-
-export function toWeeklyAggregate(row: IdbWeeklyAggregate): WeeklyAggregate {
-  return {
-    id: row.id,
-    weekStart: Timestamp.fromMillis(row.weekStartMs),
-    creditTotal: row.creditTotal,
-    unbudgetedTotal: row.unbudgetedTotal,
-    groupId: null as GroupId | null,
-  };
-}
-
-export function toNormalizationRule(row: IdbNormalizationRule): NormalizationRule {
-  return {
-    id: row.id as NormalizationRuleId,
-    pattern: row.pattern,
-    patternType: row.patternType,
-    canonicalDescription: row.canonicalDescription,
-    dateWindowDays: row.dateWindowDays,
-    institution: row.institution,
-    account: row.account,
-    priority: row.priority,
-    groupId: null as GroupId | null,
-  };
-}
-
-export function filterByTimestamp<T extends { timestampMs: number | null }>(
-  rows: T[], sinceMs: number | undefined, beforeMs: number | undefined,
-): T[] {
-  return rows.filter(row => {
-    if (sinceMs !== undefined) {
-      if (row.timestampMs === null) return false;
-      if (row.timestampMs < sinceMs) return false;
-    }
-    if (beforeMs !== undefined) {
-      if (row.timestampMs !== null && row.timestampMs >= beforeMs) return false;
-    }
-    return true;
-  });
-}
+export { filterByTimestamp } from "./entities/_helpers.js";

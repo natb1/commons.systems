@@ -1,15 +1,21 @@
 /** Serializes IndexedDB stores back to the upload JSON format. Inverse of the upload pipeline (parseUploadedJson + toParsedData in upload.ts). */
 import { getAll, getMeta } from "./idb.js";
-import type { IdbTransaction, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbStatement, IdbStatementItem, IdbReconciliationNote } from "./idb.js";
-
-function msToIso(ms: number | null): string {
-  if (ms === null) return "";
-  return new Date(ms).toISOString();
-}
-
-function nullToEmpty(value: string | null): string {
-  return value ?? "";
-}
+import type { IdbTransaction } from "./entities/transaction.js";
+import { transactionToRawJson } from "./entities/transaction.js";
+import type { IdbStatement } from "./entities/statement.js";
+import { statementToRawJson } from "./entities/statement.js";
+import type { IdbStatementItem } from "./entities/statement-item.js";
+import { statementItemToRawJson } from "./entities/statement-item.js";
+import type { IdbReconciliationNote } from "./entities/reconciliation-note.js";
+import { reconciliationNoteToRawJson } from "./entities/reconciliation-note.js";
+import type { IdbBudget } from "./entities/budget.js";
+import { budgetToRawJson } from "./entities/budget.js";
+import type { IdbBudgetPeriod } from "./entities/budget-period.js";
+import { budgetPeriodToRawJson } from "./entities/budget-period.js";
+import type { IdbRule } from "./entities/rule.js";
+import { ruleToRawJson } from "./entities/rule.js";
+import type { IdbNormalizationRule } from "./entities/normalization-rule.js";
+import { normalizationRuleToRawJson } from "./entities/normalization-rule.js";
 
 export async function exportToJson(): Promise<string> {
   const [transactions, budgets, budgetPeriods, rules, normalizationRules, statements, statementItems, reconciliationNotes, meta] = await Promise.all([
@@ -32,99 +38,14 @@ export async function exportToJson(): Promise<string> {
     // groupId is not stored locally; empty string for format compatibility
     groupId: "",
     groupName: meta.groupName,
-    transactions: transactions.map((t) => ({
-      id: t.id,
-      institution: nullToEmpty(t.institution),
-      account: nullToEmpty(t.account),
-      description: t.description,
-      amount: t.amount,
-      timestamp: msToIso(t.timestampMs),
-      statementId: nullToEmpty(t.statementId),
-      statementItemId: t.statementItemId ?? null,
-      category: t.category,
-      budget: t.budget,
-      note: t.note,
-      reimbursement: t.reimbursement,
-      normalizedId: t.normalizedId,
-      normalizedPrimary: t.normalizedPrimary,
-      normalizedDescription: t.normalizedDescription,
-    })),
-    budgets: budgets.map((b) => ({
-      id: b.id,
-      name: b.name,
-      allowance: b.allowance,
-      allowancePeriod: b.allowancePeriod,
-      rollover: b.rollover,
-      overrides: (b.overrides ?? []).map(o => ({
-        date: msToIso(o.dateMs),
-        balance: o.balance,
-      })),
-    })),
-    budgetPeriods: budgetPeriods.map((p) => ({
-      id: p.id,
-      budgetId: p.budgetId,
-      periodStart: msToIso(p.periodStartMs),
-      periodEnd: msToIso(p.periodEndMs),
-      total: p.total,
-      count: p.count,
-      categoryBreakdown: p.categoryBreakdown,
-    })),
-    rules: rules.map((r) => ({
-      id: r.id,
-      type: r.type,
-      pattern: r.pattern,
-      target: r.target,
-      priority: r.priority,
-      institution: nullToEmpty(r.institution),
-      account: nullToEmpty(r.account),
-      ...(r.minAmount != null ? { minAmount: r.minAmount } : {}),
-      ...(r.maxAmount != null ? { maxAmount: r.maxAmount } : {}),
-      ...(r.excludeCategory ? { excludeCategory: r.excludeCategory } : {}),
-      ...(r.matchCategory ? { matchCategory: r.matchCategory } : {}),
-    })),
-    normalizationRules: normalizationRules.map((r) => ({
-      id: r.id,
-      pattern: r.pattern,
-      patternType: nullToEmpty(r.patternType),
-      canonicalDescription: r.canonicalDescription,
-      dateWindowDays: r.dateWindowDays,
-      institution: nullToEmpty(r.institution),
-      account: nullToEmpty(r.account),
-      priority: r.priority,
-    })),
-    statements: statements.map((s) => ({
-      id: s.id,
-      statementId: s.statementId,
-      institution: s.institution,
-      account: s.account,
-      balance: s.balance,
-      period: s.period,
-      balanceDate: s.balanceDate ?? "",
-      lastTransactionDate: s.lastTransactionDateMs != null
-        ? msToIso(s.lastTransactionDateMs)
-        : null,
-    })),
-    statementItems: statementItems.map((i) => ({
-      id: i.id,
-      statementItemId: i.statementItemId,
-      statementId: i.statementId,
-      institution: i.institution,
-      account: i.account,
-      period: i.period,
-      amount: i.amount,
-      timestamp: msToIso(i.timestampMs),
-      description: i.description,
-      fitid: i.fitid,
-    })),
-    reconciliationNotes: reconciliationNotes.map((n) => ({
-      id: n.id,
-      entityType: n.entityType,
-      entityId: n.entityId,
-      classification: n.classification,
-      note: n.note,
-      updatedAt: msToIso(n.updatedAtMs),
-      updatedBy: n.updatedBy,
-    })),
+    transactions: transactions.map(transactionToRawJson),
+    budgets: budgets.map(budgetToRawJson),
+    budgetPeriods: budgetPeriods.map(budgetPeriodToRawJson),
+    rules: rules.map(ruleToRawJson),
+    normalizationRules: normalizationRules.map(normalizationRuleToRawJson),
+    statements: statements.map(statementToRawJson),
+    statementItems: statementItems.map(statementItemToRawJson),
+    reconciliationNotes: reconciliationNotes.map(reconciliationNoteToRawJson),
   };
 
   return JSON.stringify(output, null, 2) + "\n";
