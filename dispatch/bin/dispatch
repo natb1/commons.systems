@@ -132,6 +132,16 @@ reconcile_phase_signal() {
 # Default behavior preserved: identical to `[[ -t 0 ]]`.
 prompt_is_tty() { [[ -t 0 ]]; }
 
+# --- phase_signal_complete --------------------------------------------------
+# Returns 0 iff `state.phase_signal == "complete"` in the JSON file at $1.
+# Returns non-zero when the file is absent, unreadable, or the predicate is
+# false. This is the protocol-level gate set by `dispatch/bin/phase-complete`
+# and consumed by both the watcher (to SIGTERM Claude) and the post-stage
+# gating in `should_run_post_stages`.
+phase_signal_complete() {
+  jq -e '.state.phase_signal == "complete"' "$1" >/dev/null 2>&1
+}
+
 # --- should_run_post_stages -------------------------------------------------
 # Gate the post-implementation stage sequence: only proceed when the verify
 # loop signaled completion AND stdin is a TTY (interactive run).
@@ -146,10 +156,7 @@ should_run_post_stages() {
   if [[ ! -f "$state_file" ]]; then
     return 1
   fi
-  if ! jq -e '.state.phase_signal == "complete"' "$state_file" >/dev/null 2>&1; then
-    return 1
-  fi
-  return 0
+  phase_signal_complete "$state_file"
 }
 
 # --- prompt_yes_skip --------------------------------------------------------
@@ -372,13 +379,14 @@ ${RESUME_INSTRUCTION}}")
   CLAUDE_PID=$!
 
   # Background watcher: polls phase_signal=complete and SIGTERMs the child
-  # Claude on match. jq silently returns false when the file doesn't exist
-  # yet, so no separate file-existence loop is needed. kill -0 on CLAUDE_PID
-  # detects when Claude exits, so the watcher self-terminates cleanly.
+  # Claude on match. phase_signal_complete silently returns false when the
+  # file doesn't exist yet, so no separate file-existence loop is needed.
+  # kill -0 on CLAUDE_PID detects when Claude exits, so the watcher
+  # self-terminates cleanly.
   (
     set -euo pipefail
     while kill -0 "$CLAUDE_PID" 2>/dev/null; do
-      if jq -e '.state.phase_signal == "complete"' "$STATE_FILE" >/dev/null 2>&1; then
+      if phase_signal_complete "$STATE_FILE"; then
         kill -TERM "$CLAUDE_PID" 2>/dev/null || true
         exit 0
       fi

@@ -105,11 +105,9 @@ This skill is a **single user-acceptance pass**. It does not iterate, does not e
 
    Write per-item results to `tmp/dispatch-qa-results-<n>.txt`.
 
-5. **Single pass — no iteration.**
+5. **Recovery path when bugs are reported.**
 
-   When the user reports a bug, record it in the results file and continue to the next item. Do NOT attempt a fix. Do NOT loop. Do NOT invoke `/wiggum-loop`. Do NOT enter plan mode.
-
-   If issues are found, the recovery path is for the user to re-dispatch the original issue (with #569's resume-mode work, the dispatcher will pick up at the right step). Surface this to the user when reporting bugs.
+   The constraints in "What this skill is NOT" still apply: record the bug in the results file and continue to the next item. The recovery path is for the user to re-dispatch the original issue (with #569's resume-mode work, the dispatcher will pick up at the right step). Surface this to the user when reporting bugs.
 
 6. **Post the PR comment summary.**
 
