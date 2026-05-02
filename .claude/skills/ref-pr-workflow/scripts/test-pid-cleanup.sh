@@ -233,39 +233,24 @@ echo "=== Test: cleanup_stale_worktree_processes prunes before listing ==="
 (
   source "$SCRIPT_DIR/lib.sh"
 
-  # Simulate a worktree whose directory was deleted but whose git admin entry still exists.
-  # We mock `git worktree prune` (no-op) and `git worktree list --porcelain` so the test
-  # controls exactly what the active-worktree set looks like, isolating the prune-before-list
-  # logic from filesystem and sandbox constraints.
-  #
-  # The mock returns two states depending on call order:
-  #   1st list call (before prune in cleanup): includes the stale path (prunable)
-  #   After prune: list excludes the stale path
-  # We simulate this by having the mock check a sentinel file left by the prune call.
-
+  # Mock `git worktree list` so its output flips based on whether prune ran first:
+  # without the prune call, list reports the stale path as still-active and the
+  # orphan would survive. The test passes only if the production code prunes first.
   STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/worktrees/612-prune-test-fixture-$$"
   REAL_WT="$(git rev-parse --show-toplevel)"
   PRUNE_CALLED_MARKER="${TEST_TMPDIR}/prune_called_$$"
+  REAL_ENTRY=$(printf 'worktree %s\nHEAD abc123\nbranch refs/heads/main\n\n' "$REAL_WT")
+  STALE_ENTRY=$(printf 'worktree %s\nHEAD def456\nbranch refs/heads/612-prune-test\nprunable gitdir file points to non-existent location\n\n' "$STALE_WT")
 
   git() {
-    local subcmd="$1"
-    if [ "$subcmd" = "worktree" ]; then
-      local action="$2"
-      if [ "$action" = "prune" ]; then
-        touch "$PRUNE_CALLED_MARKER"
-        return 0
-      elif [ "$action" = "list" ]; then
-        if [ -f "$PRUNE_CALLED_MARKER" ]; then
-          printf 'worktree %s\nHEAD abc123\nbranch refs/heads/main\n\n' "$REAL_WT"
-        else
-          printf 'worktree %s\nHEAD abc123\nbranch refs/heads/main\n\n' "$REAL_WT"
-          printf 'worktree %s\nHEAD def456\nbranch refs/heads/612-prune-test\nprunable gitdir file points to non-existent location\n\n' "$STALE_WT"
-        fi
-        return 0
-      fi
-    elif [ "$subcmd" = "rev-parse" ]; then
-      command git rev-parse "${@:2}"
-      return $?
+    if [ "$1" = "worktree" ] && [ "$2" = "prune" ]; then
+      touch "$PRUNE_CALLED_MARKER"
+      return 0
+    fi
+    if [ "$1" = "worktree" ] && [ "$2" = "list" ]; then
+      printf '%s\n' "$REAL_ENTRY"
+      [ -f "$PRUNE_CALLED_MARKER" ] || printf '%s\n' "$STALE_ENTRY"
+      return 0
     fi
     command git "$@"
   }
