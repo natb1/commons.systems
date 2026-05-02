@@ -1,205 +1,53 @@
 /**
- * IndexedDB-backed LRU cache for print media files (PDFs, EPUBs, image archive chunks).
- *
- * Two object stores: `media-data` holds blobs, `media-meta` holds size + lastAccessed
- * metadata (separated so eviction scans never load large blobs). A sentinel `__total__`
- * entry in meta tracks aggregate cache size for O(1) capacity checks. 500 MB cap with
- * LRU eviction. Whole files and range-request chunks share the same stores.
+ * IndexedDB-backed LRU cache for print media files (PDFs, EPUBs, image archive
+ * chunks). Thin wrapper around the shared `@commons-systems/idbutil/lru-blob-cache`
+ * primitive. Whole files and range-request chunks share the same stores.
  */
-import { createDbConnection } from "@commons-systems/idbutil/connection";
+import { createLruBlobCache } from "@commons-systems/idbutil/lru-blob-cache";
 
 export const MAX_CACHE_BYTES = 500 * 1024 * 1024;
 
-const DATA_STORE = "media-data";
-const META_STORE = "media-meta";
-const TOTAL_KEY = "__total__";
-
-interface DataEntry {
-  key: string;
-  data: ArrayBuffer | Uint8Array;
-}
-
-interface MetaEntry {
-  key: string;
-  size: number;
-  lastAccessed: number;
-}
-
-const { openDb, closeDb: closeDbConn } = createDbConnection({
+const cache = createLruBlobCache({
   name: "print-media-cache",
   version: 2,
+  maxBytes: MAX_CACHE_BYTES,
   onUpgrade(db, oldVersion) {
     if (oldVersion < 2 && db.objectStoreNames.contains("media")) {
       db.deleteObjectStore("media");
     }
-    if (!db.objectStoreNames.contains(DATA_STORE)) {
-      db.createObjectStore(DATA_STORE, { keyPath: "key" });
-    }
-    if (!db.objectStoreNames.contains(META_STORE)) {
-      const metaStore = db.createObjectStore(META_STORE, { keyPath: "key" });
-      metaStore.createIndex("lastAccessed", "lastAccessed", { unique: false });
-    }
   },
 });
 
-export const closeDb = closeDbConn;
-
-function touchLastAccessed(db: IDBDatabase, key: string): void {
-  const tx = db.transaction(META_STORE, "readwrite");
-  const store = tx.objectStore(META_STORE);
-  const getReq = store.get(key);
-  getReq.onsuccess = () => {
-    const entry = getReq.result as MetaEntry | undefined;
-    if (entry) {
-      entry.lastAccessed = Date.now();
-      store.put(entry);
-    }
-  };
-  tx.onerror = () => {
-    reportError(new Error("Failed to touch lastAccessed", { cause: tx.error }));
-  };
-}
-
-async function getTotalSize(db: IDBDatabase): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(META_STORE, "readonly");
-    const req = tx.objectStore(META_STORE).get(TOTAL_KEY);
-    req.onsuccess = () => {
-      const entry = req.result as MetaEntry | undefined;
-      resolve(entry ? entry.size : 0);
-    };
-    req.onerror = () => reject(req.error);
-  });
-}
-
-/** Read __total__ within `metaStore`'s transaction, subtract `evictedSize`, and write back. */
-function updateTotalAfterEviction(
-  metaStore: IDBObjectStore,
-  evictedSize: number,
-  fallbackTotal: number,
-  resolve: () => void,
-): void {
-  const totalReq = metaStore.get(TOTAL_KEY);
-  totalReq.onsuccess = () => {
-    const totalEntry = totalReq.result as MetaEntry | undefined;
-    const currentTotal = totalEntry ? totalEntry.size : fallbackTotal;
-    metaStore.put({ key: TOTAL_KEY, size: currentTotal - evictedSize, lastAccessed: 0 });
-    resolve();
-  };
-}
-
-async function evictIfNeeded(db: IDBDatabase, incomingSize: number): Promise<void> {
-  const totalSize = await getTotalSize(db);
-
-  if (totalSize + incomingSize <= MAX_CACHE_BYTES) return;
-
-  const evictTx = db.transaction([DATA_STORE, META_STORE], "readwrite");
-  const metaStore = evictTx.objectStore(META_STORE);
-  const dataStore = evictTx.objectStore(DATA_STORE);
-  const evictIndex = metaStore.index("lastAccessed");
-
-  await new Promise<void>((resolve, reject) => {
-    let remaining = totalSize + incomingSize - MAX_CACHE_BYTES;
-    let evictedSize = 0;
-    const req = evictIndex.openCursor();
-    req.onsuccess = () => {
-      if (remaining <= 0) {
-        updateTotalAfterEviction(metaStore, evictedSize, totalSize, resolve);
-        return;
-      }
-      const cursor = req.result;
-      if (!cursor) {
-        updateTotalAfterEviction(metaStore, evictedSize, totalSize, resolve);
-        return;
-      }
-      const entry = cursor.value as MetaEntry;
-      if (entry.key === TOTAL_KEY) { cursor.continue(); return; }
-      remaining -= entry.size;
-      evictedSize += entry.size;
-      dataStore.delete(entry.key);
-      cursor.delete();
-      cursor.continue();
-    };
-    req.onerror = () => reject(req.error);
-  });
-}
+export const closeDb = cache.closeDb;
+export const clearCache = cache.clearCache;
 
 function chunkKey(storagePath: string, offset: number, length: number): string {
   return `${storagePath}:${offset}:${length}`;
 }
 
-async function getEntry<T extends ArrayBuffer | Uint8Array>(key: string): Promise<T | null> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DATA_STORE, "readonly");
-    const req = tx.objectStore(DATA_STORE).get(key);
-    req.onsuccess = () => {
-      const entry = req.result as DataEntry | undefined;
-      if (entry) {
-        touchLastAccessed(db, key);
-        resolve(entry.data as T);
-      } else {
-        resolve(null);
-      }
-    };
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function putEntry(key: string, data: ArrayBuffer | Uint8Array): Promise<void> {
-  const db = await openDb();
-  await evictIfNeeded(db, data.byteLength);
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction([DATA_STORE, META_STORE], "readwrite");
-    const dataStore = tx.objectStore(DATA_STORE);
-    const metaStore = tx.objectStore(META_STORE);
-
-    // If this key already exists, subtract its old size from the total before adding the new size
-    const existingReq = metaStore.get(key);
-    existingReq.onsuccess = () => {
-      const existing = existingReq.result as MetaEntry | undefined;
-      const oldSize = existing ? existing.size : 0;
-
-      dataStore.put({ key, data });
-      metaStore.put({ key, size: data.byteLength, lastAccessed: Date.now() });
-
-      // Update __total__
-      const totalReq = metaStore.get(TOTAL_KEY);
-      totalReq.onsuccess = () => {
-        const totalEntry = totalReq.result as MetaEntry | undefined;
-        const currentTotal = totalEntry ? totalEntry.size : 0;
-        metaStore.put({ key: TOTAL_KEY, size: currentTotal - oldSize + data.byteLength, lastAccessed: 0 });
-      };
-    };
-
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-export function getFile(storagePath: string): Promise<ArrayBuffer | null> {
-  return getEntry<ArrayBuffer>(storagePath);
+export async function getFile(storagePath: string): Promise<ArrayBuffer | null> {
+  const result = await cache.getEntry(storagePath);
+  return result as ArrayBuffer | null;
 }
 
 export function putFile(storagePath: string, data: ArrayBuffer): Promise<void> {
-  return putEntry(storagePath, data);
+  return cache.putEntry(storagePath, data);
 }
 
-export function getChunk(storagePath: string, offset: number, length: number): Promise<Uint8Array | null> {
-  return getEntry<Uint8Array>(chunkKey(storagePath, offset, length));
+export async function getChunk(
+  storagePath: string,
+  offset: number,
+  length: number,
+): Promise<Uint8Array | null> {
+  const result = await cache.getEntry(chunkKey(storagePath, offset, length));
+  return result as Uint8Array | null;
 }
 
-export function putChunk(storagePath: string, offset: number, length: number, data: Uint8Array): Promise<void> {
-  return putEntry(chunkKey(storagePath, offset, length), data);
-}
-
-export async function clearCache(): Promise<void> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction([DATA_STORE, META_STORE], "readwrite");
-    tx.objectStore(DATA_STORE).clear();
-    tx.objectStore(META_STORE).clear();
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+export function putChunk(
+  storagePath: string,
+  offset: number,
+  length: number,
+  data: Uint8Array,
+): Promise<void> {
+  return cache.putEntry(chunkKey(storagePath, offset, length), data);
 }
