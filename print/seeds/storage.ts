@@ -10,11 +10,7 @@ function loadChapterBodies(): string[] {
   return JSON.parse(readFileSync(jsonPath, "utf-8")) as string[];
 }
 
-export interface StorageSeedItem {
-  path: string;
-  content: string | Buffer;
-  metadata: Record<string, string>;
-}
+import type { StorageSeedItem } from "@commons-systems/firebaseutil/seed-storage";
 
 function makePdf(pageCount: number): string {
   let body = "%PDF-1.0\n";
