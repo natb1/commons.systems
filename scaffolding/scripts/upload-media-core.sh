@@ -147,7 +147,7 @@ core::create_firestore_doc() {
   http_code="$(curl -sS -o "$resp_file" -w '%{http_code}' -X POST "$url" \
     --config <(echo "header = \"Authorization: Bearer ${token}\"") \
     -H "Content-Type: application/json" \
-    --data "$body_json")"
+    -d "$body_json")"
 
   if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
     echo "error: Firestore API returned HTTP ${http_code}:" >&2
