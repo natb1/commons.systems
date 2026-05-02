@@ -160,7 +160,7 @@ const router = createHistoryRouter(
           const admin = await isInGroup(db, NAMESPACE, currentUser, ADMIN_GROUP_ID);
           return renderAdmin(currentUser, admin, lastSkippedCount);
         } catch (error) {
-          if (classifyError(error) === "programmer") throw error;
+          if (deferProgrammerError(error)) return `<h2>Admin</h2><p>Could not verify admin access. Try refreshing the page.</p>`;
           logError(error, { operation: "admin-group-check" });
           return `<h2>Admin</h2><p>Could not verify admin access. Try refreshing the page.</p>`;
         }

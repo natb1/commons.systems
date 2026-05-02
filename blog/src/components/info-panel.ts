@@ -1,5 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
-import { classifyError } from "@commons-systems/errorutil/classify";
+import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { formatUtcDate, monthName } from "../date.ts";
 import { isPublished, type PostMeta, type PublishedPost } from "../post-types.ts";
@@ -241,7 +241,7 @@ export function hydrateInfoPanel(
     })
     // Intentional silent degradation — user sees build-time content rather than an error.
     .catch((err) => {
-      if (classifyError(err) === "programmer") throw err;
+      if (deferProgrammerError(err)) return;
       logError(err, { operation: "hydrate-blogroll" });
     });
 }
