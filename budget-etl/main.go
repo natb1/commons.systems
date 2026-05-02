@@ -105,52 +105,15 @@ type parsedFile struct {
 }
 
 func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, firestoreMode bool) error {
-	// Discover statement files
-	files, err := parse.DiscoverFiles(dir)
+	parsed, skipped, err := parseStatementDir(dir)
 	if err != nil {
-		return fmt.Errorf("discovering files in %s: %w", dir, err)
-	}
-	log.Printf("discovered %d statement files", len(files))
-
-	// Parse all files concurrently
-	type fileResult struct {
-		sf     parse.StatementFile
-		result parse.ParseResult
-		err    error
-	}
-	ch := make(chan fileResult, len(files))
-	for _, sf := range files {
-		go func() {
-			result, err := parse.ParseFile(sf.Path)
-			ch <- fileResult{sf: sf, result: result, err: err}
-		}()
+		return err
 	}
 
-	var parsed []parsedFile
 	var totalTxns int
-	var skipped int
-	for range files {
-		r := <-ch
-		if r.err != nil {
-			return r.err
-		}
-		if r.result.Skipped {
-			log.Printf("skipping %s: %s", r.sf.Path, r.result.SkipReason)
-			skipped++
-			continue
-		}
-		// Override path-derived period with document-inferred period before any
-		// downstream use of sf (StatementID, buildStatementData, etc.).
-		if inferred := r.result.InferPeriod(); inferred != "" {
-			r.sf.Period = inferred
-		} else {
-			log.Printf("could not infer period from document data for %s, using path-derived period %q", r.sf.Path, r.sf.Period)
-		}
-		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
-		totalTxns += len(r.result.Transactions)
+	for _, pf := range parsed {
+		totalTxns += len(pf.result.Transactions)
 	}
-
-	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
 	// Build all TransactionData, StatementItemData, and StatementData across all files.
 	// Dedup by doc ID: overlapping statement files (same statementId) can
@@ -158,47 +121,29 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 	// are deduped by their canonical id ({institution}_{account}_{fitid}), which
 	// collapses the same bank line appearing in multiple statement files
 	// (e.g., an item that crosses a month boundary).
-	seen := make(map[string]bool, totalTxns)
-	seenItems := make(map[string]bool, totalTxns)
-	allTxns := make([]store.TransactionData, 0, totalTxns)
-	allItems := make([]store.StatementItemData, 0, totalTxns)
-	for _, pf := range parsed {
-		for _, t := range pf.result.Transactions {
-			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
-			if seen[docID] {
-				continue
-			}
-			seen[docID] = true
-			stmtItemID := buildStatementItemID(pf.sf.Institution, pf.sf.Account, t.TransactionID)
-			allTxns = append(allTxns, store.TransactionData{
-				Institution:     pf.sf.Institution,
-				Account:         pf.sf.Account,
-				Description:     t.Description,
-				Amount:          t.Amount,
-				Timestamp:       t.Date,
-				StatementID:     pf.sf.StatementID(),
-				StatementItemID: stmtItemID,
-				TransactionID:   t.TransactionID,
-			})
-			if seenItems[stmtItemID] {
-				continue
-			}
-			seenItems[stmtItemID] = true
-			// Statement items use the raw bank sign (negative = debit); TransactionData
-			// has already inverted it. Undo the inversion from convertRawTransaction.
-			allItems = append(allItems, store.StatementItemData{
-				StatementItemID: stmtItemID,
-				StatementID:     pf.sf.StatementID(),
-				Institution:     pf.sf.Institution,
-				Account:         pf.sf.Account,
-				Period:          pf.sf.Period,
-				Amount:          -t.Amount,
-				Timestamp:       t.Date,
-				Description:     t.Description,
-				FITID:           t.TransactionID,
-			})
+	seenItems := make(map[string]bool)
+	var allItems []store.StatementItemData
+	allTxns, _ := buildTransactions(parsed, func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
+		stmtItemID := buildStatementItemID(sf.Institution, sf.Account, t.TransactionID)
+		td.StatementItemID = stmtItemID
+		if seenItems[stmtItemID] {
+			return
 		}
-	}
+		seenItems[stmtItemID] = true
+		// Statement items use the raw bank sign (negative = debit); TransactionData
+		// has already inverted it. Undo the inversion from convertRawTransaction.
+		allItems = append(allItems, store.StatementItemData{
+			StatementItemID: stmtItemID,
+			StatementID:     sf.StatementID(),
+			Institution:     sf.Institution,
+			Account:         sf.Account,
+			Period:          sf.Period,
+			Amount:          -t.Amount,
+			Timestamp:       t.Date,
+			Description:     t.Description,
+			FITID:           t.TransactionID,
+		})
+	})
 	maxDates := maxTransactionDates(allTxns)
 	allStmts := buildStatementData(parsed, maxDates)
 	allStmts = append(allStmts, deriveMonthlyStatements(parsed)...)
@@ -866,49 +811,10 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	}
 
 	// Parse statements from dir
-	files, err := parse.DiscoverFiles(dir)
+	parsed, _, err := parseStatementDir(dir)
 	if err != nil {
-		return fmt.Errorf("discovering files in %s: %w", dir, err)
+		return err
 	}
-	log.Printf("discovered %d statement files", len(files))
-
-	type fileResult struct {
-		sf     parse.StatementFile
-		result parse.ParseResult
-		err    error
-	}
-	ch := make(chan fileResult, len(files))
-	for _, sf := range files {
-		go func() {
-			result, err := parse.ParseFile(sf.Path)
-			ch <- fileResult{sf: sf, result: result, err: err}
-		}()
-	}
-
-	var parsed []parsedFile
-	var totalTxns int
-	var skipped int
-	for range files {
-		r := <-ch
-		if r.err != nil {
-			return r.err
-		}
-		if r.result.Skipped {
-			log.Printf("skipping %s: %s", r.sf.Path, r.result.SkipReason)
-			skipped++
-			continue
-		}
-		// Override path-derived period with document-inferred period before any
-		// downstream use of sf (StatementID, buildStatementData, etc.).
-		if inferred := r.result.InferPeriod(); inferred != "" {
-			r.sf.Period = inferred
-		} else {
-			log.Printf("could not infer period from document data for %s, using path-derived period %q", r.sf.Path, r.sf.Period)
-		}
-		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
-		totalTxns += len(r.result.Transactions)
-	}
-	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
 	// Build statements from dir-parsed files (maxDates computed later after merge)
 	dirStmts := buildStatementData(parsed, nil)
@@ -921,40 +827,18 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	}
 
 	// Build TransactionData from dir, tracking which input IDs are covered
-	dirDocIDs := make(map[string]bool, totalTxns)
 	editsMap := make(map[string]txnEdits)
-
-	var allTxns []store.TransactionData
-	var allDocIDs []string
-
-	for _, pf := range parsed {
-		for _, t := range pf.result.Transactions {
-			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
-			if dirDocIDs[docID] {
-				continue // already seen from another file with the same statementId
+	allTxns, allDocIDs := buildTransactions(parsed, func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
+		if inputTxn, ok := inputByID[docID]; ok {
+			editsMap[docID] = txnEdits{
+				note:          inputTxn.Note,
+				reimbursement: inputTxn.Reimbursement,
 			}
-			dirDocIDs[docID] = true
-
-			td := store.TransactionData{
-				Institution:   pf.sf.Institution,
-				Account:       pf.sf.Account,
-				Description:   t.Description,
-				Amount:        t.Amount,
-				Timestamp:     t.Date,
-				StatementID:   pf.sf.StatementID(),
-				TransactionID: t.TransactionID,
-			}
-
-			if inputTxn, ok := inputByID[docID]; ok {
-				editsMap[docID] = txnEdits{
-					note:          inputTxn.Note,
-					reimbursement: inputTxn.Reimbursement,
-				}
-			}
-
-			allTxns = append(allTxns, td)
-			allDocIDs = append(allDocIDs, docID)
 		}
+	})
+	dirDocIDs := make(map[string]bool, len(allDocIDs))
+	for _, id := range allDocIDs {
+		dirDocIDs[id] = true
 	}
 
 	// Append input-only transactions (not in dir), skipping virtual transactions
