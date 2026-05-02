@@ -21,7 +21,7 @@ import (
 const mismatchedStart = "Thu Jan  1 00:00:00 1970"
 
 func TestQuitKeyQ(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if cmd == nil {
 		t.Error("expected quit command for 'q' key")
@@ -29,7 +29,7 @@ func TestQuitKeyQ(t *testing.T) {
 }
 
 func TestQuitKeyCtrlC(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if cmd == nil {
 		t.Error("expected quit command for ctrl+c")
@@ -37,14 +37,14 @@ func TestQuitKeyCtrlC(t *testing.T) {
 }
 
 func TestInitialState(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	if len(m.Sessions()) != 0 {
 		t.Errorf("expected empty sessions, got %d", len(m.Sessions()))
 	}
 }
 
 func TestWindowSizeUpdate(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model := updated.(Model)
 	if model.width != 80 || model.height != 24 {
@@ -53,7 +53,7 @@ func TestWindowSizeUpdate(t *testing.T) {
 }
 
 func TestSessionsMsg(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	sessions := map[string]session.Session{
 		"sess_1": {WorkingDir: "/tmp/a", Idle: false, LastActivity: time.Now()},
 		"sess_2": {WorkingDir: "/tmp/b", Idle: true, LastActivity: time.Now()},
@@ -66,7 +66,7 @@ func TestSessionsMsg(t *testing.T) {
 }
 
 func TestViewIdleIndicator(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	m.height = 24
 	m.sessions = map[string]session.Session{
@@ -99,7 +99,7 @@ func TestViewEdgeCasePaths(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := New("/dev/null", "/dev/null")
+			m := New("/dev/null", "/dev/null", "/dev/null")
 			m.width = 80
 			m.sessions = map[string]session.Session{
 				"sess_1": {WorkingDir: tc.path, Idle: false},
@@ -113,7 +113,7 @@ func TestViewEdgeCasePaths(t *testing.T) {
 }
 
 func TestViewEmptySessions(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	output := m.View()
 	if !strings.Contains(output, "No active sessions") {
@@ -165,7 +165,7 @@ func TestLoadSessionsFiltersDead(t *testing.T) {
 }
 
 func TestViewWithWeztermTabNumber(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	m.height = 24
 	m.sessions = map[string]session.Session{
@@ -179,7 +179,7 @@ func TestViewWithWeztermTabNumber(t *testing.T) {
 }
 
 func TestViewWithMissingPaneId(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	m.height = 24
 	m.sessions = map[string]session.Session{
@@ -193,7 +193,7 @@ func TestViewWithMissingPaneId(t *testing.T) {
 }
 
 func TestViewWithEmptyWeztermTabs(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	m.height = 24
 	m.sessions = map[string]session.Session{
@@ -205,7 +205,7 @@ func TestViewWithEmptyWeztermTabs(t *testing.T) {
 		t.Errorf("expected no tab prefix when weztermTabs is nil, got: %s", output)
 	}
 	// output should match a model with no WeztermPane at all
-	mBaseline := New("/dev/null", "/dev/null")
+	mBaseline := New("/dev/null", "/dev/null", "/dev/null")
 	mBaseline.width = 80
 	mBaseline.height = 24
 	mBaseline.sessions = map[string]session.Session{
@@ -218,7 +218,7 @@ func TestViewWithEmptyWeztermTabs(t *testing.T) {
 }
 
 func TestViewMixedSessionsAlign(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	m.height = 24
 	m.sessions = map[string]session.Session{
@@ -252,7 +252,7 @@ func TestViewMixedSessionsAlign(t *testing.T) {
 }
 
 func TestUpdateWeztermTabsMsg(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 
 	// Success case: tabs are set.
 	updated, _ := m.Update(weztermTabsMsg{tabs: map[string]int{"9": 3}})
@@ -298,7 +298,7 @@ func TestTickReloadsSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m := New(path, "/dev/null")
+	m := New(path, "/dev/null", "/dev/null")
 	_, cmd := m.Update(tickMsg(time.Now()))
 	if cmd == nil {
 		t.Error("expected batch command from tick")
@@ -308,7 +308,7 @@ func TestTickReloadsSessions(t *testing.T) {
 // --- Rate-limits header tests ---
 
 func TestViewRateLimitsHeader_BothWindows(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	future := time.Now().Add(32 * time.Minute).Unix()
 	m.rateLimits = ratelimits.RateLimits{
@@ -331,7 +331,7 @@ func TestViewRateLimitsHeader_BothWindows(t *testing.T) {
 }
 
 func TestViewRateLimitsHeader_FiveHourOnly(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	future := time.Now().Add(1 * time.Hour).Unix()
 	m.rateLimits = ratelimits.RateLimits{
@@ -347,7 +347,7 @@ func TestViewRateLimitsHeader_FiveHourOnly(t *testing.T) {
 }
 
 func TestViewRateLimitsHeader_OmittedWhenAbsent(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	// Both windows nil (zero value) — header must be omitted.
 	output := m.View()
@@ -362,7 +362,7 @@ func TestViewRateLimitsHeader_OmittedWhenAbsent(t *testing.T) {
 }
 
 func TestViewRateLimitsHeader_ResetsNow(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	// Timestamp in the past → resets now.
 	m.rateLimits = ratelimits.RateLimits{
@@ -375,7 +375,7 @@ func TestViewRateLimitsHeader_ResetsNow(t *testing.T) {
 }
 
 func TestViewRateLimitsHeader_OmittedOnError(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	m.rateLimitsErr = errors.New("boom")
 	// Set windows too — they should be ignored when err is set.
@@ -389,7 +389,7 @@ func TestViewRateLimitsHeader_OmittedOnError(t *testing.T) {
 }
 
 func TestViewRateLimitsHeader_CountdownOnSecondLine(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	m.width = 80
 	future := time.Now().Add(32 * time.Minute).Unix()
 	m.rateLimits = ratelimits.RateLimits{
@@ -437,7 +437,7 @@ func TestLoadRateLimitsMissingFile(t *testing.T) {
 }
 
 func TestLoadRateLimitsMessageDispatch(t *testing.T) {
-	m := New("/dev/null", "/dev/null")
+	m := New("/dev/null", "/dev/null", "/dev/null")
 	fiveHour := &ratelimits.Window{UsedPercentage: 42, ResetsAt: time.Now().Add(time.Hour).Unix()}
 	updated, _ := m.Update(rateLimitsMsg{rl: ratelimits.RateLimits{FiveHour: fiveHour}})
 	model := updated.(Model)

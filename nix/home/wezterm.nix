@@ -114,6 +114,30 @@
         return index .. ': ' .. title
       end)
 
+      wezterm.on('update-status', function(window, pane)
+        pcall(function()
+          local mapping = {}
+          for _, mux_win in ipairs(wezterm.mux.all_windows()) do
+            for i, tab in ipairs(mux_win:tabs()) do
+              for _, mux_pane in ipairs(tab:panes()) do
+                mapping[tostring(mux_pane:pane_id())] = i
+              end
+            end
+          end
+          local home = os.getenv('HOME')
+          if not home then return end
+          local dir = home .. '/.local/share/productivity-tui'
+          os.execute('mkdir -p ' .. dir)
+          local path = dir .. '/wezterm-tabs.json'
+          local tmp = path .. '.tmp'
+          local f = io.open(tmp, 'w')
+          if not f then return end
+          f:write(wezterm.json_encode(mapping))
+          f:close()
+          os.rename(tmp, path)
+        end)
+      end)
+
       return config
     '';
   };

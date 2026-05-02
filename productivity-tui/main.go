@@ -9,6 +9,7 @@ import (
 	"github.com/natb1/commons.systems/productivity-tui/internal/app"
 	"github.com/natb1/commons.systems/productivity-tui/internal/ratelimits"
 	"github.com/natb1/commons.systems/productivity-tui/internal/session"
+	"github.com/natb1/commons.systems/productivity-tui/internal/wezterm"
 )
 
 var version = "0.1.0"
@@ -44,7 +45,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	m := app.New(stateFile, rateLimitsFile)
+	m := app.New(stateFile, rateLimitsFile, wezterm.DefaultPath())
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

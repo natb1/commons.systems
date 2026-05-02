@@ -47,22 +47,24 @@ type Model struct {
 	height           int
 	err              error
 	weztermTabs      map[string]int
+	weztermTabsPath  string
 	weztermErrLogged bool
 	rateLimits       ratelimits.RateLimits
 	rateLimitsPath   string
 	rateLimitsErr    error
 }
 
-func New(sessionsPath, rateLimitsPath string) Model {
+func New(sessionsPath, rateLimitsPath, weztermTabsPath string) Model {
 	return Model{
-		sessions:       map[string]session.Session{},
-		stateFilePath:  sessionsPath,
-		rateLimitsPath: rateLimitsPath,
+		sessions:        map[string]session.Session{},
+		stateFilePath:   sessionsPath,
+		rateLimitsPath:  rateLimitsPath,
+		weztermTabsPath: weztermTabsPath,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tick(), loadSessions(m.stateFilePath), loadWeztermTabs(), loadRateLimits(m.rateLimitsPath))
+	return tea.Batch(tick(), loadSessions(m.stateFilePath), loadWeztermTabs(m.weztermTabsPath), loadRateLimits(m.rateLimitsPath))
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -76,7 +78,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 	case tickMsg:
-		return m, tea.Batch(tick(), loadSessions(m.stateFilePath), loadWeztermTabs(), loadRateLimits(m.rateLimitsPath))
+		return m, tea.Batch(tick(), loadSessions(m.stateFilePath), loadWeztermTabs(m.weztermTabsPath), loadRateLimits(m.rateLimitsPath))
 	case sessionsMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -92,7 +94,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.weztermTabs = nil
 			if !m.weztermErrLogged {
-				fmt.Fprintf(os.Stderr, "productivity-tui: wezterm cli list failed: %v\n", msg.err)
+				fmt.Fprintf(os.Stderr, "productivity-tui: wezterm tab-index file read failed: %v\n", msg.err)
 				m.weztermErrLogged = true
 			}
 		}
@@ -268,9 +270,9 @@ func loadSessions(path string) tea.Cmd {
 	}
 }
 
-func loadWeztermTabs() tea.Cmd {
+func loadWeztermTabs(path string) tea.Cmd {
 	return func() tea.Msg {
-		tabs, err := wezterm.QueryTabIndex()
+		tabs, err := wezterm.QueryTabIndex(path)
 		return weztermTabsMsg{tabs: tabs, err: err}
 	}
 }
