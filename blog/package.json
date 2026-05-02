@@ -19,6 +19,7 @@
     "./vite-plugin-blog-posts": "./src/vite-plugin-blog-posts.ts",
     "./pages/home": "./src/pages/home.ts",
     "./pages/admin": "./src/pages/admin.ts",
+    "./pages/app": "./src/pages/app.ts",
     "./og-meta": "./src/og-meta.ts",
     "./prerender": "./src/prerender.ts",
     "./feed": "./src/feed.ts",
