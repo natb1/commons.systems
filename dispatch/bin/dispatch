@@ -219,11 +219,16 @@ prompt_yes_skip() {
 # and so a non-zero stage exit (crash, error) doesn't trip set -e and abort
 # the remaining post-stages. CLAUDE_PID is intentionally not local-declared
 # so it updates the main()-scoped variable that on_int reads.
-# Requires $BRANCH and $CLAUDE_PID to be set in the caller's scope.
+# Requires $BRANCH and $CLAUDE_PID to be set in the caller's scope. $MODEL is
+# read via dynamic scoping from main() so a user-supplied --model arg applies
+# to every post-stage Claude invocation, not just the implementation phase.
 # Args: $1 = slash-command argument (e.g. "/simplify", "/dispatch-qa #123")
 launch_claude_stage() {
   local slash="$1"
-  claude -w "$BRANCH" "$slash" &
+  local args=(-w "$BRANCH")
+  [[ -n "${MODEL:-}" ]] && args+=(--model "$MODEL")
+  args+=("$slash")
+  claude "${args[@]}" &
   CLAUDE_PID=$!
   set +e
   wait "$CLAUDE_PID"
@@ -464,21 +469,29 @@ ${RESUME_INSTRUCTION}}")
     launch_claude_stage "/security-review"
   fi
 
+  # Stages 6 and 7 are conceptually independent (remote PR state vs. local
+  # worktree state). A Stage 6 failure must not skip the Stage 7 prompt — the
+  # commonest Stage 6 failure is `gh pr ready` on an already-ready PR (re-run
+  # case), which has no bearing on whether the worktree should be cleaned up.
+  # Track failures and exit non-zero at the end instead of aborting mid-sequence.
+  local POSTSTAGE_RC=0
+
   # Stage 6: Mark PR ready (not a Claude invocation; one gh call).
   if prompt_yes_skip "Mark PR ready for review?"; then
     if ! mark_pr_ready "$BRANCH"; then
-      exit 1
+      echo "[dispatch] warning: mark_pr_ready failed — continuing to next stage" >&2
+      POSTSTAGE_RC=1
     fi
   fi
 
   # Stage 7: Remove local worktree (not a Claude invocation; one git call).
   if prompt_yes_skip "Remove local worktree?"; then
     if ! remove_worktree "$WORKTREE_PATH"; then
-      exit 1
+      POSTSTAGE_RC=1
     fi
   fi
 
-  exit 0
+  exit "$POSTSTAGE_RC"
 }
 
 # Only run main() when executed directly — allows tests to `source` this
