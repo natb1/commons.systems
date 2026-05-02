@@ -24,6 +24,12 @@ export function weekStart(ms: number): number {
 
 const CREDIT_WEEKS = 12;
 
+const WEEKS_PER_PERIOD: Record<AllowancePeriod, number> = {
+  weekly: 1,
+  monthly: 52 / 12,
+  quarterly: 52 / 4,
+};
+
 export function computeNetAmount(amount: number, reimbursement: number): number {
   if (reimbursement < 0 || reimbursement > 100) {
     throw new RangeError(`reimbursement must be between 0 and 100, got ${reimbursement}`);
@@ -126,18 +132,12 @@ export function periodAllowance(
 
 /** Convert an allowance to its weekly equivalent for apples-to-apples comparison. */
 export function weeklyEquivalent(allowance: number, allowancePeriod: AllowancePeriod): number {
-  if (allowancePeriod === "weekly") return allowance;
-  if (allowancePeriod === "monthly") return allowance * 12 / 52;
-  if (allowancePeriod === "quarterly") return allowance * 4 / 52;
-  throw new DataIntegrityError(`Unrecognized allowancePeriod: ${allowancePeriod}`);
+  return allowance / WEEKS_PER_PERIOD[allowancePeriod];
 }
 
 /** Convert a weekly amount to the budget's native period scale (inverse of weeklyEquivalent). */
 export function periodEquivalent(weeklyAmount: number, allowancePeriod: AllowancePeriod): number {
-  if (allowancePeriod === "weekly") return weeklyAmount;
-  if (allowancePeriod === "monthly") return weeklyAmount * 52 / 12;
-  if (allowancePeriod === "quarterly") return weeklyAmount * 52 / 4;
-  throw new DataIntegrityError(`Unrecognized allowancePeriod: ${allowancePeriod}`);
+  return weeklyAmount * WEEKS_PER_PERIOD[allowancePeriod];
 }
 
 export function periodsForBudget(periods: BudgetPeriod[], budgetId: BudgetId): BudgetPeriod[] {
