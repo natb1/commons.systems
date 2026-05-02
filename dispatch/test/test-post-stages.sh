@@ -223,6 +223,18 @@ else
   echo "  PASS: C2: launch_claude_stage does not redirect stdin"
 fi
 
+# C3: launch_claude_stage must background claude and update CLAUDE_PID so the
+# on_int trap targets the current child throughout the post-stage sequence.
+TOTAL=$((TOTAL + 1))
+fn_body=$(awk '/^launch_claude_stage\(\)/,/^}/' "$DISPATCH")
+if grep -q 'claude .* &' <<<"$fn_body" && grep -q 'CLAUDE_PID=\$!' <<<"$fn_body"; then
+  PASS=$((PASS + 1))
+  echo "  PASS: C3: launch_claude_stage backgrounds claude and tracks CLAUDE_PID"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: C3: launch_claude_stage does not background + track CLAUDE_PID"
+fi
+
 # ---------------------------------------------------------------------------
 # D. mark_pr_ready
 # ---------------------------------------------------------------------------
@@ -296,6 +308,21 @@ export STUB_GH_PR_VIEW=success
 export STUB_GH_PR_NUMBER=42
 export STUB_GH_PR_READY=success
 assert_returns_zero "D1c: success returns 0" mark_pr_ready "test-branch"
+
+# D1d: mark_pr_ready surfaces gh stderr on failure (issue #2 fix).
+# No existing test in this suite asserts on stderr content; this guards the
+# fix for the bug where 2>/dev/null swallowed gh's diagnostic output.
+export STUB_GH_PR_VIEW=not-found
+unset STUB_GH_PR_NUMBER STUB_GH_PR_READY
+TOTAL=$((TOTAL + 1))
+captured_stderr=$(mark_pr_ready "test-branch" 2>&1 1>/dev/null || true)
+if grep -q "no pull requests found" <<<"$captured_stderr"; then
+  PASS=$((PASS + 1))
+  echo "  PASS: D1d: gh stderr surfaced on PR-not-found"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: D1d: gh stderr not surfaced (got: '$captured_stderr')"
+fi
 
 PATH="$ORIGINAL_PATH"
 rm -rf "$D_STUB_DIR"

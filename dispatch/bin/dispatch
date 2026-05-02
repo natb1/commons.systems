@@ -214,31 +214,50 @@ prompt_yes_skip() {
 
 # --- launch_claude_stage ----------------------------------------------------
 # Launch a foreground Claude session for a post-implementation stage. The
-# user terminates the session (e.g. /exit) to return control. No watcher —
-# post-stages are not gated by phase_signal.
-# Requires $BRANCH to be set in the caller's scope.
+# user terminates the session (e.g. /exit) to return control. Backgrounded +
+# wait so we can track the child's PID in $CLAUDE_PID for the on_int trap,
+# and so a non-zero stage exit (crash, error) doesn't trip set -e and abort
+# the remaining post-stages. CLAUDE_PID is intentionally not local-declared
+# so it updates the main()-scoped variable that on_int reads.
+# Requires $BRANCH and $CLAUDE_PID to be set in the caller's scope.
 # Args: $1 = slash-command argument (e.g. "/simplify", "/dispatch-qa #123")
 launch_claude_stage() {
   local slash="$1"
-  claude -w "$BRANCH" "$slash"
+  claude -w "$BRANCH" "$slash" &
+  CLAUDE_PID=$!
+  set +e
+  wait "$CLAUDE_PID"
+  local rc=$?
+  set -e
+  CLAUDE_PID=0
+  if [[ $rc -ne 0 && $rc -ne 130 && $rc -ne 143 ]]; then
+    echo "[dispatch] warning: claude $slash exited with status $rc — continuing to next stage" >&2
+  fi
+  return 0
 }
 
 # --- mark_pr_ready ----------------------------------------------------------
 # Resolve the PR number for $1 (branch name) and flip it from draft to
 # ready-for-review. Exits non-zero with a descriptive error when the PR
-# cannot be found or the gh call fails.
+# cannot be found or the gh call fails. Captures gh stderr to a temp file
+# and surfaces it on failure so the user can distinguish "no PR found"
+# from auth / network / rate-limit errors (mirrors diagnose_state's pattern).
 # Args: $1 = branch name
 mark_pr_ready() {
   local branch="$1"
-  local pr_num=""
+  local pr_num="" stderr_file rc
+  stderr_file=$(mktemp)
   set +e
-  pr_num=$(gh pr view "$branch" --json number -q .number 2>/dev/null)
-  local rc=$?
+  pr_num=$(gh pr view "$branch" --json number -q .number 2>"$stderr_file")
+  rc=$?
   set -e
   if [[ $rc -ne 0 || -z "$pr_num" ]]; then
+    cat "$stderr_file" >&2
+    rm -f "$stderr_file"
     echo "error: could not resolve PR number for branch '$branch' — cannot mark ready" >&2
     return 1
   fi
+  rm -f "$stderr_file"
   if ! gh pr ready "$pr_num"; then
     echo "error: gh pr ready $pr_num failed" >&2
     return 1
