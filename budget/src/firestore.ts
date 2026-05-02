@@ -1,64 +1,54 @@
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, increment, Timestamp, addDoc, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
-import { requireString, requireNumber, requireNonNegativeNumber, optionalString, optionalNumber } from "@commons-systems/firestoreutil/validate";
+import { requireOneOf } from "@commons-systems/firestoreutil/validate";
 
 import { db, NAMESPACE } from "./firebase.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import type { GroupId } from "@commons-systems/authutil/groups";
-import type { Brand } from "@commons-systems/firestoreutil/brand";
-
-export type TransactionId = Brand<"TransactionId">;
-export type StatementId = Brand<"StatementId">;
-export type StatementItemId = Brand<"StatementItemId">;
-export type BudgetId = Brand<"BudgetId">;
-export type BudgetPeriodId = Brand<"BudgetPeriodId">;
-export type RuleId = Brand<"RuleId">;
-export type NormalizationRuleId = Brand<"NormalizationRuleId">;
+import {
+  ROLLOVERS,
+  ALLOWANCE_PERIODS,
+  RECONCILIATION_CLASSIFICATIONS,
+  RECONCILIATION_ENTITY_TYPES,
+  RULE_TYPES,
+  type Rollover,
+  type AllowancePeriod,
+  type ReconciliationClassification,
+  type ReconciliationEntityType,
+} from "./schema/enums.js";
+import { parseFirestoreTransaction, validateReimbursementRange } from "./entities/transaction.js";
+import type { Transaction, TransactionId } from "./entities/transaction.js";
+export type { Transaction, IdbTransaction, TransactionId } from "./entities/transaction.js";
+import { parseFirestoreStatement } from "./entities/statement.js";
+import type { Statement } from "./entities/statement.js";
+export type { Statement, IdbStatement, StatementId } from "./entities/statement.js";
+import { parseFirestoreStatementItem } from "./entities/statement-item.js";
+import type { StatementItem, StatementItemId } from "./entities/statement-item.js";
+export type { StatementItem, IdbStatementItem, StatementItemId } from "./entities/statement-item.js";
+import { parseFirestoreReconciliationNote } from "./entities/reconciliation-note.js";
+import type { ReconciliationNote } from "./entities/reconciliation-note.js";
+export type { ReconciliationNote, IdbReconciliationNote } from "./entities/reconciliation-note.js";
+import { parseFirestoreBudget } from "./entities/budget.js";
+import type { Budget, BudgetOverride, BudgetId } from "./entities/budget.js";
+export type { Budget, BudgetOverride, IdbBudget, BudgetId } from "./entities/budget.js";
+import { parseFirestoreBudgetPeriod } from "./entities/budget-period.js";
+import type { BudgetPeriod, BudgetPeriodId } from "./entities/budget-period.js";
+export type { BudgetPeriod, IdbBudgetPeriod, BudgetPeriodId } from "./entities/budget-period.js";
+import { parseFirestoreRule } from "./entities/rule.js";
+import type { Rule, RuleId } from "./entities/rule.js";
+export type { Rule, IdbRule, RuleId } from "./entities/rule.js";
+import { parseFirestoreNormalizationRule } from "./entities/normalization-rule.js";
+import type { NormalizationRule, NormalizationRuleId } from "./entities/normalization-rule.js";
+export type { NormalizationRule, IdbNormalizationRule, NormalizationRuleId } from "./entities/normalization-rule.js";
+import { parseFirestoreWeeklyAggregate } from "./entities/weekly-aggregate.js";
+import type { WeeklyAggregate } from "./entities/weekly-aggregate.js";
+export type { WeeklyAggregate, IdbWeeklyAggregate } from "./entities/weekly-aggregate.js";
 
 /** Classification applied to unmatched statement items or transactions during reconciliation. */
-export type ReconciliationClassification = "timing" | "missing_entry" | "discrepancy";
-export type ReconciliationEntityType = "transaction" | "statementItem";
+export type { ReconciliationClassification, ReconciliationEntityType, Rollover, AllowancePeriod, RuleType } from "./schema/enums.js";
+export { ROLLOVERS, ALLOWANCE_PERIODS, RECONCILIATION_CLASSIFICATIONS, RECONCILIATION_ENTITY_TYPES, RULE_TYPES } from "./schema/enums.js";
 
 export type { GroupId } from "@commons-systems/authutil/groups";
-
-/**
- * Budget rollover strategy:
- * - "none": balance resets to the allowance each period (no carry-forward)
- * - "debt": only negative balances carry to next period
- * - "balance": full balance (positive or negative) carries over
- */
-export type Rollover = "none" | "debt" | "balance";
-export type AllowancePeriod = "weekly" | "monthly" | "quarterly";
-
-export interface BudgetOverride {
-  readonly date: Timestamp;
-  readonly balance: number;
-}
-
-export interface Budget {
-  readonly id: BudgetId;
-  readonly name: string;
-  readonly allowance: number;
-  readonly allowancePeriod: AllowancePeriod;
-  readonly rollover: Rollover;
-  /** Sorted by date ascending. findLatestOverride assumes this ordering. */
-  readonly overrides: BudgetOverride[];
-  readonly groupId: GroupId | null;
-}
-
-export interface BudgetPeriod {
-  readonly id: BudgetPeriodId;
-  readonly budgetId: BudgetId;
-  readonly periodStart: Timestamp;
-  readonly periodEnd: Timestamp;
-  /** Sum of net transaction amounts (after reimbursement) in this period. May be negative when credits/refunds exceed debits. Client-updatable. */
-  readonly total: number;
-  /** Number of transactions in this period. Non-negative, immutable by client. */
-  readonly count: number;
-  /** Net amounts broken down by category. Immutable by client. */
-  readonly categoryBreakdown: Record<string, number>;
-  readonly groupId: GroupId | null;
-}
 
 /** Serialized form of BudgetPeriod for HTML data attributes. Serialized by page renderers and deserialized by their hydration counterparts. */
 export interface SerializedBudgetPeriod {
@@ -71,152 +61,16 @@ export interface SerializedBudgetPeriod {
   readonly categoryBreakdown: Record<string, number>;
 }
 
-export interface Statement {
-  readonly id: string;
-  readonly statementId: StatementId;
-  readonly institution: string;
-  readonly account: string;
-  readonly balance: number;
-  readonly period: string;
-  readonly balanceDate: string | null;
-  readonly lastTransactionDate: Timestamp | null;
-  readonly groupId: GroupId | null;
-  readonly virtual: boolean;
-}
-
-export interface Transaction {
-  readonly id: TransactionId;
-  readonly institution: string;
-  readonly account: string;
-  readonly description: string;
-  /** Transaction amount. May be negative for credits/refunds. */
-  readonly amount: number;
-  readonly note: string;
-  readonly category: string;
-  /**
-   * Percentage, range [0, 100]. Validated at read and write boundaries:
-   * read via requireReimbursement (throws RangeError for out-of-range values),
-   * write via validateReimbursementRange in updateTransaction.
-   * Server-side enforcement via Firestore security rules ensures the type
-   * and range constraints hold even if client validation is bypassed.
-   */
-  readonly reimbursement: number;
-  readonly budget: BudgetId | null;
-  readonly timestamp: Timestamp | null;
-  readonly statementId: StatementId | null;
-  /** Explicit link to the immutable statement line item this transaction was imported from. Null or undefined for manually entered transactions and older records written before the statement-items backfill. */
-  readonly statementItemId?: StatementItemId | null;
-  readonly groupId: GroupId | null;
-  readonly normalizedId: string | null;
-  readonly normalizedPrimary: boolean;
-  readonly normalizedDescription: string | null;
-  readonly virtual: boolean;
-}
-
-/**
- * Immutable bank-record line item. One document per OFX transaction line.
- * Amount uses the raw bank sign convention: negative = debit, positive = credit.
- * Transactions invert this (positive = spending), so reconciliation must sign-flip when matching.
- */
-export interface StatementItem {
-  readonly id: string;
-  readonly statementItemId: StatementItemId;
-  readonly statementId: StatementId;
-  readonly institution: string;
-  readonly account: string;
-  readonly period: string;
-  readonly amount: number;
-  readonly timestamp: Timestamp;
-  readonly description: string;
-  readonly fitid: string;
-  readonly groupId: GroupId | null;
-}
-
-/** User annotation on an unmatched reconciliation entity. Document id = `{entityType}_{entityId}`. */
-export interface ReconciliationNote {
-  readonly id: string;
-  readonly entityType: ReconciliationEntityType;
-  readonly entityId: string;
-  readonly classification: ReconciliationClassification;
-  readonly note: string;
-  readonly updatedAt: Timestamp;
-  readonly updatedBy: string;
-  readonly groupId: GroupId | null;
-}
-
-function validateReimbursementRange(n: number): void {
-  if (!Number.isFinite(n) || n < 0 || n > 100) {
-    throw new RangeError(`reimbursement must be between 0 and 100, got ${n}`);
-  }
-}
-
-function requireReimbursement(value: unknown): number {
-  const n = requireNumber(value, "reimbursement");
-  validateReimbursementRange(n);
-  return n;
-}
-
-function optionalTimestamp(value: unknown, field: string): Timestamp | null {
-  if (value == null) return null;
-  if (!(value instanceof Timestamp)) {
-    throw new DataIntegrityError(`Expected Timestamp for ${field}, got ${typeof value}`);
-  }
-  return value;
-}
-
-function requireTimestamp(value: unknown, field: string): Timestamp {
-  const ts = optionalTimestamp(value, field);
-  if (ts === null) throw new DataIntegrityError(`Expected Timestamp for ${field}, got null`);
-  return ts;
-}
-
-function requireCategoryBreakdown(value: unknown): Record<string, number> {
-  if (value == null) return {};
-  if (typeof value !== "object" || Array.isArray(value)) {
-    throw new DataIntegrityError(`Expected object for categoryBreakdown, got ${typeof value}`);
-  }
-  const result: Record<string, number> = {};
-  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof val !== "number" || !Number.isFinite(val)) {
-      throw new DataIntegrityError(`categoryBreakdown[${key}] is not a finite number`);
-    }
-    result[key] = val;
-  }
-  return result;
-}
-
-function requireOverrides(value: unknown): BudgetOverride[] {
-  if (value == null) return [];
-  if (!Array.isArray(value)) {
-    throw new DataIntegrityError(`Expected array for overrides, got ${typeof value}`);
-  }
-  const result: BudgetOverride[] = [];
-  for (let i = 0; i < value.length; i++) {
-    const entry = value[i];
-    if (entry == null || typeof entry !== "object") {
-      throw new DataIntegrityError(`overrides[${i}] is not an object`);
-    }
-    const date = requireTimestamp(entry.date, `overrides[${i}].date`);
-    const balance = requireNumber(entry.balance, `overrides[${i}].balance`);
-    result.push({ date, balance });
-  }
-  for (let i = 1; i < result.length; i++) {
-    if (result[i].date.toMillis() <= result[i - 1].date.toMillis()) {
-      throw new DataIntegrityError(`overrides not sorted by date ascending at index ${i}`);
-    }
-  }
-  return result;
-}
-
 function requireRollover(value: unknown): Rollover {
-  if (value === "none" || value === "debt" || value === "balance") return value;
-  throw new DataIntegrityError(`Expected rollover to be one of none, debt, balance, got ${value}`);
+  if (!(ROLLOVERS as readonly string[]).includes(String(value))) {
+    throw new DataIntegrityError(`Expected rollover to be one of ${ROLLOVERS.join(", ")}, got ${value}`);
+  }
+  return value as Rollover;
 }
 
 function requireAllowancePeriod(value: unknown): AllowancePeriod {
   if (value == null) return "weekly";
-  if (value === "weekly" || value === "monthly" || value === "quarterly") return value;
-  throw new DataIntegrityError(`Expected allowancePeriod to be weekly, monthly, or quarterly, got ${value}`);
+  return requireOneOf(value, ALLOWANCE_PERIODS, "allowancePeriod");
 }
 
 /**
@@ -265,50 +119,14 @@ export async function getTransactions(groupId: null, email?: undefined, filters?
 export async function getTransactions(groupId: GroupId, email: string, filters?: { since?: Timestamp; before?: Timestamp }): Promise<Transaction[]>;
 export async function getTransactions(groupId: GroupId | null, email?: string, filters?: { since?: Timestamp; before?: Timestamp }): Promise<Transaction[]> {
   const docs = await queryGroupCollection("transactions", "seed-", groupId, email, filters);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id as TransactionId,
-      institution: requireString(data.institution, "institution"),
-      account: requireString(data.account, "account"),
-      description: requireString(data.description, "description"),
-      amount: requireNumber(data.amount, "amount"),
-      note: requireString(data.note, "note"),
-      category: requireString(data.category, "category"),
-      reimbursement: requireReimbursement(data.reimbursement),
-      budget: optionalString(data.budget, "budget") as BudgetId | null,
-      timestamp: optionalTimestamp(data.timestamp, "timestamp"),
-      statementId: optionalString(data.statementId, "statementId") as StatementId | null,
-      statementItemId: optionalString(data.statementItemId, "statementItemId") as StatementItemId | null,
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-      normalizedId: optionalString(data.normalizedId, "normalizedId"),
-      // Defaults to true for un-normalized transactions (field may be missing or null)
-      normalizedPrimary: data.normalizedPrimary !== false,
-      normalizedDescription: optionalString(data.normalizedDescription, "normalizedDescription"),
-      virtual: data.virtual === true,
-    };
-  });
+  return docs.map(parseFirestoreTransaction);
 }
 
 export async function getStatements(groupId: null): Promise<Statement[]>;
 export async function getStatements(groupId: GroupId, email: string): Promise<Statement[]>;
 export async function getStatements(groupId: GroupId | null, email?: string): Promise<Statement[]> {
   const docs = await queryGroupCollection("statements", "seed-", groupId, email);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id,
-      statementId: requireString(data.statementId, "statementId") as StatementId,
-      institution: requireString(data.institution, "institution"),
-      account: requireString(data.account, "account"),
-      balance: requireNumber(data.balance, "balance"),
-      period: requireString(data.period, "period"),
-      balanceDate: optionalString(data.balanceDate, "balanceDate"),
-      lastTransactionDate: optionalTimestamp(data.lastTransactionDate, "lastTransactionDate"),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-      virtual: data.virtual === true,
-    };
-  });
+  return docs.map(parseFirestoreStatement);
 }
 
 function requireDocId(id: string, label: string): void {
@@ -343,32 +161,7 @@ export async function getStatementItems(groupId: null): Promise<StatementItem[]>
 export async function getStatementItems(groupId: GroupId, email: string): Promise<StatementItem[]>;
 export async function getStatementItems(groupId: GroupId | null, email?: string): Promise<StatementItem[]> {
   const docs = await queryGroupCollection("statement-items", "seed-", groupId, email);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id,
-      statementItemId: requireString(data.statementItemId, "statementItemId") as StatementItemId,
-      statementId: requireString(data.statementId, "statementId") as StatementId,
-      institution: requireString(data.institution, "institution"),
-      account: requireString(data.account, "account"),
-      period: requireString(data.period, "period"),
-      amount: requireNumber(data.amount, "amount"),
-      timestamp: requireTimestamp(data.timestamp, "timestamp"),
-      description: requireString(data.description, "description"),
-      fitid: requireString(data.fitid, "fitid"),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-    };
-  });
-}
-
-function requireReconciliationClassification(value: unknown): ReconciliationClassification {
-  if (value === "timing" || value === "missing_entry" || value === "discrepancy") return value;
-  throw new DataIntegrityError(`Expected classification to be timing | missing_entry | discrepancy, got ${value}`);
-}
-
-function requireReconciliationEntityType(value: unknown): ReconciliationEntityType {
-  if (value === "transaction" || value === "statementItem") return value;
-  throw new DataIntegrityError(`Expected entityType to be transaction | statementItem, got ${value}`);
+  return docs.map(parseFirestoreStatementItem);
 }
 
 export function reconciliationNoteDocId(
@@ -383,19 +176,7 @@ export async function getReconciliationNotes(groupId: null): Promise<Reconciliat
 export async function getReconciliationNotes(groupId: GroupId, email: string): Promise<ReconciliationNote[]>;
 export async function getReconciliationNotes(groupId: GroupId | null, email?: string): Promise<ReconciliationNote[]> {
   const docs = await queryGroupCollection("reconciliation-notes", "seed-", groupId, email);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id,
-      entityType: requireReconciliationEntityType(data.entityType),
-      entityId: requireString(data.entityId, "entityId"),
-      classification: requireReconciliationClassification(data.classification),
-      note: typeof data.note === "string" ? data.note : "",
-      updatedAt: requireTimestamp(data.updatedAt, "updatedAt"),
-      updatedBy: requireString(data.updatedBy, "updatedBy"),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-    };
-  });
+  return docs.map(parseFirestoreReconciliationNote);
 }
 
 export async function upsertReconciliationNote(
@@ -409,8 +190,8 @@ export async function upsertReconciliationNote(
     note: string;
   },
 ): Promise<string> {
-  requireReconciliationEntityType(fields.entityType);
-  requireReconciliationClassification(fields.classification);
+  requireOneOf(fields.entityType, RECONCILIATION_ENTITY_TYPES, "entityType");
+  requireOneOf(fields.classification, RECONCILIATION_CLASSIFICATIONS, "classification");
   if (!fields.entityId) throw new Error("entityId is required");
   const id = reconciliationNoteDocId(fields.entityType, fields.entityId);
   const path = nsCollectionPath(NAMESPACE, "reconciliation-notes");
@@ -442,20 +223,7 @@ export async function getBudgets(groupId: null): Promise<Budget[]>;
 export async function getBudgets(groupId: GroupId, email: string): Promise<Budget[]>;
 export async function getBudgets(groupId: GroupId | null, email?: string): Promise<Budget[]> {
   const docs = await queryGroupCollection("budgets", "seed-", groupId, email);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    const name = requireString(data.name, "name");
-    if (!name) throw new DataIntegrityError("Budget name must be non-empty");
-    return {
-      id: docSnap.id as BudgetId,
-      name,
-      allowance: requireNonNegativeNumber(data.allowance, "allowance"),
-      allowancePeriod: requireAllowancePeriod(data.allowancePeriod),
-      rollover: requireRollover(data.rollover),
-      overrides: requireOverrides(data.overrides),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-    };
-  });
+  return docs.map(parseFirestoreBudget);
 }
 
 function validateNoOverlappingPeriods(periods: BudgetPeriod[]): void {
@@ -481,27 +249,7 @@ export async function getBudgetPeriods(groupId: null): Promise<BudgetPeriod[]>;
 export async function getBudgetPeriods(groupId: GroupId, email: string): Promise<BudgetPeriod[]>;
 export async function getBudgetPeriods(groupId: GroupId | null, email?: string): Promise<BudgetPeriod[]> {
   const docs = await queryGroupCollection("budget-periods", "seed-", groupId, email);
-  const periods = docs.map((docSnap) => {
-    const data = docSnap.data();
-    const periodStart = requireTimestamp(data.periodStart, "periodStart");
-    const periodEnd = requireTimestamp(data.periodEnd, "periodEnd");
-    if (periodStart.toMillis() >= periodEnd.toMillis()) {
-      throw new DataIntegrityError(
-        `periodStart must be before periodEnd for budget period ${docSnap.id}`
-      );
-    }
-    return {
-      id: docSnap.id as BudgetPeriodId,
-      budgetId: requireString(data.budgetId, "budgetId") as BudgetId,
-      periodStart,
-      periodEnd,
-      total: requireNumber(data.total, "total"),
-      count: requireNonNegativeNumber(data.count, "count"),
-      categoryBreakdown: requireCategoryBreakdown(data.categoryBreakdown),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-    };
-  });
-
+  const periods = docs.map(parseFirestoreBudgetPeriod);
   validateNoOverlappingPeriods(periods);
   return periods;
 }
@@ -549,9 +297,7 @@ export async function updateBudget(
     }
   }
   if (fields.allowancePeriod !== undefined) {
-    if (fields.allowancePeriod !== "weekly" && fields.allowancePeriod !== "monthly" && fields.allowancePeriod !== "quarterly") {
-      throw new Error("Allowance period must be weekly, monthly, or quarterly");
-    }
+    requireAllowancePeriod(fields.allowancePeriod);
   }
   if (fields.rollover !== undefined) {
     requireRollover(fields.rollover);
@@ -580,49 +326,11 @@ export async function updateBudgetOverrides(
 
 // --- Rules ---
 
-export type RuleType = "categorization" | "budget_assignment";
-
-export interface Rule {
-  readonly id: RuleId;
-  readonly type: RuleType;
-  readonly pattern: string;
-  readonly target: string;
-  readonly priority: number;
-  readonly institution: string | null;
-  readonly account: string | null;
-  readonly minAmount: number | null;
-  readonly maxAmount: number | null;
-  readonly excludeCategory: string | null;
-  readonly matchCategory: string | null;
-  readonly groupId: GroupId | null;
-}
-
-function requireRuleType(value: unknown): RuleType {
-  if (value === "categorization" || value === "budget_assignment") return value;
-  throw new DataIntegrityError(`Expected rule type to be categorization or budget_assignment, got ${value}`);
-}
-
 export async function getRules(groupId: GroupId, email: string): Promise<Rule[]>;
 export async function getRules(groupId: null): Promise<Rule[]>;
 export async function getRules(groupId: GroupId | null, email?: string): Promise<Rule[]> {
   const docs = await queryGroupCollection("rules", "seed-", groupId, email);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id as RuleId,
-      type: requireRuleType(data.type),
-      pattern: requireString(data.pattern, "pattern"),
-      target: requireString(data.target, "target"),
-      priority: requireNumber(data.priority, "priority"),
-      institution: optionalString(data.institution, "institution"),
-      account: optionalString(data.account, "account"),
-      minAmount: optionalNumber(data.minAmount, "minAmount"),
-      maxAmount: optionalNumber(data.maxAmount, "maxAmount"),
-      excludeCategory: optionalString(data.excludeCategory, "excludeCategory"),
-      matchCategory: optionalString(data.matchCategory, "matchCategory"),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-    };
-  });
+  return docs.map(parseFirestoreRule);
 }
 
 export async function createRule(
@@ -630,7 +338,7 @@ export async function createRule(
   memberEmails: string[],
   fields: Omit<Rule, "id" | "groupId">,
 ): Promise<RuleId> {
-  requireRuleType(fields.type);
+  if (!(RULE_TYPES as readonly string[]).includes(fields.type)) throw new DataIntegrityError(`Expected rule type to be ${RULE_TYPES.join(" or ")}, got ${fields.type}`);
   if (!Number.isFinite(fields.priority)) throw new RangeError("Rule priority must be a finite number");
   if (!fields.pattern && !fields.matchCategory) throw new Error("Rule pattern or matchCategory is required");
   if (!fields.target) throw new Error("Rule target cannot be empty");
@@ -658,7 +366,7 @@ export async function updateRule(
 ): Promise<void> {
   requireDocId(ruleId, "rule");
   if (Object.keys(fields).length === 0) return;
-  if (fields.type !== undefined) requireRuleType(fields.type);
+  if (fields.type !== undefined && !(RULE_TYPES as readonly string[]).includes(fields.type)) throw new DataIntegrityError(`Expected rule type to be ${RULE_TYPES.join(" or ")}, got ${fields.type}`);
   if (fields.priority !== undefined && !Number.isFinite(fields.priority)) throw new RangeError("Rule priority must be a finite number");
   if (fields.target !== undefined && !fields.target) throw new Error("Rule target cannot be empty");
   const path = nsCollectionPath(NAMESPACE, "rules");
@@ -675,36 +383,11 @@ export async function deleteRule(ruleId: RuleId): Promise<void> {
 
 // --- Normalization Rules ---
 
-export interface NormalizationRule {
-  readonly id: NormalizationRuleId;
-  readonly pattern: string;
-  readonly patternType: string | null;
-  readonly canonicalDescription: string;
-  readonly dateWindowDays: number;
-  readonly institution: string | null;
-  readonly account: string | null;
-  readonly priority: number;
-  readonly groupId: GroupId | null;
-}
-
 export async function getNormalizationRules(groupId: GroupId, email: string): Promise<NormalizationRule[]>;
 export async function getNormalizationRules(groupId: null): Promise<NormalizationRule[]>;
 export async function getNormalizationRules(groupId: GroupId | null, email?: string): Promise<NormalizationRule[]> {
   const docs = await queryGroupCollection("normalization-rules", "seed-", groupId, email);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id as NormalizationRuleId,
-      pattern: requireString(data.pattern, "pattern"),
-      patternType: optionalString(data.patternType, "patternType"),
-      canonicalDescription: requireString(data.canonicalDescription, "canonicalDescription"),
-      dateWindowDays: data.dateWindowDays == null ? 0 : requireNumber(data.dateWindowDays, "dateWindowDays"),
-      institution: optionalString(data.institution, "institution"),
-      account: optionalString(data.account, "account"),
-      priority: requireNumber(data.priority, "priority"),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-    };
-  });
+  return docs.map(parseFirestoreNormalizationRule);
 }
 
 export async function createNormalizationRule(
@@ -754,26 +437,9 @@ export async function deleteNormalizationRule(ruleId: NormalizationRuleId): Prom
 
 // --- Weekly Aggregates ---
 
-export interface WeeklyAggregate {
-  readonly id: string;
-  readonly weekStart: Timestamp;
-  readonly creditTotal: number;
-  readonly unbudgetedTotal: number;
-  readonly groupId: GroupId | null;
-}
-
 export async function getWeeklyAggregates(groupId: null): Promise<WeeklyAggregate[]>;
 export async function getWeeklyAggregates(groupId: GroupId, email: string): Promise<WeeklyAggregate[]>;
 export async function getWeeklyAggregates(groupId: GroupId | null, email?: string): Promise<WeeklyAggregate[]> {
   const docs = await queryGroupCollection("weekly-aggregates", "seed-", groupId, email);
-  return docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id,
-      weekStart: requireTimestamp(data.weekStart, "weekStart"),
-      creditTotal: requireNumber(data.creditTotal, "creditTotal"),
-      unbudgetedTotal: requireNumber(data.unbudgetedTotal, "unbudgetedTotal"),
-      groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-    };
-  });
+  return docs.map(parseFirestoreWeeklyAggregate);
 }
