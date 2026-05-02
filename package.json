@@ -8,6 +8,8 @@
     "authutil",
     "blog",
     "budget",
+    "components",
+    "criticalcssutil",
     "errorutil",
     "fellspiral",
     "firebaseutil",

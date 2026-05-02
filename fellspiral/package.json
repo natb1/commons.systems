@@ -13,11 +13,13 @@
   },
   "dependencies": {
     "@commons-systems/analyticsutil": "*",
+    "@commons-systems/components": "*",
     "@commons-systems/errorutil": "*",
     "@commons-systems/authutil": "*",
     "@commons-systems/blog": "*",
     "@commons-systems/router": "*",
     "@commons-systems/firebaseutil": "*",
+    "@commons-systems/criticalcssutil": "*",
     "@commons-systems/htmlutil": "*",
     "@commons-systems/firestoreutil": "*",
     "@commons-systems/style": "*",

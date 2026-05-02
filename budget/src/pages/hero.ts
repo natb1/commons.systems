@@ -1,4 +1,4 @@
-import { renderHeroShell } from "@commons-systems/style/hero-render";
+import { renderHeroShell } from "@commons-systems/components/hero-render";
 
 export function renderHero(): string {
   return renderHeroShell({

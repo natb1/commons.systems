@@ -9,7 +9,7 @@ vi.mock("../../src/active-data-source.js", () => ({
   getActiveDataSource: () => mockDataSource,
 }));
 
-vi.mock("@commons-systems/style/components/autocomplete", () => ({
+vi.mock("@commons-systems/components/autocomplete", () => ({
   showDropdown: vi.fn(),
   removeDropdown: vi.fn(),
   registerAutocompleteListeners: vi.fn(),
