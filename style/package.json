@@ -6,21 +6,7 @@
   "exports": {
     "./default.css": "./default.css",
     "./layout.css": "./layout.css",
-    "./components/nav": "./src/components/nav.ts",
-    "./components/autocomplete": "./src/components/autocomplete.ts",
     "./expandable-row.css": "./expandable-row.css",
-    "./panel-toggle": "./src/panel-toggle.ts",
-    "./scroll-indicator": "./src/scroll-indicator.ts",
-    "./hero": "./src/hero.ts",
-    "./hero-render": "./src/hero-render.ts",
     "./hero.css": "./hero.css"
-  },
-  "peerDependencies": {
-    "@commons-systems/htmlutil": "*"
-  },
-  "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "lint": "eslint src/"
   }
 }

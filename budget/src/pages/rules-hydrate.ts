@@ -1,7 +1,7 @@
 import { type RuleType, type Rule, type RuleId, type NormalizationRuleId } from "../firestore.js";
 import { getActiveDataSource } from "../active-data-source.js";
 import { renderRow, renderNormalizationRow } from "./rules.js";
-import { removeDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
+import { removeDropdown, registerAutocompleteListeners } from "@commons-systems/components/autocomplete";
 import { showInputError, handleSaveError, handleActionError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
 
 function rowRuleId(el: HTMLElement): RuleId | null {

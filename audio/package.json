@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@commons-systems/analyticsutil": "file:../analyticsutil",
+    "@commons-systems/components": "file:../components",
     "@commons-systems/authutil": "file:../authutil",
     "@commons-systems/firebaseutil": "file:../firebaseutil",
     "@commons-systems/firestoreutil": "file:../firestoreutil",

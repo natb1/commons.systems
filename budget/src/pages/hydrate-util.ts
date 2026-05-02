@@ -2,7 +2,7 @@ import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
-import { showDropdown } from "@commons-systems/style/components/autocomplete";
+import { showDropdown } from "@commons-systems/components/autocomplete";
 
 const errorTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
