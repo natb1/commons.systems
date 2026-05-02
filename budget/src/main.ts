@@ -19,6 +19,7 @@ import { hydrateAccountsReconcile } from "./pages/accounts-reconcile-hydrate.js"
 import { mountHero } from "@commons-systems/style/hero";
 import { renderHero } from "./pages/hero.js";
 import { trackPageView, initAppCheck } from "./firebase.js";
+import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
@@ -343,24 +344,4 @@ initialize().catch((error) => {
   transition({ source: "seed" });
 });
 
-// Defer App Check / reCAPTCHA initialization until first user interaction to keep the
-// large reCAPTCHA script off the critical path. Until initAppCheck() resolves,
-// getAppCheckHeaders returns empty headers, so pre-interaction requests lack App Check tokens.
-const deferredAppCheckInit = async () => {
-  if (!initAppCheck) return;
-  await initAppCheck();
-};
-
-const INTERACTION_EVENTS = ["scroll", "click", "touchstart", "keydown"] as const;
-const triggerOnce = () => {
-  for (const evt of INTERACTION_EVENTS) {
-    window.removeEventListener(evt, triggerOnce);
-  }
-  deferredAppCheckInit().catch((err) => {
-    if (deferProgrammerError(err)) return;
-    logError(err, { operation: "deferred-appcheck-init" });
-  });
-};
-for (const evt of INTERACTION_EVENTS) {
-  window.addEventListener(evt, triggerOnce, { once: true, passive: true });
-}
+deferAppCheckInit(initAppCheck);
