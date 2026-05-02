@@ -25,12 +25,13 @@ func main() {
 		os.Exit(1)
 	}
 	type summary struct {
-		Budgets []export.Budget `json:"budgets"`
-		Rules   []export.Rule   `json:"rules"`
+		Transactions []export.Transaction `json:"transactions"`
+		Budgets      []export.Budget      `json:"budgets"`
+		Rules        []export.Rule        `json:"rules"`
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(summary{Budgets: out.Budgets, Rules: out.Rules}); err != nil {
+	if err := enc.Encode(summary{Transactions: out.Transactions, Budgets: out.Budgets, Rules: out.Rules}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
