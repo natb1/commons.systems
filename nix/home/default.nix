@@ -25,6 +25,7 @@
 {
   imports = [
     ./claude-code.nix
+    ./claude-in-chrome-windows.nix
     ./direnv.nix
     ./gh.nix
     ./git.nix
@@ -35,6 +36,7 @@
     ./ssh-authorized-keys.nix
     ./ssh-keygen.nix
     ./wezterm.nix
+    ./wezterm-windows.nix
     ./zsh.nix
   ];
 

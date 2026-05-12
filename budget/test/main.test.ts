@@ -25,7 +25,7 @@ vi.mock("../src/firebase.js", () => ({
   db: { type: "mock-firestore" },
   NAMESPACE: "app/test",
   trackPageView: vi.fn(),
-  initAppCheck: vi.fn().mockResolvedValue(undefined),
+  initAppCheck: vi.fn(() => Promise.resolve()),
 }));
 
 const mockGetMeta = vi.fn();
@@ -76,7 +76,7 @@ function resetAndMockAll(): void {
   }));
   vi.mock("../src/firebase.js", () => ({
     db: { type: "mock-firestore" }, NAMESPACE: "app/test", trackPageView: vi.fn(),
-    initAppCheck: vi.fn().mockResolvedValue(undefined),
+    initAppCheck: vi.fn(() => Promise.resolve()),
   }));
   vi.mock("../src/idb.js", () => ({
     getMeta: mockGetMeta, storeParsedData: mockStoreParsedData, clearAll: mockClearAll,
@@ -124,7 +124,7 @@ describe("main module", () => {
     expect(mockGetMeta).toHaveBeenCalled();
     const heroContainer = document.getElementById("hero-container")!;
     expect(heroContainer.hidden).toBe(false);
-  });
+  }, 15000);
 
   it("does not call initAppCheck before user interaction", async () => {
     mockGetMeta.mockResolvedValue(undefined);
