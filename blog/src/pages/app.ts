@@ -77,6 +77,10 @@ export interface CreateBlogAppConfig {
   /** Element to receive the `--header-height` CSS variable. Defaults to `document.documentElement`. */
   headerHeightTarget?: HTMLElement;
 
+  // Prerender
+  /** Full outer HTML of the landing-hero section to inject at runtime when the placeholder is present. */
+  homeExtraHtml?: string;
+
   // Optional features
   /** When true, attaches a scroll indicator to the info panel. */
   enableInfoPanelScrollIndicator?: boolean;
@@ -109,6 +113,14 @@ export function createBlogApp(config: CreateBlogAppConfig): void {
       `${entry.borderBoxSize[0].blockSize}px`,
     );
   }).observe(header);
+
+  const heroSection = document.querySelector("section.landing-hero");
+  if (
+    heroSection?.querySelector('[data-placeholder="true"]') &&
+    config.homeExtraHtml
+  ) {
+    heroSection.outerHTML = config.homeExtraHtml;
+  }
 
   let teardownScroll: (() => void) | undefined;
   let currentUser: User | null = null;
