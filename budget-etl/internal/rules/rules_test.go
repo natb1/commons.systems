@@ -203,9 +203,9 @@ func TestApplyCategorization(t *testing.T) {
 			{Description: "STARBUCKS COFFEE #1234", StatementID: "s1", TransactionID: "t1"},
 			{Description: "Electric Company", StatementID: "s1", TransactionID: "t2"},
 		}
-		err := ApplyCategorization(txns, rules)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		uncategorized := ApplyCategorization(txns, rules)
+		if len(uncategorized) != 0 {
+			t.Fatalf("unexpected uncategorized: %v", uncategorized)
 		}
 		if txns[0].Category != "Food:Coffee" {
 			t.Errorf("txn[0].Category = %q, want Food:Coffee", txns[0].Category)
@@ -215,17 +215,23 @@ func TestApplyCategorization(t *testing.T) {
 		}
 	})
 
-	t.Run("error for uncategorized transactions", func(t *testing.T) {
+	t.Run("returns uncategorized records", func(t *testing.T) {
 		txns := []store.TransactionData{
 			{Description: "STARBUCKS", StatementID: "s1", TransactionID: "t1"},
 			{Description: "UNKNOWN MERCHANT", StatementID: "s1", TransactionID: "t2"},
 		}
-		err := ApplyCategorization(txns, rules)
-		if err == nil {
-			t.Fatal("expected error for uncategorized transaction")
+		uncategorized := ApplyCategorization(txns, rules)
+		if len(uncategorized) == 0 {
+			t.Fatal("expected uncategorized records for unmatched transaction")
 		}
 		if txns[0].Category != "Food:Coffee" {
 			t.Errorf("matched txn should still be categorized: %q", txns[0].Category)
+		}
+		if uncategorized[0].TransactionID != "t2" {
+			t.Errorf("uncategorized[0].TransactionID = %q, want t2", uncategorized[0].TransactionID)
+		}
+		if uncategorized[0].Description != "UNKNOWN MERCHANT" {
+			t.Errorf("uncategorized[0].Description = %q, want UNKNOWN MERCHANT", uncategorized[0].Description)
 		}
 	})
 
@@ -233,22 +239,22 @@ func TestApplyCategorization(t *testing.T) {
 		txns := []store.TransactionData{
 			{Description: "STARBUCKS", Category: "Manual:Override", StatementID: "s1", TransactionID: "t1"},
 		}
-		err := ApplyCategorization(txns, rules)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		uncategorized := ApplyCategorization(txns, rules)
+		if len(uncategorized) != 0 {
+			t.Fatalf("unexpected uncategorized: %v", uncategorized)
 		}
 		if txns[0].Category != "Manual:Override" {
 			t.Errorf("should preserve existing category: got %q", txns[0].Category)
 		}
 	})
 
-	t.Run("100% coverage no error", func(t *testing.T) {
+	t.Run("100% coverage returns empty slice", func(t *testing.T) {
 		txns := []store.TransactionData{
 			{Description: "Starbucks #5", StatementID: "s1", TransactionID: "t1"},
 		}
-		err := ApplyCategorization(txns, rules)
-		if err != nil {
-			t.Errorf("expected nil error for full coverage, got: %v", err)
+		uncategorized := ApplyCategorization(txns, rules)
+		if len(uncategorized) != 0 {
+			t.Errorf("expected empty slice for full coverage, got: %v", uncategorized)
 		}
 	})
 }
