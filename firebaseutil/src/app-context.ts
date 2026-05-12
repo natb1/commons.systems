@@ -21,7 +21,7 @@ import {
 import { initAnalyticsSafe } from "@commons-systems/analyticsutil";
 import { createFirestoreErrorSink, type ErrorSinkOptions } from "./error-sink.js";
 
-export interface AppContextBase {
+interface AppContextBase {
   app: FirebaseApp;
   db: Firestore;
   NAMESPACE: Namespace;
@@ -30,7 +30,7 @@ export interface AppContextBase {
   initAppCheck?: () => Promise<void>;
 }
 
-export interface AppContextWithStorage extends AppContextBase {
+interface AppContextWithStorage extends AppContextBase {
   storage: FirebaseStorage;
   STORAGE_NAMESPACE: Namespace;
 }
@@ -67,7 +67,7 @@ function parseEmulatorHost(
   return { hostname: url.hostname, port };
 }
 
-export interface StorageModule {
+interface StorageModule {
   getStorage: (app: FirebaseApp) => FirebaseStorage;
   connectStorageEmulator: (
     storage: FirebaseStorage,
@@ -76,7 +76,7 @@ export interface StorageModule {
   ) => void;
 }
 
-export interface AppContextOptions {
+interface AppContextOptions {
   recaptchaSiteKey?: string;
   /** Defer App Check initialization until `initAppCheck()` is called. When true
    *  with `recaptchaSiteKey`, `getAppCheckHeaders` returns `{}` until init completes

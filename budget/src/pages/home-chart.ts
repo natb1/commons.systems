@@ -19,7 +19,7 @@ export interface SerializedChartTransaction {
   budgetName: string | null;
 }
 
-export interface CategoryNode {
+interface CategoryNode {
   name: string;
   fullPath: string;
   value: number;
@@ -72,7 +72,7 @@ export function filterByWeeks(
  * transactions whose category exactly matches the filter or starts with
  * categoryFilter + ":" (subcategories) are included.
  */
-export interface CategoryTreeOptions {
+interface CategoryTreeOptions {
   mode?: ChartMode;
   unbudgetedOnly?: boolean;
   showCardPayment?: boolean;

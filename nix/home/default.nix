@@ -34,6 +34,7 @@
     ./ssh-authorized-keys.nix
     ./ssh-keygen.nix
     ./wezterm.nix
+    ./wezterm-windows.nix
     ./zsh.nix
   ];
 
