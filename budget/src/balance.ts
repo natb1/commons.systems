@@ -930,48 +930,6 @@ function indexPeriodsForBudgets(periods: BudgetPeriod[]): {
 }
 
 /**
- * Compute diff (allowance minus trailing average) and the raw trailing averages
- * over 12- and 52-week windows. The latest observed week across all budgets is
- * excluded as typically incomplete.
- */
-export function computeBudgetDiffs(budgets: Budget[], periods: BudgetPeriod[]): Map<BudgetId, PerBudgetStats> {
-  const { latestWeekMs, periodsByBudget } = indexPeriodsForBudgets(periods);
-
-  const result = new Map<BudgetId, PerBudgetStats>();
-  for (const budget of budgets) {
-    const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
-    const weeklyAllow = weeklyEquivalent(budget.allowance, budget.allowancePeriod);
-
-    // Build weekly spending map once, then compute both trailing windows.
-    const weeklySpending = new Map<number, number>();
-    for (const p of budgetPeriods) {
-      const entry = toSundayEntry(p.periodStart.toDate());
-      weeklySpending.set(entry.ms, (weeklySpending.get(entry.ms) ?? 0) + p.total);
-    }
-    const completed = [...weeklySpending.entries()]
-      .filter(([ms]) => latestWeekMs === undefined || ms !== latestWeekMs)
-      .sort((a, b) => a[0] - b[0]);
-
-    function trailingAvg(weekCount: number): number {
-      if (completed.length === 0 || latestWeekMs === undefined) return 0;
-      const windowMs = weekCount * MS_PER_WEEK;
-      const trailing = completed.filter(([ms]) => latestWeekMs - ms <= windowMs);
-      if (trailing.length === 0) return 0;
-      return trailing.reduce((acc, [, total]) => acc + total, 0) / weekCount;
-    }
-
-    const avg12 = trailingAvg(12);
-    const avg52 = trailingAvg(52);
-
-    result.set(budget.id, {
-      diff: { diff12: weeklyAllow - avg12, diff52: weeklyAllow - avg52 },
-      avg: { avg12, avg52 },
-    });
-  }
-  return result;
-}
-
-/**
  * A category's share is computed as abs(category.avgWeekly) / absTotal, where
  * absTotal is the sum of abs(avgWeekly) across all categories in the window.
  * Categories whose share is strictly below this threshold are folded into "Other".
@@ -998,43 +956,6 @@ export type PerBudgetCategoryVariance = Readonly<Record<VarianceWindow, readonly
  */
 export function isFavorableDiff(diff: number): boolean {
   return diff >= 0;
-}
-
-/**
- * Decompose each budget's trailing-window actual spending into per-category
- * weekly averages. Each category's total across the window is divided by the
- * fixed weekCount (12 or 52) regardless of how many weeks contain data, so
- * weeks with no data contribute zero rather than shrinking the divisor.
- *
- * The latest observed week (across all budgets) is excluded from both windows
- * because partial-week data would bias the average.
- * Included weeks are those whose start falls within `weekCount * MS_PER_WEEK`
- * of the latest week's start.
- *
- * Categories whose share falls below MATERIALITY_THRESHOLD are folded into a
- * single `kind: "other"` row appended after the sorted material rows.
- */
-export function computePerBudgetCategoryVariance(
-  budgets: Budget[],
-  periods: BudgetPeriod[],
-): Map<BudgetId, PerBudgetCategoryVariance> {
-  const { latestWeekMs, periodsByBudget } = indexPeriodsForBudgets(periods);
-
-  const result = new Map<BudgetId, PerBudgetCategoryVariance>();
-  for (const budget of budgets) {
-    const budgetPeriods = periodsByBudget.get(budget.id) ?? [];
-    const completed: { weekMs: number; period: BudgetPeriod }[] = [];
-    for (const p of budgetPeriods) {
-      const weekMs = toSundayEntry(p.periodStart.toDate()).ms;
-      if (weekMs === latestWeekMs) continue;
-      completed.push({ weekMs, period: p });
-    }
-    result.set(budget.id, {
-      12: decomposeWindow(completed, latestWeekMs, 12),
-      52: decomposeWindow(completed, latestWeekMs, 52),
-    });
-  }
-  return result;
 }
 
 /**
@@ -1104,8 +1025,12 @@ function decomposeWindow(
 }
 
 /**
- * Equivalent to calling computeBudgetDiffs and computePerBudgetCategoryVariance separately,
- * but builds the period index only once.
+ * Build the period index once and produce both per-budget stats (allowance
+ * diffs and raw trailing averages) and a per-category variance decomposition,
+ * over 12- and 52-week trailing windows. The latest observed week across all
+ * budgets is excluded as typically incomplete; categories whose share of the
+ * window's absolute total falls below MATERIALITY_THRESHOLD are folded into a
+ * trailing `kind: "other"` row.
  */
 export function computeBudgetStatsAndVariances(
   budgets: Budget[],
