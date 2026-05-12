@@ -1,4 +1,4 @@
-package store
+package budget
 
 import (
 	"crypto/sha256"

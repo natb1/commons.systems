@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
 	"github.com/natb1/commons.systems/budget-etl/internal/keychain"
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
-	"github.com/natb1/commons.systems/budget-etl/internal/store"
 )
 
 func main() {
@@ -181,15 +181,15 @@ func runDirJSON(dir, groupName string, output fileOpts) error {
 	// Dedup by doc ID: overlapping statement files (same statementId) can
 	// produce duplicate transactions with the same OFX FITID.
 	seen := make(map[string]bool, totalTxns)
-	allTxns := make([]store.TransactionData, 0, totalTxns)
+	allTxns := make([]budget.TransactionData, 0, totalTxns)
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
-			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			docID := budget.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
 			if seen[docID] {
 				continue
 			}
 			seen[docID] = true
-			allTxns = append(allTxns, store.TransactionData{
+			allTxns = append(allTxns, budget.TransactionData{
 				Institution:   pf.sf.Institution,
 				Account:       pf.sf.Account,
 				Description:   t.Description,
@@ -210,15 +210,15 @@ func runDirJSON(dir, groupName string, output fileOpts) error {
 // runOutputJSON writes parsed transactions and statements as a JSON file
 // without applying rules. Category, budget, and normalization fields are
 // left empty. Use --input to apply rules in a subsequent pass.
-func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementData, groupName string, output fileOpts) error {
+func runOutputJSON(allTxns []budget.TransactionData, allStmts []budget.StatementData, groupName string, output fileOpts) error {
 	exportTxns := make([]export.Transaction, len(allTxns))
 	for i, txn := range allTxns {
 		exportTxns[i] = export.Transaction{
-			ID:                store.TransactionDocID(txn.StatementID, txn.TransactionID),
+			ID:                budget.TransactionDocID(txn.StatementID, txn.TransactionID),
 			Institution:       txn.Institution,
 			Account:           txn.Account,
 			Description:       txn.Description,
-			Amount:            store.DollarAmount(txn.Amount),
+			Amount:            budget.DollarAmount(txn.Amount),
 			Timestamp:         export.FormatTimestamp(txn.Timestamp),
 			StatementID:       txn.StatementID,
 			Note:              "",
@@ -251,7 +251,7 @@ func runOutputJSON(allTxns []store.TransactionData, allStmts []store.StatementDa
 
 // virtualSynchronyResult holds generated virtual Synchrony spending transactions and statements.
 type virtualSynchronyResult struct {
-	transactions []store.TransactionData
+	transactions []budget.TransactionData
 	docIDs       []string
 	statements   []export.Statement
 }
@@ -266,7 +266,7 @@ type virtualSynchronyResult struct {
 // Output: category=Pet:Veterinarian, budget=pet.
 // These values match the current PNC/Synchrony account setup; update if account details change.
 func generateVirtualSynchrony(
-	allTxns []store.TransactionData,
+	allTxns []budget.TransactionData,
 	txnDocIDs []string,
 ) virtualSynchronyResult {
 	type dateAmount struct {
@@ -293,7 +293,7 @@ func generateVirtualSynchrony(
 		seen[key] = true
 		period := txn.Timestamp.Format("2006-01")
 		stmtID := "synchrony-virtual-" + period
-		result.transactions = append(result.transactions, store.TransactionData{
+		result.transactions = append(result.transactions, budget.TransactionData{
 			Institution:   "synchrony",
 			Account:       "virtual",
 			Description:   txn.Description,
@@ -312,7 +312,7 @@ func generateVirtualSynchrony(
 	for period := range periods {
 		stmtID := "synchrony-virtual-" + period
 		result.statements = append(result.statements, export.Statement{
-			ID:          store.StatementDocID(stmtID),
+			ID:          budget.StatementDocID(stmtID),
 			StatementID: stmtID,
 			Institution: "synchrony",
 			Account:     "virtual",
@@ -328,14 +328,14 @@ func generateVirtualSynchrony(
 // Returns nil if no virtual transactions exist.
 // Note: the returned Allowance field holds the monthly average because
 // AllowancePeriod is "monthly".
-func computePetBudget(virtualTxns []store.TransactionData) *export.Budget {
+func computePetBudget(virtualTxns []budget.TransactionData) *export.Budget {
 	if len(virtualTxns) == 0 {
 		return nil
 	}
 	var total float64
 	var earliest, latest time.Time
 	for _, txn := range virtualTxns {
-		total += store.DollarAmount(txn.Amount)
+		total += budget.DollarAmount(txn.Amount)
 		if earliest.IsZero() || txn.Timestamp.Before(earliest) {
 			earliest = txn.Timestamp
 		}
@@ -351,7 +351,7 @@ func computePetBudget(virtualTxns []store.TransactionData) *export.Budget {
 	return &export.Budget{
 		ID:              "pet",
 		Name:            "Pet",
-		Allowance: math.Round(monthlyAvg*100) / 100,
+		Allowance:       math.Round(monthlyAvg*100) / 100,
 		AllowancePeriod: "monthly",
 		Rollover:        "none",
 	}
@@ -359,7 +359,7 @@ func computePetBudget(virtualTxns []store.TransactionData) *export.Budget {
 
 // appendPetBudgetIfNeeded adds a pet budget to the list if virtual Synchrony
 // transactions exist and the budget is not already present.
-func appendPetBudgetIfNeeded(budgets []export.Budget, virtualTxns []store.TransactionData) []export.Budget {
+func appendPetBudgetIfNeeded(budgets []export.Budget, virtualTxns []budget.TransactionData) []export.Budget {
 	for _, b := range budgets {
 		if b.ID == "pet" {
 			return budgets
@@ -398,9 +398,9 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		return err
 	}
 
-	// Convert transactions to store.TransactionData for categorization/budget assignment.
+	// Convert transactions to budget.TransactionData for categorization/budget assignment.
 	// Skip virtual transactions — they are regenerated fresh each run.
-	var allTxns []store.TransactionData
+	var allTxns []budget.TransactionData
 	var txnDocIDs []string
 	for _, t := range inp.Transactions {
 		if t.Virtual {
@@ -410,7 +410,7 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 		if err != nil {
 			return fmt.Errorf("transaction %s: invalid timestamp %q: %w", t.ID, t.Timestamp, err)
 		}
-		allTxns = append(allTxns, store.TransactionData{
+		allTxns = append(allTxns, budget.TransactionData{
 			Institution:   t.Institution,
 			Account:       t.Account,
 			Description:   t.Description,
@@ -484,8 +484,8 @@ func runInputJSON(input fileOpts, output fileOpts) error {
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
-		GroupID:             inp.GroupID,
-		GroupName:           inp.GroupName,
+		GroupID:            inp.GroupID,
+		GroupName:          inp.GroupName,
 		Transactions:       exportTxns,
 		Statements:         updatedStmts,
 		Budgets:            budgets,
@@ -555,7 +555,7 @@ func convertExportRules(exportRules []export.Rule) ([]rules.Rule, error) {
 // matching transaction-specific rules. These rules target a specific transaction
 // by doc ID rather than matching by pattern. General rules skip pre-populated
 // transactions (existing behavior in ApplyCategorization/ApplyBudgetAssignment).
-func applyTransactionRules(txns []store.TransactionData, txnDocIDs []string, txnRules []export.Rule) error {
+func applyTransactionRules(txns []budget.TransactionData, txnDocIDs []string, txnRules []export.Rule) error {
 	if len(txnRules) == 0 {
 		return nil
 	}
@@ -599,10 +599,10 @@ func convertNormRules(exportRules []export.NormalizationRule) []rules.Normalizat
 }
 
 // buildNormTxns converts transaction data and doc IDs to normalization input format.
-func buildNormTxns(allTxns []store.TransactionData, docIDs []string) []store.NormTxn {
-	out := make([]store.NormTxn, len(allTxns))
+func buildNormTxns(allTxns []budget.TransactionData, docIDs []string) []budget.NormTxn {
+	out := make([]budget.NormTxn, len(allTxns))
 	for i, t := range allTxns {
-		out[i] = store.NormTxn{
+		out[i] = budget.NormTxn{
 			DocID:       docIDs[i],
 			Description: t.Description,
 			Institution: t.Institution,
@@ -616,12 +616,12 @@ func buildNormTxns(allTxns []store.TransactionData, docIDs []string) []store.Nor
 }
 
 // applyNormToMap applies normalization rules and returns a map keyed by doc ID.
-func applyNormToMap(normTxns []store.NormTxn, normRules []rules.NormalizationRule) (map[string]store.NormalizationUpdate, error) {
+func applyNormToMap(normTxns []budget.NormTxn, normRules []rules.NormalizationRule) (map[string]budget.NormalizationUpdate, error) {
 	normUpdates, err := rules.ApplyNormalization(normTxns, normRules)
 	if err != nil {
 		return nil, err
 	}
-	normMap := make(map[string]store.NormalizationUpdate, len(normUpdates))
+	normMap := make(map[string]budget.NormalizationUpdate, len(normUpdates))
 	for _, u := range normUpdates {
 		normMap[u.DocID] = u
 	}
@@ -636,7 +636,7 @@ type txnEdits struct {
 
 // buildExportTxns converts internal transaction data to export format, applying
 // normalization results and user edits.
-func buildExportTxns(allTxns []store.TransactionData, docIDs []string, normMap map[string]store.NormalizationUpdate, editsMap map[string]txnEdits) []export.Transaction {
+func buildExportTxns(allTxns []budget.TransactionData, docIDs []string, normMap map[string]budget.NormalizationUpdate, editsMap map[string]txnEdits) []export.Transaction {
 	exportTxns := make([]export.Transaction, len(allTxns))
 	for i, txn := range allTxns {
 		docID := docIDs[i]
@@ -645,7 +645,7 @@ func buildExportTxns(allTxns []store.TransactionData, docIDs []string, normMap m
 			Institution:       txn.Institution,
 			Account:           txn.Account,
 			Description:       txn.Description,
-			Amount:            store.DollarAmount(txn.Amount),
+			Amount:            budget.DollarAmount(txn.Amount),
 			Timestamp:         export.FormatTimestamp(txn.Timestamp),
 			StatementID:       txn.StatementID,
 			Category:          txn.Category,
@@ -673,8 +673,8 @@ func buildExportTxns(allTxns []store.TransactionData, docIDs []string, normMap m
 }
 
 // computeExportPeriodsFromFull builds sorted budget periods from pre-built full transactions.
-func computeExportPeriodsFromFull(fullTxns []store.FullTransaction) []export.BudgetPeriod {
-	periods := store.ComputePeriods(fullTxns)
+func computeExportPeriodsFromFull(fullTxns []budget.FullTransaction) []export.BudgetPeriod {
+	periods := budget.ComputePeriods(fullTxns)
 	sort.Slice(periods, func(i, j int) bool {
 		return periods[i].ID < periods[j].ID
 	})
@@ -694,14 +694,14 @@ func computeExportPeriodsFromFull(fullTxns []store.FullTransaction) []export.Bud
 }
 
 // buildFullTransactions converts export transactions and internal transaction data
-// to store.FullTransaction for aggregation functions.
-func buildFullTransactions(exportTxns []export.Transaction, allTxns []store.TransactionData) []store.FullTransaction {
-	fullTxns := make([]store.FullTransaction, len(exportTxns))
+// to budget.FullTransaction for aggregation functions.
+func buildFullTransactions(exportTxns []export.Transaction, allTxns []budget.TransactionData) []budget.FullTransaction {
+	fullTxns := make([]budget.FullTransaction, len(exportTxns))
 	for i, et := range exportTxns {
-		ft := store.FullTransaction{
+		ft := budget.FullTransaction{
 			ID:                et.ID,
 			Category:          allTxns[i].Category,
-			Amount:            store.DollarAmount(allTxns[i].Amount),
+			Amount:            budget.DollarAmount(allTxns[i].Amount),
 			Reimbursement:     et.Reimbursement,
 			Timestamp:         allTxns[i].Timestamp,
 			NormalizedPrimary: et.NormalizedPrimary,
@@ -718,8 +718,8 @@ func buildFullTransactions(exportTxns []export.Transaction, allTxns []store.Tran
 }
 
 // computeExportWeeklyAggregatesFromFull computes sorted weekly aggregates from pre-built full transactions.
-func computeExportWeeklyAggregatesFromFull(fullTxns []store.FullTransaction) []export.WeeklyAggregate {
-	aggregates := store.ComputeWeeklyAggregates(fullTxns)
+func computeExportWeeklyAggregatesFromFull(fullTxns []budget.FullTransaction) []export.WeeklyAggregate {
+	aggregates := budget.ComputeWeeklyAggregates(fullTxns)
 	sort.Slice(aggregates, func(i, j int) bool {
 		return aggregates[i].WeekStart.Before(aggregates[j].WeekStart)
 	})
@@ -867,17 +867,17 @@ func parseAndClassify(input *export.Output, dir string) (
 
 	// Build new (dir-only) transactions, deduplicating within dir
 	dirSeen := make(map[string]bool)
-	var newTxns []store.TransactionData
+	var newTxns []budget.TransactionData
 	var newDocIDs []string
 
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
-			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			docID := budget.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
 			if dirSeen[docID] || inputIDs[docID] {
 				continue
 			}
 			dirSeen[docID] = true
-			newTxns = append(newTxns, store.TransactionData{
+			newTxns = append(newTxns, budget.TransactionData{
 				Institution:   pf.sf.Institution,
 				Account:       pf.sf.Account,
 				Description:   t.Description,
@@ -914,7 +914,7 @@ func parseAndClassify(input *export.Output, dir string) (
 			FITID:       txn.TransactionID,
 			DocID:       newDocIDs[rec.Index],
 			Date:        txn.Timestamp.Format("2006-01-02"),
-			Amount:      store.DollarAmount(txn.Amount),
+			Amount:      budget.DollarAmount(txn.Amount),
 			Description: txn.Description,
 		})
 	}
@@ -937,7 +937,7 @@ func parseAndClassify(input *export.Output, dir string) (
 			Period:      pf.sf.Period,
 			TxnCount:    len(pf.result.Transactions),
 			DateRange:   [2]string{first, last},
-			Balance:     store.DollarAmount(pf.result.Balance),
+			Balance:     budget.DollarAmount(pf.result.Balance),
 		})
 	}
 
@@ -950,7 +950,7 @@ func parseAndClassify(input *export.Output, dir string) (
 			FITID:       txn.TransactionID,
 			DocID:       newDocIDs[i],
 			Date:        txn.Timestamp.Format("2006-01-02"),
-			Amount:      store.DollarAmount(txn.Amount),
+			Amount:      budget.DollarAmount(txn.Amount),
 			Description: txn.Description,
 			Category:    txn.Category,
 			Budget:      txn.Budget,
@@ -1086,18 +1086,18 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	dirDocIDs := make(map[string]bool)
 	editsMap := make(map[string]txnEdits)
 
-	var allTxns []store.TransactionData
+	var allTxns []budget.TransactionData
 	var allDocIDs []string
 
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
-			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
+			docID := budget.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
 			if dirDocIDs[docID] {
 				continue // already seen from another file with the same statementId
 			}
 			dirDocIDs[docID] = true
 
-			td := store.TransactionData{
+			td := budget.TransactionData{
 				Institution:   pf.sf.Institution,
 				Account:       pf.sf.Account,
 				Description:   t.Description,
@@ -1128,7 +1128,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		if err != nil {
 			return fmt.Errorf("transaction %s: invalid timestamp %q: %w", t.ID, t.Timestamp, err)
 		}
-		allTxns = append(allTxns, store.TransactionData{
+		allTxns = append(allTxns, budget.TransactionData{
 			Institution:   t.Institution,
 			Account:       t.Account,
 			Description:   t.Description,
@@ -1194,8 +1194,8 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	return writeOutputAndLog(output, export.Output{
 		Version:            inp.Version,
 		ExportedAt:         export.FormatTimestamp(time.Now()),
-		GroupID:             inp.GroupID,
-		GroupName:           groupName,
+		GroupID:            inp.GroupID,
+		GroupName:          groupName,
 		Transactions:       exportTxns,
 		Statements:         exportStmts,
 		Budgets:            budgets,
@@ -1209,7 +1209,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 // mergeStatements merges dir-parsed statements with input statements.
 // Dir statements override input by statementID; input-only statements are retained.
 // Uses maxDates to set LastTransactionDate on all statements (dir and input-only).
-func mergeStatements(dirStmts []store.StatementData, inputStmts []export.Statement, maxDates map[string]*time.Time) []export.Statement {
+func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statement, maxDates map[string]*time.Time) []export.Statement {
 	for i := range dirStmts {
 		key := accountKey(dirStmts[i].Institution, dirStmts[i].Account)
 		dirStmts[i].LastTransactionDate = maxDates[key]
@@ -1244,7 +1244,7 @@ func accountKey(institution, account string) string {
 
 // maxTransactionDates computes the latest transaction date per (institution, account)
 // from a slice of transactions.
-func maxTransactionDates(txns []store.TransactionData) map[string]*time.Time {
+func maxTransactionDates(txns []budget.TransactionData) map[string]*time.Time {
 	m := make(map[string]*time.Time)
 	for _, txn := range txns {
 		key := accountKey(txn.Institution, txn.Account)
@@ -1264,7 +1264,7 @@ func maxTransactionDates(txns []store.TransactionData) map[string]*time.Time {
 //
 // This allows computeNetWorth to track the account's balance over time instead
 // of treating it as NULL until the single statement's period.
-func deriveMonthlyStatements(parsed []parsedFile) []store.StatementData {
+func deriveMonthlyStatements(parsed []parsedFile) []budget.StatementData {
 	// Group parsed files by (institution, account)
 	type acctKey struct{ inst, acct string }
 	byAccount := make(map[acctKey][]parsedFile)
@@ -1273,7 +1273,7 @@ func deriveMonthlyStatements(parsed []parsedFile) []store.StatementData {
 		byAccount[k] = append(byAccount[k], pf)
 	}
 
-	var derived []store.StatementData
+	var derived []budget.StatementData
 	for k, pfs := range byAccount {
 		// Only derive for accounts with exactly one statement file
 		if len(pfs) != 1 {
@@ -1331,7 +1331,7 @@ func deriveMonthlyStatements(parsed []parsedFile) []store.StatementData {
 
 			stmtID := k.inst + "-" + k.acct + "-" + period
 
-			derived = append(derived, store.StatementData{
+			derived = append(derived, budget.StatementData{
 				StatementID: stmtID,
 				Institution: k.inst,
 				Account:     k.acct,
@@ -1347,9 +1347,9 @@ func deriveMonthlyStatements(parsed []parsedFile) []store.StatementData {
 	return derived
 }
 
-// buildStatementData converts parsed files to store.StatementData.
-func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []store.StatementData {
-	out := make([]store.StatementData, len(parsed))
+// buildStatementData converts parsed files to budget.StatementData.
+func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []budget.StatementData {
+	out := make([]budget.StatementData, len(parsed))
 	for i, pf := range parsed {
 		key := accountKey(pf.sf.Institution, pf.sf.Account)
 		var balanceDate *time.Time
@@ -1357,7 +1357,7 @@ func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []s
 			bd := pf.result.BalanceDate
 			balanceDate = &bd
 		}
-		out[i] = store.StatementData{
+		out[i] = budget.StatementData{
 			StatementID:         pf.sf.StatementID(),
 			Institution:         pf.sf.Institution,
 			Account:             pf.sf.Account,
@@ -1370,8 +1370,8 @@ func buildStatementData(parsed []parsedFile, maxDates map[string]*time.Time) []s
 	return out
 }
 
-// buildExportStatements converts store.StatementData to export.Statement.
-func buildExportStatements(stmts []store.StatementData) []export.Statement {
+// buildExportStatements converts budget.StatementData to export.Statement.
+func buildExportStatements(stmts []budget.StatementData) []export.Statement {
 	out := make([]export.Statement, len(stmts))
 	for i, s := range stmts {
 		balanceDate := ""
@@ -1384,11 +1384,11 @@ func buildExportStatements(stmts []store.StatementData) []export.Statement {
 			ltd = &v
 		}
 		out[i] = export.Statement{
-			ID:                  store.StatementDocID(s.StatementID),
+			ID:                  budget.StatementDocID(s.StatementID),
 			StatementID:         s.StatementID,
 			Institution:         s.Institution,
 			Account:             s.Account,
-			Balance:             store.DollarAmount(s.Balance),
+			Balance:             budget.DollarAmount(s.Balance),
 			Period:              s.Period,
 			BalanceDate:         balanceDate,
 			LastTransactionDate: ltd,
@@ -1396,4 +1396,3 @@ func buildExportStatements(stmts []store.StatementData) []export.Statement {
 	}
 	return out
 }
-
