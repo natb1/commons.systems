@@ -35,6 +35,7 @@ func main() {
 
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> [--output <path> | --firestore] [--input <path>] [--keychain <name>] [--env <env>] [--dry-run]")
+		fmt.Fprintln(os.Stderr, "  Encrypt/decrypt password sources (checked in order): BUDGET_ETL_PASSWORD env var, then --keychain (macOS only).")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -48,9 +49,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Resolve password early so keychain errors fail fast before file I/O
+	// Resolve password early so keychain errors fail fast before file I/O.
+	// BUDGET_ETL_PASSWORD takes precedence over --keychain so non-macOS
+	// platforms (Linux/WSL) can supply a password without the macOS-only
+	// `security` tool.
 	var password string
-	if *keychainFlag != "" {
+	if envPw := os.Getenv("BUDGET_ETL_PASSWORD"); envPw != "" {
+		password = envPw
+		log.Print("using password from BUDGET_ETL_PASSWORD env var")
+		if *keychainFlag != "" {
+			log.Printf("ignoring --keychain %q because BUDGET_ETL_PASSWORD is set", *keychainFlag)
+		}
+	} else if *keychainFlag != "" {
 		pw, err := keychain.Get(*keychainFlag)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
