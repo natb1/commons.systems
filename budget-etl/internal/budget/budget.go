@@ -34,27 +34,16 @@ func StatementDocID(statementID string) string {
 
 // TransactionData holds the fields for a parsed transaction in a budget snapshot.
 type TransactionData struct {
-	Institution     string
-	Account         string
-	Description     string
-	Amount          int64 // cents; positive = spending, negative = income/credit
-	Timestamp       time.Time
-	StatementID     string
-	StatementItemID string // immutable bank line id; empty for manual/virtual entries
-	TransactionID   string
-	Category        string // set by categorization rules; preserved across re-imports
-	Budget          string // set by budget assignment rules; preserved across re-imports
-	Virtual         bool   // true for ETL-generated virtual transactions
-}
-
-// StatementItemDocID generates a deterministic document ID from a statement-item ID
-// using a truncated sha256 hash (10 bytes / 20 hex characters).
-func StatementItemDocID(statementItemID string) string {
-	if statementItemID == "" {
-		panic("statementItemDocID: empty statementItemID")
-	}
-	h := sha256.Sum256([]byte(statementItemID))
-	return fmt.Sprintf("%x", h[:10])
+	Institution   string
+	Account       string
+	Description   string
+	Amount        int64 // cents; positive = spending, negative = income/credit
+	Timestamp     time.Time
+	StatementID   string
+	TransactionID string
+	Category      string // set by categorization rules; preserved across re-imports
+	Budget        string // set by budget assignment rules; preserved across re-imports
+	Virtual       bool   // true for ETL-generated virtual transactions
 }
 
 // NormTxn is a read-only view of a transaction used by normalization rules.
