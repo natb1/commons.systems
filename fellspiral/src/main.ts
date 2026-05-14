@@ -8,8 +8,7 @@ import buildTimeMetadata from "virtual:blog-post-metadata";
 import buildTimeFeeds from "virtual:blog-roll-feeds";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
-import { signIn, signOut, onAuthStateChanged } from "./auth.js";
-import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
+import { db, NAMESPACE, trackPageView, initAppCheck, signIn, signOut, onAuthStateChanged } from "./firebase.js";
 
 const headerHeightTarget = document.querySelector(".content-grid") as HTMLElement | null;
 if (!headerHeightTarget) throw new Error(".content-grid element not found");
