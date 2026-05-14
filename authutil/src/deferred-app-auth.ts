@@ -1,5 +1,6 @@
 import type { FirebaseApp } from "firebase/app";
 import type { User } from "firebase/auth";
+import { logError } from "@commons-systems/errorutil/log";
 
 export interface DeferredAppAuth {
   signIn(): Promise<void>;
@@ -20,10 +21,15 @@ export function createDeferredAppAuth(app: FirebaseApp): DeferredAppAuth {
   const authReady = Promise.all([
     import("./app-auth.js"),
     import("firebase/auth"),
-  ]).then(([{ createAppAuth }, { getAuth }]) => {
-    cachedGetAuth = () => getAuth(app);
-    return createAppAuth(app);
-  });
+  ])
+    .then(([{ createAppAuth }, { getAuth }]) => {
+      cachedGetAuth = () => getAuth(app);
+      return createAppAuth(app);
+    })
+    .catch((err: unknown) => {
+      logError(err, { operation: "auth-chunk-load" });
+      throw err;
+    });
 
   function getCurrentUser(): { uid: string; email: string | null } | null {
     try {

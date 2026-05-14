@@ -7,6 +7,7 @@ const mockSignOut = vi.fn();
 const mockOnAuthStateChanged = vi.fn();
 const mockCreateAppAuth = vi.fn();
 const mockGetAuth = vi.fn();
+const mockLogError = vi.fn();
 
 vi.mock("../src/app-auth.js", () => ({
   createAppAuth: (...args: unknown[]) => mockCreateAppAuth(...args),
@@ -14,6 +15,10 @@ vi.mock("../src/app-auth.js", () => ({
 
 vi.mock("firebase/auth", () => ({
   getAuth: (...args: unknown[]) => mockGetAuth(...args),
+}));
+
+vi.mock("@commons-systems/errorutil/log", () => ({
+  logError: (...args: unknown[]) => mockLogError(...args),
 }));
 
 const mockApp = { type: "mock-app" } as unknown as FirebaseApp;
@@ -113,5 +118,21 @@ describe("createDeferredAppAuth", () => {
 
     expect(mockOnAuthStateChanged).toHaveBeenCalledWith(callback);
     expect(unsubscribe).toBe(mockUnsubscribe);
+  });
+
+  it("logs auth-chunk-load and rejects awaited methods when the chunk load fails", async () => {
+    mockCreateAppAuth.mockImplementation(() => {
+      throw new Error("chunk failed");
+    });
+
+    const { createDeferredAppAuth } = await import("../src/deferred-app-auth");
+    const deferred = createDeferredAppAuth(mockApp);
+
+    await expect(deferred.signIn()).rejects.toThrow("chunk failed");
+    expect(mockLogError).toHaveBeenCalledWith(expect.any(Error), {
+      operation: "auth-chunk-load",
+    });
+    const [loggedErr] = mockLogError.mock.calls[0]!;
+    expect((loggedErr as Error).message).toBe("chunk failed");
   });
 });
