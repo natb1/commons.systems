@@ -12,7 +12,7 @@ import type { FirebaseStorage } from "firebase/storage";
 import type { User } from "firebase/auth";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError, registerErrorSink } from "@commons-systems/errorutil/log";
-import { createDeferredAppAuth } from "@commons-systems/authutil/deferred-app-auth";
+import type { DeferredAppAuth } from "@commons-systems/authutil/deferred-app-auth";
 import { firebaseConfig } from "./config.js";
 import {
   validateNamespace,
@@ -258,9 +258,32 @@ export function createAppContext(
   }
   const NAMESPACE = validateNamespace(envNamespace || `${appName}/prod`);
 
-  const deferredAuth = options?.enableAuth ? createDeferredAppAuth(app) : undefined;
-  const errorSinkGetCurrentUser = deferredAuth
-    ? deferredAuth.getCurrentUser
+  // Dynamic-import the shim so apps that don't opt into auth never pull the
+  // deferred-app-auth module into their firebaseutil chunk. The shim's own
+  // firebase/auth dynamic import still defers the heavy auth chunk.
+  let resolvedDeferredAuth: DeferredAppAuth | undefined;
+  let deferredAuthPromise: Promise<DeferredAppAuth> | undefined;
+  function loadDeferredAuth(): Promise<DeferredAppAuth> {
+    if (!deferredAuthPromise) {
+      deferredAuthPromise = import("@commons-systems/authutil/deferred-app-auth").then(
+        ({ createDeferredAppAuth }) => {
+          resolvedDeferredAuth = createDeferredAppAuth(app);
+          return resolvedDeferredAuth;
+        },
+      );
+    }
+    return deferredAuthPromise;
+  }
+  if (options?.enableAuth) {
+    // Trigger the load eagerly to match the original parallel-with-init
+    // timing. The `.catch(() => {})` consumes rejection from this kick-off
+    // chain only; callers awaiting an auth method still see the rejection
+    // through `deferredAuthPromise`.
+    loadDeferredAuth().catch(() => {});
+  }
+
+  const errorSinkGetCurrentUser = options?.enableAuth
+    ? () => resolvedDeferredAuth?.getCurrentUser() ?? null
     : options?.getCurrentUser;
 
   // Errors logged before this point (e.g., appcheck-init) go to console only.
@@ -274,11 +297,13 @@ export function createAppContext(
 
   const trackPageView = initAnalyticsSafe(app);
 
-  const authMethods = deferredAuth
+  const authMethods = options?.enableAuth
     ? {
-        signIn: deferredAuth.signIn,
-        signOut: deferredAuth.signOut,
-        onAuthStateChanged: deferredAuth.onAuthStateChanged,
+        signIn: async (): Promise<void> => (await loadDeferredAuth()).signIn(),
+        signOut: async (): Promise<void> => (await loadDeferredAuth()).signOut(),
+        onAuthStateChanged: async (
+          cb: (user: User | null) => void,
+        ): Promise<() => void> => (await loadDeferredAuth()).onAuthStateChanged(cb),
       }
     : {};
 
