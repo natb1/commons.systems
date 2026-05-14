@@ -5,21 +5,6 @@
   contain: layout style;
 }
 
-/*
- * missing.css sets `main { max-inline-size: var(--eff-line-length); margin-inline: auto }`
- * which works for top-level `main` (it self-centers in viewport). Inside `.content-grid`
- * we own the column layout, so pin `main` to the grid column start. Without this override,
- * if the grid column ever grows wider than `--eff-line-length`, `main` shrinks and
- * auto-centers within its column — misaligning its left edge with the header. The grid
- * column width depends on `25ch` resolution, which varies with font metrics (and font-load
- * timing under `font-display: optional` differs between local and CI), so the alignment
- * would otherwise be fragile to environmental variance.
- */
-.content-grid > main {
-  max-inline-size: none;
-  margin-inline: 0;
-}
-
 @media (min-width: 768px) {
   .content-grid {
     grid-template-columns: 1fr var(--sidebar-width, 16rem);
