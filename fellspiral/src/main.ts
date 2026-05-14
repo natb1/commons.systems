@@ -25,7 +25,7 @@ createBlogApp({
 
   infoPanelLinkSections: INFO_PANEL_LINK_SECTIONS,
   blogRollEntries: BLOG_ROLL_ENTRIES,
-  createStrategies,
+  strategies: createStrategies(),
   buildTimeFeeds,
 
   enableInfoPanelScrollIndicator: true,

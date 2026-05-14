@@ -52,7 +52,7 @@ export interface CreateBlogAppConfig {
   // Info panel
   infoPanelLinkSections: LinkSection[];
   blogRollEntries: BlogRollEntry[];
-  createStrategies: () => Map<string, BlogRollStrategy>;
+  strategies: Map<string, BlogRollStrategy>;
   /** Build-time-fetched blogroll feed snapshot. Triggers a post-AppCheck rehydrate when present. */
   buildTimeFeeds?: Record<string, LatestPost | null>;
   /** RSS feed URL shown in info-panel archive header. Defaults to "/feed.xml". */
@@ -127,15 +127,12 @@ export function createBlogApp(config: CreateBlogAppConfig): void {
   let cachedPosts: PostMeta[] = [];
   let lastSkippedCount = 0;
   let lastRenderedPosts: PostMeta[] | undefined;
-  const strategies = config.createStrategies();
   const boundFetchPost = createFetchPost(config.postFetchPathPrefix);
 
   // Skip the very first innerHTML replacement when pre-rendered content exists.
   // The pre-render script already injected identical panel markup, so replacing
-  // it would cause a needless DOM teardown that can trigger CLS. For apps
-  // without pre-render, infoPanel.children.length is 0 so this is a no-op.
-  const hasPrerenderedPanel = infoPanel.children.length > 0;
-  let isFirstPanelRender = hasPrerenderedPanel;
+  // it would cause a needless DOM teardown that can trigger CLS.
+  let isFirstPanelRender = infoPanel.children.length > 0;
 
   const updateInfoPanel = (): void => {
     if (cachedPosts === lastRenderedPosts) return;
@@ -153,7 +150,7 @@ export function createBlogApp(config: CreateBlogAppConfig): void {
         buildTimeFeeds: config.buildTimeFeeds,
       });
     }
-    hydrateInfoPanel(infoPanel, config.blogRollEntries, strategies);
+    hydrateInfoPanel(infoPanel, config.blogRollEntries, config.strategies);
     if (config.enableInfoPanelScrollIndicator) {
       teardownScroll?.();
       teardownScroll = initScrollIndicator(infoPanel);
@@ -178,37 +175,32 @@ export function createBlogApp(config: CreateBlogAppConfig): void {
     if (currentUser === null) {
       cachedPosts = config.buildTimeMetadata;
       lastSkippedCount = 0;
-      return renderHomeHtml(cachedPosts, postLinkPrefix, config.buildTimeContent);
-    }
-
-    try {
-      const result = await getPosts(config.db, config.namespace, currentUser);
-      cachedPosts = result.posts;
-      lastSkippedCount = result.skippedCount;
-      return renderHomeHtml(cachedPosts, postLinkPrefix, config.buildTimeContent);
-    } catch (error) {
-      const kind = classifyError(error);
-      if (kind === "programmer") throw error;
-      logError(error, { operation: "load-posts" });
-      const msg =
-        kind === "permission-denied"
-          ? "Permission denied loading posts."
-          : "Could not load posts. Try refreshing the page.";
-      return `
+    } else {
+      try {
+        const result = await getPosts(config.db, config.namespace, currentUser);
+        cachedPosts = result.posts;
+        lastSkippedCount = result.skippedCount;
+      } catch (error) {
+        const kind = classifyError(error);
+        if (kind === "programmer") throw error;
+        logError(error, { operation: "load-posts" });
+        const msg =
+          kind === "permission-denied"
+            ? "Permission denied loading posts."
+            : "Could not load posts. Try refreshing the page.";
+        return `
     <h2>Home</h2>
     <p id="posts-error">${msg}</p>
   `;
+      }
     }
+    return renderHomeHtml(cachedPosts, postLinkPrefix, config.buildTimeContent);
   }
-
-  updateNav(parsePath().path);
 
   // Same pre-render skip pattern as isFirstPanelRender above — return null on
   // the first navigation so the router keeps the existing DOM instead of
-  // tearing it down and rebuilding identical markup. For apps without
-  // pre-render, hasPrerenderedHome is false so this is a no-op.
-  const hasPrerenderedHome = app.querySelector("#posts") !== null;
-  let isFirstHomeRender = hasPrerenderedHome;
+  // tearing it down and rebuilding identical markup.
+  let isFirstHomeRender = app.querySelector("#posts") !== null;
 
   const router = createHistoryRouter(
     app,
@@ -227,7 +219,7 @@ export function createBlogApp(config: CreateBlogAppConfig): void {
           return loadPosts();
         },
         afterRender: (outlet, path) => {
-          const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
+          const slug = path.startsWith(postLinkPrefix) ? path.slice(postLinkPrefix.length) : undefined;
           hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
           updateOgMeta(
             config.siteUrl,
@@ -309,7 +301,7 @@ export function createBlogApp(config: CreateBlogAppConfig): void {
   // initial hydrateInfoPanel call already covers refresh.
   if (config.buildTimeFeeds) {
     deferAppCheckInit(config.initAppCheck, () =>
-      hydrateInfoPanel(infoPanel, config.blogRollEntries, strategies),
+      hydrateInfoPanel(infoPanel, config.blogRollEntries, config.strategies),
     );
   } else {
     deferAppCheckInit(config.initAppCheck);
