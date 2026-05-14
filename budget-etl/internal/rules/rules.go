@@ -166,7 +166,7 @@ type NormalizationRule struct {
 	Pattern              string // case-insensitive substring (or regex if PatternType=="regex")
 	PatternType          string // "substring" (default) or "regex"
 	CanonicalDescription string
-	DateWindowDays       int // unused in grouping logic; preserved in JSON export and Firestore schemas
+	DateWindowDays       int // unused in grouping logic; preserved in JSON export schema
 	Institution          string
 	Account              string
 	Priority             int

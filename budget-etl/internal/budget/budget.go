@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// StatementData holds the fields to write to a Firestore statement document.
+// StatementData holds the fields for a parsed statement in a budget snapshot.
 type StatementData struct {
 	StatementID         string
 	Institution         string
@@ -32,7 +32,7 @@ func StatementDocID(statementID string) string {
 	return fmt.Sprintf("%x", h[:10])
 }
 
-// TransactionData holds the fields to write to a Firestore transaction document.
+// TransactionData holds the fields for a parsed transaction in a budget snapshot.
 type TransactionData struct {
 	Institution     string
 	Account         string

@@ -1221,7 +1221,7 @@ func mergeStatements(dirStmts []budget.StatementData, inputStmts []export.Statem
 		dirByStmtID[s.StatementID] = true
 	}
 
-	result := append([]export.Statement{}, dirExport...)
+	result := dirExport
 	for _, s := range inputStmts {
 		if dirByStmtID[s.StatementID] || s.Virtual {
 			continue
