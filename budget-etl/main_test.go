@@ -312,8 +312,8 @@ func TestApplyTransactionRulesSkippedByGeneral(t *testing.T) {
 	}
 
 	// Step 2: Apply general categorization (should skip doc-1, categorize doc-2)
-	if err := rules.ApplyCategorization(txns, generalRules); err != nil {
-		t.Fatalf("ApplyCategorization: %v", err)
+	if uncategorized := rules.ApplyCategorization(txns, generalRules); len(uncategorized) > 0 {
+		t.Fatalf("ApplyCategorization: unexpected uncategorized: %v", uncategorized)
 	}
 
 	// Step 3: Apply general budget assignment (should skip doc-1, assign doc-2)

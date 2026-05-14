@@ -25,6 +25,7 @@
 {
   imports = [
     ./claude-code.nix
+    ./claude-in-chrome-windows.nix
     ./direnv.nix
     ./gh.nix
     ./git.nix
