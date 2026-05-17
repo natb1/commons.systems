@@ -13,7 +13,7 @@ export function renderShowcase(apps: AppCard[]): string {
   const cards = apps.map(renderCard).join("\n        ");
   return `<section class="landing-hero app-showcase" aria-label="Featured apps">
       <div class="landing-hero-band">
-        <p class="landing-hero-band-headline">Build with commons.systems. Run without.</p>
+        <p class="landing-hero-band-headline">Build with commons.systems. Learn to run without.</p>
         <p class="landing-hero-band-subline">Code you understand. Data you control. A roadmap you set.</p>
       </div>
       <div class="landing-hero-grid">
