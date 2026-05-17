@@ -247,6 +247,8 @@ GREEN_ROLLUP='[{"status":"COMPLETED","conclusion":"SUCCESS"},{"status":"COMPLETE
 FAILING_ROLLUP='[{"status":"COMPLETED","conclusion":"FAILURE"}]'
 # Pending rollup (one check not yet complete).
 PENDING_ROLLUP='[{"status":"IN_PROGRESS","conclusion":null}]'
+# Mixed rollup: one check concluded failing, one still pending.
+MIXED_ROLLUP='[{"status":"COMPLETED","conclusion":"FAILURE"},{"status":"IN_PROGRESS","conclusion":null}]'
 # Empty rollup.
 EMPTY_ROLLUP='[]'
 # No labels.
@@ -274,22 +276,31 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "draft + failing CI → verify" "verify" "$result"
 teardown
 
-# 3. Draft + pending CI → verify
-echo "Test: draft + pending CI → verify"
+# 3. Draft + pending CI → waiting
+echo "Test: draft + pending CI → waiting"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$PENDING_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + pending CI → verify" "verify" "$result"
+assert_eq "draft + pending CI → waiting" "waiting" "$result"
 teardown
 
-# 4. Draft + empty rollup → verify
-echo "Test: draft + empty rollup → verify"
+# 4. Draft + empty rollup → waiting
+echo "Test: draft + empty rollup → waiting"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$EMPTY_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + empty rollup → verify" "verify" "$result"
+assert_eq "draft + empty rollup → waiting" "waiting" "$result"
+teardown
+
+# 4b. Draft + mixed rollup (failing + pending) → verify (failure wins)
+echo "Test: draft + mixed rollup → verify"
+setup
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" "$NO_LABELS" "$MIXED_ROLLUP")" \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "draft + mixed rollup (fail+pending) → verify" "verify" "$result"
 teardown
 
 # 5. Draft + green + no label → qa
@@ -591,6 +602,44 @@ echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
 assert_eq "--qa returns oldest QA PR (ignores security PR)" "pr 20 20-qa-old" "$result"
+teardown
+
+# 13. waiting PR is skipped in favor of a help-wanted issue.
+echo "Test: waiting PR skipped in favor of help-wanted issue"
+setup
+# PR 10 in waiting phase (pending CI); no other PRs.
+FULL='['"$(make_pr 10 "10-waiting" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
+BRIEF='['"$(make_pr_brief 10 "10-waiting" "2024-01-01T00:00:00Z")"']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "waiting PR skipped; help-wanted issue returned" "issue 55" "$result"
+teardown
+
+# 14. waiting PR is skipped in favor of a newer verify-phase PR.
+echo "Test: waiting PR skipped in favor of verify PR"
+setup
+# PR 10 (older) in waiting phase, PR 20 (newer) in verify phase.
+FULL='['"$(make_pr 10 "10-waiting" "true" "$NO_LABELS" "$PENDING_ROLLUP")"','"$(make_pr 20 "20-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+BRIEF='['"$(make_pr_brief 10 "10-waiting" "2024-01-01T00:00:00Z")"','"$(make_pr_brief 20 "20-verify" "2024-01-02T00:00:00Z")"']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "waiting PR skipped; verify PR returned" "pr 20 20-verify" "$result"
+teardown
+
+# 15. A lone waiting PR (nothing else queued) yields empty.
+echo "Test: lone waiting PR → empty"
+setup
+FULL='['"$(make_pr 10 "10-waiting" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
+BRIEF='['"$(make_pr_brief 10 "10-waiting" "2024-01-01T00:00:00Z")"']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "lone waiting PR → empty" "empty" "$result"
 teardown
 
 # ============================================================================

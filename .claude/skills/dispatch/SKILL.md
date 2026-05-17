@@ -34,10 +34,11 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
   - `empty` — nothing eligible
 
   Priority order it implements (highest first; within a tier, oldest PR wins; PRs
-  with a local worktree are skipped): oldest `ready` PR → oldest `security` PR →
-  oldest `review` PR → oldest `simplify` PR → oldest `verify` PR → oldest `help
-  wanted` issue → oldest `qa` PR → `empty`. Non-QA PRs are ranked closest-to-done
-  first; `help wanted` issues rank below all non-QA PRs but above QA PRs.
+  with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
+  oldest `ready` PR → oldest `security` PR → oldest `review` PR → oldest
+  `simplify` PR → oldest `verify` PR → oldest `help wanted` issue → oldest `qa`
+  PR → `empty`. Non-QA PRs are ranked closest-to-done first; `help wanted` issues
+  rank below all non-QA PRs but above QA PRs.
 
   On `empty` → report that the queue is empty and **stop**.
 
@@ -107,7 +108,8 @@ present. Map the phase:
 | Phase | Meaning | Next action |
 |---|---|---|
 | `implement` | no PR on the target | relevance review (Step 6), then `/plan-implement` |
-| `verify` | draft PR, CI not green (failing, pending, or empty rollup) | `/verify-pr` |
+| `verify` | draft PR, CI completed and failed | `/verify-pr` |
+| `waiting` | draft PR, CI in progress (running/queued/not started) | report "checks still running, nothing to do" and stop |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` → then label `dispatch:qa-done` |
 | `simplify` | draft PR + `dispatch:qa-done` | `/simplify` → then label `dispatch:refactored` |
 | `review` | draft PR + `dispatch:refactored` | `/review` → then label `dispatch:reviewed` |
@@ -125,6 +127,9 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
   `/plan-implement` gets **no** `dispatch:*` label.
 - **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of failed
   CI checks, record the outcome, post it, stop. No label.
+- **`waiting`** — CI checks are still running or queued; there is nothing to do yet.
+  Report "checks still running, nothing to do" and **stop** without invoking any
+  phase skill or applying any label.
 - **`qa` / `simplify` / `review` / `security`** — invoke the mapped skill
   (`/dispatch-qa`, `/simplify`, `/review`, `/security-review`). After it **returns**,
   apply the accumulating `dispatch:*` label to the PR (see below).

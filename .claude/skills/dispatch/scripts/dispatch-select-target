@@ -12,12 +12,13 @@
 #   2. Oldest "security" PR (draft + dispatch:reviewed)
 #   3. Oldest "review"   PR (draft + dispatch:refactored)
 #   4. Oldest "simplify" PR (draft + dispatch:qa-done)
-#   5. Oldest "verify"   PR (draft, CI not green)
+#   5. Oldest "verify"   PR (draft, CI completed and failed)
 #   6. Oldest open help-wanted issue
 #   7. Oldest "qa"       PR (draft, CI green, no dispatch:* label)
 #
 # PRs with a local git worktree are skipped (a session is actively working them).
 # "done" (non-draft) PRs are skipped entirely.
+# "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
 #
 # --qa mode priority:
 #   1. Oldest QA PR with no local git worktree
@@ -88,6 +89,10 @@ while IFS=$'\t' read -r pr_num _created pr_branch; do
   case "$phase" in
     done)
       # Skip completed PRs.
+      continue
+      ;;
+    waiting)
+      # Skip PRs whose CI is still running — nothing actionable yet.
       continue
       ;;
     ready)
