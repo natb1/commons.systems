@@ -213,13 +213,19 @@ test.describe("home page infinite scroll", () => {
         expect(totalRows).toBeGreaterThan(initialVisible + await hiddenRows.count());
       }).toPass({ timeout: 10000 });
 
-      // Verify ALL visible rows match the budget filter
-      const budgets = await allVisible.evaluateAll(rows =>
-        rows.map(r => (r as HTMLElement).dataset.budgetName)
-      );
-      for (const b of budgets) {
-        expect(b).toBe("Groceries");
-      }
+      // Verify ALL visible rows match the budget filter. Scroll-loaded rows are
+      // appended as raw HTML and only hidden once the TRANSACTIONS_APPENDED_EVENT
+      // re-runs the filter, so re-poll until every visible row has settled on the
+      // filtered budget rather than reading once during that transient window.
+      await expect.poll(
+        async () => {
+          const budgets = await allVisible.evaluateAll(rows =>
+            rows.map(r => (r as HTMLElement).dataset.budgetName)
+          );
+          return budgets.every(b => b === "Groceries");
+        },
+        { timeout: 10000 },
+      ).toBe(true);
     });
   });
 });

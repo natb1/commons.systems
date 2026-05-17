@@ -107,11 +107,18 @@ test.describe("info panel — header alignment", () => {
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
 
-    const headerBox = await page.locator("header").boundingBox();
-    const mainBox = await page.locator("main").boundingBox();
-
-    expect(headerBox).not.toBeNull();
-    expect(mainBox).not.toBeNull();
-    expect(Math.abs(headerBox!.x - mainBox!.x)).toBeLessThanOrEqual(2);
+    // The header and main column-1 left edges are governed by identical CSS grid
+    // templates, but a late font load or stylesheet application can shift the
+    // header by ~1 filigree width before layout settles. Re-measure both boxes
+    // until they agree; a genuine misalignment still fails at the timeout.
+    await expect.poll(
+      async () => {
+        const headerBox = await page.locator("header").boundingBox();
+        const mainBox = await page.locator("main").boundingBox();
+        if (!headerBox || !mainBox) return Number.NaN;
+        return Math.abs(headerBox.x - mainBox.x);
+      },
+      { timeout: 10000 },
+    ).toBeLessThanOrEqual(2);
   });
 });
