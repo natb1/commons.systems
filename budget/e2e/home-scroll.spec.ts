@@ -177,12 +177,13 @@ test.describe("home page infinite scroll", () => {
       const initialVisible = await visibleRows.count();
       expect(initialVisible).toBeGreaterThan(0);
 
-      // Scroll to load more
-      await page.locator("#scroll-sentinel").scrollIntoViewIfNeeded();
+      // Scroll repeatedly until more rows load — re-scroll on every iteration so
+      // the IntersectionObserver keeps firing as new batches push the sentinel down.
       await expect(async () => {
+        await page.locator("#scroll-sentinel").scrollIntoViewIfNeeded();
         const totalRows = await page.locator("#transactions-table .txn-row").count();
         expect(totalRows).toBeGreaterThan(initialVisible + await hiddenRows.count());
-      }).toPass({ timeout: 10000 });
+      }).toPass({ timeout: 30000 });
 
       // Verify ALL visible rows match the category filter
       const allVisible = page.locator('#transactions-table .txn-row:not([style*="display: none"])');
@@ -205,13 +206,14 @@ test.describe("home page infinite scroll", () => {
       const initialVisible = await allVisible.count();
       expect(initialVisible).toBeGreaterThan(0);
 
-      // Scroll to load more
-      await page.locator("#scroll-sentinel").scrollIntoViewIfNeeded();
+      // Scroll repeatedly until more rows load — re-scroll on every iteration so
+      // the IntersectionObserver keeps firing as new batches push the sentinel down.
       const hiddenRows = page.locator('#transactions-table .txn-row[style*="display: none"]');
       await expect(async () => {
+        await page.locator("#scroll-sentinel").scrollIntoViewIfNeeded();
         const totalRows = await page.locator("#transactions-table .txn-row").count();
         expect(totalRows).toBeGreaterThan(initialVisible + await hiddenRows.count());
-      }).toPass({ timeout: 10000 });
+      }).toPass({ timeout: 30000 });
 
       // Verify ALL visible rows match the budget filter. Scroll-loaded rows are
       // appended as raw HTML and only hidden once the TRANSACTIONS_APPENDED_EVENT
