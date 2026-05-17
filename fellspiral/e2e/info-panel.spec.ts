@@ -107,18 +107,15 @@ test.describe("info panel — header alignment", () => {
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
 
-    // The header and main column-1 left edges are governed by identical CSS grid
-    // templates, but a late font load or stylesheet application can shift the
-    // header by ~1 filigree width before layout settles. Re-measure both boxes
-    // until they agree; a genuine misalignment still fails at the timeout.
-    await expect.poll(
-      async () => {
-        const headerBox = await page.locator("header").boundingBox();
-        const mainBox = await page.locator("main").boundingBox();
-        if (!headerBox || !mainBox) return Number.NaN;
-        return Math.abs(headerBox.x - mainBox.x);
-      },
-      { timeout: 10000 },
-    ).toBeLessThanOrEqual(2);
+    // `layout.css` pins `.content-grid > main` to its grid column start
+    // (`max-inline-size: none; margin-inline: 0`), so main's left edge no longer
+    // depends on font-metric-derived widths. The header and main left edges
+    // therefore coincide regardless of whether the web font or the fallback font
+    // is active — the alignment is deterministic, so a direct assertion suffices.
+    const headerBox = await page.locator("header").boundingBox();
+    const mainBox = await page.locator("main").boundingBox();
+    expect(headerBox).not.toBeNull();
+    expect(mainBox).not.toBeNull();
+    expect(Math.abs(headerBox!.x - mainBox!.x)).toBeLessThanOrEqual(2);
   });
 });
