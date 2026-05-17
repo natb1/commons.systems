@@ -5,7 +5,16 @@ description: Post-implementation user-acceptance QA — single pass, no wiggum-l
 
 # Dispatch: User-Acceptance QA
 
-Invoked by `./dispatch/bin/dispatch <issue-num>` after the implementation phase reports `phase_signal=complete`. The dispatcher launched Claude with `claude -w <branch> "/dispatch-qa #<issue-num>"`, so the WorktreeCreate hook has already placed the session in the correct worktree, written `CLAUDE.local.md`, and exported `DISPATCH_ISSUE_NUM` and `DISPATCH_STATE_FILE`.
+Runs a single user-acceptance QA pass on an implemented PR. Invoked three ways:
+
+- By the `/dispatch` skill — the session is already inside the target worktree.
+- Standalone with no argument — `/dispatch-qa` self-selects the highest-priority
+  QA-phase PR.
+- Standalone, or via the legacy `./dispatch/bin/dispatch` dispatcher, with an
+  explicit `#<issue>` argument.
+
+**Step 0** resolves the target issue and its worktree for all three paths. The
+remaining steps use the Step-0-resolved issue number `<N>`.
 
 This skill is a **single user-acceptance pass**. It does not iterate, does not enter plan mode, does not modify code, and does not commit. The recovery path for any bug found is "re-dispatch the original issue" — this skill records and continues.
 
@@ -17,6 +26,43 @@ This skill is a **single user-acceptance pass**. It does not iterate, does not e
 - **No code changes, commits, or pushes.**
 
 ## Steps
+
+0. **Target resolution.**
+
+   Establish the target issue number `<N>` and ensure the session is in the
+   target's worktree. Precedence:
+
+   1. **An issue/PR number argument is given** (leading `#` optional) → that issue
+      is the target.
+   2. **Else the current branch matches `<issue>-*`** (the session is already inside
+      a target worktree) → use that issue number.
+   3. **Else** (standalone: no argument, not in a target worktree) → run:
+      ```bash
+      .claude/skills/dispatch/scripts/dispatch-select-target --qa
+      ```
+      It prints `pr <num> <branch>` (the highest-priority QA-phase PR) or `empty`.
+      On `empty`, report that there is no QA-phase work and **stop**. Otherwise the
+      printed PR's issue number is the target.
+
+   Then, **when the session is not already in the target's worktree**, resolve or
+   create it via `EnterWorktree`, matching `/dispatch` Step 3. `EnterWorktree`
+   accepts exactly one of `path` (switch to an existing worktree) or `name`
+   (create a new one):
+
+   - **Already in the target's worktree** (current branch starts with `<issue>-`) →
+     proceed to Step 1.
+   - **An existing worktree matches** `<issue>-*` (parse `git worktree list
+     --porcelain` as blank-line-delimited records) → `EnterWorktree` with `path:`
+     set to that path.
+   - **No existing worktree** → generate a sanitized branch name `<issue>-<slug>`:
+     lowercase the issue title, replace non-alphanumeric runs with `-`, collapse
+     repeated `-`, strip leading/trailing `-`, and truncate so the full branch name
+     is ≤ 32 characters. `EnterWorktree` with `name:` set to that branch name.
+     Creating via `name:` fires the `WorktreeCreate` hook, which runs
+     `sync-issue-context` and populates `CLAUDE.local.md` with full issue context.
+
+   Step 0 establishes the issue number `<N>` that the remaining steps use for their
+   `tmp/` filenames.
 
 1. **Detect whether the implementation has a browser component.**
 
@@ -92,7 +138,7 @@ This skill is a **single user-acceptance pass**. It does not iterate, does not e
             - On interaction failure: retry once, then record **SKIP** and continue.
             - 3 consecutive SKIPs → stop the walkthrough early.
             - Stay on the App URL domain — do not follow external links.
-      8. Stop GIF recording: `gif_creator` with `action: "stop_recording"`. Export to `tmp/dispatch-qa-walkthrough-<n>.gif` (where `<n>` is `$DISPATCH_ISSUE_NUM`).
+      8. Stop GIF recording: `gif_creator` with `action: "stop_recording"`. Export to `tmp/dispatch-qa-walkthrough-<n>.gif` (where `<n>` is the Step-0-resolved issue number `<N>`).
       9. Write per-item results (PASS/FAIL/SKIP, console errors, network failures, summary counts) to `tmp/dispatch-qa-results-<n>.txt`.
 
 4. **Non-browser path.**
@@ -117,7 +163,7 @@ This skill is a **single user-acceptance pass**. It does not iterate, does not e
    ```
    where `$BRANCH` is the current branch (`git rev-parse --abbrev-ref HEAD`).
 
-   Write a markdown summary to `tmp/dispatch-qa-summary-<n>.md` (where `<n>` is `$DISPATCH_ISSUE_NUM`). Include:
+   Write a markdown summary to `tmp/dispatch-qa-summary-<n>.md` (where `<n>` is the Step-0-resolved issue number `<N>`). Include:
    - Items walked.
    - PASS / FAIL / SKIP counts.
    - List of bugs reported (if any), each with the item title and the user's report.
