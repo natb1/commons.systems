@@ -11,7 +11,7 @@ test.describe("app showcase", () => {
     await page.goto("/");
 
     const headline = page.locator(".landing-hero-band .landing-hero-band-headline");
-    await expect(headline).toHaveText("Build with commons.systems. Run without.");
+    await expect(headline).toHaveText("Build with commons.systems. Learn to run without.");
 
     const subline = page.locator(".landing-hero-band .landing-hero-band-subline");
     await expect(subline).toHaveText(

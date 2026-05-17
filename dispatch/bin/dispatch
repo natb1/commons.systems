@@ -219,16 +219,22 @@ prompt_yes_skip() {
 # and so a non-zero stage exit (crash, error) doesn't trip set -e and abort
 # the remaining post-stages. CLAUDE_PID is intentionally not local-declared
 # so it updates the main()-scoped variable that on_int reads.
-# Requires $BRANCH and $CLAUDE_PID to be set in the caller's scope. $MODEL is
-# read via dynamic scoping from main() so a user-supplied --model arg applies
-# to every post-stage Claude invocation, not just the implementation phase.
+# Requires $BRANCH, $WORKTREE_PATH, and $CLAUDE_PID to be set in the caller's
+# scope. $MODEL is read via dynamic scoping from main() so a user-supplied
+# --model arg applies to every post-stage Claude invocation, not just the
+# implementation phase.
 # Args: $1 = slash-command argument (e.g. "/simplify", "/dispatch-qa #123")
 launch_claude_stage() {
   local slash="$1"
   local args=(-w "$BRANCH")
   [[ -n "${MODEL:-}" ]] && args+=(--model "$MODEL")
   args+=("$slash")
-  claude "${args[@]}" &
+  # direnv exec re-sources the target worktree's .envrc so Claude inherits the
+  # worktree's flake env (PLAYWRIGHT_BROWSERS_PATH, PATH, etc.), not whatever
+  # the dispatcher's parent shell happened to have. Without this, a parent
+  # shell that last cd'd through a different worktree leaks its stale
+  # nix-store paths into Claude's subprocesses, breaking smoke tests etc.
+  direnv exec "$WORKTREE_PATH" claude "${args[@]}" &
   CLAUDE_PID=$!
   set +e
   wait "$CLAUDE_PID"
@@ -399,7 +405,10 @@ ${RESUME_INSTRUCTION}}")
   # Launch Claude as a child. It inherits the controlling TTY directly — no
   # stdin redirection, no nohup — so the user retains full interactive access
   # and Ctrl-C is delivered to Claude (the foreground job) by the shell.
-  claude "${CLAUDE_ARGS[@]}" &
+  # direnv exec re-sources the worktree's .envrc so Claude (and every Bash
+  # subprocess it spawns) gets the worktree's flake env — see
+  # launch_claude_stage for the full rationale.
+  direnv exec "$WORKTREE_PATH" claude "${CLAUDE_ARGS[@]}" &
   CLAUDE_PID=$!
 
   # Background watcher: polls phase_signal=complete and SIGTERMs the child
