@@ -75,10 +75,18 @@ function removeOgTags(): void {
   }
 }
 
+/**
+ * Builds OG/description meta entries for a static page (e.g. /about).
+ * `page.url` must be a root-relative path starting with "/" (e.g. "/about"); it is
+ * concatenated onto `siteUrl` to form og:url. Passing a full absolute URL doubles the origin.
+ */
 export function staticPageOgEntries(
   siteUrl: string,
   page: { url: string; title: string; description: string; image?: string; type?: "website" | "profile" },
 ): OgTagEntry[] {
+  if (!page.url.startsWith("/")) {
+    throw new Error("staticPageOgEntries: page.url must be a root-relative path starting with '/'");
+  }
   const entries: OgTagEntry[] = [
     { attr: "name", key: "description", content: page.description },
     { attr: "property", key: "og:title", content: page.title },
@@ -97,6 +105,7 @@ export function staticPageOgEntries(
   return entries;
 }
 
+// `page.url` must be a root-relative path — see staticPageOgEntries above.
 export function updateStaticPageMeta(
   siteUrl: string,
   page: { url: string; title: string; description: string; image?: string; type?: "website" | "profile" },

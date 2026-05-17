@@ -11,7 +11,7 @@ export const NAV_LINKS: NavLink[] = [
 ];
 
 export const ABOUT_PAGE_META = {
-  url: `${SITE_URL}/about`,
+  url: "/about",
   title: "About",
   description: "Nathan Buesgens — independent contractor focused on training the AI skills that decouple a business from professional services and platform vendors.",
   type: "profile" as const,

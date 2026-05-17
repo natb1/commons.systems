@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { ABOUT_PAGE_META, NAV_LINKS, PERSON, SITE_DEFAULTS } from "../src/site-config";
+import { describe, it, expect, beforeEach } from "vitest";
+import { updateStaticPageMeta } from "@commons-systems/blog/og-meta";
+import { ABOUT_PAGE_META, NAV_LINKS, PERSON, SITE_DEFAULTS, SITE_URL } from "../src/site-config";
 
 describe("SITE_DEFAULTS", () => {
   it("description stays within 160 chars (Google SERP truncation threshold)", () => {
@@ -30,8 +31,8 @@ describe("ABOUT_PAGE_META", () => {
     expect(ABOUT_PAGE_META.title).toBe("About");
   });
 
-  it("url ends with /about", () => {
-    expect(ABOUT_PAGE_META.url.endsWith("/about")).toBe(true);
+  it("url is the root-relative path /about", () => {
+    expect(ABOUT_PAGE_META.url).toBe("/about");
   });
 
   it("type is 'profile'", () => {
@@ -50,5 +51,24 @@ describe("PERSON", () => {
 
   it("sameAs links to GitHub", () => {
     expect(PERSON.sameAs).toContain("https://github.com/natb1");
+  });
+});
+
+// Regression for the doubled-origin bug: exercises the real SITE_URL + ABOUT_PAGE_META
+// constant + updateStaticPageMeta, the exact production path from main.ts SPA navigation.
+describe("ABOUT_PAGE_META rendered via updateStaticPageMeta", () => {
+  beforeEach(() => {
+    document.head.querySelectorAll('meta[property^="og:"]').forEach((el) => el.remove());
+    document.head.querySelectorAll('meta[name^="twitter:"]').forEach((el) => el.remove());
+    document.head.querySelectorAll('meta[name="description"]').forEach((el) => el.remove());
+    document.title = "";
+  });
+
+  it("renders og:url as a single, non-doubled origin", () => {
+    updateStaticPageMeta(SITE_URL, ABOUT_PAGE_META, "commons.systems");
+    const ogUrl = document
+      .querySelector<HTMLMetaElement>('meta[property="og:url"]')
+      ?.getAttribute("content");
+    expect(ogUrl).toBe("https://commons.systems/about");
   });
 });

@@ -291,6 +291,25 @@ describe("staticPageOgEntries", () => {
       entries.find((e) => e.key === "og:description")?.content,
     );
   });
+
+  it("builds og:url by joining siteUrl with the root-relative page.url", () => {
+    const entries = staticPageOgEntries("https://example.com", {
+      url: "/about",
+      title: "About",
+      description: "About page",
+    });
+    expect(entries.find((e) => e.key === "og:url")?.content).toBe("https://example.com/about");
+  });
+
+  it("throws when page.url is an absolute URL rather than a root-relative path", () => {
+    expect(() =>
+      staticPageOgEntries("https://example.com", {
+        url: "https://example.com/about",
+        title: "About",
+        description: "About page",
+      }),
+    ).toThrow(/page.url must be a root-relative path/);
+  });
 });
 
 describe("updateStaticPageMeta", () => {
