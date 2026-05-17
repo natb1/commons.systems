@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("transactions", () => {
   test("Firestore connectivity @smoke", async ({ page }) => {

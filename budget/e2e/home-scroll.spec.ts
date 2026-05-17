@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@commons-systems/config/playwright-test";
 
 /**
  * Build a fixture JSON buffer with transactions spread over 30 weeks from today.

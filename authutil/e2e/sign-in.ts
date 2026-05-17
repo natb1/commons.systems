@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page } from "@commons-systems/config/playwright-test";
 
 export async function signIn(
   page: Page,

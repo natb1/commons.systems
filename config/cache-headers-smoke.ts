@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./playwright-test";
 
 export function describeCacheHeadersSmoke(appName: string): void {
   test.describe(`${appName} cache headers smoke`, () => {
