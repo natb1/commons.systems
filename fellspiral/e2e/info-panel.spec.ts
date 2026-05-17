@@ -107,11 +107,9 @@ test.describe("info panel — header alignment", () => {
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
 
-    // `layout.css` pins `.content-grid > main` to its grid column start
-    // (`max-inline-size: none; margin-inline: 0`), so main's left edge no longer
-    // depends on font-metric-derived widths. The header and main left edges
-    // therefore coincide regardless of whether the web font or the fallback font
-    // is active — the alignment is deterministic, so a direct assertion suffices.
+    // `layout.css` pins `.content-grid > main` to its grid column start, so
+    // header/main left-edge alignment no longer depends on which font loads —
+    // it is deterministic, and a direct assertion suffices (no font-load wait).
     const headerBox = await page.locator("header").boundingBox();
     const mainBox = await page.locator("main").boundingBox();
     expect(headerBox).not.toBeNull();

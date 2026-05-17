@@ -69,6 +69,46 @@ async function waitForTable(page: Page): Promise<void> {
   await expect(page.locator("#transactions-table")).toBeVisible({ timeout: 15000 });
 }
 
+/**
+ * Scroll the sentinel into view repeatedly until the row count grows past the
+ * baseline. Re-scroll on every poll iteration so the IntersectionObserver keeps
+ * firing as each loaded batch pushes the sentinel further down. The threshold
+ * adds the current hidden-row count so a filtered table still detects a newly
+ * loaded batch even when every new row is filtered out of view.
+ */
+async function scrollUntilMoreRows(page: Page, baselineVisible: number): Promise<void> {
+  const hiddenRows = page.locator('#transactions-table .txn-row[style*="display: none"]');
+  await expect(async () => {
+    await page.locator("#scroll-sentinel").scrollIntoViewIfNeeded();
+    const totalRows = await page.locator("#transactions-table .txn-row").count();
+    expect(totalRows).toBeGreaterThan(baselineVisible + (await hiddenRows.count()));
+  }).toPass({ timeout: 30000 });
+}
+
+/**
+ * Poll until every visible row's `dataset[key]` satisfies `predicate`.
+ * Scroll-loaded rows are appended as raw HTML and only hidden once the
+ * TRANSACTIONS_APPENDED_EVENT re-runs the table filter, so a single read can
+ * catch the transient window before the new rows have been filtered.
+ */
+async function expectVisibleRowsSettle(
+  page: Page,
+  key: "category" | "budgetName",
+  predicate: (value: string | undefined) => boolean,
+): Promise<void> {
+  const visibleRows = page.locator('#transactions-table .txn-row:not([style*="display: none"])');
+  await expect.poll(
+    async () => {
+      const values = await visibleRows.evaluateAll(
+        (rows, k) => rows.map((r) => (r as HTMLElement).dataset[k]),
+        key,
+      );
+      return values.every(predicate);
+    },
+    { timeout: 10000 },
+  ).toBe(true);
+}
+
 test.describe("home page infinite scroll", () => {
   test.describe("seed data — all transactions loaded without scroll", () => {
     test("seed data loads all transactions without scroll sentinel", async ({ page }) => {
@@ -166,68 +206,31 @@ test.describe("home page infinite scroll", () => {
     });
 
     test("category filter applies to scroll-loaded rows", async ({ page }) => {
-      // Set category filter to "Food:Groceries"
       const categoryInput = page.locator("#sankey-category-filter");
       await categoryInput.fill("Food:Groceries");
       await categoryInput.blur();
 
-      // Verify initial rows are filtered
-      const visibleRows = page.locator("#transactions-table .txn-row:visible");
-      const hiddenRows = page.locator('#transactions-table .txn-row[style*="display: none"]');
-      const initialVisible = await visibleRows.count();
-      expect(initialVisible).toBeGreaterThan(0);
-
-      // Scroll repeatedly until more rows load — re-scroll on every iteration so
-      // the IntersectionObserver keeps firing as new batches push the sentinel down.
-      await expect(async () => {
-        await page.locator("#scroll-sentinel").scrollIntoViewIfNeeded();
-        const totalRows = await page.locator("#transactions-table .txn-row").count();
-        expect(totalRows).toBeGreaterThan(initialVisible + await hiddenRows.count());
-      }).toPass({ timeout: 30000 });
-
-      // Verify ALL visible rows match the category filter
-      const allVisible = page.locator('#transactions-table .txn-row:not([style*="display: none"])');
-      const categories = await allVisible.evaluateAll(rows =>
-        rows.map(r => (r as HTMLElement).dataset.category)
-      );
-      for (const cat of categories) {
-        expect(cat).toMatch(/^Food/);
-      }
-    });
-
-    test("budget filter applies to scroll-loaded rows", async ({ page }) => {
-      // Set budget filter to "Groceries"
-      const budgetInput = page.locator("#sankey-budget-filter");
-      await budgetInput.fill("Groceries");
-      await budgetInput.blur();
-
-      // Verify initial rows are filtered
       const allVisible = page.locator('#transactions-table .txn-row:not([style*="display: none"])');
       const initialVisible = await allVisible.count();
       expect(initialVisible).toBeGreaterThan(0);
 
-      // Scroll repeatedly until more rows load — re-scroll on every iteration so
-      // the IntersectionObserver keeps firing as new batches push the sentinel down.
-      const hiddenRows = page.locator('#transactions-table .txn-row[style*="display: none"]');
-      await expect(async () => {
-        await page.locator("#scroll-sentinel").scrollIntoViewIfNeeded();
-        const totalRows = await page.locator("#transactions-table .txn-row").count();
-        expect(totalRows).toBeGreaterThan(initialVisible + await hiddenRows.count());
-      }).toPass({ timeout: 30000 });
+      await scrollUntilMoreRows(page, initialVisible);
 
-      // Verify ALL visible rows match the budget filter. Scroll-loaded rows are
-      // appended as raw HTML and only hidden once the TRANSACTIONS_APPENDED_EVENT
-      // re-runs the filter, so re-poll until every visible row has settled on the
-      // filtered budget rather than reading once during that transient window.
-      await expect.poll(
-        async () => {
-          const budgets = await allVisible.evaluateAll(rows =>
-            rows.map(r => (r as HTMLElement).dataset.budgetName)
-          );
-          return budgets.every(b => b === "Groceries");
-        },
-        { timeout: 10000 },
-      ).toBe(true);
+      await expectVisibleRowsSettle(page, "category", (c) => c?.startsWith("Food") ?? false);
+    });
+
+    test("budget filter applies to scroll-loaded rows", async ({ page }) => {
+      const budgetInput = page.locator("#sankey-budget-filter");
+      await budgetInput.fill("Groceries");
+      await budgetInput.blur();
+
+      const allVisible = page.locator('#transactions-table .txn-row:not([style*="display: none"])');
+      const initialVisible = await allVisible.count();
+      expect(initialVisible).toBeGreaterThan(0);
+
+      await scrollUntilMoreRows(page, initialVisible);
+
+      await expectVisibleRowsSettle(page, "budgetName", (b) => b === "Groceries");
     });
   });
 });
