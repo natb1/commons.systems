@@ -65,8 +65,8 @@ Resolve or create the final target's worktree via `EnterWorktree`, matching
 `pr-workflow` Sections 2–3. `EnterWorktree` accepts exactly one of `path` (switch to
 an existing worktree) or `name` (create a new one; fires the `WorktreeCreate` hook).
 
-- **Already in the target's worktree** (current branch starts with `<issue>-`) →
-  proceed to Step 4.
+- **Already in the target's worktree** (current branch starts with `<issue>-`) → no
+  `EnterWorktree` needed; go straight to creating the marker below.
 - **An existing worktree matches** `<issue>-*` (parse `git worktree list --porcelain`
   as blank-line-delimited records) → `EnterWorktree` with `path:` set to that path.
 - **No existing worktree** → generate a sanitized branch name `<issue>-<slug>`:
@@ -76,6 +76,21 @@ an existing worktree) or `name` (create a new one; fires the `WorktreeCreate` ho
 
 Creating via `name:` fires the `WorktreeCreate` hook, which runs `sync-issue-context`
 and populates `CLAUDE.local.md` with full issue context.
+
+As the **last action of this step on every path** — before any phase skill runs —
+create the recovery marker:
+
+```bash
+mkdir -p tmp && touch tmp/dispatch-worktree
+```
+
+`restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
+recovery on this marker — when present, it re-invokes `/dispatch` so the phase is
+re-derived from PR/CI ground truth. `/dispatch` is the safe single creator: it only
+ever runs for dispatch sessions, so a `/pr-workflow` worktree can never acquire the
+marker. The marker is an empty boolean flag with no payload; it persists for the
+worktree's life and needs no cleanup — `tmp/` is git-ignored, and removing the
+worktree removes it.
 
 ## 4. Derive the Phase
 
@@ -91,8 +106,8 @@ present. Map the phase:
 
 | Phase | Meaning | Next action |
 |---|---|---|
-| `implement` | no PR on the target | relevance review (Step 6), then `/dispatch-implement` |
-| `verify` | draft PR, CI not green (failing, pending, or empty rollup) | `/dispatch-implement` with a resume hint → its verify loop |
+| `implement` | no PR on the target | relevance review (Step 6), then `/plan-implement` |
+| `verify` | draft PR, CI not green (failing, pending, or empty rollup) | `/verify-pr` |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` → then label `dispatch:qa-done` |
 | `simplify` | draft PR + `dispatch:qa-done` | `/simplify` → then label `dispatch:refactored` |
 | `review` | draft PR + `dispatch:refactored` | `/review` → then label `dispatch:reviewed` |
@@ -106,12 +121,10 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 `/dispatch` invocation.
 
 - **`implement`** — run the Step 6 relevance review first. If it passes, invoke
-  `/dispatch-implement` (see the bridge note below). The draft PR's existence plus
-  its CI status is its own marker — `/dispatch-implement` gets **no** `dispatch:*`
-  label.
-- **`verify`** — invoke `/dispatch-implement` (see the bridge note below) with a
-  resume hint that tells it to resume at the post-implementation verify loop
-  (Step 2.5). No label.
+  `/plan-implement`. The draft PR's existence plus its CI status is its own marker —
+  `/plan-implement` gets **no** `dispatch:*` label.
+- **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of failed
+  CI checks, record the outcome, post it, stop. No label.
 - **`qa` / `simplify` / `review` / `security`** — invoke the mapped skill
   (`/dispatch-qa`, `/simplify`, `/review`, `/security-review`). After it **returns**,
   apply the accumulating `dispatch:*` label to the PR (see below).
@@ -150,37 +163,15 @@ gh pr edit <pr-num> --add-label "dispatch:<name>"
 
 ## 6. Pre-Implementation Relevance Review
 
-Before invoking `/dispatch-implement` on an `implement`-phase (no-PR) issue, run the
+Before invoking `/plan-implement` on an `implement`-phase (no-PR) issue, run the
 `ref-ready` Step 3e relevance check against the current codebase: has the codebase
 evolved to make the issue obsolete, or are any requirements already addressed by
 existing code?
 
-- **Still relevant** → proceed to invoke `/dispatch-implement`.
+- **Still relevant** → proceed to invoke `/plan-implement`.
 - **Obsolete or already addressed** → **stop** and report to the user what made the
   issue obsolete or what already exists, and recommend closing the issue or
-  re-running `/ready`. Do **not** invoke `/dispatch-implement`.
+  re-running `/ready`. Do **not** invoke `/plan-implement`.
 
-This review is **skipped** for the `verify` resume case — a PR already exists and
+This review is **skipped** for the `verify` case — a PR already exists and
 implementation is underway.
-
-## `/dispatch-implement` env-var bridge
-
-`/dispatch-implement` expects the legacy dispatcher's `DISPATCH_ISSUE_NUM` and
-`DISPATCH_STATE_FILE` env vars, which are not set when `/dispatch` invokes it as a
-skill. When invoking `/dispatch-implement` (the `implement` and `verify` rows):
-
-1. Treat the resolved issue number `<N>` as `DISPATCH_ISSUE_NUM`, and
-   `tmp/dispatch-<N>.json` as `DISPATCH_STATE_FILE`.
-2. Seed the state file first so the `restore-dispatch-skill.sh` recovery hook still
-   works through `/dispatch-implement`'s plan-mode context clear:
-
-   ```bash
-   [ -f tmp/dispatch-<N>.json ] || { mkdir -p tmp && printf '{}' > tmp/dispatch-<N>.json; }
-   ```
-
-3. Invoke `/dispatch-implement` with argument `#<N>`.
-4. For the `verify` row, also pass a free-form resume hint instructing it to resume
-   at the post-implementation verify loop (Step 2.5).
-
-Fully decoupling `/dispatch-implement` from this legacy plumbing is a tracked
-follow-up — out of scope here.
