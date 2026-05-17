@@ -465,6 +465,134 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "done PRs skipped; help-wanted issue returned" "issue 33" "$result"
 teardown
 
+# 8. ready beats security beats review beats simplify beats verify.
+echo "Test: ready beats security beats review beats simplify beats verify"
+setup
+# Five PRs, each in a different phase. verify (PR 10) is oldest, ready (PR 50) is newest.
+# The ready-phase PR must be chosen regardless of age.
+READY_LABELS='[{"name":"dispatch:security-reviewed"}]'
+SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
+REVIEW_LABELS='[{"name":"dispatch:refactored"}]'
+SIMPLIFY_LABELS='[{"name":"dispatch:qa-done"}]'
+FULL='['
+FULL+="$(make_pr 10 "10-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
+FULL+="$(make_pr 20 "20-simplify" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"','
+FULL+="$(make_pr 30 "30-review" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
+FULL+="$(make_pr 40 "40-security" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"','
+FULL+="$(make_pr 50 "50-ready" "true" "$READY_LABELS" "$GREEN_ROLLUP")"
+FULL+=']'
+BRIEF='['
+BRIEF+="$(make_pr_brief 10 "10-verify" "2024-01-01T00:00:00Z")"','
+BRIEF+="$(make_pr_brief 20 "20-simplify" "2024-01-02T00:00:00Z")"','
+BRIEF+="$(make_pr_brief 30 "30-review" "2024-01-03T00:00:00Z")"','
+BRIEF+="$(make_pr_brief 40 "40-security" "2024-01-04T00:00:00Z")"','
+BRIEF+="$(make_pr_brief 50 "50-ready" "2024-01-05T00:00:00Z")"
+BRIEF+=']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "ready beats security/review/simplify/verify" "pr 50 50-ready" "$result"
+teardown
+
+# 9. security beats review beats simplify beats verify (no ready PR).
+echo "Test: security beats review/simplify/verify"
+setup
+SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
+REVIEW_LABELS='[{"name":"dispatch:refactored"}]'
+SIMPLIFY_LABELS='[{"name":"dispatch:qa-done"}]'
+FULL='['
+FULL+="$(make_pr 10 "10-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
+FULL+="$(make_pr 20 "20-simplify" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"','
+FULL+="$(make_pr 30 "30-review" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
+FULL+="$(make_pr 40 "40-security" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"
+FULL+=']'
+BRIEF='['
+BRIEF+="$(make_pr_brief 10 "10-verify" "2024-01-01T00:00:00Z")"','
+BRIEF+="$(make_pr_brief 20 "20-simplify" "2024-01-02T00:00:00Z")"','
+BRIEF+="$(make_pr_brief 30 "30-review" "2024-01-03T00:00:00Z")"','
+BRIEF+="$(make_pr_brief 40 "40-security" "2024-01-04T00:00:00Z")"
+BRIEF+=']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "security beats review/simplify/verify" "pr 40 40-security" "$result"
+teardown
+
+# 10. Within one phase, the oldest PR wins.
+echo "Test: within same phase, oldest PR wins"
+setup
+# Two review-phase PRs; PR 30 is older.
+REVIEW_LABELS='[{"name":"dispatch:refactored"}]'
+FULL='['
+FULL+="$(make_pr 30 "30-review-a" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
+FULL+="$(make_pr 31 "31-review-b" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"
+FULL+=']'
+BRIEF='['
+BRIEF+="$(make_pr_brief 30 "30-review-a" "2024-01-01T00:00:00Z")"','
+BRIEF+="$(make_pr_brief 31 "31-review-b" "2024-01-02T00:00:00Z")"
+BRIEF+=']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "oldest review PR wins within phase" "pr 30 30-review-a" "$result"
+teardown
+
+# 11. Any non-QA PR beats a help-wanted issue; help-wanted issue beats a QA PR.
+echo "Test: verify PR beats issue; issue beats QA PR"
+setup
+# verify PR (10), QA PR (20), help-wanted issue (55).
+FULL='['
+FULL+="$(make_pr 10 "10-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
+FULL+="$(make_pr 20 "20-qa" "true" "$NO_LABELS" "$GREEN_ROLLUP")"
+FULL+=']'
+BRIEF='['
+BRIEF+="$(make_pr_brief 10 "10-verify" "2024-01-01T00:00:00Z")"','
+BRIEF+="$(make_pr_brief 20 "20-qa" "2024-01-02T00:00:00Z")"
+BRIEF+=']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "verify PR beats issue (non-QA > issue > qa)" "pr 10 10-verify" "$result"
+teardown
+
+# 11b. No non-QA PR: help-wanted issue beats QA PR.
+echo "Test: help-wanted issue beats QA PR"
+setup
+FULL='['"$(make_pr 20 "20-qa" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+BRIEF='['"$(make_pr_brief 20 "20-qa" "2024-01-02T00:00:00Z")"']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "help-wanted issue beats QA PR" "issue 55" "$result"
+teardown
+
+# 12. --qa mode returns only the oldest QA PR (ignores non-QA PRs).
+echo "Test: --qa mode ignores non-QA PRs and returns oldest QA PR"
+setup
+SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
+FULL='['
+FULL+="$(make_pr 10 "10-security" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"','
+FULL+="$(make_pr 20 "20-qa-old" "true" "$NO_LABELS" "$GREEN_ROLLUP")"','
+FULL+="$(make_pr 30 "30-qa-new" "true" "$NO_LABELS" "$GREEN_ROLLUP")"
+FULL+=']'
+# Brief list sorted oldest-first: 10, 20, 30.
+BRIEF='['
+BRIEF+="$(make_pr_brief 10 "10-security" "2024-01-01T00:00:00Z")"','
+BRIEF+="$(make_pr_brief 20 "20-qa-old" "2024-01-02T00:00:00Z")"','
+BRIEF+="$(make_pr_brief 30 "30-qa-new" "2024-01-03T00:00:00Z")"
+BRIEF+=']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
+assert_eq "--qa returns oldest QA PR (ignores security PR)" "pr 20 20-qa-old" "$result"
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================

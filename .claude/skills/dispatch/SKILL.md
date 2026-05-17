@@ -33,9 +33,11 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
   - `issue <num>` — a `help wanted` issue to implement
   - `empty` — nothing eligible
 
-  Priority order it implements: oldest non-QA-phase open PR with no local worktree →
-  oldest open `help wanted` issue → oldest QA-phase open PR with no local worktree →
-  `empty`.
+  Priority order it implements (highest first; within a tier, oldest PR wins; PRs
+  with a local worktree are skipped): oldest `ready` PR → oldest `security` PR →
+  oldest `review` PR → oldest `simplify` PR → oldest `verify` PR → oldest `help
+  wanted` issue → oldest `qa` PR → `empty`. Non-QA PRs are ranked closest-to-done
+  first; `help wanted` issues rank below all non-QA PRs but above QA PRs.
 
   On `empty` → report that the queue is empty and **stop**.
 
