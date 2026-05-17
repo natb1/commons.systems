@@ -429,15 +429,17 @@ cleanup_stale_worktree_processes() {
   local exclude_pids
   exclude_pids=$(_ancestor_pids)
 
+  # Declared once, before the loop: re-running `local` inside the loop makes
+  # zsh display the parameter on every iteration after the first.
+  local cmdline wt_path
+
   while IFS= read -r pid; do
     [ -z "$pid" ] && continue
     [[ "$exclude_pids" == *" $pid "* ]] && continue
 
     # Extract the worktree path from this process's command line
-    local cmdline
     cmdline=$(ps -o args= -p "$pid" 2>/dev/null) || continue
 
-    local wt_path
     wt_path=$(printf '%s' "$cmdline" | grep -oE '/[^ ]*worktrees/[^/ ]+' | head -1) || continue
     [ -z "$wt_path" ] && continue
 
