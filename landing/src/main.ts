@@ -1,6 +1,6 @@
 import "missing.css";
 import "./style/theme.css";
-import type { User } from "./auth.js";
+import type { User } from "firebase/auth";
 
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -21,9 +21,8 @@ import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
-import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
-import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
+import { db, NAMESPACE, trackPageView, initAppCheck, signIn, signOut, onAuthStateChanged } from "./firebase.js";
 import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
 
 const navEl = document.getElementById("nav") as AppNavElement;
