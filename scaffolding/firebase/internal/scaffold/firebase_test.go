@@ -628,17 +628,16 @@ func TestRemoveWorkspaceNotFound(t *testing.T) {
 }
 
 type testStruct struct {
-	A     string `json:"a"`
-	B     int    `json:"b"`
-	extra map[string]json.RawMessage
+	A string `json:"a"`
+	B int    `json:"b"`
 }
 
 func TestUnmarshalWithExtra(t *testing.T) {
 	t.Run("known fields only", func(t *testing.T) {
 		type Alias testStruct
 		var alias Alias
-		var extra map[string]json.RawMessage
-		if err := unmarshalWithExtra([]byte(`{"a":"hello","b":42}`), &alias, &extra, "a", "b"); err != nil {
+		extra, err := unmarshalWithExtra([]byte(`{"a":"hello","b":42}`), &alias, "a", "b")
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if alias.A != "hello" || alias.B != 42 {
@@ -652,8 +651,8 @@ func TestUnmarshalWithExtra(t *testing.T) {
 	t.Run("extra fields only", func(t *testing.T) {
 		type Alias testStruct
 		var alias Alias
-		var extra map[string]json.RawMessage
-		if err := unmarshalWithExtra([]byte(`{"x":1,"y":"two"}`), &alias, &extra, "a", "b"); err != nil {
+		extra, err := unmarshalWithExtra([]byte(`{"x":1,"y":"two"}`), &alias, "a", "b")
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if _, ok := extra["x"]; !ok {
@@ -667,8 +666,8 @@ func TestUnmarshalWithExtra(t *testing.T) {
 	t.Run("known and extra mixed", func(t *testing.T) {
 		type Alias testStruct
 		var alias Alias
-		var extra map[string]json.RawMessage
-		if err := unmarshalWithExtra([]byte(`{"a":"hi","b":7,"x":1}`), &alias, &extra, "a", "b"); err != nil {
+		extra, err := unmarshalWithExtra([]byte(`{"a":"hi","b":7,"x":1}`), &alias, "a", "b")
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if alias.A != "hi" || alias.B != 7 {
@@ -685,8 +684,7 @@ func TestUnmarshalWithExtra(t *testing.T) {
 	t.Run("malformed input", func(t *testing.T) {
 		type Alias testStruct
 		var alias Alias
-		var extra map[string]json.RawMessage
-		if err := unmarshalWithExtra([]byte(`{not json`), &alias, &extra, "a", "b"); err == nil {
+		if _, err := unmarshalWithExtra([]byte(`{not json`), &alias, "a", "b"); err == nil {
 			t.Error("expected error for malformed input, got nil")
 		}
 	})

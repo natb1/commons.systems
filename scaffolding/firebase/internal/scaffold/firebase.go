@@ -59,23 +59,23 @@ func (h HostingEntry) Validate() error {
 }
 
 // unmarshalWithExtra unmarshals data into target (which must be an alias type
-// without its own UnmarshalJSON to avoid recursion), then captures any
-// remaining JSON keys (those not in knownKeys) into *extra.
-func unmarshalWithExtra[T any](data []byte, target *T, extra *map[string]json.RawMessage, knownKeys ...string) error {
+// without its own UnmarshalJSON to avoid recursion) and returns any remaining
+// JSON keys (those not in knownKeys), or nil if there are none.
+func unmarshalWithExtra[T any](data []byte, target *T, knownKeys ...string) (map[string]json.RawMessage, error) {
 	if err := json.Unmarshal(data, target); err != nil {
-		return err
+		return nil, err
 	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+		return nil, err
 	}
 	for _, k := range knownKeys {
 		delete(raw, k)
 	}
-	if len(raw) > 0 {
-		*extra = raw
+	if len(raw) == 0 {
+		return nil, nil
 	}
-	return nil
+	return raw, nil
 }
 
 // marshalWithExtra marshals typed (which must be an alias type without its own
@@ -101,8 +101,8 @@ func marshalWithExtra[T any](typed T, extra map[string]json.RawMessage) ([]byte,
 func (h *HostingEntry) UnmarshalJSON(data []byte) error {
 	type Alias HostingEntry
 	var alias Alias
-	var extra map[string]json.RawMessage
-	if err := unmarshalWithExtra(data, &alias, &extra, "target", "public", "ignore", "rewrites"); err != nil {
+	extra, err := unmarshalWithExtra(data, &alias, "target", "public", "ignore", "rewrites")
+	if err != nil {
 		return err
 	}
 	*h = HostingEntry(alias)
@@ -129,8 +129,8 @@ type FirebaseConfig struct {
 func (c *FirebaseConfig) UnmarshalJSON(data []byte) error {
 	type Alias FirebaseConfig
 	var alias Alias
-	var extra map[string]json.RawMessage
-	if err := unmarshalWithExtra(data, &alias, &extra, "hosting", "firestore"); err != nil {
+	extra, err := unmarshalWithExtra(data, &alias, "hosting", "firestore")
+	if err != nil {
 		return err
 	}
 	*c = FirebaseConfig(alias)
@@ -157,8 +157,8 @@ type FirebaseRC struct {
 func (rc *FirebaseRC) UnmarshalJSON(data []byte) error {
 	type Alias FirebaseRC
 	var alias Alias
-	var extra map[string]json.RawMessage
-	if err := unmarshalWithExtra(data, &alias, &extra, "projects", "targets"); err != nil {
+	extra, err := unmarshalWithExtra(data, &alias, "projects", "targets")
+	if err != nil {
 		return err
 	}
 	*rc = FirebaseRC(alias)
@@ -343,8 +343,8 @@ type PackageJSON struct {
 func (p *PackageJSON) UnmarshalJSON(data []byte) error {
 	type Alias PackageJSON
 	var alias Alias
-	var extra map[string]json.RawMessage
-	if err := unmarshalWithExtra(data, &alias, &extra, "name", "private", "workspaces"); err != nil {
+	extra, err := unmarshalWithExtra(data, &alias, "name", "private", "workspaces")
+	if err != nil {
 		return err
 	}
 	*p = PackageJSON(alias)
