@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Select the single highest-priority task from the queue.
+# Usage: dispatch-select-target [--qa]
+#
+# Output: exactly one line:
+#   pr <num> <branch>   — a PR to work on
+#   issue <num>         — a help-wanted issue to implement
+#   empty               — nothing eligible
+#
+# Default mode priority:
+#   1. Oldest non-QA PR (phase: verify, simplify, review, security, ready)
+#      with no local git worktree
+#   2. Oldest open help-wanted issue
+#   3. Oldest QA PR with no local git worktree
+#
+# --qa mode priority:
+#   1. Oldest QA PR with no local git worktree
+#   2. empty
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+QA_MODE=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --qa) QA_MODE=true ;;
+    *) echo "error: unknown argument: $arg" >&2; exit 1 ;;
+  esac
+done
+
+# Collect branches that already have a local worktree (a session is working them).
+WORKTREE_BRANCHES=()
+while IFS= read -r line; do
+  # git worktree list --porcelain emits "branch refs/heads/<name>" lines.
+  if [[ "$line" == branch\ * ]]; then
+    branch_ref="${line#branch }"
+    WORKTREE_BRANCHES+=("${branch_ref#refs/heads/}")
+  fi
+done < <(git worktree list --porcelain)
+
+has_worktree() {
+  local branch="$1"
+  local b
+  for b in "${WORKTREE_BRANCHES[@]}"; do
+    if [[ "$b" == "$branch" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Fetch all open PRs sorted by createdAt ascending (oldest first).
+PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName)
+PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number, .createdAt, .headRefName] | @tsv')
+
+NON_QA_PR_NUM=""
+NON_QA_PR_BRANCH=""
+QA_PR_NUM=""
+QA_PR_BRANCH=""
+
+while IFS=$'\t' read -r pr_num _created pr_branch; do
+  [[ -z "$pr_num" ]] && continue
+
+  # Skip PRs with a local worktree.
+  if has_worktree "$pr_branch"; then
+    continue
+  fi
+
+  # Determine phase for this PR.
+  phase=$("$SCRIPT_DIR/dispatch-phase" "$pr_branch")
+
+  case "$phase" in
+    done)
+      # Skip completed PRs.
+      continue
+      ;;
+    qa)
+      # First QA PR wins (list is oldest-first).
+      if [[ -z "$QA_PR_NUM" ]]; then
+        QA_PR_NUM="$pr_num"
+        QA_PR_BRANCH="$pr_branch"
+      fi
+      ;;
+    *)
+      # verify, simplify, review, security, ready — non-QA bucket.
+      # First non-QA PR wins.
+      if [[ -z "$NON_QA_PR_NUM" ]]; then
+        NON_QA_PR_NUM="$pr_num"
+        NON_QA_PR_BRANCH="$pr_branch"
+      fi
+      ;;
+  esac
+done <<< "$PR_SORTED"
+
+if [[ "$QA_MODE" == "true" ]]; then
+  # --qa mode: only return QA PRs.
+  if [[ -n "$QA_PR_NUM" ]]; then
+    echo "pr $QA_PR_NUM $QA_PR_BRANCH"
+  else
+    echo "empty"
+  fi
+  exit 0
+fi
+
+# Default mode: non-QA PR → help-wanted issue → QA PR → empty.
+if [[ -n "$NON_QA_PR_NUM" ]]; then
+  echo "pr $NON_QA_PR_NUM $NON_QA_PR_BRANCH"
+  exit 0
+fi
+
+# Fetch oldest help-wanted issue.
+ISSUE_LIST=$(gh issue list --label "help wanted" --state open --json number,createdAt)
+ISSUE_NUM=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[0].number // empty')
+
+if [[ -n "$ISSUE_NUM" ]]; then
+  echo "issue $ISSUE_NUM"
+  exit 0
+fi
+
+if [[ -n "$QA_PR_NUM" ]]; then
+  echo "pr $QA_PR_NUM $QA_PR_BRANCH"
+  exit 0
+fi
+
+echo "empty"
