@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "-systems/config/playwright-test";
+import { test, expect, type Page } from "@commons-systems/config/playwright-test";
 
 async function expectLightBackground(page: Page) {
   const bg = await page.evaluate(() =>
