@@ -171,7 +171,7 @@ _ancestor_pids() {
 _collect_tree_pids() {
   local pid="$1"
   local children child
-  children=$(pgrep -P "$pid" 2>/dev/null) || true
+  children=$(_pids_with_parent "$pid")
   while IFS= read -r child; do
     [ -z "$child" ] && continue
     _collect_tree_pids "$child"
@@ -348,12 +348,20 @@ cleanup_stale_hub() {
   fi
 }
 
+# Sandbox-safe replacements for `pgrep -f` and `pgrep -P`. The macOS sandbox
+# Claude Code runs under blocks pgrep's sysmond IPC, so any pgrep variant
+# returns nothing. These helpers use `ps` instead. Output: one PID per line.
+
 # Print PIDs whose command-line args contain the given fixed-string substring.
-# Uses ps + grep -F instead of `pgrep -f` so it works under the macOS sandbox
-# (which blocks pgrep's sysmond IPC). Output: one PID per line; empty if none.
 _pids_matching_arg() {
   local needle="${1:?_pids_matching_arg requires a substring}"
   ps -axo pid=,args= 2>/dev/null | grep -F "$needle" | awk '{print $1}' || true
+}
+
+# Print PIDs whose parent PID equals the given PID.
+_pids_with_parent() {
+  local parent="${1:?_pids_with_parent requires a parent PID}"
+  ps -axo pid=,ppid= 2>/dev/null | awk -v p="$parent" '$2 == p {print $1}' || true
 }
 
 # Kill all processes whose command-line args contain the given worktree path.

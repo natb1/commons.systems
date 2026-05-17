@@ -270,6 +270,50 @@ echo "=== Test: cleanup_stale_worktree_processes prunes before listing ==="
   fi
 )
 
+echo ""
+echo "=== Test: cleanup_stale_worktree_processes kills child processes ==="
+(
+  source "$SCRIPT_DIR/lib.sh"
+
+  # Spawn a parent that matches the stale-worktree path filter, with a child
+  # whose own args do NOT match. The child is reachable only through tree-walk;
+  # if `_collect_tree_pids` cannot enumerate children (sandbox-blocked pgrep),
+  # the parent dies but the child is orphaned.
+  STALE_WT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/worktrees/612-tree-test-fixture-$$"
+  REAL_WT="$(git rev-parse --show-toplevel)"
+  REAL_ENTRY=$(printf 'worktree %s\nHEAD abc123\nbranch refs/heads/main\n\n' "$REAL_WT")
+
+  git() {
+    case "$1 $2" in
+      "worktree prune") return 0 ;;
+      "worktree list") printf '%s\n' "$REAL_ENTRY"; return 0 ;;
+    esac
+    command git "$@"
+  }
+
+  perl -e 'my $kid = fork(); if ($kid == 0) { exec("sleep", "300"); } sleep 300;' -- "$STALE_WT/sentinel" &
+  PARENT_PID=$!
+  CHILD_PID=""
+  trap 'kill -9 $PARENT_PID 2>/dev/null || true; [ -n "$CHILD_PID" ] && kill -9 $CHILD_PID 2>/dev/null || true' EXIT
+  sleep 0.5
+
+  CHILD_PID=$(ps -axo pid=,ppid= | awk -v p="$PARENT_PID" '$2 == p {print $1; exit}')
+
+  if [ -z "$CHILD_PID" ]; then
+    fail "could not locate child of fixture parent $PARENT_PID"
+  else
+    cleanup_stale_worktree_processes
+
+    if kill -0 "$PARENT_PID" 2>/dev/null; then
+      fail "cleanup did not kill fixture parent $PARENT_PID"
+    elif kill -0 "$CHILD_PID" 2>/dev/null; then
+      fail "cleanup killed parent but orphaned child $CHILD_PID (tree-walk missed it)"
+    else
+      pass "cleanup_stale_worktree_processes kills parent and child"
+    fi
+  fi
+)
+
 FINAL_PASS=$(cat "$PASS_FILE")
 FINAL_FAIL=$(cat "$FAIL_FILE")
 
