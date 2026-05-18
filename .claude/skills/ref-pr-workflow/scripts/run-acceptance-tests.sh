@@ -18,12 +18,15 @@ ensure_deps
 
 cd "$REPO_ROOT/$APP_DIR"
 
-# When a base URL is provided, skip emulator setup and run tests directly
+# When a base URL is provided, skip emulator setup and run tests directly.
+# This path runs against a Vite QA dev server: no Firebase Hosting headers and
+# public data only. Exclude @hosting tests (require Hosting emulator or deployed
+# preview) and @testonly tests (require testOnly seed data) — everything else runs.
 if [ -n "$EXTERNAL_BASE_URL" ]; then
   if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
     npx playwright install --with-deps chromium
   fi
-  BASE_URL="$EXTERNAL_BASE_URL" npx playwright test --config e2e/playwright.config.ts
+  BASE_URL="$EXTERNAL_BASE_URL" npx playwright test --config e2e/playwright.config.ts --grep-invert "@hosting|@testonly"
   exit 0
 fi
 

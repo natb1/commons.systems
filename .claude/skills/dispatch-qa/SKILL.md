@@ -119,13 +119,13 @@ The QA pass covers **public data only** — documents present in both the QA ser
       .claude/skills/ref-pr-workflow/scripts/wait-for-url.sh <url>
       ```
 
-   c. **Smoke-check via acceptance tests:**
+   c. **Pre-QA acceptance check:**
       ```bash
       .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh <app-dir> <url>
       ```
 
-      - **On smoke fail** → Report the failure to the user. Run `.claude/skills/ref-pr-workflow/scripts/run-qa-cleanup.sh`. Post a brief PR comment summarizing the smoke failure (Step 6). Stop. The user's recovery is to re-dispatch the original issue.
-      - **On smoke pass** → Continue to the walkthrough.
+      - **If the check fails** → Report the failure to the user. Run `.claude/skills/ref-pr-workflow/scripts/run-qa-cleanup.sh`. Post a brief PR comment summarizing the failure (Step 6). Stop. The user's recovery is to re-dispatch the original issue.
+      - **If the check passes** → Continue to the walkthrough.
 
    d. **Walk the user through the QA plan via the Chrome extension.** Reuse the per-item three-step cycle from `.claude/skills/ref-qa/SKILL.md`:
 
