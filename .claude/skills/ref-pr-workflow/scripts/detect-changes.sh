@@ -2,8 +2,9 @@
 set -euo pipefail
 
 # Detect changed file categories for CI conditional tool installation.
-# Outputs "nix=true", "playwright=true", and/or "rules=true" to $GITHUB_OUTPUT
-# when relevant files changed on the branch relative to origin/main.
+# Outputs "nix=true", "playwright=true", "rules=true", and/or "go=true" to
+# $GITHUB_OUTPUT when relevant files changed on the branch relative to
+# origin/main.
 
 # Try origin/main first; fall back to HEAD~1 when origin/main is unavailable
 # (e.g., shallow clones or direct pushes to non-feature branches).
@@ -30,4 +31,9 @@ fi
 # get-changed-apps.sh (those mark ALL workspaces dirty, including rules-test).
 if echo "$CHANGED" | grep -qE '^(firestore\.rules$|storage\.rules$|rules-test/|\.claude/skills/ref-pr-workflow/scripts/|firebase\.json$|package\.json$|package-lock\.json$)'; then
   echo "rules=true" >> "$GITHUB_OUTPUT"
+fi
+# go-tests needs the Go toolchain. The budget-etl module is not a package.json
+# workspace, so set go=true when anything in budget-etl/ changed.
+if echo "$CHANGED" | grep -qE '^budget-etl/'; then
+  echo "go=true" >> "$GITHUB_OUTPUT"
 fi

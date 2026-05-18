@@ -29,6 +29,7 @@
     ./direnv.nix
     ./gh.nix
     ./git.nix
+    ./gpg.nix
     ./neovim.nix
     ./nix.nix
     ./ssh.nix
@@ -83,6 +84,7 @@
   home.packages = [
     pkgs.jq
     pkgs.google-cloud-sdk
+    pkgs.pass
   ];
 
   # Let Home Manager manage itself
