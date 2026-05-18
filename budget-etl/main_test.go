@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -886,4 +887,38 @@ func TestDeriveMonthlyStatements(t *testing.T) {
 			t.Errorf("expected 0 derived statements for zero balance, got %d", len(derived))
 		}
 	})
+}
+
+// TestMain lets TestRemovedFlagsRejected re-exec this test binary as the real
+// budget-etl CLI: when BUDGET_ETL_TEST_RUN_MAIN=1 is set, it runs main()
+// instead of the test suite. main() parses flags via flag.CommandLine, and an
+// undefined flag makes flag.Parse() call os.Exit(2) — uncatchable in-process —
+// so the negative-flag check must run main() in a subprocess.
+func TestMain(m *testing.M) {
+	if os.Getenv("BUDGET_ETL_TEST_RUN_MAIN") == "1" {
+		main()
+		return
+	}
+	os.Exit(m.Run())
+}
+
+// TestRemovedFlagsRejected verifies the Firestore-mode flags deleted in #592
+// (--firestore/--env/--project/--dry-run) are no longer defined: passing one
+// must exit non-zero with flag's "flag provided but not defined" message.
+// Flag parsing runs before any file I/O or password resolution, so the
+// subprocess exits immediately.
+func TestRemovedFlagsRejected(t *testing.T) {
+	for _, arg := range []string{"-firestore", "-env=prod", "-project=x", "-dry-run"} {
+		t.Run(arg, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], arg)
+			cmd.Env = append(os.Environ(), "BUDGET_ETL_TEST_RUN_MAIN=1")
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected non-zero exit for %s; output:\n%s", arg, out)
+			}
+			if !strings.Contains(string(out), "flag provided but not defined") {
+				t.Errorf("for %s, missing 'flag provided but not defined'; output:\n%s", arg, out)
+			}
+		})
+	}
 }
