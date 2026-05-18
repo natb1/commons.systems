@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("CSS loading", () => {
   test("critical CSS is inlined in the head @smoke", async ({ page }) => {

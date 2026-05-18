@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 import { describeCacheHeadersSmoke } from "@commons-systems/config/cache-headers-smoke";
 
 describeCacheHeadersSmoke("fellspiral");

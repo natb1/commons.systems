@@ -225,6 +225,11 @@ assert_passthrough \
   "Bash" \
   "definitely-not-a-real-command --flag value"
 
+assert_passthrough \
+  "legacy dispatch/bin/phase-complete is no longer approved (regression guard)" \
+  "Bash" \
+  "./dispatch/bin/phase-complete 630"
+
 # --- Security edge cases ---
 
 assert_passthrough \

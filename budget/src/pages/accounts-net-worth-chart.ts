@@ -3,7 +3,7 @@ import type { NetWorthPoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
 import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
-export interface NetWorthChartOptions {
+interface NetWorthChartOptions {
   readonly data: NetWorthPoint[];
   readonly containerWidth: number;
   readonly pointWidth: number;

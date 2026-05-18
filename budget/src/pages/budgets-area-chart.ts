@@ -4,7 +4,7 @@ import { UNBUDGETED_SERIES, type PerBudgetPoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
 import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
-export interface AreaChartOptions {
+interface AreaChartOptions {
   readonly data: PerBudgetPoint[];
   readonly containerWidth: number;
   readonly panelWidth: number;

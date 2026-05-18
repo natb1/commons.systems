@@ -10,6 +10,16 @@ import (
 	"github.com/natb1/commons.systems/budget-etl/internal/store"
 )
 
+// UncategorizedRecord identifies a transaction that didn't match any
+// categorization rule. Returned by ApplyCategorization for callers to
+// either format into an error (strict mode) or surface as data (report mode).
+type UncategorizedRecord struct {
+	Index         int
+	StatementID   string
+	TransactionID string
+	Description   string
+}
+
 // Rule defines a categorization or budget assignment rule.
 type Rule struct {
 	ID              string
@@ -96,11 +106,12 @@ func rulesOfType(rules []Rule, ruleType string) []Rule {
 // ApplyCategorization applies categorization rules to transactions.
 // Rules are matched in priority order (ascending); first match wins.
 // Only transactions with an empty Category field are categorized.
-// Returns an error listing uncategorized transactions if any remain.
-func ApplyCategorization(txns []store.TransactionData, rules []Rule) error {
+// Returns a slice of UncategorizedRecord for any transactions that didn't match.
+// Empty slice means full coverage.
+func ApplyCategorization(txns []store.TransactionData, rules []Rule) []UncategorizedRecord {
 	catRules := rulesOfType(rules, "categorization")
 
-	var uncategorized []string
+	var uncategorized []UncategorizedRecord
 	for i := range txns {
 		if txns[i].Category != "" {
 			continue
@@ -114,16 +125,16 @@ func ApplyCategorization(txns []store.TransactionData, rules []Rule) error {
 			}
 		}
 		if !matched {
-			uncategorized = append(uncategorized, fmt.Sprintf("%s/%s: %q",
-				txns[i].StatementID, txns[i].TransactionID, txns[i].Description))
+			uncategorized = append(uncategorized, UncategorizedRecord{
+				Index:         i,
+				StatementID:   txns[i].StatementID,
+				TransactionID: txns[i].TransactionID,
+				Description:   txns[i].Description,
+			})
 		}
 	}
 
-	if len(uncategorized) > 0 {
-		return fmt.Errorf("%d uncategorized transactions:\n  %s",
-			len(uncategorized), strings.Join(uncategorized, "\n  "))
-	}
-	return nil
+	return uncategorized
 }
 
 // ApplyBudgetAssignment applies budget assignment rules to transactions.
