@@ -12,7 +12,7 @@
 #
 # Environment:
 #   DISPATCH_PR_LIST — optional. A JSON array of open PRs supplied by the
-#     caller (dispatch-select-target exports it to avoid a redundant
+#     caller (dispatch-select-target passes it to avoid a redundant
 #     gh pr list per PR). When set and non-empty, it is used in place of a
 #     self-issued gh pr list. Must include the fields
 #     number,headRefName,isDraft,statusCheckRollup,labels.
@@ -24,8 +24,7 @@ if [[ -z "$ARG" ]]; then
   exit 1
 fi
 
-# Use the caller-supplied open-PR list when DISPATCH_PR_LIST is set
-# (dispatch-select-target exports it to avoid a redundant gh pr list per PR).
+# Use the caller-supplied open-PR list when DISPATCH_PR_LIST is set.
 # Otherwise fetch the list ourselves — standalone callers rely on this path.
 if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
   PR_LIST="$DISPATCH_PR_LIST"
