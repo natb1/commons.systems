@@ -3,7 +3,7 @@
 # Usage: dispatch-phase <issue-num|branch>
 #
 # Prints exactly one phase name to stdout:
-#   implement | verify | qa | simplify | review | security | ready | done
+#   implement | verify | waiting | qa | simplify | review | security | ready | done
 #
 # Argument resolution:
 #   - All-digit arg: treated as an issue number. The matching PR is the one
@@ -50,32 +50,15 @@ fi
 ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
 ROLLUP_LEN=$(printf '%s' "$ROLLUP" | jq 'length')
 
-# Empty rollup is NOT green.
+# Empty rollup — checks not yet started, nothing actionable.
 if [[ "$ROLLUP_LEN" -eq 0 ]]; then
-  echo "verify"
+  echo "waiting"
   exit 0
 fi
 
-# Check for any pending entries (check runs not yet COMPLETED, or status
-# contexts with state PENDING/EXPECTED).
-PENDING=$(printf '%s' "$ROLLUP" | jq '
-  map(
-    if has("conclusion") then
-      # Check run: pending if status != COMPLETED
-      .status != "COMPLETED"
-    else
-      # Status context: pending if state is PENDING or EXPECTED
-      (.state == "PENDING" or .state == "EXPECTED")
-    end
-  ) | any
-')
-
-if [[ "$PENDING" == "true" ]]; then
-  echo "verify"
-  exit 0
-fi
-
-# Check for any failing entries.
+# Check for any failing entries first: a concluded failure is actionable even
+# while other checks are still running, so a mixed rollup (some failing, some
+# pending) resolves to verify, not waiting.
 FAILING=$(printf '%s' "$ROLLUP" | jq '
   map(
     if has("conclusion") then
@@ -96,6 +79,26 @@ if [[ "$FAILING" == "true" ]]; then
   exit 0
 fi
 
+# Check for any pending entries (check runs not yet COMPLETED, or status
+# contexts with state PENDING/EXPECTED). No failures found above, so pending
+# means checks are still running — nothing actionable yet.
+PENDING=$(printf '%s' "$ROLLUP" | jq '
+  map(
+    if has("conclusion") then
+      # Check run: pending if status != COMPLETED
+      .status != "COMPLETED"
+    else
+      # Status context: pending if state is PENDING or EXPECTED
+      (.state == "PENDING" or .state == "EXPECTED")
+    end
+  ) | any
+')
+
+if [[ "$PENDING" == "true" ]]; then
+  echo "waiting"
+  exit 0
+fi
+
 # All entries are passing — check that all passing conditions hold.
 # An entry passes if: check run with conclusion in {SUCCESS,NEUTRAL,SKIPPED},
 # or status context with state SUCCESS.
@@ -111,7 +114,9 @@ ALL_PASSING=$(printf '%s' "$ROLLUP" | jq '
 ')
 
 if [[ "$ALL_PASSING" != "true" ]]; then
-  echo "verify"
+  # Non-empty rollup with no failures, no pending, but not all passing —
+  # unrecognized state, nothing actionable.
+  echo "waiting"
   exit 0
 fi
 
