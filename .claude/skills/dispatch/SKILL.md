@@ -12,8 +12,9 @@ then stops. Re-invoke `/dispatch` (or `/loop /dispatch`) to advance to the next 
 `/dispatch` takes an **optional issue-number argument** (leading `#` optional). With
 an argument, it targets that issue and skips the queue scan.
 
-Run `/dispatch` from the **main worktree**. Step 3 switches into the target's
-worktree via `EnterWorktree`; the phase skill runs there.
+Run `/dispatch` from the **main worktree**, or from inside an issue worktree to
+continue that issue. Step 3 switches into the target's worktree via `EnterWorktree`;
+the phase skill runs there.
 
 Run `gh` and git-index-writing commands (`git add`, `gh pr ready`, `gh label create`)
 with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
@@ -31,7 +32,17 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
   It prints exactly one line:
   - `pr <num> <branch>` — a PR to work on
   - `issue <num>` — a `help wanted` issue to implement
+  - `worktree <N> <branch>` — run from inside an issue worktree; target is `<N>`,
+    queue scan already skipped
+  - `worktree-closed <N> <branch>` — run from inside a worktree whose issue is
+    closed or unrecognized → report that the current worktree belongs to
+    closed/unrecognized issue `<N>` and **stop** (consistent with the named-target
+    "closed → report and stop" rule in Step 2)
   - `empty` — nothing eligible
+
+  An **explicit issue argument overrides current-worktree detection** — the selection
+  script, and therefore its current-worktree detection, runs only when no argument is
+  given. `/dispatch #123` run from inside worktree-456 still targets 123.
 
   Priority order it implements (highest first; within a tier, oldest PR wins; PRs
   with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
@@ -54,9 +65,12 @@ When the resolved target is an **open issue with no PR** — whether queue-selec
 It walks open blockers and sub-issues to an open leaf and prints one issue number.
 Retarget to that leaf.
 
-Skip leaf tracing once a PR exists for the target (the `pr <num> <branch>` selection
-result, or an explicit issue argument that already has a PR) — implementation is
-already underway.
+Skip leaf tracing when:
+- A PR exists for the target (`pr <num> <branch>` result, or an explicit issue
+  argument that already has a PR) — implementation is already underway.
+- The target was current-worktree detected (`worktree <N>` result) — the worktree
+  is the already-committed unit of work; retargeting to a sub-issue or blocker
+  would be wrong.
 
 If a named target issue is **closed**, report it and **stop**.
 
@@ -67,9 +81,19 @@ Resolve or create the final target's worktree via `EnterWorktree`, matching
 an existing worktree) or `name` (create a new one; fires the `WorktreeCreate` hook).
 
 - **Already in the target's worktree** (current branch starts with `<issue>-`) → no
-  `EnterWorktree` needed; go straight to creating the marker below.
+  `EnterWorktree` needed. Re-sync issue context:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+  ```
+  (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.) Then go
+  straight to creating the marker below.
 - **An existing worktree matches** `<issue>-*` (parse `git worktree list --porcelain`
   as blank-line-delimited records) → `EnterWorktree` with `path:` set to that path.
+  After entering, re-sync issue context from the worktree:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+  ```
+  (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
 - **No existing worktree** → generate a sanitized branch name `<issue>-<slug>`:
   lowercase the issue title, replace non-alphanumeric runs with `-`, collapse repeated
   `-`, strip leading/trailing `-`, and truncate so the full branch name is ≤ 32
