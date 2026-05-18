@@ -104,7 +104,7 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
    The plan must NOT duplicate things already verified by unit tests, lint, or type-check. Do not include items like "type-check passes", "no lint errors", "renders without crashing", "no console errors on load". Those are CI's job.
 
-   Build the plan around public seed data (see [QA data policy](#qa-data-policy)). When target behavior is only reachable via `testOnly` or private data, do not create a walkthrough item for it — note the limitation in the plan and defer that coverage to the automated acceptance tests.
+   Build the plan around public seed data (see [QA data policy](#qa-data-policy)). When target behavior is only reachable via `testOnly` or private data, do not create a walkthrough item for it — note the limitation in the plan instead.
 
 3. **Browser feature path.** Skip to Step 4 if the non-browser path applies.
 
