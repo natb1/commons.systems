@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("security headers", () => {
   test("content-security-policy includes key directives", async ({ page }) => {
