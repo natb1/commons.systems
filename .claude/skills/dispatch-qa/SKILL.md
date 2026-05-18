@@ -10,8 +10,7 @@ Runs a single user-acceptance QA pass on an implemented PR. Invoked three ways:
 - By the `/dispatch` skill — the session is already inside the target worktree.
 - Standalone with no argument — `/dispatch-qa` self-selects the highest-priority
   QA-phase PR.
-- Standalone, or via the legacy `./dispatch/bin/dispatch` dispatcher, with an
-  explicit `#<issue>` argument.
+- Standalone with an explicit `#<issue>` argument.
 
 **Step 0** resolves the target issue and its worktree for all three paths. The
 remaining steps use the Step-0-resolved issue number `<N>`.
@@ -76,7 +75,7 @@ This skill is a **single user-acceptance pass**. It does not iterate, does not e
    - A frontend template (e.g. `index.html`, files under `src/` of a frontend app).
    - A path under one of the known frontend packages: `budget`, `fellspiral`, `landing`, `print`.
 
-   Pure-backend PRs (e.g. `dispatch/`-only, `functions/`-only, scripts-only) take the **non-browser path**. Detection is best-effort — if the user explicitly says otherwise, follow the user.
+   Pure-backend PRs (e.g. `functions/`-only, scripts-only) take the **non-browser path**. Detection is best-effort — if the user explicitly says otherwise, follow the user.
 
    If a browser component is detected, identify the **app dir** (`budget`, `fellspiral`, `landing`, or `print`) from the changed paths. If multiple app dirs are touched, ask the user which one to demo.
 
@@ -153,7 +152,7 @@ This skill is a **single user-acceptance pass**. It does not iterate, does not e
 
 5. **Recovery path when bugs are reported.**
 
-   The constraints in "What this skill is NOT" still apply: record the bug in the results file and continue to the next item. The recovery path is for the user to re-dispatch the original issue (with #569's resume-mode work, the dispatcher will pick up at the right step). Surface this to the user when reporting bugs.
+   The constraints in "What this skill is NOT" still apply: record the bug in the results file and continue to the next item. The recovery path is for the user to re-dispatch the original issue. Surface this to the user when reporting bugs.
 
 6. **Post the PR comment summary.**
 
@@ -185,4 +184,4 @@ This skill is a **single user-acceptance pass**. It does not iterate, does not e
 
    On the non-browser path, no QA server was started — skip cleanup.
 
-8. **Stop.** The dispatcher resumes after this session exits and prompts for the next post-implementation stage.
+8. **Stop.** `/loop /dispatch` advances to the next phase.
