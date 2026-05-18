@@ -112,8 +112,8 @@ present. Map the phase:
 | `waiting` | draft PR, CI in progress (running/queued/not started) | report "checks still running, nothing to do" and stop |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` → then label `dispatch:qa-done` |
 | `simplify` | draft PR + `dispatch:qa-done` | `/simplify` → then label `dispatch:refactored` |
-| `review` | draft PR + `dispatch:refactored` | `/review-fix` |
-| `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` |
+| `review` | draft PR + `dispatch:refactored` | `/review-fix` (applies `dispatch:reviewed` itself) |
+| `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
 | `done` | non-draft (ready) PR | already complete — report and skip |
 
 ## 5. Dispatch One Phase, Then Stop
