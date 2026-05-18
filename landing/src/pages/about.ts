@@ -1,12 +1,9 @@
 export function renderAboutHtml(): string {
   return `
     <h2>About</h2>
-    <p>Nathan Buesgens is an independent contractor. The apps on this site are the demonstration; this page is the offer.</p>
-    <p>The contracting model is one person on both sides of the work. The person you give requirements to is the person who implements them — no handoff between an account manager and an engineering team, no translation layer between intent and code.</p>
-    <p>This matters when the requirements are still moving. Requirements clarify as the system takes shape, and the round trip from "I noticed something" to "it's running" is short when one person carries both ends.</p>
-    <p>The work is focused on training the AI skills a business needs to decouple itself from professional services and platform vendors — not migrating it onto a different set of platform dependencies. The goal is capability that stays with the business when the engagement ends.</p>
-    <p>Contact: <a href="mailto:nathan@natb1.com">nathan@natb1.com</a>.</p>
-    <p><a href="https://github.com/natb1/commons.systems/blob/main/CHARTER.md">Read the charter</a> for the full framing, or head <a href="/">back to the homepage</a>.</p>
+    <p>Nathan Buesgens is an independent contractor. One person is responsible for contracting, project management and execution. The person you give requirements to is the person who implements them.</p>
+    <p>All deliverables are coupled with the necessary documentation to host the solution using your own data (Nathan never has access to your private data), and modify the solution to meet your future requirements. Deliverables will not require business transformation or platform migration to manage. Third-party dependencies are kept to a minimum. You will recieve a solution and also a capability that stays with the business when the engagement ends.</p>
+    <p>Contracts are written as a simple retainer. Work will be scoped to the size of the retainer with no long term commitments.</p>
   `;
 }
 
