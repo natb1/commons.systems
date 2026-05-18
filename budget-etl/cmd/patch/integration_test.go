@@ -6,10 +6,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
-	"github.com/natb1/commons.systems/budget-etl/internal/store"
 )
 
 // TestApplySpecAndMerge exercises the full patch -> merge flow against a
@@ -53,9 +53,9 @@ func TestApplySpecAndMerge(t *testing.T) {
 	}
 
 	stmtID := "banktwo-5678-2025-05"
-	txns := make([]store.TransactionData, len(pr.Transactions))
+	txns := make([]budget.TransactionData, len(pr.Transactions))
 	for i, tx := range pr.Transactions {
-		txns[i] = store.TransactionData{
+		txns[i] = budget.TransactionData{
 			Institution:   "banktwo",
 			Account:       "5678",
 			Description:   tx.Description,

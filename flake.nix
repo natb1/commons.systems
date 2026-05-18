@@ -44,6 +44,8 @@
                 jq
                 fswatch
                 playwright-driver.browsers
+                gnupg
+                pass
               ];
               shellHook = ''
                 export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
