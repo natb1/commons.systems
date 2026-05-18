@@ -20,7 +20,7 @@ func TestParseStatementDir(t *testing.T) {
 		{"2025/01/15", "30.00", "PURCHASE THREE", "", "TXN-3", "DEBIT"},
 	})
 
-	parsed, skipped, err := parseStatementDir(tmp)
+	parsed, totalTxns, skipped, err := parseStatementDir(tmp)
 	if err != nil {
 		t.Fatalf("parseStatementDir: %v", err)
 	}
@@ -30,8 +30,10 @@ func TestParseStatementDir(t *testing.T) {
 	if len(parsed) != 2 {
 		t.Fatalf("len(parsed): got %d, want 2", len(parsed))
 	}
+	if totalTxns != 3 {
+		t.Errorf("totalTxns: got %d, want 3", totalTxns)
+	}
 
-	totTxns := 0
 	for _, pf := range parsed {
 		if pf.sf.Period == "" {
 			t.Errorf("sf.Period is empty for %s", pf.sf.Path)
@@ -39,10 +41,6 @@ func TestParseStatementDir(t *testing.T) {
 		if len(pf.result.Transactions) == 0 {
 			t.Errorf("no transactions for %s", pf.sf.Path)
 		}
-		totTxns += len(pf.result.Transactions)
-	}
-	if totTxns != 3 {
-		t.Errorf("total transactions: got %d, want 3", totTxns)
 	}
 }
 

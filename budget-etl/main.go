@@ -105,24 +105,18 @@ type parsedFile struct {
 }
 
 func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, firestoreMode bool) error {
-	parsed, skipped, err := parseStatementDir(dir)
+	parsed, totalTxns, skipped, err := parseStatementDir(dir)
 	if err != nil {
 		return err
 	}
 
-	var totalTxns int
-	for _, pf := range parsed {
-		totalTxns += len(pf.result.Transactions)
-	}
-
 	// Build all TransactionData, StatementItemData, and StatementData across all files.
-	// Dedup by doc ID: overlapping statement files (same statementId) can
-	// produce duplicate transactions with the same OFX FITID. Statement items
-	// are deduped by their canonical id ({institution}_{account}_{fitid}), which
-	// collapses the same bank line appearing in multiple statement files
-	// (e.g., an item that crosses a month boundary).
-	seenItems := make(map[string]bool)
-	var allItems []store.StatementItemData
+	// Statement items are deduped by their canonical id
+	// ({institution}_{account}_{fitid}), which collapses the same bank line
+	// appearing in multiple statement files (e.g., an item that crosses a
+	// month boundary).
+	seenItems := make(map[string]bool, totalTxns)
+	allItems := make([]store.StatementItemData, 0, totalTxns)
 	allTxns, _ := buildTransactions(parsed, func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
 		stmtItemID := buildStatementItemID(sf.Institution, sf.Account, t.TransactionID)
 		td.StatementItemID = stmtItemID
@@ -810,8 +804,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		return fmt.Errorf("--group is required when input file has no groupName")
 	}
 
-	// Parse statements from dir
-	parsed, _, err := parseStatementDir(dir)
+	parsed, _, _, err := parseStatementDir(dir)
 	if err != nil {
 		return err
 	}

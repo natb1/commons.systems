@@ -9,12 +9,13 @@ import (
 )
 
 // parseStatementDir discovers and parses all statement files in dir
-// concurrently, infers the period from document data when possible,
-// and returns the successfully parsed files and the count of skipped files.
-func parseStatementDir(dir string) (parsed []parsedFile, skipped int, err error) {
+// concurrently, infers the period from document data when possible, and
+// returns the successfully parsed files, the total transaction count across
+// them, and the count of skipped files.
+func parseStatementDir(dir string) (parsed []parsedFile, totalTxns, skipped int, err error) {
 	files, err := parse.DiscoverFiles(dir)
 	if err != nil {
-		return nil, 0, fmt.Errorf("discovering files in %s: %w", dir, err)
+		return nil, 0, 0, fmt.Errorf("discovering files in %s: %w", dir, err)
 	}
 	log.Printf("discovered %d statement files", len(files))
 
@@ -31,11 +32,10 @@ func parseStatementDir(dir string) (parsed []parsedFile, skipped int, err error)
 		}()
 	}
 
-	var totalTxns int
 	for range files {
 		r := <-ch
 		if r.err != nil {
-			return nil, 0, r.err
+			return nil, 0, 0, r.err
 		}
 		if r.result.Skipped {
 			log.Printf("skipping %s: %s", r.sf.Path, r.result.SkipReason)
@@ -54,19 +54,28 @@ func parseStatementDir(dir string) (parsed []parsedFile, skipped int, err error)
 	}
 
 	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
-	return parsed, skipped, nil
+	return parsed, totalTxns, skipped, nil
 }
 
 // buildTransactions iterates parsed files and deduplicates transactions by
-// transaction doc ID. The visit callback (may be nil) fires once per unique
-// transaction so callers can build side artifacts (statement items, edits
-// map, etc.) and may mutate td (e.g., to set StatementItemID).
-// Returns the deduplicated TransactionData and parallel docID slice.
+// transaction doc ID: overlapping statement files (same statementId) can
+// produce duplicate transactions with the same OFX FITID. The visit callback
+// (may be nil) fires once per unique transaction so callers can build side
+// artifacts (statement items, edits map, etc.) and may mutate td (e.g., to
+// set StatementItemID); the td pointer is valid only for the duration of the
+// callback. Returns the deduplicated transactions and a parallel slice of
+// their doc IDs — allTxns[i] corresponds to allDocIDs[i].
 func buildTransactions(
 	parsed []parsedFile,
 	visit func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction),
 ) (allTxns []store.TransactionData, allDocIDs []string) {
-	seen := make(map[string]bool)
+	var totalTxns int
+	for _, pf := range parsed {
+		totalTxns += len(pf.result.Transactions)
+	}
+	seen := make(map[string]bool, totalTxns)
+	allTxns = make([]store.TransactionData, 0, totalTxns)
+	allDocIDs = make([]string, 0, totalTxns)
 	for _, pf := range parsed {
 		for _, t := range pf.result.Transactions {
 			docID := store.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
