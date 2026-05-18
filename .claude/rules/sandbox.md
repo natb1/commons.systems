@@ -1,14 +1,23 @@
 # Sandbox
 
-Sandbox mode restricts writes to `.bare/`, causing git index operations to fail inside worktrees:
+Two paths are in the sandbox write-allowlist — `sandbox.filesystem.allowWrite`
+in `.claude/settings.json` — both relative to a worktree's project root:
 
-```
-fatal: Unable to create '.bare/worktrees/<branch>/index.lock': Read-only file system
-```
+- `../../.bare` — the shared git common dir (index, objects, refs, and worktree
+  registrations under `.bare/worktrees/`).
+- `../../worktrees` — the worktree checkouts themselves. `git worktree remove`
+  deletes a worktree's *working directory* in addition to its `.bare/`
+  registration, so the container of all worktrees must be writable too.
 
-Use `dangerouslyDisableSandbox: true` on Bash calls that write to the git index: `git add`, `git commit`, `git merge`, `git checkout`, `git rebase`, `git push`.
+So git operations work **without** `dangerouslyDisableSandbox`: `git add`,
+`git commit`, `git merge`, `git checkout`, `git rebase`, and
+`git worktree add`/`remove`. `git push` / `git fetch` work sandboxed too — the
+`origin` remote is HTTPS to `github.com`, an allowlisted host.
 
-Read-only git ops (`git log`, `git diff`, `git status`, `git show`) work without disabling sandbox.
+If either entry is missing, the matching write fails read-only — e.g.
+`Unable to create '.bare/worktrees/<branch>/index.lock': Read-only file system`
+on a commit, or `failed to delete '.../worktrees/<branch>': Read-only file
+system` from `git worktree remove`.
 
 ## gh CLI (GitHub API)
 
