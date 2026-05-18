@@ -158,14 +158,14 @@ The QA pass covers **public data only** — documents present in both the QA ser
       .claude/skills/ref-pr-workflow/scripts/wait-for-url.sh <url>
       ```
 
-   c. **Smoke-check via acceptance tests:**
+   c. **Pre-QA acceptance check:**
       ```bash
       .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh <app-dir> <url>
       ```
 
-      - **On smoke fail** → A failed smoke check is a bug. Go to Step 5 and treat
-        the smoke failure as the first bug found.
-      - **On smoke pass** → Continue to the walkthrough.
+      - **If the check fails** → A failed pre-QA acceptance check is a bug. Go to
+        Step 5 and treat the check failure as the first bug found.
+      - **If the check passes** → Continue to the walkthrough.
 
    d. **Walk through the QA plan via the Chrome extension.** The per-item cycle
       below adapts `.claude/skills/ref-qa/SKILL.md`'s three-step cycle; the
@@ -220,15 +220,16 @@ The QA pass covers **public data only** — documents present in both the QA ser
 5. **First bug found — finalize the QA session, then fix the bug.**
 
    When the **first** bug is found — a FAIL Claude detected on its own, a
-   user-reported FAIL, or a failed smoke check — stop the walkthrough and fix it.
+   user-reported FAIL, or a failed pre-QA acceptance check — stop the walkthrough
+   and fix it.
    Proceed in order:
 
    1. **Finalize the QA session before plan mode.** Entering plan mode clears
       context and ends the browser session, so finish the session first:
       - **Browser path** — if GIF recording was started (Step 3d.7), stop and
         export it (`gif_creator` with `action: "stop_recording"` →
-        `tmp/dispatch-qa-walkthrough-<n>.gif`). A smoke failure (Step 3c) occurs
-        before recording starts — skip this bullet in that case.
+        `tmp/dispatch-qa-walkthrough-<n>.gif`). A pre-QA acceptance check failure
+        (Step 3c) occurs before recording starts — skip this bullet in that case.
       - Write QA results so far — **including the bug** — to
         `tmp/dispatch-qa-results-<n>.txt`.
       - **Browser path** — run `run-qa-cleanup.sh` (see Step 7).
