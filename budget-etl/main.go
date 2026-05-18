@@ -117,7 +117,7 @@ func run(dir, groupName, env, projectID string, dryRun bool, output fileOpts, fi
 	// month boundary).
 	seenItems := make(map[string]bool, totalTxns)
 	allItems := make([]store.StatementItemData, 0, totalTxns)
-	allTxns, _ := buildTransactions(parsed, func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
+	allTxns, _ := buildTransactions(parsed, totalTxns, func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
 		stmtItemID := buildStatementItemID(sf.Institution, sf.Account, t.TransactionID)
 		td.StatementItemID = stmtItemID
 		if seenItems[stmtItemID] {
@@ -804,7 +804,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		return fmt.Errorf("--group is required when input file has no groupName")
 	}
 
-	parsed, _, _, err := parseStatementDir(dir)
+	parsed, totalTxns, _, err := parseStatementDir(dir)
 	if err != nil {
 		return err
 	}
@@ -821,7 +821,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 
 	// Build TransactionData from dir, tracking which input IDs are covered
 	editsMap := make(map[string]txnEdits)
-	allTxns, allDocIDs := buildTransactions(parsed, func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
+	allTxns, allDocIDs := buildTransactions(parsed, totalTxns, func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
 		if inputTxn, ok := inputByID[docID]; ok {
 			editsMap[docID] = txnEdits{
 				note:          inputTxn.Note,

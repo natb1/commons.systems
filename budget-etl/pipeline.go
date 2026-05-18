@@ -65,14 +65,15 @@ func parseStatementDir(dir string) (parsed []parsedFile, totalTxns, skipped int,
 // set StatementItemID); the td pointer is valid only for the duration of the
 // callback. Returns the deduplicated transactions and a parallel slice of
 // their doc IDs — allTxns[i] corresponds to allDocIDs[i].
+//
+// totalTxns is a capacity hint for pre-allocating the dedup map and result
+// slices; pass the value from parseStatementDir (or 0 if unknown — only the
+// pre-allocation is lost).
 func buildTransactions(
 	parsed []parsedFile,
+	totalTxns int,
 	visit func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction),
 ) (allTxns []store.TransactionData, allDocIDs []string) {
-	var totalTxns int
-	for _, pf := range parsed {
-		totalTxns += len(pf.result.Transactions)
-	}
 	seen := make(map[string]bool, totalTxns)
 	allTxns = make([]store.TransactionData, 0, totalTxns)
 	allDocIDs = make([]string, 0, totalTxns)

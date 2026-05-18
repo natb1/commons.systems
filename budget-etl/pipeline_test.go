@@ -1,7 +1,9 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,7 +62,7 @@ func TestBuildTransactions_Dedupes(t *testing.T) {
 	pf1 := parsedFile{sf: sf, result: parse.ParseResult{Transactions: []parse.Transaction{txn}}}
 	pf2 := parsedFile{sf: sf, result: parse.ParseResult{Transactions: []parse.Transaction{txn}}}
 
-	allTxns, allDocIDs := buildTransactions([]parsedFile{pf1, pf2}, nil)
+	allTxns, allDocIDs := buildTransactions([]parsedFile{pf1, pf2}, 0, nil)
 
 	if len(allTxns) != 1 {
 		t.Errorf("len(allTxns): got %d, want 1 (expected dedup)", len(allTxns))
@@ -87,7 +89,7 @@ func TestBuildTransactions_Visit(t *testing.T) {
 	pf := parsedFile{sf: sf, result: parse.ParseResult{Transactions: txns}}
 
 	var visitCount int
-	allTxns, _ := buildTransactions([]parsedFile{pf}, func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
+	allTxns, _ := buildTransactions([]parsedFile{pf}, 0, func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
 		visitCount++
 		td.StatementItemID = "item-" + t.TransactionID
 	})
@@ -120,7 +122,7 @@ func TestBuildTransactions_NilVisit(t *testing.T) {
 	}
 	pf := parsedFile{sf: sf, result: parse.ParseResult{Transactions: []parse.Transaction{txn}}}
 
-	allTxns, allDocIDs := buildTransactions([]parsedFile{pf}, nil)
+	allTxns, allDocIDs := buildTransactions([]parsedFile{pf}, 0, nil)
 
 	if len(allTxns) != 1 {
 		t.Fatalf("len(allTxns): got %d, want 1", len(allTxns))
@@ -130,5 +132,85 @@ func TestBuildTransactions_NilVisit(t *testing.T) {
 	}
 	if len(allDocIDs) != 1 {
 		t.Errorf("len(allDocIDs): got %d, want 1", len(allDocIDs))
+	}
+}
+
+// investmentQFX mirrors internal/parse/testdata/investment.qfx: an SGML/QFX
+// file whose INVSTMTMSGSRSV1 marker causes the parser to skip it.
+const investmentQFX = `OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+SECURITY:NONE
+ENCODING:USASCII
+CHARSET:1252
+COMPRESSION:NONE
+OLDFILEUID:NONE
+NEWFILEUID:NONE
+
+<OFX>
+<SIGNONMSGSRSV1>
+<SONRS>
+<STATUS>
+<CODE>0
+<SEVERITY>INFO
+</STATUS>
+<DTSERVER>20250525155800.345[-4:EDT]
+<LANGUAGE>ENG
+</SONRS>
+</SIGNONMSGSRSV1>
+<INVSTMTMSGSRSV1>
+<INVSTMTTRNRS>
+<TRNUID>0
+<STATUS>
+<CODE>0
+<SEVERITY>INFO
+</STATUS>
+</INVSTMTTRNRS>
+</INVSTMTMSGSRSV1>
+</OFX>
+`
+
+func TestParseStatementDir_SkipsInvestment(t *testing.T) {
+	tmp := t.TempDir()
+
+	writeCSVFixture(t, filepath.Join(tmp, "bank_a", "1111", "2025-01", "stmt.csv"), [][6]string{
+		{"2025/01/05", "10.00", "PURCHASE ONE", "", "TXN-1", "DEBIT"},
+		{"2025/01/10", "20.00", "PURCHASE TWO", "", "TXN-2", "DEBIT"},
+	})
+
+	// An investment statement at the same {institution}/{account}/{period}/{file}
+	// depth — DiscoverFiles finds it, ParseFile reports it Skipped.
+	qfxPath := filepath.Join(tmp, "bank_b", "2222", "2025-01", "invest.qfx")
+	if err := os.MkdirAll(filepath.Dir(qfxPath), 0755); err != nil {
+		t.Fatalf("creating qfx fixture dir: %v", err)
+	}
+	if err := os.WriteFile(qfxPath, []byte(investmentQFX), 0644); err != nil {
+		t.Fatalf("writing qfx fixture: %v", err)
+	}
+
+	parsed, totalTxns, skipped, err := parseStatementDir(tmp)
+	if err != nil {
+		t.Fatalf("parseStatementDir: %v", err)
+	}
+	if skipped != 1 {
+		t.Errorf("skipped: got %d, want 1", skipped)
+	}
+	if len(parsed) != 1 {
+		t.Fatalf("len(parsed): got %d, want 1 (the skipped .qfx is excluded)", len(parsed))
+	}
+	if totalTxns != 2 {
+		t.Errorf("totalTxns: got %d, want 2 (only the good CSV's transactions)", totalTxns)
+	}
+}
+
+func TestParseStatementDir_DiscoverError(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+
+	_, _, _, err := parseStatementDir(missing)
+	if err == nil {
+		t.Fatal("parseStatementDir: got nil error, want a discovery error")
+	}
+	if !strings.Contains(err.Error(), "discovering files in") {
+		t.Errorf("error %q does not contain %q", err.Error(), "discovering files in")
 	}
 }
