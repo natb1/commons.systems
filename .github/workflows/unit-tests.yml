@@ -99,7 +99,7 @@ jobs:
           fetch-depth: 0
       - name: Detect changed file categories
         id: changes
-        run: .claude/skills/ref-pr-workflow/scripts/detect-changes.sh
+        run: .claude/skills/dispatch/scripts/detect-changes.sh
       - name: Set up Go (if budget-etl changed)
         if: steps.changes.outputs.go == 'true'
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
