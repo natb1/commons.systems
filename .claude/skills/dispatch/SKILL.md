@@ -39,10 +39,23 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
     closed/unrecognized issue `<N>` and **stop** (consistent with the named-target
     "closed → report and stop" rule in Step 2)
   - `empty` — nothing eligible
+  - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check; the queue
+    scan was short-circuited (see the `main-broken` handling block below)
 
   An **explicit issue argument overrides current-worktree detection** — the selection
   script, and therefore its current-worktree detection, runs only when no argument is
   given. `/dispatch #123` run from inside worktree-456 still targets 123.
+
+  Before the priority ladder, the script runs a **top-priority `origin/main` CI
+  health gate**. Every queueable task builds on `origin/main` — branches fork
+  from it and merge it — so a failing check on main's HEAD means nothing is safe
+  to start. The gate aggregates main's HEAD CI from two sources (CodeQL
+  check-runs and Actions workflow runs); a failing conclusion short-circuits the
+  scan to `main-broken <sha>` and the priority ladder is not evaluated.
+  In-progress (not-yet-concluded) checks do **not** trip the gate. The gate is
+  bypassed by an explicit `/dispatch <issue|pr>` argument (the queue scan is not
+  run at all) and by current-worktree continuation (a session continues its own
+  in-progress work regardless of main's state).
 
   Priority order it implements (highest first; within a tier, oldest PR wins; PRs
   with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
@@ -52,6 +65,16 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
   rank below all non-QA PRs but above QA PRs.
 
   On `empty` → report that the queue is empty and **stop**.
+
+  On `main-broken <sha>` → `origin/main` itself is red, so no new work is safe to
+  start. Do **not** create a worktree, branch, or phase skill. Diagnose main
+  instead: enumerate the failing checks on `<sha>` by aggregating
+  `gh run list --branch main` and
+  `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`, fetch the failing
+  workflow run's logs with `gh run view <databaseId> --log-failed`, summarize the
+  likely cause, report it, and **stop**. Once a PR that fixes main exists the
+  normal ladder picks it up (verify/ready) — this gate only blocks starting new,
+  unrelated work.
 
 ## 2. Trace to an Open Leaf
 
