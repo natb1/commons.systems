@@ -152,6 +152,16 @@
           }
         ]
       }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/worktree-remove.sh"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
@@ -159,12 +169,17 @@
     "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/statusline.sh"
   },
   "enabledPlugins": {
-    "security-guidance@claude-plugins-official": true,
-    "marketing@knowledge-work-plugins": false
+    "security-guidance@claude-plugins-official": true
   },
   "sandbox": {
     "enabled": true,
-    "autoAllowBashIfSandboxed": true
+    "autoAllowBashIfSandboxed": true,
+    "filesystem": {
+      "allowWrite": [
+        "../../.bare",
+        "../../worktrees"
+      ]
+    }
   },
   "showClearContextOnPlanAccept": true
 }

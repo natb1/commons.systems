@@ -65,6 +65,8 @@ jobs:
         run: .claude/hooks/test-approve-workflow-commands.sh
       - name: Run dispatch script tests
         run: .claude/skills/dispatch/scripts/test-dispatch-scripts.sh
+      - name: Run worktree-remove hook tests
+        run: .claude/hooks/test-worktree-remove.sh
 
   playwright-version-sync:
     runs-on: ubuntu-latest
