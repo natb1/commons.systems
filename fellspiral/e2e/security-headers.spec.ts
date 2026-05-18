@@ -1,7 +1,7 @@
 import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("security headers", () => {
-  test("content-security-policy includes key directives", async ({ page }) => {
+  test("content-security-policy includes key directives @hosting", async ({ page }) => {
     const response = await page.goto("/");
     expect(response).not.toBeNull();
     expect(response!.status()).toBe(200);
@@ -13,7 +13,7 @@ test.describe("security headers", () => {
     expect(csp).toContain("frame-ancestors");
   });
 
-  test("cross-origin-opener-policy is same-origin", async ({ page }) => {
+  test("cross-origin-opener-policy is same-origin @hosting", async ({ page }) => {
     const response = await page.goto("/");
     expect(response).not.toBeNull();
     expect(response!.status()).toBe(200);
@@ -23,7 +23,7 @@ test.describe("security headers", () => {
     expect(coop).toBe("same-origin");
   });
 
-  test("x-frame-options is DENY", async ({ page }) => {
+  test("x-frame-options is DENY @hosting", async ({ page }) => {
     const response = await page.goto("/");
     expect(response).not.toBeNull();
     expect(response!.status()).toBe(200);
@@ -33,7 +33,7 @@ test.describe("security headers", () => {
     expect(xfo).toBe("DENY");
   });
 
-  test("strict-transport-security includes includeSubDomains and preload", async ({
+  test("strict-transport-security includes includeSubDomains and preload @hosting", async ({
     page,
   }) => {
     const response = await page.goto("/");
