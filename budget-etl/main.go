@@ -130,76 +130,15 @@ type parsedFile struct {
 // by doc ID, and writes a JSON budget file with no rules applied. Use --input
 // to apply rules in a subsequent pass.
 func runDirJSON(dir, groupName string, output fileOpts) error {
-	// Discover statement files
-	files, err := parse.DiscoverFiles(dir)
+	parsed, totalTxns, _, err := parseStatementDir(dir)
 	if err != nil {
-		return fmt.Errorf("discovering files in %s: %w", dir, err)
+		return err
 	}
-	log.Printf("discovered %d statement files", len(files))
-
-	// Parse all files concurrently
-	type fileResult struct {
-		sf     parse.StatementFile
-		result parse.ParseResult
-		err    error
-	}
-	ch := make(chan fileResult, len(files))
-	for _, sf := range files {
-		go func() {
-			result, err := parse.ParseFile(sf.Path)
-			ch <- fileResult{sf: sf, result: result, err: err}
-		}()
-	}
-
-	var parsed []parsedFile
-	var totalTxns int
-	var skipped int
-	for range files {
-		r := <-ch
-		if r.err != nil {
-			return r.err
-		}
-		if r.result.Skipped {
-			log.Printf("skipping %s: %s", r.sf.Path, r.result.SkipReason)
-			skipped++
-			continue
-		}
-		// Override path-derived period with document-inferred period before any
-		// downstream use of sf (StatementID, buildStatementData, etc.).
-		if inferred := r.result.InferPeriod(); inferred != "" {
-			r.sf.Period = inferred
-		} else {
-			log.Printf("could not infer period from document data for %s, using path-derived period %q", r.sf.Path, r.sf.Period)
-		}
-		parsed = append(parsed, parsedFile{sf: r.sf, result: r.result})
-		totalTxns += len(r.result.Transactions)
-	}
-
-	log.Printf("parsed %d transactions from %d files (%d skipped)", totalTxns, len(parsed), skipped)
 
 	// Build all TransactionData and StatementData across all files.
 	// Dedup by doc ID: overlapping statement files (same statementId) can
 	// produce duplicate transactions with the same OFX FITID.
-	seen := make(map[string]bool, totalTxns)
-	allTxns := make([]budget.TransactionData, 0, totalTxns)
-	for _, pf := range parsed {
-		for _, t := range pf.result.Transactions {
-			docID := budget.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
-			if seen[docID] {
-				continue
-			}
-			seen[docID] = true
-			allTxns = append(allTxns, budget.TransactionData{
-				Institution:   pf.sf.Institution,
-				Account:       pf.sf.Account,
-				Description:   t.Description,
-				Amount:        t.Amount,
-				Timestamp:     t.Date,
-				StatementID:   pf.sf.StatementID(),
-				TransactionID: t.TransactionID,
-			})
-		}
-	}
+	allTxns, _ := buildTransactions(parsed, totalTxns, nil)
 	maxDates := maxTransactionDates(allTxns)
 	allStmts := buildStatementData(parsed, maxDates)
 	allStmts = append(allStmts, deriveMonthlyStatements(parsed)...)
@@ -1082,41 +1021,21 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 		inputByID[t.ID] = t
 	}
 
-	// Build TransactionData from dir, tracking which input IDs are covered
-	dirDocIDs := make(map[string]bool)
+	// Build TransactionData from dir, tracking which input IDs are covered.
+	// parseAndClassify does not return a transaction count, so pass 0 — the
+	// only cost is losing the pre-allocation capacity hint.
 	editsMap := make(map[string]txnEdits)
-
-	var allTxns []budget.TransactionData
-	var allDocIDs []string
-
-	for _, pf := range parsed {
-		for _, t := range pf.result.Transactions {
-			docID := budget.TransactionDocID(pf.sf.StatementID(), t.TransactionID)
-			if dirDocIDs[docID] {
-				continue // already seen from another file with the same statementId
+	allTxns, allDocIDs := buildTransactions(parsed, 0, func(td *budget.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
+		if inputTxn, ok := inputByID[docID]; ok {
+			editsMap[docID] = txnEdits{
+				note:          inputTxn.Note,
+				reimbursement: inputTxn.Reimbursement,
 			}
-			dirDocIDs[docID] = true
-
-			td := budget.TransactionData{
-				Institution:   pf.sf.Institution,
-				Account:       pf.sf.Account,
-				Description:   t.Description,
-				Amount:        t.Amount,
-				Timestamp:     t.Date,
-				StatementID:   pf.sf.StatementID(),
-				TransactionID: t.TransactionID,
-			}
-
-			if inputTxn, ok := inputByID[docID]; ok {
-				editsMap[docID] = txnEdits{
-					note:          inputTxn.Note,
-					reimbursement: inputTxn.Reimbursement,
-				}
-			}
-
-			allTxns = append(allTxns, td)
-			allDocIDs = append(allDocIDs, docID)
 		}
+	})
+	dirDocIDs := make(map[string]bool, len(allDocIDs))
+	for _, id := range allDocIDs {
+		dirDocIDs[id] = true
 	}
 
 	// Append input-only transactions (not in dir), skipping virtual transactions
