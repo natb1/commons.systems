@@ -210,8 +210,10 @@ remains visible even though the planning conversation is gone.
 
    1. **Finalize the QA session before plan mode.** Entering plan mode clears
       context and ends the browser session, so finish the session first:
-      - **Browser path** — stop and export the GIF (`gif_creator` with
-        `action: "stop_recording"` → `tmp/dispatch-qa-walkthrough-<n>.gif`).
+      - **Browser path** — if GIF recording was started (Step 3d.7), stop and
+        export it (`gif_creator` with `action: "stop_recording"` →
+        `tmp/dispatch-qa-walkthrough-<n>.gif`). A smoke failure (Step 3c) occurs
+        before recording starts — skip this bullet in that case.
       - Write QA results so far — **including the bug** — to
         `tmp/dispatch-qa-results-<n>.txt`.
       - **Browser path** — run `run-qa-cleanup.sh` (see Step 7).
@@ -233,7 +235,8 @@ remains visible even though the planning conversation is gone.
    4. **Stop without labeling.** Do **not** apply `dispatch:qa-done`. The fix
       commits change the PR; the user re-runs `/dispatch`, which re-derives the
       phase from CI/labels (→ `waiting`/`verify` while CI runs, → `qa` once green)
-      and re-QAs the fixed build.
+      and re-QAs the fixed build. The skill ends here — Steps 6 and 7 already ran
+      inline in sub-step 1, and Step 8 does not run on the bug-fix path.
 
 6. **Post the PR comment summary.**
 
