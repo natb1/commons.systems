@@ -21,17 +21,18 @@ implementation subagents.
 
 ## Idempotency preamble
 
-Before running any step, resolve the PR number from the current branch (use
-`dangerouslyDisableSandbox: true` — `gh` needs network):
+Before running any step, resolve the PR number **and its labels** from the current
+branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-gh pr view "$BRANCH" --json number,labels -q .number
+gh pr view "$BRANCH" --json number,labels
 ```
 
-If the PR already carries the `dispatch:security-reviewed` label — an interrupted
-prior run — **skip Steps 1–6 entirely** and go straight to Step 7 to ensure the
-PR is ready. Otherwise run all steps in order.
+This prints the PR number and its labels as JSON. If the PR already carries the
+`dispatch:security-reviewed` label — an interrupted prior run — **skip Steps 1–6
+entirely** and go straight to Step 7 to ensure the PR is ready. Otherwise run all
+steps in order.
 
 ## Steps
 

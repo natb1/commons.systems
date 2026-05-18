@@ -16,8 +16,8 @@ Run `/dispatch` from the **main worktree**, or from inside an issue worktree to
 continue that issue. Step 3 switches into the target's worktree via `EnterWorktree`;
 the phase skill runs there.
 
-Run `gh` and git-index-writing commands (`git add`, `gh label create`)
-with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
+Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
+`gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
 ## 1. Select the Target
 

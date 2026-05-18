@@ -20,8 +20,8 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 ## Steps
 
 1. **Merge `origin/main` first.** Before any CI failure is read or reproduced, merge
-   current `main` into the working tree (use `dangerouslyDisableSandbox: true` — these
-   are git-index writes and a network op):
+   current `main` into the working tree. `git fetch` and `git merge` run sandboxed —
+   no `dangerouslyDisableSandbox` (see `.claude/rules/sandbox.md`):
 
    ```bash
    git fetch origin main
@@ -81,7 +81,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
      forever. Step 1's `git merge origin/main` is always a clean merge here — a
      conflict would have halted the skill back in Step 1 — and a clean `git merge`
      auto-creates the merge commit, so the merge commit already exists; just push it
-     with `dangerouslyDisableSandbox: true`:
+     (`git push` runs sandboxed — see `.claude/rules/sandbox.md`):
 
      ```bash
      git push origin HEAD
