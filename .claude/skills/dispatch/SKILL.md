@@ -134,7 +134,7 @@ present. Map the phase:
 | `implement` | no PR on the target | relevance review (Step 6), then `/plan-implement` |
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
 | `waiting` | draft PR, CI in progress (running/queued/not started) | report "checks still running, nothing to do" and stop |
-| `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` → then label `dispatch:qa-done` |
+| `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
 | `simplify` | draft PR + `dispatch:qa-done` | `/simplify` → then label `dispatch:refactored` |
 | `review` | draft PR + `dispatch:refactored` | `/review` → then label `dispatch:reviewed` |
 | `security` | draft PR + `dispatch:reviewed` | `/security-review` → then label `dispatch:security-reviewed` |
@@ -154,9 +154,11 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 - **`waiting`** — CI checks are still running or queued; there is nothing to do yet.
   Report "checks still running, nothing to do" and **stop** without invoking any
   phase skill or applying any label.
-- **`qa` / `simplify` / `review` / `security`** — invoke the mapped skill
-  (`/dispatch-qa`, `/simplify`, `/review`, `/security-review`). After it **returns**,
-  apply the accumulating `dispatch:*` label to the PR (see below).
+- **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done` itself on
+  a clean pass; `/dispatch` applies no label.
+- **`simplify` / `review` / `security`** — invoke the mapped skill (`/simplify`,
+  `/review`, `/security-review`). After it **returns**, apply the accumulating
+  `dispatch:*` label to the PR (see below).
 - **`ready`** — run `gh pr ready <pr-num>` to flip the draft to ready-for-review.
   The workflow is complete.
 - **`done`** — report that the PR is already ready and skip.
@@ -173,12 +175,14 @@ so `/dispatch` cannot launch it.
 
 The four `dispatch:*` labels — `dispatch:qa-done`, `dispatch:refactored`,
 `dispatch:reviewed`, `dispatch:security-reviewed` — are the accumulating progress
-markers. Apply a label only **after** the corresponding phase skill returns
-successfully; this keeps the generic `/simplify`, `/review`, and `/security-review`
-skills dispatch-unaware.
+markers across the full workflow. `/dispatch-qa` owns and applies `dispatch:qa-done`
+on a clean pass. `/dispatch` applies the remaining three: `dispatch:refactored`,
+`dispatch:reviewed`, and `dispatch:security-reviewed` — one after each corresponding
+phase skill returns successfully. This keeps the generic `/simplify`, `/review`, and
+`/security-review` skills dispatch-unaware.
 
-Before applying, ensure the labels exist idempotently — run this for each of the four
-names (safe on forks where the labels do not yet exist):
+Before applying, ensure the three labels exist idempotently — run this for each
+(safe on forks where the labels do not yet exist):
 
 ```bash
 gh label create "dispatch:<name>" --color BFD4F2 --description "<phase> phase complete" 2>/dev/null || true
