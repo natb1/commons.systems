@@ -673,8 +673,7 @@ teardown
 # 17. Closed issue worktree → worktree-closed.
 echo "Test: closed issue worktree → worktree-closed <N> <branch>"
 setup
-echo '[]' > "$STUB_DIR/pr-list-full.json"
-echo '[]' > "$STUB_DIR/pr-list-brief.json"
+setup_both_pr_lists '[]' '[]'
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
@@ -686,8 +685,7 @@ teardown
 # 18. Unknown issue worktree (no state file → gh fails) → worktree-closed.
 echo "Test: unknown issue worktree → worktree-closed <N> <branch>"
 setup
-echo '[]' > "$STUB_DIR/pr-list-full.json"
-echo '[]' > "$STUB_DIR/pr-list-brief.json"
+setup_both_pr_lists '[]' '[]'
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '999-gone' > "$STUB_DIR/current-branch.txt"
