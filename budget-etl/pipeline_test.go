@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
-	"github.com/natb1/commons.systems/budget-etl/internal/store"
 )
 
 func TestParseStatementDir(t *testing.T) {
@@ -70,7 +70,7 @@ func TestBuildTransactions_Dedupes(t *testing.T) {
 	if len(allDocIDs) != 1 {
 		t.Errorf("len(allDocIDs): got %d, want 1", len(allDocIDs))
 	}
-	want := store.TransactionDocID(sf.StatementID(), txn.TransactionID)
+	want := budget.TransactionDocID(sf.StatementID(), txn.TransactionID)
 	if allDocIDs[0] != want {
 		t.Errorf("allDocIDs[0]: got %q, want %q", allDocIDs[0], want)
 	}
@@ -89,9 +89,9 @@ func TestBuildTransactions_Visit(t *testing.T) {
 	pf := parsedFile{sf: sf, result: parse.ParseResult{Transactions: txns}}
 
 	var visitCount int
-	allTxns, _ := buildTransactions([]parsedFile{pf}, 0, func(td *store.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
+	allTxns, _ := buildTransactions([]parsedFile{pf}, 0, func(td *budget.TransactionData, docID string, sf parse.StatementFile, t parse.Transaction) {
 		visitCount++
-		td.StatementItemID = "item-" + t.TransactionID
+		td.Category = "cat-" + t.TransactionID
 	})
 
 	if visitCount != 2 {
@@ -100,11 +100,11 @@ func TestBuildTransactions_Visit(t *testing.T) {
 	if len(allTxns) != 2 {
 		t.Fatalf("len(allTxns): got %d, want 2", len(allTxns))
 	}
-	if allTxns[0].StatementItemID != "item-A" {
-		t.Errorf("allTxns[0].StatementItemID: got %q, want %q", allTxns[0].StatementItemID, "item-A")
+	if allTxns[0].Category != "cat-A" {
+		t.Errorf("allTxns[0].Category: got %q, want %q", allTxns[0].Category, "cat-A")
 	}
-	if allTxns[1].StatementItemID != "item-B" {
-		t.Errorf("allTxns[1].StatementItemID: got %q, want %q", allTxns[1].StatementItemID, "item-B")
+	if allTxns[1].Category != "cat-B" {
+		t.Errorf("allTxns[1].Category: got %q, want %q", allTxns[1].Category, "cat-B")
 	}
 }
 
@@ -127,8 +127,8 @@ func TestBuildTransactions_NilVisit(t *testing.T) {
 	if len(allTxns) != 1 {
 		t.Fatalf("len(allTxns): got %d, want 1", len(allTxns))
 	}
-	if allTxns[0].StatementItemID != "" {
-		t.Errorf("StatementItemID: got %q, want empty", allTxns[0].StatementItemID)
+	if allTxns[0].Category != "" {
+		t.Errorf("Category: got %q, want empty", allTxns[0].Category)
 	}
 	if len(allDocIDs) != 1 {
 		t.Errorf("len(allDocIDs): got %d, want 1", len(allDocIDs))
