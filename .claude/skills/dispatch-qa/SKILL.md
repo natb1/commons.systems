@@ -15,7 +15,9 @@ Runs a single user-acceptance QA pass on an implemented PR. Invoked three ways:
 **Step 0** resolves the target issue and its worktree for all three paths. The
 remaining steps use the Step-0-resolved issue number `<N>`.
 
-This skill is a **single QA pass** — it does not iterate and runs no `wiggum-loop`.
+This skill is a **single QA pass** — the QA walkthrough runs once, with no
+iteration and no `wiggum-loop`. (Step 5's bug-fix build loop iterates over plan
+units; that is a build loop, not a re-run of the walkthrough.)
 It self-verifies every QA item it can check on its own (page text, DOM state,
 console, network, shell commands, file inspection) and prompts the user only for
 items needing human judgment. On the **first** bug found — whether Claude detects
@@ -29,8 +31,10 @@ dispatch is already present in context (typical after
 context was cleared, causing `restore-dispatch-skill.sh` to re-enter `/dispatch`
 → `/dispatch-qa`), **skip the QA walkthrough** — Step 0.5 and Steps 1–4 — and
 resume directly at the build loop (Step 5, sub-step 3: build each unit via
-`/implement-unit`). The plan persists across context clears, so the unit list
-remains visible even though the planning conversation is gone.
+`/implement-unit`). Step 0 (target resolution) still runs: it re-establishes the
+issue number `<N>` and confirms the worktree from the current branch. The plan
+persists across context clears, so the unit list remains visible even though the
+planning conversation is gone.
 
 ## What this skill is NOT
 
