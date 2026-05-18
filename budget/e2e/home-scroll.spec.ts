@@ -70,18 +70,18 @@ async function waitForTable(page: Page): Promise<void> {
 }
 
 /**
- * Scroll the sentinel into view repeatedly until the row count grows past the
- * baseline. Re-scroll on every poll iteration so the IntersectionObserver keeps
- * firing as each loaded batch pushes the sentinel further down. The threshold
- * adds the current hidden-row count so a filtered table still detects a newly
- * loaded batch even when every new row is filtered out of view.
+ * Scroll the sentinel into view repeatedly until the count of visible (non-hidden)
+ * rows grows past the baseline. Re-scroll on every poll iteration so the
+ * IntersectionObserver keeps firing as each loaded batch pushes the sentinel
+ * further down the page. A scroll-loaded batch whose rows are all filtered out
+ * of view does not advance the count — callers must use seed data that yields
+ * matching rows on scroll.
  */
 async function scrollUntilMoreRows(page: Page, baselineVisible: number): Promise<void> {
-  const hiddenRows = page.locator('#transactions-table .txn-row[style*="display: none"]');
+  const visibleRows = page.locator('#transactions-table .txn-row:not([style*="display: none"])');
   await expect(async () => {
     await page.locator("#scroll-sentinel").scrollIntoViewIfNeeded();
-    const totalRows = await page.locator("#transactions-table .txn-row").count();
-    expect(totalRows).toBeGreaterThan(baselineVisible + (await hiddenRows.count()));
+    expect(await visibleRows.count()).toBeGreaterThan(baselineVisible);
   }).toPass({ timeout: 30000 });
 }
 
