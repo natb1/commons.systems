@@ -9,6 +9,13 @@
 #   - All-digit arg: treated as an issue number. The matching PR is the one
 #     whose headRefName starts with "<issue>-".
 #   - Otherwise: treated as a branch name. Matched exactly.
+#
+# Environment:
+#   DISPATCH_PR_LIST — optional. A JSON array of open PRs supplied by the
+#     caller (dispatch-select-target exports it to avoid a redundant
+#     gh pr list per PR). When set and non-empty, it is used in place of a
+#     self-issued gh pr list. Must include the fields
+#     number,headRefName,isDraft,statusCheckRollup,labels.
 set -euo pipefail
 
 ARG="${1:-}"
@@ -17,8 +24,14 @@ if [[ -z "$ARG" ]]; then
   exit 1
 fi
 
-# Fetch all open PRs with the fields we need.
-PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+# Use the caller-supplied open-PR list when DISPATCH_PR_LIST is set
+# (dispatch-select-target exports it to avoid a redundant gh pr list per PR).
+# Otherwise fetch the list ourselves — standalone callers rely on this path.
+if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
+  PR_LIST="$DISPATCH_PR_LIST"
+else
+  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+fi
 
 # Find the matching PR.
 if [[ "$ARG" =~ ^[0-9]+$ ]]; then
