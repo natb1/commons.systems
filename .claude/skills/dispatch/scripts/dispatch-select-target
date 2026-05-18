@@ -3,9 +3,11 @@
 # Usage: dispatch-select-target [--qa]
 #
 # Output: exactly one line:
-#   pr <num> <branch>   — a PR to work on
-#   issue <num>         — a help-wanted issue to implement
-#   empty               — nothing eligible
+#   pr <num> <branch>           — a PR to work on
+#   issue <num>                 — a help-wanted issue to implement
+#   empty                       — nothing eligible
+#   worktree <N> <branch>       — the current worktree's own open issue (short-circuits the queue scan)
+#   worktree-closed <N> <branch>— the current worktree's issue is closed or unknown
 #
 # Default mode priority (highest first; within a tier, oldest PR wins):
 #   1. Oldest "ready"    PR (draft + dispatch:security-reviewed)
@@ -34,6 +36,26 @@ for arg in "$@"; do
     *) echo "error: unknown argument: $arg" >&2; exit 1 ;;
   esac
 done
+
+# Current-worktree detection (default mode only): if the current branch matches
+# the worktree convention <issue-num>-<slug>, short-circuit before the queue scan
+# and target that worktree's own issue directly.
+if [[ "$QA_MODE" == "false" ]]; then
+  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  if [[ "$CURRENT_BRANCH" =~ ^([0-9]+)- ]]; then
+    N="${BASH_REMATCH[1]}"
+    if STATE=$(gh issue view "$N" --json state 2>/dev/null | jq -r '.state'); then
+      if [[ "$STATE" == "OPEN" ]]; then
+        echo "worktree $N $CURRENT_BRANCH"
+      else
+        echo "worktree-closed $N $CURRENT_BRANCH"
+      fi
+    else
+      echo "worktree-closed $N $CURRENT_BRANCH"
+    fi
+    exit 0
+  fi
+fi
 
 # Collect branches that already have a local worktree (a session is working them).
 WORKTREE_BRANCHES=()

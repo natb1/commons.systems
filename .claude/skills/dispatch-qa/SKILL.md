@@ -24,6 +24,15 @@ This skill is a **single user-acceptance pass**. It does not iterate, does not e
 - **No iteration.** When the user reports a bug, record it and move to the next item. Do not attempt fixes.
 - **No code changes, commits, or pushes.**
 
+## QA data policy
+
+The QA pass covers **public data only** — documents present in both the QA server and production.
+
+- **Identify public seed items** from `<app>/seeds/firestore.ts`: documents in collection blocks **without** `testOnly: true`. The QA server seeds exactly these. Build the walkthrough around them.
+- **Never** run the QA server or any seed step with `SEED_TEST_ONLY=true`, and never re-seed `testOnly` collections by other means — that breaks QA/prod parity, letting QA pass against data absent from production. `testOnly` data exists for the Playwright acceptance tests, which CI's `acceptance` job already runs.
+- **Auth-gated and private-data flows are out of scope** for the automated walkthrough. If one must be verified, the user does so in a preview deployment — avoid this where possible.
+- When a change's behavior is only reachable via `testOnly` or private data, note in the QA plan that the walkthrough is limited to public data and defer that coverage to the automated acceptance tests.
+
 ## Steps
 
 0. **Target resolution.**
@@ -95,13 +104,15 @@ This skill is a **single user-acceptance pass**. It does not iterate, does not e
 
    The plan must NOT duplicate things already verified by unit tests, lint, or type-check. Do not include items like "type-check passes", "no lint errors", "renders without crashing", "no console errors on load". Those are CI's job.
 
+   Build the plan around public seed data (see [QA data policy](#qa-data-policy)). When target behavior is only reachable via `testOnly` or private data, do not create a walkthrough item for it — note the limitation in the plan instead.
+
 3. **Browser feature path.** Skip to Step 4 if the non-browser path applies.
 
    a. **Start the QA server in the background.** Use a Bash tool call with `run_in_background: true`:
       ```bash
       .claude/skills/ref-pr-workflow/scripts/run-qa-server.sh <app-dir>
       ```
-      Capture the App URL printed to stdout.
+      Capture the App URL printed to stdout. The QA server seeds public data only — do not re-run it or any seed step with `SEED_TEST_ONLY=true` (see [QA data policy](#qa-data-policy)).
 
    b. **Wait for the server:**
       ```bash

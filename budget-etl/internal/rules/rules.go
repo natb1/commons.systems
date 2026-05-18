@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/natb1/commons.systems/budget-etl/internal/store"
+	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 )
 
 // UncategorizedRecord identifies a transaction that didn't match any
@@ -108,7 +108,7 @@ func rulesOfType(rules []Rule, ruleType string) []Rule {
 // Only transactions with an empty Category field are categorized.
 // Returns a slice of UncategorizedRecord for any transactions that didn't match.
 // Empty slice means full coverage.
-func ApplyCategorization(txns []store.TransactionData, rules []Rule) []UncategorizedRecord {
+func ApplyCategorization(txns []budget.TransactionData, rules []Rule) []UncategorizedRecord {
 	catRules := rulesOfType(rules, "categorization")
 
 	var uncategorized []UncategorizedRecord
@@ -144,7 +144,7 @@ func ApplyCategorization(txns []store.TransactionData, rules []Rule) []Uncategor
 // category exclusion (ExcludeCategory) — see Rule.Match for details.
 // Only transactions with an empty Budget field are assigned.
 // Unmatched transactions are left with an empty budget (no error).
-func ApplyBudgetAssignment(txns []store.TransactionData, rules []Rule) {
+func ApplyBudgetAssignment(txns []budget.TransactionData, rules []Rule) {
 	budgetRules := rulesOfType(rules, "budget_assignment")
 
 	for i := range txns {
@@ -166,7 +166,7 @@ type NormalizationRule struct {
 	Pattern              string // case-insensitive substring (or regex if PatternType=="regex")
 	PatternType          string // "substring" (default) or "regex"
 	CanonicalDescription string
-	DateWindowDays       int // unused in grouping logic; preserved in JSON export and Firestore schemas
+	DateWindowDays       int // unused in grouping logic; preserved in JSON export schema
 	Institution          string
 	Account              string
 	Priority             int
@@ -181,7 +181,7 @@ type compiledNormRule struct {
 // matchNormRule returns true if the rule matches the given transaction.
 // When re is non-nil (regex pattern), it is used for description matching
 // instead of a substring check.
-func matchNormRule(rule NormalizationRule, re *regexp.Regexp, txn store.NormTxn) bool {
+func matchNormRule(rule NormalizationRule, re *regexp.Regexp, txn budget.NormTxn) bool {
 	if re != nil {
 		if !re.MatchString(txn.Description) {
 			return false
@@ -202,12 +202,12 @@ type amountDateKey struct {
 // groupByAmountAndDate partitions matched transactions by exact amount
 // and exact calendar date (UTC). Duplicates from overlapping statements
 // share the same amount and date; different dates are different transactions.
-func groupByAmountAndDate(matches []store.NormTxn) [][]store.NormTxn {
+func groupByAmountAndDate(matches []budget.NormTxn) [][]budget.NormTxn {
 	if len(matches) == 0 {
 		return nil
 	}
 
-	partitions := make(map[amountDateKey][]store.NormTxn)
+	partitions := make(map[amountDateKey][]budget.NormTxn)
 	for _, txn := range matches {
 		key := amountDateKey{
 			amount: txn.Amount,
@@ -216,7 +216,7 @@ func groupByAmountAndDate(matches []store.NormTxn) [][]store.NormTxn {
 		partitions[key] = append(partitions[key], txn)
 	}
 
-	var groups [][]store.NormTxn
+	var groups [][]budget.NormTxn
 	for _, partition := range partitions {
 		groups = append(groups, partition)
 	}
@@ -228,8 +228,8 @@ func groupByAmountAndDate(matches []store.NormTxn) [][]store.NormTxn {
 // at most one transaction per sub-group. If a statement has N transactions and
 // another has M, min(N,M) sub-groups are formed; the remaining max(N,M)-min(N,M)
 // transactions are standalone (not duplicates).
-func groupAcrossStatements(group []store.NormTxn) [][]store.NormTxn {
-	byStmt := make(map[string][]store.NormTxn)
+func groupAcrossStatements(group []budget.NormTxn) [][]budget.NormTxn {
+	byStmt := make(map[string][]budget.NormTxn)
 	for _, txn := range group {
 		byStmt[txn.StatementID] = append(byStmt[txn.StatementID], txn)
 	}
@@ -252,9 +252,9 @@ func groupAcrossStatements(group []store.NormTxn) [][]store.NormTxn {
 		}
 	}
 
-	var result [][]store.NormTxn
+	var result [][]budget.NormTxn
 	for i := 0; i < maxCount; i++ {
-		var subgroup []store.NormTxn
+		var subgroup []budget.NormTxn
 		for _, sid := range stmtIDs {
 			txns := byStmt[sid]
 			if i < len(txns) {
@@ -270,7 +270,7 @@ func groupAcrossStatements(group []store.NormTxn) [][]store.NormTxn {
 
 // selectPrimary picks the primary transaction from a group: latest statement
 // period (alphabetically greatest StatementID), then doc ID as tiebreak.
-func selectPrimary(group []store.NormTxn) store.NormTxn {
+func selectPrimary(group []budget.NormTxn) budget.NormTxn {
 	best := group[0]
 	for _, txn := range group[1:] {
 		if txn.StatementID > best.StatementID ||
@@ -291,8 +291,8 @@ type autoNormKey struct {
 // autoNormalize groups transactions with matching description (case-insensitive),
 // amount, and date from different statements. These are exact duplicates from
 // overlapping statement periods that don't require a rule.
-func autoNormalize(txns []store.NormTxn, normalized map[string]bool) []store.NormalizationUpdate {
-	groups := make(map[autoNormKey][]store.NormTxn)
+func autoNormalize(txns []budget.NormTxn, normalized map[string]bool) []budget.NormalizationUpdate {
+	groups := make(map[autoNormKey][]budget.NormTxn)
 	for _, txn := range txns {
 		key := autoNormKey{
 			description: strings.ToLower(txn.Description),
@@ -302,7 +302,7 @@ func autoNormalize(txns []store.NormTxn, normalized map[string]bool) []store.Nor
 		groups[key] = append(groups[key], txn)
 	}
 
-	var updates []store.NormalizationUpdate
+	var updates []budget.NormalizationUpdate
 	for _, group := range groups {
 		if len(group) < 2 {
 			continue
@@ -312,7 +312,7 @@ func autoNormalize(txns []store.NormTxn, normalized map[string]bool) []store.Nor
 			primary := selectPrimary(pair)
 			for _, txn := range pair {
 				normalized[txn.DocID] = true
-				updates = append(updates, store.NormalizationUpdate{
+				updates = append(updates, budget.NormalizationUpdate{
 					DocID:                 txn.DocID,
 					NormalizedID:          primary.DocID,
 					NormalizedPrimary:     txn.DocID == primary.DocID,
@@ -339,9 +339,9 @@ func autoNormalize(txns []store.NormTxn, normalized map[string]bool) []store.Nor
 //
 // Returns an error if a rule has an invalid regex pattern or an unrecognized
 // PatternType.
-func ApplyNormalization(txns []store.NormTxn, rules []NormalizationRule) ([]store.NormalizationUpdate, error) {
+func ApplyNormalization(txns []budget.NormTxn, rules []NormalizationRule) ([]budget.NormalizationUpdate, error) {
 	normalized := make(map[string]bool)
-	var updates []store.NormalizationUpdate
+	var updates []budget.NormalizationUpdate
 
 	// Step 1: Auto-normalize exact duplicates across different statements
 	updates = append(updates, autoNormalize(txns, normalized)...)
@@ -368,7 +368,7 @@ func ApplyNormalization(txns []store.NormTxn, rules []NormalizationRule) ([]stor
 	}
 
 	for _, cr := range compiled {
-		var matches []store.NormTxn
+		var matches []budget.NormTxn
 		for _, txn := range txns {
 			if normalized[txn.DocID] {
 				continue
@@ -385,7 +385,7 @@ func ApplyNormalization(txns []store.NormTxn, rules []NormalizationRule) ([]stor
 				primary := selectPrimary(pair)
 				for _, txn := range pair {
 					normalized[txn.DocID] = true
-					updates = append(updates, store.NormalizationUpdate{
+					updates = append(updates, budget.NormalizationUpdate{
 						DocID:                 txn.DocID,
 						NormalizedID:          primary.DocID,
 						NormalizedPrimary:     txn.DocID == primary.DocID,

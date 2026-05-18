@@ -3,15 +3,16 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
-	"github.com/natb1/commons.systems/budget-etl/internal/store"
 )
 
 func TestSplitRules(t *testing.T) {
@@ -154,7 +155,7 @@ func TestApplyTransactionRules(t *testing.T) {
 	ts := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
 
 	t.Run("categorization rule pre-populates Category", func(t *testing.T) {
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "Test Item A", Amount: 500, Timestamp: ts, TransactionID: "t1"},
 		}
 		docIDs := []string{"doc-1"}
@@ -172,7 +173,7 @@ func TestApplyTransactionRules(t *testing.T) {
 	})
 
 	t.Run("budget_assignment rule pre-populates Budget", func(t *testing.T) {
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "Test Item B", Amount: 150000, Timestamp: ts, TransactionID: "t1"},
 		}
 		docIDs := []string{"doc-1"}
@@ -190,7 +191,7 @@ func TestApplyTransactionRules(t *testing.T) {
 	})
 
 	t.Run("non-existent transaction IDs are ignored", func(t *testing.T) {
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "Test Item C", Amount: 500, Timestamp: ts, TransactionID: "t1"},
 		}
 		docIDs := []string{"doc-1"}
@@ -208,7 +209,7 @@ func TestApplyTransactionRules(t *testing.T) {
 	})
 
 	t.Run("multiple rules for same transaction", func(t *testing.T) {
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "Test Item D", Amount: 500, Timestamp: ts, TransactionID: "t1"},
 		}
 		docIDs := []string{"doc-1"}
@@ -230,7 +231,7 @@ func TestApplyTransactionRules(t *testing.T) {
 	})
 
 	t.Run("empty txnRules is a no-op", func(t *testing.T) {
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "Test Item E", Amount: 500, Timestamp: ts, TransactionID: "t1"},
 		}
 		docIDs := []string{"doc-1"}
@@ -245,7 +246,7 @@ func TestApplyTransactionRules(t *testing.T) {
 	})
 
 	t.Run("unrecognized rule type returns error", func(t *testing.T) {
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "Test Item F", Amount: 500, Timestamp: ts, TransactionID: "t1"},
 		}
 		docIDs := []string{"doc-1"}
@@ -264,7 +265,7 @@ func TestApplyTransactionRulesSkippedByGeneral(t *testing.T) {
 	ts := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
 
 	// Two transactions: one with transaction-specific rules, one without.
-	txns := []store.TransactionData{
+	txns := []budget.TransactionData{
 		{
 			Description:   "test coffee purchase",
 			Amount:        500,
@@ -365,8 +366,8 @@ func TestRunMerge(t *testing.T) {
 	})
 
 	// Compute expected doc IDs for the dir transactions
-	docA := store.TransactionDocID("test_bank-1234-2025-01", "TXN-A")
-	docB := store.TransactionDocID("test_bank-1234-2025-01", "TXN-B")
+	docA := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-A")
+	docB := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-B")
 
 	// Create an input JSON with:
 	// - txn docA with a user note (overlaps with dir)
@@ -526,7 +527,7 @@ func TestRunMergeGroupNameOverride(t *testing.T) {
 		{"2025/01/10", "5.00", "TEST ITEM", "", "TXN-X", "DEBIT"},
 	})
 
-	docX := store.TransactionDocID("test_bank-1234-2025-01", "TXN-X")
+	docX := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-X")
 	inputJSON := export.Output{
 		Version:   1,
 		GroupName: "original-group",
@@ -620,8 +621,8 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 		t.Fatalf("expected 2 transactions (deduped), got %d", len(out.Transactions))
 	}
 
-	docOverlap := store.TransactionDocID("test_bank-1234-2025-01", "TXN-OVERLAP")
-	docUnique := store.TransactionDocID("test_bank-1234-2025-01", "TXN-UNIQUE")
+	docOverlap := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-OVERLAP")
+	docUnique := budget.TransactionDocID("test_bank-1234-2025-01", "TXN-UNIQUE")
 	ids := make(map[string]int)
 	for _, txn := range out.Transactions {
 		ids[txn.ID]++
@@ -635,7 +636,7 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 }
 
 func TestGenerateVirtualSynchrony(t *testing.T) {
-	allTxns := []store.TransactionData{
+	allTxns := []budget.TransactionData{
 		{
 			Institution:   "pnc",
 			Account:       "5111",
@@ -695,7 +696,7 @@ func TestGenerateVirtualSynchrony(t *testing.T) {
 }
 
 func TestComputePetBudget(t *testing.T) {
-	txns := []store.TransactionData{
+	txns := []budget.TransactionData{
 		{Amount: 50000, Timestamp: time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)},
 		{Amount: 60000, Timestamp: time.Date(2025, 3, 15, 0, 0, 0, 0, time.UTC)},
 		{Amount: 70000, Timestamp: time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)},
@@ -886,4 +887,38 @@ func TestDeriveMonthlyStatements(t *testing.T) {
 			t.Errorf("expected 0 derived statements for zero balance, got %d", len(derived))
 		}
 	})
+}
+
+// TestMain lets TestRemovedFlagsRejected re-exec this test binary as the real
+// budget-etl CLI: when BUDGET_ETL_TEST_RUN_MAIN=1 is set, it runs main()
+// instead of the test suite. main() parses flags via flag.CommandLine, and an
+// undefined flag makes flag.Parse() call os.Exit(2) — uncatchable in-process —
+// so the negative-flag check must run main() in a subprocess.
+func TestMain(m *testing.M) {
+	if os.Getenv("BUDGET_ETL_TEST_RUN_MAIN") == "1" {
+		main()
+		return
+	}
+	os.Exit(m.Run())
+}
+
+// TestRemovedFlagsRejected verifies the Firestore-mode flags deleted in #592
+// (--firestore/--env/--project/--dry-run) are no longer defined: passing one
+// must exit non-zero with flag's "flag provided but not defined" message.
+// Flag parsing runs before any file I/O or password resolution, so the
+// subprocess exits immediately.
+func TestRemovedFlagsRejected(t *testing.T) {
+	for _, arg := range []string{"-firestore", "-env=prod", "-project=x", "-dry-run"} {
+		t.Run(arg, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], arg)
+			cmd.Env = append(os.Environ(), "BUDGET_ETL_TEST_RUN_MAIN=1")
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected non-zero exit for %s; output:\n%s", arg, out)
+			}
+			if !strings.Contains(string(out), "flag provided but not defined") {
+				t.Errorf("for %s, missing 'flag provided but not defined'; output:\n%s", arg, out)
+			}
+		})
+	}
 }

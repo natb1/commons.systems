@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, increment, Timestamp, addDoc, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, increment, Timestamp, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { requireOneOf } from "@commons-systems/firestoreutil/validate";
 
@@ -10,7 +10,6 @@ import {
   ALLOWANCE_PERIODS,
   RECONCILIATION_CLASSIFICATIONS,
   RECONCILIATION_ENTITY_TYPES,
-  RULE_TYPES,
   type Rollover,
   type AllowancePeriod,
   type ReconciliationClassification,
@@ -34,11 +33,7 @@ export type { Budget, BudgetOverride, IdbBudget, BudgetId } from "./entities/bud
 import { parseFirestoreBudgetPeriod } from "./entities/budget-period.js";
 import type { BudgetPeriod, BudgetPeriodId } from "./entities/budget-period.js";
 export type { BudgetPeriod, IdbBudgetPeriod, BudgetPeriodId } from "./entities/budget-period.js";
-import { parseFirestoreRule } from "./entities/rule.js";
-import type { Rule, RuleId } from "./entities/rule.js";
 export type { Rule, IdbRule, RuleId } from "./entities/rule.js";
-import { parseFirestoreNormalizationRule } from "./entities/normalization-rule.js";
-import type { NormalizationRule, NormalizationRuleId } from "./entities/normalization-rule.js";
 export type { NormalizationRule, IdbNormalizationRule, NormalizationRuleId } from "./entities/normalization-rule.js";
 import { parseFirestoreWeeklyAggregate } from "./entities/weekly-aggregate.js";
 import type { WeeklyAggregate } from "./entities/weekly-aggregate.js";
@@ -322,117 +317,6 @@ export async function updateBudgetOverrides(
   await updateDoc(ref, {
     overrides: overrides.map(o => ({ date: o.date, balance: o.balance })),
   });
-}
-
-// --- Rules ---
-
-export async function getRules(groupId: GroupId, email: string): Promise<Rule[]>;
-export async function getRules(groupId: null): Promise<Rule[]>;
-export async function getRules(groupId: GroupId | null, email?: string): Promise<Rule[]> {
-  const docs = await queryGroupCollection("rules", "seed-", groupId, email);
-  return docs.map(parseFirestoreRule);
-}
-
-export async function createRule(
-  groupId: GroupId,
-  memberEmails: string[],
-  fields: Omit<Rule, "id" | "groupId">,
-): Promise<RuleId> {
-  if (!(RULE_TYPES as readonly string[]).includes(fields.type)) throw new DataIntegrityError(`Expected rule type to be ${RULE_TYPES.join(" or ")}, got ${fields.type}`);
-  if (!Number.isFinite(fields.priority)) throw new RangeError("Rule priority must be a finite number");
-  if (!fields.pattern && !fields.matchCategory) throw new Error("Rule pattern or matchCategory is required");
-  if (!fields.target) throw new Error("Rule target cannot be empty");
-  const path = nsCollectionPath(NAMESPACE, "rules");
-  const ref = await addDoc(collection(db, path), {
-    type: fields.type,
-    pattern: fields.pattern,
-    target: fields.target,
-    priority: fields.priority,
-    institution: fields.institution,
-    account: fields.account,
-    minAmount: fields.minAmount,
-    maxAmount: fields.maxAmount,
-    excludeCategory: fields.excludeCategory,
-    matchCategory: fields.matchCategory,
-    groupId,
-    memberEmails,
-  });
-  return ref.id as RuleId;
-}
-
-export async function updateRule(
-  ruleId: RuleId,
-  fields: Partial<Pick<Rule, "pattern" | "target" | "priority" | "type" | "institution" | "account" | "minAmount" | "maxAmount" | "excludeCategory" | "matchCategory">>,
-): Promise<void> {
-  requireDocId(ruleId, "rule");
-  if (Object.keys(fields).length === 0) return;
-  if (fields.type !== undefined && !(RULE_TYPES as readonly string[]).includes(fields.type)) throw new DataIntegrityError(`Expected rule type to be ${RULE_TYPES.join(" or ")}, got ${fields.type}`);
-  if (fields.priority !== undefined && !Number.isFinite(fields.priority)) throw new RangeError("Rule priority must be a finite number");
-  if (fields.target !== undefined && !fields.target) throw new Error("Rule target cannot be empty");
-  const path = nsCollectionPath(NAMESPACE, "rules");
-  const ref = doc(db, path, ruleId);
-  await updateDoc(ref, fields);
-}
-
-export async function deleteRule(ruleId: RuleId): Promise<void> {
-  requireDocId(ruleId, "rule");
-  const path = nsCollectionPath(NAMESPACE, "rules");
-  const ref = doc(db, path, ruleId);
-  await deleteDoc(ref);
-}
-
-// --- Normalization Rules ---
-
-export async function getNormalizationRules(groupId: GroupId, email: string): Promise<NormalizationRule[]>;
-export async function getNormalizationRules(groupId: null): Promise<NormalizationRule[]>;
-export async function getNormalizationRules(groupId: GroupId | null, email?: string): Promise<NormalizationRule[]> {
-  const docs = await queryGroupCollection("normalization-rules", "seed-", groupId, email);
-  return docs.map(parseFirestoreNormalizationRule);
-}
-
-export async function createNormalizationRule(
-  groupId: GroupId,
-  memberEmails: string[],
-  fields: Omit<NormalizationRule, "id" | "groupId">,
-): Promise<NormalizationRuleId> {
-  if (!fields.pattern) throw new Error("Normalization rule pattern cannot be empty");
-  if (!fields.canonicalDescription) throw new Error("Normalization rule canonical description cannot be empty");
-  if (!Number.isFinite(fields.priority)) throw new RangeError("Normalization rule priority must be a finite number");
-  const path = nsCollectionPath(NAMESPACE, "normalization-rules");
-  const data: Record<string, unknown> = {
-    pattern: fields.pattern,
-    canonicalDescription: fields.canonicalDescription,
-    priority: fields.priority,
-    groupId,
-    memberEmails,
-  };
-  if (fields.patternType) data.patternType = fields.patternType;
-  if (fields.dateWindowDays != null) data.dateWindowDays = fields.dateWindowDays;
-  if (fields.institution) data.institution = fields.institution;
-  if (fields.account) data.account = fields.account;
-  const ref = await addDoc(collection(db, path), data);
-  return ref.id as NormalizationRuleId;
-}
-
-export async function updateNormalizationRule(
-  ruleId: NormalizationRuleId,
-  fields: Partial<Pick<NormalizationRule, "pattern" | "patternType" | "canonicalDescription" | "dateWindowDays" | "priority" | "institution" | "account">>,
-): Promise<void> {
-  requireDocId(ruleId, "normalization rule");
-  if (Object.keys(fields).length === 0) return;
-  if (fields.pattern !== undefined && !fields.pattern) throw new Error("Normalization rule pattern cannot be empty");
-  if (fields.canonicalDescription !== undefined && !fields.canonicalDescription) throw new Error("Normalization rule canonical description cannot be empty");
-  if (fields.priority !== undefined && !Number.isFinite(fields.priority)) throw new RangeError("Normalization rule priority must be a finite number");
-  const path = nsCollectionPath(NAMESPACE, "normalization-rules");
-  const ref = doc(db, path, ruleId);
-  await updateDoc(ref, fields);
-}
-
-export async function deleteNormalizationRule(ruleId: NormalizationRuleId): Promise<void> {
-  requireDocId(ruleId, "normalization rule");
-  const path = nsCollectionPath(NAMESPACE, "normalization-rules");
-  const ref = doc(db, path, ruleId);
-  await deleteDoc(ref);
 }
 
 // --- Weekly Aggregates ---
