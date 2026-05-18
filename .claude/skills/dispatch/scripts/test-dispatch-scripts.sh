@@ -595,6 +595,57 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "help-wanted issue beats QA PR" "issue 55" "$result"
 teardown
 
+# 11c. A help-wanted issue with a local worktree is skipped; next issue chosen.
+echo "Test: help-wanted issue with worktree skipped; next issue chosen"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo '[]' > "$STUB_DIR/pr-list-brief.json"
+printf '[{"number":50,"createdAt":"2024-01-01T00:00:00Z"},{"number":51,"createdAt":"2024-01-02T00:00:00Z"}]\n' \
+  > "$STUB_DIR/issue-list.json"
+# Worktree exists for issue 50 (branch 50-some-slug) — a session owns it.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/50-some-slug\nHEAD def456\nbranch refs/heads/50-some-slug\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "issue 50 (has worktree) skipped; issue 51 chosen" "issue 51" "$result"
+teardown
+
+# 11d. The only help-wanted issue has a worktree → empty (not selected).
+echo "Test: lone help-wanted issue with worktree → empty"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo '[]' > "$STUB_DIR/pr-list-brief.json"
+printf '[{"number":50,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/50-some-slug\nHEAD def456\nbranch refs/heads/50-some-slug\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "lone help-wanted issue with worktree → empty" "empty" "$result"
+teardown
+
+# 11e. A help-wanted issue with a worktree is skipped in favor of a QA PR.
+echo "Test: help-wanted issue with worktree skipped → QA PR chosen"
+setup
+FULL='['"$(make_pr 20 "20-qa" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+BRIEF='['"$(make_pr_brief 20 "20-qa" "2024-01-02T00:00:00Z")"']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+printf '[{"number":50,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/50-some-slug\nHEAD def456\nbranch refs/heads/50-some-slug\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "help-wanted issue with worktree skipped → QA PR" "pr 20 20-qa" "$result"
+teardown
+
+# 11f. Worktree prefix disambiguation: branch 60-foo does not mask issue 6.
+echo "Test: worktree 60-foo does not mask help-wanted issue 6"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo '[]' > "$STUB_DIR/pr-list-brief.json"
+printf '[{"number":6,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/60-foo\nHEAD def456\nbranch refs/heads/60-foo\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "worktree 60-foo does not mask issue 6" "issue 6" "$result"
+teardown
+
 # 12. --qa mode returns only the oldest QA PR (ignores non-QA PRs).
 echo "Test: --qa mode ignores non-QA PRs and returns oldest QA PR"
 setup

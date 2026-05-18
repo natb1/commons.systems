@@ -18,7 +18,10 @@
 #   6. Oldest open help-wanted issue
 #   7. Oldest "qa"       PR (draft, CI green, no dispatch:* label)
 #
-# PRs with a local git worktree are skipped (a session is actively working them).
+# PRs and help-wanted issues with a local git worktree are skipped — an existing
+# worktree means a session is (or was) assigned to it, and the queue must never
+# hand the same worktree to a second session. Re-using such a worktree requires
+# an explicit `/dispatch <issue|pr>` argument, which bypasses this scan.
 # "done" (non-draft) PRs are skipped entirely.
 # "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
 #
@@ -72,6 +75,20 @@ has_worktree() {
   local b
   for b in "${WORKTREE_BRANCHES[@]}"; do
     if [[ "$b" == "$branch" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# True when issue N has a local worktree — any worktree branch named
+# "<N>-<slug>". Mirrors dispatch-phase's issue→branch matching ("<N>-" prefix),
+# so issue 6 is not masked by an unrelated worktree on branch "60-foo".
+issue_has_worktree() {
+  local issue="$1"
+  local b
+  for b in "${WORKTREE_BRANCHES[@]}"; do
+    if [[ "$b" == "$issue"-* ]]; then
       return 0
     fi
   done
@@ -193,9 +210,19 @@ if [[ -n "$VERIFY_PR_NUM" ]]; then
   exit 0
 fi
 
-# Fetch oldest help-wanted issue.
+# Pick the oldest open help-wanted issue with no local worktree. An issue whose
+# worktree already exists is owned by another session; the queue must not hand
+# it to a second one. Re-using that worktree is reachable only via an explicit
+# `/dispatch <issue>` argument, which bypasses this scan.
 ISSUE_LIST=$(gh issue list --label "help wanted" --state open --json number,createdAt)
-ISSUE_NUM=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[0].number // empty')
+ISSUE_NUM=""
+while IFS= read -r candidate; do
+  [[ -z "$candidate" ]] && continue
+  if ! issue_has_worktree "$candidate"; then
+    ISSUE_NUM="$candidate"
+    break
+  fi
+done < <(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
 
 if [[ -n "$ISSUE_NUM" ]]; then
   echo "issue $ISSUE_NUM"
