@@ -85,6 +85,15 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  issue\ view\ *\ --json\ state)
+    # dispatch-select-target worktree detection: gh issue view <num> --json state
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-state-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-state-${num}.json"
+    else
+      exit 1
+    fi
+    ;;
   issue\ view\ *\ --json\ title,body,comments,number,state)
     # issue-blocking / issue-sub-issues call: gh issue view <num> --json ...
     num=$(echo "$args" | awk '{print $3}')
@@ -135,7 +144,11 @@ case "$args" in
     fi
     ;;
   "rev-parse --abbrev-ref HEAD")
-    echo "main"
+    if [[ -f "$STUB_DIR/current-branch.txt" ]]; then
+      cat "$STUB_DIR/current-branch.txt"
+    else
+      echo "main"
+    fi
     ;;
   *)
     echo "git stub: unknown invocation: $args" >&2
@@ -640,6 +653,76 @@ echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "lone waiting PR → empty" "empty" "$result"
+teardown
+
+# 16. Open issue worktree → worktree output, queue scan skipped.
+echo "Test: open issue worktree → worktree <N> <branch>, scan skipped"
+setup
+# Seed a verify PR that would normally be selected — proves the scan is skipped.
+FULL='['"$(make_pr 10 "10-verify-me" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+BRIEF='['"$(make_pr_brief 10 "10-verify-me" "2024-01-01T00:00:00Z")"']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
+printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "open issue worktree → worktree 42 42-some-slug" "worktree 42 42-some-slug" "$result"
+teardown
+
+# 17. Closed issue worktree → worktree-closed.
+echo "Test: closed issue worktree → worktree-closed <N> <branch>"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo '[]' > "$STUB_DIR/pr-list-brief.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
+printf '{"state":"CLOSED"}' > "$STUB_DIR/issue-state-42.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "closed issue worktree → worktree-closed 42 42-some-slug" "worktree-closed 42 42-some-slug" "$result"
+teardown
+
+# 18. Unknown issue worktree (no state file → gh fails) → worktree-closed.
+echo "Test: unknown issue worktree → worktree-closed <N> <branch>"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo '[]' > "$STUB_DIR/pr-list-brief.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '999-gone' > "$STUB_DIR/current-branch.txt"
+# No issue-state-999.json — gh stub exits 1, models a nonexistent issue.
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "unknown issue worktree → worktree-closed 999 999-gone" "worktree-closed 999 999-gone" "$result"
+teardown
+
+# 19. main branch → queue scan unchanged, normal result returned.
+echo "Test: main branch → queue scan runs normally"
+setup
+FULL='['"$(make_pr 10 "10-verify-me" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+BRIEF='['"$(make_pr_brief 10 "10-verify-me" "2024-01-01T00:00:00Z")"']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main branch → normal scan result (verify PR)" "pr 10 10-verify-me" "$result"
+teardown
+
+# 20. --qa mode from an issue worktree → detection skipped, QA PR returned.
+echo "Test: --qa mode from issue worktree → detection skipped, QA PR returned"
+setup
+# QA-phase PR: draft + green + no label.
+FULL='['"$(make_pr 20 "20-qa-me" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+BRIEF='['"$(make_pr_brief 20 "20-qa-me" "2024-01-01T00:00:00Z")"']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Current branch looks like an issue worktree, but --qa skips detection.
+printf '42-x' > "$STUB_DIR/current-branch.txt"
+printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
+result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
+assert_eq "--qa mode from issue worktree → normal QA scan (pr 20 20-qa-me)" "pr 20 20-qa-me" "$result"
 teardown
 
 # ============================================================================
