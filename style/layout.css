@@ -5,6 +5,24 @@
   contain: layout style;
 }
 
+/*
+ * missing.css sets `main { max-inline-size: var(--eff-line-length); inline-size: 100%;
+ * margin-inline: auto }`, which self-centers a top-level `main` in the viewport. Inside
+ * `.content-grid` we own the column layout, so pin `main` to the grid column start.
+ * Without this override, whenever the grid column resolves wider than `--eff-line-length`,
+ * `main` caps at `--eff-line-length` and auto-centers within its column — its left edge
+ * drifts right of the header's. The column width depends on a `25ch` sidebar value whose
+ * px equivalent shifts with font metrics; under `font-display: optional` the web font may
+ * miss its block period on a cold load and the fallback font's metrics apply for the page
+ * lifetime, so the misalignment is environment-specific (warm caches hide it locally).
+ * Removing the cap and zeroing the margins makes `main` fill the column from its start
+ * regardless of which font is active, so header and main left edges always coincide.
+ */
+.content-grid > main {
+  max-inline-size: none;
+  margin-inline: 0;
+}
+
 @media (min-width: 768px) {
   .content-grid {
     grid-template-columns: 1fr var(--sidebar-width, 16rem);

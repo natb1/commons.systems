@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("hero band", () => {
   test("H1 and tagline render above the fold", async ({ page }) => {

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("responsive layout", () => {
   test("main content is visible", async ({ page }) => {

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("auth", () => {
   test("Load data button visible on page load", async ({ page }) => {
