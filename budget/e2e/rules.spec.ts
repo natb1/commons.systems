@@ -1,6 +1,6 @@
 import path from "path";
 import { fileURLToPath } from "url";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.join(__dirname, "fixtures", "test-budget.json");

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("console errors", () => {
   test("no atom-strategy-fetch errors on page load @smoke", async ({

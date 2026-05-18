@@ -313,7 +313,7 @@ describe("parseUploadedJson", () => {
       UploadValidationError,
     );
     expect(() => parseUploadedJson(JSON.stringify(input))).toThrow(
-      'Invalid rule type: "unknown"',
+      'Invalid rule type value: "unknown"',
     );
   });
 });

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("info panel — desktop", () => {
   test("aside is visible with core sections", async ({ page }, testInfo) => {
@@ -107,9 +107,11 @@ test.describe("info panel — header alignment", () => {
     await page.goto("/");
     await page.waitForSelector("main h2", { timeout: 30000 });
 
+    // `layout.css` pins `.content-grid > main` to its grid column start, so
+    // header/main left-edge alignment no longer depends on which font loads —
+    // it is deterministic, and a direct assertion suffices (no font-load wait).
     const headerBox = await page.locator("header").boundingBox();
     const mainBox = await page.locator("main").boundingBox();
-
     expect(headerBox).not.toBeNull();
     expect(mainBox).not.toBeNull();
     expect(Math.abs(headerBox!.x - mainBox!.x)).toBeLessThanOrEqual(2);

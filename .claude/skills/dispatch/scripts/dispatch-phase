@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# Print the current workflow phase for an issue or branch.
+# Usage: dispatch-phase <issue-num|branch>
+#
+# Prints exactly one phase name to stdout:
+#   implement | verify | waiting | qa | simplify | review | security | ready | done
+#
+# Argument resolution:
+#   - All-digit arg: treated as an issue number. The matching PR is the one
+#     whose headRefName starts with "<issue>-".
+#   - Otherwise: treated as a branch name. Matched exactly.
+set -euo pipefail
+
+ARG="${1:-}"
+if [[ -z "$ARG" ]]; then
+  echo "error: usage: dispatch-phase <issue-num|branch>" >&2
+  exit 1
+fi
+
+# Fetch all open PRs with the fields we need.
+PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+
+# Find the matching PR.
+if [[ "$ARG" =~ ^[0-9]+$ ]]; then
+  # Issue number: find PR whose headRefName starts with "<num>-"
+  ISSUE_NUM="$ARG"
+  PR=$(printf '%s' "$PR_LIST" | jq --arg num "${ISSUE_NUM}-" \
+    'map(select(.headRefName | startswith($num))) | .[0] // empty')
+else
+  # Branch name: exact match
+  PR=$(printf '%s' "$PR_LIST" | jq --arg branch "$ARG" \
+    'map(select(.headRefName == $branch)) | .[0] // empty')
+fi
+
+# No matching PR → implement.
+if [[ -z "$PR" || "$PR" == "null" ]]; then
+  echo "implement"
+  exit 0
+fi
+
+IS_DRAFT=$(printf '%s' "$PR" | jq -r '.isDraft')
+
+# Non-draft (ready-for-review) PR → done.
+if [[ "$IS_DRAFT" == "false" ]]; then
+  echo "done"
+  exit 0
+fi
+
+# Draft PR — check CI via statusCheckRollup.
+ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
+ROLLUP_LEN=$(printf '%s' "$ROLLUP" | jq 'length')
+
+# Empty rollup — checks not yet started, nothing actionable.
+if [[ "$ROLLUP_LEN" -eq 0 ]]; then
+  echo "waiting"
+  exit 0
+fi
+
+# Check for any failing entries first: a concluded failure is actionable even
+# while other checks are still running, so a mixed rollup (some failing, some
+# pending) resolves to verify, not waiting.
+FAILING=$(printf '%s' "$ROLLUP" | jq '
+  map(
+    if has("conclusion") then
+      # Check run: failing conclusions
+      (.conclusion // "") as $c |
+      ($c == "FAILURE" or $c == "TIMED_OUT" or $c == "CANCELLED" or
+       $c == "ACTION_REQUIRED" or $c == "STARTUP_FAILURE" or $c == "STALE")
+    else
+      # Status context: failing states
+      (.state // "") as $s |
+      ($s == "FAILURE" or $s == "ERROR")
+    end
+  ) | any
+')
+
+if [[ "$FAILING" == "true" ]]; then
+  echo "verify"
+  exit 0
+fi
+
+# Check for any pending entries (check runs not yet COMPLETED, or status
+# contexts with state PENDING/EXPECTED). No failures found above, so pending
+# means checks are still running — nothing actionable yet.
+PENDING=$(printf '%s' "$ROLLUP" | jq '
+  map(
+    if has("conclusion") then
+      # Check run: pending if status != COMPLETED
+      .status != "COMPLETED"
+    else
+      # Status context: pending if state is PENDING or EXPECTED
+      (.state == "PENDING" or .state == "EXPECTED")
+    end
+  ) | any
+')
+
+if [[ "$PENDING" == "true" ]]; then
+  echo "waiting"
+  exit 0
+fi
+
+# All entries are passing — check that all passing conditions hold.
+# An entry passes if: check run with conclusion in {SUCCESS,NEUTRAL,SKIPPED},
+# or status context with state SUCCESS.
+ALL_PASSING=$(printf '%s' "$ROLLUP" | jq '
+  map(
+    if has("conclusion") then
+      (.conclusion // "") as $c |
+      ($c == "SUCCESS" or $c == "NEUTRAL" or $c == "SKIPPED")
+    else
+      (.state // "") == "SUCCESS"
+    end
+  ) | all
+')
+
+if [[ "$ALL_PASSING" != "true" ]]; then
+  # Non-empty rollup with no failures, no pending, but not all passing —
+  # unrecognized state, nothing actionable.
+  echo "waiting"
+  exit 0
+fi
+
+# CI is green — map the highest dispatch:* label to the next phase.
+# Label chain: qa-done < refactored < reviewed < security-reviewed
+LABELS=$(printf '%s' "$PR" | jq -r '[.labels[].name | select(startswith("dispatch:"))] | join(" ")')
+
+if echo "$LABELS" | grep -qF "dispatch:security-reviewed"; then
+  echo "ready"
+elif echo "$LABELS" | grep -qF "dispatch:reviewed"; then
+  echo "security"
+elif echo "$LABELS" | grep -qF "dispatch:refactored"; then
+  echo "review"
+elif echo "$LABELS" | grep -qF "dispatch:qa-done"; then
+  echo "simplify"
+else
+  echo "qa"
+fi

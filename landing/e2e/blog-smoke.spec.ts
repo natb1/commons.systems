@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 // Smoke tests run against a deployed preview URL via run-smoke-tests.sh
 // (--grep @smoke). They verify the meta description tag and that the

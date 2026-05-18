@@ -1,7 +1,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { serializeSeedData } from "../src/vite-plugin-seed-data.js";
-import { toBudget, toBudgetPeriod, toWeeklyAggregate } from "../src/converters.js";
+import { idbToBudget } from "../src/entities/budget.js";
+import { idbToBudgetPeriod } from "../src/entities/budget-period.js";
+import { idbToWeeklyAggregate } from "../src/entities/weekly-aggregate.js";
 import { renderBudgetsContent } from "../src/pages/budgets.js";
 import { NAV_LINKS } from "../src/nav-links.js";
 
@@ -9,9 +11,9 @@ const distDir = join(dirname(new URL(import.meta.url).pathname), "..", "dist");
 const indexPath = join(distDir, "index.html");
 
 const seedData = serializeSeedData();
-const budgets = seedData.budgets.map(toBudget);
-const periods = seedData.budgetPeriods.map(toBudgetPeriod);
-const weeklyAggregates = seedData.weeklyAggregates.map(toWeeklyAggregate);
+const budgets = seedData.budgets.map(idbToBudget);
+const periods = seedData.budgetPeriods.map(idbToBudgetPeriod);
+const weeklyAggregates = seedData.weeklyAggregates.map(idbToWeeklyAggregate);
 const budgetsHtml = renderBudgetsContent(budgets, periods, weeklyAggregates, false);
 
 const navLinksInner = NAV_LINKS.map(l => `<a href="${l.href}">${l.label}</a>`).join("\n     ");

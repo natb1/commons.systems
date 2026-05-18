@@ -73,7 +73,7 @@ describe("getUserGroups", () => {
       docs: [{ id: "bad", data: () => ({ name: 123, members: ["user@example.com"] }) }],
     });
 
-    const { DataIntegrityError } = await import("../src/errors");
+    const { DataIntegrityError } = await import("@commons-systems/firestoreutil/errors");
     await expect(getUserGroups(mockDb, NAMESPACE, mockUser)).rejects.toThrow(DataIntegrityError);
   });
 });

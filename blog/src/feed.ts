@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { generateRssXml, type RssPost } from "@commons-systems/rssutil";
+import { generateRssXml, type RssPost } from "./feed-rss.ts";
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
 
 export interface FeedXmlConfig {

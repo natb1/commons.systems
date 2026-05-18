@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { APPS, DEPENDENCIES } from "../src/site-config";
+import { APPS } from "../src/site-config";
 
 describe("APPS", () => {
   it("has exactly 3 entries with names Budget, Audio, Print", () => {
@@ -30,27 +30,6 @@ describe("APPS", () => {
   it("all screenshots end with .png", () => {
     for (const app of APPS) {
       expect(app.screenshot.endsWith(".png")).toBe(true);
-    }
-  });
-});
-
-describe("DEPENDENCIES", () => {
-  it("has at least 4 entries", () => {
-    expect(DEPENDENCIES.length).toBeGreaterThanOrEqual(4);
-  });
-
-  it("all entries have non-empty strings for every field", () => {
-    for (const dep of DEPENDENCIES) {
-      expect(typeof dep.name).toBe("string");
-      expect(dep.name.length).toBeGreaterThan(0);
-      expect(typeof dep.solves).toBe("string");
-      expect(dep.solves.length).toBeGreaterThan(0);
-      expect(typeof dep.classification).toBe("string");
-      expect(dep.classification.length).toBeGreaterThan(0);
-      expect(typeof dep.exitPath).toBe("string");
-      expect(dep.exitPath.length).toBeGreaterThan(0);
-      expect(typeof dep.ratchetRisk).toBe("string");
-      expect(dep.ratchetRisk.length).toBeGreaterThan(0);
     }
   });
 });

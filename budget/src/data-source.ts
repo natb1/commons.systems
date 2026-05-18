@@ -22,7 +22,16 @@ import type {
 import seedData from "virtual:budget-seed-data";
 import { getAll, get, put, deleteRecord } from "./idb.js";
 import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
-import { toTransaction, toBudget, toBudgetPeriod, toRule, toStatement, toStatementItem, toReconciliationNote, toWeeklyAggregate, toNormalizationRule, filterByTimestamp } from "./converters.js";
+import { idbToTransaction } from "./entities/transaction.js";
+import { idbToStatement } from "./entities/statement.js";
+import { idbToStatementItem } from "./entities/statement-item.js";
+import { idbToReconciliationNote } from "./entities/reconciliation-note.js";
+import { idbToBudget } from "./entities/budget.js";
+import { idbToBudgetPeriod } from "./entities/budget-period.js";
+import { idbToRule } from "./entities/rule.js";
+import { idbToNormalizationRule } from "./entities/normalization-rule.js";
+import { idbToWeeklyAggregate } from "./entities/weekly-aggregate.js";
+import { filterByTimestamp } from "./entities/_helpers.js";
 
 export interface TransactionQuery {
   since?: Timestamp;
@@ -78,31 +87,31 @@ export class SeedDataSource implements DataSource {
     const filtered = filterByTimestamp(
       seedData.transactions, query?.since?.toMillis(), query?.before?.toMillis(),
     );
-    return filtered.map(toTransaction);
+    return filtered.map(idbToTransaction);
   }
   async getStatements(): Promise<Statement[]> {
-    return seedData.statements.map(toStatement);
+    return seedData.statements.map(idbToStatement);
   }
   async getStatementItems(): Promise<StatementItem[]> {
-    return seedData.statementItems.map(toStatementItem);
+    return seedData.statementItems.map(idbToStatementItem);
   }
   async getReconciliationNotes(): Promise<ReconciliationNote[]> {
-    return seedData.reconciliationNotes.map(toReconciliationNote);
+    return seedData.reconciliationNotes.map(idbToReconciliationNote);
   }
   async getBudgets(): Promise<Budget[]> {
-    return seedData.budgets.map(toBudget);
+    return seedData.budgets.map(idbToBudget);
   }
   async getBudgetPeriods(): Promise<BudgetPeriod[]> {
-    return seedData.budgetPeriods.map(toBudgetPeriod);
+    return seedData.budgetPeriods.map(idbToBudgetPeriod);
   }
   async getRules(): Promise<Rule[]> {
-    return seedData.rules.map(toRule);
+    return seedData.rules.map(idbToRule);
   }
   async getNormalizationRules(): Promise<NormalizationRule[]> {
-    return seedData.normalizationRules.map(toNormalizationRule);
+    return seedData.normalizationRules.map(idbToNormalizationRule);
   }
   async getWeeklyAggregates(): Promise<WeeklyAggregate[]> {
-    return seedData.weeklyAggregates.map(toWeeklyAggregate);
+    return seedData.weeklyAggregates.map(idbToWeeklyAggregate);
   }
   async updateTransaction(): Promise<void> {
     throw new Error("Seed data is read-only");
@@ -161,47 +170,47 @@ export class IdbDataSource implements DataSource {
   async getTransactions(query?: TransactionQuery): Promise<Transaction[]> {
     const rows = await getAll<IdbTransaction>("transactions");
     const filtered = filterByTimestamp(rows, query?.since?.toMillis(), query?.before?.toMillis());
-    return filtered.map(toTransaction);
+    return filtered.map(idbToTransaction);
   }
 
   async getStatements(): Promise<Statement[]> {
     const rows = await getAll<IdbStatement>("statements");
-    return rows.map(toStatement);
+    return rows.map(idbToStatement);
   }
 
   async getStatementItems(): Promise<StatementItem[]> {
     const rows = await getAll<IdbStatementItem>("statementItems");
-    return rows.map(toStatementItem);
+    return rows.map(idbToStatementItem);
   }
 
   async getReconciliationNotes(): Promise<ReconciliationNote[]> {
     const rows = await getAll<IdbReconciliationNote>("reconciliationNotes");
-    return rows.map(toReconciliationNote);
+    return rows.map(idbToReconciliationNote);
   }
 
   async getBudgets(): Promise<Budget[]> {
     const rows = await getAll<IdbBudget>("budgets");
-    return rows.map(toBudget);
+    return rows.map(idbToBudget);
   }
 
   async getBudgetPeriods(): Promise<BudgetPeriod[]> {
     const rows = await getAll<IdbBudgetPeriod>("budgetPeriods");
-    return rows.map(toBudgetPeriod);
+    return rows.map(idbToBudgetPeriod);
   }
 
   async getRules(): Promise<Rule[]> {
     const rows = await getAll<IdbRule>("rules");
-    return rows.map(toRule);
+    return rows.map(idbToRule);
   }
 
   async getNormalizationRules(): Promise<NormalizationRule[]> {
     const rows = await getAll<IdbNormalizationRule>("normalizationRules");
-    return rows.map(toNormalizationRule);
+    return rows.map(idbToNormalizationRule);
   }
 
   async getWeeklyAggregates(): Promise<WeeklyAggregate[]> {
     const rows = await getAll<IdbWeeklyAggregate>("weeklyAggregates");
-    return rows.map(toWeeklyAggregate);
+    return rows.map(idbToWeeklyAggregate);
   }
 
   async updateTransaction(

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 import { uploadIncomeStatementFixture } from "./helpers";
 
 test.describe("accounts income statement", () => {
@@ -53,6 +53,8 @@ test.describe("accounts income statement", () => {
   });
 
   test("income statement renders above the charts", async ({ page }) => {
+    await expect(page.locator("#accounts-income-statement")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("#accounts-trend-chart")).toBeVisible({ timeout: 10000 });
     const isBox = await page.locator("#accounts-income-statement").boundingBox();
     const chartBox = await page.locator("#accounts-trend-chart").boundingBox();
     expect(isBox).not.toBeNull();

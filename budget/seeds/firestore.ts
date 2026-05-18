@@ -2,7 +2,9 @@
 // The firestoreutil seed runner writes these specs to Firestore using the Admin SDK,
 // which converts Date objects to Timestamps on write.
 import type { SeedSpec } from "@commons-systems/firestoreutil/seed";
-import type { Transaction, Statement, StatementItem, ReconciliationNote, Budget, BudgetPeriod, Rule, NormalizationRule, WeeklyAggregate } from "../src/firestore.js";
+import type { Transaction, Statement, StatementItem, ReconciliationNote, Rule, NormalizationRule, WeeklyAggregate } from "../src/firestore.js";
+import type { Budget } from "../src/entities/budget.js";
+import type { BudgetPeriod } from "../src/entities/budget-period.js";
 import { TEST_USER } from "@commons-systems/authutil/seed";
 import type { Group } from "@commons-systems/authutil/groups";
 

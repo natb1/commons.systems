@@ -6,13 +6,14 @@
   "exports": {
     "./seed": "./src/seed.ts",
     "./emulator-auth": "./src/emulator-auth.ts",
-    "./errors": "./src/errors.ts",
     "./firebase-auth": "./src/firebase-auth.ts",
     "./app-auth": "./src/app-auth.ts",
+    "./deferred-app-auth": "./src/deferred-app-auth.ts",
     "./groups": "./src/groups.ts",
     "./e2e/sign-in": "./e2e/sign-in.ts"
   },
   "peerDependencies": {
+    "@commons-systems/errorutil": "*",
     "@commons-systems/firestoreutil": "*",
     "firebase": ">=12",
     "@playwright/test": ">=1.50"

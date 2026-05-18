@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+# Select the single highest-priority task from the queue.
+# Usage: dispatch-select-target [--qa]
+#
+# Output: exactly one line:
+#   pr <num> <branch>           — a PR to work on
+#   issue <num>                 — a help-wanted issue to implement
+#   empty                       — nothing eligible
+#   worktree <N> <branch>       — the current worktree's own open issue (short-circuits the queue scan)
+#   worktree-closed <N> <branch>— the current worktree's issue is closed or unknown
+#
+# Default mode priority (highest first; within a tier, oldest PR wins):
+#   1. Oldest "ready"    PR (draft + dispatch:security-reviewed)
+#   2. Oldest "security" PR (draft + dispatch:reviewed)
+#   3. Oldest "review"   PR (draft + dispatch:refactored)
+#   4. Oldest "simplify" PR (draft + dispatch:qa-done)
+#   5. Oldest "verify"   PR (draft, CI completed and failed)
+#   6. Oldest open help-wanted issue
+#   7. Oldest "qa"       PR (draft, CI green, no dispatch:* label)
+#
+# PRs with a local git worktree are skipped (a session is actively working them).
+# "done" (non-draft) PRs are skipped entirely.
+# "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
+#
+# --qa mode priority:
+#   1. Oldest QA PR with no local git worktree
+#   2. empty
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+QA_MODE=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --qa) QA_MODE=true ;;
+    *) echo "error: unknown argument: $arg" >&2; exit 1 ;;
+  esac
+done
+
+# Current-worktree detection (default mode only): if the current branch matches
+# the worktree convention <issue-num>-<slug>, short-circuit before the queue scan
+# and target that worktree's own issue directly.
+if [[ "$QA_MODE" == "false" ]]; then
+  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  if [[ "$CURRENT_BRANCH" =~ ^([0-9]+)- ]]; then
+    N="${BASH_REMATCH[1]}"
+    if STATE=$(gh issue view "$N" --json state 2>/dev/null | jq -r '.state'); then
+      if [[ "$STATE" == "OPEN" ]]; then
+        echo "worktree $N $CURRENT_BRANCH"
+      else
+        echo "worktree-closed $N $CURRENT_BRANCH"
+      fi
+    else
+      echo "worktree-closed $N $CURRENT_BRANCH"
+    fi
+    exit 0
+  fi
+fi
+
+# Collect branches that already have a local worktree (a session is working them).
+WORKTREE_BRANCHES=()
+while IFS= read -r line; do
+  # git worktree list --porcelain emits "branch refs/heads/<name>" lines.
+  if [[ "$line" == branch\ * ]]; then
+    branch_ref="${line#branch }"
+    WORKTREE_BRANCHES+=("${branch_ref#refs/heads/}")
+  fi
+done < <(git worktree list --porcelain)
+
+has_worktree() {
+  local branch="$1"
+  local b
+  for b in "${WORKTREE_BRANCHES[@]}"; do
+    if [[ "$b" == "$branch" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Fetch all open PRs sorted by createdAt ascending (oldest first).
+PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName)
+PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number, .createdAt, .headRefName] | @tsv')
+
+# One "first-seen" variable per phase (list is pre-sorted oldest-first, so first
+# capture of a phase is always the oldest PR in that phase).
+READY_PR_NUM=""
+READY_PR_BRANCH=""
+SECURITY_PR_NUM=""
+SECURITY_PR_BRANCH=""
+REVIEW_PR_NUM=""
+REVIEW_PR_BRANCH=""
+SIMPLIFY_PR_NUM=""
+SIMPLIFY_PR_BRANCH=""
+VERIFY_PR_NUM=""
+VERIFY_PR_BRANCH=""
+QA_PR_NUM=""
+QA_PR_BRANCH=""
+
+while IFS=$'\t' read -r pr_num _created pr_branch; do
+  [[ -z "$pr_num" ]] && continue
+
+  # Skip PRs with a local worktree.
+  if has_worktree "$pr_branch"; then
+    continue
+  fi
+
+  # Determine phase for this PR.
+  phase=$("$SCRIPT_DIR/dispatch-phase" "$pr_branch")
+
+  case "$phase" in
+    done)
+      # Skip completed PRs.
+      continue
+      ;;
+    waiting)
+      # Skip PRs whose CI is still running — nothing actionable yet.
+      continue
+      ;;
+    ready)
+      if [[ -z "$READY_PR_NUM" ]]; then
+        READY_PR_NUM="$pr_num"
+        READY_PR_BRANCH="$pr_branch"
+      fi
+      ;;
+    security)
+      if [[ -z "$SECURITY_PR_NUM" ]]; then
+        SECURITY_PR_NUM="$pr_num"
+        SECURITY_PR_BRANCH="$pr_branch"
+      fi
+      ;;
+    review)
+      if [[ -z "$REVIEW_PR_NUM" ]]; then
+        REVIEW_PR_NUM="$pr_num"
+        REVIEW_PR_BRANCH="$pr_branch"
+      fi
+      ;;
+    simplify)
+      if [[ -z "$SIMPLIFY_PR_NUM" ]]; then
+        SIMPLIFY_PR_NUM="$pr_num"
+        SIMPLIFY_PR_BRANCH="$pr_branch"
+      fi
+      ;;
+    verify)
+      if [[ -z "$VERIFY_PR_NUM" ]]; then
+        VERIFY_PR_NUM="$pr_num"
+        VERIFY_PR_BRANCH="$pr_branch"
+      fi
+      ;;
+    qa)
+      if [[ -z "$QA_PR_NUM" ]]; then
+        QA_PR_NUM="$pr_num"
+        QA_PR_BRANCH="$pr_branch"
+      fi
+      ;;
+  esac
+done <<< "$PR_SORTED"
+
+if [[ "$QA_MODE" == "true" ]]; then
+  # --qa mode: only return QA PRs.
+  if [[ -n "$QA_PR_NUM" ]]; then
+    echo "pr $QA_PR_NUM $QA_PR_BRANCH"
+  else
+    echo "empty"
+  fi
+  exit 0
+fi
+
+# Default mode: ready → security → review → simplify → verify →
+#               help-wanted issue → qa → empty.
+if [[ -n "$READY_PR_NUM" ]]; then
+  echo "pr $READY_PR_NUM $READY_PR_BRANCH"
+  exit 0
+fi
+
+if [[ -n "$SECURITY_PR_NUM" ]]; then
+  echo "pr $SECURITY_PR_NUM $SECURITY_PR_BRANCH"
+  exit 0
+fi
+
+if [[ -n "$REVIEW_PR_NUM" ]]; then
+  echo "pr $REVIEW_PR_NUM $REVIEW_PR_BRANCH"
+  exit 0
+fi
+
+if [[ -n "$SIMPLIFY_PR_NUM" ]]; then
+  echo "pr $SIMPLIFY_PR_NUM $SIMPLIFY_PR_BRANCH"
+  exit 0
+fi
+
+if [[ -n "$VERIFY_PR_NUM" ]]; then
+  echo "pr $VERIFY_PR_NUM $VERIFY_PR_BRANCH"
+  exit 0
+fi
+
+# Fetch oldest help-wanted issue.
+ISSUE_LIST=$(gh issue list --label "help wanted" --state open --json number,createdAt)
+ISSUE_NUM=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[0].number // empty')
+
+if [[ -n "$ISSUE_NUM" ]]; then
+  echo "issue $ISSUE_NUM"
+  exit 0
+fi
+
+if [[ -n "$QA_PR_NUM" ]]; then
+  echo "pr $QA_PR_NUM $QA_PR_BRANCH"
+  exit 0
+fi
+
+echo "empty"

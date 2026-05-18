@@ -63,3 +63,49 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Run approve-workflow-commands hook tests
         run: .claude/hooks/test-approve-workflow-commands.sh
+      - name: Run dispatch script tests
+        run: .claude/skills/dispatch/scripts/test-dispatch-scripts.sh
+      - name: Run worktree-remove hook tests
+        run: .claude/hooks/test-worktree-remove.sh
+
+  playwright-version-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/ref-pr-workflow/scripts/detect-changes.sh
+      - name: Install nix (only when flake or package-lock changed)
+        if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
+        uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
+        with:
+          node-version-file: .node-version
+      - name: Install workspace dependencies
+        if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
+        run: npm ci
+      - name: Verify nix playwright-driver chromium matches npm @playwright/test
+        if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
+        run: nix develop --command .github/scripts/check-playwright-version-sync.sh
+
+  go-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed file categories
+        id: changes
+        run: .claude/skills/ref-pr-workflow/scripts/detect-changes.sh
+      - name: Set up Go (if budget-etl changed)
+        if: steps.changes.outputs.go == 'true'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: budget-etl/go.mod
+      - name: Run Go tests
+        if: steps.changes.outputs.go == 'true'
+        run: go test ./...
+        working-directory: budget-etl

@@ -49,7 +49,6 @@
       "Bash(gh run view:*)",
       "Bash(gh run watch:*)",
       "Bash(.claude/skills/ref-pr-workflow/scripts/run-ci-watch.sh:*)",
-      "Bash(./dispatch/bin/phase-complete:*)",
       "Bash(.claude/skills/roadmap-debate/scripts/gather-context.sh:*)",
       "Bash(gh search:*)",
       "Bash(go build:*)",
@@ -153,15 +152,34 @@
           }
         ]
       }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/worktree-remove.sh"
+          }
+        ]
+      }
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/statusline.sh"
+  },
   "enabledPlugins": {
-    "security-guidance@claude-plugins-official": true,
-    "marketing@knowledge-work-plugins": false
+    "security-guidance@claude-plugins-official": true
   },
   "sandbox": {
     "enabled": true,
-    "autoAllowBashIfSandboxed": true
+    "autoAllowBashIfSandboxed": true,
+    "filesystem": {
+      "allowWrite": [
+        "../../.bare",
+        "../../worktrees"
+      ]
+    }
   },
   "showClearContextOnPlanAccept": true
 }
