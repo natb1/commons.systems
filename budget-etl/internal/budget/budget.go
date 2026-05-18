@@ -16,8 +16,6 @@ type StatementData struct {
 	Balance             int64 // cents; raw signed value from statement
 	Period              string
 	BalanceDate         *time.Time // LEDGERBAL DTASOF; nil if absent
-	GroupID             string
-	MemberEmails        []string
 	LastTransactionDate *time.Time // nil when not yet computed or no transactions exist for this account
 }
 
