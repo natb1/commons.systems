@@ -109,7 +109,7 @@ present. Map the phase:
 |---|---|---|
 | `implement` | no PR on the target | relevance review (Step 6), then `/plan-implement` |
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
-| `waiting` | draft PR, CI in progress (running/queued/not started) | report "checks still running, nothing to do" and stop |
+| `waiting` | draft PR, CI in progress (running/queued/not started) | monitor CI to completion with a `sonnet` subagent, then re-derive the phase and dispatch it (Step 5) |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` → then label `dispatch:qa-done` |
 | `simplify` | draft PR + `dispatch:qa-done` | `/simplify` → then label `dispatch:refactored` |
 | `review` | draft PR + `dispatch:refactored` | `/review` → then label `dispatch:reviewed` |
@@ -127,9 +127,24 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
   `/plan-implement` gets **no** `dispatch:*` label.
 - **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of failed
   CI checks, record the outcome, post it, stop. No label.
-- **`waiting`** — CI checks are still running or queued; there is nothing to do yet.
-  Report "checks still running, nothing to do" and **stop** without invoking any
-  phase skill or applying any label.
+- **`waiting`** — CI checks are still running or queued. Monitor them to
+  completion, then re-derive and dispatch the resolved phase within this same
+  `/dispatch` invocation:
+  1. Resolve the draft PR number for the target.
+  2. Spawn a subagent via the Agent tool (`subagent_type: general-purpose`,
+     `model: sonnet`) that:
+     - first waits for CI to register at least one check — a freshly-pushed
+       branch can briefly have an empty check rollup;
+     - then runs `.claude/skills/ref-pr-workflow/scripts/run-pr-checks-wait.sh
+       <pr-num>` with `dangerouslyDisableSandbox: true`, which blocks until
+       every check concludes;
+     - returns once all checks have completed.
+  3. After the subagent returns, re-run Step 4 (`dispatch-phase`) to re-derive
+     the phase from the now-complete CI, then dispatch the resolved phase per
+     this step — `/verify-pr` if any check failed, otherwise the green-CI
+     phases (`qa` / `simplify` / `review` / `security` / `ready`).
+  4. If the re-derived phase is still `waiting` (CI never registered any check),
+     report it and **stop** — do not loop.
 - **`qa` / `simplify` / `review` / `security`** — invoke the mapped skill
   (`/dispatch-qa`, `/simplify`, `/review`, `/security-review`). After it **returns**,
   apply the accumulating `dispatch:*` label to the PR (see below).
