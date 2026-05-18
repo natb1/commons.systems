@@ -92,6 +92,24 @@ if [ ${#APP_DIRS[@]} -gt 0 ]; then
   ensure_deps
 fi
 
+# Build changed apps that have a build script, so build-dependent vitest
+# tests (which read dist/index.html and skipIf it is absent) run their
+# assertions instead of silently skipping. See issue #308.
+if [ ${#APP_DIRS[@]} -gt 0 ]; then
+  for dir in "${APP_DIRS[@]}"; do
+    pkg="$REPO_ROOT/$dir/package.json"
+    if [ -f "$pkg" ] && jq -e '.scripts.build' "$pkg" >/dev/null 2>&1; then
+      echo "=== Build: $dir ==="
+      if npm run build --prefix "$REPO_ROOT/$dir"; then
+        echo "PASS: build($dir)"
+      else
+        echo "FAIL: build($dir)" >&2
+        FAILURES+=("build($dir)")
+      fi
+    fi
+  done
+fi
+
 # Run app unit tests via vitest workspace projects
 if [ ${#APP_DIRS[@]} -gt 0 ]; then
   echo "=== Unit tests: ${APP_DIRS[*]} ==="
