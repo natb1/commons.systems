@@ -84,12 +84,12 @@ assert_approves \
 assert_approves \
   "backslash-continuation multi-line args" \
   "Bash" \
-  "$(printf '.claude/skills/dispatch/scripts/concat-review-output.sh \\\n  tmp/output.txt \\\n  \"review:/tmp/r.txt\"')"
+  "$(printf '.claude/skills/dispatch/scripts/post-pr-comment.sh \\\n  323 \\\n  \"tmp/output.txt\"')"
 
 assert_approves \
   "absolute path with backslash-continuation" \
   "Bash" \
-  "$(printf '/Users/n8/project/.claude/skills/dispatch/scripts/concat-review-output.sh \\\n  tmp/output.txt \\\n  \"label1:file1\" \\\n  \"label2:file2\"')"
+  "$(printf '/Users/n8/project/.claude/skills/dispatch/scripts/post-pr-comment.sh \\\n  323 \\\n  \"file1\" \\\n  \"file2\"')"
 
 assert_approves \
   "single trailing backslash-continuation" \
@@ -99,12 +99,12 @@ assert_approves \
 assert_approves \
   "pipe workflow script to allowed command (head)" \
   "Bash" \
-  ".claude/skills/dispatch/scripts/load-context 350 2>&1 | head -200"
+  ".claude/skills/dispatch/scripts/sync-issue-context 350 2>&1 | head -200"
 
 assert_approves \
   "pipe workflow script to allowed command (tail)" \
   "Bash" \
-  ".claude/skills/dispatch/scripts/load-context 350 | tail -5"
+  ".claude/skills/dispatch/scripts/sync-issue-context 350 | tail -5"
 
 assert_approves \
   "bare 2>&1 with no pipe" \
@@ -129,7 +129,7 @@ assert_approves \
 assert_approves \
   "semicolon then pipe" \
   "Bash" \
-  ".claude/skills/dispatch/scripts/issue-primary 350; .claude/skills/dispatch/scripts/load-context 350 | head -20"
+  ".claude/skills/dispatch/scripts/issue-primary 350; .claude/skills/dispatch/scripts/sync-issue-context 350 | head -20"
 
 assert_approves \
   "&& between two allowed workflow scripts" \

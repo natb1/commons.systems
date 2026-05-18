@@ -6,18 +6,5 @@
     "name": "Nate",
     "email": "nathan@natb1.com"
   },
-  "plugins": [
-    {
-      "name": "write-instructions",
-      "description": "Invoke when editing Claude configuration files (CLAUDE.md, .claude/rules/*.md, .claude/agents/*.md, .claude/skills/*/SKILL.md) to ensure instructions follow best practices",
-      "version": "1.0.0",
-      "author": {
-        "name": "Nate",
-        "email": "nathan@natb1.com"
-      },
-      "source": "./.claude-plugin/pr-workflow-bundle/write-instructions",
-      "category": "development",
-      "tags": ["documentation", "instructions", "best-practices"]
-    }
-  ]
+  "plugins": []
 }

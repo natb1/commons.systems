@@ -46,9 +46,9 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 | verify | Draft PR, CI failed | [verify-pr](.claude/skills/verify-pr/SKILL.md) |
 | waiting | Draft PR, CI in progress | (nothing — wait) |
 | qa | Draft PR, CI green | [dispatch-qa](.claude/skills/dispatch-qa/SKILL.md) |
-| simplify | Post-QA code quality | [simplify](.claude/skills/simplify/SKILL.md) (built-in) |
-| review | Post-simplify review | [review](.claude/skills/review/SKILL.md) (built-in) |
-| security | Post-review security | [security-review](.claude/skills/security-review/SKILL.md) (built-in) |
+| simplify | Post-QA code quality | `/simplify` (built-in) |
+| review | Post-simplify review | `/review` (built-in) |
+| security | Post-review security | `/security-review` (built-in) |
 | ready | All reviews complete | flip draft PR to ready |
 
 **Agent patterns:** *Augmented* = human-in-the-loop, Claude assists. *Delegated* = Claude drives autonomously. *QC* = human quality gate before proceeding.
