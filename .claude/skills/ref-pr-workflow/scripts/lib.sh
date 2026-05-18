@@ -353,9 +353,16 @@ cleanup_stale_hub() {
 # returns nothing. These helpers use `ps` instead. Output: one PID per line.
 
 # Print PIDs whose command-line args contain the given fixed-string substring.
+# Matches against the args column only, so a numeric needle cannot collide with
+# the PID column.
 _pids_matching_arg() {
   local needle="${1:?_pids_matching_arg requires a substring}"
-  ps -axo pid=,args= 2>/dev/null | grep -F "$needle" | awk '{print $1}' || true
+  local pid args
+  ps -axo pid=,args= 2>/dev/null | while read -r pid args; do
+    case "$args" in
+      *"$needle"*) echo "$pid" ;;
+    esac
+  done || true
 }
 
 # Print PIDs whose parent PID equals the given PID.
