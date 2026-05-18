@@ -101,9 +101,8 @@ If a named target issue is **closed**, report it and **stop**.
 
 ## 3. Resolve the Worktree
 
-Run the worktree-resolution script, matching `pr-workflow` Sections 2–3. Pass
-`explicit` when the target was named by an explicit `/dispatch` argument,
-otherwise `queue`:
+Run the worktree-resolution script. Pass `explicit` when the target was named by
+an explicit `/dispatch` argument, otherwise `queue`:
 
 ```bash
 .claude/skills/dispatch/scripts/dispatch-resolve-worktree <N> <explicit|queue>
@@ -144,11 +143,9 @@ mkdir -p tmp && touch tmp/dispatch-worktree
 
 `restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
 recovery on this marker — when present, it re-invokes `/dispatch` so the phase is
-re-derived from PR/CI ground truth. `/dispatch` is the safe single creator: it only
-ever runs for dispatch sessions, so a `/pr-workflow` worktree can never acquire the
-marker. The marker is an empty boolean flag with no payload; it persists for the
-worktree's life and needs no cleanup — `tmp/` is git-ignored, and removing the
-worktree removes it.
+re-derived from PR/CI ground truth. The marker is an empty boolean flag with no
+payload; it persists for the worktree's life and needs no cleanup — `tmp/` is
+git-ignored, and removing the worktree removes it.
 
 ## 4. Derive the Phase
 

@@ -17,7 +17,7 @@ jobs:
           fetch-depth: 0
       - name: Detect changed file categories
         id: changes
-        run: .claude/skills/ref-pr-workflow/scripts/detect-changes.sh
+        run: .claude/skills/dispatch/scripts/detect-changes.sh
       - name: Install nix (if nix files changed)
         if: steps.changes.outputs.nix == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
@@ -31,7 +31,7 @@ jobs:
         with:
           node-version-file: .node-version
       - name: Run unit tests
-        run: .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh
+        run: .claude/skills/dispatch/scripts/run-unit-tests.sh
 
   lint:
     runs-on: ubuntu-latest
@@ -41,7 +41,7 @@ jobs:
           fetch-depth: 0
       - name: Detect changed file categories
         id: changes
-        run: .claude/skills/ref-pr-workflow/scripts/detect-changes.sh
+        run: .claude/skills/dispatch/scripts/detect-changes.sh
       - name: Install nix (if nix files changed)
         if: steps.changes.outputs.nix == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main
@@ -55,7 +55,7 @@ jobs:
         with:
           node-version-file: .node-version
       - name: Run lint
-        run: .claude/skills/ref-pr-workflow/scripts/run-lint.sh
+        run: .claude/skills/dispatch/scripts/run-lint.sh
 
   hook-tests:
     runs-on: ubuntu-latest
@@ -76,7 +76,7 @@ jobs:
           fetch-depth: 0
       - name: Detect changed file categories
         id: changes
-        run: .claude/skills/ref-pr-workflow/scripts/detect-changes.sh
+        run: .claude/skills/dispatch/scripts/detect-changes.sh
       - name: Install nix (only when flake or package-lock changed)
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
         uses: DeterminateSystems/nix-installer-action@d96bc962e61b3049ce8128d03d57a1144fa96539 # main

@@ -8,42 +8,6 @@
   },
   "plugins": [
     {
-      "name": "wiggum-loop",
-      "description": "Generic iterative loop pattern with evaluation and convergence",
-      "version": "1.0.0",
-      "author": {
-        "name": "Nate",
-        "email": "nathan@natb1.com"
-      },
-      "source": "./.claude-plugin/pr-workflow-bundle/wiggum-loop",
-      "category": "development",
-      "tags": ["iteration", "loops", "workflow"]
-    },
-    {
-      "name": "pr-workflow",
-      "description": "Manage end-to-end implementation of GitHub issues from planning through review",
-      "version": "1.0.0",
-      "author": {
-        "name": "Nate",
-        "email": "nathan@natb1.com"
-      },
-      "source": "./.claude-plugin/pr-workflow-bundle/pr-workflow",
-      "category": "development",
-      "tags": ["github", "workflow", "automation"]
-    },
-    {
-      "name": "pr-workflow-bundle",
-      "description": "Complete PR workflow bundle including iterative development loops and end-to-end PR lifecycle management. Includes: wiggum-loop and pr-workflow skills.",
-      "version": "1.0.0",
-      "author": {
-        "name": "Nate",
-        "email": "nathan@natb1.com"
-      },
-      "source": "./.claude-plugin/pr-workflow-bundle",
-      "category": "development",
-      "tags": ["github", "workflow", "automation", "bundle", "git", "iteration"]
-    },
-    {
       "name": "write-instructions",
       "description": "Invoke when editing Claude configuration files (CLAUDE.md, .claude/rules/*.md, .claude/agents/*.md, .claude/skills/*/SKILL.md) to ensure instructions follow best practices",
       "version": "1.0.0",

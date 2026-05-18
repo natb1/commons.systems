@@ -29,82 +29,57 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 - Augmented workflows focus on requirements management and design, while delegated workflows focus on implementation.
 - Delegated workflows have well defined break points for human quality control (QC).
 - Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts (system instructions, hooks, sub-agents, agent teams, etc.) due to portability and ease of maintenance.
-- Keep [focused context windows](.claude/skills/ref-memory-management/SKILL.md) with frequent planning and QC steps, using workflows with [persisted state](.claude/skills/ref-pr-workflow/SKILL.md) so skills and PR context reload cleanly across sessions.
-- Conversation scope is persisted in git commit log, github issues and PR using [dynamic content](https://code.claude.com/docs/en/skills#inject-dynamic-context) in [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) skills.
+- Keep [focused context windows](.claude/skills/ref-memory-management/SKILL.md) with frequent planning and QC steps.
+- Workflow state is derived from PR/CI ground truth — no external state machine required.
 
 ## Agentic Coding Workflow
 
 ### Cross Cutting Artifacts
-- [ref-pr-workflow skill](.claude/skills/ref-pr-workflow/SKILL.md): manages PR workflow using state stored in git commit log, github issues and PR.
+- [dispatch skill](.claude/skills/dispatch/SKILL.md): orchestrates the issue workflow — selects the next task, derives the phase from PR/CI status, and dispatches exactly one phase skill per invocation.
 - [ref-memory-management](.claude/skills/ref-memory-management/SKILL.md): smart management of the conversation context using skills and ["plan mode"](https://code.claude.com/docs/en/how-claude-code-works#explore-before-implementing).
-- Issue-body-based state persistence via `issue-state-read` / `issue-state-write` scripts for cross-session workflow resumption
 
 ### PR Control Flow
 
-| Step | Name | Agent Pattern | Skill | Tooling |
-|------|------|---------------|-------|---------|
-| 0 | Issue Grooming | Augmented | [ref-ready](.claude/skills/ref-ready/SKILL.md) | |
-| 1 | Dev Env Management | Delegated | [pr-workflow](.claude/skills/pr-workflow/SKILL.md) | [nix](nix), [EnterWorktree](https://code.claude.com/docs/en/tools-reference#enterworktree) |
-| 2 | Planning | Delegated + QC | [ref-implement](.claude/skills/ref-implement/SKILL.md) | Claude Code Planning Tool |
-| 3 | Implementation | Delegated | [ref-implement](.claude/skills/ref-implement/SKILL.md) | |
-| 4 | Unit Tests + Lint | Delegated | [ref-unit-test](.claude/skills/ref-unit-test/SKILL.md) | [unit test framework](.claude/skills/ref-pr-workflow/run-unit-tests.sh) |
-| 5 | PR Creation | Delegated | [ref-create-pr](.claude/skills/ref-create-pr/SKILL.md) | |
-| 6 | Acceptance Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) | [e2e test framework](.claude/skills/ref-pr-workflow/run-acceptance-tests.sh) |
-| 7 | Smoke Tests | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) | [preview deployments](.claude/skills/ref-pr-workflow/run-preview-deploy.sh) [smoke tests](.claude/skills/ref-pr-workflow/run-smoke-tests.sh) |
-| 8 | QA Review | Augmented | [ref-qa](.claude/skills/ref-qa/SKILL.md) | QA server |
-| 9 | Code Quality Review | Delegated + QC | [ref-code-quality](.claude/skills/ref-code-quality/SKILL.md) | |
-| 10 | Security Review | Delegated + QC | [ref-security](.claude/skills/ref-security/SKILL.md) | |
-| 11 | Final PR Checks | Delegated | [ref-pr-check](.claude/skills/ref-pr-check/SKILL.md) | |
-| 12 | Merge | Augmented | [ref-pr-workflow](.claude/skills/ref-pr-workflow/SKILL.md) | [continuous deployment](.claude/skills/ref-pr-workflow/run-prod-deploy.sh) |
-| 13 | Production QA | Augmented | [ref-prod-qa](.claude/skills/ref-prod-qa/SKILL.md) | [browser demo](https://code.claude.com/docs/en/mcp) |
+| Phase | Meaning | Skill |
+|-------|---------|-------|
+| implement | No PR on the target | [plan-implement](.claude/skills/plan-implement/SKILL.md) |
+| verify | Draft PR, CI failed | [verify-pr](.claude/skills/verify-pr/SKILL.md) |
+| waiting | Draft PR, CI in progress | (nothing — wait) |
+| qa | Draft PR, CI green | [dispatch-qa](.claude/skills/dispatch-qa/SKILL.md) |
+| simplify | Post-QA code quality | [simplify](.claude/skills/simplify/SKILL.md) (built-in) |
+| review | Post-simplify review | [review](.claude/skills/review/SKILL.md) (built-in) |
+| security | Post-review security | [security-review](.claude/skills/security-review/SKILL.md) (built-in) |
+| ready | All reviews complete | flip draft PR to ready |
 
 **Agent patterns:** *Augmented* = human-in-the-loop, Claude assists. *Delegated* = Claude drives autonomously. *QC* = human quality gate before proceeding.
 
-#### Dispatcher Architecture
+#### Dispatch Architecture
 
 ```
 Entry points               Dispatcher                    Phase skills
 ─────────────              ──────────                    ────────────
-/pr-workflow  ──┐
-                ├──>  ref-pr-workflow  ──┬──>  ref-implement     (Steps 1-3)
-compaction    ──┘     (resume logic,    ├──>  ref-unit-test     (Step 4, fork)
-recovery hook         dispatch table,   ├──>  ref-create-pr     (Step 5)
-                      state machine)    ├──>  ref-pr-check      (Steps 6-7, fork)
-                                        ├──>  ref-qa            (Step 8)
-                                        ├──>  ref-code-quality  (Step 9)
-                                        ├──>  ref-security      (Step 10)
-                                        ├──>  ref-pr-check      (Step 11, fork)
-                                        ├──>  (inline Step 12)
-                                        └──>  ref-prod-qa       (Step 13)
+/dispatch     ──────────>  dispatch        ──────────>  plan-implement  (implement)
+(re-invoked                (derives phase               verify-pr       (verify)
+ each phase)               from PR/CI                   dispatch-qa     (qa)
+                           ground truth)                simplify        (simplify)
+                                                        review          (review)
+                                                        security-review (security)
+                                                        gh pr ready     (ready)
 ```
 
-#### Control Flow with Fork Boundaries
+#### Phase Derivation
 
-```
-Main context                          Forked context
-────────────                          ──────────────
-Step 1: Prerequisite Check
-Step 2: Planning (plan mode)
-Step 3: Implementation
-                                      Step 4: Unit Tests + Lint ──── wiggum-loop
-Step 5: PR Creation
-                                      Step 6: Acceptance Tests ───── wiggum-loop
-                                      Step 7: Smoke Tests ────────── wiggum-loop
-Step 8: QA Review ──────────────────────────────────────────── wiggum-loop
-Step 9: Code Quality Review ────────────────────────────────── wiggum-loop
-Step 10: Security Review ───────────────────────────────────── wiggum-loop
-                                      Step 11: Final PR Checks ──── verify loop
-Step 12: Mark Ready + Merge
-Step 13: Production QA ─────────────────────────────────────── wiggum-loop
-```
+`/dispatch` derives the current phase from live PR/CI status — no persisted state machine:
 
-#### State Persistence
-
-Workflow state is stored as JSON in the GitHub issue body via `issue-state-write`. This allows any new conversation to resume from the correct step after context loss or auto-compaction. State includes: `step`, `phase`, `active_skills`, and optional `wiggum_step`.
-
-#### Wiggum-Loop Pattern
-
-Seven of thirteen steps use the [wiggum-loop](.claude/skills/ref-wiggum-loop/SKILL.md) pattern: an evaluate-iterate-terminate cycle where each iteration runs the step's action, evaluates the result, and either iterates (fix + retry) or terminates (advance to next step). Progress reports and termination summaries are posted as PR comments.
+1. No PR → `implement`
+2. Draft PR + CI failed → `verify`
+3. Draft PR + CI running → `waiting`
+4. Draft PR + CI green + no label → `qa`
+5. Draft PR + `dispatch:qa-done` label → `simplify`
+6. Draft PR + `dispatch:refactored` label → `review`
+7. Draft PR + `dispatch:reviewed` label → `security`
+8. Draft PR + `dispatch:security-reviewed` label → `ready`
+9. Non-draft (ready) PR → `done`
 
 ## CI/CD
 
@@ -156,11 +131,4 @@ run-all-cleanup-preview.sh <pr-number>
 ## Usage and Contributing
 <a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>
 
-For using and/or extending the artifacts in this repo: forking is encouraged. To better understand the agentic coding artifacts a demo is available as a Claude Code [plugin](https://code.claude.com/docs/en/plugins).
-
-> Plugin distribution is WIP. You can clone and load pr-workflow skills from this repo.
-```
-/plugin marketplace add natb1/commons.systems
-/plugin install pr-workflow-bundle@commons-systems
-/pr-workflow <issue-number>
-```
+For using and/or extending the artifacts in this repo: forking is encouraged.
