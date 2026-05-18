@@ -723,6 +723,59 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
 assert_eq "--qa mode from issue worktree → normal QA scan (pr 20 20-qa-me)" "pr 20 20-qa-me" "$result"
 teardown
 
+# 21. Help-wanted issue with a worktree is skipped; the next-oldest issue is chosen.
+echo "Test: issue with worktree skipped; next-oldest issue chosen"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo '[]' > "$STUB_DIR/pr-list-brief.json"
+# Issue 55 is older, issue 66 is newer. Issue 55 has a 55-* worktree.
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"},{"number":66,"createdAt":"2024-01-02T00:00:00Z"}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "issue with worktree skipped; next issue 66 chosen" "issue 66" "$result"
+teardown
+
+# 22. A lone help-wanted issue that has a worktree → empty (nothing else queued).
+echo "Test: lone worktree'd issue → empty"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo '[]' > "$STUB_DIR/pr-list-brief.json"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "lone worktree'd issue → empty" "empty" "$result"
+teardown
+
+# 23. Worktree'd issue skipped; QA PR is next in line.
+echo "Test: worktree'd issue skipped → QA PR selected"
+setup
+FULL='['"$(make_pr 20 "20-qa" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+BRIEF='['"$(make_pr_brief 20 "20-qa" "2024-01-01T00:00:00Z")"']'
+setup_both_pr_lists "$FULL" "$BRIEF"
+# The help-wanted issue would normally beat the QA PR, but it has a worktree.
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "worktree'd issue skipped → QA PR returned" "pr 20 20-qa" "$result"
+teardown
+
+# 24. Prefix disambiguation: issue 6 is NOT masked by an unrelated worktree on branch 60-foo.
+echo "Test: issue 6 not masked by worktree on branch 60-foo"
+setup
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+echo '[]' > "$STUB_DIR/pr-list-brief.json"
+printf '[{"number":6,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+# Worktree exists for 60-foo, not for 6-*.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/60-foo\nHEAD def456\nbranch refs/heads/60-foo\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "issue 6 not masked by 60-foo worktree" "issue 6" "$result"
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================

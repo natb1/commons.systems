@@ -15,10 +15,11 @@
 #   3. Oldest "review"   PR (draft + dispatch:refactored)
 #   4. Oldest "simplify" PR (draft + dispatch:qa-done)
 #   5. Oldest "verify"   PR (draft, CI completed and failed)
-#   6. Oldest open help-wanted issue
+#   6. Oldest open help-wanted issue with no local git worktree
 #   7. Oldest "qa"       PR (draft, CI green, no dispatch:* label)
 #
-# PRs with a local git worktree are skipped (a session is actively working them).
+# PRs and help-wanted issues with a local git worktree are skipped (a session is
+# actively working them).
 # "done" (non-draft) PRs are skipped entirely.
 # "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
 #
@@ -72,6 +73,17 @@ has_worktree() {
   local b
   for b in "${WORKTREE_BRANCHES[@]}"; do
     if [[ "$b" == "$branch" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+issue_has_worktree() {
+  local num="$1"
+  local b
+  for b in "${WORKTREE_BRANCHES[@]}"; do
+    if [[ "$b" == "$num-"* ]]; then
       return 0
     fi
   done
@@ -193,9 +205,18 @@ if [[ -n "$VERIFY_PR_NUM" ]]; then
   exit 0
 fi
 
-# Fetch oldest help-wanted issue.
+# Fetch help-wanted issues oldest-first; pick the oldest with no local worktree.
 ISSUE_LIST=$(gh issue list --label "help wanted" --state open --json number,createdAt)
-ISSUE_NUM=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[0].number // empty')
+ISSUE_NUM=""
+while IFS= read -r issue_num; do
+  [[ -z "$issue_num" ]] && continue
+  # Skip issues whose <N>-* worktree exists (a session is working them).
+  if issue_has_worktree "$issue_num"; then
+    continue
+  fi
+  ISSUE_NUM="$issue_num"
+  break
+done < <(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
 
 if [[ -n "$ISSUE_NUM" ]]; then
   echo "issue $ISSUE_NUM"
