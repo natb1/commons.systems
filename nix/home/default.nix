@@ -25,15 +25,18 @@
 {
   imports = [
     ./claude-code.nix
+    ./claude-in-chrome-windows.nix
     ./direnv.nix
     ./gh.nix
     ./git.nix
+    ./gpg.nix
     ./neovim.nix
     ./nix.nix
     ./ssh.nix
     ./ssh-authorized-keys.nix
     ./ssh-keygen.nix
     ./wezterm.nix
+    ./wezterm-windows.nix
     ./zsh.nix
   ];
 
@@ -81,6 +84,7 @@
   home.packages = [
     pkgs.jq
     pkgs.google-cloud-sdk
+    pkgs.pass
   ];
 
   # Let Home Manager manage itself

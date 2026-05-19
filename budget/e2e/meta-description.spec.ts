@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("meta description", () => {
   test("home page has meta description @smoke", async ({ page }) => {

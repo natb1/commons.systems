@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Mark a dispatch workflow phase complete on a PR.
+# Usage: dispatch-complete-phase <pr-num> <phase>
+#
+# Maps a completed phase to its accumulating dispatch:* progress label and
+# applies it to the PR. (Apply-first ordering and missing-label handling are
+# explained inline at the code below.)
+#
+# This script is the single source of truth for the dispatch:* label
+# create metadata (color and description).
+#
+# Phase → label:
+#   qa       → dispatch:qa-done
+#   simplify → dispatch:refactored
+#   review   → dispatch:reviewed
+#   security → dispatch:security-reviewed
+#
+# Missing args or an unknown phase is a clear error, not a fallback.
+set -euo pipefail
+
+PR_NUM="${1:-}"
+PHASE="${2:-}"
+
+if [[ -z "$PR_NUM" || -z "$PHASE" ]]; then
+  echo "error: usage: dispatch-complete-phase <pr-num> <phase>" >&2
+  exit 1
+fi
+
+case "$PHASE" in
+  qa)       LABEL="dispatch:qa-done" ;;
+  simplify) LABEL="dispatch:refactored" ;;
+  review)   LABEL="dispatch:reviewed" ;;
+  security) LABEL="dispatch:security-reviewed" ;;
+  *)
+    echo "error: unknown phase: $PHASE (expected qa, simplify, review, or security)" >&2
+    exit 1
+    ;;
+esac
+
+# Apply the label first. Once the label exists — the common case — this is the
+# only gh call that runs.
+if apply_output=$(gh pr edit "$PR_NUM" --add-label "$LABEL" 2>&1); then
+  exit 0
+fi
+
+# The apply failed. gh reports a missing label with a "not found" message; in
+# that case the label simply does not exist yet (e.g. on a fork) — create it
+# and retry once. Any other failure is real: surface it and exit non-zero.
+if [[ "$apply_output" != *"not found"* ]]; then
+  echo "$apply_output" >&2
+  exit 1
+fi
+
+SUFFIX="${LABEL#dispatch:}"
+gh label create "$LABEL" --color BFD4F2 \
+  --description "dispatch workflow: $SUFFIX phase complete"
+gh pr edit "$PR_NUM" --add-label "$LABEL"

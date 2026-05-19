@@ -53,11 +53,14 @@ done
 # Generate temporary firebase.json (emulators only, no hosting — Vite serves)
 TEMP_FIREBASE_JSON="${REPO_ROOT}/.firebase-qa-$$.json"
 
-# Build emulators config
+# Build emulators config. Each emulator binds "0.0.0.0" (all interfaces) instead
+# of the default 127.0.0.1 so its port is reachable from Chrome on the Windows
+# host — WSL2 NAT networking does not reliably forward 127.0.0.1-only emulator
+# ports. See .claude/rules/chrome-extension.md.
 EMULATORS_JSON="{"
 EMULATOR_LIST=""
 if [ "$USES_FIRESTORE" = true ]; then
-  EMULATORS_JSON="$EMULATORS_JSON\"firestore\": {\"port\": ${FIRESTORE_PORT}}"
+  EMULATORS_JSON="$EMULATORS_JSON\"firestore\": {\"host\": \"0.0.0.0\", \"port\": ${FIRESTORE_PORT}}"
   EMULATOR_LIST="firestore"
 fi
 if [ "$USES_AUTH" = true ]; then
@@ -67,7 +70,7 @@ if [ "$USES_AUTH" = true ]; then
   else
     EMULATOR_LIST="auth"
   fi
-  EMULATORS_JSON="$EMULATORS_JSON\"auth\": {\"port\": ${AUTH_PORT}}"
+  EMULATORS_JSON="$EMULATORS_JSON\"auth\": {\"host\": \"0.0.0.0\", \"port\": ${AUTH_PORT}}"
 fi
 if [ "$USES_STORAGE" = true ]; then
   if [ -n "$EMULATOR_LIST" ]; then
@@ -76,7 +79,7 @@ if [ "$USES_STORAGE" = true ]; then
   else
     EMULATOR_LIST="storage"
   fi
-  EMULATORS_JSON="$EMULATORS_JSON\"storage\": {\"port\": ${STORAGE_PORT}}"
+  EMULATORS_JSON="$EMULATORS_JSON\"storage\": {\"host\": \"0.0.0.0\", \"port\": ${STORAGE_PORT}}"
 fi
 if [ "$USES_FUNCTIONS" = true ]; then
   if [ -n "$EMULATOR_LIST" ]; then
@@ -85,7 +88,7 @@ if [ "$USES_FUNCTIONS" = true ]; then
   else
     EMULATOR_LIST="functions"
   fi
-  EMULATORS_JSON="$EMULATORS_JSON\"functions\": {\"port\": ${FUNCTIONS_PORT}}"
+  EMULATORS_JSON="$EMULATORS_JSON\"functions\": {\"host\": \"0.0.0.0\", \"port\": ${FUNCTIONS_PORT}}"
 fi
 EMULATORS_JSON="$EMULATORS_JSON}"
 

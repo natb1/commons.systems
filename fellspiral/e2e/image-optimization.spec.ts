@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 // Verify that blog post images are optimized: WebP format, explicit dimensions,
 // fetchpriority on the LCP image, and lazy loading on below-fold images.

@@ -1,11 +1,13 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("viewer", () => {
   // Public seed items (by addedAt desc):
-  //   1. "Little Nemo..." (test-image-archive, image-archive, 5 images)
-  //   2. "Republic" (plato-republic, PDF, 3 pages)
-  //   3. "Phaedrus" (plato-phaedrus, PDF, 1 page)
-  //   4. "Confessions..." (gutenberg-3296, EPUB)
+  //   1. "Republic" (plato-republic, PDF, 3 pages)
+  //   2. "Phaedrus" (plato-phaedrus, PDF, 1 page)
+  //   3. "Confessions..." (gutenberg-3296, EPUB)
+  //
+  // testOnly seed items (seeded only with SEED_TEST_ONLY=true):
+  //   - "Little Nemo..." (test-image-archive, image-archive, 5 images)
   //
   // Navigate to Republic (3 pages) for navigation testing:
   //   page.goto("/view/plato-republic")
@@ -89,14 +91,14 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-pd")).toContainText("Public Domain");
   });
 
-  test("viewer loads for image archive item", async ({ page }) => {
+  test("viewer loads for image archive item @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".viewer-canvas-wrap img")).toBeVisible();
     await expect(page.locator(".viewer-position")).toContainText("1 / 5");
   });
 
-  test("image navigation works", async ({ page }) => {
+  test("image navigation works @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
       timeout: 15000,
@@ -122,7 +124,7 @@ test.describe("viewer", () => {
     await expect(next).toBeEnabled();
   });
 
-  test("keyboard navigation works for image archive", async ({ page }) => {
+  test("keyboard navigation works for image archive @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
       timeout: 15000,
@@ -274,7 +276,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-pd")).toContainText("Public Domain");
   });
 
-  test("image archive: default view fits image without scrollbars", async ({
+  test("image archive: default view fits image without scrollbars @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -291,7 +293,7 @@ test.describe("viewer", () => {
     expect(imgBox!.height).toBeLessThanOrEqual(containerBox!.height);
   });
 
-  test("image archive: zoom controls visible for image-archive", async ({
+  test("image archive: zoom controls visible for image-archive @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -314,7 +316,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-zoom-out")).not.toBeVisible();
   });
 
-  test("image archive: zoom-in button makes image larger than container", async ({
+  test("image archive: zoom-in button makes image larger than container @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -338,7 +340,7 @@ test.describe("viewer", () => {
     expect(exceedsWidth || exceedsHeight).toBe(true);
   });
 
-  test("image archive: zoom-out button decreases zoom level", async ({
+  test("image archive: zoom-out button decreases zoom level @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -360,7 +362,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-zoom-reset")).toBeEnabled();
   });
 
-  test("image archive: reset-zoom returns to fit-to-view", async ({
+  test("image archive: reset-zoom returns to fit-to-view @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -390,7 +392,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-zoom-reset")).toBeDisabled();
   });
 
-  test("image archive: page navigation resets zoom", async ({ page }) => {
+  test("image archive: page navigation resets zoom @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     const img = page.locator(".viewer-canvas-wrap img");
     await expect(img).toBeVisible({ timeout: 15000 });
@@ -461,7 +463,7 @@ test.describe("viewer", () => {
     });
   });
 
-  test("image archive loads from cache on second view @cache", async ({
+  test("image archive loads from cache on second view @cache @testonly", async ({
     page,
   }) => {
     // First visit: load the image archive normally
@@ -492,7 +494,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-position")).toContainText("2 / 5");
   });
 
-  test("spread toggle visible for PDF and image-archive, hidden for EPUB", async ({
+  test("spread toggle visible for PDF and image-archive, hidden for EPUB @testonly", async ({
     page,
   }) => {
     // PDF: spread toggle should be visible
@@ -511,7 +513,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-spread-toggle")).toHaveClass(/spread-hidden/);
   });
 
-  test("two pages visible in spread mode for interior pages", async ({
+  test("two pages visible in spread mode for interior pages @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -531,7 +533,7 @@ test.describe("viewer", () => {
     await expect(spreadPages).toHaveCount(2);
   });
 
-  test("page 1 displayed solo and centered in spread mode", async ({
+  test("page 1 displayed solo and centered in spread mode @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -545,7 +547,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-canvas-wrap.spread-mode.solo")).toBeVisible();
   });
 
-  test("navigation advances by spread, position label updates", async ({
+  test("navigation advances by spread, position label updates @testonly", async ({
     page,
   }) => {
     await page.goto("/view/test-image-archive");
@@ -569,7 +571,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-position")).toContainText(/Pages 4\u20135 \/ 5/);
   });
 
-  test("toggle spread on/off preserves position", async ({ page }) => {
+  test("toggle spread on/off preserves position @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
       timeout: 15000,
@@ -592,7 +594,7 @@ test.describe("viewer", () => {
     await expect(page.locator(".viewer-position")).toContainText("3 / 5");
   });
 
-  test("keyboard arrows advance by spread", async ({ page }) => {
+  test("keyboard arrows advance by spread @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer-position")).toContainText("1 / 5", {
       timeout: 15000,
@@ -668,13 +670,13 @@ test.describe("viewer", () => {
     expect(Math.abs(nextBox!.width - expectedWidth)).toBeLessThan(tolerance);
   });
 
-  test("text layer not present for image archive", async ({ page }) => {
+  test("text layer not present for image archive @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".textLayer")).not.toBeAttached();
   });
 
-  test("search section is hidden for image archive viewer", async ({ page }) => {
+  test("search section is hidden for image archive viewer @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".viewer-search")).toHaveClass(/search-hidden/);
@@ -735,7 +737,7 @@ test.describe("viewer", () => {
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 
-  test("image archive outline is hidden", async ({ page }) => {
+  test("image archive outline is hidden @testonly", async ({ page }) => {
     await page.goto("/view/test-image-archive");
     await expect(page.locator(".viewer")).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".viewer-outline")).toHaveClass(/outline-hidden/);

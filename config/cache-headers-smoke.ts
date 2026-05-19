@@ -1,8 +1,8 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./playwright-test";
 
 export function describeCacheHeadersSmoke(appName: string): void {
   test.describe(`${appName} cache headers smoke`, () => {
-    test("hashed assets have immutable cache-control @smoke", async ({
+    test("hashed assets have immutable cache-control @smoke @hosting", async ({
       page,
     }) => {
       const response = await page.goto("/");
@@ -32,7 +32,7 @@ export function describeCacheHeadersSmoke(appName: string): void {
       expect(cacheControl).toContain("public, max-age=31536000, immutable");
     });
 
-    test("images have yearly cache-control @smoke", async ({ page }) => {
+    test("images have yearly cache-control @smoke @hosting", async ({ page }) => {
       const response = await page.goto("/");
       expect(response).not.toBeNull();
       expect(response!.status()).toBe(200);
