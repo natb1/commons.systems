@@ -16,8 +16,8 @@ Run `/dispatch` from the **main worktree**, or from inside an issue worktree to
 continue that issue. Step 3 switches into the target's worktree via `EnterWorktree`;
 the phase skill runs there.
 
-Run `gh` and git-index-writing commands (`git add`, `gh pr ready`, `gh label create`)
-with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
+Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
+`gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
 ## 1. Select the Target
 
@@ -30,7 +30,8 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
   ```
 
   It prints exactly one line:
-  - `pr <num> <branch>` — a PR to work on
+  - `pr <num> <branch> <phase>` — a PR to work on; `<phase>` is pre-derived by the
+    selection scan, so Step 4 reuses it instead of re-deriving
   - `issue <num>` — a `help wanted` issue to implement
   - `worktree <N> <branch>` — run from inside an issue worktree; target is `<N>`,
     queue scan already skipped
@@ -39,19 +40,43 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
     closed/unrecognized issue `<N>` and **stop** (consistent with the named-target
     "closed → report and stop" rule in Step 2)
   - `empty` — nothing eligible
+  - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check; the queue
+    scan was short-circuited (see the `main-broken` handling block below)
 
   An **explicit issue argument overrides current-worktree detection** — the selection
   script, and therefore its current-worktree detection, runs only when no argument is
   given. `/dispatch #123` run from inside worktree-456 still targets 123.
 
+  Before the priority ladder, the script runs a **top-priority `origin/main` CI
+  health gate**. Every queueable task builds on `origin/main` — branches fork
+  from it and merge it — so a failing check on main's HEAD means nothing is safe
+  to start. The gate aggregates main's HEAD CI from two sources (CodeQL
+  check-runs and Actions workflow runs); a failing conclusion short-circuits the
+  scan to `main-broken <sha>` and the priority ladder is not evaluated.
+  In-progress (not-yet-concluded) checks do **not** trip the gate. The gate is
+  bypassed by an explicit `/dispatch <issue|pr>` argument (the queue scan is not
+  run at all) and by current-worktree continuation (a session continues its own
+  in-progress work regardless of main's state).
+
   Priority order it implements (highest first; within a tier, oldest PR wins; PRs
-  with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
-  oldest `ready` PR → oldest `security` PR → oldest `review` PR → oldest
-  `simplify` PR → oldest `verify` PR → oldest `help wanted` issue → oldest `qa`
-  PR → `empty`. Non-QA PRs are ranked closest-to-done first; `help wanted` issues
-  rank below all non-QA PRs but above QA PRs.
+  and `help wanted` issues with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
+  oldest `security` PR → oldest `review` PR → oldest `simplify` PR → oldest
+  `verify` PR → oldest `help wanted` issue → oldest `qa` PR → `empty`. Non-QA PRs
+  are ranked closest-to-done first — `security` is the closest-to-done non-QA
+  tier; `help wanted` issues rank below all non-QA PRs but above QA PRs.
 
   On `empty` → report that the queue is empty and **stop**.
+
+  On `main-broken <sha>` → `origin/main` itself is red, so no new work is safe to
+  start. Do **not** create a worktree, branch, or phase skill. Diagnose main
+  instead: enumerate the failing checks on `<sha>` by aggregating
+  `gh run list --branch main` and
+  `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`. For a failing workflow
+  run, fetch its logs with `gh run view <databaseId> --log-failed`; for a failing
+  CodeQL check-run (which has no workflow-run id), open its `details_url` from the
+  check-runs response. Summarize the likely cause, report it, and **stop**. Once a
+  PR that fixes main exists the normal ladder picks it up (verify/ready) — this
+  gate only blocks starting new, unrelated work.
 
 ## 2. Trace to an Open Leaf
 
@@ -66,8 +91,8 @@ It walks open blockers and sub-issues to an open leaf and prints one issue numbe
 Retarget to that leaf.
 
 Skip leaf tracing when:
-- A PR exists for the target (`pr <num> <branch>` result, or an explicit issue
-  argument that already has a PR) — implementation is already underway.
+- A PR exists for the target (`pr <num> <branch> <phase>` result, or an explicit
+  issue argument that already has a PR) — implementation is already underway.
 - The target was current-worktree detected (`worktree <N>` result) — the worktree
   is the already-committed unit of work; retargeting to a sub-issue or blocker
   would be wrong.
@@ -88,12 +113,19 @@ an existing worktree) or `name` (create a new one; fires the `WorktreeCreate` ho
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.) Then go
   straight to creating the marker below.
 - **An existing worktree matches** `<issue>-*` (parse `git worktree list --porcelain`
-  as blank-line-delimited records) → `EnterWorktree` with `path:` set to that path.
-  After entering, re-sync issue context from the worktree:
-  ```bash
-  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
-  ```
-  (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
+  as blank-line-delimited records):
+  - **Named by an explicit `/dispatch` argument** (recycle-after-completion case) →
+    `EnterWorktree` with `path:` set to that path. After entering, re-sync issue
+    context from the worktree:
+    ```bash
+    .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+    ```
+    (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
+  - **Queue-selected (no argument)** → another session already owns this worktree.
+    The queue scan skips worktree'd issues, so this arises only when Step 2
+    leaf-tracing retargets to a blocker or sub-issue that has one. Report the
+    conflict (name the worktree path and issue `<N>`) and **stop**; do not
+    `EnterWorktree`.
 - **No existing worktree** → generate a sanitized branch name `<issue>-<slug>`:
   lowercase the issue title, replace non-alphanumeric runs with `-`, collapse repeated
   `-`, strip leading/trailing `-`, and truncate so the full branch name is ≤ 32
@@ -119,7 +151,12 @@ worktree removes it.
 
 ## 4. Derive the Phase
 
-Run the phase script against the final target (issue number or branch):
+When the target is a **queue-selected PR** (`pr <num> <branch> <phase>` from Step 1),
+the phase is already on the result line — use it directly and skip the script below.
+
+On every other path — an explicit issue argument, a `worktree <N>` result, or a
+queue-selected `issue <num>` (after leaf tracing in Step 2) — run the phase script
+against the final target (issue number or branch):
 
 ```bash
 .claude/skills/dispatch/scripts/dispatch-phase <target>
@@ -136,9 +173,8 @@ present. Map the phase:
 | `waiting` | draft PR, CI in progress (running/queued/not started) | report "checks still running, nothing to do" and stop |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
 | `simplify` | draft PR + `dispatch:qa-done` | `/simplify` → then label `dispatch:refactored` |
-| `review` | draft PR + `dispatch:refactored` | `/review` → then label `dispatch:reviewed` |
-| `security` | draft PR + `dispatch:reviewed` | `/security-review` → then label `dispatch:security-reviewed` |
-| `ready` | draft PR + `dispatch:security-reviewed` | `gh pr ready <pr>` — flip draft to ready, workflow complete |
+| `review` | draft PR + `dispatch:refactored` | `/review-fix` (applies `dispatch:reviewed` itself) |
+| `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
 | `done` | non-draft (ready) PR | already complete — report and skip |
 
 ## 5. Dispatch One Phase, Then Stop
@@ -156,14 +192,19 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
   phase skill or applying any label.
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done` itself on
   a clean pass; `/dispatch` applies no label.
-- **`simplify` / `review` / `security`** — invoke the mapped skill (`/simplify`,
-  `/review`, `/security-review`). After it **returns**, apply the accumulating
+- **`simplify`** — invoke `/simplify`. After it **returns**, apply the accumulating
   `dispatch:*` label to the PR (see below).
-- **`ready`** — run `gh pr ready <pr-num>` to flip the draft to ready-for-review.
-  The workflow is complete.
+- **`review`** — invoke `/review-fix`. It runs `/review`, applies the recommended
+  fixes, posts a PR comment, and applies the `dispatch:reviewed` label itself —
+  `/dispatch` applies no label.
+- **`security`** — invoke `/security-review-fix`. It runs `/security-review`,
+  applies the recommended fixes, posts a PR comment, applies the
+  `dispatch:security-reviewed` label, and marks the PR ready. It is idempotent on
+  re-entry — `/dispatch` applies no label.
 - **`done`** — report that the PR is already ready and skip.
 
-The PR stays a **draft** through every phase; only the `ready` phase flips it.
+The PR stays a **draft** through every phase; the `security` phase's
+`/security-review-fix` flips it to ready as the workflow's terminal action.
 
 After dispatching the one phase and applying any label, **STOP** — do not advance to
 the next phase.
@@ -173,25 +214,20 @@ so `/dispatch` cannot launch it.
 
 ### Applying the progress label
 
-The four `dispatch:*` labels — `dispatch:qa-done`, `dispatch:refactored`,
-`dispatch:reviewed`, `dispatch:security-reviewed` — are the accumulating progress
-markers across the full workflow. `/dispatch-qa` owns and applies `dispatch:qa-done`
-on a clean pass. `/dispatch` applies the remaining three: `dispatch:refactored`,
-`dispatch:reviewed`, and `dispatch:security-reviewed` — one after each corresponding
-phase skill returns successfully. This keeps the generic `/simplify`, `/review`, and
-`/security-review` skills dispatch-unaware.
+The `dispatch:*` labels are the accumulating progress markers across the full
+workflow. `/dispatch-qa`, `/review-fix`, and `/security-review-fix` each own and
+apply their own label — `dispatch:qa-done`, `dispatch:reviewed`, and
+`dispatch:security-reviewed` respectively — so `/dispatch` applies no label after
+the `qa`, `review`, or `security` phase. The one label `/dispatch` applies itself is
+`dispatch:refactored`, after the `simplify` phase skill returns successfully —
+applying it here keeps the generic `/simplify` skill dispatch-unaware.
 
-Before applying, ensure the three labels exist idempotently — run this for each
-(safe on forks where the labels do not yet exist):
-
-```bash
-gh label create "dispatch:<name>" --color BFD4F2 --description "<phase> phase complete" 2>/dev/null || true
-```
-
-Then apply the label for the completed phase:
+`dispatch-complete-phase` maps the completed phase to its label and applies it to the
+PR, creating the label first only if it does not yet exist (e.g. on a fork) — one
+call, run with `dangerouslyDisableSandbox: true` since it invokes `gh`:
 
 ```bash
-gh pr edit <pr-num> --add-label "dispatch:<name>"
+.claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> <phase>
 ```
 
 ## 6. Pre-Implementation Relevance Review
