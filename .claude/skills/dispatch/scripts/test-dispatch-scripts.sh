@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Unit-test suite for dispatch-phase, dispatch-select-target, dispatch-trace-leaf.
-# Uses PATH shims to fake gh and git — no network required.
+# Unit-test suite for dispatch-phase, dispatch-select-target, dispatch-trace-leaf,
+# dispatch-complete-phase. Uses PATH shims to fake gh and git — no network required.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -49,9 +49,11 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-phase" "$TMPDIR_TEST/dispatch-phase"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
+  cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-select-target" \
-           "$TMPDIR_TEST/dispatch-trace-leaf"
+           "$TMPDIR_TEST/dispatch-trace-leaf" \
+           "$TMPDIR_TEST/dispatch-complete-phase"
 
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
@@ -122,6 +124,14 @@ case "$args" in
     else
       echo "[]"
     fi
+    ;;
+  label\ create\ *)
+    # dispatch-complete-phase ensures the label exists.
+    echo "$args" >> "$STUB_DIR/gh-label-create.log"
+    ;;
+  pr\ edit\ *)
+    # dispatch-complete-phase applies the label to the PR.
+    echo "$args" >> "$STUB_DIR/gh-pr-edit.log"
     ;;
   *)
     echo "gh stub: unknown invocation: $args" >&2
@@ -821,6 +831,61 @@ printf '{"title":"Issue 601","body":"","comments":[],"number":601,"state":"OPEN"
   > "$STUB_DIR/issue-601.json"
 result=$("$TMPDIR_TEST/dispatch-trace-leaf" "600")
 assert_eq "sub-issues chain 600→601 → leaf 601" "601" "$result"
+teardown
+
+# ============================================================================
+# dispatch-complete-phase tests
+# ============================================================================
+echo ""
+echo "=== dispatch-complete-phase ==="
+
+# 1. simplify → dispatch:refactored.
+echo "Test: simplify → dispatch:refactored"
+setup
+"$TMPDIR_TEST/dispatch-complete-phase" 25 simplify
+logged=$(cat "$STUB_DIR/gh-pr-edit.log")
+assert_eq "simplify applies dispatch:refactored" \
+  "pr edit 25 --add-label dispatch:refactored" "$logged"
+teardown
+
+# 2. review → dispatch:reviewed.
+echo "Test: review → dispatch:reviewed"
+setup
+"$TMPDIR_TEST/dispatch-complete-phase" 30 review
+logged=$(cat "$STUB_DIR/gh-pr-edit.log")
+assert_eq "review applies dispatch:reviewed" \
+  "pr edit 30 --add-label dispatch:reviewed" "$logged"
+teardown
+
+# 3. security → dispatch:security-reviewed.
+echo "Test: security → dispatch:security-reviewed"
+setup
+"$TMPDIR_TEST/dispatch-complete-phase" 40 security
+logged=$(cat "$STUB_DIR/gh-pr-edit.log")
+assert_eq "security applies dispatch:security-reviewed" \
+  "pr edit 40 --add-label dispatch:security-reviewed" "$logged"
+teardown
+
+# 4. Unknown phase → non-zero exit, no label applied.
+echo "Test: unknown phase → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-complete-phase" 25 bogus 2>/dev/null; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "unknown phase exits non-zero" "1" "$rc"
+teardown
+
+# 5. Missing phase arg → non-zero exit.
+echo "Test: missing args → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-complete-phase" 25 2>/dev/null; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "missing phase arg exits non-zero" "1" "$rc"
 teardown
 
 # ============================================================================

@@ -163,8 +163,9 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done` itself on
   a clean pass; `/dispatch` applies no label.
 - **`simplify` / `review` / `security`** — invoke the mapped skill (`/simplify`,
-  `/review`, `/security-review`). After it **returns**, apply the accumulating
-  `dispatch:*` label to the PR (see below).
+  `/review`, `/security-review`). After it **returns**, run
+  `dispatch-complete-phase <pr-num> <phase>` to apply the accumulating `dispatch:*`
+  label to the PR (see below).
 - **`ready`** — run `gh pr ready <pr-num>` to flip the draft to ready-for-review.
   The workflow is complete.
 - **`done`** — report that the PR is already ready and skip.
@@ -187,17 +188,13 @@ on a clean pass. `/dispatch` applies the remaining three: `dispatch:refactored`,
 phase skill returns successfully. This keeps the generic `/simplify`, `/review`, and
 `/security-review` skills dispatch-unaware.
 
-Before applying, ensure the three labels exist idempotently — run this for each
-(safe on forks where the labels do not yet exist):
+`dispatch-complete-phase` maps the completed phase to its label, ensures that label
+exists idempotently (safe on forks where the labels do not yet exist), and applies it
+to the PR — one call, run with `dangerouslyDisableSandbox: true` since it invokes
+`gh`:
 
 ```bash
-gh label create "dispatch:<name>" --color BFD4F2 --description "<phase> phase complete" 2>/dev/null || true
-```
-
-Then apply the label for the completed phase:
-
-```bash
-gh pr edit <pr-num> --add-label "dispatch:<name>"
+.claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> <phase>
 ```
 
 ## 6. Pre-Implementation Relevance Review
