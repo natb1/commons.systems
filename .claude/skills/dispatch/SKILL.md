@@ -40,19 +40,43 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
     closed/unrecognized issue `<N>` and **stop** (consistent with the named-target
     "closed → report and stop" rule in Step 2)
   - `empty` — nothing eligible
+  - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check; the queue
+    scan was short-circuited (see the `main-broken` handling block below)
 
   An **explicit issue argument overrides current-worktree detection** — the selection
   script, and therefore its current-worktree detection, runs only when no argument is
   given. `/dispatch #123` run from inside worktree-456 still targets 123.
 
+  Before the priority ladder, the script runs a **top-priority `origin/main` CI
+  health gate**. Every queueable task builds on `origin/main` — branches fork
+  from it and merge it — so a failing check on main's HEAD means nothing is safe
+  to start. The gate aggregates main's HEAD CI from two sources (CodeQL
+  check-runs and Actions workflow runs); a failing conclusion short-circuits the
+  scan to `main-broken <sha>` and the priority ladder is not evaluated.
+  In-progress (not-yet-concluded) checks do **not** trip the gate. The gate is
+  bypassed by an explicit `/dispatch <issue|pr>` argument (the queue scan is not
+  run at all) and by current-worktree continuation (a session continues its own
+  in-progress work regardless of main's state).
+
   Priority order it implements (highest first; within a tier, oldest PR wins; PRs
-  with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
+  and `help wanted` issues with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
   oldest `security` PR → oldest `review` PR → oldest `simplify` PR → oldest
   `verify` PR → oldest `help wanted` issue → oldest `qa` PR → `empty`. Non-QA PRs
   are ranked closest-to-done first — `security` is the closest-to-done non-QA
   tier; `help wanted` issues rank below all non-QA PRs but above QA PRs.
 
   On `empty` → report that the queue is empty and **stop**.
+
+  On `main-broken <sha>` → `origin/main` itself is red, so no new work is safe to
+  start. Do **not** create a worktree, branch, or phase skill. Diagnose main
+  instead: enumerate the failing checks on `<sha>` by aggregating
+  `gh run list --branch main` and
+  `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`. For a failing workflow
+  run, fetch its logs with `gh run view <databaseId> --log-failed`; for a failing
+  CodeQL check-run (which has no workflow-run id), open its `details_url` from the
+  check-runs response. Summarize the likely cause, report it, and **stop**. Once a
+  PR that fixes main exists the normal ladder picks it up (verify/ready) — this
+  gate only blocks starting new, unrelated work.
 
 ## 2. Trace to an Open Leaf
 
@@ -89,12 +113,19 @@ an existing worktree) or `name` (create a new one; fires the `WorktreeCreate` ho
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.) Then go
   straight to creating the marker below.
 - **An existing worktree matches** `<issue>-*` (parse `git worktree list --porcelain`
-  as blank-line-delimited records) → `EnterWorktree` with `path:` set to that path.
-  After entering, re-sync issue context from the worktree:
-  ```bash
-  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
-  ```
-  (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
+  as blank-line-delimited records):
+  - **Named by an explicit `/dispatch` argument** (recycle-after-completion case) →
+    `EnterWorktree` with `path:` set to that path. After entering, re-sync issue
+    context from the worktree:
+    ```bash
+    .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+    ```
+    (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
+  - **Queue-selected (no argument)** → another session already owns this worktree.
+    The queue scan skips worktree'd issues, so this arises only when Step 2
+    leaf-tracing retargets to a blocker or sub-issue that has one. Report the
+    conflict (name the worktree path and issue `<N>`) and **stop**; do not
+    `EnterWorktree`.
 - **No existing worktree** → generate a sanitized branch name `<issue>-<slug>`:
   lowercase the issue title, replace non-alphanumeric runs with `-`, collapse repeated
   `-`, strip leading/trailing `-`, and truncate so the full branch name is ≤ 32
