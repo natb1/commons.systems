@@ -34,7 +34,7 @@ When choosing a new domain, these criteria help identify where the author's prob
 
 **Bottleneck:** Discoverability. The project is producing artifacts into a vacuum. The next phase focuses on making existing work findable while continuing to deepen author-usage artifacts.
 
-**Resourcing:** The [charter's](CHARTER.md) Resourcing section adds contracting to the model — institutions pay for help that brings them in as practitioners. It is not a gated phase: an institution drawn in by the portfolio validates the artifacts by the fact of engaging. So resourcing is not a separate priority — it runs on portfolio strength, and the artifact-quality and discoverability work already prioritized is what builds that portfolio. The `/about` page is the destination.
+**Resourcing:** The [charter's](CHARTER.md) Resourcing section adds contracting to the model — institutions pay for help that brings them in as practitioners. It is not a gated phase: an institution drawn in by the portfolio is, by the fact of engaging, evidence that the artifacts work. So resourcing is not a separate priority — it runs on portfolio strength, and the artifact-quality and discoverability work already prioritized is what builds that portfolio. The `/about` page is the destination.
 
 ## Priorities
 

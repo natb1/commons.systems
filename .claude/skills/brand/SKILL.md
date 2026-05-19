@@ -72,6 +72,8 @@ Blog voice is the ceiling: the most expressive register, with assertions, cross-
 
 The about / services page is the one context where the project makes an offer rather than only giving gifts. The voice does not change — the authority still comes from the artifacts that function as a portfolio, not from rhetoric. What changes is the *content*: pricing, what an engagement delivers, what the institution owns when it ends. Honesty about limitations is the selling point here, not a liability — a sophisticated buyer reads it as competence. Hype stays out: overclaiming is dishonest and validates nothing about whether the work is useful. A conversion funnel is not hype, though — a clear path with explicit calls to action that moves a curious institution toward an engagement is legitimate, and optimizing practitioner engagement depends on it. The line is hype and manufactured urgency, not the funnel itself.
 
+One terminology note for this page: `artifact` is the project's internal term, and a business reader has no context for it — describe deliverables with concrete plain nouns instead ("the software", "the application", "what's built"). `solution` as a noun still stays out; it is vendor jargon a sophisticated buyer discounts, and a business audience is not helped by it. This page is also written in the first person: the offer's core differentiator is that the buyer deals directly with the implementer, and third-person copy about the contractor implies the intermediary the offer denies.
+
 ## Terminology
 
 ### Preferred terms
