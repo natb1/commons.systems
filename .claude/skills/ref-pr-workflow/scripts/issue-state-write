@@ -21,4 +21,4 @@ if [ -z "$JSON_INPUT" ]; then
 fi
 
 # Write to Firestore.
-npx tsx "$REPO_ROOT/firestoreutil/bin/run-issue-state-write.ts" "$ISSUE_NUM" "$JSON_INPUT"
+npx tsx "$REPO_ROOT/dispatch/bin/run-issue-state-write.ts" "$ISSUE_NUM" "$JSON_INPUT"
