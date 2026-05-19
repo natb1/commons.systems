@@ -70,11 +70,12 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
   start. Do **not** create a worktree, branch, or phase skill. Diagnose main
   instead: enumerate the failing checks on `<sha>` by aggregating
   `gh run list --branch main` and
-  `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`, fetch the failing
-  workflow run's logs with `gh run view <databaseId> --log-failed`, summarize the
-  likely cause, report it, and **stop**. Once a PR that fixes main exists the
-  normal ladder picks it up (verify/ready) — this gate only blocks starting new,
-  unrelated work.
+  `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`. For a failing workflow
+  run, fetch its logs with `gh run view <databaseId> --log-failed`; for a failing
+  CodeQL check-run (which has no workflow-run id), open its `details_url` from the
+  check-runs response. Summarize the likely cause, report it, and **stop**. Once a
+  PR that fixes main exists the normal ladder picks it up (verify/ready) — this
+  gate only blocks starting new, unrelated work.
 
 ## 2. Trace to an Open Leaf
 

@@ -758,7 +758,7 @@ printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
 printf '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
   > "$STUB_DIR/main-check-runs.json"
-printf '[{"databaseId":900,"headSha":"mainhead0","conclusion":"success","status":"completed","workflowName":"Production Deploy"}]' \
+printf '[{"headSha":"mainhead0","conclusion":"success"}]' \
   > "$STUB_DIR/main-run-list.json"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "main green → normal selection (verify PR)" "pr 10 10-verify-me" "$result"
@@ -791,7 +791,7 @@ echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
 printf '{"check_runs":[]}' > "$STUB_DIR/main-check-runs.json"
-printf '[{"databaseId":901,"headSha":"mainhead0","conclusion":"failure","status":"completed","workflowName":"Production Deploy"}]' \
+printf '[{"headSha":"mainhead0","conclusion":"failure"}]' \
   > "$STUB_DIR/main-run-list.json"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "main failing workflow run → main-broken" "main-broken mainhead0" "$result"
@@ -808,7 +808,7 @@ printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
 printf '{"check_runs":[{"status":"in_progress","conclusion":null}]}' \
   > "$STUB_DIR/main-check-runs.json"
-printf '[{"databaseId":902,"headSha":"mainhead0","conclusion":null,"status":"in_progress","workflowName":"Production Deploy"}]' \
+printf '[{"headSha":"mainhead0","conclusion":null}]' \
   > "$STUB_DIR/main-run-list.json"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "main in-progress → normal selection (verify PR)" "pr 10 10-verify-me" "$result"
@@ -824,7 +824,7 @@ echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
 printf '{"check_runs":[]}' > "$STUB_DIR/main-check-runs.json"
-printf '[{"databaseId":903,"headSha":"oldsha99","conclusion":"failure","status":"completed","workflowName":"Production Deploy"}]' \
+printf '[{"headSha":"oldsha99","conclusion":"failure"}]' \
   > "$STUB_DIR/main-run-list.json"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "main failing run on stale SHA → normal selection (verify PR)" "pr 10 10-verify-me" "$result"

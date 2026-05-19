@@ -64,7 +64,7 @@ main_broken_sha() {
   # otherwise miss it); the headSha filter is a defense-in-depth guard so a
   # stale run can never trip the gate.
   wf_fail=$(gh run list --branch main --commit "$sha" \
-    --json databaseId,headSha,conclusion,status,workflowName \
+    --json headSha,conclusion \
     | jq --arg sha "$sha" --argjson fail "$fail" \
         '[.[] | select(.headSha == $sha)
               | select(.conclusion as $c | $fail | index($c))] | length')
