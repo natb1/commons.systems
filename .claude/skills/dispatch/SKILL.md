@@ -67,8 +67,8 @@ It walks open blockers and sub-issues to an open leaf and prints one issue numbe
 Retarget to that leaf.
 
 Skip leaf tracing when:
-- A PR exists for the target (`pr <num> <branch>` result, or an explicit issue
-  argument that already has a PR) — implementation is already underway.
+- A PR exists for the target (`pr <num> <branch> <phase>` result, or an explicit
+  issue argument that already has a PR) — implementation is already underway.
 - The target was current-worktree detected (`worktree <N>` result) — the worktree
   is the already-committed unit of work; retargeting to a sub-issue or blocker
   would be wrong.
