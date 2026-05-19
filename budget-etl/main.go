@@ -14,8 +14,8 @@ import (
 
 	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
-	"github.com/natb1/commons.systems/budget-etl/internal/keychain"
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
+	"github.com/natb1/commons.systems/budget-etl/internal/password"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
 )
 
@@ -30,7 +30,7 @@ func main() {
 
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> --output <path> [--input <path>] [--keychain <name>] [--report <path> --allow-uncategorized]")
-		fmt.Fprintln(os.Stderr, "  Encrypt/decrypt password sources (checked in order): BUDGET_ETL_PASSWORD env var, then --keychain (macOS only).")
+		fmt.Fprintln(os.Stderr, "  Encrypt/decrypt password sources (checked in order): BUDGET_ETL_PASSWORD env var, then --keychain (macOS only). Both unset fails fast.")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -57,29 +57,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Resolve password early so keychain errors fail fast before file I/O.
-	// BUDGET_ETL_PASSWORD takes precedence over --keychain so non-macOS
-	// platforms (Linux/WSL) can supply a password without the macOS-only
-	// `security` tool.
-	var password string
-	if envPw := os.Getenv("BUDGET_ETL_PASSWORD"); envPw != "" {
-		password = envPw
-		log.Print("using password from BUDGET_ETL_PASSWORD env var")
-		if *keychainFlag != "" {
-			log.Printf("ignoring --keychain %q because BUDGET_ETL_PASSWORD is set", *keychainFlag)
-		}
-	} else if *keychainFlag != "" {
-		pw, err := keychain.Get(*keychainFlag)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		password = pw
-		log.Printf("retrieved password from keychain (account: %s)", *keychainFlag)
+	// Resolve password early so the failure mode is identical regardless of
+	// which mode the rest of main dispatches into. password.Resolve enforces
+	// the env-var-then-keychain precedence and emits a single self-describing
+	// error when neither source is available.
+	pw, err := password.Resolve(*keychainFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 
 	if *reportPath != "" {
-		if err := runReport(fileOpts{path: *inputPath, password: password}, *dir, *reportPath); err != nil {
+		if err := runReport(fileOpts{path: *inputPath, password: pw}, *dir, *reportPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -87,14 +76,14 @@ func main() {
 	}
 
 	if *inputPath != "" && *dir != "" {
-		if err := runMerge(fileOpts{path: *inputPath, password: password}, *dir, *group, fileOpts{path: *outputPath, password: password}); err != nil {
+		if err := runMerge(fileOpts{path: *inputPath, password: pw}, *dir, *group, fileOpts{path: *outputPath, password: pw}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if *inputPath != "" {
-		if err := runInputJSON(fileOpts{path: *inputPath, password: password}, fileOpts{path: *outputPath, password: password}); err != nil {
+		if err := runInputJSON(fileOpts{path: *inputPath, password: pw}, fileOpts{path: *outputPath, password: pw}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -110,7 +99,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := runDirJSON(*dir, *group, fileOpts{path: *outputPath, password: password}); err != nil {
+	if err := runDirJSON(*dir, *group, fileOpts{path: *outputPath, password: pw}); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

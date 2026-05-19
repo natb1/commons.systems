@@ -216,3 +216,19 @@ func TestRunPatch_MissingSpec(t *testing.T) {
 		t.Fatal("expected error for missing --spec")
 	}
 }
+
+// TestRunPatch_NoPasswordSource verifies that when neither BUDGET_ETL_PASSWORD
+// nor --keychain is set, runPatch fails at password resolution with the
+// self-describing error from internal/password — before touching the input
+// file. Validation paths (spec/input/output) all pass; password resolution
+// is what trips.
+func TestRunPatch_NoPasswordSource(t *testing.T) {
+	t.Setenv("BUDGET_ETL_PASSWORD", "")
+	err := runPatch("/tmp/has-spec.json", "/tmp/in.json", "/tmp/out.json", "")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no password source") {
+		t.Fatalf("expected error mentioning 'no password source', got %q", err.Error())
+	}
+}
