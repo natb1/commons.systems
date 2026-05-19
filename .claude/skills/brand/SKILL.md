@@ -44,7 +44,7 @@ Someone leaving notes for the next person. The writing assumes the reader might 
 
 ## What This Project Never Sounds Like
 
-**Startup hype.** No "revolutionizing," "disrupting," "unlocking potential," "empowering users." No breathless future-casting. No implied scale ambitions. No calls to action that sound like conversion funnels.
+**Startup hype.** No "revolutionizing," "disrupting," "unlocking potential," "empowering users." No breathless future-casting. No implied scale ambitions. No manufactured urgency or breathless calls to action. (A plain, honest call to action is not hype — see the Tone Spectrum note on the services context.)
 
 **Political activism.** No villains, no moral urgency, no "we must" or "it's time to." The charter diagnoses a structural problem but doesn't moralize about it. The project builds alternatives, it doesn't campaign against incumbents.
 
@@ -62,12 +62,15 @@ The voice stays the same across all contexts. The tone — how much personality,
 |---|---|---|---|---|
 | Blog posts | Ceiling | Yes | Assertions with support | "Recovering Autonomy with Coding Agents" |
 | Landing page | Mid-high | Sparingly | Concise claims, not arguments | Hero copy, project description |
+| About / services page | Mid-high | Yes | Concise claims, business-relevant | /about page |
 | Charter | Mid | When relevant | Structural claims, not personal ones | CHARTER.md |
 | README | Mid-low | Minimal | Practical guidance, not philosophy | README.md |
 | Fork/plugin docs | Floor | No | None — describe what it does, how to use it | Setup instructions, API descriptions |
 | Issue descriptions | Floor | No | Scope and rationale only | GitHub issue bodies |
 
 Blog voice is the ceiling: the most expressive register, with assertions, cross-domain connections, and first person. Documentation voice is the floor: still direct, still no jargon, but fewer opinions and no first person. Everything else sits between. The range is narrow — it's all the same person adjusting how much personality comes through.
+
+The about / services page is the one context where the project makes an offer rather than only giving gifts. The voice does not change — the authority still comes from the artifacts that function as a portfolio, not from rhetoric. What changes is the *content*: pricing, what an engagement delivers, what the institution owns when it ends. Honesty about limitations is the selling point here, not a liability — a sophisticated buyer reads it as competence. Hype stays out: overclaiming is dishonest and validates nothing about whether the work is useful. A conversion funnel is not hype, though — a clear path with explicit calls to action that moves a curious institution toward an engagement is legitimate, and optimizing practitioner engagement depends on it. The line is hype and manufactured urgency, not the funnel itself.
 
 ## Terminology
 
