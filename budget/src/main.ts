@@ -19,6 +19,7 @@ import { hydrateAccountsReconcile } from "./pages/accounts-reconcile-hydrate.js"
 import { mountHero } from "@commons-systems/style/hero";
 import { renderHero } from "./pages/hero.js";
 import { trackPageView, initAppCheck } from "./firebase.js";
+import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
@@ -261,7 +262,7 @@ async function handleFileUpload(file: File): Promise<void> {
       showNavError(error.message);
       return;
     }
-    if (classifyError(error) === "programmer") throw error;
+    if (deferProgrammerError(error)) return;
     logError(error, { operation: "upload" });
     showNavError("Upload failed. Please try again.");
   }
@@ -308,7 +309,7 @@ exportButton.addEventListener("click", async () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } catch (error) {
-    if (classifyError(error) === "programmer") throw error;
+    if (deferProgrammerError(error)) return;
     logError(error, { operation: "export" });
     showNavError(error instanceof Error ? error.message : "Export failed. Please try again.");
   }
@@ -320,7 +321,7 @@ clearButton.addEventListener("click", async () => {
     importPassword = null;
     transition({ source: "seed" });
   } catch (error) {
-    if (classifyError(error) === "programmer") throw error;
+    if (deferProgrammerError(error)) return;
     logError(error, { operation: "clear-data" });
     showNavError("Failed to clear data. Try closing other tabs or refreshing the page.");
   }
@@ -337,30 +338,10 @@ async function initialize(): Promise<void> {
 }
 
 initialize().catch((error) => {
-  if (classifyError(error) === "programmer") throw error;
+  if (deferProgrammerError(error)) return;
   logError(error, { operation: "initialization" });
   showNavError("Could not load saved data. You may need to re-upload your file.");
   transition({ source: "seed" });
 });
 
-// Defer App Check / reCAPTCHA initialization until first user interaction to keep the
-// large reCAPTCHA script off the critical path. Until initAppCheck() resolves,
-// getAppCheckHeaders returns empty headers, so pre-interaction requests lack App Check tokens.
-const deferredAppCheckInit = async () => {
-  if (!initAppCheck) return;
-  await initAppCheck();
-};
-
-const INTERACTION_EVENTS = ["scroll", "click", "touchstart", "keydown"] as const;
-const triggerOnce = () => {
-  for (const evt of INTERACTION_EVENTS) {
-    window.removeEventListener(evt, triggerOnce);
-  }
-  deferredAppCheckInit().catch((err) => {
-    if (deferProgrammerError(err)) return;
-    logError(err, { operation: "deferred-appcheck-init" });
-  });
-};
-for (const evt of INTERACTION_EVENTS) {
-  window.addEventListener(evt, triggerOnce, { once: true, passive: true });
-}
+deferAppCheckInit(initAppCheck);

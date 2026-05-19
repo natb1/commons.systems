@@ -3,7 +3,7 @@ import type { Budget, BudgetId, BudgetPeriod } from "../firestore.js";
 import { applyRollover, periodAllowance, weeklyEquivalent, computePeriodBalances, toSundayEntry, type PeriodBalance } from "../balance.js";
 import { getThemeFg, computePanelWidth, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
-export interface ChartOptions {
+interface ChartOptions {
   budgets: Budget[];
   periods: BudgetPeriod[];
 }

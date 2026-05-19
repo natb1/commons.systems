@@ -3,17 +3,13 @@
  * All per-entity representations (domain, IDB, raw/upload, seed declaration, seed data)
  * are defined or imported here; adaptor functions live alongside them.
  */
-import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import type { Brand } from "@commons-systems/firestoreutil/brand";
 import {
   emptyToNull,
   nullToEmpty,
-  optionalString,
-  requireNumber,
   requireSeedNumber,
   requireSeedString,
-  requireString,
   requireUploadId,
 } from "./_helpers.js";
 import type { NormalizationRuleSeedData } from "../../seeds/firestore.js";
@@ -76,23 +72,6 @@ export interface SeedNormalizationRule {
   readonly institution: string | null;
   readonly account: string | null;
   readonly priority: number;
-}
-
-// ── Firestore → NormalizationRule ─────────────────────────────────────────────
-
-export function parseFirestoreNormalizationRule(docSnap: QueryDocumentSnapshot<DocumentData, DocumentData>): NormalizationRule {
-  const data = docSnap.data();
-  return {
-    id: docSnap.id as NormalizationRuleId,
-    pattern: requireString(data.pattern, "pattern"),
-    patternType: optionalString(data.patternType, "patternType"),
-    canonicalDescription: requireString(data.canonicalDescription, "canonicalDescription"),
-    dateWindowDays: data.dateWindowDays == null ? 0 : requireNumber(data.dateWindowDays, "dateWindowDays"),
-    institution: optionalString(data.institution, "institution"),
-    account: optionalString(data.account, "account"),
-    priority: requireNumber(data.priority, "priority"),
-    groupId: optionalString(data.groupId, "groupId") as GroupId | null,
-  };
 }
 
 // ── Raw upload → NormalizationRule ────────────────────────────────────────────

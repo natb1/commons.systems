@@ -171,8 +171,10 @@ When decomposition (Step 3f) creates new issues, establish relationships using t
 
 ## Step 6. Post-Processing
 
-Assign the issue to the current GitHub user:
+Assign the issue to the current GitHub user and apply the `help wanted` label:
 
 ```bash
-gh issue edit <N> --add-assignee @me
+gh issue edit <N> --add-assignee @me --add-label "help wanted"
 ```
+
+Apply `help wanted` by default. Drop `--add-label "help wanted"` only when the user explicitly asked not to label the issue or named a different label set.

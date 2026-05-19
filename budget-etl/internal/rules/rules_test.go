@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/natb1/commons.systems/budget-etl/internal/store"
+	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 )
 
 func intPtr(v int64) *int64 { return &v }
@@ -199,13 +199,13 @@ func TestApplyCategorization(t *testing.T) {
 	}
 
 	t.Run("priority ordering first-match-wins", func(t *testing.T) {
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "STARBUCKS COFFEE #1234", StatementID: "s1", TransactionID: "t1"},
 			{Description: "Electric Company", StatementID: "s1", TransactionID: "t2"},
 		}
-		err := ApplyCategorization(txns, rules)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		uncategorized := ApplyCategorization(txns, rules)
+		if len(uncategorized) != 0 {
+			t.Fatalf("unexpected uncategorized: %v", uncategorized)
 		}
 		if txns[0].Category != "Food:Coffee" {
 			t.Errorf("txn[0].Category = %q, want Food:Coffee", txns[0].Category)
@@ -215,40 +215,46 @@ func TestApplyCategorization(t *testing.T) {
 		}
 	})
 
-	t.Run("error for uncategorized transactions", func(t *testing.T) {
-		txns := []store.TransactionData{
+	t.Run("returns uncategorized records", func(t *testing.T) {
+		txns := []budget.TransactionData{
 			{Description: "STARBUCKS", StatementID: "s1", TransactionID: "t1"},
 			{Description: "UNKNOWN MERCHANT", StatementID: "s1", TransactionID: "t2"},
 		}
-		err := ApplyCategorization(txns, rules)
-		if err == nil {
-			t.Fatal("expected error for uncategorized transaction")
+		uncategorized := ApplyCategorization(txns, rules)
+		if len(uncategorized) == 0 {
+			t.Fatal("expected uncategorized records for unmatched transaction")
 		}
 		if txns[0].Category != "Food:Coffee" {
 			t.Errorf("matched txn should still be categorized: %q", txns[0].Category)
 		}
+		if uncategorized[0].TransactionID != "t2" {
+			t.Errorf("uncategorized[0].TransactionID = %q, want t2", uncategorized[0].TransactionID)
+		}
+		if uncategorized[0].Description != "UNKNOWN MERCHANT" {
+			t.Errorf("uncategorized[0].Description = %q, want UNKNOWN MERCHANT", uncategorized[0].Description)
+		}
 	})
 
 	t.Run("skips already-categorized transactions", func(t *testing.T) {
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "STARBUCKS", Category: "Manual:Override", StatementID: "s1", TransactionID: "t1"},
 		}
-		err := ApplyCategorization(txns, rules)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		uncategorized := ApplyCategorization(txns, rules)
+		if len(uncategorized) != 0 {
+			t.Fatalf("unexpected uncategorized: %v", uncategorized)
 		}
 		if txns[0].Category != "Manual:Override" {
 			t.Errorf("should preserve existing category: got %q", txns[0].Category)
 		}
 	})
 
-	t.Run("100% coverage no error", func(t *testing.T) {
-		txns := []store.TransactionData{
+	t.Run("100% coverage returns empty slice", func(t *testing.T) {
+		txns := []budget.TransactionData{
 			{Description: "Starbucks #5", StatementID: "s1", TransactionID: "t1"},
 		}
-		err := ApplyCategorization(txns, rules)
-		if err != nil {
-			t.Errorf("expected nil error for full coverage, got: %v", err)
+		uncategorized := ApplyCategorization(txns, rules)
+		if len(uncategorized) != 0 {
+			t.Errorf("expected empty slice for full coverage, got: %v", uncategorized)
 		}
 	})
 }
@@ -261,7 +267,7 @@ func TestApplyBudgetAssignment(t *testing.T) {
 	}
 
 	t.Run("assigns budgets by pattern", func(t *testing.T) {
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "STARBUCKS #1234", StatementID: "s1", TransactionID: "t1"},
 			{Description: "Electric Company", StatementID: "s1", TransactionID: "t2"},
 		}
@@ -275,7 +281,7 @@ func TestApplyBudgetAssignment(t *testing.T) {
 	})
 
 	t.Run("no error for unmatched", func(t *testing.T) {
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "UNKNOWN MERCHANT", StatementID: "s1", TransactionID: "t1"},
 		}
 		ApplyBudgetAssignment(txns, rules)
@@ -285,7 +291,7 @@ func TestApplyBudgetAssignment(t *testing.T) {
 	})
 
 	t.Run("skips already-assigned transactions", func(t *testing.T) {
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "STARBUCKS", Budget: "vacation", StatementID: "s1", TransactionID: "t1"},
 		}
 		ApplyBudgetAssignment(txns, rules)
@@ -298,7 +304,7 @@ func TestApplyBudgetAssignment(t *testing.T) {
 		rules := []Rule{
 			{Type: "budget_assignment", Pattern: "", Category: "Food", Target: "food-budget", Priority: 10},
 		}
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "GROCERY STORE", Category: "Food:Groceries", StatementID: "s1", TransactionID: "t1"},
 		}
 		ApplyBudgetAssignment(txns, rules)
@@ -311,7 +317,7 @@ func TestApplyBudgetAssignment(t *testing.T) {
 		rules := []Rule{
 			{Type: "budget_assignment", Pattern: "", Category: "Food", Target: "food-budget", Priority: 10},
 		}
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "ELECTRIC CO", Category: "Housing:Utilities", StatementID: "s1", TransactionID: "t1"},
 		}
 		ApplyBudgetAssignment(txns, rules)
@@ -324,7 +330,7 @@ func TestApplyBudgetAssignment(t *testing.T) {
 		rules := []Rule{
 			{Type: "budget_assignment", Pattern: "", Category: "food", Target: "food-budget", Priority: 10},
 		}
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "GROCERY STORE", Category: "Food:Groceries", StatementID: "s1", TransactionID: "t1"},
 		}
 		ApplyBudgetAssignment(txns, rules)
@@ -337,7 +343,7 @@ func TestApplyBudgetAssignment(t *testing.T) {
 		rules := []Rule{
 			{Type: "budget_assignment", Pattern: "grocery", Category: "", Target: "catch-all", Priority: 10},
 		}
-		txns := []store.TransactionData{
+		txns := []budget.TransactionData{
 			{Description: "GROCERY STORE", Category: "Food:Groceries", StatementID: "s1", TransactionID: "t1"},
 		}
 		ApplyBudgetAssignment(txns, rules)
@@ -351,55 +357,55 @@ func TestNormalizationRuleMatch(t *testing.T) {
 	tests := []struct {
 		name string
 		rule NormalizationRule
-		txn  store.NormTxn
+		txn  budget.NormTxn
 		want bool
 	}{
 		{
 			name: "case-insensitive substring match",
 			rule: NormalizationRule{Pattern: "netflix"},
-			txn:  store.NormTxn{Description: "NETFLIX.COM Monthly Charge"},
+			txn:  budget.NormTxn{Description: "NETFLIX.COM Monthly Charge"},
 			want: true,
 		},
 		{
 			name: "no match",
 			rule: NormalizationRule{Pattern: "spotify"},
-			txn:  store.NormTxn{Description: "NETFLIX.COM Monthly Charge"},
+			txn:  budget.NormTxn{Description: "NETFLIX.COM Monthly Charge"},
 			want: false,
 		},
 		{
 			name: "institution filter matches",
 			rule: NormalizationRule{Pattern: "netflix", Institution: "Chase"},
-			txn:  store.NormTxn{Description: "NETFLIX.COM", Institution: "Chase"},
+			txn:  budget.NormTxn{Description: "NETFLIX.COM", Institution: "Chase"},
 			want: true,
 		},
 		{
 			name: "institution filter rejects",
 			rule: NormalizationRule{Pattern: "netflix", Institution: "Chase"},
-			txn:  store.NormTxn{Description: "NETFLIX.COM", Institution: "BankOne"},
+			txn:  budget.NormTxn{Description: "NETFLIX.COM", Institution: "BankOne"},
 			want: false,
 		},
 		{
 			name: "account filter matches",
 			rule: NormalizationRule{Pattern: "netflix", Account: "checking"},
-			txn:  store.NormTxn{Description: "NETFLIX.COM", Account: "Checking"},
+			txn:  budget.NormTxn{Description: "NETFLIX.COM", Account: "Checking"},
 			want: true,
 		},
 		{
 			name: "account filter rejects",
 			rule: NormalizationRule{Pattern: "netflix", Account: "Savings"},
-			txn:  store.NormTxn{Description: "NETFLIX.COM", Account: "Checking"},
+			txn:  budget.NormTxn{Description: "NETFLIX.COM", Account: "Checking"},
 			want: false,
 		},
 		{
 			name: "both filters match",
 			rule: NormalizationRule{Pattern: "netflix", Institution: "chase", Account: "checking"},
-			txn:  store.NormTxn{Description: "NETFLIX.COM", Institution: "Chase", Account: "Checking"},
+			txn:  budget.NormTxn{Description: "NETFLIX.COM", Institution: "Chase", Account: "Checking"},
 			want: true,
 		},
 		{
 			name: "empty pattern matches everything",
 			rule: NormalizationRule{Pattern: ""},
-			txn:  store.NormTxn{Description: "anything at all"},
+			txn:  budget.NormTxn{Description: "anything at all"},
 			want: true,
 		},
 	}
@@ -418,25 +424,25 @@ func TestNormalizationRuleMatch_Regex(t *testing.T) {
 	tests := []struct {
 		name string
 		rule NormalizationRule
-		txn  store.NormTxn
+		txn  budget.NormTxn
 		want bool
 	}{
 		{
 			name: "basic regex match",
 			rule: NormalizationRule{Pattern: `NETFLIX\.COM.*\d+`, PatternType: "regex"},
-			txn:  store.NormTxn{Description: "NETFLIX.COM subscription 12345"},
+			txn:  budget.NormTxn{Description: "NETFLIX.COM subscription 12345"},
 			want: true,
 		},
 		{
 			name: "case-insensitive regex via ApplyNormalization compilation",
 			rule: NormalizationRule{Pattern: `netflix\.com`, PatternType: "regex"},
-			txn:  store.NormTxn{Description: "NETFLIX.COM Monthly"},
+			txn:  budget.NormTxn{Description: "NETFLIX.COM Monthly"},
 			want: true, // ApplyNormalization prepends (?i); tested below via full pipeline
 		},
 		{
 			name: "regex no match",
 			rule: NormalizationRule{Pattern: `^EXACT$`, PatternType: "regex"},
-			txn:  store.NormTxn{Description: "NOT EXACT MATCH"},
+			txn:  budget.NormTxn{Description: "NOT EXACT MATCH"},
 			want: false,
 		},
 	}
@@ -458,7 +464,7 @@ func TestNormalizationRuleMatch_Regex(t *testing.T) {
 				txn2.StatementID = "s1"
 			}
 			updates, err := ApplyNormalization(
-				[]store.NormTxn{tt.txn, txn2},
+				[]budget.NormTxn{tt.txn, txn2},
 				[]NormalizationRule{tt.rule},
 			)
 			if err != nil {
@@ -483,7 +489,7 @@ func TestNormalizationRuleMatch_Regex(t *testing.T) {
 func TestApplyNormalization_AmountGrouping(t *testing.T) {
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
 	day2 := base.AddDate(0, 0, 1)
-	txns := []store.NormTxn{
+	txns := []budget.NormTxn{
 		// Two amounts on the same date, each in two overlapping statements
 		{DocID: "a1", Description: "NETFLIX.COM sub", Amount: 1599, Timestamp: base, StatementID: "s1"},
 		{DocID: "a2", Description: "NETFLIX.COM subscription", Amount: 1599, Timestamp: base, StatementID: "s2"},
@@ -517,7 +523,7 @@ func TestApplyNormalization_AmountGrouping(t *testing.T) {
 
 func TestApplyNormalization_ExactDateOnly(t *testing.T) {
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
-	txns := []store.NormTxn{
+	txns := []budget.NormTxn{
 		// Same date, different statements → duplicate
 		{DocID: "d1", Description: "ELECTRIC CO", Amount: 8500, Timestamp: base, StatementID: "s1"},
 		{DocID: "d2", Description: "ELECTRIC COMPANY", Amount: 8500, Timestamp: base, StatementID: "s2"},
@@ -552,7 +558,7 @@ func TestApplyNormalization_ExactDateOnly(t *testing.T) {
 func TestApplyNormalization_PrimarySelection(t *testing.T) {
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
 	// Same date, 3 overlapping statements
-	txns := []store.NormTxn{
+	txns := []budget.NormTxn{
 		{DocID: "x1", Description: "WATER BILL", Amount: 5000, Timestamp: base, StatementID: "stmt-2025-01"},
 		{DocID: "x2", Description: "WATER BILL PAYMENT", Amount: 5000, Timestamp: base, StatementID: "stmt-2025-03"},
 		{DocID: "x3", Description: "WATER BILL CO", Amount: 5000, Timestamp: base, StatementID: "stmt-2025-02"},
@@ -589,7 +595,7 @@ func TestApplyNormalization_PrimarySelection(t *testing.T) {
 
 	// Same-statement transactions are never grouped
 	t.Run("same statement not grouped", func(t *testing.T) {
-		txns := []store.NormTxn{
+		txns := []budget.NormTxn{
 			{DocID: "aa", Description: "WATER BILL", Amount: 5000, Timestamp: base, StatementID: "stmt-same"},
 			{DocID: "zz", Description: "WATER BILL", Amount: 5000, Timestamp: base, StatementID: "stmt-same"},
 		}
@@ -606,7 +612,7 @@ func TestApplyNormalization_PrimarySelection(t *testing.T) {
 func TestApplyNormalization_FirstMatchWins(t *testing.T) {
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
 	// Same date, 3 overlapping statements
-	txns := []store.NormTxn{
+	txns := []budget.NormTxn{
 		{DocID: "t1", Description: "ACME ELECTRIC CO", Amount: 8500, Timestamp: base, StatementID: "s1"},
 		{DocID: "t2", Description: "ACME ELECTRIC COMPANY", Amount: 8500, Timestamp: base, StatementID: "s2"},
 		{DocID: "t3", Description: "ACME ELECTRIC", Amount: 8500, Timestamp: base, StatementID: "s3"},
@@ -645,7 +651,7 @@ func TestApplyNormalization_FirstMatchWins(t *testing.T) {
 
 func TestApplyNormalization_AutoNormalize(t *testing.T) {
 	base := time.Date(2025, 1, 22, 10, 0, 0, 0, time.UTC)
-	txns := []store.NormTxn{
+	txns := []budget.NormTxn{
 		{DocID: "a1", Description: "CAFE NERO #1234", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-01"},
 		{DocID: "a2", Description: "CAFE NERO #1234", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-02"},
 	}
@@ -677,7 +683,7 @@ func TestApplyNormalization_AutoNormalize(t *testing.T) {
 
 func TestApplyNormalization_AutoNormalize_SameStatement(t *testing.T) {
 	base := time.Date(2025, 1, 22, 10, 0, 0, 0, time.UTC)
-	txns := []store.NormTxn{
+	txns := []budget.NormTxn{
 		{DocID: "a1", Description: "CAFE NERO", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-01"},
 		{DocID: "a2", Description: "CAFE NERO", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-01"},
 	}
@@ -692,7 +698,7 @@ func TestApplyNormalization_AutoNormalize_SameStatement(t *testing.T) {
 
 func TestApplyNormalization_AutoNormalize_DifferentDescription(t *testing.T) {
 	base := time.Date(2025, 1, 22, 10, 0, 0, 0, time.UTC)
-	txns := []store.NormTxn{
+	txns := []budget.NormTxn{
 		{DocID: "a1", Description: "CAFE NERO #1234 01/22", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-01"},
 		{DocID: "a2", Description: "CAFE NERO 01/22 DEBIT CARD", Amount: 2500, Timestamp: base, StatementID: "stmt-2025-02"},
 	}
@@ -707,7 +713,7 @@ func TestApplyNormalization_AutoNormalize_DifferentDescription(t *testing.T) {
 
 func TestApplyNormalization_AutoAndRules(t *testing.T) {
 	base := time.Date(2025, 1, 22, 10, 0, 0, 0, time.UTC)
-	txns := []store.NormTxn{
+	txns := []budget.NormTxn{
 		// Auto-normalizable pair (identical descriptions, different statements)
 		{DocID: "auto-1", Description: "EXACT MATCH", Amount: 1000, Timestamp: base, StatementID: "s1"},
 		{DocID: "auto-2", Description: "EXACT MATCH", Amount: 1000, Timestamp: base, StatementID: "s2"},
@@ -732,8 +738,8 @@ func TestApplyNormalization_AutoAndRules(t *testing.T) {
 		t.Fatalf("got %d updates, want 4", len(updates))
 	}
 
-	autoUpdates := make(map[string]store.NormalizationUpdate)
-	ruleUpdates := make(map[string]store.NormalizationUpdate)
+	autoUpdates := make(map[string]budget.NormalizationUpdate)
+	ruleUpdates := make(map[string]budget.NormalizationUpdate)
 	for _, u := range updates {
 		if u.DocID == "auto-1" || u.DocID == "auto-2" {
 			autoUpdates[u.DocID] = u
@@ -763,7 +769,7 @@ func TestApplyNormalization_AutoAndRules(t *testing.T) {
 
 func TestApplyNormalization_SingleMatch(t *testing.T) {
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
-	txns := []store.NormTxn{
+	txns := []budget.NormTxn{
 		{DocID: "solo", Description: "UNIQUE PAYMENT", Amount: 999, Timestamp: base, StatementID: "s1"},
 	}
 	rules := []NormalizationRule{{
