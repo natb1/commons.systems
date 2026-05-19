@@ -65,15 +65,17 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
   "pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels")
+    echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
       cat "$STUB_DIR/pr-list-full.json"
     else
       echo "[]"
     fi
     ;;
-  "pr list --state open --json number,createdAt,headRefName")
-    if [[ -f "$STUB_DIR/pr-list-brief.json" ]]; then
-      cat "$STUB_DIR/pr-list-brief.json"
+  "pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels")
+    echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
+    if [[ -f "$STUB_DIR/pr-list-union.json" ]]; then
+      cat "$STUB_DIR/pr-list-union.json"
     else
       echo "[]"
     fi
@@ -263,10 +265,13 @@ make_pr() {
     "$num" "$branch" "$is_draft" "$labels_json" "$rollup_json"
 }
 
-# Helper to build a PR JSON entry for the brief PR list (dispatch-select-target).
-make_pr_brief() {
-  local num="$1" branch="$2" created="$3"
-  printf '{"number":%s,"headRefName":"%s","createdAt":"%s"}' "$num" "$branch" "$created"
+# Helper to build a PR JSON entry for the single union PR list that
+# dispatch-select-target fetches and exports to dispatch-phase. Carries the
+# union of fields both scripts need.
+make_pr_union() {
+  local num="$1" branch="$2" created="$3" is_draft="$4" labels_json="$5" rollup_json="$6"
+  printf '{"number":%s,"createdAt":"%s","headRefName":"%s","isDraft":%s,"labels":%s,"statusCheckRollup":%s}' \
+    "$num" "$created" "$branch" "$is_draft" "$labels_json" "$rollup_json"
 }
 
 # Green rollup (two passing check runs).
@@ -403,29 +408,38 @@ result=$("$TMPDIR_TEST/dispatch-phase" "6")
 assert_eq "issue 6 does not match branch 60-foo" "implement" "$result"
 teardown
 
+# 13. DISPATCH_PR_LIST is used in place of a self-issued gh pr list.
+echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+setup
+# pr-list-full.json is empty: a self-fetch would yield implement. The verify
+# PR lives only in the env var, so a verify result proves the env var won.
+echo '[]' > "$STUB_DIR/pr-list-full.json"
+ENV_LIST='['"$(make_pr 42 "42-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+result=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-phase" "42")
+assert_eq "DISPATCH_PR_LIST used over self-fetch → verify" "verify" "$result"
+teardown
+
 # ============================================================================
 # dispatch-select-target tests
 # ============================================================================
 echo ""
 echo "=== dispatch-select-target ==="
 
-# For dispatch-select-target we need both the brief PR list (for enumeration)
-# and the full PR list (for dispatch-phase calls).
+# dispatch-select-target fetches one union PR list and exports it via
+# DISPATCH_PR_LIST, so each per-PR dispatch-phase call reuses it. The harness
+# only needs to seed that single list.
 
-setup_both_pr_lists() {
-  local full_json="$1"
-  local brief_json="$2"
-  printf '%s\n' "$full_json" > "$STUB_DIR/pr-list-full.json"
-  printf '%s\n' "$brief_json" > "$STUB_DIR/pr-list-brief.json"
+setup_union_pr_list() {
+  local union_json="$1"
+  printf '%s\n' "$union_json" > "$STUB_DIR/pr-list-union.json"
 }
 
 # 1. A non-QA PR is chosen over a QA PR and a help-wanted issue.
 echo "Test: non-QA PR beats QA PR and issue"
 setup
 # PR 10 in verify phase (no CI green), PR 20 in qa phase (CI green, no label).
-FULL='['"$(make_pr 10 "10-verify-me" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr 20 "20-qa-me" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-verify-me" "2024-01-01T00:00:00Z")"','"$(make_pr_brief 20 "20-qa-me" "2024-01-02T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-qa-me" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 printf '[{"number":99,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
 # No worktrees for these branches.
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
@@ -436,9 +450,8 @@ teardown
 # 2. PR with a local worktree is skipped.
 echo "Test: PR whose branch has a worktree is skipped"
 setup
-FULL='['"$(make_pr 10 "10-active-branch" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr 20 "20-other" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-active-branch" "2024-01-01T00:00:00Z")"','"$(make_pr_brief 20 "20-other" "2024-01-02T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-active-branch" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr_union 20 "20-other" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 # Worktree exists for branch 10-active-branch.
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/10-active-branch\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
@@ -450,8 +463,7 @@ teardown
 # 3. When no eligible PR exists, a help-wanted issue is chosen.
 echo "Test: no eligible PR → help-wanted issue"
 setup
-echo '[]' > "$STUB_DIR/pr-list-full.json"
-echo '[]' > "$STUB_DIR/pr-list-brief.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
 printf '[{"number":55,"createdAt":"2024-03-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -461,9 +473,8 @@ teardown
 # 4. --qa mode returns only QA PRs.
 echo "Test: --qa mode returns QA PR"
 setup
-FULL='['"$(make_pr 10 "10-verify-me" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','"$(make_pr 20 "20-qa-me" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 20 "20-qa-me" "2024-01-02T00:00:00Z")"','"$(make_pr_brief 10 "10-verify-me" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 20 "20-qa-me" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"','"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
@@ -473,8 +484,7 @@ teardown
 # 5. Nothing eligible → empty.
 echo "Test: nothing eligible → empty"
 setup
-echo '[]' > "$STUB_DIR/pr-list-full.json"
-echo '[]' > "$STUB_DIR/pr-list-brief.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -484,8 +494,7 @@ teardown
 # 6. --qa mode with no QA PR → empty (ignores help-wanted issues).
 echo "Test: --qa mode with no QA PR → empty"
 setup
-echo '[]' > "$STUB_DIR/pr-list-full.json"
-echo '[]' > "$STUB_DIR/pr-list-brief.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
 printf '[{"number":77,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
@@ -495,9 +504,8 @@ teardown
 # 7. All PRs done → falls through to help-wanted issue.
 echo "Test: all PRs done → help-wanted issue"
 setup
-FULL='['"$(make_pr 10 "10-done-pr" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-done-pr" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-done-pr" "2024-01-01T00:00:00Z" "false" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 printf '[{"number":33,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -513,21 +521,14 @@ READY_LABELS='[{"name":"dispatch:security-reviewed"}]'
 SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
 REVIEW_LABELS='[{"name":"dispatch:refactored"}]'
 SIMPLIFY_LABELS='[{"name":"dispatch:qa-done"}]'
-FULL='['
-FULL+="$(make_pr 10 "10-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
-FULL+="$(make_pr 20 "20-simplify" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"','
-FULL+="$(make_pr 30 "30-review" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
-FULL+="$(make_pr 40 "40-security" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"','
-FULL+="$(make_pr 50 "50-ready" "true" "$READY_LABELS" "$GREEN_ROLLUP")"
-FULL+=']'
-BRIEF='['
-BRIEF+="$(make_pr_brief 10 "10-verify" "2024-01-01T00:00:00Z")"','
-BRIEF+="$(make_pr_brief 20 "20-simplify" "2024-01-02T00:00:00Z")"','
-BRIEF+="$(make_pr_brief 30 "30-review" "2024-01-03T00:00:00Z")"','
-BRIEF+="$(make_pr_brief 40 "40-security" "2024-01-04T00:00:00Z")"','
-BRIEF+="$(make_pr_brief 50 "50-ready" "2024-01-05T00:00:00Z")"
-BRIEF+=']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['
+UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
+UNION+="$(make_pr_union 20 "20-simplify" "2024-01-02T00:00:00Z" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 40 "40-security" "2024-01-04T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 50 "50-ready" "2024-01-05T00:00:00Z" "true" "$READY_LABELS" "$GREEN_ROLLUP")"
+UNION+=']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -540,19 +541,13 @@ setup
 SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
 REVIEW_LABELS='[{"name":"dispatch:refactored"}]'
 SIMPLIFY_LABELS='[{"name":"dispatch:qa-done"}]'
-FULL='['
-FULL+="$(make_pr 10 "10-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
-FULL+="$(make_pr 20 "20-simplify" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"','
-FULL+="$(make_pr 30 "30-review" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
-FULL+="$(make_pr 40 "40-security" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"
-FULL+=']'
-BRIEF='['
-BRIEF+="$(make_pr_brief 10 "10-verify" "2024-01-01T00:00:00Z")"','
-BRIEF+="$(make_pr_brief 20 "20-simplify" "2024-01-02T00:00:00Z")"','
-BRIEF+="$(make_pr_brief 30 "30-review" "2024-01-03T00:00:00Z")"','
-BRIEF+="$(make_pr_brief 40 "40-security" "2024-01-04T00:00:00Z")"
-BRIEF+=']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['
+UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
+UNION+="$(make_pr_union 20 "20-simplify" "2024-01-02T00:00:00Z" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 40 "40-security" "2024-01-04T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"
+UNION+=']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -564,15 +559,11 @@ echo "Test: within same phase, oldest PR wins"
 setup
 # Two review-phase PRs; PR 30 is older.
 REVIEW_LABELS='[{"name":"dispatch:refactored"}]'
-FULL='['
-FULL+="$(make_pr 30 "30-review-a" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
-FULL+="$(make_pr 31 "31-review-b" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"
-FULL+=']'
-BRIEF='['
-BRIEF+="$(make_pr_brief 30 "30-review-a" "2024-01-01T00:00:00Z")"','
-BRIEF+="$(make_pr_brief 31 "31-review-b" "2024-01-02T00:00:00Z")"
-BRIEF+=']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['
+UNION+="$(make_pr_union 30 "30-review-a" "2024-01-01T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 31 "31-review-b" "2024-01-02T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"
+UNION+=']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -583,15 +574,11 @@ teardown
 echo "Test: verify PR beats issue; issue beats QA PR"
 setup
 # verify PR (10), QA PR (20), help-wanted issue (55).
-FULL='['
-FULL+="$(make_pr 10 "10-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
-FULL+="$(make_pr 20 "20-qa" "true" "$NO_LABELS" "$GREEN_ROLLUP")"
-FULL+=']'
-BRIEF='['
-BRIEF+="$(make_pr_brief 10 "10-verify" "2024-01-01T00:00:00Z")"','
-BRIEF+="$(make_pr_brief 20 "20-qa" "2024-01-02T00:00:00Z")"
-BRIEF+=']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['
+UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
+UNION+="$(make_pr_union 20 "20-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"
+UNION+=']'
+setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -601,9 +588,8 @@ teardown
 # 11b. No non-QA PR: help-wanted issue beats QA PR.
 echo "Test: help-wanted issue beats QA PR"
 setup
-FULL='['"$(make_pr 20 "20-qa" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 20 "20-qa" "2024-01-02T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 20 "20-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -614,18 +600,12 @@ teardown
 echo "Test: --qa mode ignores non-QA PRs and returns oldest QA PR"
 setup
 SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
-FULL='['
-FULL+="$(make_pr 10 "10-security" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"','
-FULL+="$(make_pr 20 "20-qa-old" "true" "$NO_LABELS" "$GREEN_ROLLUP")"','
-FULL+="$(make_pr 30 "30-qa-new" "true" "$NO_LABELS" "$GREEN_ROLLUP")"
-FULL+=']'
-# Brief list sorted oldest-first: 10, 20, 30.
-BRIEF='['
-BRIEF+="$(make_pr_brief 10 "10-security" "2024-01-01T00:00:00Z")"','
-BRIEF+="$(make_pr_brief 20 "20-qa-old" "2024-01-02T00:00:00Z")"','
-BRIEF+="$(make_pr_brief 30 "30-qa-new" "2024-01-03T00:00:00Z")"
-BRIEF+=']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['
+UNION+="$(make_pr_union 10 "10-security" "2024-01-01T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 20 "20-qa-old" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 30 "30-qa-new" "2024-01-03T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"
+UNION+=']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
@@ -636,9 +616,8 @@ teardown
 echo "Test: waiting PR skipped in favor of help-wanted issue"
 setup
 # PR 10 in waiting phase (pending CI); no other PRs.
-FULL='['"$(make_pr 10 "10-waiting" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-waiting" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-waiting" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -649,9 +628,8 @@ teardown
 echo "Test: waiting PR skipped in favor of verify PR"
 setup
 # PR 10 (older) in waiting phase, PR 20 (newer) in verify phase.
-FULL='['"$(make_pr 10 "10-waiting" "true" "$NO_LABELS" "$PENDING_ROLLUP")"','"$(make_pr 20 "20-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-waiting" "2024-01-01T00:00:00Z")"','"$(make_pr_brief 20 "20-verify" "2024-01-02T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-waiting" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP")"','"$(make_pr_union 20 "20-verify" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -661,9 +639,8 @@ teardown
 # 15. A lone waiting PR (nothing else queued) yields empty.
 echo "Test: lone waiting PR → empty"
 setup
-FULL='['"$(make_pr 10 "10-waiting" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-waiting" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-waiting" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
@@ -674,9 +651,8 @@ teardown
 echo "Test: open issue worktree → worktree <N> <branch>, scan skipped"
 setup
 # Seed a verify PR that would normally be selected — proves the scan is skipped.
-FULL='['"$(make_pr 10 "10-verify-me" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-verify-me" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
@@ -688,7 +664,7 @@ teardown
 # 17. Closed issue worktree → worktree-closed.
 echo "Test: closed issue worktree → worktree-closed <N> <branch>"
 setup
-setup_both_pr_lists '[]' '[]'
+setup_union_pr_list '[]'
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
@@ -700,7 +676,7 @@ teardown
 # 18. Unknown issue worktree (no state file → gh fails) → worktree-closed.
 echo "Test: unknown issue worktree → worktree-closed <N> <branch>"
 setup
-setup_both_pr_lists '[]' '[]'
+setup_union_pr_list '[]'
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '999-gone' > "$STUB_DIR/current-branch.txt"
@@ -712,9 +688,8 @@ teardown
 # 19. main branch → queue scan unchanged, normal result returned.
 echo "Test: main branch → queue scan runs normally"
 setup
-FULL='['"$(make_pr 10 "10-verify-me" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-verify-me" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf 'main' > "$STUB_DIR/current-branch.txt"
@@ -726,9 +701,8 @@ teardown
 echo "Test: --qa mode from issue worktree → detection skipped, QA PR returned"
 setup
 # QA-phase PR: draft + green + no label.
-FULL='['"$(make_pr 20 "20-qa-me" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 20 "20-qa-me" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 20 "20-qa-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 # Current branch looks like an issue worktree, but --qa skips detection.
@@ -750,9 +724,8 @@ teardown
 # 21. main green (explicit success checks) → normal selection.
 echo "Test: main green → normal selection"
 setup
-FULL='['"$(make_pr 10 "10-verify-me" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-verify-me" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
@@ -768,9 +741,8 @@ teardown
 echo "Test: main failing check-run → main-broken"
 setup
 # Seed a verify PR + help-wanted issue — both must be ignored once the gate trips.
-FULL='['"$(make_pr 10 "10-verify-me" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-verify-me" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
@@ -784,9 +756,8 @@ teardown
 # 23. main failing workflow run → main-broken.
 echo "Test: main failing workflow run → main-broken"
 setup
-FULL='['"$(make_pr 10 "10-verify-me" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-verify-me" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
@@ -800,9 +771,8 @@ teardown
 # 24. main in-progress checks → gate not tripped, normal selection.
 echo "Test: main in-progress checks → not tripped"
 setup
-FULL='['"$(make_pr 10 "10-verify-me" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-verify-me" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
@@ -817,9 +787,8 @@ teardown
 # 25. Failing workflow run on a stale SHA → gate not tripped (headSha filter).
 echo "Test: main failing run on stale SHA → not tripped"
 setup
-FULL='['"$(make_pr 10 "10-verify-me" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 10 "10-verify-me" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
@@ -833,9 +802,8 @@ teardown
 # 26. --qa mode bypasses the gate even when main is broken.
 echo "Test: --qa mode bypasses the main-CI gate"
 setup
-FULL='['"$(make_pr 20 "20-qa-me" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
-BRIEF='['"$(make_pr_brief 20 "20-qa-me" "2024-01-01T00:00:00Z")"']'
-setup_both_pr_lists "$FULL" "$BRIEF"
+UNION='['"$(make_pr_union 20 "20-qa-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
@@ -849,7 +817,7 @@ teardown
 # 27. Current-worktree continuation bypasses the gate even when main is broken.
 echo "Test: worktree continuation bypasses the main-CI gate"
 setup
-setup_both_pr_lists '[]' '[]'
+setup_union_pr_list '[]'
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
@@ -860,6 +828,23 @@ printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
 printf '[]' > "$STUB_DIR/main-run-list.json"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "worktree continuation bypasses gate → worktree 42 42-some-slug" "worktree 42 42-some-slug" "$result"
+teardown
+
+# 28. Selecting a target issues exactly one gh pr list call (down from 1 + N).
+echo "Test: dispatch-select-target fetches the open-PR list once"
+setup
+UNION='['
+UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
+UNION+="$(make_pr_union 20 "20-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 30 "30-waiting" "2024-01-03T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP")"
+UNION+=']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "select-target result over 3 PRs" "pr 10 10-verify" "$result"
+count=$(wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ')
+assert_eq "exactly one gh pr list call regardless of PR count" "1" "$count"
 teardown
 
 # ============================================================================
