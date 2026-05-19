@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Resolve the worktree action for a dispatch target issue.
+# Usage: dispatch-resolve-worktree <issue-num> <explicit|queue>
+#
+# Prints exactly one decision line to stdout:
+#   here            — the current branch already is <issue>-*; no EnterWorktree
+#                     is needed.
+#   enter <path>    — an existing <issue>-* worktree should be re-used;
+#                     EnterWorktree with path: <path>.
+#   create <branch> — no worktree exists; <branch> is the sanitized name,
+#                     EnterWorktree with name: <branch>.
+#   conflict <path> — a queue-selected target already has a worktree (another
+#                     session owns it); /dispatch reports <path> and stops.
+#
+# The mode argument decides what an existing <issue>-* worktree means:
+#   explicit — the target was named by an explicit /dispatch argument
+#              (recycle-after-completion); an existing worktree yields `enter`.
+#   queue    — the target was queue-selected; an existing worktree belongs to
+#              another session and yields `conflict`.
+# The `here` check is mode-independent and fires before the worktree scan.
+#
+# The branch name printed by `create` matches the WorktreeCreate hook's
+# accepted form ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$, full name <= 32 characters.
+#
+# A bad argument or a failed `gh issue view` is a clear error, not a fallback.
+set -euo pipefail
+
+ISSUE="${1:-}"
+MODE="${2:-}"
+
+if [[ ! "$ISSUE" =~ ^[1-9][0-9]*$ ]] || [[ "$MODE" != "explicit" && "$MODE" != "queue" ]]; then
+  echo "error: usage: dispatch-resolve-worktree <issue-num> <explicit|queue>" >&2
+  exit 1
+fi
+
+# `here` — the current branch already is the target's branch. Mode-independent,
+# checked before the worktree scan.
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [[ "$CURRENT_BRANCH" == "$ISSUE"-* ]]; then
+  echo "here"
+  exit 0
+fi
+
+# `enter` / `conflict` — scan local worktrees for a <issue>-* branch. git
+# worktree list --porcelain emits blank-line-delimited records; each opens with
+# a "worktree <path>" line and (for a branch checkout) carries a
+# "branch refs/heads/<name>" line. Use the first matching record.
+WORKTREE_PATH=""
+while IFS= read -r line; do
+  if [[ "$line" == worktree\ * ]]; then
+    WORKTREE_PATH="${line#worktree }"
+  elif [[ "$line" == branch\ * ]]; then
+    branch="${line#branch }"
+    branch="${branch#refs/heads/}"
+    if [[ "$branch" == "$ISSUE"-* ]]; then
+      if [[ "$MODE" == "explicit" ]]; then
+        echo "enter $WORKTREE_PATH"
+      else
+        echo "conflict $WORKTREE_PATH"
+      fi
+      exit 0
+    fi
+  fi
+done < <(git worktree list --porcelain)
+
+# `create` — no worktree matched. Build a sanitized <issue>-<slug> branch name
+# from the issue title.
+if ! TITLE=$(gh issue view "$ISSUE" --json title | jq -r '.title'); then
+  echo "error: failed to fetch title for issue $ISSUE" >&2
+  exit 1
+fi
+
+# Lowercase, then collapse non-alphanumeric runs to single dashes and strip
+# leading/trailing dashes.
+slug=$(printf '%s' "$TITLE" \
+  | tr '[:upper:]' '[:lower:]' \
+  | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
+
+# Truncate so the full <issue>-<slug> name is <= 32 chars, then drop a trailing
+# `-` the cut may have left (runs were already collapsed, so at most one).
+slug="${slug:0:$((32 - ${#ISSUE} - 1))}"
+slug="${slug%-}"
+
+if [[ -z "$slug" ]]; then
+  echo "error: issue $ISSUE title produced an empty branch slug: '$TITLE'" >&2
+  exit 1
+fi
+
+echo "create $ISSUE-$slug"
