@@ -30,7 +30,8 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
   ```
 
   It prints exactly one line:
-  - `pr <num> <branch>` — a PR to work on
+  - `pr <num> <branch> <phase>` — a PR to work on; `<phase>` is pre-derived by the
+    selection scan, so Step 4 reuses it instead of re-deriving
   - `issue <num>` — a `help wanted` issue to implement
   - `worktree <N> <branch>` — run from inside an issue worktree; target is `<N>`,
     queue scan already skipped
@@ -90,8 +91,8 @@ It walks open blockers and sub-issues to an open leaf and prints one issue numbe
 Retarget to that leaf.
 
 Skip leaf tracing when:
-- A PR exists for the target (`pr <num> <branch>` result, or an explicit issue
-  argument that already has a PR) — implementation is already underway.
+- A PR exists for the target (`pr <num> <branch> <phase>` result, or an explicit
+  issue argument that already has a PR) — implementation is already underway.
 - The target was current-worktree detected (`worktree <N>` result) — the worktree
   is the already-committed unit of work; retargeting to a sub-issue or blocker
   would be wrong.
@@ -150,7 +151,12 @@ worktree removes it.
 
 ## 4. Derive the Phase
 
-Run the phase script against the final target (issue number or branch):
+When the target is a **queue-selected PR** (`pr <num> <branch> <phase>` from Step 1),
+the phase is already on the result line — use it directly and skip the script below.
+
+On every other path — an explicit issue argument, a `worktree <N>` result, or a
+queue-selected `issue <num>` (after leaf tracing in Step 2) — run the phase script
+against the final target (issue number or branch):
 
 ```bash
 .claude/skills/dispatch/scripts/dispatch-phase <target>
@@ -216,17 +222,12 @@ the `qa`, `review`, or `security` phase. The one label `/dispatch` applies itsel
 `dispatch:refactored`, after the `simplify` phase skill returns successfully —
 applying it here keeps the generic `/simplify` skill dispatch-unaware.
 
-Before applying, ensure the label exists idempotently — run this for the label
-name (safe on forks where the label does not yet exist):
+`dispatch-complete-phase` maps the completed phase to its label and applies it to the
+PR, creating the label first only if it does not yet exist (e.g. on a fork) — one
+call, run with `dangerouslyDisableSandbox: true` since it invokes `gh`:
 
 ```bash
-gh label create "dispatch:<name>" --color BFD4F2 --description "<phase> phase complete" 2>/dev/null || true
-```
-
-Then apply the label for the completed phase:
-
-```bash
-gh pr edit <pr-num> --add-label "dispatch:<name>"
+.claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> <phase>
 ```
 
 ## 6. Pre-Implementation Relevance Review

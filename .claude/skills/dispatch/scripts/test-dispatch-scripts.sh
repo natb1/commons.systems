@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Unit-test suite for dispatch-phase, dispatch-select-target, dispatch-trace-leaf.
-# Uses PATH shims to fake gh and git — no network required.
+# Unit-test suite for dispatch-phase, dispatch-select-target, dispatch-trace-leaf,
+# dispatch-complete-phase. Uses PATH shims to fake gh and git — no network required.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -49,9 +49,11 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-phase" "$TMPDIR_TEST/dispatch-phase"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
+  cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-select-target" \
-           "$TMPDIR_TEST/dispatch-trace-leaf"
+           "$TMPDIR_TEST/dispatch-trace-leaf" \
+           "$TMPDIR_TEST/dispatch-complete-phase"
 
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
@@ -122,6 +124,38 @@ case "$args" in
     else
       echo "[]"
     fi
+    ;;
+  label\ create\ *)
+    # dispatch-complete-phase creates the label only when the apply reported
+    # it missing.
+    echo "$args" >> "$STUB_DIR/gh-label-create.log"
+    ;;
+  pr\ edit\ *)
+    # dispatch-complete-phase applies the label to the PR. $STUB_DIR/pr-edit-mode
+    # selects behavior (default: succeed and log the args).
+    mode="ok"
+    [[ -f "$STUB_DIR/pr-edit-mode" ]] && mode=$(cat "$STUB_DIR/pr-edit-mode")
+    case "$mode" in
+      label-missing)
+        # The label does not exist until gh label create runs: model gh's
+        # missing-label error until then, then succeed on the retry.
+        if [[ -f "$STUB_DIR/gh-label-create.log" ]]; then
+          echo "$args" >> "$STUB_DIR/gh-pr-edit.log"
+        else
+          label="${args##* }"
+          echo "failed to update: '$label' not found" >&2
+          exit 1
+        fi
+        ;;
+      other-failure)
+        # An apply failure unrelated to a missing label.
+        echo "GraphQL: Could not resolve to a PullRequest" >&2
+        exit 1
+        ;;
+      *)
+        echo "$args" >> "$STUB_DIR/gh-pr-edit.log"
+        ;;
+    esac
     ;;
   "api repos/{owner}/{repo}/commits/main")
     # main_broken_sha: resolve origin/main's HEAD SHA. Default: healthy main.
@@ -444,7 +478,7 @@ printf '[{"number":99,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue
 # No worktrees for these branches.
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "non-QA PR (verify) chosen first" "pr 10 10-verify-me" "$result"
+assert_eq "non-QA PR (verify) chosen first" "pr 10 10-verify-me verify" "$result"
 teardown
 
 # 2. PR with a local worktree is skipped.
@@ -457,7 +491,7 @@ echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/10-active-branch\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "PR with worktree skipped; next PR returned" "pr 20 20-other" "$result"
+assert_eq "PR with worktree skipped; next PR returned" "pr 20 20-other verify" "$result"
 teardown
 
 # 3. When no eligible PR exists, a help-wanted issue is chosen.
@@ -528,7 +562,7 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "security beats review/simplify/verify" "pr 40 40-security" "$result"
+assert_eq "security beats review/simplify/verify" "pr 40 40-security security" "$result"
 teardown
 
 # 9. Within one phase, the oldest PR wins.
@@ -544,7 +578,7 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "oldest review PR wins within phase" "pr 30 30-review-a" "$result"
+assert_eq "oldest review PR wins within phase" "pr 30 30-review-a review" "$result"
 teardown
 
 # 10. Any non-QA PR beats a help-wanted issue; help-wanted issue beats a QA PR.
@@ -559,7 +593,7 @@ setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "verify PR beats issue (non-QA > issue > qa)" "pr 10 10-verify" "$result"
+assert_eq "verify PR beats issue (non-QA > issue > qa)" "pr 10 10-verify verify" "$result"
 teardown
 
 # 10b. No non-QA PR: help-wanted issue beats QA PR.
@@ -610,7 +644,7 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "waiting PR skipped; verify PR returned" "pr 20 20-verify" "$result"
+assert_eq "waiting PR skipped; verify PR returned" "pr 20 20-verify verify" "$result"
 teardown
 
 # 14. A lone waiting PR (nothing else queued) yields empty.
@@ -671,7 +705,7 @@ echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf 'main' > "$STUB_DIR/current-branch.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "main branch → normal scan result (verify PR)" "pr 10 10-verify-me" "$result"
+assert_eq "main branch → normal scan result (verify PR)" "pr 10 10-verify-me verify" "$result"
 teardown
 
 # 20. --qa mode from an issue worktree → detection skipped, QA PR returned.
@@ -711,7 +745,7 @@ printf '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
 printf '[{"headSha":"mainhead0","conclusion":"success"}]' \
   > "$STUB_DIR/main-run-list.json"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "main green → normal selection (verify PR)" "pr 10 10-verify-me" "$result"
+assert_eq "main green → normal selection (verify PR)" "pr 10 10-verify-me verify" "$result"
 teardown
 
 # 22. main failing check-run → main-broken; priority ladder skipped.
@@ -758,7 +792,7 @@ printf '{"check_runs":[{"status":"in_progress","conclusion":null}]}' \
 printf '[{"headSha":"mainhead0","conclusion":null}]' \
   > "$STUB_DIR/main-run-list.json"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "main in-progress → normal selection (verify PR)" "pr 10 10-verify-me" "$result"
+assert_eq "main in-progress → normal selection (verify PR)" "pr 10 10-verify-me verify" "$result"
 teardown
 
 # 25. Failing workflow run on a stale SHA → gate not tripped (headSha filter).
@@ -773,7 +807,7 @@ printf '{"check_runs":[]}' > "$STUB_DIR/main-check-runs.json"
 printf '[{"headSha":"oldsha99","conclusion":"failure"}]' \
   > "$STUB_DIR/main-run-list.json"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "main failing run on stale SHA → normal selection (verify PR)" "pr 10 10-verify-me" "$result"
+assert_eq "main failing run on stale SHA → normal selection (verify PR)" "pr 10 10-verify-me verify" "$result"
 teardown
 
 # 26. --qa mode bypasses the gate even when main is broken.
@@ -819,12 +853,35 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "select-target result over 3 PRs" "pr 10 10-verify" "$result"
+assert_eq "select-target result over 3 PRs" "pr 10 10-verify verify" "$result"
 count=$(wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ')
 assert_eq "exactly one gh pr list call regardless of PR count" "1" "$count"
 teardown
 
-# 22. Help-wanted issue with a worktree is skipped; the next-oldest issue is chosen.
+# 22. A simplify-phase PR winning emits the simplify phase on the result line.
+echo "Test: simplify PR winner → pr <n> <branch> simplify"
+setup
+SIMPLIFY_LABELS='[{"name":"dispatch:qa-done"}]'
+UNION='['"$(make_pr_union 25 "25-simplify-me" "2024-01-01T00:00:00Z" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "simplify PR winner emits phase" "pr 25 25-simplify-me simplify" "$result"
+teardown
+
+# 23. A lone QA PR with no help-wanted issue emits the qa phase on the result line.
+echo "Test: QA PR, no issue → pr <n> <branch> qa"
+setup
+UNION='['"$(make_pr_union 35 "35-qa-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "QA PR (no issue) emits qa phase" "pr 35 35-qa-me qa" "$result"
+teardown
+
+# 24. Help-wanted issue with a worktree is skipped; the next-oldest issue is chosen.
 echo "Test: issue with worktree skipped; next-oldest issue chosen"
 setup
 setup_union_pr_list '[]'
@@ -837,7 +894,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "issue with worktree skipped; next issue 66 chosen" "issue 66" "$result"
 teardown
 
-# 23. A lone help-wanted issue that has a worktree → empty (nothing else queued).
+# 25. A lone help-wanted issue that has a worktree → empty (nothing else queued).
 echo "Test: lone worktree'd issue → empty"
 setup
 setup_union_pr_list '[]'
@@ -848,7 +905,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "lone worktree'd issue → empty" "empty" "$result"
 teardown
 
-# 24. Worktree'd issue skipped; QA PR is next in line.
+# 26. Worktree'd issue skipped; QA PR is next in line.
 echo "Test: worktree'd issue skipped → QA PR selected"
 setup
 UNION='['"$(make_pr_union 20 "20-qa" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
@@ -858,10 +915,10 @@ printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/55-some-feature\nHEAD def456\nbranch refs/heads/55-some-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "worktree'd issue skipped → QA PR returned" "pr 20 20-qa" "$result"
+assert_eq "worktree'd issue skipped → QA PR returned" "pr 20 20-qa qa" "$result"
 teardown
 
-# 25. Prefix disambiguation: issue 6 is NOT masked by an unrelated worktree on branch 60-foo.
+# 27. Prefix disambiguation: issue 6 is NOT masked by an unrelated worktree on branch 60-foo.
 echo "Test: issue 6 not masked by worktree on branch 60-foo"
 setup
 setup_union_pr_list '[]'
@@ -957,6 +1014,88 @@ printf '{"title":"Issue 601","body":"","comments":[],"number":601,"state":"OPEN"
   > "$STUB_DIR/issue-601.json"
 result=$("$TMPDIR_TEST/dispatch-trace-leaf" "600")
 assert_eq "sub-issues chain 600→601 → leaf 601" "601" "$result"
+teardown
+
+# ============================================================================
+# dispatch-complete-phase tests
+# ============================================================================
+echo ""
+echo "=== dispatch-complete-phase ==="
+
+# Reports whether the gh stub recorded a `gh label create` call.
+label_create_state() {
+  [[ -f "$STUB_DIR/gh-label-create.log" ]] && echo "present" || echo "absent"
+}
+
+# 1-4. Phase → label mapping. The label already exists (default stub mode), so
+# the script applies it with a single `gh pr edit` and issues no `gh label create`.
+echo "Test: qa → dispatch:qa-done (apply only, no label create)"
+setup
+"$TMPDIR_TEST/dispatch-complete-phase" 21 qa
+assert_eq "qa applies dispatch:qa-done" \
+  "pr edit 21 --add-label dispatch:qa-done" "$(cat "$STUB_DIR/gh-pr-edit.log")"
+assert_eq "qa: no gh label create when label exists" "absent" "$(label_create_state)"
+teardown
+
+echo "Test: simplify → dispatch:refactored (apply only, no label create)"
+setup
+"$TMPDIR_TEST/dispatch-complete-phase" 25 simplify
+assert_eq "simplify applies dispatch:refactored" \
+  "pr edit 25 --add-label dispatch:refactored" "$(cat "$STUB_DIR/gh-pr-edit.log")"
+assert_eq "simplify: no gh label create when label exists" "absent" "$(label_create_state)"
+teardown
+
+echo "Test: review → dispatch:reviewed (apply only, no label create)"
+setup
+"$TMPDIR_TEST/dispatch-complete-phase" 30 review
+assert_eq "review applies dispatch:reviewed" \
+  "pr edit 30 --add-label dispatch:reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
+assert_eq "review: no gh label create when label exists" "absent" "$(label_create_state)"
+teardown
+
+echo "Test: security → dispatch:security-reviewed (apply only, no label create)"
+setup
+"$TMPDIR_TEST/dispatch-complete-phase" 40 security
+assert_eq "security applies dispatch:security-reviewed" \
+  "pr edit 40 --add-label dispatch:security-reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
+assert_eq "security: no gh label create when label exists" "absent" "$(label_create_state)"
+teardown
+
+# 5. Label missing: the apply fails "not found", so the script creates the
+#    label (BFD4F2, "dispatch workflow: <suffix> phase complete") and retries.
+echo "Test: label missing → create then retry"
+setup
+echo "label-missing" > "$STUB_DIR/pr-edit-mode"
+"$TMPDIR_TEST/dispatch-complete-phase" 30 review
+assert_eq "label-missing: label created with workflow description" \
+  "label create dispatch:reviewed --color BFD4F2 --description dispatch workflow: reviewed phase complete" \
+  "$(cat "$STUB_DIR/gh-label-create.log")"
+assert_eq "label-missing: label applied on retry" \
+  "pr edit 30 --add-label dispatch:reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
+teardown
+
+# 6. An apply failure unrelated to a missing label exits non-zero and creates
+#    no label.
+echo "Test: other apply failure → non-zero exit, no label create"
+setup
+echo "other-failure" > "$STUB_DIR/pr-edit-mode"
+if "$TMPDIR_TEST/dispatch-complete-phase" 40 security 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "other apply failure exits non-zero" "1" "$rc"
+assert_eq "other failure: no spurious label create" "absent" "$(label_create_state)"
+teardown
+
+# 7. Unknown phase → non-zero exit.
+echo "Test: unknown phase → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-complete-phase" 25 bogus 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "unknown phase exits non-zero" "1" "$rc"
+teardown
+
+# 8. Missing phase arg → non-zero exit.
+echo "Test: missing args → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-complete-phase" 25 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing phase arg exits non-zero" "1" "$rc"
 teardown
 
 # ============================================================================
