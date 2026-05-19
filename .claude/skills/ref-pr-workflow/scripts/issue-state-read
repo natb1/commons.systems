@@ -12,4 +12,4 @@ if [ -z "$ISSUE_NUM" ] || ! [[ "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-exec npx tsx "$REPO_ROOT/firestoreutil/bin/run-issue-state-read.ts" "$ISSUE_NUM"
+exec npx tsx "$REPO_ROOT/dispatch/bin/run-issue-state-read.ts" "$ISSUE_NUM"

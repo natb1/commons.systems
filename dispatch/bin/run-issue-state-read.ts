@@ -1,4 +1,4 @@
-import { initFirebaseAdmin } from "../src/init.js";
+import { initFirebaseAdmin } from "@commons-systems/firestoreutil/init";
 import { readIssueState, validateIssueNumber, type IssueNumber, type IssueState } from "../src/issue-state.js";
 
 const issueArg = process.argv[2];
