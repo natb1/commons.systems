@@ -294,15 +294,14 @@ The QA pass covers **public data only** — documents present in both the QA ser
    First, **surface any unresolved SKIP items** to the user — list each SKIP item
    so the user can decide whether to accept it before the PR advances.
 
-   Then ensure the label exists and apply it to the PR. Run both `gh` commands with
-   `dangerouslyDisableSandbox: true` (per `.claude/rules/sandbox.md`):
+   Then apply the `dispatch:qa-done` label to the PR via `dispatch-complete-phase`
+   (run with `dangerouslyDisableSandbox: true` — it invokes `gh`):
 
    ```bash
-   gh label create "dispatch:qa-done" --color BFD4F2 --description "qa phase complete" 2>/dev/null || true
-   gh pr edit <pr-num> --add-label "dispatch:qa-done"
+   .claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> qa
    ```
 
-   The first command is idempotent — it is safe when the label already exists or on
-   forks where it does not.
+   The script applies the label, creating it first only if it does not yet exist
+   (e.g. on a fork where it has not been created).
 
    Then **stop**. `/loop /dispatch` advances to the next phase.

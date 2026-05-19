@@ -188,10 +188,9 @@ on a clean pass. `/dispatch` applies the remaining three: `dispatch:refactored`,
 phase skill returns successfully. This keeps the generic `/simplify`, `/review`, and
 `/security-review` skills dispatch-unaware.
 
-`dispatch-complete-phase` maps the completed phase to its label, ensures that label
-exists idempotently (safe on forks where the labels do not yet exist), and applies it
-to the PR — one call, run with `dangerouslyDisableSandbox: true` since it invokes
-`gh`:
+`dispatch-complete-phase` maps the completed phase to its label and applies it to the
+PR, creating the label first only if it does not yet exist (e.g. on a fork) — one
+call, run with `dangerouslyDisableSandbox: true` since it invokes `gh`:
 
 ```bash
 .claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> <phase>

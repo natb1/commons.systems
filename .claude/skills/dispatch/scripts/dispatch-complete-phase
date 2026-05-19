@@ -2,18 +2,23 @@
 # Mark a dispatch workflow phase complete on a PR.
 # Usage: dispatch-complete-phase <pr-num> <phase>
 #
-# Maps a completed phase to its accumulating dispatch:* progress label,
-# ensures that label exists (creating it if missing — idempotent, safe on
-# forks where the labels do not yet exist), then applies it to the PR.
+# Maps a completed phase to its accumulating dispatch:* progress label and
+# applies it to the PR. The apply (gh pr edit --add-label) runs FIRST: once
+# the label exists — the steady state — that single call is all that runs,
+# with no redundant gh label create. Only if the apply fails because the
+# label is missing does the script create the label and retry once. Any
+# other apply failure surfaces the underlying error and exits non-zero.
+#
+# This script is the single source of truth for the dispatch:* label
+# create metadata (color and description).
 #
 # Phase → label:
+#   qa       → dispatch:qa-done
 #   simplify → dispatch:refactored
 #   review   → dispatch:reviewed
 #   security → dispatch:security-reviewed
 #
-# /dispatch-qa owns dispatch:qa-done and applies it itself, so that phase is
-# intentionally not handled here. Missing args or an unknown phase is a clear
-# error, not a fallback.
+# Missing args or an unknown phase is a clear error, not a fallback.
 set -euo pipefail
 
 PR_NUM="${1:-}"
@@ -25,21 +30,31 @@ if [[ -z "$PR_NUM" || -z "$PHASE" ]]; then
 fi
 
 case "$PHASE" in
+  qa)       LABEL="dispatch:qa-done" ;;
   simplify) LABEL="dispatch:refactored" ;;
   review)   LABEL="dispatch:reviewed" ;;
   security) LABEL="dispatch:security-reviewed" ;;
   *)
-    echo "error: unknown phase: $PHASE (expected simplify, review, or security)" >&2
+    echo "error: unknown phase: $PHASE (expected qa, simplify, review, or security)" >&2
     exit 1
     ;;
 esac
 
+# Apply the label first. Once the label exists — the common case — this is the
+# only gh call that runs.
+if apply_output=$(gh pr edit "$PR_NUM" --add-label "$LABEL" 2>&1); then
+  exit 0
+fi
+
+# The apply failed. gh reports a missing label with a "not found" message; in
+# that case the label simply does not exist yet (e.g. on a fork) — create it
+# and retry once. Any other failure is real: surface it and exit non-zero.
+if [[ "$apply_output" != *"not found"* ]]; then
+  echo "$apply_output" >&2
+  exit 1
+fi
+
 SUFFIX="${LABEL#dispatch:}"
-
-# Ensure the label exists. A failure here is almost always "label already
-# exists" — that is the expected steady state, so swallow it.
 gh label create "$LABEL" --color BFD4F2 \
-  --description "dispatch workflow: $SUFFIX phase complete" 2>/dev/null || true
-
-# Apply the label to the PR.
+  --description "dispatch workflow: $SUFFIX phase complete"
 gh pr edit "$PR_NUM" --add-label "$LABEL"
