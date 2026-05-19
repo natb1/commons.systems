@@ -1232,6 +1232,14 @@ if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 bogus 2>/dev/null; then rc=0; els
 assert_eq "bad mode exits non-zero" "1" "$rc"
 teardown
 
+# 10. A title with no alphanumerics sanitizes to an empty slug → exit 1.
+echo "Test: title with no alphanumerics → empty-slug error"
+setup
+echo '{"title":"!!!"}' > "$STUB_DIR/issue-title-42.json"
+if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "empty-slug title exits non-zero" "1" "$rc"
+teardown
+
 # ============================================================================
 # summary
 # ============================================================================

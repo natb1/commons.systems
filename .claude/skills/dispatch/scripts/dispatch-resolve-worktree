@@ -64,8 +64,9 @@ while IFS= read -r line; do
 done < <(git worktree list --porcelain)
 
 # `create` — no worktree matched. Build a sanitized <issue>-<slug> branch name
-# from the issue title.
-if ! TITLE=$(gh issue view "$ISSUE" --json title | jq -r '.title'); then
+# from the issue title. `jq -e` exits non-zero on a null/missing .title, so the
+# guard catches a malformed response instead of slugging the literal "null".
+if ! TITLE=$(gh issue view "$ISSUE" --json title | jq -er '.title'); then
   echo "error: failed to fetch title for issue $ISSUE" >&2
   exit 1
 fi
