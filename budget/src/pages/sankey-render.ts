@@ -1,8 +1,6 @@
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
 import { formatCurrency } from "../format.js";
-import type { CategoryNode } from "./home-chart.js";
-
-export type { CategoryNode };
+import type { CategoryNode } from "./category-node.js";
 
 export interface SankeyRenderInput {
   rootData: CategoryNode;

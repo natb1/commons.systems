@@ -3,10 +3,11 @@ import { showDropdown, registerAutocompleteListeners } from "@commons-systems/st
 import { parseJsonArray, makeDebounced } from "./hydrate-util.js";
 import { getThemeFg } from "./chart-util.js";
 import { renderSankeySvg } from "./sankey-render.js";
+import type { CategoryNode } from "./category-node.js";
 
 export type ChartMode = "spending" | "credits";
 
-/** Custom event name dispatched after scroll-loaded transactions are appended to the table. The chart listens for this to incorporate new data and re-apply filters. */
+/** Custom event name dispatched by home-hydrate.ts after scroll-loading older transactions. The chart listens for this to incorporate the new data and re-apply filters. */
 export const TRANSACTIONS_APPENDED_EVENT = "transactions-appended";
 
 export interface SerializedChartTransaction {
@@ -16,14 +17,6 @@ export interface SerializedChartTransaction {
   reimbursement: number;
   timestampMs: number | null;
   budgetName: string | null;
-}
-
-export interface CategoryNode {
-  name: string;
-  fullPath: string;
-  value: number;
-  count: number;
-  children: CategoryNode[];
 }
 
 /** Compute sorted distinct week-start timestamps from transactions. */

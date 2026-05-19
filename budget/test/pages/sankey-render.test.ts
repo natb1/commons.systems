@@ -1,16 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("firebase/firestore", () => ({
-  Timestamp: class Timestamp {
-    _date: Date;
-    constructor(d: Date) { this._date = d; }
-    toDate() { return this._date; }
-    toMillis() { return this._date.getTime(); }
-    static fromDate(d: Date) { return new Timestamp(d); }
-  },
-}));
-
-import type { CategoryNode } from "../../src/pages/home-chart";
+import type { CategoryNode } from "../../src/pages/category-node";
 import { renderSankeySvg, type SankeyRenderInput } from "../../src/pages/sankey-render";
 
 function makeNode(name: string, fullPath: string, value: number, children: CategoryNode[] = []): CategoryNode {
