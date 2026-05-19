@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Unit-test suite for dispatch-phase, dispatch-select-target, dispatch-trace-leaf,
-# dispatch-complete-phase. Uses PATH shims to fake gh and git — no network required.
+# dispatch-complete-phase, dispatch-resolve-worktree. Uses PATH shims to fake gh
+# and git — no network required.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -50,10 +51,12 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
+  cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
-           "$TMPDIR_TEST/dispatch-complete-phase"
+           "$TMPDIR_TEST/dispatch-complete-phase" \
+           "$TMPDIR_TEST/dispatch-resolve-worktree"
 
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
@@ -105,6 +108,15 @@ case "$args" in
       cat "$STUB_DIR/issue-${num}.json"
     else
       echo "{\"title\":\"Issue $num\",\"body\":\"\",\"comments\":[],\"number\":$num,\"state\":\"OPEN\"}"
+    fi
+    ;;
+  issue\ view\ *\ --json\ title)
+    # dispatch-resolve-worktree create case: gh issue view <num> --json title
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-title-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-title-${num}.json"
+    else
+      echo "{\"title\":\"Issue $num\"}"
     fi
     ;;
   api\ */dependencies/blocked_by)
@@ -1096,6 +1108,136 @@ echo "Test: missing args → non-zero exit"
 setup
 if "$TMPDIR_TEST/dispatch-complete-phase" 25 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "missing phase arg exits non-zero" "1" "$rc"
+teardown
+
+# ============================================================================
+# dispatch-resolve-worktree tests
+# ============================================================================
+echo ""
+echo "=== dispatch-resolve-worktree ==="
+
+# A two-record worktree list: the main worktree on `main`, plus a 42-* worktree.
+WORKTREE_LIST_42='worktree /repo
+HEAD abc123
+branch refs/heads/main
+
+worktree /worktrees/42-my-feature
+HEAD def456
+branch refs/heads/42-my-feature
+
+'
+
+# 1. Current branch is <N>-* → here (mode-independent).
+echo "Test: current branch <N>-* → here (both modes)"
+setup
+echo "42-my-feature" > "$STUB_DIR/current-branch.txt"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "current branch <N>-* → here (explicit)" "here" "$result"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "current branch <N>-* → here (queue)" "here" "$result"
+teardown
+
+# 2. explicit mode + an existing <N>-* worktree → enter <path>.
+echo "Test: explicit + existing <N>-* worktree → enter"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "explicit + existing worktree → enter <path>" \
+  "enter /worktrees/42-my-feature" "$result"
+teardown
+
+# 3. queue mode + the same worktree setup → conflict <path>. Acceptance
+#    criterion 3: same target, explicit → enter, queue → conflict.
+echo "Test: queue + existing <N>-* worktree → conflict"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "queue + existing worktree → conflict <path>" \
+  "conflict /worktrees/42-my-feature" "$result"
+teardown
+
+# 4. No matching worktree → create <N>-<slug> from the issue title.
+echo "Test: no worktree → create <N>-<slug>"
+setup
+echo '{"title":"Add a feature"}' > "$STUB_DIR/issue-title-42.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "no worktree → create <N>-<slug>" "create 42-add-a-feature" "$result"
+teardown
+
+# 5. Sanitization: uppercase, punctuation, and leading/trailing spaces collapse
+#    to a lowercase dash-joined slug.
+echo "Test: title sanitization → create"
+setup
+printf '{"title":"  Fix: The Foo/Bar Widget!  "}' > "$STUB_DIR/issue-title-7.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 7 explicit)
+assert_eq "messy title sanitized → create" "create 7-fix-the-foo-bar-widget" "$result"
+teardown
+
+# 6. Truncation: a long title yields a branch <= 32 chars matching the
+#    WorktreeCreate hook form (acceptance criterion 2).
+echo "Test: long title truncated to <= 32-char branch → create"
+setup
+echo '{"title":"Extract the worktree resolution logic into a dedicated script"}' \
+  > "$STUB_DIR/issue-title-656.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 656 explicit)
+assert_eq "long title truncated → exact create line" \
+  "create 656-extract-the-worktree-resolut" "$result"
+branch="${result#create }"
+TOTAL=$((TOTAL + 1))
+if [[ "${#branch}" -le 32 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: truncated branch <= 32 chars"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: truncated branch <= 32 chars (${#branch})"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$branch" =~ ^[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: truncated branch matches WorktreeCreate form"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: truncated branch matches WorktreeCreate form"
+fi
+teardown
+
+# 7. here precedence: current branch <N>-* wins even when a matching worktree
+#    also exists — the here check fires before the worktree scan.
+echo "Test: here precedence over a matching worktree"
+setup
+echo "42-my-feature" > "$STUB_DIR/current-branch.txt"
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
+assert_eq "here wins over a matching worktree" "here" "$result"
+teardown
+
+# 8. A non-matching worktree (different issue) → create.
+echo "Test: only a non-matching worktree → create"
+setup
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/99-other\nHEAD def456\nbranch refs/heads/99-other\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+echo '{"title":"My Task"}' > "$STUB_DIR/issue-title-42.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "non-matching worktree → create" "create 42-my-task" "$result"
+teardown
+
+# 9. Argument validation: missing args, non-numeric issue, bad mode → exit 1.
+echo "Test: argument validation → non-zero exit"
+setup
+if "$TMPDIR_TEST/dispatch-resolve-worktree" 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing both args exits non-zero" "1" "$rc"
+if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "missing mode arg exits non-zero" "1" "$rc"
+if "$TMPDIR_TEST/dispatch-resolve-worktree" abc explicit 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "non-numeric issue exits non-zero" "1" "$rc"
+if "$TMPDIR_TEST/dispatch-resolve-worktree" 0 explicit 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "issue zero exits non-zero" "1" "$rc"
+if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 bogus 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "bad mode exits non-zero" "1" "$rc"
+teardown
+
+# 10. A title with no alphanumerics sanitizes to an empty slug → exit 1.
+echo "Test: title with no alphanumerics → empty-slug error"
+setup
+echo '{"title":"!!!"}' > "$STUB_DIR/issue-title-42.json"
+if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null; then rc=0; else rc=$?; fi
+assert_eq "empty-slug title exits non-zero" "1" "$rc"
 teardown
 
 # ============================================================================
