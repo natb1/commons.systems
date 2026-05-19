@@ -12,11 +12,12 @@ then stops. Re-invoke `/dispatch` (or `/loop /dispatch`) to advance to the next 
 `/dispatch` takes an **optional issue-number argument** (leading `#` optional). With
 an argument, it targets that issue and skips the queue scan.
 
-Run `/dispatch` from the **main worktree**. Step 3 switches into the target's
-worktree via `EnterWorktree`; the phase skill runs there.
+Run `/dispatch` from the **main worktree**, or from inside an issue worktree to
+continue that issue. Step 3 switches into the target's worktree via `EnterWorktree`;
+the phase skill runs there.
 
-Run `gh` and git-index-writing commands (`git add`, `gh pr ready`, `gh label create`)
-with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
+Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
+`gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
 ## 1. Select the Target
 
@@ -31,15 +32,50 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
   It prints exactly one line:
   - `pr <num> <branch>` — a PR to work on
   - `issue <num>` — a `help wanted` issue to implement
+  - `worktree <N> <branch>` — run from inside an issue worktree; target is `<N>`,
+    queue scan already skipped
+  - `worktree-closed <N> <branch>` — run from inside a worktree whose issue is
+    closed or unrecognized → report that the current worktree belongs to
+    closed/unrecognized issue `<N>` and **stop** (consistent with the named-target
+    "closed → report and stop" rule in Step 2)
   - `empty` — nothing eligible
+  - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check; the queue
+    scan was short-circuited (see the `main-broken` handling block below)
+
+  An **explicit issue argument overrides current-worktree detection** — the selection
+  script, and therefore its current-worktree detection, runs only when no argument is
+  given. `/dispatch #123` run from inside worktree-456 still targets 123.
+
+  Before the priority ladder, the script runs a **top-priority `origin/main` CI
+  health gate**. Every queueable task builds on `origin/main` — branches fork
+  from it and merge it — so a failing check on main's HEAD means nothing is safe
+  to start. The gate aggregates main's HEAD CI from two sources (CodeQL
+  check-runs and Actions workflow runs); a failing conclusion short-circuits the
+  scan to `main-broken <sha>` and the priority ladder is not evaluated.
+  In-progress (not-yet-concluded) checks do **not** trip the gate. The gate is
+  bypassed by an explicit `/dispatch <issue|pr>` argument (the queue scan is not
+  run at all) and by current-worktree continuation (a session continues its own
+  in-progress work regardless of main's state).
 
   Priority order it implements (highest first; within a tier, oldest PR wins; PRs
-  with a local worktree are skipped): oldest `ready` PR → oldest `security` PR →
-  oldest `review` PR → oldest `simplify` PR → oldest `verify` PR → oldest `help
-  wanted` issue → oldest `qa` PR → `empty`. Non-QA PRs are ranked closest-to-done
-  first; `help wanted` issues rank below all non-QA PRs but above QA PRs.
+  and `help wanted` issues with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
+  oldest `security` PR → oldest `review` PR → oldest `simplify` PR → oldest
+  `verify` PR → oldest `help wanted` issue → oldest `qa` PR → `empty`. Non-QA PRs
+  are ranked closest-to-done first — `security` is the closest-to-done non-QA
+  tier; `help wanted` issues rank below all non-QA PRs but above QA PRs.
 
   On `empty` → report that the queue is empty and **stop**.
+
+  On `main-broken <sha>` → `origin/main` itself is red, so no new work is safe to
+  start. Do **not** create a worktree, branch, or phase skill. Diagnose main
+  instead: enumerate the failing checks on `<sha>` by aggregating
+  `gh run list --branch main` and
+  `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`. For a failing workflow
+  run, fetch its logs with `gh run view <databaseId> --log-failed`; for a failing
+  CodeQL check-run (which has no workflow-run id), open its `details_url` from the
+  check-runs response. Summarize the likely cause, report it, and **stop**. Once a
+  PR that fixes main exists the normal ladder picks it up (verify/ready) — this
+  gate only blocks starting new, unrelated work.
 
 ## 2. Trace to an Open Leaf
 
@@ -53,9 +89,12 @@ When the resolved target is an **open issue with no PR** — whether queue-selec
 It walks open blockers and sub-issues to an open leaf and prints one issue number.
 Retarget to that leaf.
 
-Skip leaf tracing once a PR exists for the target (the `pr <num> <branch>` selection
-result, or an explicit issue argument that already has a PR) — implementation is
-already underway.
+Skip leaf tracing when:
+- A PR exists for the target (`pr <num> <branch>` result, or an explicit issue
+  argument that already has a PR) — implementation is already underway.
+- The target was current-worktree detected (`worktree <N>` result) — the worktree
+  is the already-committed unit of work; retargeting to a sub-issue or blocker
+  would be wrong.
 
 If a named target issue is **closed**, report it and **stop**.
 
@@ -65,10 +104,27 @@ Resolve or create the final target's worktree via `EnterWorktree`, matching
 `pr-workflow` Sections 2–3. `EnterWorktree` accepts exactly one of `path` (switch to
 an existing worktree) or `name` (create a new one; fires the `WorktreeCreate` hook).
 
-- **Already in the target's worktree** (current branch starts with `<issue>-`) →
-  proceed to Step 4.
+- **Already in the target's worktree** (current branch starts with `<issue>-`) → no
+  `EnterWorktree` needed. Re-sync issue context:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+  ```
+  (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.) Then go
+  straight to creating the marker below.
 - **An existing worktree matches** `<issue>-*` (parse `git worktree list --porcelain`
-  as blank-line-delimited records) → `EnterWorktree` with `path:` set to that path.
+  as blank-line-delimited records):
+  - **Named by an explicit `/dispatch` argument** (recycle-after-completion case) →
+    `EnterWorktree` with `path:` set to that path. After entering, re-sync issue
+    context from the worktree:
+    ```bash
+    .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+    ```
+    (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
+  - **Queue-selected (no argument)** → another session already owns this worktree.
+    The queue scan skips worktree'd issues, so this arises only when Step 2
+    leaf-tracing retargets to a blocker or sub-issue that has one. Report the
+    conflict (name the worktree path and issue `<N>`) and **stop**; do not
+    `EnterWorktree`.
 - **No existing worktree** → generate a sanitized branch name `<issue>-<slug>`:
   lowercase the issue title, replace non-alphanumeric runs with `-`, collapse repeated
   `-`, strip leading/trailing `-`, and truncate so the full branch name is ≤ 32
@@ -76,6 +132,21 @@ an existing worktree) or `name` (create a new one; fires the `WorktreeCreate` ho
 
 Creating via `name:` fires the `WorktreeCreate` hook, which runs `sync-issue-context`
 and populates `CLAUDE.local.md` with full issue context.
+
+As the **last action of this step on every path** — before any phase skill runs —
+create the recovery marker:
+
+```bash
+mkdir -p tmp && touch tmp/dispatch-worktree
+```
+
+`restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
+recovery on this marker — when present, it re-invokes `/dispatch` so the phase is
+re-derived from PR/CI ground truth. `/dispatch` is the safe single creator: it only
+ever runs for dispatch sessions, so a `/pr-workflow` worktree can never acquire the
+marker. The marker is an empty boolean flag with no payload; it persists for the
+worktree's life and needs no cleanup — `tmp/` is git-ignored, and removing the
+worktree removes it.
 
 ## 4. Derive the Phase
 
@@ -91,13 +162,13 @@ present. Map the phase:
 
 | Phase | Meaning | Next action |
 |---|---|---|
-| `implement` | no PR on the target | relevance review (Step 6), then `/dispatch-implement` |
-| `verify` | draft PR, CI not green (failing, pending, or empty rollup) | `/dispatch-implement` with a resume hint → its verify loop |
-| `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` → then label `dispatch:qa-done` |
+| `implement` | no PR on the target | relevance review (Step 6), then `/plan-implement` |
+| `verify` | draft PR, CI completed and failed | `/verify-pr` |
+| `waiting` | draft PR, CI in progress (running/queued/not started) | report "checks still running, nothing to do" and stop |
+| `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
 | `simplify` | draft PR + `dispatch:qa-done` | `/simplify` → then label `dispatch:refactored` |
-| `review` | draft PR + `dispatch:refactored` | `/review` → then label `dispatch:reviewed` |
-| `security` | draft PR + `dispatch:reviewed` | `/security-review` → then label `dispatch:security-reviewed` |
-| `ready` | draft PR + `dispatch:security-reviewed` | `gh pr ready <pr>` — flip draft to ready, workflow complete |
+| `review` | draft PR + `dispatch:refactored` | `/review-fix` (applies `dispatch:reviewed` itself) |
+| `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
 | `done` | non-draft (ready) PR | already complete — report and skip |
 
 ## 5. Dispatch One Phase, Then Stop
@@ -106,20 +177,28 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 `/dispatch` invocation.
 
 - **`implement`** — run the Step 6 relevance review first. If it passes, invoke
-  `/dispatch-implement` (see the bridge note below). The draft PR's existence plus
-  its CI status is its own marker — `/dispatch-implement` gets **no** `dispatch:*`
-  label.
-- **`verify`** — invoke `/dispatch-implement` (see the bridge note below) with a
-  resume hint that tells it to resume at the post-implementation verify loop
-  (Step 2.5). No label.
-- **`qa` / `simplify` / `review` / `security`** — invoke the mapped skill
-  (`/dispatch-qa`, `/simplify`, `/review`, `/security-review`). After it **returns**,
-  apply the accumulating `dispatch:*` label to the PR (see below).
-- **`ready`** — run `gh pr ready <pr-num>` to flip the draft to ready-for-review.
-  The workflow is complete.
+  `/plan-implement`. The draft PR's existence plus its CI status is its own marker —
+  `/plan-implement` gets **no** `dispatch:*` label.
+- **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of failed
+  CI checks, record the outcome, post it, stop. No label.
+- **`waiting`** — CI checks are still running or queued; there is nothing to do yet.
+  Report "checks still running, nothing to do" and **stop** without invoking any
+  phase skill or applying any label.
+- **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done` itself on
+  a clean pass; `/dispatch` applies no label.
+- **`simplify`** — invoke `/simplify`. After it **returns**, apply the accumulating
+  `dispatch:*` label to the PR (see below).
+- **`review`** — invoke `/review-fix`. It runs `/review`, applies the recommended
+  fixes, posts a PR comment, and applies the `dispatch:reviewed` label itself —
+  `/dispatch` applies no label.
+- **`security`** — invoke `/security-review-fix`. It runs `/security-review`,
+  applies the recommended fixes, posts a PR comment, applies the
+  `dispatch:security-reviewed` label, and marks the PR ready. It is idempotent on
+  re-entry — `/dispatch` applies no label.
 - **`done`** — report that the PR is already ready and skip.
 
-The PR stays a **draft** through every phase; only the `ready` phase flips it.
+The PR stays a **draft** through every phase; the `security` phase's
+`/security-review-fix` flips it to ready as the workflow's terminal action.
 
 After dispatching the one phase and applying any label, **STOP** — do not advance to
 the next phase.
@@ -129,14 +208,16 @@ so `/dispatch` cannot launch it.
 
 ### Applying the progress label
 
-The four `dispatch:*` labels — `dispatch:qa-done`, `dispatch:refactored`,
-`dispatch:reviewed`, `dispatch:security-reviewed` — are the accumulating progress
-markers. Apply a label only **after** the corresponding phase skill returns
-successfully; this keeps the generic `/simplify`, `/review`, and `/security-review`
-skills dispatch-unaware.
+The `dispatch:*` labels are the accumulating progress markers across the full
+workflow. `/dispatch-qa`, `/review-fix`, and `/security-review-fix` each own and
+apply their own label — `dispatch:qa-done`, `dispatch:reviewed`, and
+`dispatch:security-reviewed` respectively — so `/dispatch` applies no label after
+the `qa`, `review`, or `security` phase. The one label `/dispatch` applies itself is
+`dispatch:refactored`, after the `simplify` phase skill returns successfully —
+applying it here keeps the generic `/simplify` skill dispatch-unaware.
 
-Before applying, ensure the labels exist idempotently — run this for each of the four
-names (safe on forks where the labels do not yet exist):
+Before applying, ensure the label exists idempotently — run this for the label
+name (safe on forks where the label does not yet exist):
 
 ```bash
 gh label create "dispatch:<name>" --color BFD4F2 --description "<phase> phase complete" 2>/dev/null || true
@@ -150,37 +231,15 @@ gh pr edit <pr-num> --add-label "dispatch:<name>"
 
 ## 6. Pre-Implementation Relevance Review
 
-Before invoking `/dispatch-implement` on an `implement`-phase (no-PR) issue, run the
+Before invoking `/plan-implement` on an `implement`-phase (no-PR) issue, run the
 `ref-ready` Step 3e relevance check against the current codebase: has the codebase
 evolved to make the issue obsolete, or are any requirements already addressed by
 existing code?
 
-- **Still relevant** → proceed to invoke `/dispatch-implement`.
+- **Still relevant** → proceed to invoke `/plan-implement`.
 - **Obsolete or already addressed** → **stop** and report to the user what made the
   issue obsolete or what already exists, and recommend closing the issue or
-  re-running `/ready`. Do **not** invoke `/dispatch-implement`.
+  re-running `/ready`. Do **not** invoke `/plan-implement`.
 
-This review is **skipped** for the `verify` resume case — a PR already exists and
+This review is **skipped** for the `verify` case — a PR already exists and
 implementation is underway.
-
-## `/dispatch-implement` env-var bridge
-
-`/dispatch-implement` expects the legacy dispatcher's `DISPATCH_ISSUE_NUM` and
-`DISPATCH_STATE_FILE` env vars, which are not set when `/dispatch` invokes it as a
-skill. When invoking `/dispatch-implement` (the `implement` and `verify` rows):
-
-1. Treat the resolved issue number `<N>` as `DISPATCH_ISSUE_NUM`, and
-   `tmp/dispatch-<N>.json` as `DISPATCH_STATE_FILE`.
-2. Seed the state file first so the `restore-dispatch-skill.sh` recovery hook still
-   works through `/dispatch-implement`'s plan-mode context clear:
-
-   ```bash
-   [ -f tmp/dispatch-<N>.json ] || { mkdir -p tmp && printf '{}' > tmp/dispatch-<N>.json; }
-   ```
-
-3. Invoke `/dispatch-implement` with argument `#<N>`.
-4. For the `verify` row, also pass a free-form resume hint instructing it to resume
-   at the post-implementation verify loop (Step 2.5).
-
-Fully decoupling `/dispatch-implement` from this legacy plumbing is a tracked
-follow-up — out of scope here.

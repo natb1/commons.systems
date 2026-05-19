@@ -4,7 +4,7 @@ import { describeCacheHeadersSmoke } from "@commons-systems/config/cache-headers
 describeCacheHeadersSmoke("fellspiral");
 
 test.describe("fellspiral extra cache headers smoke", () => {
-  test("fonts have yearly cache-control @smoke", async ({ request }) => {
+  test("fonts have yearly cache-control @smoke @hosting", async ({ request }) => {
     const fontResponse = await request.get(
       "/fonts/eb-garamond-latin-400-normal.woff2",
     );

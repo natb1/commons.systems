@@ -16,9 +16,9 @@ import (
 	"os"
 	"regexp"
 
+	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
 	"github.com/natb1/commons.systems/budget-etl/internal/keychain"
-	"github.com/natb1/commons.systems/budget-etl/internal/store"
 )
 
 // Spec is the top-level patch specification read from --spec.
@@ -35,7 +35,7 @@ type RemoveSpec struct {
 	ByPredicate []export.Rule `json:"by_predicate"`
 }
 
-// docIDPattern matches the format produced by store.TransactionDocID:
+// docIDPattern matches the format produced by budget.TransactionDocID:
 // truncated SHA-256 (10 bytes / 20 lowercase hex chars).
 var docIDPattern = regexp.MustCompile(`^[0-9a-f]{20}$`)
 
@@ -101,7 +101,7 @@ func runPatch(specPath, inputPath, outputPath, keychainAccount string) error {
 // and rules appended (add[]). Errors on:
 //   - any add[].ID empty, intra-spec duplicate, or collision with an existing rule
 //   - any add[] transaction-specific rule whose TransactionID isn't a valid
-//     store.TransactionDocID-formatted doc ID
+//     budget.TransactionDocID-formatted doc ID
 //   - any remove.by_predicate item with all zero fields (would match every rule)
 func applySpec(out export.Output, spec Spec) (export.Output, error) {
 	existingIDs := make(map[string]bool, len(out.Rules))
@@ -163,16 +163,16 @@ func applySpec(out export.Output, spec Spec) (export.Output, error) {
 }
 
 // validateAddRule checks transaction-specific rules carry a valid doc ID.
-// The format is whatever store.TransactionDocID produces — 20 lowercase hex
+// The format is whatever budget.TransactionDocID produces — 20 lowercase hex
 // chars from a truncated SHA-256. We reuse the helper directly elsewhere
-// (e.g. tests construct doc IDs via store.TransactionDocID) rather than
+// (e.g. tests construct doc IDs via budget.TransactionDocID) rather than
 // reimplementing the truncation here.
 func validateAddRule(r export.Rule, idx int) error {
 	if r.TransactionID == "" {
 		return nil
 	}
 	if !docIDPattern.MatchString(r.TransactionID) {
-		return fmt.Errorf("add[%d]: transactionId %q is not a valid doc ID (expected %d lowercase hex chars from store.TransactionDocID)", idx, r.TransactionID, len(store.TransactionDocID("x", "y")))
+		return fmt.Errorf("add[%d]: transactionId %q is not a valid doc ID (expected %d lowercase hex chars from budget.TransactionDocID)", idx, r.TransactionID, len(budget.TransactionDocID("x", "y")))
 	}
 	return nil
 }
