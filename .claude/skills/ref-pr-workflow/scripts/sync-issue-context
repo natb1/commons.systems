@@ -6,7 +6,7 @@
 # Sections: primary issue (title + body + comments), blocking issues, sub-issues,
 # parent issue (omitted if none), sibling issues (omitted if not a sub-issue).
 # Excludes PR status (no PR at worktree creation), issue state (lives in
-# tmp/dispatch-<num>.json), and README (auto-loaded by root CLAUDE.md).
+# Firestore, read via issue-state-read), and README (auto-loaded by root CLAUDE.md).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

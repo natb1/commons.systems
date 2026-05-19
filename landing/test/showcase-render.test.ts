@@ -28,7 +28,7 @@ const APPS: AppCard[] = [
 describe("renderShowcase", () => {
   it("contains the hero band headline", () => {
     const html = renderShowcase(APPS);
-    expect(html).toContain("Build with commons.systems. Run without.");
+    expect(html).toContain("Build with commons.systems. Learn to run without.");
   });
 
   it("contains exactly one <a class=\"app-card\" per app", () => {

@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Trace from issue N to the deepest open leaf (no open children).
+# Usage: dispatch-trace-leaf <issue-num>
+#
+# Walks open blockers and open sub-issues depth-first, visiting the
+# lowest-numbered open child first, to find the lowest-numbered reachable
+# open leaf. Prints one issue number.
+#
+# Falls back to printing N if cycles block every path to a leaf.
+#
+# Uses sibling scripts:
+#   issue-blocking   — prints JSON for each open blocker (gh issue view output)
+#   issue-sub-issues — prints JSON for each sub-issue (gh issue view output)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# issue-blocking and issue-sub-issues live alongside load-context etc.
+REF_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/../../ref-pr-workflow/scripts" && pwd)"
+
+ISSUE_NUM="${1:-}"
+if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: usage: dispatch-trace-leaf <issue-num>" >&2
+  exit 1
+fi
+
+# Collect open children of an issue: open blockers union open sub-issues.
+# Outputs sorted unique issue numbers, one per line, lowest first.
+open_children() {
+  local n="$1"
+  local children=()
+
+  # Gather open blockers.
+  local blocker_json
+  blocker_json=$("$REF_SCRIPTS_DIR/issue-blocking" "$n" 2>/dev/null) || blocker_json=""
+  if [[ -n "$blocker_json" ]]; then
+    while IFS= read -r num; do
+      [[ -n "$num" ]] && children+=("$num")
+    done < <(printf '%s' "$blocker_json" | jq -r 'select(.state == "OPEN" or .state == "open") | .number' 2>/dev/null || true)
+  fi
+
+  # Gather open sub-issues.
+  local sub_json
+  sub_json=$("$REF_SCRIPTS_DIR/issue-sub-issues" "$n" 2>/dev/null) || sub_json=""
+  if [[ -n "$sub_json" ]]; then
+    while IFS= read -r num; do
+      [[ -n "$num" ]] && children+=("$num")
+    done < <(printf '%s' "$sub_json" | jq -r 'select(.state == "OPEN" or .state == "open") | .number' 2>/dev/null || true)
+  fi
+
+  # Print unique numbers sorted ascending (lowest first).
+  if [[ ${#children[@]} -gt 0 ]]; then
+    printf '%s\n' "${children[@]}" | sort -un
+  fi
+}
+
+# Depth-first search for the lowest-numbered reachable open leaf.
+# Args: $1 = current issue number
+# Uses global VISITED associative array for cycle protection.
+# Returns 0 and prints the leaf number on success.
+# Returns 1 if all paths lead to cycles (no leaf reachable).
+declare -A VISITED=()
+
+find_leaf() {
+  local n="$1"
+
+  if [[ -n "${VISITED[$n]+x}" ]]; then
+    # Cycle detected — no leaf reachable via this path.
+    return 1
+  fi
+  VISITED["$n"]=1
+
+  local kids
+  kids=$(open_children "$n")
+
+  if [[ -z "$kids" ]]; then
+    # No open children — n is a leaf.
+    echo "$n"
+    return 0
+  fi
+
+  # Descend into children lowest-numbered first; return the first leaf found.
+  local kid
+  while IFS= read -r kid; do
+    [[ -z "$kid" ]] && continue
+    local leaf
+    if leaf=$(find_leaf "$kid"); then
+      echo "$leaf"
+      return 0
+    fi
+  done <<< "$kids"
+
+  # All children led to cycles.
+  return 1
+}
+
+LEAF=$(find_leaf "$ISSUE_NUM") || LEAF=""
+
+if [[ -z "$LEAF" ]]; then
+  # Cycle blocked every path — fall back to N.
+  echo "$ISSUE_NUM"
+else
+  echo "$LEAF"
+fi

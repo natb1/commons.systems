@@ -3,7 +3,7 @@ import { computeRollingAverage, type CashFlowPoint } from "../balance.js";
 import type { ChartResult, WeekEntry } from "./budgets-chart.js";
 import { getThemeFg, assembleChartLayout, MARGIN_RIGHT, MARGIN_BOTTOM, computeChartWidth, renderAxisSvg } from "./chart-util.js";
 
-export interface CashFlowChartOptions {
+interface CashFlowChartOptions {
   readonly data: CashFlowPoint[];
   readonly containerWidth: number;
   readonly pointWidth: number;

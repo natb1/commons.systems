@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timestamp } from "firebase/firestore";
-import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetDiffs, computePerBudgetCategoryVariance, computeBudgetStatsAndVariances, MATERIALITY_THRESHOLD } from "../src/balance";
+import { weekStart, computeNetAmount, findPeriodForTimestamp, computeBudgetBalance, computeAllBudgetBalances, computePeriodBalances, computeAverageWeeklyCredits, computeRollingAverage, computeAggregateTrend, computePerBudgetTrend, computeAverageWeeklySpending, computeNetWorth, computeCashFlow, computeDerivedBalances, findLatestOverride, periodAllowance, weeklyEquivalent, periodEquivalent, computeBudgetStatsAndVariances, MATERIALITY_THRESHOLD } from "../src/balance";
 import type { BudgetDiff, PerBudgetStats } from "../src/balance";
 import type { Budget, BudgetOverride, BudgetPeriod, Statement, Transaction, WeeklyAggregate } from "../src/firestore";
 
@@ -1738,13 +1738,13 @@ describe("weekStart", () => {
   });
 });
 
-describe("computeBudgetDiffs", () => {
+describe("computeBudgetStatsAndVariances stats", () => {
   it("returns full allowance as diff and zero averages when no periods exist", () => {
     const budgets = [
       makeBudget({ id: "food", allowance: 150 }),
       makeBudget({ id: "housing", name: "Housing", allowance: 400 }),
     ];
-    const result = computeBudgetDiffs(budgets, []);
+    const result = computeBudgetStatsAndVariances(budgets, []).stats;
     expect(result.get("food")!.diff).toEqual({ diff12: 150, diff52: 150 } satisfies BudgetDiff);
     expect(result.get("food")!.avg).toEqual({ avg12: 0, avg52: 0 });
     expect(result.get("housing")!.diff).toEqual({ diff12: 400, diff52: 400 } satisfies BudgetDiff);
@@ -1772,7 +1772,7 @@ describe("computeBudgetDiffs", () => {
       );
     }
 
-    const result = computeBudgetDiffs(budgets, periods);
+    const result = computeBudgetStatsAndVariances(budgets, periods).stats;
 
     // food: 14 completed weeks. Last 12 = weeks 2-13 = 10*200 + 2*100 = 2200, avg = 2200/12
     // 52-week trailing: all 14 completed = 12*200+2*100 = 2600, avg = 2600/52
@@ -1801,7 +1801,7 @@ describe("computeBudgetDiffs", () => {
       makePeriod({ id: "p4", budgetId: "food", periodStart: ts("2025-01-27"), periodEnd: ts("2025-02-03"), total: 250 }),
       makePeriod({ id: "p5", budgetId: "food", periodStart: ts("2025-02-03"), periodEnd: ts("2025-02-10"), total: 999 }),
     ];
-    const result = computeBudgetDiffs([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).stats;
     const avg = result.get("food")!.avg;
     // Completed weeks: Jan 6-Jan 27 (4 weeks, all within 12w of latest Feb 3)
     // avg12 = (100+200+150+250) / 12 = 700/12
@@ -1820,7 +1820,7 @@ describe("computeBudgetDiffs", () => {
       makePeriod({ id: "n1", budgetId: "fun", periodStart: ts("2025-01-06"), periodEnd: ts("2025-01-13"), total: 50 }),
       makePeriod({ id: "n2", budgetId: "fun", periodStart: ts("2025-01-13"), periodEnd: ts("2025-01-20"), total: 70 }),
     ];
-    const result = computeBudgetDiffs(budgets, periods);
+    const result = computeBudgetStatsAndVariances(budgets, periods).stats;
     // Global latest week is Jan 13; excluded from both budgets
     // Each has 1 completed week within 12w window, divided by 12
     expect(result.get("food")!.avg.avg12).toBeCloseTo(100 / 12);
@@ -1836,7 +1836,7 @@ describe("computeBudgetDiffs", () => {
       makePeriod({ id: "p2", budgetId: "transport", periodStart: ts("2025-08-04"), periodEnd: ts("2025-08-11"), total: 100 }),
       makePeriod({ id: "p3", budgetId: "transport", periodStart: ts("2025-08-11"), periodEnd: ts("2025-08-18"), total: 50 }),
     ];
-    const result = computeBudgetDiffs([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).stats;
     const avg = result.get("transport")!.avg;
     // 12w: only Aug 4 (100) is within 12 calendar weeks of Aug 11 -> 100/12
     expect(avg.avg12).toBeCloseTo(100 / 12);
@@ -1859,7 +1859,7 @@ describe("computeBudgetDiffs", () => {
         total: i < 2 ? 1000 : 100, // first 2 weeks high, rest low
       }));
     }
-    const result = computeBudgetDiffs([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).stats;
     const avg = result.get("food")!.avg;
     // 12w: weeks 2-13 (12 weeks x 100) / 12 = 1200/12
     expect(avg.avg12).toBeCloseTo(1200 / 12);
@@ -1875,7 +1875,7 @@ describe("computeBudgetDiffs", () => {
       makePeriod({ id: "p2", budgetId: "other", periodStart: ts("2025-08-04"), periodEnd: ts("2025-08-11"), total: 10 }),
     ];
     const budgets = [budget, makeBudget({ id: "other", name: "Other" })];
-    const result = computeBudgetDiffs(budgets, periods);
+    const result = computeBudgetStatsAndVariances(budgets, periods).stats;
     const avg = result.get("default")!.avg;
     // Jan 6 is ~30 weeks before Aug 4 -> outside 12w window
     expect(avg.avg12).toBe(0);
@@ -1884,10 +1884,10 @@ describe("computeBudgetDiffs", () => {
   });
 });
 
-describe("computePerBudgetCategoryVariance", () => {
+describe("computeBudgetStatsAndVariances variances", () => {
   it("returns empty windows when no periods exist", () => {
     const budgets = [makeBudget({ id: "food" })];
-    const result = computePerBudgetCategoryVariance(budgets, []);
+    const result = computeBudgetStatsAndVariances(budgets, []).variances;
     expect(result.get("food")).toEqual({ 12: [], 52: [] });
   });
 
@@ -1905,7 +1905,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: { "Food:Groceries": 999 },
       }),
     ];
-    const result = computePerBudgetCategoryVariance([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).variances;
     const w12 = result.get("food")![12];
     expect(w12).toHaveLength(1);
     expect(w12[0].kind).toBe("category");
@@ -1933,7 +1933,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: {},
       }),
     ];
-    const result = computePerBudgetCategoryVariance([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).variances;
     const w12 = result.get("food")![12];
     expect(w12).toHaveLength(2);
     expect(w12[0].kind).toBe("category");
@@ -1964,7 +1964,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: {},
       }),
     ];
-    const result = computePerBudgetCategoryVariance([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).variances;
     const w12 = result.get("food")![12];
     expect(w12).toHaveLength(2);
     expect(w12.every(v => v.kind === "category")).toBe(true);
@@ -1988,7 +1988,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: {},
       }),
     ];
-    const result = computePerBudgetCategoryVariance([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).variances;
     const w12 = result.get("food")![12];
     expect(w12).toHaveLength(2);
     expect(w12.every(r => r.kind === "category")).toBe(true);
@@ -2007,7 +2007,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: { "Food:Groceries": 120 },
       }));
     }
-    const result = computePerBudgetCategoryVariance([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).variances;
     const w12 = result.get("food")![12];
     const w52 = result.get("food")![52];
     // 12w: most recent 12 completed weeks × 120 = 1440 ÷ 12 = 120
@@ -2038,7 +2038,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: { "Fun:Games": 50 },
       }),
     ];
-    const result = computePerBudgetCategoryVariance(budgets, periods);
+    const result = computeBudgetStatsAndVariances(budgets, periods).variances;
     expect(result.get("food")![12][0].avgWeekly).toBeCloseTo(100 / 12);
     expect(result.get("fun")![12]).toEqual([]);
   });
@@ -2057,7 +2057,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: {},
       }),
     ];
-    const result = computePerBudgetCategoryVariance([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).variances;
     expect(result.get("food")![12]).toEqual([]);
   });
 
@@ -2075,7 +2075,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: { "Transport:Gas": 999 },
       }),
     ];
-    const result = computePerBudgetCategoryVariance([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).variances;
     expect(result.get("transport")![12]).toEqual([]);
     const w52 = result.get("transport")![52];
     expect(w52).toHaveLength(1);
@@ -2102,7 +2102,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: {},
       }),
     ];
-    const result = computePerBudgetCategoryVariance([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).variances;
     const w12 = result.get("food")![12];
     const names = w12.map(r => r.kind === "category" ? r.category : "Other");
     expect(names).toEqual(["B", "C", "A"]);
@@ -2126,7 +2126,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: {},
       }),
     ];
-    const result = computePerBudgetCategoryVariance([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).variances;
     const w12 = result.get("food")![12];
     expect(w12[w12.length - 1].kind).toBe("other");
   });
@@ -2148,7 +2148,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: {},
       }),
     ];
-    const result = computePerBudgetCategoryVariance(budgets, periods);
+    const result = computeBudgetStatsAndVariances(budgets, periods).variances;
     expect(result.has("food")).toBe(true);
     expect(result.has("fun")).toBe(true);
     expect(result.get("fun")).toEqual({ 12: [], 52: [] });
@@ -2171,7 +2171,7 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: {},
       }),
     ];
-    const result = computePerBudgetCategoryVariance([budget], periods);
+    const result = computeBudgetStatsAndVariances([budget], periods).variances;
     const w12 = result.get("food")![12];
     expect(w12).toHaveLength(2);
     const otherRow = w12[1];
@@ -2195,56 +2195,6 @@ describe("computePerBudgetCategoryVariance", () => {
         categoryBreakdown: {},
       }),
     ];
-    expect(() => computePerBudgetCategoryVariance([budget], periods)).toThrow();
-  });
-});
-
-describe("computeBudgetStatsAndVariances", () => {
-  // Shared fixture: 15 weeks across two budgets, latest week excluded from averages.
-  // Weeks 0-11: food=200, fun=50. Weeks 12-13: food=100, fun=150. Week 14: latest (excluded).
-  const budgets = [
-    makeBudget({ id: "food", allowance: 150 }),
-    makeBudget({ id: "fun", name: "Fun", allowance: 100 }),
-  ];
-  const periods: ReturnType<typeof makePeriod>[] = [];
-  for (let i = 0; i < 15; i++) {
-    const weekSunday = new Date(Date.UTC(2025, 0, 5 + i * 7));
-    const nextSunday = new Date(Date.UTC(2025, 0, 12 + i * 7));
-    periods.push(
-      makePeriod({
-        id: `food-w${i}`, budgetId: "food",
-        periodStart: ts(weekSunday.toISOString()), periodEnd: ts(nextSunday.toISOString()),
-        total: i < 12 ? 200 : 100,
-        categoryBreakdown: { "Food:Groceries": i < 12 ? 200 : 100 },
-      }),
-      makePeriod({
-        id: `fun-w${i}`, budgetId: "fun",
-        periodStart: ts(weekSunday.toISOString()), periodEnd: ts(nextSunday.toISOString()),
-        total: i < 12 ? 50 : 150,
-        categoryBreakdown: { "Fun:Movies": i < 12 ? 50 : 150 },
-      }),
-    );
-  }
-
-  it("stats output matches computeBudgetDiffs for identical inputs", () => {
-    const { stats } = computeBudgetStatsAndVariances(budgets, periods);
-    const expected = computeBudgetDiffs(budgets, periods);
-    for (const budget of budgets) {
-      const actual = stats.get(budget.id)!;
-      const ref = expected.get(budget.id)!;
-      expect(actual.diff.diff12).toBeCloseTo(ref.diff.diff12, 10);
-      expect(actual.diff.diff52).toBeCloseTo(ref.diff.diff52, 10);
-      expect(actual.avg.avg12).toBeCloseTo(ref.avg.avg12, 10);
-      expect(actual.avg.avg52).toBeCloseTo(ref.avg.avg52, 10);
-    }
-  });
-
-  it("variances output matches computePerBudgetCategoryVariance for identical inputs", () => {
-    const { variances } = computeBudgetStatsAndVariances(budgets, periods);
-    const expected = computePerBudgetCategoryVariance(budgets, periods);
-    for (const budget of budgets) {
-      expect(variances.get(budget.id)![12]).toEqual(expected.get(budget.id)![12]);
-      expect(variances.get(budget.id)![52]).toEqual(expected.get(budget.id)![52]);
-    }
+    expect(() => computeBudgetStatsAndVariances([budget], periods)).toThrow();
   });
 });
