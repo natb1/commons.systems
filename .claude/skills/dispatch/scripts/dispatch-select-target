@@ -78,8 +78,10 @@ has_worktree() {
   return 1
 }
 
-# Fetch all open PRs sorted by createdAt ascending (oldest first).
-PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName)
+# Fetch all open PRs once, with the union of fields this script and
+# dispatch-phase need. Each per-PR dispatch-phase call below reuses it
+# (passed as DISPATCH_PR_LIST) instead of re-running gh pr list.
+PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels)
 PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number, .createdAt, .headRefName] | @tsv')
 
 # One "first-seen" variable per phase (list is pre-sorted oldest-first, so first
@@ -105,8 +107,8 @@ while IFS=$'\t' read -r pr_num _created pr_branch; do
     continue
   fi
 
-  # Determine phase for this PR.
-  phase=$("$SCRIPT_DIR/dispatch-phase" "$pr_branch")
+  # Determine phase for this PR, reusing the PR list fetched above.
+  phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$pr_branch")
 
   case "$phase" in
     done)
