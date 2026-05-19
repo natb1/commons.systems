@@ -429,7 +429,7 @@ printf '[{"number":99,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue
 # No worktrees for these branches.
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "non-QA PR (verify) chosen first" "pr 10 10-verify-me" "$result"
+assert_eq "non-QA PR (verify) chosen first" "pr 10 10-verify-me verify" "$result"
 teardown
 
 # 2. PR with a local worktree is skipped.
@@ -442,7 +442,7 @@ echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/10-active-branch\n\nworktree /worktrees/10-active-branch\nHEAD def456\nbranch refs/heads/10-active-branch\n\n' \
   > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "PR with worktree skipped; next PR returned" "pr 20 20-other" "$result"
+assert_eq "PR with worktree skipped; next PR returned" "pr 20 20-other verify" "$result"
 teardown
 
 # 3. When no eligible PR exists, a help-wanted issue is chosen.
@@ -517,7 +517,7 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "ready beats security/review/simplify/verify" "pr 50 50-ready" "$result"
+assert_eq "ready beats security/review/simplify/verify" "pr 50 50-ready ready" "$result"
 teardown
 
 # 9. security beats review beats simplify beats verify (no ready PR).
@@ -536,7 +536,7 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "security beats review/simplify/verify" "pr 40 40-security" "$result"
+assert_eq "security beats review/simplify/verify" "pr 40 40-security security" "$result"
 teardown
 
 # 10. Within one phase, the oldest PR wins.
@@ -552,7 +552,7 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "oldest review PR wins within phase" "pr 30 30-review-a" "$result"
+assert_eq "oldest review PR wins within phase" "pr 30 30-review-a review" "$result"
 teardown
 
 # 11. Any non-QA PR beats a help-wanted issue; help-wanted issue beats a QA PR.
@@ -567,7 +567,7 @@ setup_union_pr_list "$UNION"
 printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "verify PR beats issue (non-QA > issue > qa)" "pr 10 10-verify" "$result"
+assert_eq "verify PR beats issue (non-QA > issue > qa)" "pr 10 10-verify verify" "$result"
 teardown
 
 # 11b. No non-QA PR: help-wanted issue beats QA PR.
@@ -618,7 +618,7 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "waiting PR skipped; verify PR returned" "pr 20 20-verify" "$result"
+assert_eq "waiting PR skipped; verify PR returned" "pr 20 20-verify verify" "$result"
 teardown
 
 # 15. A lone waiting PR (nothing else queued) yields empty.
@@ -679,7 +679,7 @@ echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf 'main' > "$STUB_DIR/current-branch.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "main branch → normal scan result (verify PR)" "pr 10 10-verify-me" "$result"
+assert_eq "main branch → normal scan result (verify PR)" "pr 10 10-verify-me verify" "$result"
 teardown
 
 # 20. --qa mode from an issue worktree → detection skipped, QA PR returned.
@@ -709,9 +709,32 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "select-target result over 3 PRs" "pr 10 10-verify" "$result"
+assert_eq "select-target result over 3 PRs" "pr 10 10-verify verify" "$result"
 count=$(wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ')
 assert_eq "exactly one gh pr list call regardless of PR count" "1" "$count"
+teardown
+
+# 22. A simplify-phase PR winning emits the simplify phase on the result line.
+echo "Test: simplify PR winner → pr <n> <branch> simplify"
+setup
+SIMPLIFY_LABELS='[{"name":"dispatch:qa-done"}]'
+UNION='['"$(make_pr_union 25 "25-simplify-me" "2024-01-01T00:00:00Z" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "simplify PR winner emits phase" "pr 25 25-simplify-me simplify" "$result"
+teardown
+
+# 23. A lone QA PR with no help-wanted issue emits the qa phase on the result line.
+echo "Test: QA PR, no issue → pr <n> <branch> qa"
+setup
+UNION='['"$(make_pr_union 35 "35-qa-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "QA PR (no issue) emits qa phase" "pr 35 35-qa-me qa" "$result"
 teardown
 
 # ============================================================================

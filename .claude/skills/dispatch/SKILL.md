@@ -30,7 +30,8 @@ with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
   ```
 
   It prints exactly one line:
-  - `pr <num> <branch>` — a PR to work on
+  - `pr <num> <branch> <phase>` — a PR to work on; `<phase>` is pre-derived by the
+    selection scan, so Step 4 reuses it instead of re-deriving
   - `issue <num>` — a `help wanted` issue to implement
   - `worktree <N> <branch>` — run from inside an issue worktree; target is `<N>`,
     queue scan already skipped
@@ -119,7 +120,12 @@ worktree removes it.
 
 ## 4. Derive the Phase
 
-Run the phase script against the final target (issue number or branch):
+When the target is a **queue-selected PR** (`pr <num> <branch> <phase>` from Step 1),
+the phase is already on the result line — use it directly and skip the script below.
+
+On every other path — an explicit issue argument, a `worktree <N>` result, or a
+queue-selected `issue <num>` (after leaf tracing in Step 2) — run the phase script
+against the final target (issue number or branch):
 
 ```bash
 .claude/skills/dispatch/scripts/dispatch-phase <target>
