@@ -3,11 +3,8 @@
 # Usage: dispatch-complete-phase <pr-num> <phase>
 #
 # Maps a completed phase to its accumulating dispatch:* progress label and
-# applies it to the PR. The apply (gh pr edit --add-label) runs FIRST: once
-# the label exists — the steady state — that single call is all that runs,
-# with no redundant gh label create. Only if the apply fails because the
-# label is missing does the script create the label and retry once. Any
-# other apply failure surfaces the underlying error and exits non-zero.
+# applies it to the PR. (Apply-first ordering and missing-label handling are
+# explained inline at the code below.)
 #
 # This script is the single source of truth for the dispatch:* label
 # create metadata (color and description).
