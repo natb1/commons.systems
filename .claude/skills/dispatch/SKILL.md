@@ -101,41 +101,42 @@ If a named target issue is **closed**, report it and **stop**.
 
 ## 3. Resolve the Worktree
 
-Resolve or create the final target's worktree via `EnterWorktree`, matching
-`pr-workflow` Sections 2–3. `EnterWorktree` accepts exactly one of `path` (switch to
-an existing worktree) or `name` (create a new one; fires the `WorktreeCreate` hook).
+Run the worktree-resolution script, matching `pr-workflow` Sections 2–3. Pass
+`explicit` when the target was named by an explicit `/dispatch` argument,
+otherwise `queue`:
 
-- **Already in the target's worktree** (current branch starts with `<issue>-`) → no
+```bash
+.claude/skills/dispatch/scripts/dispatch-resolve-worktree <N> <explicit|queue>
+```
+
+It prints exactly one decision line — act on it. `EnterWorktree` accepts exactly
+one of `path` (switch to an existing worktree) or `name` (create a new one).
+
+- **`here`** → the current branch already is the target's worktree; no
   `EnterWorktree` needed. Re-sync issue context:
   ```bash
   .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
   ```
-  (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.) Then go
-  straight to creating the marker below.
-- **An existing worktree matches** `<issue>-*` (parse `git worktree list --porcelain`
-  as blank-line-delimited records):
-  - **Named by an explicit `/dispatch` argument** (recycle-after-completion case) →
-    `EnterWorktree` with `path:` set to that path. After entering, re-sync issue
-    context from the worktree:
-    ```bash
-    .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
-    ```
-    (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
-  - **Queue-selected (no argument)** → another session already owns this worktree.
-    The queue scan skips worktree'd issues, so this arises only when Step 2
-    leaf-tracing retargets to a blocker or sub-issue that has one. Report the
-    conflict (name the worktree path and issue `<N>`) and **stop**; do not
-    `EnterWorktree`.
-- **No existing worktree** → generate a sanitized branch name `<issue>-<slug>`:
-  lowercase the issue title, replace non-alphanumeric runs with `-`, collapse repeated
-  `-`, strip leading/trailing `-`, and truncate so the full branch name is ≤ 32
-  characters. `EnterWorktree` with `name:` set to that branch name.
+  (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
+- **`enter <path>`** → re-use an existing `<issue>-*` worktree (the
+  recycle-after-completion case, reached only for an explicit argument).
+  `EnterWorktree` with `path:` set to `<path>`. After entering, re-sync issue
+  context from the worktree:
+  ```bash
+  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+  ```
+  (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
+- **`create <branch>`** → no worktree exists. `EnterWorktree` with `name:` set to
+  `<branch>`. This fires the `WorktreeCreate` hook, which runs `sync-issue-context`
+  and populates `CLAUDE.local.md` with full issue context.
+- **`conflict <path>`** → a queue-selected target already has a worktree, so
+  another session owns it. (The queue scan skips worktree'd issues, so this arises
+  only when Step 2 leaf-tracing retargets to a blocker or sub-issue that has one.)
+  Report the conflict (name `<path>` and issue `<N>`) and **stop**; do not
+  `EnterWorktree`.
 
-Creating via `name:` fires the `WorktreeCreate` hook, which runs `sync-issue-context`
-and populates `CLAUDE.local.md` with full issue context.
-
-As the **last action of this step on every path** — before any phase skill runs —
-create the recovery marker:
+As the **last action of this step on every non-`conflict` path** — before any
+phase skill runs — create the recovery marker:
 
 ```bash
 mkdir -p tmp && touch tmp/dispatch-worktree
