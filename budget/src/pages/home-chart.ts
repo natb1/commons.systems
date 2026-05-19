@@ -311,6 +311,9 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
   update();
 
+  // Listener for older transactions scroll-loaded by home-hydrate.ts: merges the
+  // new data into allTxns, adjusts the week slider to preserve the current
+  // position, then calls update() to re-render the chart and re-apply filters.
   document.addEventListener(TRANSACTIONS_APPENDED_EVENT, ((e: CustomEvent<SerializedChartTransaction[]>) => {
     if (!container.isConnected) return;
     try {
