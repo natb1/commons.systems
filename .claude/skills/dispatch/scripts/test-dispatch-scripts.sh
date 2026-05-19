@@ -123,6 +123,21 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  "api repos/{owner}/{repo}/commits/main")
+    # main_broken_sha: resolve origin/main's HEAD SHA. Default: healthy main.
+    if [[ -f "$STUB_DIR/main-commit.json" ]]; then cat "$STUB_DIR/main-commit.json"
+    else echo '{"sha":"mainhead0"}'; fi
+    ;;
+  api\ repos/*/commits/*/check-runs)
+    # main_broken_sha: CodeQL check-runs for main's HEAD. Default: none.
+    if [[ -f "$STUB_DIR/main-check-runs.json" ]]; then cat "$STUB_DIR/main-check-runs.json"
+    else echo '{"check_runs":[]}'; fi
+    ;;
+  run\ list\ --branch\ main\ *)
+    # main_broken_sha: Actions workflow runs on main. Default: none.
+    if [[ -f "$STUB_DIR/main-run-list.json" ]]; then cat "$STUB_DIR/main-run-list.json"
+    else echo '[]'; fi
+    ;;
   *)
     echo "gh stub: unknown invocation: $args" >&2
     exit 1
@@ -357,13 +372,13 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "draft + green + dispatch:reviewed → security" "security" "$result"
 teardown
 
-# 9. Draft + green + dispatch:security-reviewed → ready
-echo "Test: draft + green + dispatch:security-reviewed → ready"
+# 9. Draft + green + dispatch:security-reviewed → security (re-entry)
+echo "Test: draft + green + dispatch:security-reviewed → security (re-entry)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:security-reviewed → ready" "ready" "$result"
+assert_eq "draft + green + dispatch:security-reviewed → security (re-entry)" "security" "$result"
 teardown
 
 # 10. Non-draft PR → done
@@ -497,30 +512,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "done PRs skipped; help-wanted issue returned" "issue 33" "$result"
 teardown
 
-# 8. ready beats security beats review beats simplify beats verify.
-echo "Test: ready beats security beats review beats simplify beats verify"
-setup
-# Five PRs, each in a different phase. verify (PR 10) is oldest, ready (PR 50) is newest.
-# The ready-phase PR must be chosen regardless of age.
-READY_LABELS='[{"name":"dispatch:security-reviewed"}]'
-SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
-REVIEW_LABELS='[{"name":"dispatch:refactored"}]'
-SIMPLIFY_LABELS='[{"name":"dispatch:qa-done"}]'
-UNION='['
-UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
-UNION+="$(make_pr_union 20 "20-simplify" "2024-01-02T00:00:00Z" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 40 "40-security" "2024-01-04T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 50 "50-ready" "2024-01-05T00:00:00Z" "true" "$READY_LABELS" "$GREEN_ROLLUP")"
-UNION+=']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "ready beats security/review/simplify/verify" "pr 50 50-ready" "$result"
-teardown
-
-# 9. security beats review beats simplify beats verify (no ready PR).
+# 8. security is the top non-QA tier: it beats review, simplify, and verify.
 echo "Test: security beats review/simplify/verify"
 setup
 SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
@@ -539,7 +531,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "security beats review/simplify/verify" "pr 40 40-security" "$result"
 teardown
 
-# 10. Within one phase, the oldest PR wins.
+# 9. Within one phase, the oldest PR wins.
 echo "Test: within same phase, oldest PR wins"
 setup
 # Two review-phase PRs; PR 30 is older.
@@ -555,7 +547,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "oldest review PR wins within phase" "pr 30 30-review-a" "$result"
 teardown
 
-# 11. Any non-QA PR beats a help-wanted issue; help-wanted issue beats a QA PR.
+# 10. Any non-QA PR beats a help-wanted issue; help-wanted issue beats a QA PR.
 echo "Test: verify PR beats issue; issue beats QA PR"
 setup
 # verify PR (10), QA PR (20), help-wanted issue (55).
@@ -570,7 +562,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "verify PR beats issue (non-QA > issue > qa)" "pr 10 10-verify" "$result"
 teardown
 
-# 11b. No non-QA PR: help-wanted issue beats QA PR.
+# 10b. No non-QA PR: help-wanted issue beats QA PR.
 echo "Test: help-wanted issue beats QA PR"
 setup
 UNION='['"$(make_pr_union 20 "20-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
@@ -581,7 +573,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "help-wanted issue beats QA PR" "issue 55" "$result"
 teardown
 
-# 12. --qa mode returns only the oldest QA PR (ignores non-QA PRs).
+# 11. --qa mode returns only the oldest QA PR (ignores non-QA PRs).
 echo "Test: --qa mode ignores non-QA PRs and returns oldest QA PR"
 setup
 SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
@@ -597,7 +589,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
 assert_eq "--qa returns oldest QA PR (ignores security PR)" "pr 20 20-qa-old" "$result"
 teardown
 
-# 13. waiting PR is skipped in favor of a help-wanted issue.
+# 12. waiting PR is skipped in favor of a help-wanted issue.
 echo "Test: waiting PR skipped in favor of help-wanted issue"
 setup
 # PR 10 in waiting phase (pending CI); no other PRs.
@@ -609,7 +601,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "waiting PR skipped; help-wanted issue returned" "issue 55" "$result"
 teardown
 
-# 14. waiting PR is skipped in favor of a newer verify-phase PR.
+# 13. waiting PR is skipped in favor of a newer verify-phase PR.
 echo "Test: waiting PR skipped in favor of verify PR"
 setup
 # PR 10 (older) in waiting phase, PR 20 (newer) in verify phase.
@@ -621,7 +613,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "waiting PR skipped; verify PR returned" "pr 20 20-verify" "$result"
 teardown
 
-# 15. A lone waiting PR (nothing else queued) yields empty.
+# 14. A lone waiting PR (nothing else queued) yields empty.
 echo "Test: lone waiting PR → empty"
 setup
 UNION='['"$(make_pr_union 10 "10-waiting" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'
@@ -697,7 +689,125 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
 assert_eq "--qa mode from issue worktree → normal QA scan (pr 20 20-qa-me)" "pr 20 20-qa-me" "$result"
 teardown
 
-# 21. Selecting a target issues exactly one gh pr list call (down from 1 + N).
+# --- origin/main CI health gate (issue #660) --------------------------------
+# The gate runs before the priority ladder in default mode. It aggregates main's
+# HEAD CI from check-runs (CodeQL) and Actions workflow runs; a failing
+# conclusion short-circuits to "main-broken <sha>".
+#
+# The explicit-`/dispatch <issue|pr>` bypass is structural and not script-
+# testable here: an explicit argument skips the queue scan entirely (SKILL.md
+# Step 1), so dispatch-select-target is never invoked on that path.
+
+# 21. main green (explicit success checks) → normal selection.
+echo "Test: main green → normal selection"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[{"headSha":"mainhead0","conclusion":"success"}]' \
+  > "$STUB_DIR/main-run-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main green → normal selection (verify PR)" "pr 10 10-verify-me" "$result"
+teardown
+
+# 22. main failing check-run → main-broken; priority ladder skipped.
+echo "Test: main failing check-run → main-broken"
+setup
+# Seed a verify PR + help-wanted issue — both must be ignored once the gate trips.
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main failing check-run → main-broken (ladder skipped)" "main-broken mainhead0" "$result"
+teardown
+
+# 23. main failing workflow run → main-broken.
+echo "Test: main failing workflow run → main-broken"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[]}' > "$STUB_DIR/main-check-runs.json"
+printf '[{"headSha":"mainhead0","conclusion":"failure"}]' \
+  > "$STUB_DIR/main-run-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main failing workflow run → main-broken" "main-broken mainhead0" "$result"
+teardown
+
+# 24. main in-progress checks → gate not tripped, normal selection.
+echo "Test: main in-progress checks → not tripped"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"in_progress","conclusion":null}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[{"headSha":"mainhead0","conclusion":null}]' \
+  > "$STUB_DIR/main-run-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main in-progress → normal selection (verify PR)" "pr 10 10-verify-me" "$result"
+teardown
+
+# 25. Failing workflow run on a stale SHA → gate not tripped (headSha filter).
+echo "Test: main failing run on stale SHA → not tripped"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[]}' > "$STUB_DIR/main-check-runs.json"
+printf '[{"headSha":"oldsha99","conclusion":"failure"}]' \
+  > "$STUB_DIR/main-run-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "main failing run on stale SHA → normal selection (verify PR)" "pr 10 10-verify-me" "$result"
+teardown
+
+# 26. --qa mode bypasses the gate even when main is broken.
+echo "Test: --qa mode bypasses the main-CI gate"
+setup
+UNION='['"$(make_pr_union 20 "20-qa-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
+assert_eq "--qa mode bypasses gate → QA PR returned" "pr 20 20-qa-me" "$result"
+teardown
+
+# 27. Current-worktree continuation bypasses the gate even when main is broken.
+echo "Test: worktree continuation bypasses the main-CI gate"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
+printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "worktree continuation bypasses gate → worktree 42 42-some-slug" "worktree 42 42-some-slug" "$result"
+teardown
+
+# 28. Selecting a target issues exactly one gh pr list call (down from 1 + N).
 echo "Test: dispatch-select-target fetches the open-PR list once"
 setup
 UNION='['
