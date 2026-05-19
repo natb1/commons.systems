@@ -391,13 +391,13 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "draft + green + dispatch:reviewed → security" "security" "$result"
 teardown
 
-# 9. Draft + green + dispatch:security-reviewed → ready
-echo "Test: draft + green + dispatch:security-reviewed → ready"
+# 9. Draft + green + dispatch:security-reviewed → security (re-entry)
+echo "Test: draft + green + dispatch:security-reviewed → security (re-entry)"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:security-reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:security-reviewed → ready" "ready" "$result"
+assert_eq "draft + green + dispatch:security-reviewed → security (re-entry)" "security" "$result"
 teardown
 
 # 10. Non-draft PR → done
@@ -531,30 +531,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "done PRs skipped; help-wanted issue returned" "issue 33" "$result"
 teardown
 
-# 8. ready beats security beats review beats simplify beats verify.
-echo "Test: ready beats security beats review beats simplify beats verify"
-setup
-# Five PRs, each in a different phase. verify (PR 10) is oldest, ready (PR 50) is newest.
-# The ready-phase PR must be chosen regardless of age.
-READY_LABELS='[{"name":"dispatch:security-reviewed"}]'
-SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
-REVIEW_LABELS='[{"name":"dispatch:refactored"}]'
-SIMPLIFY_LABELS='[{"name":"dispatch:qa-done"}]'
-UNION='['
-UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
-UNION+="$(make_pr_union 20 "20-simplify" "2024-01-02T00:00:00Z" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 40 "40-security" "2024-01-04T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"','
-UNION+="$(make_pr_union 50 "50-ready" "2024-01-05T00:00:00Z" "true" "$READY_LABELS" "$GREEN_ROLLUP")"
-UNION+=']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "ready beats security/review/simplify/verify" "pr 50 50-ready ready" "$result"
-teardown
-
-# 9. security beats review beats simplify beats verify (no ready PR).
+# 8. security is the top non-QA tier: it beats review, simplify, and verify.
 echo "Test: security beats review/simplify/verify"
 setup
 SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
@@ -573,7 +550,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "security beats review/simplify/verify" "pr 40 40-security security" "$result"
 teardown
 
-# 10. Within one phase, the oldest PR wins.
+# 9. Within one phase, the oldest PR wins.
 echo "Test: within same phase, oldest PR wins"
 setup
 # Two review-phase PRs; PR 30 is older.
@@ -589,7 +566,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "oldest review PR wins within phase" "pr 30 30-review-a review" "$result"
 teardown
 
-# 11. Any non-QA PR beats a help-wanted issue; help-wanted issue beats a QA PR.
+# 10. Any non-QA PR beats a help-wanted issue; help-wanted issue beats a QA PR.
 echo "Test: verify PR beats issue; issue beats QA PR"
 setup
 # verify PR (10), QA PR (20), help-wanted issue (55).
@@ -604,7 +581,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "verify PR beats issue (non-QA > issue > qa)" "pr 10 10-verify verify" "$result"
 teardown
 
-# 11b. No non-QA PR: help-wanted issue beats QA PR.
+# 10b. No non-QA PR: help-wanted issue beats QA PR.
 echo "Test: help-wanted issue beats QA PR"
 setup
 UNION='['"$(make_pr_union 20 "20-qa" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
@@ -615,7 +592,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "help-wanted issue beats QA PR" "issue 55" "$result"
 teardown
 
-# 12. --qa mode returns only the oldest QA PR (ignores non-QA PRs).
+# 11. --qa mode returns only the oldest QA PR (ignores non-QA PRs).
 echo "Test: --qa mode ignores non-QA PRs and returns oldest QA PR"
 setup
 SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
@@ -631,7 +608,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
 assert_eq "--qa returns oldest QA PR (ignores security PR)" "pr 20 20-qa-old" "$result"
 teardown
 
-# 13. waiting PR is skipped in favor of a help-wanted issue.
+# 12. waiting PR is skipped in favor of a help-wanted issue.
 echo "Test: waiting PR skipped in favor of help-wanted issue"
 setup
 # PR 10 in waiting phase (pending CI); no other PRs.
@@ -643,7 +620,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "waiting PR skipped; help-wanted issue returned" "issue 55" "$result"
 teardown
 
-# 14. waiting PR is skipped in favor of a newer verify-phase PR.
+# 13. waiting PR is skipped in favor of a newer verify-phase PR.
 echo "Test: waiting PR skipped in favor of verify PR"
 setup
 # PR 10 (older) in waiting phase, PR 20 (newer) in verify phase.
@@ -655,7 +632,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "waiting PR skipped; verify PR returned" "pr 20 20-verify verify" "$result"
 teardown
 
-# 15. A lone waiting PR (nothing else queued) yields empty.
+# 14. A lone waiting PR (nothing else queued) yields empty.
 echo "Test: lone waiting PR → empty"
 setup
 UNION='['"$(make_pr_union 10 "10-waiting" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$PENDING_ROLLUP")"']'

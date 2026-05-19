@@ -13,13 +13,12 @@
 #   pr <num> <branch>           — the QA PR to work on
 #
 # Default mode priority (highest first; within a tier, oldest PR wins):
-#   1. Oldest "ready"    PR (draft + dispatch:security-reviewed)
-#   2. Oldest "security" PR (draft + dispatch:reviewed)
-#   3. Oldest "review"   PR (draft + dispatch:refactored)
-#   4. Oldest "simplify" PR (draft + dispatch:qa-done)
-#   5. Oldest "verify"   PR (draft, CI completed and failed)
-#   6. Oldest open help-wanted issue
-#   7. Oldest "qa"       PR (draft, CI green, no dispatch:* label)
+#   1. Oldest "security" PR (draft + dispatch:reviewed or dispatch:security-reviewed)
+#   2. Oldest "review"   PR (draft + dispatch:refactored)
+#   3. Oldest "simplify" PR (draft + dispatch:qa-done)
+#   4. Oldest "verify"   PR (draft, CI completed and failed)
+#   5. Oldest open help-wanted issue
+#   6. Oldest "qa"       PR (draft, CI green, no dispatch:* label)
 #
 # PRs with a local git worktree are skipped (a session is actively working them).
 # "done" (non-draft) PRs are skipped entirely.
@@ -96,7 +95,7 @@ PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number
 declare -A FIRST_PR
 
 # Default-mode selection order among PR phases (highest priority first).
-PHASE_PRIORITY=(ready security review simplify verify)
+PHASE_PRIORITY=(security review simplify verify)
 
 while IFS=$'\t' read -r pr_num _created pr_branch; do
   [[ -z "$pr_num" ]] && continue
@@ -129,7 +128,7 @@ if [[ "$QA_MODE" == "true" ]]; then
   exit 0
 fi
 
-# Default mode: ready → security → review → simplify → verify →
+# Default mode: security → review → simplify → verify →
 #               help-wanted issue → qa → empty.
 for phase in "${PHASE_PRIORITY[@]}"; do
   if [[ -n "${FIRST_PR[$phase]:-}" ]]; then
