@@ -1,5 +1,5 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
-import { classifyError } from "@commons-systems/errorutil/classify";
+import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
 import { resolveAudioSource } from "./storage.js";
 import type { AudioItem } from "./types.js";
@@ -70,12 +70,12 @@ export function initPlayer(
         currentObjectUrl = url;
         audioEl.src = url;
         audioEl.play().catch((err) => {
-          if (classifyError(err) === "programmer") throw err;
+          if (deferProgrammerError(err)) return;
           logError(err, { operation: "audio-play" });
         });
       })
       .catch((err) => {
-        if (classifyError(err) === "programmer") throw err;
+        if (deferProgrammerError(err)) return;
         logError(err, { operation: "audio-source-resolve", storagePath: item.storagePath });
         advanceOrStop(index);
       });
