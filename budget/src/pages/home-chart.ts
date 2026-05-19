@@ -18,7 +18,7 @@ export interface SerializedChartTransaction {
   budgetName: string | null;
 }
 
-interface CategoryNode {
+export interface CategoryNode {
   name: string;
   fullPath: string;
   value: number;
