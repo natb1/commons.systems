@@ -207,6 +207,9 @@ fi
 
 # Fetch help-wanted issues oldest-first; pick the oldest with no local worktree.
 ISSUE_LIST=$(gh issue list --label "help wanted" --state open --json number,createdAt)
+# Sort into a variable first so a jq failure aborts here (set -e + pipefail);
+# a process substitution would swallow it as empty input. Mirrors PR_SORTED.
+ISSUE_NUMS_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
 ISSUE_NUM=""
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
@@ -216,7 +219,7 @@ while IFS= read -r issue_num; do
   fi
   ISSUE_NUM="$issue_num"
   break
-done < <(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
+done <<< "$ISSUE_NUMS_SORTED"
 
 if [[ -n "$ISSUE_NUM" ]]; then
   echo "issue $ISSUE_NUM"

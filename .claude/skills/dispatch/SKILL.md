@@ -97,7 +97,9 @@ an existing worktree) or `name` (create a new one; fires the `WorktreeCreate` ho
     ```
     (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
   - **Queue-selected (no argument)** → another session already owns this worktree.
-    Report the conflict (name the worktree path and issue `<N>`) and **stop**; do not
+    The queue scan skips worktree'd issues, so this arises only when Step 2
+    leaf-tracing retargets to a blocker or sub-issue that has one. Report the
+    conflict (name the worktree path and issue `<N>`) and **stop**; do not
     `EnterWorktree`.
 - **No existing worktree** → generate a sanitized branch name `<issue>-<slug>`:
   lowercase the issue title, replace non-alphanumeric runs with `-`, collapse repeated
