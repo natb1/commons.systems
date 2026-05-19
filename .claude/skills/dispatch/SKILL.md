@@ -58,7 +58,7 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
   in-progress work regardless of main's state).
 
   Priority order it implements (highest first; within a tier, oldest PR wins; PRs
-  with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
+  and `help wanted` issues with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
   oldest `security` PR → oldest `review` PR → oldest `simplify` PR → oldest
   `verify` PR → oldest `help wanted` issue → oldest `qa` PR → `empty`. Non-QA PRs
   are ranked closest-to-done first — `security` is the closest-to-done non-QA
@@ -112,12 +112,19 @@ an existing worktree) or `name` (create a new one; fires the `WorktreeCreate` ho
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.) Then go
   straight to creating the marker below.
 - **An existing worktree matches** `<issue>-*` (parse `git worktree list --porcelain`
-  as blank-line-delimited records) → `EnterWorktree` with `path:` set to that path.
-  After entering, re-sync issue context from the worktree:
-  ```bash
-  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
-  ```
-  (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
+  as blank-line-delimited records):
+  - **Named by an explicit `/dispatch` argument** (recycle-after-completion case) →
+    `EnterWorktree` with `path:` set to that path. After entering, re-sync issue
+    context from the worktree:
+    ```bash
+    .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+    ```
+    (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
+  - **Queue-selected (no argument)** → another session already owns this worktree.
+    The queue scan skips worktree'd issues, so this arises only when Step 2
+    leaf-tracing retargets to a blocker or sub-issue that has one. Report the
+    conflict (name the worktree path and issue `<N>`) and **stop**; do not
+    `EnterWorktree`.
 - **No existing worktree** → generate a sanitized branch name `<issue>-<slug>`:
   lowercase the issue title, replace non-alphanumeric runs with `-`, collapse repeated
   `-`, strip leading/trailing `-`, and truncate so the full branch name is ≤ 32
