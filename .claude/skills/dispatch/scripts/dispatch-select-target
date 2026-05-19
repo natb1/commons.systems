@@ -51,18 +51,23 @@ done
 # for commits that have no classic statuses.
 main_broken_sha() {
   local sha cr_fail wf_fail
+  # CI conclusions that count as a failing check; both gh sources below report
+  # conclusions in lowercase.
+  local fail='["failure","timed_out","cancelled","action_required","startup_failure","stale"]'
   sha=$(gh api "repos/{owner}/{repo}/commits/main" | jq -r '.sha')
 
-  cr_fail=$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" | jq '
-    [.check_runs[] | select(.conclusion as $c |
-      ["failure","timed_out","cancelled","action_required","startup_failure","stale"]
-      | index($c))] | length')
+  cr_fail=$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
+    | jq --argjson fail "$fail" \
+        '[.check_runs[] | select(.conclusion as $c | $fail | index($c))] | length')
 
-  wf_fail=$(gh run list --branch main \
-    --json databaseId,headSha,conclusion,status,workflowName | jq --arg sha "$sha" '
-    [.[] | select(.headSha == $sha) | select(.conclusion as $c |
-      ["failure","timed_out","cancelled","action_required","startup_failure","stale"]
-      | index($c))] | length')
+  # --commit scopes the query to main's HEAD (the default 20-run window could
+  # otherwise miss it); the headSha filter is a defense-in-depth guard so a
+  # stale run can never trip the gate.
+  wf_fail=$(gh run list --branch main --commit "$sha" \
+    --json databaseId,headSha,conclusion,status,workflowName \
+    | jq --arg sha "$sha" --argjson fail "$fail" \
+        '[.[] | select(.headSha == $sha)
+              | select(.conclusion as $c | $fail | index($c))] | length')
 
   if [[ "$cr_fail" -gt 0 || "$wf_fail" -gt 0 ]]; then
     echo "$sha"

@@ -131,7 +131,7 @@ case "$args" in
     if [[ -f "$STUB_DIR/main-check-runs.json" ]]; then cat "$STUB_DIR/main-check-runs.json"
     else echo '{"check_runs":[]}'; fi
     ;;
-  "run list --branch main --json databaseId,headSha,conclusion,status,workflowName")
+  run\ list\ --branch\ main\ *)
     # main_broken_sha: Actions workflow runs on main. Default: none.
     if [[ -f "$STUB_DIR/main-run-list.json" ]]; then cat "$STUB_DIR/main-run-list.json"
     else echo '[]'; fi
