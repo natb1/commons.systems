@@ -3,21 +3,28 @@
 # Usage: dispatch-select-target [--qa]
 #
 # Output: exactly one line:
-#   pr <num> <branch>   — a PR to work on
-#   issue <num>         — a help-wanted issue to implement
-#   empty               — nothing eligible
+#   pr <num> <branch>           — a PR to work on
+#   issue <num>                 — a help-wanted issue to implement
+#   empty                       — nothing eligible
+#   worktree <N> <branch>       — the current worktree's own open issue (short-circuits the queue scan)
+#   worktree-closed <N> <branch>— the current worktree's issue is closed or unknown
+#   main-broken <sha>           — origin/main's HEAD CI has a failing check; no task selected
+#
+# Default mode runs a top-priority origin/main CI health gate before the ladder:
+# every queueable task builds on origin/main, so a failing check on main's HEAD
+# short-circuits the scan to "main-broken <sha>" and selects no task.
 #
 # Default mode priority (highest first; within a tier, oldest PR wins):
-#   1. Oldest "ready"    PR (draft + dispatch:security-reviewed)
-#   2. Oldest "security" PR (draft + dispatch:reviewed)
-#   3. Oldest "review"   PR (draft + dispatch:refactored)
-#   4. Oldest "simplify" PR (draft + dispatch:qa-done)
-#   5. Oldest "verify"   PR (draft, CI not green)
-#   6. Oldest open help-wanted issue
-#   7. Oldest "qa"       PR (draft, CI green, no dispatch:* label)
+#   1. Oldest "security" PR (draft + dispatch:reviewed or dispatch:security-reviewed)
+#   2. Oldest "review"   PR (draft + dispatch:refactored)
+#   3. Oldest "simplify" PR (draft + dispatch:qa-done)
+#   4. Oldest "verify"   PR (draft, CI completed and failed)
+#   5. Oldest open help-wanted issue
+#   6. Oldest "qa"       PR (draft, CI green, no dispatch:* label)
 #
 # PRs with a local git worktree are skipped (a session is actively working them).
 # "done" (non-draft) PRs are skipped entirely.
+# "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
 #
 # --qa mode priority:
 #   1. Oldest QA PR with no local git worktree
@@ -33,6 +40,68 @@ for arg in "$@"; do
     *) echo "error: unknown argument: $arg" >&2; exit 1 ;;
   esac
 done
+
+# Print origin/main's HEAD SHA if its CI has a failing check; print nothing if
+# main is healthy or only has in-progress checks. main's CI state spans two
+# sources that must both be aggregated:
+#   - check-runs    (CodeQL default-setup analyses)      — /commits/{sha}/check-runs
+#   - workflow runs (Production Deploy, Firestore rules) — gh run list --branch main
+# The legacy combined-status API is intentionally not used: it reports "pending"
+# for commits that have no classic statuses.
+main_broken_sha() {
+  local sha cr_fail wf_fail
+  # CI conclusions that count as a failing check; both gh sources below report
+  # conclusions in lowercase.
+  local fail='["failure","timed_out","cancelled","action_required","startup_failure","stale"]'
+  sha=$(gh api "repos/{owner}/{repo}/commits/main" | jq -r '.sha')
+
+  cr_fail=$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
+    | jq --argjson fail "$fail" \
+        '[.check_runs[] | select(.conclusion as $c | $fail | index($c))] | length')
+
+  # --commit scopes the query to main's HEAD (the default 20-run window could
+  # otherwise miss it); the headSha filter is a defense-in-depth guard so a
+  # stale run can never trip the gate.
+  wf_fail=$(gh run list --branch main --commit "$sha" \
+    --json headSha,conclusion \
+    | jq --arg sha "$sha" --argjson fail "$fail" \
+        '[.[] | select(.headSha == $sha)
+              | select(.conclusion as $c | $fail | index($c))] | length')
+
+  if [[ "$cr_fail" -gt 0 || "$wf_fail" -gt 0 ]]; then
+    echo "$sha"
+  fi
+}
+
+# Current-worktree detection (default mode only): if the current branch matches
+# the worktree convention <issue-num>-<slug>, short-circuit before the queue scan
+# and target that worktree's own issue directly.
+if [[ "$QA_MODE" == "false" ]]; then
+  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  if [[ "$CURRENT_BRANCH" =~ ^([0-9]+)- ]]; then
+    N="${BASH_REMATCH[1]}"
+    if STATE=$(gh issue view "$N" --json state 2>/dev/null | jq -r '.state'); then
+      if [[ "$STATE" == "OPEN" ]]; then
+        echo "worktree $N $CURRENT_BRANCH"
+      else
+        echo "worktree-closed $N $CURRENT_BRANCH"
+      fi
+    else
+      echo "worktree-closed $N $CURRENT_BRANCH"
+    fi
+    exit 0
+  fi
+
+  # Top-priority gate: every queueable task builds on origin/main, so a failing
+  # check on main's HEAD means nothing is safe to start — short-circuit to
+  # main-broken and let /dispatch Step 1 diagnose. In-progress checks do not trip
+  # the gate. --qa mode and current-worktree continuation never reach here.
+  MAIN_BROKEN_SHA=$(main_broken_sha)
+  if [[ -n "$MAIN_BROKEN_SHA" ]]; then
+    echo "main-broken $MAIN_BROKEN_SHA"
+    exit 0
+  fi
+fi
 
 # Collect branches that already have a local worktree (a session is working them).
 WORKTREE_BRANCHES=()
@@ -55,14 +124,14 @@ has_worktree() {
   return 1
 }
 
-# Fetch all open PRs sorted by createdAt ascending (oldest first).
-PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName)
+# Fetch all open PRs once, with the union of fields this script and
+# dispatch-phase need. Each per-PR dispatch-phase call below reuses it
+# (passed as DISPATCH_PR_LIST) instead of re-running gh pr list.
+PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels)
 PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number, .createdAt, .headRefName] | @tsv')
 
 # One "first-seen" variable per phase (list is pre-sorted oldest-first, so first
 # capture of a phase is always the oldest PR in that phase).
-READY_PR_NUM=""
-READY_PR_BRANCH=""
 SECURITY_PR_NUM=""
 SECURITY_PR_BRANCH=""
 REVIEW_PR_NUM=""
@@ -82,19 +151,17 @@ while IFS=$'\t' read -r pr_num _created pr_branch; do
     continue
   fi
 
-  # Determine phase for this PR.
-  phase=$("$SCRIPT_DIR/dispatch-phase" "$pr_branch")
+  # Determine phase for this PR, reusing the PR list fetched above.
+  phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$pr_branch")
 
   case "$phase" in
     done)
       # Skip completed PRs.
       continue
       ;;
-    ready)
-      if [[ -z "$READY_PR_NUM" ]]; then
-        READY_PR_NUM="$pr_num"
-        READY_PR_BRANCH="$pr_branch"
-      fi
+    waiting)
+      # Skip PRs whose CI is still running — nothing actionable yet.
+      continue
       ;;
     security)
       if [[ -z "$SECURITY_PR_NUM" ]]; then
@@ -139,13 +206,8 @@ if [[ "$QA_MODE" == "true" ]]; then
   exit 0
 fi
 
-# Default mode: ready → security → review → simplify → verify →
+# Default mode: security → review → simplify → verify →
 #               help-wanted issue → qa → empty.
-if [[ -n "$READY_PR_NUM" ]]; then
-  echo "pr $READY_PR_NUM $READY_PR_BRANCH"
-  exit 0
-fi
-
 if [[ -n "$SECURITY_PR_NUM" ]]; then
   echo "pr $SECURITY_PR_NUM $SECURITY_PR_BRANCH"
   exit 0

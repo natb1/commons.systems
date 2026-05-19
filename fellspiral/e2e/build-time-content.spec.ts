@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 // These tests verify that build-time inlined blog content is present in the
 // served HTML without requiring async fetches. No route interception is used --

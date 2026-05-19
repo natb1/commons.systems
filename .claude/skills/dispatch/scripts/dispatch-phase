@@ -3,12 +3,19 @@
 # Usage: dispatch-phase <issue-num|branch>
 #
 # Prints exactly one phase name to stdout:
-#   implement | verify | qa | simplify | review | security | ready | done
+#   implement | verify | waiting | qa | simplify | review | security | done
 #
 # Argument resolution:
 #   - All-digit arg: treated as an issue number. The matching PR is the one
 #     whose headRefName starts with "<issue>-".
 #   - Otherwise: treated as a branch name. Matched exactly.
+#
+# Environment:
+#   DISPATCH_PR_LIST — optional. A JSON array of open PRs supplied by the
+#     caller (dispatch-select-target passes it to avoid a redundant
+#     gh pr list per PR). When set and non-empty, it is used in place of a
+#     self-issued gh pr list. Must include the fields
+#     number,headRefName,isDraft,statusCheckRollup,labels.
 set -euo pipefail
 
 ARG="${1:-}"
@@ -17,8 +24,13 @@ if [[ -z "$ARG" ]]; then
   exit 1
 fi
 
-# Fetch all open PRs with the fields we need.
-PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+# Use the caller-supplied open-PR list when DISPATCH_PR_LIST is set.
+# Otherwise fetch the list ourselves — standalone callers rely on this path.
+if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
+  PR_LIST="$DISPATCH_PR_LIST"
+else
+  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+fi
 
 # Find the matching PR.
 if [[ "$ARG" =~ ^[0-9]+$ ]]; then
@@ -50,32 +62,15 @@ fi
 ROLLUP=$(printf '%s' "$PR" | jq '.statusCheckRollup')
 ROLLUP_LEN=$(printf '%s' "$ROLLUP" | jq 'length')
 
-# Empty rollup is NOT green.
+# Empty rollup — checks not yet started, nothing actionable.
 if [[ "$ROLLUP_LEN" -eq 0 ]]; then
-  echo "verify"
+  echo "waiting"
   exit 0
 fi
 
-# Check for any pending entries (check runs not yet COMPLETED, or status
-# contexts with state PENDING/EXPECTED).
-PENDING=$(printf '%s' "$ROLLUP" | jq '
-  map(
-    if has("conclusion") then
-      # Check run: pending if status != COMPLETED
-      .status != "COMPLETED"
-    else
-      # Status context: pending if state is PENDING or EXPECTED
-      (.state == "PENDING" or .state == "EXPECTED")
-    end
-  ) | any
-')
-
-if [[ "$PENDING" == "true" ]]; then
-  echo "verify"
-  exit 0
-fi
-
-# Check for any failing entries.
+# Check for any failing entries first: a concluded failure is actionable even
+# while other checks are still running, so a mixed rollup (some failing, some
+# pending) resolves to verify, not waiting.
 FAILING=$(printf '%s' "$ROLLUP" | jq '
   map(
     if has("conclusion") then
@@ -96,6 +91,26 @@ if [[ "$FAILING" == "true" ]]; then
   exit 0
 fi
 
+# Check for any pending entries (check runs not yet COMPLETED, or status
+# contexts with state PENDING/EXPECTED). No failures found above, so pending
+# means checks are still running — nothing actionable yet.
+PENDING=$(printf '%s' "$ROLLUP" | jq '
+  map(
+    if has("conclusion") then
+      # Check run: pending if status != COMPLETED
+      .status != "COMPLETED"
+    else
+      # Status context: pending if state is PENDING or EXPECTED
+      (.state == "PENDING" or .state == "EXPECTED")
+    end
+  ) | any
+')
+
+if [[ "$PENDING" == "true" ]]; then
+  echo "waiting"
+  exit 0
+fi
+
 # All entries are passing — check that all passing conditions hold.
 # An entry passes if: check run with conclusion in {SUCCESS,NEUTRAL,SKIPPED},
 # or status context with state SUCCESS.
@@ -111,16 +126,20 @@ ALL_PASSING=$(printf '%s' "$ROLLUP" | jq '
 ')
 
 if [[ "$ALL_PASSING" != "true" ]]; then
-  echo "verify"
+  # Non-empty rollup with no failures, no pending, but not all passing —
+  # unrecognized state, nothing actionable.
+  echo "waiting"
   exit 0
 fi
 
 # CI is green — map the highest dispatch:* label to the next phase.
-# Label chain: qa-done < refactored < reviewed < security-reviewed
+# Label chain: qa-done < refactored < reviewed < security-reviewed.
+# dispatch:security-reviewed is a /security-review-fix re-entry marker — it maps
+# back to "security"; the skill is idempotent and just finishes "gh pr ready".
 LABELS=$(printf '%s' "$PR" | jq -r '[.labels[].name | select(startswith("dispatch:"))] | join(" ")')
 
 if echo "$LABELS" | grep -qF "dispatch:security-reviewed"; then
-  echo "ready"
+  echo "security"
 elif echo "$LABELS" | grep -qF "dispatch:reviewed"; then
   echo "security"
 elif echo "$LABELS" | grep -qF "dispatch:refactored"; then
