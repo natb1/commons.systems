@@ -1,26 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Skill(pr-workflow)",
-      "Skill(pr-workflow-ci-monitor)",
-      "Skill(pr-workflow-progress-report)",
-      "Skill(pr-workflow-termination-summary)",
       "Skill(ready)",
-      "Skill(ref-code-quality)",
-      "Skill(ref-create-pr)",
-      "Skill(ref-implement)",
       "Skill(ref-memory-management)",
-      "Skill(ref-pr-check)",
-      "Skill(ref-pr-workflow)",
-      "Skill(ref-prod-qa)",
-      "Skill(ref-qa)",
       "Skill(ref-ready)",
-      "Skill(ref-security)",
-      "Skill(ref-unit-test)",
-      "Skill(ref-wiggum-loop)",
       "Skill(ref-write-instructions)",
       "Skill(roadmap-debate)",
-      "Skill(wiggum-loop)",
       "Bash(cat:*)",
       "Bash(echo:*)",
       "Bash(find:*)",
@@ -48,7 +33,6 @@
       "Bash(gh run rerun:*)",
       "Bash(gh run view:*)",
       "Bash(gh run watch:*)",
-      "Bash(.claude/skills/ref-pr-workflow/scripts/run-ci-watch.sh:*)",
       "Bash(.claude/skills/roadmap-debate/scripts/gather-context.sh:*)",
       "Bash(gh search:*)",
       "Bash(go build:*)",
@@ -121,21 +105,8 @@
         ]
       },
       {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/restore-skill-state.sh"
-          }
-        ]
-      },
-      {
         "matcher": "clear",
         "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/clear-skill-state.sh"
-          },
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/restore-dispatch-skill.sh"

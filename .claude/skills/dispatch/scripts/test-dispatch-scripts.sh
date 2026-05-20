@@ -221,21 +221,14 @@ esac
 STUB
   chmod +x "$TMPDIR_TEST/bin/git"
 
-  # Make a fake issue-blocking script that the trace-leaf script can call.
-  # dispatch-trace-leaf resolves REF_SCRIPTS_DIR relative to SCRIPT_DIR
-  # (two levels up, then ref-pr-workflow/scripts). Inside TMPDIR_TEST the
-  # copied scripts have SCRIPT_DIR = TMPDIR_TEST, so REF_SCRIPTS_DIR would
-  # be "$TMPDIR_TEST/../../ref-pr-workflow/scripts" which is wrong.
-  # Instead, create fake issue-blocking and issue-sub-issues in a fake
-  # ref-pr-workflow/scripts dir alongside TMPDIR_TEST.
-  mkdir -p "$TMPDIR_TEST/ref-pr-workflow/scripts"
-
-  # We need to patch the copied dispatch-trace-leaf so REF_SCRIPTS_DIR
-  # points at our fake scripts. Use a wrapper approach: write a thin wrapper
-  # that sets the env and calls the real script with a patched path.
-  cat > "$TMPDIR_TEST/ref-pr-workflow/scripts/issue-blocking" <<'FAKE'
+  # dispatch-trace-leaf calls issue-blocking and issue-sub-issues as sibling
+  # scripts ("$SCRIPT_DIR/issue-blocking"). Since the copied dispatch-trace-leaf
+  # has SCRIPT_DIR = TMPDIR_TEST, place fake versions of those scripts directly
+  # in TMPDIR_TEST so they are found alongside it. The fakes read stub files
+  # instead of calling gh.
+  cat > "$TMPDIR_TEST/issue-blocking" <<'FAKE'
 #!/usr/bin/env bash
-STUB_DIR="$(cd "$(dirname "$0")/../../stub" && pwd)"
+STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
 num="${1:-}"
 # Strip leading # if present.
 num="${num#\#}"
@@ -253,11 +246,11 @@ for dep in $blocker_nums; do
   fi
 done
 FAKE
-  chmod +x "$TMPDIR_TEST/ref-pr-workflow/scripts/issue-blocking"
+  chmod +x "$TMPDIR_TEST/issue-blocking"
 
-  cat > "$TMPDIR_TEST/ref-pr-workflow/scripts/issue-sub-issues" <<'FAKE'
+  cat > "$TMPDIR_TEST/issue-sub-issues" <<'FAKE'
 #!/usr/bin/env bash
-STUB_DIR="$(cd "$(dirname "$0")/../../stub" && pwd)"
+STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
 num="${1:-}"
 num="${num#\#}"
 sub_nums=""
@@ -272,26 +265,7 @@ for sub in $sub_nums; do
   fi
 done
 FAKE
-  chmod +x "$TMPDIR_TEST/ref-pr-workflow/scripts/issue-sub-issues"
-
-  # Patch the copied dispatch-trace-leaf to use our fake ref-pr-workflow dir.
-  # Replace the REF_SCRIPTS_DIR line so it points into TMPDIR_TEST.
-  # We do this by writing a wrapper script.
-  mv "$TMPDIR_TEST/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf.real"
-  cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<WRAPPER
-#!/usr/bin/env bash
-set -euo pipefail
-# Override REF_SCRIPTS_DIR to point at fake scripts.
-export _DISPATCH_TRACE_LEAF_REF_OVERRIDE="$TMPDIR_TEST/ref-pr-workflow/scripts"
-exec "$TMPDIR_TEST/dispatch-trace-leaf.real" "\$@"
-WRAPPER
-  chmod +x "$TMPDIR_TEST/dispatch-trace-leaf"
-
-  # Patch the real script to honour the override env var.
-  # Re-write the REF_SCRIPTS_DIR line in the .real copy.
-  # Use a sed in-place to replace the REF_SCRIPTS_DIR assignment.
-  sed -i 's|REF_SCRIPTS_DIR="$(cd "\$SCRIPT_DIR/\.\./\.\./ref-pr-workflow/scripts" && pwd)"|REF_SCRIPTS_DIR="${_DISPATCH_TRACE_LEAF_REF_OVERRIDE:-$(cd "\$SCRIPT_DIR/../../ref-pr-workflow/scripts" \&\& pwd)}"|' \
-    "$TMPDIR_TEST/dispatch-trace-leaf.real"
+  chmod +x "$TMPDIR_TEST/issue-sub-issues"
 
   export PATH="$TMPDIR_TEST/bin:$PATH"
 }
@@ -1119,14 +1093,6 @@ setup
 assert_eq "qa applies dispatch:qa-done" \
   "pr edit 21 --add-label dispatch:qa-done" "$(cat "$STUB_DIR/gh-pr-edit.log")"
 assert_eq "qa: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
-echo "Test: simplify → dispatch:refactored (apply only, no label create)"
-setup
-"$TMPDIR_TEST/dispatch-complete-phase" 25 simplify
-assert_eq "simplify applies dispatch:refactored" \
-  "pr edit 25 --add-label dispatch:refactored" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "simplify: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
 echo "Test: review → dispatch:reviewed (apply only, no label create)"

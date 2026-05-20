@@ -36,7 +36,7 @@ workspace typescript compiler.
 
 ## Scripted workflows
 
-Wrapper scripts in `.claude/skills/ref-pr-workflow/scripts/` call `ensure_deps()`
+Wrapper scripts in `.claude/skills/dispatch/scripts/` call `ensure_deps()`
 automatically. Use these for QA, deploy, and test workflows:
 
 - `run-unit-tests.sh` — runs `vitest` on changed app packages

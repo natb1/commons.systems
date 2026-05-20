@@ -78,7 +78,7 @@ fi
 
 # Branch regex above guarantees a leading <issue-num>- prefix.
 ISSUE_NUM="${BRANCH%%-*}"
-(cd "$NEW_PATH" && "$(cd "$(dirname "$0")" && pwd)/../skills/ref-pr-workflow/scripts/sync-issue-context" "$ISSUE_NUM") >&3 2>&1 \
+(cd "$NEW_PATH" && "$(cd "$(dirname "$0")" && pwd)/../skills/dispatch/scripts/sync-issue-context" "$ISSUE_NUM") >&3 2>&1 \
   || { echo "[worktree-create] ERROR: sync-issue-context failed for issue $ISSUE_NUM" >&2; exit 1; }
 
 echo "$NEW_PATH"
