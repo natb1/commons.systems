@@ -54,6 +54,18 @@
       "source": "./.claude-plugin/pr-workflow-bundle/write-instructions",
       "category": "development",
       "tags": ["documentation", "instructions", "best-practices"]
+    },
+    {
+      "name": "budget",
+      "description": "Convert QFX/OFX/CSV bank statements to budget.json on your machine — no signup, no data sharing",
+      "version": "0.1.0",
+      "author": {
+        "name": "Nate",
+        "email": "nathan@natb1.com"
+      },
+      "source": "./.claude-plugin/budget-bundle/budget",
+      "category": "productivity",
+      "tags": ["budget", "finance", "etl", "qfx", "ofx", "csv"]
     }
   ]
 }
