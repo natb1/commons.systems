@@ -78,7 +78,7 @@ Otherwise run all steps in order.
 
    ```bash
    gh label create "dispatch:reviewed" --color BFD4F2 --description "review phase complete" 2>/dev/null || true
-   gh pr edit <pr-num> --add-label "dispatch:reviewed"
+   gh pr edit "$PR_NUM" --add-label "dispatch:reviewed"
    ```
 
    This skill **owns** its `dispatch:reviewed` label — unlike the generic
