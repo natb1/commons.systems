@@ -1,5 +1,5 @@
 import { computeNetAmount, isCardPaymentCategory, MS_PER_WEEK, weekStart } from "../balance.js";
-import { showDropdown, registerAutocompleteListeners } from "@commons-systems/style/components/autocomplete";
+import { showDropdown, registerAutocompleteListeners } from "@commons-systems/components/autocomplete";
 import { parseJsonArray, makeDebounced } from "./hydrate-util.js";
 import { getThemeFg } from "./chart-util.js";
 import { renderSankeySvg } from "./sankey-render.js";
