@@ -13,19 +13,24 @@ TMP_ROOT=""
 cleanup() { [ -n "${TMP_ROOT:-}" ] && rm -rf "$TMP_ROOT"; }
 trap cleanup EXIT INT TERM
 
-# Build a fake repo at $REPO with:
-#  - a single workspace named $1 ("ws")
-#  - origin/main commit: the workspace typechecks clean iff $2 = "clean"
-#  - HEAD commit:        the workspace typechecks clean iff $3 = "clean"
-# A "dirty" version contains a marker line "DIRTY_TYPECHECK_MARKER"
-# in the workspace's src/index.ts. The stub `tsc` exits non-zero
-# when it finds that marker anywhere under the --project directory.
+# A "dirty" workspace contains the marker line DIRTY_TYPECHECK_MARKER, which the
+# stub `tsc` greps for and exits 1 on. "clean" workspaces compile fine.
+write_state() {
+  local state="$1" path="$2"
+  if [ "$state" = "clean" ]; then
+    echo "export const ok = 1;" > "$path"
+  else
+    echo "DIRTY_TYPECHECK_MARKER" > "$path"
+  fi
+}
+
+# Build a fake repo at $REPO with one workspace ($1), an origin/main commit in
+# state $2, and a HEAD commit in state $3. States are "clean" or "dirty".
 make_repo() {
   local ws="$1" baseline_state="$2" head_state="$3"
   REPO=$(mktemp -d "$TMP_ROOT/repo.XXXXXX")
   BARE=$(mktemp -d "$TMP_ROOT/bare.XXXXXX")
 
-  # Bare repo plays the role of "origin"
   git -C "$BARE" init --bare --quiet --initial-branch=main
 
   git -C "$REPO" init --quiet --initial-branch=main
@@ -33,7 +38,6 @@ make_repo() {
   git -C "$REPO" config user.name "Test User"
   git -C "$REPO" remote add origin "$BARE"
 
-  # Workspaces are derived from root package.json
   cat > "$REPO/package.json" <<JSON
 {
   "name": "test-repo",
@@ -42,7 +46,6 @@ make_repo() {
 }
 JSON
 
-  # The workspace itself
   mkdir -p "$REPO/$ws/src"
   cat > "$REPO/$ws/package.json" <<JSON
 { "name": "@commons-systems/$ws", "version": "0.0.0", "private": true }
@@ -51,47 +54,28 @@ JSON
 { "include": ["src"] }
 JSON
 
-  # Baseline content
-  if [ "$baseline_state" = "clean" ]; then
-    echo "export const ok = 1;" > "$REPO/$ws/src/index.ts"
-  else
-    echo "DIRTY_TYPECHECK_MARKER" > "$REPO/$ws/src/index.ts"
-  fi
-
+  write_state "$baseline_state" "$REPO/$ws/src/index.ts"
   git -C "$REPO" add -A
   git -C "$REPO" commit --quiet -m "baseline"
   git -C "$REPO" push --quiet origin main
 
-  # HEAD content (only commit when it differs from baseline)
+  git -C "$REPO" checkout --quiet -b feature
   if [ "$head_state" != "$baseline_state" ]; then
-    if [ "$head_state" = "clean" ]; then
-      echo "export const ok = 1;" > "$REPO/$ws/src/index.ts"
-    else
-      echo "DIRTY_TYPECHECK_MARKER" > "$REPO/$ws/src/index.ts"
-    fi
-    git -C "$REPO" checkout --quiet -b feature
+    write_state "$head_state" "$REPO/$ws/src/index.ts"
     git -C "$REPO" add -A
     git -C "$REPO" commit --quiet -m "head"
   else
-    # Even when content is identical, create a feature branch with a
-    # no-op commit so the test runs against a non-main branch like CI.
-    git -C "$REPO" checkout --quiet -b feature
+    # No-op commit so the test runs against a non-main branch like CI does.
     echo "" >> "$REPO/$ws/src/index.ts"
     git -C "$REPO" add -A
     git -C "$REPO" commit --quiet -m "head (no-op)"
   fi
 
-  # Make sure origin/main is fetched
   git -C "$REPO" fetch --quiet origin main
 }
 
-# Build a PATH-installable shim layer:
-#  - `npx tsc ...` invokes our fake tsc, which inspects the --project
-#    directory for the DIRTY_TYPECHECK_MARKER and exits 1 on hit.
-#  - We override `ensure_deps` via a wrapper that re-execs run-typecheck.sh
-#    after replacing the function. Simpler: create a sourced lib.sh shim?
-#    No — the SUT sources lib.sh by absolute path. Instead we set up the
-#    repo's node_modules so ensure_deps short-circuits.
+# Stub `npx tsc` and short-circuit `ensure_deps` (via pre-populated node_modules)
+# so the SUT can run without a real typescript install.
 make_shims() {
   local repo="$1"
   SHIM_BIN=$(mktemp -d "$TMP_ROOT/bin.XXXXXX")

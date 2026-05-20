@@ -96,39 +96,26 @@ REGRESSIONS=()
 for ws in "${APP_DIRS[@]}"; do
   echo "=== Typecheck: $ws ==="
 
-  baseline_pass=true
-  is_new_workspace=false
-
-  if ! git -C "$REPO_ROOT" rev-parse --verify "origin/main:$ws" >/dev/null 2>&1; then
-    # New workspace (no origin/main baseline) — treat as baseline-passed.
-    is_new_workspace=true
-    echo "$ws: new workspace (no origin/main baseline) — typechecking on HEAD"
-  else
+  pass_suffix=""
+  if git -C "$REPO_ROOT" rev-parse --verify "origin/main:$ws" >/dev/null 2>&1; then
     TOUCHED_WORKSPACES+=("$ws")
     git -C "$REPO_ROOT" checkout origin/main -- "$ws"
-
-    if (cd "$REPO_ROOT" && npx tsc --noEmit --project "$ws") >/dev/null 2>&1; then
-      baseline_pass=true
-    else
-      baseline_pass=false
-    fi
-
+    baseline_ok=true
+    (cd "$REPO_ROOT" && npx tsc --noEmit --project "$ws") >/dev/null 2>&1 || baseline_ok=false
     # Restore HEAD version immediately; don't wait for the trap.
     git -C "$REPO_ROOT" checkout HEAD -- "$ws"
-  fi
 
-  if [ "$baseline_pass" = false ]; then
-    echo "$ws: skipping — origin/main has pre-existing typecheck errors"
-    continue
-  fi
-
-  # Baseline clean (or new workspace) — HEAD must typecheck cleanly too.
-  if (cd "$REPO_ROOT" && npx tsc --noEmit --project "$ws"); then
-    if [ "$is_new_workspace" = true ]; then
-      echo "$ws: typecheck passed (new workspace)"
-    else
-      echo "$ws: typecheck passed"
+    if [ "$baseline_ok" = false ]; then
+      echo "$ws: skipping — origin/main has pre-existing typecheck errors"
+      continue
     fi
+  else
+    echo "$ws: new workspace (no origin/main baseline) — typechecking on HEAD"
+    pass_suffix=" (new workspace)"
+  fi
+
+  if (cd "$REPO_ROOT" && npx tsc --noEmit --project "$ws"); then
+    echo "$ws: typecheck passed$pass_suffix"
   else
     echo "$ws: typecheck FAILED" >&2
     REGRESSIONS+=("$ws")
