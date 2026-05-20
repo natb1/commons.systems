@@ -63,7 +63,7 @@ When the first line of `$INPUT` is exactly `non-interactive`, the skill runs in 
 
 1. Strip the `non-interactive` marker line from `$INPUT`.
 2. If the next non-empty line begins with `title: ` (case-sensitive), use the rest of that line as the issue title and strip that line from `$INPUT`. The remaining text is the issue body.
-3. Otherwise, derive the title from the first non-empty line of the remaining body (per the existing description-mode convention).
+3. Otherwise, derive the title from the first non-empty line of the remaining body (per the existing description-mode convention). The title is **never prompted** in non-interactive mode — callers that want a specific title must supply a `title: ` line.
 4. Proceed through Steps 2–3 (branch setup and 7-category evaluation) unchanged.
 5. In Step 4: skip plan-mode entry; compute the improved body internally and proceed directly to Step 5.
 6. In Step 5: skip the user-approval gate; proceed directly to issue creation via `gh issue create`.

@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — merge origin/main, run the generic /review, apply the recommended fixes, post a PR comment, and apply the dispatch:reviewed label
+description: Review phase — merge origin/main, run the generic /review, classify findings into Fixed/Informational/Dismissed/Deferred, implement Fixed, file follow-up issues for Deferred via /ready, post a 4-section PR comment, and apply the dispatch:reviewed label
 ---
 
 # Review and Fix
@@ -42,7 +42,9 @@ implementation and follow-up-issue subagents.
 
 3. **Classify findings into four buckets.** Walk every finding from `/review`.
    Use the `scope_disposition` hint when present; otherwise classify defensively
-   in this thread. The four buckets are:
+   in this thread — if the finding describes a concrete code change applicable
+   to this PR, default to `fix`; otherwise default to `informational`. The four
+   buckets are:
 
    - **Fixed** ← `fix` — actionable code changes to implement in Step 4.
    - **Informational** ← `informational` — FYIs, notes, observations; no
@@ -67,30 +69,28 @@ implementation and follow-up-issue subagents.
 
 5. **File follow-up issues for the Deferred bucket.** For each finding in the
    Deferred bucket, fork a subagent via the Agent tool (`subagent_type:
-   general-purpose`, `model: sonnet`) that invokes the `/ready` skill with
-   `$INPUT` constructed as:
+   general-purpose`, `model: sonnet`) that invokes the `/ready` skill. The
+   subagent constructs `$INPUT` per `ref-ready`'s "Non-Interactive Mode" format
+   (canonical there — do not restate it here). The title comes from the
+   finding's `title_hint`; the body is its `body_context` extended with a
+   "Relevant files" list, the original PR link `#<PR-num>`, and a short
+   rationale for why the finding is out of scope for this PR. The
+   non-interactive mode instructs `/ready` to skip plan mode and the
+   user-approval gate, which is required because subagents cannot collect user
+   feedback.
 
-   ```
-   non-interactive
-   title: <title_hint>
-   <body_context — including a "Relevant files" list, the original PR link
-   #<PR-num>, and a short rationale for why the finding is out of scope for
-   this PR>
-   ```
-
-   The `non-interactive` marker and `title: ` prefix are defined in
-   `ref-ready`'s "Non-Interactive Mode" section — they instruct `/ready` to
-   skip plan mode (Step 4) and the user-approval gate (Step 5), which is
-   required because subagents cannot collect user feedback.
-
-   The subagent extracts the new issue number `<N>` from `/ready`'s output
-   (`gh issue create` prints the new issue's URL ending in `/issues/<N>`) and
-   returns `<N>` as its result. Capture each `<N>` and attach it to its source
-   finding for the report generators.
+   The subagent extracts the new issue number `<N>` by parsing the
+   `https://github.com/.../issues/<N>` URL that `gh issue create` prints when
+   it creates the issue. `/ready` Step 6 (post-processing) may run additional
+   `gh issue edit <N>` calls against the same `<N>` — the creation URL is the
+   authoritative source. The subagent returns `<N>` as its result. Capture each
+   `<N>` and attach it to its source finding for the report generators.
 
    Run the per-finding subagents in parallel (multiple Agent calls in a single
-   message) — there are no sequencing constraints between them. If the
-   Deferred bucket is empty, skip this step.
+   message) — there are no sequencing constraints between them. Step 5 can
+   also be launched in the same message as Step 4's implementation subagents:
+   Step 5 touches only GitHub, Step 4 touches only the working tree, so they
+   do not conflict. If the Deferred bucket is empty, skip this step.
 
 6. **Commit and push the fixes.** Fork `/commit-merge-push` via the Agent tool
    to commit the Step 4 fixes and push. If the Fixed bucket was empty (Step 4
@@ -156,28 +156,9 @@ implementation and follow-up-issue subagents.
    advances the workflow.
 
 9. **Print the 4-section final report.** Print, in the conversation, the same
-   4-section structure used for the PR comment in Step 7:
-
-   ```
-   ## Fixed
-   - <short description>: <commit-SHA>
-   - ...
-
-   ## Informational
-   - <short description>
-   - ...
-
-   ## Dismissed
-   - <short description> — <one-line rationale>
-   - ...
-
-   ## Deferred
-   - <short description> → #<N>
-   - ...
-   ```
-
-   Empty sections render as `_None._`. On a no-findings run, every section
-   renders `_None._` and the skill still terminates cleanly.
+   4-section body that was posted to the PR in Step 7 — reuse the body file
+   written under `tmp/` rather than regenerating it. On a no-findings run,
+   every section renders `_None._` and the skill still terminates cleanly.
 
 10. **Interactive follow-up (attended use only).** If the user requests a fix
     for a remaining finding (typically from the Informational, Dismissed, or
