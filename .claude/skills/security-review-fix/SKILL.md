@@ -81,9 +81,8 @@ steps in order.
    ```
 
 6. **Apply the `dispatch:security-reviewed` label.** Ensure the label exists
-   idempotently, then apply it — follow the `gh label create` pattern from
-   `dispatch/SKILL.md`'s "Applying the progress label" section (use
-   `dangerouslyDisableSandbox: true`):
+   idempotently, then apply it (use `dangerouslyDisableSandbox: true` — `gh`
+   needs network):
 
    ```bash
    gh label create "dispatch:security-reviewed" --color BFD4F2 --description "security phase complete" 2>/dev/null || true

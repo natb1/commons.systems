@@ -105,8 +105,8 @@ true no-op. Otherwise run all steps in order.
    ```
 
 7. **Apply the `dispatch:refactored` label.** Ensure the label exists
-   idempotently, then apply it — follow the `gh label create` pattern from
-   `dispatch/SKILL.md` (use `dangerouslyDisableSandbox: true`):
+   idempotently, then apply it (use `dangerouslyDisableSandbox: true` — `gh`
+   needs network):
 
    ```bash
    gh label create "dispatch:refactored" --color BFD4F2 --description "simplify phase complete" 2>/dev/null || true

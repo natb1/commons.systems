@@ -224,8 +224,7 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 The PR stays a **draft** through every phase; the `security` phase's
 `/security-review-fix` flips it to ready as the workflow's terminal action.
 
-After dispatching the one phase and applying any label, **STOP** — do not advance to
-the next phase.
+After dispatching the one phase, **STOP** — do not advance to the next phase.
 
 `/ultrareview` is intentionally **never** invoked: it is user-triggered and billed,
 so `/dispatch` cannot launch it.
