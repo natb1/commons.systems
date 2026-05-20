@@ -117,9 +117,8 @@ If a named target issue is **closed**, report it and **stop**.
 
 ## 4. Resolve the Worktree
 
-Run the worktree-resolution script, matching `pr-workflow` Sections 2–3. Pass
-`explicit` when the target was named by an explicit `/dispatch` argument,
-otherwise `queue`:
+Run the worktree-resolution script. Pass `explicit` when the target was named by
+an explicit `/dispatch` argument, otherwise `queue`:
 
 ```bash
 .claude/skills/dispatch/scripts/dispatch-resolve-worktree <N> <explicit|queue>
@@ -131,7 +130,7 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
 - **`here`** → the current branch already is the target's worktree; no
   `EnterWorktree` needed. Re-sync issue context:
   ```bash
-  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+  .claude/skills/dispatch/scripts/sync-issue-context <N>
   ```
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
 - **`enter <path>`** → re-use an existing `<issue>-*` worktree (the
@@ -139,7 +138,7 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
   `EnterWorktree` with `path:` set to `<path>`. After entering, re-sync issue
   context from the worktree:
   ```bash
-  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+  .claude/skills/dispatch/scripts/sync-issue-context <N>
   ```
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
 - **`create <branch>`** → no worktree exists. `EnterWorktree` with `name:` set to
@@ -160,11 +159,9 @@ mkdir -p tmp && touch tmp/dispatch-worktree
 
 `restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
 recovery on this marker — when present, it re-invokes `/dispatch` so the phase is
-re-derived from PR/CI ground truth. `/dispatch` is the safe single creator: it only
-ever runs for dispatch sessions, so a `/pr-workflow` worktree can never acquire the
-marker. The marker is an empty boolean flag with no payload; it persists for the
-worktree's life and needs no cleanup — `tmp/` is git-ignored, and removing the
-worktree removes it.
+re-derived from PR/CI ground truth. The marker is an empty boolean flag with no
+payload; it persists for the worktree's life and needs no cleanup — `tmp/` is
+git-ignored, and removing the worktree removes it.
 
 ## 5. Derive the Phase
 
@@ -189,7 +186,7 @@ present. Map the phase:
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
 | `waiting` | draft PR, CI in progress (running/queued/not started) | monitor CI to completion with a `sonnet` subagent, then re-derive the phase and dispatch it (Step 6) |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
-| `simplify` | draft PR + `dispatch:qa-done` | `/simplify` → then label `dispatch:refactored` |
+| `simplify` | draft PR + `dispatch:qa-done` | `/simplify-fix` (applies `dispatch:refactored` itself) |
 | `review` | draft PR + `dispatch:refactored` | `/review-fix` (applies `dispatch:reviewed` itself) |
 | `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
 | `done` | non-draft (ready) PR | already complete — report and skip |
@@ -212,7 +209,7 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
      `model: sonnet`) that:
      - first waits for CI to register at least one check — a freshly-pushed
        branch can briefly have an empty check rollup;
-     - then runs `.claude/skills/ref-pr-workflow/scripts/run-pr-checks-wait.sh
+     - then runs `.claude/skills/dispatch/scripts/run-pr-checks-wait.sh
        <pr-num>` with `dangerouslyDisableSandbox: true`, which blocks until
        every check concludes;
      - returns once all checks have completed.
@@ -224,8 +221,10 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
      report it and **stop** — do not loop.
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done` itself on
   a clean pass; `/dispatch` applies no label.
-- **`simplify`** — invoke `/simplify`. After it **returns**, apply the accumulating
-  `dispatch:*` label to the PR (see below).
+- **`simplify`** — invoke `/simplify-fix`. It runs `/simplify`, applies the
+  recommended fixes, defers important out-of-scope findings to tracking issues,
+  posts a PR comment, and applies the `dispatch:refactored` label itself —
+  `/dispatch` applies no label.
 - **`review`** — invoke `/review-fix`. It runs `/review`, applies the recommended
   fixes, posts a PR comment, and applies the `dispatch:reviewed` label itself —
   `/dispatch` applies no label.
@@ -238,8 +237,7 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 The PR stays a **draft** through every phase; the `security` phase's
 `/security-review-fix` flips it to ready as the workflow's terminal action.
 
-After dispatching the one phase and applying any label, **STOP** — do not advance to
-the next phase.
+After dispatching the one phase, **STOP** — do not advance to the next phase.
 
 `/ultrareview` is intentionally **never** invoked: it is user-triggered and billed,
 so `/dispatch` cannot launch it.
@@ -247,20 +245,10 @@ so `/dispatch` cannot launch it.
 ### Applying the progress label
 
 The `dispatch:*` labels are the accumulating progress markers across the full
-workflow. `/dispatch-qa`, `/review-fix`, and `/security-review-fix` each own and
-apply their own label — `dispatch:qa-done`, `dispatch:reviewed`, and
-`dispatch:security-reviewed` respectively — so `/dispatch` applies no label after
-the `qa`, `review`, or `security` phase. The one label `/dispatch` applies itself is
-`dispatch:refactored`, after the `simplify` phase skill returns successfully —
-applying it here keeps the generic `/simplify` skill dispatch-unaware.
-
-`dispatch-complete-phase` maps the completed phase to its label and applies it to the
-PR, creating the label first only if it does not yet exist (e.g. on a fork) — one
-call, run with `dangerouslyDisableSandbox: true` since it invokes `gh`:
-
-```bash
-.claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> <phase>
-```
+workflow. `/dispatch-qa`, `/simplify-fix`, `/review-fix`, and
+`/security-review-fix` each own and apply their own label — `dispatch:qa-done`,
+`dispatch:refactored`, `dispatch:reviewed`, and `dispatch:security-reviewed`
+respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
 
 ## 7. Pre-Implementation Relevance Review
 

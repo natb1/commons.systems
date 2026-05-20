@@ -14,8 +14,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# issue-blocking and issue-sub-issues live alongside load-context etc.
-REF_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/../../ref-pr-workflow/scripts" && pwd)"
 
 ISSUE_NUM="${1:-}"
 if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
@@ -31,7 +29,7 @@ open_children() {
 
   # Gather open blockers.
   local blocker_json
-  blocker_json=$("$REF_SCRIPTS_DIR/issue-blocking" "$n" 2>/dev/null) || blocker_json=""
+  blocker_json=$("$SCRIPT_DIR/issue-blocking" "$n" 2>/dev/null) || blocker_json=""
   if [[ -n "$blocker_json" ]]; then
     while IFS= read -r num; do
       [[ -n "$num" ]] && children+=("$num")
@@ -40,7 +38,7 @@ open_children() {
 
   # Gather open sub-issues.
   local sub_json
-  sub_json=$("$REF_SCRIPTS_DIR/issue-sub-issues" "$n" 2>/dev/null) || sub_json=""
+  sub_json=$("$SCRIPT_DIR/issue-sub-issues" "$n" 2>/dev/null) || sub_json=""
   if [[ -n "$sub_json" ]]; then
     while IFS= read -r num; do
       [[ -n "$num" ]] && children+=("$num")
