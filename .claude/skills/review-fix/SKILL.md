@@ -51,9 +51,13 @@ Otherwise run all steps in order.
    tool, constrained to **working-tree edits only — no commits, no pushes**.
    Choose each subagent's model per `/implement-unit`'s model-selection heuristic
    (see that skill — it is the canonical home; do not restate it here).
-   Informational notes and nits the skill judges not worth a change are **not**
-   implemented — carry them to the Step 7 unfixed-findings report, each with a
-   one-line rationale.
+   **A finding is never skipped purely because the change is small.** If a nit
+   is a real, in-scope improvement, implement it regardless of how trivial the
+   diff is — smallness alone never qualifies as a reason to skip. Skip only
+   findings that are out of scope or that are not actual improvements (style
+   preference, false positive, informational context). Skipped findings are
+   carried to the Step 7 unfixed-findings report, each with a one-line
+   rationale.
 
 4. **Commit and push the fixes.** Fork `/commit-merge-push` via the Agent tool to
    commit the Step 3 fixes and push. If Step 3 produced no code changes (no
@@ -69,12 +73,11 @@ Otherwise run all steps in order.
    Then post it (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
 
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
+   .claude/skills/dispatch/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
 6. **Apply the `dispatch:reviewed` label.** Ensure the label exists idempotently,
-   then apply it — follow the `gh label create` pattern from `dispatch/SKILL.md`'s
-   "Applying the progress label" section (use `dangerouslyDisableSandbox: true`):
+   then apply it (use `dangerouslyDisableSandbox: true` — `gh` needs network):
 
    ```bash
    gh label create "dispatch:reviewed" --color BFD4F2 --description "review phase complete" 2>/dev/null || true
