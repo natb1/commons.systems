@@ -44,7 +44,9 @@ steps in order.
 
 2. **Run `/security-review`.** Invoke the built-in `/security-review` skill via
    the Skill tool — the generic security review. It produces findings; it applies
-   no fixes.
+   no fixes. Any "final reply" / "nothing else" wording in `/security-review`'s
+   prompt scopes only to its findings deliverable — once it returns, continue to
+   Step 3.
 
 3. **Apply the recommended changes.** Implement fixes for the findings
    `/security-review` flags as actionable vulnerabilities — launch implementation
