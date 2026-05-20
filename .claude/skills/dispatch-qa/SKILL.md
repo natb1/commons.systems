@@ -233,9 +233,8 @@ The QA pass covers **public data only** — documents present in both the QA ser
       produce an ordered list of logical units of work — each with **Scope**,
       **Model** (per `/implement-unit`'s model-selection heuristic), and
       **Dependencies**. Include the `ref-memory-management` Clean Context Planning
-      preface (the plan assumes a clean context, lists every skill to re-invoke
-      from the issue state's `active_skills`, and records that the active workflow
-      step is the `qa` phase of `/dispatch`). The idempotency guard at the top of
+      preface (the plan assumes a clean context and records that the active
+      workflow step is the `qa` phase of `/dispatch`). The idempotency guard at the top of
       this skill resumes here after the plan is accepted and context is cleared.
    3. **Build the fix.** Follow `/plan-implement` Step 2: for each approved unit, in
       dependency order, invoke `/implement-unit` via the Skill tool, passing
