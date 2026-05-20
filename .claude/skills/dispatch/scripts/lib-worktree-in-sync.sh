@@ -2,19 +2,15 @@
 # lib-worktree-in-sync.sh — sourceable helper that defines worktree_in_sync().
 #
 # Usage: source this file, then call:
-#   worktree_in_sync <worktree-path> [log-file-path]
+#   worktree_in_sync <worktree-path> [log-file-path] [log-tag]
 #
 # Returns 0 if the worktree is clean (no uncommitted changes) AND all commits
 # are pushed (zero unpushed commits). Returns non-zero otherwise.
 #
 # When [log-file-path] is supplied, appends a reason line on every non-zero
-# return using the same wording as the inline check in worktree-remove.sh:
-#   ERROR: ...  — for git command failures and non-numeric rev-list output
-#   KEEP: ...   — for dirty tree and unpushed commits
-#
-# Log line format: "<UTC-ISO-8601> [worktree-remove] <message>"
-# This matches the log() / err() helpers in worktree-remove.sh so output is
-# consistent when both write to the same log file.
+# return. [log-tag] defaults to "worktree-remove" so the original hook caller
+# keeps emitting "<ts> [worktree-remove] <msg>" unchanged; dispatch-sweep
+# passes "dispatch-sweep" so its log lines aren't mistagged.
 #
 # Safe to source multiple times. Does NOT use set -e (must return, not exit).
 
@@ -26,12 +22,12 @@ if [[ -z "${_LIB_WORKTREE_IN_SYNC_LOADED:-}" ]]; then
   worktree_in_sync() {
     local path="$1"
     local log_file="${2:-}"
+    local log_tag="${3:-worktree-remove}"
 
-    # Internal helper: write a line to the log file only if one is configured.
     _wis_log() {
       local msg="$1"
       if [[ -n "$log_file" ]]; then
-        printf '%s [worktree-remove] %s\n' "$(date -u +%FT%TZ)" "$msg" >>"$log_file" 2>/dev/null || true
+        printf '%s [%s] %s\n' "$(date -u +%FT%TZ)" "$log_tag" "$msg" >>"$log_file" 2>/dev/null || true
       fi
     }
 

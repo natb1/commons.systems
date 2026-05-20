@@ -1334,7 +1334,9 @@ echo "=== dispatch-sweep ==="
 #   stub/                         per-test JSON + record files (calls, gh out)
 #
 # Shims:
-#   gh   — gh-pr-list-merged.json / gh-pr-list-open.json drive `pr list`
+#   gh   — gh-pr-list-all.json drives `pr list --state all`; each entry carries
+#          {state, headRefName, number}, partitioned by the script into
+#          MERGED_BY_BRANCH / OPEN_BY_BRANCH.
 #   git  — knows worktree list/remove/prune, branch -D, -C <p> status,
 #          -C <p> rev-list --count, -C <p> log -1 --format=%ct, and
 #          rev-parse --path-format=absolute --git-common-dir.
@@ -1351,24 +1353,20 @@ sweep_setup() {
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
-  # Default empty gh outputs (each test may overwrite).
-  echo '[]' > "$STUB_DIR/gh-pr-list-merged.json"
-  echo '[]' > "$STUB_DIR/gh-pr-list-open.json"
+  # Default empty gh output (each test may overwrite).
+  echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
 
   # Default empty worktree list (each test should overwrite with its records).
   : > "$STUB_DIR/worktree-list.txt"
 
-  # gh shim — only the calls dispatch-sweep makes.
+  # gh shim — only the call dispatch-sweep makes.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  "pr list --state merged --json number,headRefName --limit 200")
-    cat "$STUB_DIR/gh-pr-list-merged.json"
-    ;;
-  "pr list --state open --json number,headRefName --limit 200")
-    cat "$STUB_DIR/gh-pr-list-open.json"
+  "pr list --state all --json number,headRefName,state --limit 200")
+    cat "$STUB_DIR/gh-pr-list-all.json"
     ;;
   *)
     echo "gh sweep stub: unknown invocation: $args" >&2
@@ -1501,8 +1499,8 @@ echo "Test: merged worktree (in-sync) is removed + branch deleted"
 sweep_setup
 WT_PATH="$TMPDIR_TEST/project/worktrees/42-feature"
 sweep_register_wt "$WT_PATH" "42-feature"
-echo '[{"number":100,"headRefName":"42-feature"}]' > "$STUB_DIR/gh-pr-list-merged.json"
-echo '[]' > "$STUB_DIR/gh-pr-list-open.json"
+echo '[{"number":100,"headRefName":"42-feature","state":"MERGED"}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
 # Clean tree + zero unpushed (defaults already match this — explicit for clarity).
 key=$(sweep_path_key "$WT_PATH")
 : > "$STUB_DIR/status${key}.txt"

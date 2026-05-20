@@ -23,65 +23,41 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 
 - **Issue argument given** → strip any leading `#`; that issue is the target.
   Skip the queue scan.
-- **No argument** → first run the **`origin/main` CI health gate**. Every
-  queueable task builds on `origin/main` — branches fork from it and merge it —
-  so a failing check on main's HEAD means nothing is safe to start, and the
-  sweep must not run either. Invoke `dispatch-select-target --health-only` with
-  `dangerouslyDisableSandbox: true` (the script invokes `gh`):
+- **No argument** → run the `origin/main` CI health gate first, then the
+  worktree sweep, then target selection. Both gh-calling scripts need
+  `dangerouslyDisableSandbox: true`.
+
+  The health gate must run **before** the sweep: a red main means no new work
+  is safe to start, and the sweep's gh calls are wasted in that case.
 
   ```bash
   HEALTH=$(.claude/skills/dispatch/scripts/dispatch-select-target --health-only)
   ```
 
-  The gate aggregates main's HEAD CI from two sources (CodeQL check-runs and
-  Actions workflow runs); a failing conclusion short-circuits to
-  `main-broken <sha>`. In-progress (not-yet-concluded) checks do **not** trip
-  the gate. The gate is bypassed by an explicit `/dispatch <issue|pr>` argument
-  (the queue scan is not run at all) and by current-worktree continuation (a
-  session continues its own in-progress work regardless of main's state); in
-  the latter case `--health-only` emits `ok` without consulting the gate.
+  - **`main-broken <sha>`** → see the **main-broken handler** at the end of
+    this step. Do **not** run the sweep or selection.
+  - **`ok`** → run the sweep (also needs `dangerouslyDisableSandbox: true` for
+    the `/proc` walk):
 
-  Route on `$HEALTH`:
+    ```bash
+    SWEEP_OUT=$(.claude/skills/dispatch/scripts/dispatch-sweep 2>$TMPDIR/dispatch-sweep-stderr)
+    SWEEP_EXIT=$?
+    ```
 
-  - **`ok`** → proceed to the sweep step below.
-  - **`main-broken <sha>`** → see the **main-broken handler** block at the end
-    of this step. Do **not** run the sweep or target selection.
+    Route on the sweep outcome:
 
-  When the gate emits `ok`, run the sweep script
-  (`dangerouslyDisableSandbox: true` — required for both the `/proc` walk and
-  the `gh pr list` calls inside it):
-
-  ```bash
-  SWEEP_OUT=$(.claude/skills/dispatch/scripts/dispatch-sweep 2>$TMPDIR/dispatch-sweep-stderr)
-  SWEEP_EXIT=$?
-  ```
-
-  Route on the three sweep outcomes before proceeding to target selection:
-
-  - **Exit 0, empty stdout** → no orphan to adopt; fall through to
-    `dispatch-select-target` below.
-  - **Exit 0, stdout is `worktree <N> <branch>`** → adopt `<N>` as the target.
-    Skip Step 2 (leaf tracing). Proceed to Step 3 (worktree-resolve) with
-    `<N>` and `explicit` — the sweep made a concrete adoption decision, not a
-    queue scan, so treat it identically to an explicit `/dispatch <N>` argument.
-  - **Non-zero exit, stderr contains `cleanup-unknown:<path>`** → the sweep found
-    a worktree with no open PR and no inferable issue number. This is the only
-    path where the sweep can destroy potentially-unmerged code. Use
-    `AskUserQuestion` to present `<path>` and explain the situation: the worktree
-    has neither an open PR nor a branch name prefixed with an issue number, so
-    its history is only in the local worktree. Ask whether to delete it.
-    - **User answers yes** → re-invoke with `dangerouslyDisableSandbox: true`:
-      ```bash
-      .claude/skills/dispatch/scripts/dispatch-sweep --cleanup-unknown <path>
-      ```
-      Then re-run the default `dispatch-sweep` (again `dangerouslyDisableSandbox:
-      true`). A new unknown orphan may surface — loop the confirmation prompt
-      until `dispatch-sweep` exits 0.
-    - **User answers no** → fall through to `dispatch-select-target` below and
-      let normal target selection proceed.
-
-  Then run the selection script (only reached when sweep exits 0 with empty
-  stdout, or the user declined cleanup):
+    - **Exit 0, empty stdout** → fall through to `dispatch-select-target`.
+    - **Exit 0, stdout `worktree <N> <branch>`** → an orphaned worktree was
+      adopted. Skip Step 2 and proceed to Step 3 with `<N>` and `explicit` —
+      treat the adoption like an explicit `/dispatch <N>`.
+    - **Non-zero exit, stderr `cleanup-unknown:<path>`** → the sweep found a
+      worktree with no open PR and no inferable issue number. Use
+      `AskUserQuestion` to ask whether to delete `<path>` — its history is
+      only local. This is the only sweep path that can destroy
+      potentially-unmerged code.
+      - **Yes** → run `dispatch-sweep --cleanup-unknown <path>`, then re-run
+        the default `dispatch-sweep`. Loop until it exits 0.
+      - **No** → fall through to `dispatch-select-target`.
 
   ```bash
   .claude/skills/dispatch/scripts/dispatch-select-target
@@ -99,9 +75,8 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
     "closed → report and stop" rule in Step 2)
   - `empty` — nothing eligible
   - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check. The
-    pre-sweep gate above normally catches this first; the same gate runs again
-    inside `dispatch-select-target` as defense-in-depth. Handle identically —
-    see the **main-broken handler** block at the end of this step.
+    pre-sweep gate above normally catches this first; this is the same gate
+    re-run as defense-in-depth. See the **main-broken handler** below.
 
   An **explicit issue argument overrides current-worktree detection** — the selection
   script, and therefore its current-worktree detection, runs only when no argument is
@@ -116,18 +91,16 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 
   On `empty` → report that the queue is empty and **stop**.
 
-  **main-broken handler.** Referenced from both the pre-sweep `--health-only`
-  gate above and the defense-in-depth `main-broken <sha>` result from
-  `dispatch-select-target`. `origin/main` itself is red, so no new work is safe
+  **main-broken handler.** `origin/main` itself is red, so no new work is safe
   to start. Do **not** run the sweep, create a worktree, branch, or phase skill.
   Diagnose main instead: enumerate the failing checks on `<sha>` by aggregating
   `gh run list --branch main` and
   `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`. For a failing workflow
   run, fetch its logs with `gh run view <databaseId> --log-failed`; for a failing
-  CodeQL check-run (which has no workflow-run id), open its `details_url` from the
-  check-runs response. Summarize the likely cause, report it, and **stop**. Once a
-  PR that fixes main exists the normal ladder picks it up (verify/ready) — this
-  gate only blocks starting new, unrelated work.
+  CodeQL check-run (which has no workflow-run id), open its `details_url` from
+  the check-runs response. Summarize the likely cause, report it, and **stop**.
+  Once a PR that fixes main exists the normal ladder picks it up (verify/ready)
+  — this gate only blocks starting new, unrelated work.
 
 ## 2. Trace to an Open Leaf
 
