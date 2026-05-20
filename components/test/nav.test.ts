@@ -2,8 +2,8 @@
  * @vitest-environment happy-dom
  */
 import { describe, it, expect, beforeEach } from "vitest";
-import "../../src/components/nav";
-import type { AppNavElement } from "../../src/components/nav";
+import "../src/nav";
+import type { AppNavElement } from "../src/nav";
 
 function createNav(): AppNavElement {
   const el = document.createElement("app-nav") as AppNavElement;
