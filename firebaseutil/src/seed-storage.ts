@@ -1,6 +1,6 @@
 export interface StorageSeedItem {
   path: string;
-  metadata: Record<string, string | number | boolean>;
+  metadata: Record<string, string>;
   content?: Buffer | string;
   sourceUrl?: string;
   testOnly?: boolean;
@@ -38,7 +38,7 @@ async function uploadItem(
   bodyBytes: Buffer,
 ): Promise<void> {
   const metadataJson = JSON.stringify({ name: item.path, metadata: item.metadata });
-  const contentType = (item.metadata.contentType as string | undefined) ?? "application/octet-stream";
+  const contentType = item.metadata.contentType ?? "application/octet-stream";
 
   const body = Buffer.concat([
     Buffer.from(`--${BOUNDARY}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadataJson}\r\n`),
@@ -61,6 +61,8 @@ async function uploadItem(
   }
 }
 
+// Emulator-only: writes via the Firebase Storage emulator's unauthenticated
+// REST surface. Not safe against a production bucket.
 export async function seedStorage(opts: SeedStorageOptions): Promise<{ uploaded: number; skipped: number }> {
   if (!opts.bucket) {
     throw new Error("seedStorage: bucket is required");
@@ -90,24 +92,12 @@ export async function seedStorage(opts: SeedStorageOptions): Promise<{ uploaded:
         return;
       }
 
-      let bodyBytes: Buffer;
-      if (includeTestOnly && item.content !== undefined) {
-        // Test mode: prefer the small stub content
-        bodyBytes = Buffer.isBuffer(item.content)
-          ? item.content
-          : Buffer.from(item.content);
-      } else if (!includeTestOnly && item.sourceUrl) {
-        // Production mode: fetch from sourceUrl
-        bodyBytes = await fetchSourceUrl(item.sourceUrl, item.path);
-      } else if (item.content !== undefined) {
-        // Fallback: use content when sourceUrl is absent
-        bodyBytes = Buffer.isBuffer(item.content)
-          ? item.content
-          : Buffer.from(item.content);
-      } else {
-        // Fallback: use sourceUrl when content is absent
-        bodyBytes = await fetchSourceUrl(item.sourceUrl!, item.path);
-      }
+      // In test mode prefer the stub content; in prod prefer the real sourceUrl.
+      // Fall back to whichever exists (the guard above ensures at least one does).
+      const useContent = includeTestOnly ? item.content !== undefined : !item.sourceUrl;
+      const bodyBytes = useContent
+        ? Buffer.from(item.content!)
+        : await fetchSourceUrl(item.sourceUrl!, item.path);
 
       await uploadItem(opts.emulatorHost, opts.bucket, item, bodyBytes);
       uploaded++;
