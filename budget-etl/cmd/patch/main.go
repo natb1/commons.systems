@@ -5,9 +5,8 @@
 //	patch --spec <path> --input <path> --output <path> [--keychain <name>]
 //
 // The spec adds and removes rules in the snapshot's Rules array. See Spec for the
-// JSON shape. Output path must differ from input. Decrypt password sources
-// (checked in order): BUDGET_ETL_PASSWORD env var, then --keychain (macOS only).
-// Both unset fails fast.
+// JSON shape. Output path must differ from input. See internal/password for the
+// env-var-then-keychain precedence.
 package main
 
 import (

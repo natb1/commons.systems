@@ -5,8 +5,7 @@
 //
 //	dump [--keychain <name>] <path>
 //
-// Decrypt password sources (checked in order): BUDGET_ETL_PASSWORD env var,
-// then --keychain (macOS only). Both unset fails fast.
+// See internal/password for the env-var-then-keychain precedence.
 package main
 
 import (
@@ -23,7 +22,7 @@ func main() {
 	keychainFlag := flag.String("keychain", "", "macOS Keychain account name for decrypt password")
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: dump [--keychain <name>] <path>")
-		fmt.Fprintln(os.Stderr, "  Decrypt password sources (checked in order): BUDGET_ETL_PASSWORD env var, then --keychain (macOS only). Both unset fails fast.")
+		fmt.Fprintln(os.Stderr, "  "+password.UsageNote)
 		flag.PrintDefaults()
 	}
 	flag.Parse()

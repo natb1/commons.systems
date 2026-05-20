@@ -6,6 +6,7 @@ import (
 
 	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
+	"github.com/natb1/commons.systems/budget-etl/internal/password"
 )
 
 func baseOutput(rules []export.Rule) export.Output {
@@ -217,13 +218,8 @@ func TestRunPatch_MissingSpec(t *testing.T) {
 	}
 }
 
-// TestRunPatch_NoPasswordSource verifies that when neither BUDGET_ETL_PASSWORD
-// nor --keychain is set, runPatch fails at password resolution with the
-// self-describing error from internal/password — before touching the input
-// file. Validation paths (spec/input/output) all pass; password resolution
-// is what trips.
 func TestRunPatch_NoPasswordSource(t *testing.T) {
-	t.Setenv("BUDGET_ETL_PASSWORD", "")
+	t.Setenv(password.EnvVar, "")
 	err := runPatch("/tmp/has-spec.json", "/tmp/in.json", "/tmp/out.json", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")

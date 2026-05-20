@@ -30,7 +30,7 @@ func main() {
 
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> --output <path> [--input <path>] [--keychain <name>] [--report <path> --allow-uncategorized]")
-		fmt.Fprintln(os.Stderr, "  Encrypt/decrypt password sources (checked in order): BUDGET_ETL_PASSWORD env var, then --keychain (macOS only). Both unset fails fast.")
+		fmt.Fprintln(os.Stderr, "  "+password.UsageNote)
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -57,10 +57,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Resolve password early so the failure mode is identical regardless of
-	// which mode the rest of main dispatches into. password.Resolve enforces
-	// the env-var-then-keychain precedence and emits a single self-describing
-	// error when neither source is available.
 	pw, err := password.Resolve(*keychainFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
