@@ -11,7 +11,6 @@ export interface SpreadControllerDeps {
   canvasWrap: HTMLElement;
   spreadToggleBtn: HTMLButtonElement;
   storageKey: string;
-  onRenderError: (err: unknown) => void;
 }
 
 export class SpreadController {
@@ -19,7 +18,6 @@ export class SpreadController {
   private readonly canvasWrap: HTMLElement;
   private readonly spreadToggleBtn: HTMLButtonElement;
   private readonly storageKey: string;
-  private readonly onRenderError: (err: unknown) => void;
 
   private spreadEnabled = false;
   private spreads: Spread[] = [];
@@ -35,7 +33,6 @@ export class SpreadController {
     this.canvasWrap = deps.canvasWrap;
     this.spreadToggleBtn = deps.spreadToggleBtn;
     this.storageKey = deps.storageKey;
-    this.onRenderError = deps.onRenderError;
   }
 
   get enabled(): boolean {
@@ -81,14 +78,15 @@ export class SpreadController {
     this.canvasWrap.appendChild(rightEl);
 
     this.spreadToggleBtn.setAttribute("aria-pressed", "true");
-    try { localStorage.setItem(this.storageKey, "true"); }
-    catch (e) { reportError(new Error("Could not save spread preference", { cause: e })); }
+    this.savePreference(true);
 
     this.spreadResizeObserver = new ResizeObserver(() => {
       if (this.spreadResizeTimer) clearTimeout(this.spreadResizeTimer);
       this.spreadResizeTimer = setTimeout(() => {
         this.spreadResizeTimer = null;
-        this.render().catch(this.onRenderError);
+        this.render().catch(err => {
+          reportError(new Error("Spread render failed", { cause: err }));
+        });
       }, 150);
     });
     this.spreadResizeObserver.observe(this.canvasWrap);
@@ -113,8 +111,7 @@ export class SpreadController {
     this.canvasWrap.classList.remove("zoomed");
 
     this.spreadToggleBtn.setAttribute("aria-pressed", "false");
-    try { localStorage.setItem(this.storageKey, "false"); }
-    catch (e) { reportError(new Error("Could not save spread preference", { cause: e })); }
+    this.savePreference(false);
 
     if (this.spreadResizeObserver) {
       this.spreadResizeObserver.disconnect();
@@ -188,12 +185,20 @@ export class SpreadController {
     }
   }
 
-  static loadPreference(storageKey: string, onError: (err: unknown) => void): boolean {
+  loadPreference(): boolean {
     try {
-      return localStorage.getItem(storageKey) === "true";
+      return localStorage.getItem(this.storageKey) === "true";
     } catch (e) {
-      onError(new Error("Could not load spread preference", { cause: e }));
+      reportError(new Error("Could not load spread preference", { cause: e }));
       return false;
+    }
+  }
+
+  private savePreference(enabled: boolean): void {
+    try {
+      localStorage.setItem(this.storageKey, enabled ? "true" : "false");
+    } catch (e) {
+      reportError(new Error("Could not save spread preference", { cause: e }));
     }
   }
 

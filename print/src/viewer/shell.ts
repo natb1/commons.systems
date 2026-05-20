@@ -237,11 +237,10 @@ export function initViewer(
     canvasWrap,
     spreadToggleBtn,
     storageKey: spreadKey,
-    onRenderError: handleRenderError,
   });
 
   function getSpreadPosition(): string {
-    return controller.enabled ? controller.position : renderer.position;
+    return controller.position;
   }
 
   // Navigation
@@ -344,7 +343,7 @@ export function initViewer(
       const onSpreadToggle = () => { handleSpreadToggle().catch(handleRenderError); };
       spreadToggleBtn.addEventListener("click", onSpreadToggle);
       spreadToggleCleanup = () => { spreadToggleBtn.removeEventListener("click", onSpreadToggle); };
-      if (SpreadController.loadPreference(spreadKey, reportError)) {
+      if (controller.loadPreference()) {
         controller.enter(renderer.currentPage);
         await controller.render();
       }
