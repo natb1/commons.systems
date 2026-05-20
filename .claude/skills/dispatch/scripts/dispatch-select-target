@@ -3,7 +3,7 @@
 # Usage: dispatch-select-target [--qa]
 #
 # Output: exactly one line:
-#   pr <num> <branch>           — a PR to work on
+#   pr <num> <branch> <phase>   — a PR to work on, with its already-derived phase
 #   issue <num>                 — a help-wanted issue to implement
 #   empty                       — nothing eligible
 #   worktree <N> <branch>       — the current worktree's own open issue (short-circuits the queue scan)
@@ -14,15 +14,19 @@
 # every queueable task builds on origin/main, so a failing check on main's HEAD
 # short-circuits the scan to "main-broken <sha>" and selects no task.
 #
+# --qa mode omits the <phase> field — there it is always "qa":
+#   pr <num> <branch>           — the QA PR to work on
+#
 # Default mode priority (highest first; within a tier, oldest PR wins):
 #   1. Oldest "security" PR (draft + dispatch:reviewed or dispatch:security-reviewed)
 #   2. Oldest "review"   PR (draft + dispatch:refactored)
 #   3. Oldest "simplify" PR (draft + dispatch:qa-done)
 #   4. Oldest "verify"   PR (draft, CI completed and failed)
-#   5. Oldest open help-wanted issue
+#   5. Oldest open help-wanted issue with no local git worktree
 #   6. Oldest "qa"       PR (draft, CI green, no dispatch:* label)
 #
-# PRs with a local git worktree are skipped (a session is actively working them).
+# PRs and help-wanted issues with a local git worktree are skipped (a session is
+# actively working them).
 # "done" (non-draft) PRs are skipped entirely.
 # "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
 #
@@ -87,6 +91,9 @@ if [[ "$QA_MODE" == "false" ]]; then
         echo "worktree-closed $N $CURRENT_BRANCH"
       fi
     else
+      # A failed `gh issue view` (a nonexistent issue, or a transient API/auth
+      # error) is intentionally conflated with a genuinely closed issue: both
+      # yield worktree-closed, and /dispatch reports and stops on either.
       echo "worktree-closed $N $CURRENT_BRANCH"
     fi
     exit 0
@@ -124,24 +131,30 @@ has_worktree() {
   return 1
 }
 
+issue_has_worktree() {
+  local num="$1"
+  local b
+  for b in "${WORKTREE_BRANCHES[@]}"; do
+    if [[ "$b" == "$num-"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Fetch all open PRs once, with the union of fields this script and
 # dispatch-phase need. Each per-PR dispatch-phase call below reuses it
 # (passed as DISPATCH_PR_LIST) instead of re-running gh pr list.
 PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels)
 PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number, .createdAt, .headRefName] | @tsv')
 
-# One "first-seen" variable per phase (list is pre-sorted oldest-first, so first
-# capture of a phase is always the oldest PR in that phase).
-SECURITY_PR_NUM=""
-SECURITY_PR_BRANCH=""
-REVIEW_PR_NUM=""
-REVIEW_PR_BRANCH=""
-SIMPLIFY_PR_NUM=""
-SIMPLIFY_PR_BRANCH=""
-VERIFY_PR_NUM=""
-VERIFY_PR_BRANCH=""
-QA_PR_NUM=""
-QA_PR_BRANCH=""
+# First-seen PR per phase: key = phase name, value = "<num> <branch>". The PR
+# list is pre-sorted oldest-first, so the first PR captured for a phase is
+# always the oldest in that phase.
+declare -A FIRST_PR
+
+# Default-mode selection order among PR phases (highest priority first).
+PHASE_PRIORITY=(security review simplify verify)
 
 while IFS=$'\t' read -r pr_num _created pr_branch; do
   [[ -z "$pr_num" ]] && continue
@@ -154,52 +167,20 @@ while IFS=$'\t' read -r pr_num _created pr_branch; do
   # Determine phase for this PR, reusing the PR list fetched above.
   phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$pr_branch")
 
+  # "done" PRs are complete; "waiting" PRs have nothing actionable yet.
   case "$phase" in
-    done)
-      # Skip completed PRs.
-      continue
-      ;;
-    waiting)
-      # Skip PRs whose CI is still running — nothing actionable yet.
-      continue
-      ;;
-    security)
-      if [[ -z "$SECURITY_PR_NUM" ]]; then
-        SECURITY_PR_NUM="$pr_num"
-        SECURITY_PR_BRANCH="$pr_branch"
-      fi
-      ;;
-    review)
-      if [[ -z "$REVIEW_PR_NUM" ]]; then
-        REVIEW_PR_NUM="$pr_num"
-        REVIEW_PR_BRANCH="$pr_branch"
-      fi
-      ;;
-    simplify)
-      if [[ -z "$SIMPLIFY_PR_NUM" ]]; then
-        SIMPLIFY_PR_NUM="$pr_num"
-        SIMPLIFY_PR_BRANCH="$pr_branch"
-      fi
-      ;;
-    verify)
-      if [[ -z "$VERIFY_PR_NUM" ]]; then
-        VERIFY_PR_NUM="$pr_num"
-        VERIFY_PR_BRANCH="$pr_branch"
-      fi
-      ;;
-    qa)
-      if [[ -z "$QA_PR_NUM" ]]; then
-        QA_PR_NUM="$pr_num"
-        QA_PR_BRANCH="$pr_branch"
-      fi
-      ;;
+    done|waiting) continue ;;
   esac
+
+  # Record the oldest PR seen in this phase. The :- guard keeps the unset-key
+  # read from aborting under set -u.
+  [[ -z "${FIRST_PR[$phase]:-}" ]] && FIRST_PR[$phase]="$pr_num $pr_branch"
 done <<< "$PR_SORTED"
 
 if [[ "$QA_MODE" == "true" ]]; then
-  # --qa mode: only return QA PRs.
-  if [[ -n "$QA_PR_NUM" ]]; then
-    echo "pr $QA_PR_NUM $QA_PR_BRANCH"
+  # --qa mode: only return QA PRs, without the <phase> field.
+  if [[ -n "${FIRST_PR[qa]:-}" ]]; then
+    echo "pr ${FIRST_PR[qa]}"
   else
     echo "empty"
   fi
@@ -208,37 +189,36 @@ fi
 
 # Default mode: security → review → simplify → verify →
 #               help-wanted issue → qa → empty.
-if [[ -n "$SECURITY_PR_NUM" ]]; then
-  echo "pr $SECURITY_PR_NUM $SECURITY_PR_BRANCH"
-  exit 0
-fi
+for phase in "${PHASE_PRIORITY[@]}"; do
+  if [[ -n "${FIRST_PR[$phase]:-}" ]]; then
+    echo "pr ${FIRST_PR[$phase]} $phase"
+    exit 0
+  fi
+done
 
-if [[ -n "$REVIEW_PR_NUM" ]]; then
-  echo "pr $REVIEW_PR_NUM $REVIEW_PR_BRANCH"
-  exit 0
-fi
-
-if [[ -n "$SIMPLIFY_PR_NUM" ]]; then
-  echo "pr $SIMPLIFY_PR_NUM $SIMPLIFY_PR_BRANCH"
-  exit 0
-fi
-
-if [[ -n "$VERIFY_PR_NUM" ]]; then
-  echo "pr $VERIFY_PR_NUM $VERIFY_PR_BRANCH"
-  exit 0
-fi
-
-# Fetch oldest help-wanted issue.
+# Fetch help-wanted issues oldest-first; pick the oldest with no local worktree.
 ISSUE_LIST=$(gh issue list --label "help wanted" --state open --json number,createdAt)
-ISSUE_NUM=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[0].number // empty')
+# Sort into a variable first so a jq failure aborts here (set -e + pipefail);
+# a process substitution would swallow it as empty input. Mirrors PR_SORTED.
+ISSUE_NUMS_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
+ISSUE_NUM=""
+while IFS= read -r issue_num; do
+  [[ -z "$issue_num" ]] && continue
+  # Skip issues whose <N>-* worktree exists (a session is working them).
+  if issue_has_worktree "$issue_num"; then
+    continue
+  fi
+  ISSUE_NUM="$issue_num"
+  break
+done <<< "$ISSUE_NUMS_SORTED"
 
 if [[ -n "$ISSUE_NUM" ]]; then
   echo "issue $ISSUE_NUM"
   exit 0
 fi
 
-if [[ -n "$QA_PR_NUM" ]]; then
-  echo "pr $QA_PR_NUM $QA_PR_BRANCH"
+if [[ -n "${FIRST_PR[qa]:-}" ]]; then
+  echo "pr ${FIRST_PR[qa]} qa"
   exit 0
 fi
 
