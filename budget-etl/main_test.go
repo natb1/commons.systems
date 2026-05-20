@@ -922,3 +922,113 @@ func TestRemovedFlagsRejected(t *testing.T) {
 		})
 	}
 }
+
+// TestPlaintextFlagWritesUnencryptedJSON runs the budget-etl CLI end-to-end
+// with --plaintext against a CSV fixture and verifies the output is
+// unencrypted JSON that round-trips through export.Output. This is the
+// happy-path for the Claude Code plugin distribution: no password env var,
+// no keychain, no encryption.
+func TestPlaintextFlagWritesUnencryptedJSON(t *testing.T) {
+	tmp := t.TempDir()
+
+	csvPath := filepath.Join(tmp, "statements", "test_bank", "1234", "2025-01", "stmt.csv")
+	writeCSVFixture(t, csvPath, [][6]string{
+		{"2025/01/10", "5.00", "TEST PURCHASE ALPHA", "", "TXN-A", "DEBIT"},
+		{"2025/01/15", "12.50", "TEST PURCHASE BETA", "", "TXN-B", "DEBIT"},
+	})
+
+	outputPath := filepath.Join(tmp, "output.json")
+	statementsDir := filepath.Join(tmp, "statements")
+
+	cmd := exec.Command(os.Args[0],
+		"-dir", statementsDir,
+		"-group", "test",
+		"-output", outputPath,
+		"-plaintext",
+	)
+	// Hermetic: ensure the password env var is not set, since --plaintext
+	// must reject the combination.
+	env := append([]string(nil), os.Environ()...)
+	filtered := env[:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "BUDGET_ETL_PASSWORD=") {
+			filtered = append(filtered, kv)
+		}
+	}
+	cmd.Env = append(filtered, "BUDGET_ETL_TEST_RUN_MAIN=1")
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("budget-etl --plaintext failed: %v\noutput:\n%s", err, out)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("output file is empty")
+	}
+	if data[0] != '{' {
+		t.Fatalf("output does not start with '{' (plaintext JSON); first byte = %q, output starts with %q", data[0], data[:min(len(data), 8)])
+	}
+	if export.IsEncrypted(data) {
+		t.Fatal("output starts with BENC magic bytes — encrypted, not plaintext")
+	}
+
+	var parsed export.Output
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("output does not round-trip through json.Unmarshal: %v", err)
+	}
+	if parsed.Version != 1 {
+		t.Errorf("output.Version = %d, want 1", parsed.Version)
+	}
+	if parsed.GroupName != "test" {
+		t.Errorf("output.GroupName = %q, want %q", parsed.GroupName, "test")
+	}
+	if len(parsed.Transactions) != 2 {
+		t.Errorf("output.Transactions: got %d, want 2", len(parsed.Transactions))
+	}
+}
+
+// TestPlaintextFlagRejectsKeychain verifies that --plaintext --keychain
+// exits non-zero with a clear error message — the two flags are mutually
+// exclusive.
+func TestPlaintextFlagRejectsKeychain(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-plaintext", "-keychain", "some-account", "-dir", "x", "-group", "y", "-output", "z")
+	env := append([]string(nil), os.Environ()...)
+	filtered := env[:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "BUDGET_ETL_PASSWORD=") {
+			filtered = append(filtered, kv)
+		}
+	}
+	cmd.Env = append(filtered, "BUDGET_ETL_TEST_RUN_MAIN=1")
+
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected non-zero exit; output:\n%s", out)
+	}
+	if !strings.Contains(string(out), "--plaintext cannot be combined with --keychain") {
+		t.Errorf("missing expected error message; output:\n%s", out)
+	}
+}
+
+// TestPlaintextFlagRejectsEnvPassword verifies that --plaintext while
+// BUDGET_ETL_PASSWORD is set exits non-zero with a clear error message.
+// Uses t.Setenv to keep the test hermetic.
+func TestPlaintextFlagRejectsEnvPassword(t *testing.T) {
+	t.Setenv("BUDGET_ETL_PASSWORD", "should-not-be-used")
+
+	cmd := exec.Command(os.Args[0], "-plaintext", "-dir", "x", "-group", "y", "-output", "z")
+	// Inherit env (including the BUDGET_ETL_PASSWORD we just set via t.Setenv).
+	cmd.Env = append(os.Environ(), "BUDGET_ETL_TEST_RUN_MAIN=1")
+
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected non-zero exit; output:\n%s", out)
+	}
+	if !strings.Contains(string(out), "--plaintext cannot be combined with BUDGET_ETL_PASSWORD") {
+		t.Errorf("missing expected error message; output:\n%s", out)
+	}
+}

@@ -25,12 +25,14 @@ func main() {
 	outputPath := flag.String("output", "", "Write JSON file")
 	inputPath := flag.String("input", "", "Read rules/budgets/transactions from existing JSON file")
 	keychainFlag := flag.String("keychain", "", "macOS Keychain account name for encrypt/decrypt password")
+	plaintextFlag := flag.Bool("plaintext", false, "skip password prompt and write plaintext JSON output (cannot be combined with --keychain or BUDGET_ETL_PASSWORD)")
 	reportPath := flag.String("report", "", "Write JSON inspection report instead of merging. Requires --allow-uncategorized; --output is ignored.")
 	allowUncategorized := flag.Bool("allow-uncategorized", false, "Allow report mode to emit uncategorized transactions as data instead of erroring. Use only with --report.")
 
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> --output <path> [--input <path>] [--keychain <name>] [--report <path> --allow-uncategorized]")
+		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> --output <path> [--input <path>] [--keychain <name>] [--plaintext] [--report <path> --allow-uncategorized]")
 		fmt.Fprintln(os.Stderr, "  "+password.UsageNote)
+		fmt.Fprintln(os.Stderr, "  --plaintext skips password resolution entirely and writes unencrypted JSON; it cannot be combined with --keychain or "+password.EnvVar+".")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -57,10 +59,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	pw, err := password.Resolve(*keychainFlag)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+	var pw string
+	if *plaintextFlag {
+		if *keychainFlag != "" {
+			fmt.Fprintln(os.Stderr, "Error: --plaintext cannot be combined with --keychain")
+			os.Exit(1)
+		}
+		if _, ok := os.LookupEnv(password.EnvVar); ok {
+			fmt.Fprintf(os.Stderr, "Error: --plaintext cannot be combined with %s being set in the environment; unset it to write plaintext output\n", password.EnvVar)
+			os.Exit(1)
+		}
+	} else {
+		resolved, err := password.Resolve(*keychainFlag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		pw = resolved
 	}
 
 	if *reportPath != "" {
