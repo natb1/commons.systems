@@ -1,6 +1,6 @@
 import "missing.css";
 import "./style/theme.css";
-import type { User } from "./auth.js";
+import type { User } from "firebase/auth";
 
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
@@ -21,9 +21,8 @@ import "@commons-systems/style/components/nav";
 import type { AppNavElement } from "@commons-systems/style/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
 import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
-import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
-import { db, NAMESPACE, trackPageView, initAppCheck } from "./firebase.js";
+import { db, NAMESPACE, trackPageView, initAppCheck, signIn, signOut, onAuthStateChanged } from "./firebase.js";
 import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
 
 const navEl = document.getElementById("nav") as AppNavElement;
@@ -91,11 +90,15 @@ async function loadPosts(): Promise<string> {
     return renderHomeHtml(cachedPosts, "/post/", buildTimeContent);
   } catch (error) {
     const kind = classifyError(error);
-    if (kind === "programmer") throw error;
-    reportError(new Error(`Failed to load posts: ${error instanceof Error ? error.message : error}`));
-    const msg = kind === "permission-denied"
-      ? "Permission denied loading posts."
-      : "Could not load posts. Try refreshing the page.";
+    const fallbackMsg = "Could not load posts. Try refreshing the page.";
+    let msg: string;
+    if (kind === "programmer") {
+      deferProgrammerError(error);
+      msg = fallbackMsg;
+    } else {
+      reportError(new Error(`Failed to load posts: ${error instanceof Error ? error.message : error}`));
+      msg = kind === "permission-denied" ? "Permission denied loading posts." : fallbackMsg;
+    }
     return `
     <h2>Home</h2>
     <p id="posts-error">${msg}</p>
@@ -126,8 +129,7 @@ const router = createHistoryRouter(
           const admin = await isInGroup(db, NAMESPACE, currentUser, ADMIN_GROUP_ID);
           return renderAdmin(currentUser, admin, lastSkippedCount);
         } catch (error) {
-          if (classifyError(error) === "programmer") throw error;
-          logError(error, { operation: "admin-group-check" });
+          if (!deferProgrammerError(error)) logError(error, { operation: "admin-group-check" });
           return `<h2>Admin</h2><p>Could not verify admin access. Try refreshing the page.</p>`;
         }
       },

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./playwright-test";
 
 const expectedHeaders: {
   header: string;
@@ -35,7 +35,7 @@ const expectedHeaders: {
 export function describeSecurityHeadersSmoke(appName: string): void {
   test.describe(`${appName} security headers smoke`, () => {
     for (const { header, assert } of expectedHeaders) {
-      test(`page response includes ${header} @smoke`, async ({ page }) => {
+      test(`page response includes ${header} @smoke @hosting`, async ({ page }) => {
         const response = await page.goto("/");
         expect(response).not.toBeNull();
         const value = response!.headers()[header];

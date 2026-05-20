@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { seed, type SeedSpec } from "../src/seed.js";
+import { validateNamespace } from "../src/namespace.js";
 
 function createMockFirestore(
   existingDocs: Record<string, string[]> = {},
@@ -15,7 +16,7 @@ function createMockFirestore(
     if (overrides?.setError) throw overrides.setError;
   });
 
-  const mockDoc = vi.fn((path: string) => {
+  const mockDoc = vi.fn(() => {
     return { set: mockSet };
   });
 
@@ -42,7 +43,7 @@ describe("seed", () => {
     const { db, mockDoc, mockSet } = createMockFirestore();
 
     const spec: SeedSpec = {
-      namespace: "app/emulator",
+      namespace: validateNamespace("app/emulator"),
       collections: [
         {
           name: "messages",
@@ -68,7 +69,7 @@ describe("seed", () => {
     const { db, mockDoc } = createMockFirestore();
 
     const spec: SeedSpec = {
-      namespace: "app/test",
+      namespace: validateNamespace("app/test"),
       collections: [
         {
           name: "messages",
@@ -91,7 +92,7 @@ describe("seed", () => {
     const { db, mockDoc } = createMockFirestore();
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         { name: "posts", documents: [{ id: "p1", data: { title: "Post" } }] },
         { name: "groups", testOnly: true, documents: [{ id: "admin", data: { name: "admin" } }] },
@@ -108,7 +109,7 @@ describe("seed", () => {
     const { db, mockDoc } = createMockFirestore();
 
     const spec: SeedSpec = {
-      namespace: "app/test",
+      namespace: validateNamespace("app/test"),
       collections: [
         { name: "posts", documents: [{ id: "p1", data: { title: "Post" } }] },
         { name: "groups", testOnly: true, documents: [{ id: "admin", data: { name: "admin" } }] },
@@ -126,7 +127,7 @@ describe("seed", () => {
     const { db, mockDoc } = createMockFirestore();
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         { name: "groups", testOnly: true, documents: [{ id: "admin", data: { name: "admin" } }] },
       ],
@@ -141,7 +142,7 @@ describe("seed", () => {
     const { db, mockDoc } = createMockFirestore();
 
     const spec: SeedSpec = {
-      namespace: "app/empty",
+      namespace: validateNamespace("app/empty"),
       collections: [],
     };
 
@@ -156,7 +157,7 @@ describe("seed", () => {
     });
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         {
           name: "posts",
@@ -178,7 +179,7 @@ describe("seed", () => {
     });
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         {
           name: "posts",
@@ -198,7 +199,7 @@ describe("seed", () => {
     });
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         {
           name: "groups",
@@ -221,7 +222,7 @@ describe("seed", () => {
     });
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         {
           name: "posts",
@@ -242,7 +243,7 @@ describe("seed", () => {
     });
 
     const spec: SeedSpec = {
-      namespace: "app/test",
+      namespace: validateNamespace("app/test"),
       collections: [
         {
           name: "groups",
@@ -266,7 +267,7 @@ describe("seed", () => {
     });
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         { name: "posts", convergent: true, documents: [] },
       ],
@@ -281,7 +282,7 @@ describe("seed", () => {
     const { db } = createMockFirestore();
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         {
           name: "posts",
@@ -302,7 +303,7 @@ describe("seed", () => {
     const { db } = createMockFirestore();
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         {
           name: "media",
@@ -327,7 +328,7 @@ describe("seed", () => {
     });
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         {
           name: "posts",
@@ -347,7 +348,7 @@ describe("seed", () => {
     });
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         {
           name: "posts",
@@ -369,7 +370,7 @@ describe("seed", () => {
     );
 
     const spec: SeedSpec = {
-      namespace: "app/prod",
+      namespace: validateNamespace("app/prod"),
       collections: [
         {
           name: "posts",

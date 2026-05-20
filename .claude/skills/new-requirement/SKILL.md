@@ -16,9 +16,9 @@ Invoke whenever the user revises a previously-understood requirement — in a di
 3. **Re-sync local context.** If Step 2 produced any remote edits, refresh the auto-loaded context:
 
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/sync-issue-context "$DISPATCH_ISSUE_NUM"
+   .claude/skills/ref-pr-workflow/scripts/sync-issue-context <issue-number>
    ```
 
-   Outside a dispatched session, pass the issue number explicitly. This rewrites `CLAUDE.local.md` in the worktree.
+   Pass the issue number explicitly. This rewrites `CLAUDE.local.md` in the worktree.
 
 4. **Revise the active plan.** If a plan is active for the current work (plan mode, or a tracked task list), review each step against the revised requirement. Update steps that no longer apply; remove steps that are now obsolete; add new steps the revision introduces. If no plan is active, skip.

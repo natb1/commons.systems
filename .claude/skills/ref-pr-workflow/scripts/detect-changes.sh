@@ -2,8 +2,9 @@
 set -euo pipefail
 
 # Detect changed file categories for CI conditional tool installation.
-# Outputs "nix=true" and/or "rules=true" to $GITHUB_OUTPUT when relevant
-# files changed on the branch relative to origin/main.
+# Outputs "nix=true", "playwright=true", "rules=true", and/or "go=true" to
+# $GITHUB_OUTPUT when relevant files changed on the branch relative to
+# origin/main.
 
 # Try origin/main first; fall back to HEAD~1 when origin/main is unavailable
 # (e.g., shallow clones or direct pushes to non-feature branches).
@@ -19,9 +20,20 @@ fi
 if echo "$CHANGED" | grep -qE '^(nix/|flake\.nix$|flake\.lock$)'; then
   echo "nix=true" >> "$GITHUB_OUTPUT"
 fi
+# playwright-version-sync re-runs when either side of the chromium pin moves —
+# package-lock.json catches @playwright/test bumps, flake.lock catches nixpkgs
+# playwright-driver bumps, and the script itself is included for self-edits.
+if echo "$CHANGED" | grep -qE '^(package-lock\.json$|flake\.lock$|\.github/scripts/check-playwright-version-sync\.sh$)'; then
+  echo "playwright=true" >> "$GITHUB_OUTPUT"
+fi
 # rules-test needs Java 21 for Firebase emulators. Set rules=true when rules-test
 # would be detected as dirty: direct changes, or any global trigger from
 # get-changed-apps.sh (those mark ALL workspaces dirty, including rules-test).
 if echo "$CHANGED" | grep -qE '^(firestore\.rules$|storage\.rules$|rules-test/|\.claude/skills/ref-pr-workflow/scripts/|firebase\.json$|package\.json$|package-lock\.json$)'; then
   echo "rules=true" >> "$GITHUB_OUTPUT"
+fi
+# go-tests needs the Go toolchain. The budget-etl module is not a package.json
+# workspace, so set go=true when anything in budget-etl/ changed.
+if echo "$CHANGED" | grep -qE '^budget-etl/'; then
+  echo "go=true" >> "$GITHUB_OUTPUT"
 fi
