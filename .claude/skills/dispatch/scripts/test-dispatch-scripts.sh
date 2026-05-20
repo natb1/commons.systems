@@ -1039,7 +1039,7 @@ label_create_state() {
   [[ -f "$STUB_DIR/gh-label-create.log" ]] && echo "present" || echo "absent"
 }
 
-# 1-4. Phase → label mapping. The label already exists (default stub mode), so
+# 1-2. Phase → label mapping. The label already exists (default stub mode), so
 # the script applies it with a single `gh pr edit` and issues no `gh label create`.
 echo "Test: qa → dispatch:qa-done (apply only, no label create)"
 setup
@@ -1057,53 +1057,37 @@ assert_eq "simplify applies dispatch:refactored" \
 assert_eq "simplify: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
-echo "Test: review → dispatch:reviewed (apply only, no label create)"
-setup
-"$TMPDIR_TEST/dispatch-complete-phase" 30 review
-assert_eq "review applies dispatch:reviewed" \
-  "pr edit 30 --add-label dispatch:reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "review: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
-echo "Test: security → dispatch:security-reviewed (apply only, no label create)"
-setup
-"$TMPDIR_TEST/dispatch-complete-phase" 40 security
-assert_eq "security applies dispatch:security-reviewed" \
-  "pr edit 40 --add-label dispatch:security-reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "security: no gh label create when label exists" "absent" "$(label_create_state)"
-teardown
-
-# 5. Label missing: the apply fails "not found", so the script creates the
+# 3. Label missing: the apply fails "not found", so the script creates the
 #    label (BFD4F2, "dispatch workflow: <suffix> phase complete") and retries.
 echo "Test: label missing → create then retry"
 setup
 echo "label-missing" > "$STUB_DIR/pr-edit-mode"
-"$TMPDIR_TEST/dispatch-complete-phase" 30 review
+"$TMPDIR_TEST/dispatch-complete-phase" 30 simplify
 assert_eq "label-missing: label created with workflow description" \
-  "label create dispatch:reviewed --color BFD4F2 --description dispatch workflow: reviewed phase complete" \
+  "label create dispatch:refactored --color BFD4F2 --description dispatch workflow: refactored phase complete" \
   "$(cat "$STUB_DIR/gh-label-create.log")"
 assert_eq "label-missing: label applied on retry" \
-  "pr edit 30 --add-label dispatch:reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
+  "pr edit 30 --add-label dispatch:refactored" "$(cat "$STUB_DIR/gh-pr-edit.log")"
 teardown
 
-# 6. An apply failure unrelated to a missing label exits non-zero and creates
+# 4. An apply failure unrelated to a missing label exits non-zero and creates
 #    no label.
 echo "Test: other apply failure → non-zero exit, no label create"
 setup
 echo "other-failure" > "$STUB_DIR/pr-edit-mode"
-if "$TMPDIR_TEST/dispatch-complete-phase" 40 security 2>/dev/null; then rc=0; else rc=$?; fi
+if "$TMPDIR_TEST/dispatch-complete-phase" 40 qa 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "other apply failure exits non-zero" "1" "$rc"
 assert_eq "other failure: no spurious label create" "absent" "$(label_create_state)"
 teardown
 
-# 7. Unknown phase → non-zero exit.
+# 5. Unknown phase → non-zero exit.
 echo "Test: unknown phase → non-zero exit"
 setup
 if "$TMPDIR_TEST/dispatch-complete-phase" 25 bogus 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "unknown phase exits non-zero" "1" "$rc"
 teardown
 
-# 8. Missing phase arg → non-zero exit.
+# 6. Missing phase arg → non-zero exit.
 echo "Test: missing args → non-zero exit"
 setup
 if "$TMPDIR_TEST/dispatch-complete-phase" 25 2>/dev/null; then rc=0; else rc=$?; fi
