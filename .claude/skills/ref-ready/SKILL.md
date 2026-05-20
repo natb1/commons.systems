@@ -55,22 +55,6 @@ Detect input mode from `$INPUT`:
 
 - Otherwise → **description mode**: treat `$INPUT` as the issue body text. Prompt user for a title if not provided.
 
-## Non-Interactive Mode
-
-When the first line of `$INPUT` is exactly `non-interactive`, the skill runs in non-interactive mode. This applies only to **description mode** (creating a new issue from a free-text description); issue-number mode is always interactive.
-
-**Marker parsing:**
-
-1. Strip the `non-interactive` marker line from `$INPUT`.
-2. If the next non-empty line begins with `title: ` (case-sensitive), use the rest of that line as the issue title and strip that line from `$INPUT`. The remaining text is the issue body.
-3. Otherwise, derive the title from the first non-empty line of the remaining body (per the existing description-mode convention). The title is **never prompted** in non-interactive mode — callers that want a specific title must supply a `title: ` line.
-4. Proceed through Steps 2–3 (branch setup and 7-category evaluation) unchanged.
-5. In Step 4: skip plan-mode entry; compute the improved body internally and proceed directly to Step 5.
-6. In Step 5: skip the user-approval gate; proceed directly to issue creation via `gh issue create`.
-7. Step 6 (post-processing) runs as normal.
-
-**Backward compatibility:** any `$INPUT` not starting with the literal line `non-interactive` runs the existing interactive flow unchanged.
-
 ## Step 2. Branch-Conditional Setup
 
 In issue number mode only: check for blocking issues and their branches.
@@ -151,8 +135,6 @@ After completing the 7-category evaluation of the primary issue, repeat the full
 
 ## Step 4. Plan Mode — Propose Improvements
 
-> **Non-interactive mode:** skip plan-mode entry; compute the improved body internally and proceed directly to Step 5.
-
 **Scope:** This plan covers creating or updating the GitHub issue body — not implementing the code changes described in the issue. Do not modify source code files.
 
 Enter plan mode. Structure the plan across all issues with findings (primary + sub-issues):
@@ -164,8 +146,6 @@ Enter plan mode. Structure the plan across all issues with findings (primary + s
 Wait for user approval before proceeding.
 
 ## Step 5. Apply Improvements
-
-> **Non-interactive mode:** skip the user-approval gate; proceed directly to issue creation.
 
 This step only modifies GitHub issues (via `gh issue edit`, `gh issue create`, and related `gh` commands). Do not modify source code files.
 
@@ -181,20 +161,18 @@ Apply the approved improvements for each issue in sequence:
   gh issue edit <sub-N> --body "<improved body>"
   ```
 
-- **Description mode**:
-  ```bash
-  gh issue create --title "<title>" --body "<improved body>"
-  ```
-  Record the new issue number as `<N>`.
+- **Description mode**: invoke `/file-issue` via the Skill tool with `$INPUT` set to the improved title on the first line followed by the improved body. `/file-issue` owns duplicate detection, issue creation, `@me` assignment, and the `help wanted` label — do not call `gh issue create` inline here. Parse the `CREATED <N>` or `EXISTING <N>` line from `/file-issue`'s output. On `EXISTING <N>`, tell the user the proposed issue was filed against existing issue #`<N>` (Step 3a's eval already surfaced candidates, but `/file-issue` is a defense-in-depth recheck and can match a candidate the user did not pick). Record `<N>` for downstream steps.
 
 When decomposition (Step 3f) creates new issues, establish relationships using the `ref-github-issues` API syntax — do not encode relationships as text in issue bodies. Use sub-issues for scope breakdown and dependencies for sequencing constraints.
 
 ## Step 6. Post-Processing
 
-Assign the issue to the current GitHub user and apply the `help wanted` label:
+**Issue number mode only.** Assign the existing issue to the current GitHub user and apply the `help wanted` label:
 
 ```bash
 gh issue edit <N> --add-assignee @me --add-label "help wanted"
 ```
 
 Apply `help wanted` by default. Drop `--add-label "help wanted"` only when the user explicitly asked not to label the issue or named a different label set.
+
+Description mode skips this step — `/file-issue` (invoked in Step 5) already assigns `@me` and applies `help wanted` on the newly created issue.

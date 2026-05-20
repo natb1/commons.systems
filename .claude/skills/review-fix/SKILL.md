@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review phase — merge origin/main, run the generic /review, classify findings into Fixed/Informational/Dismissed/Deferred, implement Fixed, file follow-up issues for Deferred via /ready, post a 4-section PR comment, and apply the dispatch:reviewed label
+description: Review phase — merge origin/main, run the generic /review, classify findings into Fixed/Informational/Dismissed/Deferred, implement Fixed, file follow-up issues for Deferred via /file-issue, post a 4-section PR comment, and apply the dispatch:reviewed label
 ---
 
 # Review and Fix
@@ -10,8 +10,8 @@ dispatch-specific wrapper around the generic built-in `/review` skill. `/review`
 only produces findings — it applies no fixes, commits nothing, and posts no
 summary. This skill wraps it: merge current `main`, run `/review`, classify the
 findings into four buckets, implement the Fixed bucket, file follow-up issues
-for the Deferred bucket, commit and push, post a 4-section PR comment, and
-apply the `dispatch:reviewed` label.
+for the Deferred bucket via `/file-issue`, commit and push, post a 4-section PR
+comment, and apply the `dispatch:reviewed` label.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
 fork `/commit-merge-push`, invoke the built-in `/review`, and launch
@@ -69,22 +69,21 @@ implementation and follow-up-issue subagents.
 
 5. **File follow-up issues for the Deferred bucket.** For each finding in the
    Deferred bucket, fork a subagent via the Agent tool (`subagent_type:
-   general-purpose`, `model: sonnet`) that invokes the `/ready` skill. The
-   subagent constructs `$INPUT` per `ref-ready`'s "Non-Interactive Mode" format
-   (canonical there — do not restate it here). The title comes from the
-   finding's `title_hint`; the body is its `body_context` extended with a
-   "Relevant files" list, the original PR link `#<PR-num>`, and a short
-   rationale for why the finding is out of scope for this PR. The
-   non-interactive mode instructs `/ready` to skip plan mode and the
-   user-approval gate, which is required because subagents cannot collect user
-   feedback.
+   general-purpose`, `model: sonnet`) that invokes the `/file-issue` skill.
+   The subagent constructs `$INPUT` as the title (from the finding's
+   `title_hint`) on the first line followed by the body — the `body_context`
+   extended with a "Relevant files" list, the original PR link `#<PR-num>`,
+   and a short rationale for why the finding is out of scope for this PR.
+   `/file-issue` owns duplicate detection, issue creation, `@me` assignment,
+   and the `help wanted` label — the subagent invokes it and does no
+   additional `gh` work.
 
-   The subagent extracts the new issue number `<N>` by parsing the
-   `https://github.com/.../issues/<N>` URL that `gh issue create` prints when
-   it creates the issue. `/ready` Step 6 (post-processing) may run additional
-   `gh issue edit <N>` calls against the same `<N>` — the creation URL is the
-   authoritative source. The subagent returns `<N>` as its result. Capture each
-   `<N>` and attach it to its source finding for the report generators.
+   `/file-issue` prints `CREATED <N>` or `EXISTING <N>` on its own line. The
+   subagent parses that line and returns `<N>` (along with the discriminator)
+   to this thread. Capture each `<N>` and attach it to its source finding for
+   the report generators. The discriminator is internal — Step 7's report
+   formats every Deferred entry as `<short description> → #<N>` regardless,
+   since the linked issue is the same either way.
 
    Run the per-finding subagents in parallel (multiple Agent calls in a single
    message) — there are no sequencing constraints between them. Step 5 can
