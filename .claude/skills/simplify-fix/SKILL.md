@@ -138,6 +138,15 @@ of `/simplify-fix` extends the skipped findings into the three non-fixed buckets
 in Step 3 — that classification is the wrapper's responsibility, not the
 generic skill's.
 
+**A finding is never Disregarded purely because the change is small.** If the
+finding is a real improvement and falls within the PR's scope, classify it as
+Fixed and implement it — full stop — regardless of how trivial the diff is.
+Disregarded is for false positives, trivially wrong findings, or style
+preferences that are not actual improvements; smallness alone never qualifies.
+If `/simplify` skipped a small in-scope improvement in Step 2, implement it
+yourself before moving on (working-tree edit only; Step 4's
+`/commit-merge-push` picks it up).
+
 ## Notes
 
 The skill is idempotent: a re-invocation with `dispatch:refactored` already on
