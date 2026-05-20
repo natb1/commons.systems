@@ -94,7 +94,7 @@ fi
 
 # Build changed apps that have a build script, so build-dependent vitest
 # tests (which read dist/index.html and skipIf it is absent) run their
-# assertions instead of silently skipping. See issue #308.
+# assertions instead of silently skipping.
 if [ ${#APP_DIRS[@]} -gt 0 ]; then
   for dir in "${APP_DIRS[@]}"; do
     pkg="$REPO_ROOT/$dir/package.json"
