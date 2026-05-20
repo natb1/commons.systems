@@ -101,9 +101,8 @@ If a named target issue is **closed**, report it and **stop**.
 
 ## 3. Resolve the Worktree
 
-Run the worktree-resolution script, matching `pr-workflow` Sections 2–3. Pass
-`explicit` when the target was named by an explicit `/dispatch` argument,
-otherwise `queue`:
+Run the worktree-resolution script. Pass `explicit` when the target was named by
+an explicit `/dispatch` argument, otherwise `queue`:
 
 ```bash
 .claude/skills/dispatch/scripts/dispatch-resolve-worktree <N> <explicit|queue>
@@ -115,7 +114,7 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
 - **`here`** → the current branch already is the target's worktree; no
   `EnterWorktree` needed. Re-sync issue context:
   ```bash
-  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+  .claude/skills/dispatch/scripts/sync-issue-context <N>
   ```
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
 - **`enter <path>`** → re-use an existing `<issue>-*` worktree (the
@@ -123,7 +122,7 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
   `EnterWorktree` with `path:` set to `<path>`. After entering, re-sync issue
   context from the worktree:
   ```bash
-  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+  .claude/skills/dispatch/scripts/sync-issue-context <N>
   ```
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
 - **`create <branch>`** → no worktree exists. `EnterWorktree` with `name:` set to
@@ -144,11 +143,9 @@ mkdir -p tmp && touch tmp/dispatch-worktree
 
 `restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
 recovery on this marker — when present, it re-invokes `/dispatch` so the phase is
-re-derived from PR/CI ground truth. `/dispatch` is the safe single creator: it only
-ever runs for dispatch sessions, so a `/pr-workflow` worktree can never acquire the
-marker. The marker is an empty boolean flag with no payload; it persists for the
-worktree's life and needs no cleanup — `tmp/` is git-ignored, and removing the
-worktree removes it.
+re-derived from PR/CI ground truth. The marker is an empty boolean flag with no
+payload; it persists for the worktree's life and needs no cleanup — `tmp/` is
+git-ignored, and removing the worktree removes it.
 
 ## 4. Derive the Phase
 
@@ -196,7 +193,7 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
      `model: sonnet`) that:
      - first waits for CI to register at least one check — a freshly-pushed
        branch can briefly have an empty check rollup;
-     - then runs `.claude/skills/ref-pr-workflow/scripts/run-pr-checks-wait.sh
+     - then runs `.claude/skills/dispatch/scripts/run-pr-checks-wait.sh
        <pr-num>` with `dangerouslyDisableSandbox: true`, which blocks until
        every check concludes;
      - returns once all checks have completed.
