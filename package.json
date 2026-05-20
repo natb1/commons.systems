@@ -8,6 +8,8 @@
     "authutil",
     "blog",
     "budget",
+    "components",
+    "criticalcssutil",
     "dispatch",
     "errorutil",
     "fellspiral",
