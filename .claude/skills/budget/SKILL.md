@@ -54,27 +54,45 @@ Bind the resolved path to `BUDGET_ETL_BIN` for the rest of the steps below.
 
 The invocation is `/budget <path>` with an optional `--output <out>`.
 
-- If `<path>` is a directory, use it directly as the input dir.
-- If `<path>` is a single file, create a temp directory and copy or symlink the file in:
+**Branch A — Directory with existing `institution/account/[period]/file` layout:**
 
-  ```bash
-  INPUT_DIR="$(mktemp -d)"
-  cp "<path>" "$INPUT_DIR/"
-  ```
+If `<path>` is a directory, check whether it already matches the required layout. Walk the directory tree to see if direct subdirectories contain an `institution` or `account` pattern (e.g., checking one level deep for folders, then one more level, to detect paths like `boa/checking/` or `boa/checking/2025-01/`). If the layout is 3–4 levels deep, use the directory as-is. Skip all the staging steps below and proceed directly to step 4 without `--institution` or `--account` flags.
 
-  Use `$INPUT_DIR` as the input dir. `budget-etl --dir` processes every file in the directory, so handing it the file's parent would pull in unrelated files.
+**Branch B — Single file, glob, or flat directory:**
 
-- If `<path>` is a glob or multiple paths, create a temp dir and copy each file in.
+For any other input (single files, globs, flat directories), ask the user for institution and account labels. Suggest defaults based on the filename. For example, `boa-checking-jul.qfx` would suggest `institution=boa`, `account=checking-jul`. 
+
+If the files are QFX or OFX format, mention that the user can optionally `grep` for `<BANKID>` and `<ACCTID>` tags in the file to find the real institution/account codes, but do not attempt to parse the binary OFX/QFX format yourself.
+
+Create a temp directory and copy or symlink all input files in:
+
+```bash
+INPUT_DIR="$(mktemp -d)"
+cp "<path>" "$INPUT_DIR/"
+```
+
+If `<path>` is a glob or multiple paths, copy each file into the same temp dir. Use `$INPUT_DIR` as the input dir.
+
+**Output path:**
 
 The default output is `./budget.json` in the user's current working directory. Honor `--output <out>` when given.
 
 ## Step 4 — Run the binary
 
+**Branch A — Directory with existing layout (no flags):**
+
 ```bash
 "$BUDGET_ETL_BIN" --dir "$INPUT_DIR" --group personal --plaintext --output "$OUTPUT_PATH"
 ```
 
-`--plaintext` is required: it tells `budget-etl` to skip the password prompt and write an unencrypted `budget.json` the hosted app can read. The binary processes the files locally. No network call is made.
+**Branch B — Flat input (with institution and account flags):**
+
+```bash
+"$BUDGET_ETL_BIN" --dir "$INPUT_DIR" --group personal --plaintext --output "$OUTPUT_PATH" \
+  --institution "<institution>" --account "<account>"
+```
+
+In both cases, `--plaintext` is required: it tells `budget-etl` to skip the password prompt and write an unencrypted `budget.json` the hosted app can read. The binary processes the files locally. No network call is made.
 
 Capture stderr separately so step 5 can inspect it. Do not retry on failure — diagnose before re-running.
 
