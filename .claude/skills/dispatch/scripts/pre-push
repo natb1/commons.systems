@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # pre-push hook: warns on test/lint failures but does not block push
 #
-# Install: cp .claude/skills/ref-pr-workflow/scripts/pre-push .bare/hooks/pre-push && chmod +x .bare/hooks/pre-push
+# Install: cp .claude/skills/dispatch/scripts/pre-push .bare/hooks/pre-push && chmod +x .bare/hooks/pre-push
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
-SCRIPTS="$REPO_ROOT/.claude/skills/ref-pr-workflow/scripts"
+SCRIPTS="$REPO_ROOT/.claude/skills/dispatch/scripts"
 
 TESTS_LOG=$(mktemp)
 LINT_LOG=$(mktemp)

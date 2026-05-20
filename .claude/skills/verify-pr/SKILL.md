@@ -45,7 +45,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 3. **Read the failed checks.** Run (use `dangerouslyDisableSandbox: true`):
 
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/run-pr-checks-wait.sh <pr-num>
+   .claude/skills/dispatch/scripts/run-pr-checks-wait.sh <pr-num>
    ```
 
    The checks have already concluded — `/dispatch` only routes a PR here once CI is
@@ -56,9 +56,9 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    failure excerpt. The subagent maps the check to a local reproduce command and runs
    it (use `dangerouslyDisableSandbox: true` when network or npm cache is needed):
 
-   - Unit test check → `.claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh`
-   - Lint check → `.claude/skills/ref-pr-workflow/scripts/run-lint.sh`
-   - Acceptance test check → `.claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh`
+   - Unit test check → `.claude/skills/dispatch/scripts/run-unit-tests.sh`
+   - Lint check → `.claude/skills/dispatch/scripts/run-lint.sh`
+   - Acceptance test check → `.claude/skills/dispatch/scripts/run-acceptance-tests.sh`
    - Type-check → `npx tsc --noEmit --project <pkg>`
    - Other → best-effort map from the failing workflow name
 
@@ -98,7 +98,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 7. **Post the accumulator as a PR comment** (use `dangerouslyDisableSandbox: true`):
 
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
+   .claude/skills/dispatch/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
    ```
 
 8. **Stop.** `/loop /dispatch` drives the next iteration — the next `/dispatch` run

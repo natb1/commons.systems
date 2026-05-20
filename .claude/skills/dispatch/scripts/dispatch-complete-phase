@@ -6,12 +6,8 @@
 # applies it to the PR. (Apply-first ordering and missing-label handling are
 # explained inline at the code below.)
 #
-# This script is the single source of truth for the dispatch:* label
-# create metadata (color and description).
-#
 # Phase → label:
-#   qa       → dispatch:qa-done
-#   simplify → dispatch:refactored
+#   qa → dispatch:qa-done
 #
 # Missing args or an unknown phase is a clear error, not a fallback.
 set -euo pipefail
@@ -25,10 +21,9 @@ if [[ -z "$PR_NUM" || -z "$PHASE" ]]; then
 fi
 
 case "$PHASE" in
-  qa)       LABEL="dispatch:qa-done" ;;
-  simplify) LABEL="dispatch:refactored" ;;
+  qa) LABEL="dispatch:qa-done" ;;
   *)
-    echo "error: unknown phase: $PHASE (expected qa or simplify)" >&2
+    echo "error: unknown phase: $PHASE (expected qa)" >&2
     exit 1
     ;;
 esac

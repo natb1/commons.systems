@@ -169,9 +169,9 @@ func Create(repoRoot, appName string, templateFS fs.FS, dryRun bool) (err error)
 	if !dryRun {
 		fmt.Println("Next steps:")
 		fmt.Printf("  cd %s && npm install\n", appName)
-		fmt.Printf("  # Run unit tests:       .claude/skills/ref-pr-workflow/scripts/run-unit-tests.sh --app %s\n", appName)
-		fmt.Printf("  # Run lint:             .claude/skills/ref-pr-workflow/scripts/run-lint.sh --app %s\n", appName)
-		fmt.Printf("  # Run acceptance tests: .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh %s\n", appName)
+		fmt.Printf("  # Run unit tests:       .claude/skills/dispatch/scripts/run-unit-tests.sh --app %s\n", appName)
+		fmt.Printf("  # Run lint:             .claude/skills/dispatch/scripts/run-lint.sh --app %s\n", appName)
+		fmt.Printf("  # Run acceptance tests: .claude/skills/dispatch/scripts/run-acceptance-tests.sh %s\n", appName)
 		fmt.Println()
 	}
 
