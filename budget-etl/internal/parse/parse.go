@@ -101,6 +101,45 @@ func DiscoverFiles(dir string) ([]StatementFile, error) {
 	return files, nil
 }
 
+// DiscoverFlatFiles walks dir for every non-dotfile (at any depth >= 1) and
+// returns a StatementFile per file using the caller-supplied institution and
+// account. Period is derived from each file's basename with its extension
+// stripped; InferPeriod later overwrites it from document content where possible.
+func DiscoverFlatFiles(dir, institution, account string) ([]StatementFile, error) {
+	dir = filepath.Clean(dir)
+	var files []StatementFile
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if path != dir && strings.HasPrefix(info.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasPrefix(info.Name(), ".") {
+			return nil
+		}
+		stem := filenameStem(info.Name())
+		if stem == "" {
+			return fmt.Errorf("cannot derive period from filename %q: empty stem after removing extension", info.Name())
+		}
+		files = append(files, StatementFile{
+			Path:        path,
+			Institution: institution,
+			Account:     account,
+			Period:      stem,
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
 // filenameStem returns the filename without its extension.
 func filenameStem(name string) string {
 	ext := filepath.Ext(name)

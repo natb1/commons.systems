@@ -11,9 +11,15 @@ import (
 // parseStatementDir discovers and parses all statement files in dir
 // concurrently, infers the period from document data when possible, and
 // returns the successfully parsed files, the total transaction count across
-// them, and the count of skipped files.
-func parseStatementDir(dir string) (parsed []parsedFile, totalTxns, skipped int, err error) {
-	files, err := parse.DiscoverFiles(dir)
+// them, and the count of skipped files. When institution and account are both
+// non-empty, dir is treated as a flat layout and DiscoverFlatFiles is used.
+func parseStatementDir(dir, institution, account string) (parsed []parsedFile, totalTxns, skipped int, err error) {
+	var files []parse.StatementFile
+	if institution != "" && account != "" {
+		files, err = parse.DiscoverFlatFiles(dir, institution, account)
+	} else {
+		files, err = parse.DiscoverFiles(dir)
+	}
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("discovering files in %s: %w", dir, err)
 	}

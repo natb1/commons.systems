@@ -22,7 +22,7 @@ func TestParseStatementDir(t *testing.T) {
 		{"2025/01/15", "30.00", "PURCHASE THREE", "", "TXN-3", "DEBIT"},
 	})
 
-	parsed, totalTxns, skipped, err := parseStatementDir(tmp)
+	parsed, totalTxns, skipped, err := parseStatementDir(tmp, "", "")
 	if err != nil {
 		t.Fatalf("parseStatementDir: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestParseStatementDir_SkipsInvestment(t *testing.T) {
 		t.Fatalf("writing qfx fixture: %v", err)
 	}
 
-	parsed, totalTxns, skipped, err := parseStatementDir(tmp)
+	parsed, totalTxns, skipped, err := parseStatementDir(tmp, "", "")
 	if err != nil {
 		t.Fatalf("parseStatementDir: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestParseStatementDir_SkipsInvestment(t *testing.T) {
 func TestParseStatementDir_DiscoverError(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 
-	_, _, _, err := parseStatementDir(missing)
+	_, _, _, err := parseStatementDir(missing, "", "")
 	if err == nil {
 		t.Fatal("parseStatementDir: got nil error, want a discovery error")
 	}

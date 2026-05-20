@@ -28,6 +28,8 @@ func main() {
 	plaintextFlag := flag.Bool("plaintext", false, "skip password prompt and write plaintext JSON output (cannot be combined with --keychain or BUDGET_ETL_PASSWORD)")
 	reportPath := flag.String("report", "", "Write JSON inspection report instead of merging. Requires --allow-uncategorized; --output is ignored.")
 	allowUncategorized := flag.Bool("allow-uncategorized", false, "Allow report mode to emit uncategorized transactions as data instead of erroring. Use only with --report.")
+	institution := flag.String("institution", "", "Institution name for flat directory layout (requires --account)")
+	account := flag.String("account", "", "Account name for flat directory layout (requires --institution)")
 
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> --output <path> [--input <path>] [--keychain <name>] [--plaintext] [--report <path> --allow-uncategorized]")
@@ -59,6 +61,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if (*institution != "") != (*account != "") {
+		fmt.Fprintln(os.Stderr, "Error: --institution and --account must be set together")
+		os.Exit(2)
+	}
+
 	var pw string
 	if *plaintextFlag {
 		if *keychainFlag != "" {
@@ -79,7 +86,7 @@ func main() {
 	}
 
 	if *reportPath != "" {
-		if err := runReport(fileOpts{path: *inputPath, password: pw}, *dir, *reportPath); err != nil {
+		if err := runReport(fileOpts{path: *inputPath, password: pw}, *dir, *institution, *account, *reportPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -87,7 +94,7 @@ func main() {
 	}
 
 	if *inputPath != "" && *dir != "" {
-		if err := runMerge(fileOpts{path: *inputPath, password: pw}, *dir, *group, fileOpts{path: *outputPath, password: pw}); err != nil {
+		if err := runMerge(fileOpts{path: *inputPath, password: pw}, *dir, *group, *institution, *account, fileOpts{path: *outputPath, password: pw}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -110,7 +117,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := runDirJSON(*dir, *group, fileOpts{path: *outputPath, password: pw}); err != nil {
+	if err := runDirJSON(*dir, *group, *institution, *account, fileOpts{path: *outputPath, password: pw}); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -128,9 +135,10 @@ type parsedFile struct {
 
 // runDirJSON discovers and parses statement files from dir, dedups transactions
 // by doc ID, and writes a JSON budget file with no rules applied. Use --input
-// to apply rules in a subsequent pass.
-func runDirJSON(dir, groupName string, output fileOpts) error {
-	parsed, totalTxns, _, err := parseStatementDir(dir)
+// to apply rules in a subsequent pass. When institution and account are both
+// non-empty, dir is treated as a flat layout and DiscoverFlatFiles is used.
+func runDirJSON(dir, groupName, institution, account string, output fileOpts) error {
+	parsed, totalTxns, _, err := parseStatementDir(dir, institution, account)
 	if err != nil {
 		return err
 	}
@@ -750,14 +758,21 @@ type StatementSummary struct {
 // transactions not already present in input. It applies rules to classify the
 // new transactions, collecting (rather than erroring on) uncategorized ones.
 // Returns the parsed files, uncategorized transaction details, a summary of new
-// statements and transactions, and any fatal error.
-func parseAndClassify(input *export.Output, dir string) (
+// statements and transactions, and any fatal error. When institution and account
+// are both non-empty, dir is treated as a flat layout and DiscoverFlatFiles is used.
+func parseAndClassify(input *export.Output, dir, institution, account string) (
 	parsed []parsedFile,
 	uncategorized []UncategorizedTxn,
 	summary StatementSummary,
 	err error,
 ) {
-	files, ferr := parse.DiscoverFiles(dir)
+	var files []parse.StatementFile
+	var ferr error
+	if institution != "" && account != "" {
+		files, ferr = parse.DiscoverFlatFiles(dir, institution, account)
+	} else {
+		files, ferr = parse.DiscoverFiles(dir)
+	}
 	if ferr != nil {
 		err = fmt.Errorf("discovering files in %s: %w", dir, ferr)
 		return
@@ -903,8 +918,9 @@ func parseAndClassify(input *export.Output, dir string) (
 // runReport parses statement files, classifies new transactions against input rules,
 // and writes a JSON inspection report. It exits 0 even when uncategorized transactions
 // exist — the caller decides how to handle them. The encrypted output write is skipped;
-// only the report file is written.
-func runReport(input fileOpts, dir, reportPath string) error {
+// only the report file is written. When institution and account are both non-empty,
+// dir is treated as a flat layout.
+func runReport(input fileOpts, dir, institution, account, reportPath string) error {
 	inp, err := export.ReadFile(input.path, input.password)
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
@@ -913,7 +929,7 @@ func runReport(input fileOpts, dir, reportPath string) error {
 		return fmt.Errorf("unsupported input version %d (expected 1)", inp.Version)
 	}
 
-	_, uncategorized, summary, err := parseAndClassify(&inp, dir)
+	_, uncategorized, summary, err := parseAndClassify(&inp, dir, institution, account)
 	if err != nil {
 		return err
 	}
@@ -976,7 +992,8 @@ func runReport(input fileOpts, dir, reportPath string) error {
 // from input are preserved. Transaction-specific rules pre-populate category/budget,
 // then general rules fill in the rest. Normalization rules are applied and budget
 // periods are computed for the merged result. The output is written to --output.
-func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
+// When institution and account are both non-empty, dir is treated as a flat layout.
+func runMerge(input fileOpts, dir, groupName, institution, account string, output fileOpts) error {
 	// Read input JSON
 	inp, err := export.ReadFile(input.path, input.password)
 	if err != nil {
@@ -995,7 +1012,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	}
 
 	// Parse and classify new (dir-only) transactions
-	parsed, uncatTxns, _, err := parseAndClassify(&inp, dir)
+	parsed, uncatTxns, _, err := parseAndClassify(&inp, dir, institution, account)
 	if err != nil {
 		return err
 	}

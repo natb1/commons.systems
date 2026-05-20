@@ -423,7 +423,7 @@ func TestRunMerge(t *testing.T) {
 	outputPath := filepath.Join(tmp, "output.json")
 	statementsDir := filepath.Join(tmp, "statements")
 
-	if err := runMerge(fileOpts{path: inputPath}, statementsDir, "", fileOpts{path: outputPath}); err != nil {
+	if err := runMerge(fileOpts{path: inputPath}, statementsDir, "", "", "", fileOpts{path: outputPath}); err != nil {
 		t.Fatalf("runMerge: %v", err)
 	}
 
@@ -555,7 +555,7 @@ func TestRunMergeGroupNameOverride(t *testing.T) {
 	}
 
 	outputPath := filepath.Join(tmp, "output.json")
-	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "override-group", fileOpts{path: outputPath}); err != nil {
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "override-group", "", "", fileOpts{path: outputPath}); err != nil {
 		t.Fatalf("runMerge: %v", err)
 	}
 
@@ -603,7 +603,7 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 	}
 
 	outputPath := filepath.Join(tmp, "output.json")
-	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", fileOpts{path: outputPath}); err != nil {
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", "", "", fileOpts{path: outputPath}); err != nil {
 		t.Fatalf("runMerge: %v", err)
 	}
 
@@ -988,6 +988,83 @@ func TestPlaintextFlagWritesUnencryptedJSON(t *testing.T) {
 	}
 	if len(parsed.Transactions) != 2 {
 		t.Errorf("output.Transactions: got %d, want 2", len(parsed.Transactions))
+	}
+}
+
+// TestPlaintextFlagWithFlatLayout runs the budget-etl CLI end-to-end with a
+// flat statement directory (no institution/account/period subdirs) using
+// --institution and --account to supply the missing metadata. Verifies that
+// the output is unencrypted plaintext JSON with the expected institution and
+// account on every transaction.
+func TestPlaintextFlagWithFlatLayout(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Write the CSV fixture directly into a flat dir — no institution/account/period subdirs.
+	csvPath := filepath.Join(tmp, "stmt.csv")
+	writeCSVFixture(t, csvPath, [][6]string{
+		{"2025/01/10", "5.00", "TEST PURCHASE ALPHA", "", "TXN-A", "DEBIT"},
+		{"2025/01/15", "12.50", "TEST PURCHASE BETA", "", "TXN-B", "DEBIT"},
+	})
+
+	outputPath := filepath.Join(tmp, "output.json")
+
+	cmd := exec.Command(os.Args[0],
+		"-dir", tmp,
+		"-institution", "test_bank",
+		"-account", "1234",
+		"-group", "personal",
+		"-plaintext",
+		"-output", outputPath,
+	)
+	// Hermetic: strip BUDGET_ETL_PASSWORD so --plaintext doesn't get rejected.
+	env := append([]string(nil), os.Environ()...)
+	filtered := env[:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "BUDGET_ETL_PASSWORD=") {
+			filtered = append(filtered, kv)
+		}
+	}
+	cmd.Env = append(filtered, "BUDGET_ETL_TEST_RUN_MAIN=1")
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("budget-etl flat layout failed: %v\noutput:\n%s", err, out)
+	}
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("output file is empty")
+	}
+	if data[0] != '{' {
+		t.Fatalf("output does not start with '{' (plaintext JSON); first byte = %q", data[0])
+	}
+	if export.IsEncrypted(data) {
+		t.Fatal("output starts with BENC magic bytes — encrypted, not plaintext")
+	}
+
+	var parsed export.Output
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("output does not round-trip through json.Unmarshal: %v", err)
+	}
+	if parsed.Version != 1 {
+		t.Errorf("output.Version = %d, want 1", parsed.Version)
+	}
+	if parsed.GroupName != "personal" {
+		t.Errorf("output.GroupName = %q, want %q", parsed.GroupName, "personal")
+	}
+	if len(parsed.Transactions) == 0 {
+		t.Fatal("output.Transactions is empty")
+	}
+	for _, txn := range parsed.Transactions {
+		if txn.Institution != "test_bank" {
+			t.Errorf("transaction %s: Institution = %q, want %q", txn.ID, txn.Institution, "test_bank")
+		}
+		if txn.Account != "1234" {
+			t.Errorf("transaction %s: Account = %q, want %q", txn.ID, txn.Account, "1234")
+		}
 	}
 }
 
