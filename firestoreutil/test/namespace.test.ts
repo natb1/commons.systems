@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nsCollectionPath, validateNamespace, type Namespace } from "../src/namespace.js";
+import { nsCollectionPath, validateNamespace } from "../src/namespace.js";
 
 describe("validateNamespace", () => {
   it("accepts valid namespace and returns it", () => {
