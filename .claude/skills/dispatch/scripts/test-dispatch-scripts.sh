@@ -1023,6 +1023,14 @@ assert_eq "qa applies dispatch:qa-done" \
 assert_eq "qa: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
+echo "Test: simplify → dispatch:refactored (apply only, no label create)"
+setup
+"$TMPDIR_TEST/dispatch-complete-phase" 25 simplify
+assert_eq "simplify applies dispatch:refactored" \
+  "pr edit 25 --add-label dispatch:refactored" "$(cat "$STUB_DIR/gh-pr-edit.log")"
+assert_eq "simplify: no gh label create when label exists" "absent" "$(label_create_state)"
+teardown
+
 echo "Test: review → dispatch:reviewed (apply only, no label create)"
 setup
 "$TMPDIR_TEST/dispatch-complete-phase" 30 review
