@@ -5,7 +5,7 @@ description: Invoke when the user introduces a new requirement or changes a prev
 
 # New Requirement
 
-Invoke whenever the user revises a previously-understood requirement — in a dispatched session, a legacy `/pr-workflow` session, or a free-form session on a feature branch.
+Invoke whenever the user revises a previously-understood requirement — in a dispatched session or a free-form session on a feature branch.
 
 ## Steps
 
@@ -16,7 +16,7 @@ Invoke whenever the user revises a previously-understood requirement — in a di
 3. **Re-sync local context.** If Step 2 produced any remote edits, refresh the auto-loaded context:
 
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/sync-issue-context <issue-number>
+   .claude/skills/dispatch/scripts/sync-issue-context <issue-number>
    ```
 
    Pass the issue number explicitly. This rewrites `CLAUDE.local.md` in the worktree.

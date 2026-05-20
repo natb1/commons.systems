@@ -37,9 +37,8 @@ an **ordered list of logical units of work**. Each unit specifies:
 Each unit becomes one commit. The user reviews and approves the plan.
 
 The plan must include a **plan preface** per `ref-memory-management`'s Clean Context
-Planning Rule: the plan assumes execution in a clean context, lists every skill from
-the issue state's `active_skills` to re-invoke before executing, and records that
-the active workflow step is the `implement` phase of `/dispatch`.
+Planning Rule: the plan assumes execution in a clean context and records that the
+active workflow step is the `implement` phase of `/dispatch`.
 
 ### 2. Build each unit
 
