@@ -55,6 +55,22 @@ Detect input mode from `$INPUT`:
 
 - Otherwise → **description mode**: treat `$INPUT` as the issue body text. Prompt user for a title if not provided.
 
+## Non-Interactive Mode
+
+When the first line of `$INPUT` is exactly `non-interactive`, the skill runs in non-interactive mode. This applies only to **description mode** (creating a new issue from a free-text description); issue-number mode is always interactive.
+
+**Marker parsing:**
+
+1. Strip the `non-interactive` marker line from `$INPUT`.
+2. If the next non-empty line begins with `title: ` (case-sensitive), use the rest of that line as the issue title and strip that line from `$INPUT`. The remaining text is the issue body.
+3. Otherwise, derive the title from the first non-empty line of the remaining body (per the existing description-mode convention).
+4. Proceed through Steps 2–3 (branch setup and 7-category evaluation) unchanged.
+5. In Step 4: skip plan-mode entry; compute the improved body internally and proceed directly to Step 5.
+6. In Step 5: skip the user-approval gate; proceed directly to issue creation via `gh issue create`.
+7. Step 6 (post-processing) runs as normal.
+
+**Backward compatibility:** any `$INPUT` not starting with the literal line `non-interactive` runs the existing interactive flow unchanged.
+
 ## Step 2. Branch-Conditional Setup
 
 In issue number mode only: check for blocking issues and their branches.
@@ -135,6 +151,8 @@ After completing the 7-category evaluation of the primary issue, repeat the full
 
 ## Step 4. Plan Mode — Propose Improvements
 
+> **Non-interactive mode:** skip plan-mode entry; compute the improved body internally and proceed directly to Step 5.
+
 **Scope:** This plan covers creating or updating the GitHub issue body — not implementing the code changes described in the issue. Do not modify source code files.
 
 Enter plan mode. Structure the plan across all issues with findings (primary + sub-issues):
@@ -146,6 +164,8 @@ Enter plan mode. Structure the plan across all issues with findings (primary + s
 Wait for user approval before proceeding.
 
 ## Step 5. Apply Improvements
+
+> **Non-interactive mode:** skip the user-approval gate; proceed directly to issue creation.
 
 This step only modifies GitHub issues (via `gh issue edit`, `gh issue create`, and related `gh` commands). Do not modify source code files.
 
