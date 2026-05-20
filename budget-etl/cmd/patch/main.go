@@ -5,8 +5,8 @@
 //	patch --spec <path> --input <path> --output <path> [--keychain <name>]
 //
 // The spec adds and removes rules in the snapshot's Rules array. See Spec for the
-// JSON shape. Output path must differ from input. When --keychain is set, input
-// is decrypted and output is encrypted with the keychain password.
+// JSON shape. Output path must differ from input. See internal/password for the
+// env-var-then-keychain precedence.
 package main
 
 import (
@@ -18,7 +18,7 @@ import (
 
 	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
-	"github.com/natb1/commons.systems/budget-etl/internal/keychain"
+	"github.com/natb1/commons.systems/budget-etl/internal/password"
 )
 
 // Spec is the top-level patch specification read from --spec.
@@ -43,7 +43,7 @@ func main() {
 	spec := flag.String("spec", "", "Path to JSON spec file (required)")
 	input := flag.String("input", "", "Path to input snapshot (required)")
 	output := flag.String("output", "", "Path to output snapshot (required; must differ from --input)")
-	keychainAccount := flag.String("keychain", "", "macOS Keychain account name; if empty, treat input/output as plaintext")
+	keychainAccount := flag.String("keychain", "", "macOS Keychain account name (optional when BUDGET_ETL_PASSWORD is set)")
 	flag.Parse()
 
 	if err := runPatch(*spec, *input, *output, *keychainAccount); err != nil {
@@ -66,16 +66,12 @@ func runPatch(specPath, inputPath, outputPath, keychainAccount string) error {
 		return fmt.Errorf("--input and --output must differ")
 	}
 
-	var password string
-	if keychainAccount != "" {
-		pw, err := keychain.Get(keychainAccount)
-		if err != nil {
-			return err
-		}
-		password = pw
+	pw, err := password.Resolve(keychainAccount)
+	if err != nil {
+		return err
 	}
 
-	inp, err := export.ReadFile(inputPath, password)
+	inp, err := export.ReadFile(inputPath, pw)
 	if err != nil {
 		return err
 	}
@@ -94,7 +90,7 @@ func runPatch(specPath, inputPath, outputPath, keychainAccount string) error {
 		return err
 	}
 
-	return export.WriteFile(outputPath, out, password)
+	return export.WriteFile(outputPath, out, pw)
 }
 
 // applySpec returns a copy of out with rules removed (by_id + by_predicate)
