@@ -6,9 +6,6 @@
 # applies it to the PR. (Apply-first ordering and missing-label handling are
 # explained inline at the code below.)
 #
-# This script is the single source of truth for the dispatch:* label
-# create metadata (color and description).
-#
 # Phase → label:
 #   qa       → dispatch:qa-done
 #   review   → dispatch:reviewed

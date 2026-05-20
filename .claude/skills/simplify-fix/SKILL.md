@@ -28,10 +28,12 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD)
 gh pr view "$BRANCH" --json number,labels
 ```
 
-This prints the PR number and its labels as JSON. If the PR already carries the
-`dispatch:refactored` label — an interrupted prior run — **skip Steps 1–6
-entirely** and return; the wrapper has no terminal action beyond the label, so
-re-entry is a true no-op. Otherwise run all steps in order.
+This prints the PR number and its labels as JSON. Capture the PR number into a
+shell variable (`PR_NUM`) and carry it through to Steps 6 and 7 — they reuse it
+without re-resolving. If the PR already carries the `dispatch:refactored`
+label — an interrupted prior run — **skip Steps 1–7 entirely** and return; the
+label is the wrapper's terminal action and is already applied, so re-entry is a
+true no-op. Otherwise run all steps in order.
 
 ## Steps
 
@@ -77,14 +79,8 @@ re-entry is a true no-op. Otherwise run all steps in order.
    Run subagents in parallel — fan them out in a single message with multiple
    Agent tool calls — since each one creates an independent issue.
 
-6. **Post a PR comment with the four-section report.** Resolve the PR number
-   from the current branch (use `dangerouslyDisableSandbox: true` — `gh` needs
-   network):
-
-   ```bash
-   BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   gh pr view "$BRANCH" --json number -q .number
-   ```
+6. **Post a PR comment with the four-section report.** Reuse the `PR_NUM`
+   captured in the preamble — do not re-resolve.
 
    Write the comment body to a file under the repo's `tmp/` directory. The body
    file **must** live under `tmp/` because `post-pr-comment.sh` restricts paths
@@ -105,7 +101,7 @@ re-entry is a true no-op. Otherwise run all steps in order.
    invokes `gh`) and also print the report to chat:
 
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/<file>
+   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
 7. **Apply the `dispatch:refactored` label.** Ensure the label exists
@@ -114,7 +110,7 @@ re-entry is a true no-op. Otherwise run all steps in order.
 
    ```bash
    gh label create "dispatch:refactored" --color BFD4F2 --description "simplify phase complete" 2>/dev/null || true
-   gh pr edit <pr-num> --add-label "dispatch:refactored"
+   gh pr edit "$PR_NUM" --add-label "dispatch:refactored"
    ```
 
    This skill **owns** its `dispatch:refactored` label — parallel to how
@@ -142,7 +138,8 @@ generic skill's.
 finding is a real improvement and falls within the PR's scope, classify it as
 Fixed and implement it — full stop — regardless of how trivial the diff is.
 Disregarded is for false positives, trivially wrong findings, or style
-preferences that are not actual improvements; smallness alone never qualifies.
+preferences that are not actual improvements; smallness alone never qualifies
+(out-of-scope items go to Deferred, not Disregarded).
 If `/simplify` skipped a small in-scope improvement in Step 2, implement it
 yourself before moving on (working-tree edit only; Step 4's
 `/commit-merge-push` picks it up).
@@ -150,5 +147,5 @@ yourself before moving on (working-tree edit only; Step 4's
 ## Notes
 
 The skill is idempotent: a re-invocation with `dispatch:refactored` already on
-the PR skips Steps 1–6 and returns. The label is the wrapper's terminal action,
-so re-entry is a true no-op.
+the PR skips Steps 1–7 and returns. The label is the wrapper's terminal action
+and is already applied, so re-entry is a true no-op.
