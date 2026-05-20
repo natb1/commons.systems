@@ -5,7 +5,7 @@ import { TEST_USER } from "@commons-systems/authutil/seed";
 type MediaSeedData = Omit<MediaItem, "id">;
 
 // Production media upload is handled by print/scripts/upload-media.sh.
-// Emulator seeding is automated via seeds/run-storage-seed.ts.
+// Emulator seeding is automated via seeds/storage.ts (run by firebaseutil/bin/run-storage-seed.ts).
 //
 // Usage: print/scripts/upload-media.sh <file> <title> <mediaType> [--public | <email> ...]
 // See the script for details on GCS metadata and Firestore document creation.

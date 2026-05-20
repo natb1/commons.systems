@@ -18,12 +18,15 @@ ensure_deps
 
 cd "$REPO_ROOT/$APP_DIR"
 
-# When a base URL is provided, skip emulator setup and run tests directly
+# When a base URL is provided, skip emulator setup and run tests directly.
+# This path runs against a Vite QA dev server: no Firebase Hosting headers and
+# public data only. Exclude @hosting tests (require Hosting emulator or deployed
+# preview) and @testonly tests (require testOnly seed data) — everything else runs.
 if [ -n "$EXTERNAL_BASE_URL" ]; then
   if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
     npx playwright install --with-deps chromium
   fi
-  BASE_URL="$EXTERNAL_BASE_URL" npx playwright test --config e2e/playwright.config.ts
+  BASE_URL="$EXTERNAL_BASE_URL" npx playwright test --config e2e/playwright.config.ts --grep-invert "@hosting|@testonly"
   exit 0
 fi
 
@@ -260,11 +263,10 @@ if [ "$USES_STORAGE" = true ]; then
   done
   echo "Firebase Storage emulator ready on port ${STORAGE_PORT}"
 
-  # Seed Storage (if the app provides a storage seed script)
-  STORAGE_SEED="$REPO_ROOT/$APP_DIR/seeds/run-storage-seed.ts"
-  if [ -f "$STORAGE_SEED" ]; then
+  # Seed Storage (if the app provides storage seed data)
+  if [ -f "$REPO_ROOT/$APP_DIR/seeds/storage.ts" ]; then
     echo "Seeding Storage..."
-    STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${EMULATOR_PROJECT_ID}.firebasestorage.app" SEED_TEST_ONLY=true npx tsx "$STORAGE_SEED"
+    APP_NAME="$APP_NAME" STORAGE_EMULATOR_HOST="localhost:${STORAGE_PORT}" STORAGE_BUCKET="${EMULATOR_PROJECT_ID}.firebasestorage.app" SEED_TEST_ONLY=true npx tsx "$REPO_ROOT/firebaseutil/bin/run-storage-seed.ts"
   fi
 fi
 

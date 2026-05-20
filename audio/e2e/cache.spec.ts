@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 test.describe("audio cache", () => {
   test("cache and replay from IndexedDB", async ({ page }) => {

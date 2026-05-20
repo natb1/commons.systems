@@ -1,12 +1,6 @@
 import { TEST_USER } from "@commons-systems/authutil/seed";
 
-export interface StorageSeedItem {
-  path: string;
-  metadata: Record<string, string>;
-  content?: Buffer;
-  sourceUrl?: string;
-  testOnly?: boolean;
-}
+import type { StorageSeedItem } from "@commons-systems/firebaseutil/seed-storage";
 
 // Generates a minimal valid WAV file (RIFF/WAVE) with silence.
 // 8 kHz, mono, 8-bit unsigned PCM. 8000 bytes per second of audio.
