@@ -17,9 +17,8 @@ const cache = createLruBlobCache({
 export const closeDb = cache.closeDb;
 export const clearCache = cache.clearCache;
 
-export async function getFile(storagePath: string): Promise<ArrayBuffer | null> {
-  const result = await cache.getEntry(storagePath);
-  return result as ArrayBuffer | null;
+export function getFile(storagePath: string): Promise<ArrayBuffer | null> {
+  return cache.getEntry<ArrayBuffer>(storagePath);
 }
 
 export function putFile(storagePath: string, data: ArrayBuffer): Promise<void> {

@@ -42,7 +42,9 @@ export interface LruBlobCacheConfig {
 }
 
 export interface LruBlobCache {
-  getEntry(key: string): Promise<ArrayBuffer | Uint8Array | null>;
+  getEntry<T extends ArrayBuffer | Uint8Array = ArrayBuffer | Uint8Array>(
+    key: string,
+  ): Promise<T | null>;
   putEntry(key: string, data: ArrayBuffer | Uint8Array): Promise<void>;
   clearCache(): Promise<void>;
   closeDb(): Promise<void>;
@@ -155,7 +157,9 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
     });
   }
 
-  async function getEntry(key: string): Promise<ArrayBuffer | Uint8Array | null> {
+  async function getEntry<T extends ArrayBuffer | Uint8Array>(
+    key: string,
+  ): Promise<T | null> {
     const db = await openDb();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(DATA_STORE, "readonly");
@@ -164,7 +168,7 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
         const entry = req.result as DataEntry | undefined;
         if (entry) {
           touchLastAccessed(db, key);
-          resolve(entry.data);
+          resolve(entry.data as T);
         } else {
           resolve(null);
         }
@@ -195,7 +199,7 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
           const currentTotal = totalEntry ? totalEntry.size : 0;
           metaStore.put({ key: TOTAL_KEY, size: currentTotal - oldSize + data.byteLength, lastAccessed: 0 });
         };
-        totalReq.onerror = () => tx.abort();
+        totalReq.onerror = () => reject(totalReq.error);
       };
 
       tx.oncomplete = () => resolve();
@@ -225,7 +229,6 @@ export function createLruBlobCache(config: LruBlobCacheConfig): LruBlobCache {
       let totalBytes = 0;
       countReq.onsuccess = () => {
         const raw = countReq.result;
-        // Subtract 1 for the __total__ sentinel entry (or 0 if store is empty)
         entryCount = raw > 0 ? raw - 1 : 0;
       };
       totalReq.onsuccess = () => {

@@ -25,22 +25,20 @@ function chunkKey(storagePath: string, offset: number, length: number): string {
   return `${storagePath}:${offset}:${length}`;
 }
 
-export async function getFile(storagePath: string): Promise<ArrayBuffer | null> {
-  const result = await cache.getEntry(storagePath);
-  return result as ArrayBuffer | null;
+export function getFile(storagePath: string): Promise<ArrayBuffer | null> {
+  return cache.getEntry<ArrayBuffer>(storagePath);
 }
 
 export function putFile(storagePath: string, data: ArrayBuffer): Promise<void> {
   return cache.putEntry(storagePath, data);
 }
 
-export async function getChunk(
+export function getChunk(
   storagePath: string,
   offset: number,
   length: number,
 ): Promise<Uint8Array | null> {
-  const result = await cache.getEntry(chunkKey(storagePath, offset, length));
-  return result as Uint8Array | null;
+  return cache.getEntry<Uint8Array>(chunkKey(storagePath, offset, length));
 }
 
 export function putChunk(
