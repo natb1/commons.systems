@@ -1116,9 +1116,12 @@ teardown
 # regression in a .sh wrapper is caught alongside .md regressions.
 echo "Test: only dispatch-complete-phase contains the BFD4F2 hex"
 REPO_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
+# grep exits 2 on permission errors (e.g. sandbox-blocked directories); treat
+# that as non-fatal — the important check is the matched file list, not whether
+# grep could read every directory.
 matches=$(grep -rl 'BFD4F2' "$REPO_ROOT/.claude" \
   --exclude='test-dispatch-scripts.sh' 2>/dev/null \
-  | sed "s|$REPO_ROOT/||" | sort)
+  | sed "s|$REPO_ROOT/||" | sort || true)
 assert_eq "only dispatch-complete-phase owns BFD4F2" \
   ".claude/skills/dispatch/scripts/dispatch-complete-phase" \
   "$matches"
