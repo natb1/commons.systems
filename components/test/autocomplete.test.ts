@@ -1,13 +1,13 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   showDropdown,
   removeDropdown,
   registerAutocompleteListeners,
   _resetForTest,
-} from "../../src/components/autocomplete";
+} from "../src/autocomplete";
 
 function createInput(): HTMLInputElement {
   const input = document.createElement("input");
