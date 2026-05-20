@@ -11,6 +11,7 @@ export interface SpreadControllerDeps {
   canvasWrap: HTMLElement;
   spreadToggleBtn: HTMLButtonElement;
   storageKey: string;
+  onRenderError: (err: unknown) => void;
 }
 
 export class SpreadController {
@@ -18,6 +19,7 @@ export class SpreadController {
   private readonly canvasWrap: HTMLElement;
   private readonly spreadToggleBtn: HTMLButtonElement;
   private readonly storageKey: string;
+  private readonly onRenderError: (err: unknown) => void;
 
   private spreadEnabled = false;
   private spreads: Spread[] = [];
@@ -33,6 +35,7 @@ export class SpreadController {
     this.canvasWrap = deps.canvasWrap;
     this.spreadToggleBtn = deps.spreadToggleBtn;
     this.storageKey = deps.storageKey;
+    this.onRenderError = deps.onRenderError;
   }
 
   get enabled(): boolean {
@@ -85,7 +88,7 @@ export class SpreadController {
       this.spreadResizeTimer = setTimeout(() => {
         this.spreadResizeTimer = null;
         this.render().catch(err => {
-          reportError(new Error("Spread render failed", { cause: err }));
+          this.onRenderError(err);
         });
       }, 150);
     });

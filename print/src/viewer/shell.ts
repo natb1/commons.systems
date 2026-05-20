@@ -237,6 +237,7 @@ export function initViewer(
     canvasWrap,
     spreadToggleBtn,
     storageKey: spreadKey,
+    onRenderError: handleRenderError,
   });
 
   function getSpreadPosition(): string {
