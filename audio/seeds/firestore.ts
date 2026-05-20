@@ -8,7 +8,7 @@ type AudioSeedData = Omit<AudioItem, "id">;
 // upsert these documents but will not delete items added via manual Firestore
 // writes.
 //
-// Emulator storage objects are seeded separately via seeds/run-storage-seed.ts.
+// Emulator storage objects are seeded separately via seeds/storage.ts (run by firebaseutil/bin/run-storage-seed.ts).
 
 const appSeed: Omit<SeedSpec, "namespace"> = {
   collections: [
