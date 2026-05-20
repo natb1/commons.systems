@@ -11,6 +11,7 @@
   },
   "peerDependencies": {
     "@commons-systems/errorutil": "*",
+    "@commons-systems/authutil": "*",
     "firebase": ">=12",
     "@commons-systems/analyticsutil": "*",
     "@commons-systems/firestoreutil": "*"

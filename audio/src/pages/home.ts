@@ -1,6 +1,6 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { logError } from "@commons-systems/errorutil/log";
-import { classifyError } from "@commons-systems/errorutil/classify";
+import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import type { User } from "../auth.js";
 import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { getPublicMedia, getAllAccessibleMedia } from "../firestore.js";
@@ -52,8 +52,7 @@ export async function renderHome(user: User | null): Promise<string> {
     mediaHtml = renderMediaList(items);
   } catch (error) {
     if (error instanceof DataIntegrityError) throw error;
-    if (classifyError(error) === "programmer") throw error;
-    logError(error, { operation: "load-media" });
+    if (!deferProgrammerError(error)) logError(error, { operation: "load-media" });
     mediaHtml = '<p id="media-error">Could not load audio library.</p>';
   }
 

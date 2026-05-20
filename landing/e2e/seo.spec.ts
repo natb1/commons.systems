@@ -1,8 +1,8 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 const SITE_URL = "https://commons.systems";
 
-async function getJsonLd(page: import("@playwright/test").Page, type: string) {
+async function getJsonLd(page: import("@commons-systems/config/playwright-test").Page, type: string) {
   const scripts = await page.locator('script[type="application/ld+json"]').all();
   for (const s of scripts) {
     const text = await s.textContent();

@@ -159,9 +159,9 @@ async function syncPeriodOnReimbursementChange(
   }
 }
 
-/** Handle an error from adjustBudgetPeriodTotal: rethrow programmer errors, log others, clear balance, and set tooltip. */
+/** Handle an error from adjustBudgetPeriodTotal: defer programmer errors, log others, clear balance, and set tooltip. */
 function handlePeriodSyncError(row: HTMLElement, error: unknown): void {
-  if (classifyError(error) === "programmer") throw error;
+  if (deferProgrammerError(error)) return;
   logError(error, { operation: "update-period-totals" });
   clearBalanceDisplay(row);
   const balanceEl = row.querySelector(".budget-balance") as HTMLElement | null;

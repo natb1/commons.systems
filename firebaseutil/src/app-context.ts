@@ -9,8 +9,10 @@ import type { FirebaseApp } from "firebase/app";
 import type { Firestore } from "firebase/firestore";
 import type { AppCheck } from "firebase/app-check";
 import type { FirebaseStorage } from "firebase/storage";
+import type { User } from "firebase/auth";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { logError, registerErrorSink } from "@commons-systems/errorutil/log";
+import type { DeferredAppAuth } from "@commons-systems/authutil/deferred-app-auth";
 import { firebaseConfig } from "./config.js";
 import {
   validateNamespace,
@@ -31,6 +33,18 @@ interface AppContextBase {
 interface AppContextWithStorage extends AppContextBase {
   storage: FirebaseStorage;
   STORAGE_NAMESPACE: Namespace;
+}
+
+export interface AppContextWithAuth extends AppContextBase {
+  signIn(): Promise<void>;
+  signOut(): Promise<void>;
+  onAuthStateChanged(cb: (user: User | null) => void): Promise<() => void>;
+}
+
+export interface AppContextWithStorageAndAuth extends AppContextWithStorage {
+  signIn(): Promise<void>;
+  signOut(): Promise<void>;
+  onAuthStateChanged(cb: (user: User | null) => void): Promise<() => void>;
 }
 
 function parseEmulatorHost(
@@ -71,8 +85,14 @@ interface AppContextOptions {
    *  always returns `{}` and `initAppCheck` is undefined. */
   deferAppCheck?: boolean;
   storageModule?: StorageModule;
-  /** Optional; error logs omit user info when not provided. */
+  /** Optional; error logs omit user info when not provided.
+   *  Mutually exclusive with `enableAuth`. */
   getCurrentUser?: ErrorSinkOptions["getCurrentUser"];
+  /** Wire in the shared deferred-auth shim (`createDeferredAppAuth`). When
+   *  true, the returned context exposes `signIn`/`signOut`/`onAuthStateChanged`
+   *  and the error sink uses the shim's `getCurrentUser` for user info.
+   *  Mutually exclusive with `getCurrentUser`. */
+  enableAuth?: boolean;
 }
 
 /**
@@ -92,6 +112,19 @@ interface AppContextOptions {
 export function createAppContext(
   appName: string,
   appId: string,
+  options: AppContextOptions & {
+    storageModule: StorageModule;
+    enableAuth: true;
+  },
+): AppContextWithStorageAndAuth;
+export function createAppContext(
+  appName: string,
+  appId: string,
+  options: AppContextOptions & { enableAuth: true },
+): AppContextWithAuth;
+export function createAppContext(
+  appName: string,
+  appId: string,
   options: AppContextOptions & { storageModule: StorageModule },
 ): AppContextWithStorage;
 export function createAppContext(
@@ -103,7 +136,13 @@ export function createAppContext(
   appName: string,
   appId: string,
   options?: AppContextOptions,
-): AppContextBase | AppContextWithStorage {
+): AppContextBase | AppContextWithStorage | AppContextWithAuth | AppContextWithStorageAndAuth {
+  if (options?.enableAuth && options.getCurrentUser) {
+    throw new Error(
+      "createAppContext: enableAuth and getCurrentUser are mutually exclusive",
+    );
+  }
+
   const app = initializeApp({
     ...firebaseConfig,
     appId,
@@ -219,16 +258,54 @@ export function createAppContext(
   }
   const NAMESPACE = validateNamespace(envNamespace || `${appName}/prod`);
 
+  // Dynamic-import the shim so apps that don't opt into auth never pull the
+  // deferred-app-auth module into their firebaseutil chunk. The shim's own
+  // firebase/auth dynamic import still defers the heavy auth chunk.
+  let resolvedDeferredAuth: DeferredAppAuth | undefined;
+  let deferredAuthPromise: Promise<DeferredAppAuth> | undefined;
+  function loadDeferredAuth(): Promise<DeferredAppAuth> {
+    if (!deferredAuthPromise) {
+      deferredAuthPromise = import("@commons-systems/authutil/deferred-app-auth").then(
+        ({ createDeferredAppAuth }) => {
+          resolvedDeferredAuth = createDeferredAppAuth(app);
+          return resolvedDeferredAuth;
+        },
+      );
+    }
+    return deferredAuthPromise;
+  }
+  if (options?.enableAuth) {
+    // Trigger the load eagerly to match the original parallel-with-init
+    // timing. The `.catch(() => {})` consumes rejection from this kick-off
+    // chain only; callers awaiting an auth method still see the rejection
+    // through `deferredAuthPromise`.
+    loadDeferredAuth().catch(() => {});
+  }
+
+  const errorSinkGetCurrentUser = options?.enableAuth
+    ? () => resolvedDeferredAuth?.getCurrentUser() ?? null
+    : options?.getCurrentUser;
+
   // Errors logged before this point (e.g., appcheck-init) go to console only.
   registerErrorSink(
     createFirestoreErrorSink({
       db,
       namespace: NAMESPACE,
-      getCurrentUser: options?.getCurrentUser,
+      getCurrentUser: errorSinkGetCurrentUser,
     }),
   );
 
   const trackPageView = initAnalyticsSafe(app);
+
+  const authMethods = options?.enableAuth
+    ? {
+        signIn: async (): Promise<void> => (await loadDeferredAuth()).signIn(),
+        signOut: async (): Promise<void> => (await loadDeferredAuth()).signOut(),
+        onAuthStateChanged: async (
+          cb: (user: User | null) => void,
+        ): Promise<() => void> => (await loadDeferredAuth()).onAuthStateChanged(cb),
+      }
+    : {};
 
   if (options?.storageModule) {
     const storage = options.storageModule.getStorage(app);
@@ -245,8 +322,8 @@ export function createAppContext(
     // Storage paths always use prod — media binaries are not duplicated per preview branch.
     const STORAGE_NAMESPACE = validateNamespace(`${appName}/prod`);
 
-    return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, initAppCheck, storage, STORAGE_NAMESPACE };
+    return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, initAppCheck, storage, STORAGE_NAMESPACE, ...authMethods };
   }
 
-  return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, initAppCheck };
+  return { app, db, NAMESPACE, trackPageView, getAppCheckHeaders, initAppCheck, ...authMethods };
 }

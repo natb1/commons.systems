@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@commons-systems/config/playwright-test";
 
 const APPS = [
   {
@@ -22,7 +22,7 @@ const APPS = [
 ];
 
 async function getSoftwareApplicationJsonLd(
-  page: import("@playwright/test").Page,
+  page: import("@commons-systems/config/playwright-test").Page,
 ) {
   const scripts = await page
     .locator('script[type="application/ld+json"]')

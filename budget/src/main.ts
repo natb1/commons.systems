@@ -262,7 +262,7 @@ async function handleFileUpload(file: File): Promise<void> {
       showNavError(error.message);
       return;
     }
-    if (classifyError(error) === "programmer") throw error;
+    if (deferProgrammerError(error)) return;
     logError(error, { operation: "upload" });
     showNavError("Upload failed. Please try again.");
   }
@@ -309,7 +309,7 @@ exportButton.addEventListener("click", async () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } catch (error) {
-    if (classifyError(error) === "programmer") throw error;
+    if (deferProgrammerError(error)) return;
     logError(error, { operation: "export" });
     showNavError(error instanceof Error ? error.message : "Export failed. Please try again.");
   }
@@ -321,7 +321,7 @@ clearButton.addEventListener("click", async () => {
     importPassword = null;
     transition({ source: "seed" });
   } catch (error) {
-    if (classifyError(error) === "programmer") throw error;
+    if (deferProgrammerError(error)) return;
     logError(error, { operation: "clear-data" });
     showNavError("Failed to clear data. Try closing other tabs or refreshing the page.");
   }
@@ -338,7 +338,7 @@ async function initialize(): Promise<void> {
 }
 
 initialize().catch((error) => {
-  if (classifyError(error) === "programmer") throw error;
+  if (deferProgrammerError(error)) return;
   logError(error, { operation: "initialization" });
   showNavError("Could not load saved data. You may need to re-upload your file.");
   transition({ source: "seed" });
