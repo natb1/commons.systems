@@ -16,6 +16,22 @@ This skill runs in the **caller's thread** — it has no `context:` key — so i
 fork `/commit-merge-push`, invoke the built-in `/review`, and launch
 implementation subagents.
 
+## Idempotency preamble
+
+Before running any step, resolve the PR number **and its labels** from the current
+branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
+
+```bash
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+gh pr view "$BRANCH" --json number,labels
+```
+
+Capture the PR number into `PR_NUM` and carry it through subsequent steps. If the
+PR already carries the `dispatch:reviewed` label — an interrupted prior run —
+**skip Steps 1–8 entirely** and return; the label is the wrapper's terminal action
+under autonomous use and is already applied, so re-entry is a true no-op.
+Otherwise run all steps in order.
+
 ## Steps
 
 1. **Merge `origin/main` first.** Fork `/commit-merge-push` via the Agent tool to
@@ -44,13 +60,8 @@ implementation subagents.
    actionable findings), this invocation also runs with no pending changes —
    `/commit-merge-push` tolerates that and creates no commit.
 
-5. **Post a PR comment.** Resolve the PR number from the current branch (use
-   `dangerouslyDisableSandbox: true` — `gh` needs network):
-
-   ```bash
-   BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   gh pr view "$BRANCH" --json number -q .number
-   ```
+5. **Post a PR comment.** Reuse `PR_NUM` from the idempotency preamble — no
+   second `gh pr view`.
 
    Write the comment body — a summary of the review findings and which were fixed
    — to a file under the repo's `tmp/` directory. The body file **must** live
@@ -58,7 +69,7 @@ implementation subagents.
    Then post it (use `dangerouslyDisableSandbox: true` — the script invokes `gh`):
 
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/<file>
+   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
 6. **Apply the `dispatch:reviewed` label.** Ensure the label exists idempotently,
@@ -89,3 +100,8 @@ Under `/loop /dispatch` there is no user to drive Step 8 — the skill applies t
 `dispatch:reviewed` label (Step 6) and stops; the Step 7 unfixed-findings report
 is informational. The label is applied regardless of whether any fixes were made,
 so `/dispatch` can always advance to the next phase.
+
+## Notes
+
+The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
+PR skips Steps 1–8 and returns.
