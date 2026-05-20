@@ -853,6 +853,78 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "worktree continuation bypasses gate → worktree 42 42-some-slug" "worktree 42 42-some-slug" "$result"
 teardown
 
+# --- --health-only mode (issue #683 AC: gate before sweep) ------------------
+# --health-only runs the pre-ladder bypasses and the gate, then exits without
+# the queue scan. /dispatch SKILL.md calls it before dispatch-sweep so the
+# sweep does not run while main is red.
+
+# 27a. --health-only, main green, not in a worktree → "ok", exit 0.
+echo "Test: --health-only + main green → ok"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[{"headSha":"mainhead0","conclusion":"success"}]' \
+  > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
+assert_eq "--health-only main green → ok" "ok" "$result"
+assert_eq "--health-only main green → exit 0" "0" "$rc"
+teardown
+
+# 27b. --health-only, main red, not in a worktree → "main-broken <sha>", exit 0.
+echo "Test: --health-only + main red → main-broken"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
+assert_eq "--health-only main red → main-broken mainhead0" "main-broken mainhead0" "$result"
+assert_eq "--health-only main red → exit 0" "0" "$rc"
+teardown
+
+# 27c. --health-only, main red, current branch is <N>-foo with open issue <N>
+#      → "ok" (current-worktree bypass preserved).
+echo "Test: --health-only + worktree branch bypasses red main"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
+printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
+assert_eq "--health-only worktree branch bypasses red main → ok" "ok" "$result"
+assert_eq "--health-only worktree branch → exit 0" "0" "$rc"
+teardown
+
+# 27d. --health-only --qa is mutually exclusive → exit non-zero, error on stderr.
+echo "Test: --health-only + --qa → error"
+setup
+err_file="$TMPDIR_TEST/err.txt"
+if "$TMPDIR_TEST/dispatch-select-target" --health-only --qa >/dev/null 2>"$err_file"; then
+  rc=0
+else
+  rc=$?
+fi
+[[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
+assert_eq "--health-only --qa exits non-zero" "yes" "$rc_nonzero"
+err_contents=$(cat "$err_file")
+[[ "$err_contents" == *"mutually exclusive"* ]] && err_msg=ok || err_msg="missing: $err_contents"
+assert_eq "--health-only --qa error mentions mutually exclusive" "ok" "$err_msg"
+teardown
+
 # 28. Selecting a target issues exactly one gh pr list call (down from 1 + N).
 echo "Test: dispatch-select-target fetches the open-PR list once"
 setup

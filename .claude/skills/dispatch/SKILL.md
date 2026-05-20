@@ -23,8 +23,33 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 
 - **Issue argument given** → strip any leading `#`; that issue is the target.
   Skip the queue scan.
-- **No argument** → first run the sweep script (`dangerouslyDisableSandbox: true` —
-  required for both the `/proc` walk and the `gh pr list` calls inside it):
+- **No argument** → first run the **`origin/main` CI health gate**. Every
+  queueable task builds on `origin/main` — branches fork from it and merge it —
+  so a failing check on main's HEAD means nothing is safe to start, and the
+  sweep must not run either. Invoke `dispatch-select-target --health-only` with
+  `dangerouslyDisableSandbox: true` (the script invokes `gh`):
+
+  ```bash
+  HEALTH=$(.claude/skills/dispatch/scripts/dispatch-select-target --health-only)
+  ```
+
+  The gate aggregates main's HEAD CI from two sources (CodeQL check-runs and
+  Actions workflow runs); a failing conclusion short-circuits to
+  `main-broken <sha>`. In-progress (not-yet-concluded) checks do **not** trip
+  the gate. The gate is bypassed by an explicit `/dispatch <issue|pr>` argument
+  (the queue scan is not run at all) and by current-worktree continuation (a
+  session continues its own in-progress work regardless of main's state); in
+  the latter case `--health-only` emits `ok` without consulting the gate.
+
+  Route on `$HEALTH`:
+
+  - **`ok`** → proceed to the sweep step below.
+  - **`main-broken <sha>`** → see the **main-broken handler** block at the end
+    of this step. Do **not** run the sweep or target selection.
+
+  When the gate emits `ok`, run the sweep script
+  (`dangerouslyDisableSandbox: true` — required for both the `/proc` walk and
+  the `gh pr list` calls inside it):
 
   ```bash
   SWEEP_OUT=$(.claude/skills/dispatch/scripts/dispatch-sweep 2>$TMPDIR/dispatch-sweep-stderr)
@@ -73,23 +98,14 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
     closed/unrecognized issue `<N>` and **stop** (consistent with the named-target
     "closed → report and stop" rule in Step 2)
   - `empty` — nothing eligible
-  - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check; the queue
-    scan was short-circuited (see the `main-broken` handling block below)
+  - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check. The
+    pre-sweep gate above normally catches this first; the same gate runs again
+    inside `dispatch-select-target` as defense-in-depth. Handle identically —
+    see the **main-broken handler** block at the end of this step.
 
   An **explicit issue argument overrides current-worktree detection** — the selection
   script, and therefore its current-worktree detection, runs only when no argument is
   given. `/dispatch #123` run from inside worktree-456 still targets 123.
-
-  Before the priority ladder, the script runs a **top-priority `origin/main` CI
-  health gate**. Every queueable task builds on `origin/main` — branches fork
-  from it and merge it — so a failing check on main's HEAD means nothing is safe
-  to start. The gate aggregates main's HEAD CI from two sources (CodeQL
-  check-runs and Actions workflow runs); a failing conclusion short-circuits the
-  scan to `main-broken <sha>` and the priority ladder is not evaluated.
-  In-progress (not-yet-concluded) checks do **not** trip the gate. The gate is
-  bypassed by an explicit `/dispatch <issue|pr>` argument (the queue scan is not
-  run at all) and by current-worktree continuation (a session continues its own
-  in-progress work regardless of main's state).
 
   Priority order it implements (highest first; within a tier, oldest PR wins; PRs
   and `help wanted` issues with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
@@ -100,9 +116,11 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 
   On `empty` → report that the queue is empty and **stop**.
 
-  On `main-broken <sha>` → `origin/main` itself is red, so no new work is safe to
-  start. Do **not** create a worktree, branch, or phase skill. Diagnose main
-  instead: enumerate the failing checks on `<sha>` by aggregating
+  **main-broken handler.** Referenced from both the pre-sweep `--health-only`
+  gate above and the defense-in-depth `main-broken <sha>` result from
+  `dispatch-select-target`. `origin/main` itself is red, so no new work is safe
+  to start. Do **not** run the sweep, create a worktree, branch, or phase skill.
+  Diagnose main instead: enumerate the failing checks on `<sha>` by aggregating
   `gh run list --branch main` and
   `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`. For a failing workflow
   run, fetch its logs with `gh run view <databaseId> --log-failed`; for a failing

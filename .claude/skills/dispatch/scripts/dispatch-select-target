@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Select the single highest-priority task from the queue.
-# Usage: dispatch-select-target [--qa]
+# Usage: dispatch-select-target [--qa | --health-only]
 #
 # Output: exactly one line:
 #   pr <num> <branch> <phase>   — a PR to work on, with its already-derived phase
@@ -13,6 +13,15 @@
 # Default mode runs a top-priority origin/main CI health gate before the ladder:
 # every queueable task builds on origin/main, so a failing check on main's HEAD
 # short-circuits the scan to "main-broken <sha>" and selects no task.
+#
+# --health-only mode runs the pre-ladder bypasses (current-worktree continuation)
+# and the origin/main CI health gate, then exits — no queue scan, no PR/issue
+# fetches. /dispatch SKILL.md uses it to gate the sweep on main's CI health.
+# Output is exactly one line:
+#   ok                          — safe to proceed (either main is healthy or the
+#                                 current branch is an <N>-* worktree that
+#                                 bypasses the gate)
+#   main-broken <sha>           — origin/main's HEAD CI has a failing check
 #
 # --qa mode omits the <phase> field — there it is always "qa":
 #   pr <num> <branch>           — the QA PR to work on
@@ -37,13 +46,20 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 QA_MODE=false
+HEALTH_ONLY=false
 
 for arg in "$@"; do
   case "$arg" in
     --qa) QA_MODE=true ;;
+    --health-only) HEALTH_ONLY=true ;;
     *) echo "error: unknown argument: $arg" >&2; exit 1 ;;
   esac
 done
+
+if [[ "$QA_MODE" == "true" && "$HEALTH_ONLY" == "true" ]]; then
+  echo "error: --qa and --health-only are mutually exclusive" >&2
+  exit 1
+fi
 
 # Print origin/main's HEAD SHA if its CI has a failing check; print nothing if
 # main is healthy or only has in-progress checks. main's CI state spans two
@@ -76,6 +92,27 @@ main_broken_sha() {
     echo "$sha"
   fi
 }
+
+# --health-only mode: report whether main is safe to start new work on. Used by
+# /dispatch SKILL.md to run the gate before the sweep — the AC ordering in
+# issue #683. Current-worktree continuation bypasses the gate (a session
+# continuing its own in-progress work doesn't care about main's state), so this
+# mode emits "ok" whenever the current branch matches an <N>-* worktree, mirroring
+# the bypass in the default-mode block below.
+if [[ "$HEALTH_ONLY" == "true" ]]; then
+  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  if [[ "$CURRENT_BRANCH" =~ ^([0-9]+)- ]]; then
+    echo "ok"
+    exit 0
+  fi
+  MAIN_BROKEN_SHA=$(main_broken_sha)
+  if [[ -n "$MAIN_BROKEN_SHA" ]]; then
+    echo "main-broken $MAIN_BROKEN_SHA"
+  else
+    echo "ok"
+  fi
+  exit 0
+fi
 
 # Current-worktree detection (default mode only): if the current branch matches
 # the worktree convention <issue-num>-<slug>, short-circuit before the queue scan
