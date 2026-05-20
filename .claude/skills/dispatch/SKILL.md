@@ -23,7 +23,40 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 
 - **Issue argument given** → strip any leading `#`; that issue is the target.
   Skip the queue scan.
-- **No argument** → run the selection script:
+- **No argument** → first run the sweep script (`dangerouslyDisableSandbox: true` —
+  required for both the `/proc` walk and the `gh pr list` calls inside it):
+
+  ```bash
+  SWEEP_OUT=$(.claude/skills/dispatch/scripts/dispatch-sweep 2>$TMPDIR/dispatch-sweep-stderr)
+  SWEEP_EXIT=$?
+  ```
+
+  Route on the three sweep outcomes before proceeding to target selection:
+
+  - **Exit 0, empty stdout** → no orphan to adopt; fall through to
+    `dispatch-select-target` below.
+  - **Exit 0, stdout is `worktree <N> <branch>`** → adopt `<N>` as the target.
+    Skip Step 2 (leaf tracing). Proceed to Step 3 (worktree-resolve) with
+    `<N>` and `explicit` — the sweep made a concrete adoption decision, not a
+    queue scan, so treat it identically to an explicit `/dispatch <N>` argument.
+  - **Non-zero exit, stderr contains `cleanup-unknown:<path>`** → the sweep found
+    a worktree with no open PR and no inferable issue number. This is the only
+    path where the sweep can destroy potentially-unmerged code. Use
+    `AskUserQuestion` to present `<path>` and explain the situation: the worktree
+    has neither an open PR nor a branch name prefixed with an issue number, so
+    its history is only in the local worktree. Ask whether to delete it.
+    - **User answers yes** → re-invoke with `dangerouslyDisableSandbox: true`:
+      ```bash
+      .claude/skills/dispatch/scripts/dispatch-sweep --cleanup-unknown <path>
+      ```
+      Then re-run the default `dispatch-sweep` (again `dangerouslyDisableSandbox:
+      true`). A new unknown orphan may surface — loop the confirmation prompt
+      until `dispatch-sweep` exits 0.
+    - **User answers no** → fall through to `dispatch-select-target` below and
+      let normal target selection proceed.
+
+  Then run the selection script (only reached when sweep exits 0 with empty
+  stdout, or the user declined cleanup):
 
   ```bash
   .claude/skills/dispatch/scripts/dispatch-select-target
