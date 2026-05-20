@@ -17,13 +17,11 @@ This script consolidates all context types into a single invocation:
 
 | Content type | Detail level |
 |---|---|
-| **PR status** | Full |
 | **Primary issue** | Full |
 | **Blockers** | Full for each blocking issue |
 | **Sub-issues** | Full for each sub-issue |
 | **Parent issue** (if primary is a sub-issue) | Full |
 | **Sibling issues** (if primary is a sub-issue) | Full for open siblings; Summary for closed |
-| **README** | Root README.md |
 
 Full = `title, body, comments, number, state`. Summary = `title, number, state`. Consumers that need additional fields (e.g., `ref-ready` uses `labels, assignees, projectItems` for evaluation) extend the base set.
 
