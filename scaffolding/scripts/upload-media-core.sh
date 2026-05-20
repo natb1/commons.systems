@@ -6,24 +6,22 @@
 # has no executable bit and no shebang; it expects to be sourced from a bash
 # script that already enabled `set -euo pipefail`.
 #
-# GCS metadata header casing: lowercase (publicdomain, groupid, member_<i>).
-# The deployed `storage.rules` reads lowercase keys, and both
-# audio/seeds/storage.ts and print/seeds/storage.ts emit lowercase. The
-# camelCase variant in print's prior local upload script was a divergence bug
-# that left uploads failing the public-read rule check.
+# GCS metadata header casing: lowercase (publicdomain, groupid, member_<i>) —
+# matches the keys read by storage.rules and emitted by the seed runners.
 #
 # Cleanup: register every temp file via core::register_temp_file. Registrations
-# are appended to a file-backed registry ($CORE_CLEANUP_REGISTRY) created at
-# source-time, so registrations survive subshell boundaries — core functions
-# called via $(...) command substitution still register paths the parent's
-# EXIT trap will see. The EXIT trap is installed once at source-time and
-# removes every registered file plus the registry. Wrappers must NOT install
-# their own EXIT traps — doing so overwrites the library's trap and leaks
-# temp files.
+# are appended to a file-backed registry ($CORE_CLEANUP_REGISTRY) so they
+# survive subshell boundaries — core functions called via $(...) still
+# register paths the parent's EXIT trap will see. Wrappers must NOT install
+# their own EXIT traps; that overwrites the library's trap and leaks temp
+# files.
 
 set -euo pipefail
 
-CORE_CLEANUP_REGISTRY="$(mktemp)"
+# Guard against re-sourcing: a second source would orphan the previous registry.
+if [ -z "${CORE_CLEANUP_REGISTRY:-}" ]; then
+  CORE_CLEANUP_REGISTRY="$(mktemp)"
+fi
 
 core::register_temp_file() {
   local path="$1"
@@ -31,8 +29,6 @@ core::register_temp_file() {
 }
 
 core::cleanup_temp_files() {
-  # Runs in EXIT trap; must not corrupt exit status. Use `|| true` only on
-  # reads that may legitimately race with concurrent removal.
   if [ -n "${CORE_CLEANUP_REGISTRY:-}" ] && [ -s "$CORE_CLEANUP_REGISTRY" ]; then
     local path
     while IFS= read -r path || [ -n "$path" ]; do
