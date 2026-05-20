@@ -5,7 +5,7 @@ vi.mock("@commons-systems/router", () => ({
   parsePath: () => ({ path: "/", params: new URLSearchParams() }),
 }));
 vi.mock("../src/pages/home.js", () => ({ renderHome: vi.fn().mockResolvedValue("<div>home</div>") }));
-vi.mock("@commons-systems/style/components/nav", () => ({}));
+vi.mock("@commons-systems/components/nav", () => ({}));
 vi.mock("@commons-systems/htmlutil", () => ({ escapeHtml: (s: string) => s }));
 vi.mock("../src/pages/home-hydrate.js", () => ({ hydrateTransactionTable: vi.fn() }));
 vi.mock("../src/pages/home-chart.js", () => ({ hydrateCategorySankey: vi.fn() }));
@@ -14,8 +14,8 @@ vi.mock("../src/pages/budgets-hydrate.js", () => ({ hydrateBudgetTable: vi.fn(),
 vi.mock("../src/pages/rules.js", () => ({ renderRules: vi.fn().mockResolvedValue("<div>rules</div>") }));
 vi.mock("../src/pages/rules-hydrate.js", () => ({ hydrateRulesTable: vi.fn() }));
 vi.mock("../src/pages/hero.js", () => ({ renderHero: vi.fn().mockReturnValue("<div>hero</div>") }));
-vi.mock("@commons-systems/style/hero", () => ({ hydrateHero: vi.fn(), mountHero: vi.fn() }));
-vi.mock("@commons-systems/style/components/autocomplete", () => ({
+vi.mock("@commons-systems/components/hero", () => ({ hydrateHero: vi.fn(), mountHero: vi.fn() }));
+vi.mock("@commons-systems/components/autocomplete", () => ({
   showDropdown: vi.fn(),
   removeDropdown: vi.fn(),
   registerAutocompleteListeners: vi.fn(),
@@ -64,14 +64,14 @@ function resetAndMockAll(): void {
     parsePath: () => ({ path: "/", params: new URLSearchParams() }),
   }));
   vi.mock("../src/pages/home.js", () => ({ renderHome: vi.fn().mockResolvedValue("<div>home</div>") }));
-  vi.mock("@commons-systems/style/components/nav", () => ({}));
+  vi.mock("@commons-systems/components/nav", () => ({}));
   vi.mock("@commons-systems/htmlutil", () => ({ escapeHtml: (s: string) => s }));
   vi.mock("../src/pages/home-hydrate.js", () => ({ hydrateTransactionTable: vi.fn() }));
   vi.mock("../src/pages/budgets.js", () => ({ renderBudgets: vi.fn().mockResolvedValue("<div>budgets</div>") }));
   vi.mock("../src/pages/budgets-hydrate.js", () => ({ hydrateBudgetTable: vi.fn(), hydrateBudgetChart: vi.fn() }));
   vi.mock("../src/pages/rules.js", () => ({ renderRules: vi.fn().mockResolvedValue("<div>rules</div>") }));
   vi.mock("../src/pages/rules-hydrate.js", () => ({ hydrateRulesTable: vi.fn() }));
-  vi.mock("@commons-systems/style/components/autocomplete", () => ({
+  vi.mock("@commons-systems/components/autocomplete", () => ({
     showDropdown: vi.fn(), removeDropdown: vi.fn(), registerAutocompleteListeners: vi.fn(), _resetForTest: vi.fn(),
   }));
   vi.mock("../src/firebase.js", () => ({
