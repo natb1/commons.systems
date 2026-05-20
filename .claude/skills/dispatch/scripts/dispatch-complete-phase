@@ -7,9 +7,7 @@
 # explained inline at the code below.)
 #
 # Phase → label:
-#   qa       → dispatch:qa-done
-#   review   → dispatch:reviewed
-#   security → dispatch:security-reviewed
+#   qa → dispatch:qa-done
 #
 # Missing args or an unknown phase is a clear error, not a fallback.
 set -euo pipefail
@@ -23,11 +21,9 @@ if [[ -z "$PR_NUM" || -z "$PHASE" ]]; then
 fi
 
 case "$PHASE" in
-  qa)       LABEL="dispatch:qa-done" ;;
-  review)   LABEL="dispatch:reviewed" ;;
-  security) LABEL="dispatch:security-reviewed" ;;
+  qa) LABEL="dispatch:qa-done" ;;
   *)
-    echo "error: unknown phase: $PHASE (expected qa, review, or security)" >&2
+    echo "error: unknown phase: $PHASE (expected qa)" >&2
     exit 1
     ;;
 esac
