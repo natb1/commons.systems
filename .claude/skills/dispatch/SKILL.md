@@ -13,13 +13,29 @@ then stops. Re-invoke `/dispatch` (or `/loop /dispatch`) to advance to the next 
 an argument, it targets that issue and skips the queue scan.
 
 Run `/dispatch` from the **main worktree**, or from inside an issue worktree to
-continue that issue. Step 3 switches into the target's worktree via `EnterWorktree`;
+continue that issue. Step 4 switches into the target's worktree via `EnterWorktree`;
 the phase skill runs there.
 
 Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 `gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
-## 1. Select the Target
+## 1. Sync local main with `origin/main`
+
+Run this step **only when the current branch is `main`**. From an issue worktree,
+skip — phase skills (`/verify-pr`, `/security-review-fix`) already merge `origin/main`
+into the issue branch at their own entry points.
+
+Invoke `/commit-merge-push` to fetch `origin/main`, merge it into the current branch,
+and push to `origin HEAD`. From the main worktree this fast-forwards local `main`; the
+merge and push are no-ops when local main already equals `origin/main`.
+
+- `/commit-merge-push` auto-commits pending tracked-file changes before merging.
+  Running `/dispatch` from a dirty main worktree will commit those changes to `main`;
+  stash first to keep them local.
+- If `/commit-merge-push` reports a merge conflict or push rejection, **stop** and
+  surface the error — do not proceed to target selection.
+
+## 2. Select the Target
 
 - **Issue argument given** → strip any leading `#`; that issue is the target.
   Skip the queue scan.
@@ -31,14 +47,14 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 
   It prints exactly one line:
   - `pr <num> <branch> <phase>` — a PR to work on; `<phase>` is pre-derived by the
-    selection scan, so Step 4 reuses it instead of re-deriving
+    selection scan, so Step 5 reuses it instead of re-deriving
   - `issue <num>` — a `help wanted` issue to implement
   - `worktree <N> <branch>` — run from inside an issue worktree; target is `<N>`,
     queue scan already skipped
   - `worktree-closed <N> <branch>` — run from inside a worktree whose issue is
     closed or unrecognized → report that the current worktree belongs to
     closed/unrecognized issue `<N>` and **stop** (consistent with the named-target
-    "closed → report and stop" rule in Step 2)
+    "closed → report and stop" rule in Step 3)
   - `empty` — nothing eligible
   - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check; the queue
     scan was short-circuited (see the `main-broken` handling block below)
@@ -78,7 +94,7 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
   PR that fixes main exists the normal ladder picks it up (verify/ready) — this
   gate only blocks starting new, unrelated work.
 
-## 2. Trace to an Open Leaf
+## 3. Trace to an Open Leaf
 
 When the resolved target is an **open issue with no PR** — whether queue-selected
 (`issue <num>`) or named by argument — trace to its open leaf:
@@ -99,7 +115,7 @@ Skip leaf tracing when:
 
 If a named target issue is **closed**, report it and **stop**.
 
-## 3. Resolve the Worktree
+## 4. Resolve the Worktree
 
 Run the worktree-resolution script, matching `pr-workflow` Sections 2–3. Pass
 `explicit` when the target was named by an explicit `/dispatch` argument,
@@ -131,7 +147,7 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
   and populates `CLAUDE.local.md` with full issue context.
 - **`conflict <path>`** → a queue-selected target already has a worktree, so
   another session owns it. (The queue scan skips worktree'd issues, so this arises
-  only when Step 2 leaf-tracing retargets to a blocker or sub-issue that has one.)
+  only when Step 3 leaf-tracing retargets to a blocker or sub-issue that has one.)
   Report the conflict (name `<path>` and issue `<N>`) and **stop**; do not
   `EnterWorktree`.
 
@@ -150,13 +166,13 @@ marker. The marker is an empty boolean flag with no payload; it persists for the
 worktree's life and needs no cleanup — `tmp/` is git-ignored, and removing the
 worktree removes it.
 
-## 4. Derive the Phase
+## 5. Derive the Phase
 
-When the target is a **queue-selected PR** (`pr <num> <branch> <phase>` from Step 1),
+When the target is a **queue-selected PR** (`pr <num> <branch> <phase>` from Step 2),
 the phase is already on the result line — use it directly and skip the script below.
 
 On every other path — an explicit issue argument, a `worktree <N>` result, or a
-queue-selected `issue <num>` (after leaf tracing in Step 2) — run the phase script
+queue-selected `issue <num>` (after leaf tracing in Step 3) — run the phase script
 against the final target (issue number or branch):
 
 ```bash
@@ -169,21 +185,21 @@ present. Map the phase:
 
 | Phase | Meaning | Next action |
 |---|---|---|
-| `implement` | no PR on the target | relevance review (Step 6), then `/plan-implement` |
+| `implement` | no PR on the target | relevance review (Step 7), then `/plan-implement` |
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
-| `waiting` | draft PR, CI in progress (running/queued/not started) | monitor CI to completion with a `sonnet` subagent, then re-derive the phase and dispatch it (Step 5) |
+| `waiting` | draft PR, CI in progress (running/queued/not started) | monitor CI to completion with a `sonnet` subagent, then re-derive the phase and dispatch it (Step 6) |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
 | `simplify` | draft PR + `dispatch:qa-done` | `/simplify` → then label `dispatch:refactored` |
 | `review` | draft PR + `dispatch:refactored` | `/review-fix` (applies `dispatch:reviewed` itself) |
 | `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
 | `done` | non-draft (ready) PR | already complete — report and skip |
 
-## 5. Dispatch One Phase, Then Stop
+## 6. Dispatch One Phase, Then Stop
 
 Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 `/dispatch` invocation.
 
-- **`implement`** — run the Step 6 relevance review first. If it passes, invoke
+- **`implement`** — run the Step 7 relevance review first. If it passes, invoke
   `/plan-implement`. The draft PR's existence plus its CI status is its own marker —
   `/plan-implement` gets **no** `dispatch:*` label.
 - **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of failed
@@ -200,7 +216,7 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
        <pr-num>` with `dangerouslyDisableSandbox: true`, which blocks until
        every check concludes;
      - returns once all checks have completed.
-  3. After the subagent returns, re-run Step 4 (`dispatch-phase`) to re-derive
+  3. After the subagent returns, re-run Step 5 (`dispatch-phase`) to re-derive
      the phase from the now-complete CI, then dispatch the resolved phase per
      this step — `/verify-pr` if any check failed, otherwise the green-CI
      phases (`qa` / `simplify` / `review` / `security` / `ready`).
@@ -246,7 +262,7 @@ call, run with `dangerouslyDisableSandbox: true` since it invokes `gh`:
 .claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> <phase>
 ```
 
-## 6. Pre-Implementation Relevance Review
+## 7. Pre-Implementation Relevance Review
 
 Before invoking `/plan-implement` on an `implement`-phase (no-PR) issue, run the
 `ref-ready` Step 3e relevance check against the current codebase: has the codebase
