@@ -1,12 +1,28 @@
 #!/usr/bin/env bash
 # Trace from issue N to the deepest open leaf (no open children).
-# Usage: dispatch-trace-leaf <issue-num>
+# Usage: dispatch-trace-leaf <issue-num> <queue|explicit>
 #
 # Walks open blockers and open sub-issues depth-first, visiting the
 # lowest-numbered open child first, to find the lowest-numbered reachable
 # open leaf. Prints one issue number.
 #
-# Falls back to printing N if cycles block every path to a leaf.
+# The mode argument controls worktree-awareness during the descent:
+#   explicit — descent is not worktree-aware. An existing <N>-* worktree on a
+#              child is fine (the dispatch caller resolves it via
+#              dispatch-resolve-worktree's explicit mode, which yields `enter`
+#              for the recycle-after-completion case).
+#   queue    — descent filters out children whose <N>-* branch is an existing
+#              local worktree (owned by another session). When a recursion
+#              reaches a topological leaf whose own <N>-* worktree exists, it
+#              bubbles up so a sibling can be tried. If a node has open
+#              children but every one is filtered out, the descent bubbles up
+#              too — that subtree has no ready work. If every reachable open
+#              leaf in the subtree is conflicted, the script exits non-zero
+#              with a clear message on stderr so the /dispatch caller can stop
+#              instead of dispatching on a conflict.
+#
+# Falls back to printing N in `explicit` mode if cycles block every path to a
+# leaf (preserves historical behavior).
 #
 # Uses sibling scripts:
 #   issue-blocking   — prints JSON for each open blocker (gh issue view output)
@@ -16,13 +32,34 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 ISSUE_NUM="${1:-}"
-if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
-  echo "error: usage: dispatch-trace-leaf <issue-num>" >&2
+MODE="${2:-}"
+if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]] \
+   || [[ "$MODE" != "queue" && "$MODE" != "explicit" ]]; then
+  echo "error: usage: dispatch-trace-leaf <issue-num> <queue|explicit>" >&2
   exit 1
 fi
 
+# In queue mode, build the set of issue-number prefixes that own a local
+# worktree. Same porcelain-record parser as dispatch-resolve-worktree: records
+# are blank-line-delimited; each opens with "worktree <path>" and a branch
+# checkout carries "branch refs/heads/<name>". The number prefix is the leading
+# digits up to the first "-".
+declare -A CONFLICTED=()
+if [[ "$MODE" == "queue" ]]; then
+  while IFS= read -r line; do
+    if [[ "$line" == branch\ * ]]; then
+      branch="${line#branch }"
+      branch="${branch#refs/heads/}"
+      if [[ "$branch" =~ ^([1-9][0-9]*)- ]]; then
+        CONFLICTED["${BASH_REMATCH[1]}"]=1
+      fi
+    fi
+  done < <(git worktree list --porcelain)
+fi
+
 # Collect open children of an issue: open blockers union open sub-issues.
-# Outputs sorted unique issue numbers, one per line, lowest first.
+# Outputs sorted unique issue numbers, one per line, lowest first. No
+# worktree filtering here — the caller (find_leaf) applies it.
 open_children() {
   local n="$1"
   local children=()
@@ -52,14 +89,16 @@ open_children() {
 }
 
 # Depth-first search for the lowest-numbered reachable open leaf.
-# Args: $1 = current issue number
+# Args: $1 = current issue number, $2 = depth (0 for initial call)
 # Uses global VISITED associative array for cycle protection.
 # Returns 0 and prints the leaf number on success.
-# Returns 1 if all paths lead to cycles (no leaf reachable).
+# Returns 1 if no valid leaf is reachable through this subtree (cycles, or in
+# queue mode every reachable leaf is worktree-conflicted).
 declare -A VISITED=()
 
 find_leaf() {
   local n="$1"
+  local depth="$2"
 
   if [[ -n "${VISITED[$n]+x}" ]]; then
     # Cycle detected — no leaf reachable via this path.
@@ -67,35 +106,68 @@ find_leaf() {
   fi
   VISITED["$n"]=1
 
-  local kids
-  kids=$(open_children "$n")
+  local raw_kids
+  raw_kids=$(open_children "$n")
 
-  if [[ -z "$kids" ]]; then
-    # No open children — n is a leaf.
+  if [[ -z "$raw_kids" ]]; then
+    # Topological leaf — no open blockers, no open sub-issues. In queue mode,
+    # a leaf reached by recursion whose own <N>-* branch is conflicted is not
+    # a valid leaf (another session owns it); bubble up so a sibling can be
+    # tried. The initial argument is never self-filtered — its worktree is
+    # resolved separately by the /dispatch caller.
+    if [[ "$MODE" == "queue" && "$depth" -gt 0 && -n "${CONFLICTED[$n]+x}" ]]; then
+      return 1
+    fi
     echo "$n"
     return 0
   fi
 
-  # Descend into children lowest-numbered first; return the first leaf found.
+  # Has open children. Filter them in queue mode; then descend lowest-first
+  # and return the first leaf found. If filtering empties the child set, the
+  # for loop does not execute and we bubble up — that subtree has no ready
+  # work even though n itself is open.
+  local kids="$raw_kids"
+  if [[ "$MODE" == "queue" ]]; then
+    local kept=()
+    local c
+    while IFS= read -r c; do
+      [[ -z "$c" ]] && continue
+      [[ -z "${CONFLICTED[$c]+x}" ]] && kept+=("$c")
+    done <<< "$raw_kids"
+    if [[ ${#kept[@]} -gt 0 ]]; then
+      kids=$(printf '%s\n' "${kept[@]}")
+    else
+      kids=""
+    fi
+  fi
+
   local kid
   while IFS= read -r kid; do
     [[ -z "$kid" ]] && continue
     local leaf
-    if leaf=$(find_leaf "$kid"); then
+    if leaf=$(find_leaf "$kid" $((depth + 1))); then
       echo "$leaf"
       return 0
     fi
   done <<< "$kids"
 
-  # All children led to cycles.
+  # All children led to cycles, were conflict-filtered, or yielded no valid
+  # leaf below them.
   return 1
 }
 
-LEAF=$(find_leaf "$ISSUE_NUM") || LEAF=""
-
-if [[ -z "$LEAF" ]]; then
-  # Cycle blocked every path — fall back to N.
-  echo "$ISSUE_NUM"
-else
+if LEAF=$(find_leaf "$ISSUE_NUM" 0); then
   echo "$LEAF"
+  exit 0
 fi
+
+# In queue mode, no valid leaf is reachable — every leaf is worktree-conflicted
+# (or cycles block every path). Surface this so /dispatch can stop with a clear
+# message instead of dispatching on a conflict.
+if [[ "$MODE" == "queue" ]]; then
+  echo "error: all open leaves reachable from $ISSUE_NUM are worktree-conflicted (owned by other sessions)" >&2
+  exit 2
+fi
+
+# Explicit mode keeps the historical cycle-fallback behavior — print N.
+echo "$ISSUE_NUM"
