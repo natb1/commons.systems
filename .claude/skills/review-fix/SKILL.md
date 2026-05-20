@@ -23,14 +23,16 @@ branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-gh pr view "$BRANCH" --json number,labels
+PR_JSON=$(gh pr view "$BRANCH" --json number,labels)
+PR_NUM=$(echo "$PR_JSON" | jq -r .number)
+echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-Capture the PR number into `PR_NUM` and carry it through subsequent steps. If the
-PR already carries the `dispatch:reviewed` label — an interrupted prior run —
-**skip Steps 1–8 entirely** and return; the label is the wrapper's terminal action
-under autonomous use and is already applied, so re-entry is a true no-op.
-Otherwise run all steps in order.
+`PR_NUM` is reused in Steps 5 and 6 — do not re-resolve. If the printed labels
+include `dispatch:reviewed` — an interrupted prior run — **skip Steps 1–8
+entirely** and return; the label is the wrapper's terminal action under
+autonomous use and is already applied, so re-entry is a true no-op. Otherwise
+run all steps in order.
 
 ## Steps
 
@@ -107,4 +109,6 @@ so `/dispatch` can always advance to the next phase.
 ## Notes
 
 The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
-PR skips Steps 1–8 and returns.
+PR skips Steps 1–8 and returns. Step 8 (interactive follow-up) is in the skip
+range because attended follow-up edits would be made directly, not by re-running
+the wrapper.
