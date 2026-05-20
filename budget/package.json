@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@commons-systems/analyticsutil": "*",
+    "@commons-systems/components": "*",
     "@commons-systems/errorutil": "*",
     "@commons-systems/authutil": "*",
     "@commons-systems/firebaseutil": "*",
