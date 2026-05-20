@@ -17,6 +17,9 @@ err() { log "ERROR: $*"; }
 trap 'err "unexpected error on line $LINENO (exit $?)"; exit 0' ERR
 trap 'exit 0' EXIT
 
+# shellcheck source=../skills/dispatch/scripts/lib-worktree-in-sync.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../skills/dispatch/scripts/lib-worktree-in-sync.sh"
+
 PAYLOAD=$(cat 2>/dev/null) || PAYLOAD=""
 log "raw payload: ${PAYLOAD:-<empty>}"   # first real fire reveals the schema
 
@@ -67,11 +70,7 @@ done <<<"$WT_LIST"
 [ "$registered" -eq 1 ] || { log "'$CANON' not a registered worktree — pruning, no-op"; git worktree prune 2>/dev/null || true; exit 0; }
 
 # In-sync check — any error or ambiguity => keep.
-status=$(git -C "$CANON" status --porcelain 2>>"$LOG_FILE") || { err "git status failed for '$CANON' — keeping"; exit 0; }
-[ -z "$status" ] || { log "KEEP: '$CANON' has uncommitted changes"; exit 0; }
-unpushed=$(git -C "$CANON" rev-list --count HEAD --not --remotes 2>>"$LOG_FILE") || { err "rev-list failed for '$CANON' — keeping"; exit 0; }
-[[ "$unpushed" =~ ^[0-9]+$ ]] || { err "rev-list non-numeric ('$unpushed') for '$CANON' — keeping"; exit 0; }
-[ "$unpushed" -eq 0 ] || { log "KEEP: '$CANON' has $unpushed unpushed commit(s)"; exit 0; }
+if ! worktree_in_sync "$CANON" "$LOG_FILE"; then exit 0; fi
 
 # In sync — remove (plain, not --force: clean check passed; let git's own
 # safety net catch anything missed).
