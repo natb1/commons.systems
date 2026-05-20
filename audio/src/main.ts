@@ -4,12 +4,12 @@ import { createHistoryRouter } from "@commons-systems/router";
 import { classifyError } from "@commons-systems/errorutil/classify";
 import { renderHome, afterRenderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
-import "@commons-systems/style/components/nav";
-import type { AppNavElement } from "@commons-systems/style/components/nav";
+import "@commons-systems/components/nav";
+import type { AppNavElement } from "@commons-systems/components/nav";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "./auth.js";
 import { trackPageView } from "./firebase.js";
-import { initPanelToggle } from "@commons-systems/style/panel-toggle";
+import { initPanelToggle } from "@commons-systems/components/panel-toggle";
 import { initPlayer } from "./player.js";
 
 const navEl = document.getElementById("nav") as AppNavElement;

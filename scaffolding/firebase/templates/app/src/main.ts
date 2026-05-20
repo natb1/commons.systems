@@ -4,13 +4,13 @@ import { createHistoryRouter } from "@commons-systems/router";
 import { renderHome } from "./pages/home.js";
 import { renderAbout } from "./pages/about.js";
 import { renderNotes } from "./pages/notes.js";
-import "@commons-systems/style/components/nav";
-import type { AppNavElement } from "@commons-systems/style/components/nav";
+import "@commons-systems/components/nav";
+import type { AppNavElement } from "@commons-systems/components/nav";
 import { signIn, signOut, onAuthStateChanged } from "./auth.js";
 import type { User } from "firebase/auth";
 import { trackPageView } from "./firebase.js";
 import { renderHero } from "./pages/hero.js";
-import { mountHero } from "@commons-systems/style/hero";
+import { mountHero } from "@commons-systems/components/hero";
 
 const navEl = document.getElementById("nav") as AppNavElement;
 if (!navEl) throw new Error("#nav element not found");
