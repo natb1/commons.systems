@@ -50,7 +50,7 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           DEPLOY_ALL: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
-        run: .claude/skills/ref-pr-workflow/scripts/run-all-prod-deploy-smoke.sh
+        run: .claude/skills/dispatch/scripts/run-all-prod-deploy-smoke.sh
       - name: Cleanup credentials
         if: always()
         run: .github/scripts/firebase-auth-cleanup.sh
@@ -71,7 +71,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: .github/scripts/firebase-auth.sh
       - name: Cleanup preview resources
-        run: .claude/skills/ref-pr-workflow/scripts/run-all-cleanup-preview.sh "${{ github.event.pull_request.number }}"
+        run: .claude/skills/dispatch/scripts/run-all-cleanup-preview.sh "${{ github.event.pull_request.number }}"
       - name: Cleanup credentials
         if: always()
         run: .github/scripts/firebase-auth-cleanup.sh

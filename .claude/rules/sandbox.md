@@ -28,8 +28,8 @@ tls: failed to verify certificate: x509: OSStatus -26276
 ```
 
 Use `dangerouslyDisableSandbox: true` on **all** Bash calls that invoke `gh` directly or via scripts
-(e.g., `issue-state-read`, `issue-state-write`, `post-pr-comment.sh`). Apply this from the start —
-do not wait for a TLS error before setting it.
+(e.g., `post-pr-comment.sh`). Apply this from the start — do not wait for a TLS error before
+setting it.
 
 ## npm cache writes
 
@@ -103,9 +103,9 @@ to a directory under the worktrees root and the git subcommand is permitted by
 VITE_GITHUB_BRANCH="75-prototype-print-viewer" npm run build --prefix print
 
 # Good — use wrapper scripts that set env vars internally
-.claude/skills/ref-pr-workflow/scripts/run-qa-server.sh print
-.claude/skills/ref-pr-workflow/scripts/run-preview-deploy.sh print pr-146
-.claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh print
+.claude/skills/dispatch/scripts/run-qa-server.sh print
+.claude/skills/dispatch/scripts/run-preview-deploy.sh print pr-146
+.claude/skills/dispatch/scripts/run-acceptance-tests.sh print
 ```
 
 ### Avoid double quotes spanning newlines in heredoc commit messages

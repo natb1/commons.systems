@@ -34,7 +34,7 @@ standalone, then batch the rest.
 ## QA server: emulator reachability from Windows Chrome
 
 `run-qa-server.sh` runs the Vite dev server and the Firebase emulators inside
-WSL; browser QA (`/dispatch-qa`, `/ref-qa`, `/ref-prod-qa`) drives Chrome on the
+WSL; browser QA (`/dispatch-qa`) drives Chrome on the
 Windows host against them. WSL2's default NAT networking forwards `localhost`
 ports from Windows into WSL, but emulators bound only to `127.0.0.1` are not
 reliably reachable from the Windows host — the page loads while every Firestore

@@ -31,7 +31,7 @@ jobs:
           VITE_GITHUB_BRANCH: ${{ github.head_ref }}
           VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           VITE_RECAPTCHA_SITE_KEY: ${{ secrets.RECAPTCHA_SITE_KEY }}
-        run: .claude/skills/ref-pr-workflow/scripts/run-all-acceptance-tests.sh
+        run: .claude/skills/dispatch/scripts/run-all-acceptance-tests.sh
 
   preview-and-smoke:
     runs-on: ubuntu-latest
@@ -61,7 +61,7 @@ jobs:
           VITE_RECAPTCHA_SITE_KEY: ${{ secrets.RECAPTCHA_SITE_KEY }}
         run: |
           set -o pipefail
-          OUTPUT=$(.claude/skills/ref-pr-workflow/scripts/run-all-preview-deploy-smoke.sh "pr-${{ github.event.pull_request.number }}" | tee /dev/stderr)
+          OUTPUT=$(.claude/skills/dispatch/scripts/run-all-preview-deploy-smoke.sh "pr-${{ github.event.pull_request.number }}" | tee /dev/stderr)
           # Extract multi-line preview comment from output
           COMMENT=$(echo "$OUTPUT" | sed -n '/^PREVIEW_COMMENT<<EOF$/,/^EOF$/{ /^PREVIEW_COMMENT<<EOF$/d; /^EOF$/d; p; }')
           if [ -n "$COMMENT" ]; then
