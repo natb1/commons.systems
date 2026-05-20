@@ -114,7 +114,7 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
 - **`here`** → the current branch already is the target's worktree; no
   `EnterWorktree` needed. Re-sync issue context:
   ```bash
-  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+  .claude/skills/dispatch/scripts/sync-issue-context <N>
   ```
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
 - **`enter <path>`** → re-use an existing `<issue>-*` worktree (the
@@ -122,7 +122,7 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
   `EnterWorktree` with `path:` set to `<path>`. After entering, re-sync issue
   context from the worktree:
   ```bash
-  .claude/skills/ref-pr-workflow/scripts/sync-issue-context <N>
+  .claude/skills/dispatch/scripts/sync-issue-context <N>
   ```
   (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`.)
 - **`create <branch>`** → no worktree exists. `EnterWorktree` with `name:` set to
@@ -193,7 +193,7 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
      `model: sonnet`) that:
      - first waits for CI to register at least one check — a freshly-pushed
        branch can briefly have an empty check rollup;
-     - then runs `.claude/skills/ref-pr-workflow/scripts/run-pr-checks-wait.sh
+     - then runs `.claude/skills/dispatch/scripts/run-pr-checks-wait.sh
        <pr-num>` with `dangerouslyDisableSandbox: true`, which blocks until
        every check concludes;
      - returns once all checks have completed.

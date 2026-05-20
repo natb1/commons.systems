@@ -77,7 +77,7 @@ steps in order.
    invokes `gh`):
 
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/<file>
+   .claude/skills/dispatch/scripts/post-pr-comment.sh <pr-num> tmp/<file>
    ```
 
 6. **Apply the `dispatch:security-reviewed` label.** Ensure the label exists

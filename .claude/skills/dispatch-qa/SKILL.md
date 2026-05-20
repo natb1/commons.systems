@@ -16,8 +16,8 @@ Runs a single user-acceptance QA pass on an implemented PR. Invoked three ways:
 remaining steps use the Step-0-resolved issue number `<N>`.
 
 This skill is a **single QA pass** — the QA walkthrough runs once, with no
-iteration and no `wiggum-loop`. (Step 5's bug-fix build loop iterates over plan
-units; that is a build loop, not a re-run of the walkthrough.)
+iteration. (Step 5's bug-fix build loop iterates over plan units; that is a
+build loop, not a re-run of the walkthrough.)
 It self-verifies every QA item it can check on its own (page text, DOM state,
 console, network, shell commands, file inspection) and prompts the user only for
 items needing human judgment. On the **first** bug found — whether Claude detects
@@ -35,11 +35,6 @@ resume directly at the build loop (Step 5, sub-step 3: build each unit via
 issue number `<N>` and confirms the worktree from the current branch. The plan
 persists across context clears, so the unit list remains visible even though the
 planning conversation is gone.
-
-## What this skill is NOT
-
-- **No `wiggum-loop`.** Do not invoke `/wiggum-loop`. The QA plan lives in the
-  active conversation, not in `wiggum-loop` state.
 
 ## QA data policy
 
@@ -149,28 +144,27 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
    a. **Start the QA server in the background.** Use a Bash tool call with `run_in_background: true`:
       ```bash
-      .claude/skills/ref-pr-workflow/scripts/run-qa-server.sh <app-dir>
+      .claude/skills/dispatch/scripts/run-qa-server.sh <app-dir>
       ```
       Capture the App URL printed to stdout. The QA server seeds public data only — do not re-run it or any seed step with `SEED_TEST_ONLY=true` (see [QA data policy](#qa-data-policy)).
 
    b. **Wait for the server:**
       ```bash
-      .claude/skills/ref-pr-workflow/scripts/wait-for-url.sh <url>
+      .claude/skills/dispatch/scripts/wait-for-url.sh <url>
       ```
 
    c. **Pre-QA acceptance check:**
       ```bash
-      .claude/skills/ref-pr-workflow/scripts/run-acceptance-tests.sh <app-dir> <url>
+      .claude/skills/dispatch/scripts/run-acceptance-tests.sh <app-dir> <url>
       ```
 
       - **If the check fails** → A failed pre-QA acceptance check is a bug. Go to
         Step 5 and treat the check failure as the first bug found.
       - **If the check passes** → Continue to the walkthrough.
 
-   d. **Walk through the QA plan via the Chrome extension.** The per-item cycle
-      below adapts `.claude/skills/ref-qa/SKILL.md`'s three-step cycle; the
-      difference is that machine-verifiable items are recorded from Claude's own
-      checks with no user prompt.
+   d. **Walk through the QA plan via the Chrome extension.** Use the per-item
+      three-step cycle below. Machine-verifiable items are recorded from
+      Claude's own checks with no user prompt.
 
       1. Load chrome tools via:
          ```
@@ -271,14 +265,14 @@ The QA pass covers **public data only** — documents present in both the QA ser
 
    Post via (use `dangerouslyDisableSandbox: true` — script invokes `gh`):
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/dispatch-qa-summary-<n>.md
+   .claude/skills/dispatch/scripts/post-pr-comment.sh <pr-num> tmp/dispatch-qa-summary-<n>.md
    ```
 
 7. **Cleanup.**
 
    On the browser path (server was started), always run on exit:
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/run-qa-cleanup.sh
+   .claude/skills/dispatch/scripts/run-qa-cleanup.sh
    ```
 
    Use this script — never broad `pkill`. The user's standing rule (project memory): `run-qa-cleanup.sh` avoids permission errors and worktree conflicts.
