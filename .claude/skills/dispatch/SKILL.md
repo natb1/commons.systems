@@ -22,16 +22,15 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 ## 1. Sync local main with `origin/main`
 
 Run this step **only when the current branch is `main`**. From an issue worktree,
-skip — phase skills (`/verify-pr`, `/security-review-fix`) already merge `origin/main`
-into the issue branch at their own entry points.
+skip this step — phase skills (`/verify-pr`, `/security-review-fix`) already merge
+`origin/main` into the issue branch at their own entry points.
 
 Invoke `/commit-merge-push` to fetch `origin/main`, merge it into the current branch,
 and push to `origin HEAD`. From the main worktree this fast-forwards local `main`; the
 merge and push are no-ops when local main already equals `origin/main`.
 
-- `/commit-merge-push` auto-commits pending tracked-file changes before merging.
-  Running `/dispatch` from a dirty main worktree will commit those changes to `main`;
-  stash first to keep them local.
+- If the working tree is dirty, stash before invoking — `/commit-merge-push` would
+  otherwise commit pending changes directly to `main`.
 - If `/commit-merge-push` reports a merge conflict or push rejection, **stop** and
   surface the error — do not proceed to target selection.
 
