@@ -13,6 +13,10 @@
 # passes "dispatch-sweep" so its log lines aren't mistagged.
 #
 # Safe to source multiple times. Does NOT use set -e (must return, not exit).
+#
+# Side effect: sourcing this file once sets `-u` and `-o pipefail` in the caller
+# shell. Both current callers (worktree-remove.sh, dispatch-sweep) already use
+# those options; new callers should be aware before sourcing.
 
 if [[ -z "${_LIB_WORKTREE_IN_SYNC_LOADED:-}" ]]; then
   _LIB_WORKTREE_IN_SYNC_LOADED=1

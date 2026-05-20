@@ -1693,6 +1693,73 @@ else
 fi
 sweep_teardown
 
+# --- Test 6: --cleanup-unknown rejects path outside WORKTREES_ROOT -----------
+
+echo "Test: --cleanup-unknown rejects path outside WORKTREES_ROOT"
+sweep_setup
+OUTSIDE_PATH="$TMPDIR_TEST/not-a-worktree"
+mkdir -p "$OUTSIDE_PATH"
+err_file="$TMPDIR_TEST/cleanup-outside-err.txt"
+if "$TMPDIR_TEST/scripts/dispatch-sweep" --cleanup-unknown "$OUTSIDE_PATH" 2>"$err_file"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "--cleanup-unknown outside WORKTREES_ROOT exits 2" "2" "$rc"
+err=$(cat "$err_file")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"not a direct child"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stderr explains direct-child requirement"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stderr explains direct-child requirement"
+  echo "    stderr: $err"
+fi
+sweep_teardown
+
+# --- Test 7: --cleanup-unknown refuses to remove main ------------------------
+
+echo "Test: --cleanup-unknown refuses to remove main"
+sweep_setup
+MAIN_PATH="$TMPDIR_TEST/project/worktrees/main"
+mkdir -p "$MAIN_PATH"
+err_file="$TMPDIR_TEST/cleanup-main-err.txt"
+if "$TMPDIR_TEST/scripts/dispatch-sweep" --cleanup-unknown "$MAIN_PATH" 2>"$err_file"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "--cleanup-unknown main exits 2" "2" "$rc"
+err=$(cat "$err_file")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"is main"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stderr identifies main as off-limits"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stderr identifies main as off-limits"
+  echo "    stderr: $err"
+fi
+sweep_teardown
+
+# --- Test 8: --cleanup-unknown without a path argument fails -----------------
+
+echo "Test: --cleanup-unknown without a path argument fails"
+sweep_setup
+err_file="$TMPDIR_TEST/cleanup-noarg-err.txt"
+if "$TMPDIR_TEST/scripts/dispatch-sweep" --cleanup-unknown 2>"$err_file"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "--cleanup-unknown without path exits 2" "2" "$rc"
+err=$(cat "$err_file")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"requires a path argument"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stderr explains missing path argument"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stderr explains missing path argument"
+  echo "    stderr: $err"
+fi
+sweep_teardown
+
 # ============================================================================
 # summary
 # ============================================================================

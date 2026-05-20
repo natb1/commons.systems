@@ -199,7 +199,7 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
     if git worktree remove "$wt_path" 2>>"$LOG_FILE"; then
       git worktree prune 2>/dev/null || true
       if ! git branch -D "$wt_branch" >>"$LOG_FILE" 2>&1; then
-        log "BRANCH_DELETE_FAILED: branch=$wt_branch (worktree already removed)"
+        log "BRANCH_DELETE_FAILED: branch=$wt_branch (worktree removed; branch retained)"
       fi
       log "REMOVE_MERGED: '$wt_path' branch=$wt_branch pr=#$pr_num"
     else
@@ -258,6 +258,8 @@ if [[ -d "$PROC_ROOT" ]]; then
       esac
     done
   done
+else
+  log "PROC_ROOT_MISSING: '$PROC_ROOT' is not a directory — all surviving worktrees will classify as orphaned"
 fi
 
 # Now log ACTIVE / ORPHANED per surviving worktree and collect the orphans.

@@ -40,7 +40,7 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
     the `/proc` walk):
 
     ```bash
-    SWEEP_OUT=$(.claude/skills/dispatch/scripts/dispatch-sweep 2>$TMPDIR/dispatch-sweep-stderr)
+    SWEEP_OUT=$(.claude/skills/dispatch/scripts/dispatch-sweep 2>tmp/dispatch-sweep-stderr)
     SWEEP_EXIT=$?
     ```
 
@@ -58,6 +58,10 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
       - **Yes** → run `dispatch-sweep --cleanup-unknown <path>`, then re-run
         the default `dispatch-sweep`. Loop until it exits 0.
       - **No** → fall through to `dispatch-select-target`.
+    - **Any other non-zero exit** → log the stderr contents to the conversation
+      as a diagnostic, then fall through to `dispatch-select-target` as
+      defense-in-depth. The sweep is best-effort; a malformed invocation or
+      transient `gh`/`git` failure should not stall the workflow.
 
   ```bash
   .claude/skills/dispatch/scripts/dispatch-select-target
