@@ -6,6 +6,7 @@ import (
 
 	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
+	"github.com/natb1/commons.systems/budget-etl/internal/password"
 )
 
 func baseOutput(rules []export.Rule) export.Output {
@@ -214,5 +215,16 @@ func TestRunPatch_InputEqualsOutput(t *testing.T) {
 func TestRunPatch_MissingSpec(t *testing.T) {
 	if err := runPatch("", "/tmp/a.json", "/tmp/b.json", ""); err == nil {
 		t.Fatal("expected error for missing --spec")
+	}
+}
+
+func TestRunPatch_NoPasswordSource(t *testing.T) {
+	t.Setenv(password.EnvVar, "")
+	err := runPatch("/tmp/has-spec.json", "/tmp/in.json", "/tmp/out.json", "")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no password source") {
+		t.Fatalf("expected error mentioning 'no password source', got %q", err.Error())
 	}
 }
