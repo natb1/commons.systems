@@ -80,9 +80,8 @@ steps in order.
    .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/<file>
    ```
 
-6. **Apply the `dispatch:security-reviewed` label.** Call `dispatch-complete-phase`,
-   the single source of truth for the `dispatch:*` label color and description (use
-   `dangerouslyDisableSandbox: true` — the script calls `gh`):
+6. **Apply the `dispatch:security-reviewed` label** via `dispatch-complete-phase`
+   (use `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
    .claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> security

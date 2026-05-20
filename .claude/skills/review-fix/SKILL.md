@@ -61,8 +61,7 @@ implementation subagents.
    .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/<file>
    ```
 
-6. **Apply the `dispatch:reviewed` label.** Call `dispatch-complete-phase`, the
-   single source of truth for the `dispatch:*` label color and description (use
+6. **Apply the `dispatch:reviewed` label** via `dispatch-complete-phase` (use
    `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash

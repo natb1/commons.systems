@@ -1111,10 +1111,13 @@ assert_eq "missing phase arg exits non-zero" "1" "$rc"
 teardown
 
 # 9. Static guard: only dispatch-complete-phase contains the BFD4F2 hex color.
+# Exclude this test file (which references BFD4F2 in fixtures and comments)
+# rather than whitelisting specific extensions — that way any future
+# regression in a .sh wrapper is caught alongside .md regressions.
 echo "Test: only dispatch-complete-phase contains the BFD4F2 hex"
 REPO_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
 matches=$(grep -rl 'BFD4F2' "$REPO_ROOT/.claude" \
-  --include='*.md' --include='dispatch-complete-phase' 2>/dev/null \
+  --exclude='test-dispatch-scripts.sh' 2>/dev/null \
   | sed "s|$REPO_ROOT/||" | sort)
 assert_eq "only dispatch-complete-phase owns BFD4F2" \
   ".claude/skills/dispatch/scripts/dispatch-complete-phase" \
