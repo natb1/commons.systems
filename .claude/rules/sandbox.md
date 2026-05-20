@@ -52,6 +52,24 @@ Sandboxed Bash calls run in an isolated network namespace. Servers started with
 Use `dangerouslyDisableSandbox: true` on Bash calls that check local server
 connectivity (e.g., `curl http://localhost:*`, `ss -tlnp`, readiness polls).
 
+## pass / GPG pinentry
+
+`pass show <path>` decrypts a GPG-encrypted secret store entry. GPG cannot
+prompt for a passphrase via pinentry in Claude's non-interactive shell — if
+the gpg-agent cache is cold, the command fails with
+`gpg: decryption failed: No pinentry`.
+
+For workflows that need a `pass`-managed secret (e.g. `BUDGET_ETL_PASSWORD`
+for the `budget-etl` skill):
+
+1. Warm the cache once in your interactive host shell:
+   `pass show <path>` (enter the GPG passphrase when pinentry prompts).
+2. Then export the value into Claude's shell:
+   `export VAR="$(pass show <path>)"`.
+
+Auto-warming the gpg-agent cache from within Claude is out of scope; the
+secret backend (`pass` / GPG) is not changed by this rule.
+
 ## Command pattern matching
 
 `allowedTools` rules match from the start of the command string. Patterns that
