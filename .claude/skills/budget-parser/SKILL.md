@@ -7,50 +7,43 @@ description: Guide a user through adding a new bank-statement parser to budget-e
 
 Adds a new parser to `budget-etl/internal/parse/` for a bank export format not already handled (QFX/OFX/CSV). The user provides a sample statement file; this skill identifies the format, generates the parser and test, registers the format in the dispatch table, and runs `go test`.
 
-## Step 1 — Check Go toolchain
+## Step 1 — Check prerequisites
 
-Run:
+Run `go version`. If not found or non-zero, report that Go is required (https://go.dev/dl/) and stop.
 
-```bash
-go version
-```
+Confirm `budget-etl/internal/parse/` exists relative to the current directory. If not, the user is not in a clone of this repo — report and stop.
 
-If the command is not found or exits non-zero, report to the user that Go is required and direct them to https://go.dev/dl/. Stop — do not proceed without a working Go toolchain.
+## Step 2 — Identify the format and record a header marker
 
-## Step 2 — Read the sample file and identify its structure
+Read the file the user provided. Then identify:
 
-Read the file the user provided (the skill argument). Inspect at minimum the first 512 bytes plus a structural scan of the full file. Identify:
+- **Syntax type**: delimiter-separated, XML/tag markup with closing tags, SGML-style markup without closing tags, fixed-width, JSON, or other.
+- **Transaction boundaries**: enclosing tags, row delimiters, blank-line separators, etc.
+- **Field positions**: where dates, amounts, descriptions appear within each transaction.
+- **Balance**: whether a ledger balance and balance date are present, and where.
+- **Header marker**: a stable substring within the first 512 bytes that uniquely identifies this format (e.g. `<?xml`, `OFXHEADER:`). This will be reused in Step 7's `detectFormat` branch; record it now so the format is not re-sniffed.
 
-- Syntax type: delimiter-separated, XML/tag markup with closing tags, SGML-style markup without closing tags, fixed-width, JSON, or other.
-- How individual transactions are bounded (e.g., enclosing tags, row delimiters, blank-line separators).
-- Where dates, amounts, and descriptions appear within each transaction.
-- Whether a ledger balance and balance date are present, and where.
+Report the structure to the user in plain language before proceeding.
 
-Report the identified structure to the user in plain language before proceeding.
+## Step 3 — Read the canonical types and the closest existing parser
 
-## Step 3 — Reference the existing parsers as templates
+Read `budget-etl/internal/parse/parse.go` (defines `Transaction`, `ParseResult`, `detectFormat`, `ParseFile`) and `budget-etl/internal/parse/ofxutil.go` (defines the shared helpers `parseCents`, `parseOFXDate`, `convertRawTransaction`, and the `rawTransaction` struct).
 
-Read `budget-etl/internal/parse/sgml.go`, `ofx.go`, and `csv.go`. Pick the closest analog to the new format:
+Pick the closest analog to the new format and read that parser:
 
-- Line-oriented delimited text → model after `csv.go`.
-- Tag/markup with closing tags (valid XML) → model after `ofx.go`.
-- Tag/markup without closing tags (SGML-style) → model after `sgml.go`.
+- Line-oriented delimited text → `csv.go`.
+- Tag/markup with closing tags (valid XML) → `ofx.go`.
+- Tag/markup without closing tags (SGML-style) → `sgml.go`.
 
-The new parser must produce a `ParseResult` containing a `[]Transaction` slice. Each `Transaction` has:
+You may read the other parsers for cross-reference if helpful, but only the analog is required.
 
-| Field | Type | Convention |
-|---|---|---|
-| `TransactionID` | `string` | Unique per transaction; see Step 4 for synthesizing IDs |
-| `Date` | `time.Time` | Posting date |
-| `Amount` | `int64` | Cents, signed: **positive = spending, negative = income/credit** |
-| `Description` | `string` | Merchant name or memo text |
+Reuse the shared helpers where their semantics fit:
 
-`ParseResult` also carries optional `Balance int64` (cents) and `BalanceDate time.Time`.
+- `parseCents` — decimal amount string → integer cents.
+- `parseOFXDate` — OFX `YYYYMMDD[...]` date strings → `time.Time`.
+- `rawTransaction` + `convertRawTransaction` — only when the source provides OFX-named fields (`FITID`, `DtPosted`, `TrnAmt`, `Name`, `Memo`). Populate a `rawTransaction` and call `convertRawTransaction(raw)`; it validates required fields, inverts the OFX sign convention, and joins `Name`/`Memo` into `Description` as `"Name | Memo"` when they differ. Do **not** call it with non-OFX field semantics.
 
-Reuse shared helpers where their semantics fit:
-- `parseCents(s string) (int64, error)` — parse a decimal amount string to integer cents.
-- `parseOFXDate(s string) (time.Time, error)` — parse OFX YYYYMMDD[...] date strings.
-- `convertRawTransaction(raw rawTransaction) (Transaction, error)` — convert OFX/SGML `STMTTRN` fields; only applicable when the source uses OFX field names (`FITID`, `DTPOSTED`, `TRNAMT`, `NAME`, `MEMO`).
+If the new format has account types your code should not parse as transactions (e.g. investment accounts in OFX), set `ParseResult.Skipped = true` and `SkipReason = "<reason>"` and return early — see `parseSGML` and `parseOFX` for the pattern.
 
 ## Step 4 — Generate the parser
 
@@ -62,42 +55,45 @@ func parse<Format>(path string) (ParseResult, error)
 
 Follow the chosen template from Step 3. Key requirements:
 
-- **Amount sign**: the `Transaction.Amount` convention is positive = spending. OFX/SGML invert the raw sign (`convertRawTransaction` handles this). CSV uses a DEBIT/CREDIT type field. For other formats, map the source's sign convention to the `Transaction.Amount` convention explicitly.
-- **Date parsing**: use `parseOFXDate` for OFX-format dates; use `time.Parse` with the appropriate layout for others.
-- **TransactionID uniqueness**: if the source format provides a unique ID per transaction, use it directly. If IDs may repeat (as in CSV), apply the `idCounts` de-dup pattern from `csv.go`: track seen IDs in a `map[string]int`, and append `-N` (where N ≥ 2) to any duplicate. If the format has no ID field, synthesize one from a stable combination of fields (e.g., date + amount + description hash).
+- **Amount sign**: `Transaction.Amount` is positive = spending. If you use `convertRawTransaction`, sign inversion is handled for you. Otherwise map the source's sign convention to `Transaction.Amount` explicitly (e.g. CSV reads a DEBIT/CREDIT type field).
+- **Date parsing**: use `parseOFXDate` for OFX-style dates; `time.Parse` with the appropriate layout for others.
+- **TransactionID uniqueness**: if the source provides a stable per-transaction ID, use it directly. If IDs may repeat (as in CSV), apply the `idCounts` de-dup pattern from `csv.go`: track seen IDs in a `map[string]int`, and append `-N` (N ≥ 2) to duplicates. If the format has no ID field at all, this is a new convention — pause and discuss with the user before inventing one.
 
 ## Step 5 — Add the test fixture
 
-Before copying the user's sample file into the codebase, **ask the user** whether it contains identifying personal data (account numbers, names, addresses). Offer to redact — replace sensitive values with clearly fake placeholders — before committing the file to the repo.
+Before copying the user's sample file into the repo, **ask the user** whether it contains personal data (account numbers, names, addresses). Offer to redact — replace sensitive values with clearly fake placeholders — before the file is committed.
 
-Once the user confirms (redacted or as-is), copy to:
+Once confirmed, copy to:
 
 ```
-budget-etl/internal/parse/testdata/<format>-sample.<ext>
+budget-etl/internal/parse/testdata/<institution>.<ext>
 ```
+
+Fixtures are keyed by institution name, not format name (see existing `bankone.qfx`, `banktwo.ofx`, `bankone.csv`). Pick a short, distinct institution identifier with the user.
 
 ## Step 6 — Write the test
 
-Create `budget-etl/internal/parse/<format>_test.go` following the structure of `sgml_test.go`:
+Create `budget-etl/internal/parse/<format>_test.go`. Use `sgml_test.go` as the template, or `csv_test.go` if the format is delimited (its `TestParseCSV_EmptyFile` is the closer analog for empty-input handling).
 
 - A primary `TestParse<Format>` function that calls the parser directly against the fixture.
-- Assert transaction count matches the fixture.
-- If a balance is present in the fixture, assert `result.Balance` and `result.BalanceDate`.
 - For at least one transaction, assert all four fields: `TransactionID`, `Date`, `Amount`, `Description`. Derive expected values by reading the fixture directly.
-- Add an error-case test for an empty or malformed input (equivalent to `TestParseSGML_NoTransactions`).
+- If a balance is present in the fixture, assert `result.Balance` and `result.BalanceDate`.
+- An error-case test for empty/malformed input (see `TestParseSGML_NoTransactions` or `TestParseCSV_EmptyFile`).
+
+Transaction count is covered by `TestParseFile_Dispatch` in Step 7 — don't duplicate it here.
 
 ## Step 7 — Register the format in the dispatch table
 
-Make three edits to `budget-etl/internal/parse/parse.go`:
+Make three edits to `budget-etl/internal/parse/parse.go` in one pass:
 
 1. Add a `format<Format>` constant to the `format` iota block after the existing constants.
-2. Add a header-sniffing branch to `detectFormat` that returns `format<Format>` when the first 512 bytes match a reliable marker for the new format.
+2. Add a branch to `detectFormat` that returns `format<Format>` when the header matches the marker recorded in Step 2.
 3. Add a `case format<Format>:` branch in `ParseFile`'s switch that calls `parse<Format>(path)`.
 
-Then extend the existing tests in `budget-etl/internal/parse/parse_test.go`:
+Then extend the existing tests in `budget-etl/internal/parse/parse_test.go`. The `TestParseFile_Dispatch` row fields are `{name, path, wantTxns int, wantSkipped bool}`:
 
-- Add a `{"<Format>", filepath.Join("testdata", "<format>-sample.<ext>"), <count>, false}` row to `TestParseFile_Dispatch`.
-- Add a `{"<Format>", filepath.Join("testdata", "<format>-sample.<ext>"), format<Format>}` row to `TestDetectFormat`.
+- Add a `{"<Format>", filepath.Join("testdata", "<institution>.<ext>"), <count>, false}` row to `TestParseFile_Dispatch`.
+- Add a `{"<Format>", filepath.Join("testdata", "<institution>.<ext>"), format<Format>}` row to `TestDetectFormat`.
 
 ## Step 8 — Run `go test`
 
