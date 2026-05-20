@@ -7,52 +7,25 @@ description: Load when planning work, writing commits, changing requirements, or
 
 When creating any plan (issue implementation, review, security review, or ad hoc):
 - All plans must assume execution in a clean context. Include all necessary steps — do not rely on state from the planning session.
-- Read the issue state's `active_skills` list (the canonical store for skills that must be reloaded across sessions). If any skills are listed, add this line to the plan preface: `**Before executing this plan:** Invoke /skill-X and /skill-Y`. The line **must** include the **explicit** instruction to invoke ALL skills from `active_skills` before executing the plan.
-- If plan is being created as part of a multi-step process (eg. pr-workflow, or wiggum-loop), the plan must record which step of the process is active in the preface of the plan.
 
 # Issue Context Loading
 
 When loading issue context (at session start, after context loss, or when a skill requests issue data), run:
-`.claude/skills/ref-pr-workflow/scripts/load-context`
+`.claude/skills/dispatch/scripts/sync-issue-context <issue-number>`
 
 This script consolidates all context types into a single invocation:
 
 | Content type | Detail level |
 |---|---|
-| **PR status** | Full |
 | **Primary issue** | Full |
 | **Blockers** | Full for each blocking issue |
 | **Sub-issues** | Full for each sub-issue |
 | **Parent issue** (if primary is a sub-issue) | Full |
 | **Sibling issues** (if primary is a sub-issue) | Full for open siblings; Summary for closed |
-| **Issue state** | JSON if present |
-| **README** | Root README.md |
 
 Full = `title, body, comments, number, state`. Summary = `title, number, state`. Consumers that need additional fields (e.g., `ref-ready` uses `labels, assignees, projectItems` for evaluation) extend the base set.
 
-Individual scripts remain in `.claude/skills/ref-pr-workflow/scripts/` for standalone use. Each accepts an optional issue number argument; otherwise it derives the number from the branch name.
-
-# Issue State Rule
-
-Persist workflow state to the issue body so it survives auto-compaction. Use `.claude/skills/ref-pr-workflow/scripts/issue-state-write <issue-number> '<json>'` to update state.
-
-State schema:
-```json
-{
-  "version": 1,
-  "step": 8,
-  "step_label": "QA Review Loop",
-  "phase": "qa",
-  "active_skills": ["ref-memory-management", "ref-pr-workflow", "ref-qa"],
-  "wiggum_step": 2,
-  "wiggum_step_label": "Evaluate"
-}
-```
-
-- **When entering a workflow step or changing phase:** call `.claude/skills/ref-pr-workflow/scripts/issue-state-write` with updated `step`, `step_label`, `phase`, and current `active_skills`
-- **When loading or unloading skills:** include the updated `active_skills` list in the next `.claude/skills/ref-pr-workflow/scripts/issue-state-write` call
-- **When entering a wiggum-loop step:** include `wiggum_step` and `wiggum_step_label` in the state
-- **When a wiggum-loop terminates:** omit `wiggum_step` and `wiggum_step_label` from the state
+Individual scripts for standalone use are in `.claude/skills/dispatch/scripts/`. Each accepts an optional issue number argument; otherwise it derives the number from the branch name.
 
 # Commit Guidelines
 
