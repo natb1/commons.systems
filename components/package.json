@@ -1,0 +1,22 @@
+{
+  "name": "@commons-systems/components",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./hero": "./src/hero.ts",
+    "./hero-render": "./src/hero-render.ts",
+    "./panel-toggle": "./src/panel-toggle.ts",
+    "./scroll-indicator": "./src/scroll-indicator.ts",
+    "./nav": "./src/nav.ts",
+    "./autocomplete": "./src/autocomplete.ts"
+  },
+  "peerDependencies": {
+    "@commons-systems/htmlutil": "*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/"
+  }
+}
