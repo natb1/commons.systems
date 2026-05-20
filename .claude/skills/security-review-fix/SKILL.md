@@ -80,14 +80,12 @@ steps in order.
    .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/<file>
    ```
 
-6. **Apply the `dispatch:security-reviewed` label.** Ensure the label exists
-   idempotently, then apply it — follow the `gh label create` pattern from
-   `dispatch/SKILL.md`'s "Applying the progress label" section (use
-   `dangerouslyDisableSandbox: true`):
+6. **Apply the `dispatch:security-reviewed` label.** Call `dispatch-complete-phase`,
+   the single source of truth for the `dispatch:*` label color and description (use
+   `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   gh label create "dispatch:security-reviewed" --color BFD4F2 --description "security phase complete" 2>/dev/null || true
-   gh pr edit <pr-num> --add-label "dispatch:security-reviewed"
+   .claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> security
    ```
 
    This skill **owns** its `dispatch:security-reviewed` label — unlike the generic

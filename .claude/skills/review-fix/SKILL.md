@@ -61,13 +61,12 @@ implementation subagents.
    .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/<file>
    ```
 
-6. **Apply the `dispatch:reviewed` label.** Ensure the label exists idempotently,
-   then apply it — follow the `gh label create` pattern from `dispatch/SKILL.md`'s
-   "Applying the progress label" section (use `dangerouslyDisableSandbox: true`):
+6. **Apply the `dispatch:reviewed` label.** Call `dispatch-complete-phase`, the
+   single source of truth for the `dispatch:*` label color and description (use
+   `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   gh label create "dispatch:reviewed" --color BFD4F2 --description "review phase complete" 2>/dev/null || true
-   gh pr edit <pr-num> --add-label "dispatch:reviewed"
+   .claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> review
    ```
 
    This skill **owns** its `dispatch:reviewed` label — unlike the generic
