@@ -8,6 +8,7 @@
     "authutil",
     "blog",
     "budget",
+    "dispatch",
     "errorutil",
     "fellspiral",
     "firebaseutil",

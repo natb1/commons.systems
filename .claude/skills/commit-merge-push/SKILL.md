@@ -25,6 +25,12 @@ Add specific files by name. Do not use `git add -A` or `git add .` — risks pul
 
 Never commit files that could contain secrets (`.env`, `credentials.json`, private key material). If such a file is present in the working tree's changes, warn and stop.
 
+## No pending changes
+
+When the working tree has no changes to stage, create no commit and go straight
+to the merge-and-push below. This is expected when a caller forks this skill
+solely to merge `origin/main` into the branch.
+
 ## Commit messages
 
 - One commit per logical unit.
@@ -43,7 +49,7 @@ Never commit files that could contain secrets (`.env`, `credentials.json`, priva
 
 ## Merge origin/main and push
 
-Immediately after the final commit:
+Immediately after the final commit — or immediately, if there was nothing to commit:
 
 ```bash
 git fetch origin main
@@ -58,6 +64,6 @@ If the push is rejected (non-fast-forward, hook rejection), stop and report. Do 
 ## Reporting
 
 Return a summary with:
-- Commits created — title + short SHA per commit.
+- Commits created — title + short SHA per commit, or "no commits — no pending changes" when the working tree had nothing to stage.
 - Merge outcome — clean or errored on conflicts (list conflicted paths).
 - Push outcome — succeeded or rejected with reason.
