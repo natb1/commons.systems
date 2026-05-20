@@ -173,7 +173,7 @@ present. Map the phase:
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
 | `waiting` | draft PR, CI in progress (running/queued/not started) | monitor CI to completion with a `sonnet` subagent, then re-derive the phase and dispatch it (Step 5) |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
-| `simplify` | draft PR + `dispatch:qa-done` | `/simplify` → then label `dispatch:refactored` |
+| `simplify` | draft PR + `dispatch:qa-done` | `/simplify-fix` (applies `dispatch:refactored` itself) |
 | `review` | draft PR + `dispatch:refactored` | `/review-fix` (applies `dispatch:reviewed` itself) |
 | `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
 | `done` | non-draft (ready) PR | already complete — report and skip |
@@ -208,8 +208,10 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
      report it and **stop** — do not loop.
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done` itself on
   a clean pass; `/dispatch` applies no label.
-- **`simplify`** — invoke `/simplify`. After it **returns**, apply the accumulating
-  `dispatch:*` label to the PR (see below).
+- **`simplify`** — invoke `/simplify-fix`. It runs `/simplify`, applies the
+  recommended fixes, defers important out-of-scope findings to tracking issues,
+  posts a PR comment, and applies the `dispatch:refactored` label itself —
+  `/dispatch` applies no label.
 - **`review`** — invoke `/review-fix`. It runs `/review`, applies the recommended
   fixes, posts a PR comment, and applies the `dispatch:reviewed` label itself —
   `/dispatch` applies no label.
@@ -231,20 +233,10 @@ so `/dispatch` cannot launch it.
 ### Applying the progress label
 
 The `dispatch:*` labels are the accumulating progress markers across the full
-workflow. `/dispatch-qa`, `/review-fix`, and `/security-review-fix` each own and
-apply their own label — `dispatch:qa-done`, `dispatch:reviewed`, and
-`dispatch:security-reviewed` respectively — so `/dispatch` applies no label after
-the `qa`, `review`, or `security` phase. The one label `/dispatch` applies itself is
-`dispatch:refactored`, after the `simplify` phase skill returns successfully —
-applying it here keeps the generic `/simplify` skill dispatch-unaware.
-
-`dispatch-complete-phase` maps the completed phase to its label and applies it to the
-PR, creating the label first only if it does not yet exist (e.g. on a fork) — one
-call, run with `dangerouslyDisableSandbox: true` since it invokes `gh`:
-
-```bash
-.claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> <phase>
-```
+workflow. `/dispatch-qa`, `/simplify-fix`, `/review-fix`, and
+`/security-review-fix` each own and apply their own label — `dispatch:qa-done`,
+`dispatch:refactored`, `dispatch:reviewed`, and `dispatch:security-reviewed`
+respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
 
 ## 6. Pre-Implementation Relevance Review
 

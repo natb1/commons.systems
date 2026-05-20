@@ -11,7 +11,6 @@
 #
 # Phase → label:
 #   qa       → dispatch:qa-done
-#   simplify → dispatch:refactored
 #   review   → dispatch:reviewed
 #   security → dispatch:security-reviewed
 #
@@ -28,11 +27,10 @@ fi
 
 case "$PHASE" in
   qa)       LABEL="dispatch:qa-done" ;;
-  simplify) LABEL="dispatch:refactored" ;;
   review)   LABEL="dispatch:reviewed" ;;
   security) LABEL="dispatch:security-reviewed" ;;
   *)
-    echo "error: unknown phase: $PHASE (expected qa, simplify, review, or security)" >&2
+    echo "error: unknown phase: $PHASE (expected qa, review, or security)" >&2
     exit 1
     ;;
 esac
