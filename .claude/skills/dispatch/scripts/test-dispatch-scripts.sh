@@ -1039,7 +1039,7 @@ label_create_state() {
   [[ -f "$STUB_DIR/gh-label-create.log" ]] && echo "present" || echo "absent"
 }
 
-# 1-2. Phase → label mapping. The label already exists (default stub mode), so
+# Phase → label mapping. The label already exists (default stub mode), so
 # the script applies it with a single `gh pr edit` and issues no `gh label create`.
 echo "Test: qa → dispatch:qa-done (apply only, no label create)"
 setup
@@ -1057,8 +1057,8 @@ assert_eq "simplify applies dispatch:refactored" \
 assert_eq "simplify: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
-# 3. Label missing: the apply fails "not found", so the script creates the
-#    label (BFD4F2, "dispatch workflow: <suffix> phase complete") and retries.
+# Label missing: the apply fails "not found", so the script creates the
+# label (BFD4F2, "dispatch workflow: <suffix> phase complete") and retries.
 echo "Test: label missing → create then retry"
 setup
 echo "label-missing" > "$STUB_DIR/pr-edit-mode"
@@ -1070,8 +1070,8 @@ assert_eq "label-missing: label applied on retry" \
   "pr edit 30 --add-label dispatch:refactored" "$(cat "$STUB_DIR/gh-pr-edit.log")"
 teardown
 
-# 4. An apply failure unrelated to a missing label exits non-zero and creates
-#    no label.
+# An apply failure unrelated to a missing label exits non-zero and creates
+# no label.
 echo "Test: other apply failure → non-zero exit, no label create"
 setup
 echo "other-failure" > "$STUB_DIR/pr-edit-mode"
@@ -1080,14 +1080,14 @@ assert_eq "other apply failure exits non-zero" "1" "$rc"
 assert_eq "other failure: no spurious label create" "absent" "$(label_create_state)"
 teardown
 
-# 5. Unknown phase → non-zero exit.
+# Unknown phase → non-zero exit.
 echo "Test: unknown phase → non-zero exit"
 setup
 if "$TMPDIR_TEST/dispatch-complete-phase" 25 bogus 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "unknown phase exits non-zero" "1" "$rc"
 teardown
 
-# 6. Missing phase arg → non-zero exit.
+# Missing phase arg → non-zero exit.
 echo "Test: missing args → non-zero exit"
 setup
 if "$TMPDIR_TEST/dispatch-complete-phase" 25 2>/dev/null; then rc=0; else rc=$?; fi
