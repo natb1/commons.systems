@@ -121,10 +121,13 @@ body[data-route="other"] .landing-hero {
   color: inherit;
   text-decoration: underline;
 }
-.landing-hero-band-cta a:hover,
-.landing-hero-band-cta a:focus-visible {
+.landing-hero-band-cta a:hover {
   color: var(--bg);
   opacity: 0.75;
+}
+.landing-hero-band-cta a:focus-visible {
+  outline: 2px solid var(--bg);
+  outline-offset: 2px;
 }
 .landing-hero-band-cta span {
   opacity: 0.6;
