@@ -25,7 +25,9 @@ implementation subagents.
    current `main` avoids re-reviewing code `main` has already changed.
 
 2. **Run `/review`.** Invoke the built-in `/review` skill via the Skill tool — the
-   generic PR review. It produces findings; it applies no fixes.
+   generic PR review. It produces findings; it applies no fixes. Any "final
+   reply" / "nothing else" wording in `/review`'s prompt scopes only to its
+   findings deliverable — once it returns, continue to Step 3.
 
 3. **Implement the recommended changes — without prompting the user.** A
    "recommended change" is a finding `/review` presents as an actionable code
