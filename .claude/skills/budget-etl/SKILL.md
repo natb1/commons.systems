@@ -11,6 +11,24 @@ Monthly statement merge workflow. Backed by `budget-etl/cmd/patch` (JSON-spec ru
 
 Every `go run` that touches `budget-etl` or `budget-etl/cmd/patch` with `--keychain` needs `dangerouslyDisableSandbox: true` — `keychain.Get` shells out to `security`, which the sandbox blocks. See `.claude/rules/sandbox.md`.
 
+## Precondition — Export BUDGET_ETL_PASSWORD
+
+Claude Code runs from the worktree root, where the nested
+`budget-etl/.envrc` is **not** active. Before any `go run`, export the
+password into the shell:
+
+```bash
+export BUDGET_ETL_PASSWORD="$(pass show budget-etl/main)"
+```
+
+If `pass show` errors with `gpg: decryption failed`, the gpg-agent cache is
+cold and pinentry can't prompt in Claude's non-interactive shell — see
+`.claude/rules/sandbox.md`. Run `pass show budget-etl/main` once in the host
+terminal to warm the cache, then re-export here.
+
+macOS users with the `budget` keychain entry may alternatively pass
+`--keychain budget` to each `go run` instead of exporting the env var.
+
 ## Step 1 — Move QFX downloads into the statements directory
 
 Run from the worktree root:
@@ -33,7 +51,7 @@ Run from `budget-etl/`. Use `dangerouslyDisableSandbox: true`.
 
 ```bash
 INPUT=$(ls -t ~/Desktop/budget*.enc.json | head -1)
-go run . --input "$INPUT" --dir ~/statements --report /tmp/inspect.json --allow-uncategorized --keychain budget
+go run . --input "$INPUT" --dir ~/statements --report /tmp/inspect.json --allow-uncategorized
 ```
 
 The report has three arrays:
@@ -79,9 +97,9 @@ Build or update `/tmp/budget-patch.json` from step-3 feedback. Spec shape:
 Apply and re-merge. Both commands need `dangerouslyDisableSandbox: true`:
 
 ```bash
-go run ./cmd/patch --input "$INPUT" --spec /tmp/budget-patch.json --output /tmp/stage1.enc.json --keychain budget
+go run ./cmd/patch --input "$INPUT" --spec /tmp/budget-patch.json --output /tmp/stage1.enc.json
 OUT=~/Desktop/budget-$(date +%Y-%m-%dT%H-%M-%S).enc.json
-go run . --input /tmp/stage1.enc.json --dir ~/statements --output "$OUT" --keychain budget
+go run . --input /tmp/stage1.enc.json --dir ~/statements --output "$OUT"
 ```
 
 On uncategorized regression: regenerate report with `--input /tmp/stage1.enc.json` and return to step 3 with the residual list. After 3 iterations without convergence, stop and surface the remaining uncategorized transactions to the user — do not loop further.
