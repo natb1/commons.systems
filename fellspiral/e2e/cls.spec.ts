@@ -49,6 +49,7 @@ test.describe("Cumulative Layout Shift", () => {
             }
           }
         });
+        // No buffered: true — replaying pre-fonts.ready shifts would defeat the gate above.
         observer.observe({ type: "layout-shift" });
 
         setTimeout(() => {
