@@ -227,6 +227,26 @@ body[data-route="other"] .landing-hero {
   outline-offset: -2px;
 }
 
+/* The /about sidebar carries the profile card and contact CTA — primary
+   content, not the collapsible secondary nav the homepage panel holds.
+   layout.css collapses .sidebar behind the panel toggle below 768px; on
+   /about render it inline in normal flow instead so the contact link stays
+   visible, and drop the now-purposeless toggle. */
+@media (max-width: 767px) {
+  body[data-route="about"] .sidebar {
+    display: block;
+    position: static;
+    width: auto;
+    max-height: none;
+    border: none;
+    padding: 0;
+  }
+
+  body[data-route="about"] .panel-toggle {
+    display: none;
+  }
+}
+
 /* Deliverables list on /about: an amber rule marks each selling point and
    gives it its own block instead of a dense paragraph. */
 .about-deliverables {
