@@ -280,15 +280,13 @@ export function hydrateTransactionTable(container: HTMLElement): void {
     try {
       chartTxns = serializeChartTransactions(txns, budgetIdToName);
     } catch (chartError) {
-      // Serialization should no longer throw (resolveBudgetName degrades unknown
-      // ids — #578); if it ever does, fall back to an empty batch so the dispatch
-      // below still fires and the table re-filter runs. Chart skips this batch.
+      // resolveBudgetName degrades unknown ids, so serialization should no
+      // longer throw (#578); the empty-batch fallback covers it if it ever does.
       logError(chartError, { operation: "update-chart-scroll" });
       chartTxns = [];
     }
-    // Dispatch is outside the catch: a failed serialization must not skip the
-    // event, which is the only thing that re-applies the table filter to
-    // scroll-loaded rows (#578).
+    // Dispatched outside the catch: a chart-serialization failure must not skip
+    // the event — it is the table re-filter's only trigger for scroll-loaded rows (#578).
     document.dispatchEvent(new CustomEvent(TRANSACTIONS_APPENDED_EVENT, { detail: chartTxns }));
   }
 

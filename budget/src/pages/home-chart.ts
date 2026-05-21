@@ -256,6 +256,16 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
   const fg = getThemeFg(container);
 
+  function currentFilterOpts(): FilterTableOptions {
+    return {
+      mode: currentMode,
+      showCardPayment: currentShowCardPayment,
+      unbudgetedOnly: currentUnbudgetedOnly,
+      categoryFilter: currentCategoryFilter,
+      budgetFilter: currentBudgetFilter,
+    };
+  }
+
   function render(): void {
     const containerWidth = container.clientWidth;
     if (containerWidth === 0) return;
@@ -303,7 +313,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       return;
     }
     try {
-      filterTable({ mode: currentMode, showCardPayment: currentShowCardPayment, unbudgetedOnly: currentUnbudgetedOnly, categoryFilter: currentCategoryFilter, budgetFilter: currentBudgetFilter });
+      filterTable(currentFilterOpts());
     } catch (error) {
       setTimeout(() => { throw error; }, 0);
     }
@@ -318,10 +328,8 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   document.addEventListener(TRANSACTIONS_APPENDED_EVENT, ((e: CustomEvent<SerializedChartTransaction[]>) => {
     const newTxns = e.detail;
 
-    // Chart-update block: merge the new data into allTxns, adjust the week
-    // slider to preserve position, then re-render. Skipped when the chart
-    // container is gone; render() is called directly since the table re-filter
-    // now runs separately below.
+    // Chart-update block — skipped when the container is gone. Calls render()
+    // directly, not update(): the table re-filter runs as its own block below.
     if (container.isConnected) {
       try {
         assertChartTransactions(newTxns);
@@ -340,18 +348,9 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       }
     }
 
-    // Table re-filter block: re-apply the active filter to the newly inserted
-    // rows. Runs unconditionally — not gated on the chart container, not inside
-    // the chart try/catch — so a failed chart serialization or render cannot
-    // leave scroll-loaded rows with stale visibility (#578).
+    // Table re-filter block — runs unconditionally (see listener header).
     try {
-      filterTable({
-        mode: currentMode,
-        showCardPayment: currentShowCardPayment,
-        unbudgetedOnly: currentUnbudgetedOnly,
-        categoryFilter: currentCategoryFilter,
-        budgetFilter: currentBudgetFilter,
-      });
+      filterTable(currentFilterOpts());
     } catch (error) {
       setTimeout(() => { throw error; }, 0);
     }
