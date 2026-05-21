@@ -26,7 +26,17 @@
 # --qa mode omits the <phase> field — there it is always "qa":
 #   pr <num> <branch>           — the QA PR to work on
 #
-# Default mode priority (highest first; within a tier, oldest PR wins):
+# Selection is two-tier: a topic *category* nests outside the phase *ladder*.
+# Categories, highest priority first:
+#   bug → testing infrastructure → dispatch → other
+# The selector exhausts every tier of one category before moving to the next.
+#
+# A PR's category is the highest-priority topic among the labels of every issue
+# it closes (closingIssuesReferences); a PR that closes no issue, or whose
+# closing issues carry no topic label, is "other". An issue's category is the
+# highest-priority topic among its own labels, else "other".
+#
+# Within each category, default-mode priority (oldest PR wins within a tier):
 #   1. Oldest "security" PR (draft + dispatch:reviewed or dispatch:security-reviewed)
 #   2. Oldest "review"   PR (draft + dispatch:refactored)
 #   3. Oldest "simplify" PR (draft + dispatch:qa-done)
@@ -38,9 +48,11 @@
 # actively working them).
 # "done" (non-draft) PRs are skipped entirely.
 # "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
+# A queue with no topic-labeled items resolves entirely to "other", reproducing
+# the flat ladder exactly.
 #
 # --qa mode priority:
-#   1. Oldest QA PR with no local git worktree
+#   1. Oldest QA PR in the highest-priority category that has one
 #   2. empty
 set -euo pipefail
 
@@ -177,18 +189,68 @@ issue_has_worktree() {
 # Fetch all open PRs once, with the union of fields this script and
 # dispatch-phase need. Each per-PR dispatch-phase call below reuses it
 # (passed as DISPATCH_PR_LIST) instead of re-running gh pr list.
-PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels)
-PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number, .createdAt, .headRefName] | @tsv')
+# closingIssuesReferences drives topic-category resolution: a PR inherits the
+# highest-priority topic among the labels of every issue it closes.
+PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences)
+PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number, .createdAt, .headRefName, (.closingIssuesReferences | tojson)] | @tsv')
 
-# First-seen PR per phase: key = phase name, value = "<num> <branch>". The PR
-# list is pre-sorted oldest-first, so the first PR captured for a phase is
-# always the oldest in that phase.
+# Fetch every open issue once, carrying labels. This single list serves two
+# roles: filtered client-side to "help wanted" it is the issue queue; indexed
+# number → labels it is the map that resolves each PR's topic category from its
+# closing issues. --limit 300 covers the full open-issue set (gh's default of
+# 30 would silently truncate a ~30-item queue).
+ISSUE_LIST=$(gh issue list --state open --limit 300 --json number,createdAt,labels)
+
+# number → labels-JSON map, built from the open-issue list above. Assigned to a
+# variable first so a jq failure aborts here (set -e + pipefail); mirrors
+# PR_SORTED.
+declare -A ISSUE_LABELS
+ISSUE_LABEL_ROWS=$(printf '%s' "$ISSUE_LIST" | jq -r '.[] | [.number, ((.labels // []) | tojson)] | @tsv')
+while IFS=$'\t' read -r _inum _ilabels; do
+  [[ -z "$_inum" ]] && continue
+  ISSUE_LABELS["$_inum"]="$_ilabels"
+done <<< "$ISSUE_LABEL_ROWS"
+
+# Topic categories, highest priority first. A category tier nests *outside* the
+# phase ladder: the selector exhausts every phase of "bug" before considering
+# "testing infrastructure", and so on.
+CATEGORIES=(bug "testing infrastructure" dispatch other)
+
+# Highest-priority topic category among a JSON array of {name:...} label
+# objects. Exact name match, so the phase label "dispatch:reviewed" never reads
+# as topic "dispatch". A labels array with no topic label resolves to "other".
+category_of_labels() {
+  printf '%s' "$1" | jq -r '
+    [(.[] | .name)] as $names
+    | if   ($names | index("bug")) then "bug"
+      elif ($names | index("testing infrastructure")) then "testing infrastructure"
+      elif ($names | index("dispatch")) then "dispatch"
+      else "other" end'
+}
+
+# Topic category of a PR, from the union of its closing issues' labels. A PR
+# that closes no issue — or whose closing issues carry no topic label —
+# resolves to "other".
+pr_category() {
+  local closing="$1" combined='[]' n lbls
+  for n in $(printf '%s' "$closing" | jq -r '.[].number'); do
+    lbls="${ISSUE_LABELS[$n]:-[]}"
+    combined=$(jq -nc --argjson a "$combined" --argjson b "$lbls" '$a + $b')
+  done
+  category_of_labels "$combined"
+}
+
+# First-seen PR per (category, phase): key = "<category>|<phase>", value =
+# "<num> <branch>". Both lists are pre-sorted oldest-first, so the first PR
+# captured for a key is the oldest in that category+phase.
 declare -A FIRST_PR
+# First-seen help-wanted issue per category: key = category, value = "<num>".
+declare -A FIRST_ISSUE
 
-# Default-mode selection order among PR phases (highest priority first).
+# Within-category phase ladder, highest priority first.
 PHASE_PRIORITY=(security review simplify verify)
 
-while IFS=$'\t' read -r pr_num _created pr_branch; do
+while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue
 
   # Skip PRs with a local worktree.
@@ -204,54 +266,66 @@ while IFS=$'\t' read -r pr_num _created pr_branch; do
     done|waiting) continue ;;
   esac
 
-  # Record the oldest PR seen in this phase. The :- guard keeps the unset-key
-  # read from aborting under set -u.
-  [[ -z "${FIRST_PR[$phase]:-}" ]] && FIRST_PR[$phase]="$pr_num $pr_branch"
+  # Record the oldest PR seen in this category+phase. The :- guard keeps the
+  # unset-key read from aborting under set -u.
+  pr_cat=$(pr_category "$pr_closing")
+  pr_key="$pr_cat|$phase"
+  [[ -z "${FIRST_PR[$pr_key]:-}" ]] && FIRST_PR[$pr_key]="$pr_num $pr_branch"
 done <<< "$PR_SORTED"
 
-if [[ "$QA_MODE" == "true" ]]; then
-  # --qa mode: only return QA PRs, without the <phase> field.
-  if [[ -n "${FIRST_PR[qa]:-}" ]]; then
-    echo "pr ${FIRST_PR[qa]}"
-  else
-    echo "empty"
-  fi
-  exit 0
-fi
-
-# Default mode: security → review → simplify → verify →
-#               help-wanted issue → qa → empty.
-for phase in "${PHASE_PRIORITY[@]}"; do
-  if [[ -n "${FIRST_PR[$phase]:-}" ]]; then
-    echo "pr ${FIRST_PR[$phase]} $phase"
-    exit 0
-  fi
-done
-
-# Fetch help-wanted issues oldest-first; pick the oldest with no local worktree.
-ISSUE_LIST=$(gh issue list --label "help wanted" --state open --json number,createdAt)
-# Sort into a variable first so a jq failure aborts here (set -e + pipefail);
-# a process substitution would swallow it as empty input. Mirrors PR_SORTED.
-ISSUE_NUMS_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
-ISSUE_NUM=""
-while IFS= read -r issue_num; do
+# First-seen help-wanted issue per category. The queue is the open-issue list
+# filtered client-side to "help wanted"; issues whose <N>-* worktree exists
+# (a session is working them) are skipped, exactly as before.
+ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r '
+  sort_by(.createdAt) | .[]
+  | select((.labels // []) | any(.name == "help wanted"))
+  | [.number, ((.labels // []) | tojson)] | @tsv')
+while IFS=$'\t' read -r issue_num issue_labels; do
   [[ -z "$issue_num" ]] && continue
   # Skip issues whose <N>-* worktree exists (a session is working them).
   if issue_has_worktree "$issue_num"; then
     continue
   fi
-  ISSUE_NUM="$issue_num"
-  break
-done <<< "$ISSUE_NUMS_SORTED"
+  issue_cat=$(category_of_labels "$issue_labels")
+  [[ -z "${FIRST_ISSUE[$issue_cat]:-}" ]] && FIRST_ISSUE[$issue_cat]="$issue_num"
+done <<< "$ISSUE_SORTED"
 
-if [[ -n "$ISSUE_NUM" ]]; then
-  echo "issue $ISSUE_NUM"
+if [[ "$QA_MODE" == "true" ]]; then
+  # --qa mode: oldest QA PR in the highest-priority category that has one,
+  # without the <phase> field.
+  for category in "${CATEGORIES[@]}"; do
+    qa_key="$category|qa"
+    if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
+      echo "pr ${FIRST_PR[$qa_key]}"
+      exit 0
+    fi
+  done
+  echo "empty"
   exit 0
 fi
 
-if [[ -n "${FIRST_PR[qa]:-}" ]]; then
-  echo "pr ${FIRST_PR[qa]} qa"
-  exit 0
-fi
+# Default mode: iterate categories outermost; within each, the ladder
+# security → review → simplify → verify → help-wanted issue → qa. The first
+# category with any eligible task wins.
+for category in "${CATEGORIES[@]}"; do
+  for phase in "${PHASE_PRIORITY[@]}"; do
+    pr_key="$category|$phase"
+    if [[ -n "${FIRST_PR[$pr_key]:-}" ]]; then
+      echo "pr ${FIRST_PR[$pr_key]} $phase"
+      exit 0
+    fi
+  done
+
+  if [[ -n "${FIRST_ISSUE[$category]:-}" ]]; then
+    echo "issue ${FIRST_ISSUE[$category]}"
+    exit 0
+  fi
+
+  qa_key="$category|qa"
+  if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
+    echo "pr ${FIRST_PR[$qa_key]} qa"
+    exit 0
+  fi
+done
 
 echo "empty"

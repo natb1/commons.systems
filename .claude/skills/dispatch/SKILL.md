@@ -168,12 +168,23 @@ merge and push are no-ops when local main already equals `origin/main`.
   script, and therefore its current-worktree detection, runs only when no argument is
   given. `/dispatch #123` run from inside worktree-456 still targets 123.
 
-  Priority order it implements (highest first; within a tier, oldest PR wins; PRs
-  and `help wanted` issues with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
-  oldest `security` PR → oldest `review` PR → oldest `simplify` PR → oldest
-  `verify` PR → oldest `help wanted` issue → oldest `qa` PR → `empty`. Non-QA PRs
-  are ranked closest-to-done first — `security` is the closest-to-done non-QA
-  tier; `help wanted` issues rank below all non-QA PRs but above QA PRs.
+  Priority order it implements is two-tier: a topic **category** nests outside
+  the phase **ladder**. Categories, highest priority first: `bug` → `testing
+  infrastructure` → `dispatch` → `other`. A PR's category is the highest-priority
+  topic among the labels of every issue it closes; an issue's category is the
+  highest-priority topic among its own labels; anything with no topic label is
+  `other`. The selector exhausts one category's whole ladder before moving to
+  the next.
+
+  Within each category the ladder is (highest first; within a tier, oldest PR
+  wins; PRs and `help wanted` issues with a local worktree are skipped;
+  `waiting`-phase PRs are skipped entirely): oldest `security` PR → oldest
+  `review` PR → oldest `simplify` PR → oldest `verify` PR → oldest `help wanted`
+  issue → oldest `qa` PR. Non-QA PRs are ranked closest-to-done first —
+  `security` is the closest-to-done non-QA tier; `help wanted` issues rank below
+  all non-QA PRs but above QA PRs. A queue with no topic-labeled items resolves
+  entirely to `other`, reproducing the flat ladder; `empty` when no category
+  yields a task.
 
   On `empty` → release the lock (see *Releasing the lock*), then report that
   the queue is empty and **stop**.
