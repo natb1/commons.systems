@@ -39,9 +39,14 @@ export PATH="$STUB_BIN:$PATH"
 
 tmp=""
 
+# Remove the shared stub-git dir and the last per-case temp tree on exit;
+# setup_case discards each prior tree as it creates the next.
+trap 'rm -rf "$STUB_BIN" "$tmp" 2>/dev/null || true' EXIT
+
 # setup_case — create a fresh isolated temp tree for one test.
 # Copies the real hook so the hook's SCRIPT_DIR resolves inside $tmp.
 setup_case() {
+  [ -n "$tmp" ] && rm -rf "$tmp"   # discard the previous case's temp tree
   TMPDIR="$ORIG_TMPDIR"
   tmp=$(mktemp -d)
 
@@ -73,6 +78,12 @@ DPHASE
 
   # Cache lives at: $tmp/.claude/hooks/../../tmp/dispatch-phase = $tmp/tmp/dispatch-phase
   # (No pre-seeding by default; individual cases call seed_cache if needed.)
+
+  # Reset every STUB_* var to a default so a previous case's overrides never
+  # leak; each case overrides only the vars it exercises.
+  export STUB_BRANCH="main"
+  export STUB_PHASE="implement"
+  export STUB_FAIL="0"
 }
 
 # seed_cache <phase> <fresh|stale>
@@ -98,15 +109,15 @@ run_hook() {
 # Returns 0 when the cache file contains exactly <expected_value>, else 1.
 poll_cache() {
   local expected="$1" timeout="${2:-5}"
-  local elapsed=0
-  while (( elapsed < timeout * 5 )); do
+  local iters=0
+  while (( iters < timeout * 5 )); do
     local got
     got=$(cat "$tmp/tmp/dispatch-phase" 2>/dev/null) || true
     if [ "$got" = "$expected" ]; then
       return 0
     fi
     sleep 0.2
-    elapsed=$(( elapsed + 1 ))
+    iters=$(( iters + 1 ))
   done
   return 1
 }
@@ -213,7 +224,6 @@ json_without_tokens() {
 # =============================================================================
 setup_case
 export STUB_BRANCH="main"
-unset STUB_PHASE STUB_FAIL 2>/dev/null || true
 run_hook "$(json_with_tokens "claude-sonnet-4" "/home/user/project")"
 assert_nonempty    "case1: branch main renders model+cwd+tokens" "$HOOK_OUT"
 assert_not_contains "case1: branch main has no dispatch segment" "#" "$HOOK_OUT"
@@ -224,7 +234,6 @@ assert_not_contains "case1: branch main has no dispatch segment" "#" "$HOOK_OUT"
 setup_case
 export STUB_BRANCH="718-foo"
 export STUB_PHASE="review"
-unset STUB_FAIL 2>/dev/null || true
 seed_cache "review" "fresh"
 run_hook "$(json_with_tokens "claude-sonnet-4" "/home/user/project")"
 assert_contains "case2: fresh cache shows phase" "#718 review" "$HOOK_OUT"
@@ -236,7 +245,6 @@ assert_contains "case2: fresh cache shows phase" "#718 review" "$HOOK_OUT"
 setup_case
 export STUB_BRANCH="718-foo"
 export STUB_PHASE="review"
-unset STUB_FAIL 2>/dev/null || true
 seed_cache "qa" "stale"
 run_hook "$(json_with_tokens "claude-sonnet-4" "/home/user/project")"
 assert_contains "case3: stale cache renders stale value immediately" "#718 qa" "$HOOK_OUT"
@@ -249,7 +257,6 @@ assert_poll     "case3: background refresh writes new phase to cache" "review"
 setup_case
 export STUB_BRANCH="718-foo"
 export STUB_PHASE="implement"
-unset STUB_FAIL 2>/dev/null || true
 # No seed_cache call — cache does not exist
 run_hook "$(json_with_tokens "claude-sonnet-4" "/home/user/project")"
 assert_nonempty     "case4: no cache still renders model+cwd+tokens" "$HOOK_OUT"
@@ -263,7 +270,6 @@ assert_poll         "case4: background process populates cache" "implement"
 setup_case
 export STUB_BRANCH="718-foo"
 export STUB_FAIL="1"
-unset STUB_PHASE 2>/dev/null || true
 # No seed_cache call — cache does not exist
 run_hook "$(json_with_tokens "claude-sonnet-4" "/home/user/project")"
 assert_nonempty     "case5: stub fail still renders model+cwd+tokens" "$HOOK_OUT"
@@ -277,7 +283,6 @@ assert_cache_not_populated "case5: failed stub leaves cache empty"
 setup_case
 export STUB_BRANCH="718-foo"
 export STUB_PHASE="review"
-unset STUB_FAIL 2>/dev/null || true
 seed_cache "review" "fresh"
 run_hook "$(json_without_tokens "claude-sonnet-4" "/home/user/project")"
 assert_contains     "case6: no-token branch shows dispatch phase" "#718 review" "$HOOK_OUT"
