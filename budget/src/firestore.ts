@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, increment, Timestamp, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, increment, writeBatch, Timestamp, deleteDoc, type QueryDocumentSnapshot, type DocumentData } from "firebase/firestore";
 import { nsCollectionPath } from "@commons-systems/firestoreutil/namespace";
 import { requireOneOf } from "@commons-systems/firestoreutil/validate";
 
@@ -15,6 +15,18 @@ import {
   type ReconciliationClassification,
   type ReconciliationEntityType,
 } from "./schema/enums.js";
+import { parseFirestoreAccount } from "./entities/account.js";
+import type { Account } from "./entities/account.js";
+export type { Account } from "./entities/account.js";
+import { parseFirestoreJournalEntry } from "./entities/journal-entry.js";
+import type { JournalEntry } from "./entities/journal-entry.js";
+export type { JournalEntry } from "./entities/journal-entry.js";
+import { parseFirestoreJournalLeg } from "./entities/journal-leg.js";
+import type { JournalLeg } from "./entities/journal-leg.js";
+export type { JournalLeg } from "./entities/journal-leg.js";
+import { parseFirestoreReconciliationEvent } from "./entities/reconciliation-event.js";
+import type { ReconciliationEvent } from "./entities/reconciliation-event.js";
+export type { ReconciliationEvent } from "./entities/reconciliation-event.js";
 import { parseFirestoreTransaction, validateReimbursementRange } from "./entities/transaction.js";
 import type { Transaction, TransactionId } from "./entities/transaction.js";
 export type { Transaction, IdbTransaction, TransactionId } from "./entities/transaction.js";
@@ -40,8 +52,8 @@ import type { WeeklyAggregate } from "./entities/weekly-aggregate.js";
 export type { WeeklyAggregate, IdbWeeklyAggregate } from "./entities/weekly-aggregate.js";
 
 /** Classification applied to unmatched statement items or transactions during reconciliation. */
-export type { ReconciliationClassification, ReconciliationEntityType, Rollover, AllowancePeriod, RuleType } from "./schema/enums.js";
-export { ROLLOVERS, ALLOWANCE_PERIODS, RECONCILIATION_CLASSIFICATIONS, RECONCILIATION_ENTITY_TYPES, RULE_TYPES } from "./schema/enums.js";
+export type { ReconciliationClassification, ReconciliationEntityType, Rollover, AllowancePeriod, RuleType, AccountType } from "./schema/enums.js";
+export { ROLLOVERS, ALLOWANCE_PERIODS, RECONCILIATION_CLASSIFICATIONS, RECONCILIATION_ENTITY_TYPES, RULE_TYPES, ACCOUNT_TYPES } from "./schema/enums.js";
 
 export type { GroupId } from "@commons-systems/authutil/groups";
 
@@ -78,7 +90,7 @@ async function queryGroupCollection(
   seedPrefix: string,
   groupId: GroupId | null,
   email?: string,
-  filters?: { since?: Timestamp; before?: Timestamp },
+  filters?: { since?: Timestamp; before?: Timestamp; accountId?: string },
 ): Promise<QueryDocumentSnapshot<DocumentData, DocumentData>[]> {
   if (groupId && !email) throw new Error("email is required when querying by groupId");
   const name = groupId ? collectionName : `${seedPrefix}${collectionName}`;
@@ -89,6 +101,7 @@ async function queryGroupCollection(
         where("memberEmails", "array-contains", email),
       ]
     : [];
+  if (filters?.accountId) constraints.push(where("accountId", "==", filters.accountId));
   if (filters?.since) constraints.push(where("timestamp", ">=", filters.since));
   if (filters?.before) constraints.push(where("timestamp", "<", filters.before));
   const q = query(collection(db, path), ...constraints);
@@ -130,7 +143,7 @@ function requireDocId(id: string, label: string): void {
 
 export async function updateTransaction(
   txnId: TransactionId,
-  fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
+  fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription" | "journalEntryId">>,
 ): Promise<void> {
   requireDocId(txnId, "transaction");
   if (Object.keys(fields).length === 0) return;
@@ -326,4 +339,152 @@ export async function getWeeklyAggregates(groupId: GroupId, email: string): Prom
 export async function getWeeklyAggregates(groupId: GroupId | null, email?: string): Promise<WeeklyAggregate[]> {
   const docs = await queryGroupCollection("weekly-aggregates", "seed-", groupId, email);
   return docs.map(parseFirestoreWeeklyAggregate);
+}
+
+// --- Double-entry ledger: accounts, journal entries, journal legs, reconciliation events ---
+
+/** Read the chart of accounts. Group-scoped; reads `seed-accounts` when groupId is null. */
+export async function getAccounts(groupId: null): Promise<Account[]>;
+export async function getAccounts(groupId: GroupId, email: string): Promise<Account[]>;
+export async function getAccounts(groupId: GroupId | null, email?: string): Promise<Account[]> {
+  const docs = await queryGroupCollection("accounts", "seed-", groupId, email);
+  return docs.map(parseFirestoreAccount);
+}
+
+/** Read journal entries, optionally filtered by a timestamp range. */
+export async function getJournalEntries(groupId: null, email?: undefined, filters?: { since?: Timestamp; before?: Timestamp }): Promise<JournalEntry[]>;
+export async function getJournalEntries(groupId: GroupId, email: string, filters?: { since?: Timestamp; before?: Timestamp }): Promise<JournalEntry[]>;
+export async function getJournalEntries(groupId: GroupId | null, email?: string, filters?: { since?: Timestamp; before?: Timestamp }): Promise<JournalEntry[]> {
+  const docs = await queryGroupCollection("journal-entries", "seed-", groupId, email, filters);
+  return docs.map(parseFirestoreJournalEntry);
+}
+
+/** Read completed reconciliation events. */
+export async function getReconciliationEvents(groupId: null): Promise<ReconciliationEvent[]>;
+export async function getReconciliationEvents(groupId: GroupId, email: string): Promise<ReconciliationEvent[]>;
+export async function getReconciliationEvents(groupId: GroupId | null, email?: string): Promise<ReconciliationEvent[]> {
+  const docs = await queryGroupCollection("reconciliation-events", "seed-", groupId, email);
+  return docs.map(parseFirestoreReconciliationEvent);
+}
+
+/**
+ * Read all journal legs for a single account within a timestamp period.
+ * Queries the flat `journal-legs` collection with an `accountId` equality clause
+ * plus the period range.
+ */
+export async function getJournalLegs(accountId: string, period: { since?: Timestamp; before?: Timestamp }, groupId: null): Promise<JournalLeg[]>;
+export async function getJournalLegs(accountId: string, period: { since?: Timestamp; before?: Timestamp }, groupId: GroupId, email: string): Promise<JournalLeg[]>;
+export async function getJournalLegs(accountId: string, period: { since?: Timestamp; before?: Timestamp }, groupId: GroupId | null, email?: string): Promise<JournalLeg[]> {
+  const docs = await queryGroupCollection("journal-legs", "seed-", groupId, email, {
+    accountId,
+    since: period.since,
+    before: period.before,
+  });
+  return docs.map(parseFirestoreJournalLeg);
+}
+
+/**
+ * Create a balanced double-entry journal entry and its legs in a single batch.
+ *
+ * Validates synchronously and throws before any write when the legs are
+ * unbalanced, fewer than two, have both a debit and a credit, or carry a
+ * negative / non-finite amount. Returns the new journal-entry document id.
+ */
+export async function createJournalEntry(
+  groupId: GroupId,
+  memberEmails: string[],
+  entry: { timestamp: Timestamp; description: string; note?: string | null },
+  legs: ReadonlyArray<{
+    accountId: string;
+    debit: number;
+    credit: number;
+    cleared?: boolean;
+    statementItemId?: string | null;
+  }>,
+): Promise<string> {
+  if (legs.length < 2) {
+    throw new DataIntegrityError(`Journal entry requires at least 2 legs, got ${legs.length}`);
+  }
+  let totalDebit = 0;
+  let totalCredit = 0;
+  for (const [i, leg] of legs.entries()) {
+    if (!Number.isFinite(leg.debit) || !Number.isFinite(leg.credit)) {
+      throw new DataIntegrityError(`Journal leg ${i} has a non-finite amount (debit=${leg.debit}, credit=${leg.credit})`);
+    }
+    if (leg.debit < 0 || leg.credit < 0) {
+      throw new DataIntegrityError(`Journal leg ${i} has a negative amount (debit=${leg.debit}, credit=${leg.credit})`);
+    }
+    if (leg.debit > 0 && leg.credit > 0) {
+      throw new DataIntegrityError(`Journal leg ${i} cannot have both a debit and a credit (debit=${leg.debit}, credit=${leg.credit})`);
+    }
+    totalDebit += leg.debit;
+    totalCredit += leg.credit;
+  }
+  if (Math.abs(totalDebit - totalCredit) > 0.005) {
+    throw new DataIntegrityError(
+      `Journal entry is unbalanced: debits ${totalDebit} != credits ${totalCredit}`,
+    );
+  }
+
+  const entriesPath = nsCollectionPath(NAMESPACE, "journal-entries");
+  const legsPath = nsCollectionPath(NAMESPACE, "journal-legs");
+  const entryRef = doc(collection(db, entriesPath));
+  const batch = writeBatch(db);
+  batch.set(entryRef, {
+    timestamp: entry.timestamp,
+    description: entry.description,
+    note: entry.note ?? null,
+    legCount: legs.length,
+    groupId,
+    memberEmails,
+  });
+  for (const leg of legs) {
+    const legRef = doc(collection(db, legsPath));
+    batch.set(legRef, {
+      entryId: entryRef.id,
+      accountId: leg.accountId,
+      debit: leg.debit,
+      credit: leg.credit,
+      timestamp: entry.timestamp,
+      cleared: leg.cleared ?? false,
+      statementItemId: leg.statementItemId ?? null,
+      groupId,
+      memberEmails,
+    });
+  }
+  await batch.commit();
+  return entryRef.id;
+}
+
+/**
+ * Guard for the journal-leg cleared/reconciled state model.
+ *
+ * A leg moves uncleared → cleared → reconciled. The uncleared/cleared
+ * transition is free in either direction. `reconciled` (`reconciledAt != null`)
+ * is terminal: any change to `cleared` on a reconciled leg is rejected.
+ */
+export function assertLegStateTransition(
+  leg: Pick<JournalLeg, "cleared" | "reconciledAt">,
+  nextCleared: boolean,
+): void {
+  if (leg.reconciledAt != null) {
+    throw new Error(
+      `Cannot change cleared state to ${nextCleared}: leg is reconciled (reconciled state is terminal)`,
+    );
+  }
+}
+
+/**
+ * Toggle a journal leg's `cleared` flag. Rejects the change when the leg is
+ * already reconciled (see `assertLegStateTransition`).
+ */
+export async function updateJournalLegCleared(legId: string, cleared: boolean): Promise<void> {
+  requireDocId(legId, "journal leg");
+  const path = nsCollectionPath(NAMESPACE, "journal-legs");
+  const ref = doc(db, path, legId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error(`Journal leg ${legId} not found`);
+  const leg = parseFirestoreJournalLeg(snap as QueryDocumentSnapshot<DocumentData, DocumentData>);
+  assertLegStateTransition(leg, cleared);
+  await updateDoc(ref, { cleared });
 }
