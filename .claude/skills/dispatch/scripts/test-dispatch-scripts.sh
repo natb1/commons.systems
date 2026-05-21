@@ -2008,7 +2008,8 @@ lock_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   STUB_DIR=""
-  unset DISPATCH_LOCK_FILE DISPATCH_LOCK_SESSION_PID DISPATCH_LOCK_PROC_ROOT
+  unset DISPATCH_LOCK_FILE DISPATCH_LOCK_SESSION_PID DISPATCH_LOCK_PROC_ROOT \
+    DISPATCH_LOCK_WAIT_INTERVAL DISPATCH_LOCK_WAIT_TIMEOUT
 }
 
 # Helper: write a synthetic <proc>/<pid>/comm file with the given comm string.
@@ -2152,6 +2153,121 @@ assert_eq "proc-walk prints acquired" "acquired" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
 assert_eq "proc-walk records the .claude ancestor PID, not \$PPID" \
   "$claude_pid" "$lock_contents"
+lock_teardown
+
+# --- Test 8: --wait with an own-session record acquires immediately ----------
+#
+# An own-session PID is recorded. --wait must NOT poll — try_acquire claims it
+# on iteration 1. WAIT_TIMEOUT=0 proves no wait happened: a real wait would
+# have to time out, which 0 cannot survive.
+
+echo "Test: --wait with an own-session record acquires immediately"
+lock_setup
+printf '%s\n' 800800 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 800800 ".claude-unwrapp"
+export DISPATCH_LOCK_SESSION_PID=800800
+export DISPATCH_LOCK_WAIT_TIMEOUT=0
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --wait 2>/dev/null); rc=$?
+assert_eq "--wait own-session exits 0" "0" "$rc"
+assert_eq "--wait own-session prints acquired" "acquired" "$out"
+lock_teardown
+
+# --- Test 9: --wait against a live foreign holder times out → busy -----------
+#
+# The recorded PID is a live foreign .claude session that never goes away. The
+# --wait loop polls until WAIT_TIMEOUT elapses, then prints busy and exits 0.
+
+echo "Test: --wait against a live foreign holder times out and prints busy"
+lock_setup
+printf '%s\n' 900900 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 900900 ".claude-unwrapp"          # live foreign holder
+export DISPATCH_LOCK_SESSION_PID=900901
+lock_proc_pid 900901 ".claude-unwrapp"          # our own session
+export DISPATCH_LOCK_WAIT_TIMEOUT=1
+export DISPATCH_LOCK_WAIT_INTERVAL=0.2
+# `set -e` is in effect: capture the exit code with an if/else.
+if out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --wait 2>/dev/null); then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "--wait timeout exits 0" "0" "$rc"
+assert_eq "--wait timeout prints busy" "busy" "$out"
+lock_teardown
+
+# --- Test 10: --wait acquires once a contended holder goes stale -------------
+#
+# The recorded PID is a live foreign holder when --wait starts. Mid-wait its
+# synthetic /proc entry is removed, so the next poll's liveness check fails and
+# the waiter reclaims the lock — recording its own session PID.
+
+echo "Test: --wait acquires once a contended holder goes stale"
+lock_setup
+printf '%s\n' 101010 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 101010 ".claude-unwrapp"          # live foreign holder
+export DISPATCH_LOCK_SESSION_PID=101011
+lock_proc_pid 101011 ".claude-unwrapp"          # our own session
+export DISPATCH_LOCK_WAIT_INTERVAL=0.1
+export DISPATCH_LOCK_WAIT_TIMEOUT=10
+( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --wait ) >"$STUB_DIR/out10" 2>&1 &
+wait_pid=$!
+sleep 0.5
+# Holder goes away — next poll's liveness check fails, waiter reclaims.
+rm -rf "$DISPATCH_LOCK_PROC_ROOT/101010"
+wait "$wait_pid"
+out=$(cat "$STUB_DIR/out10" 2>/dev/null || true)
+assert_eq "--wait reclaim prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "--wait reclaim records our session PID" "101011" "$lock_contents"
+lock_teardown
+
+# --- Test 11: --release with an own-session record → released, file emptied --
+
+echo "Test: --release with an own-session record clears the lock file"
+lock_setup
+printf '%s\n' 111100 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 111100 ".claude-unwrapp"
+export DISPATCH_LOCK_SESSION_PID=111100
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "--release own-session exits 0" "0" "$rc"
+assert_eq "--release own-session prints released" "released" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$lock_contents" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: --release empties the lock file"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: --release empties the lock file"
+  echo "    lock file: '$lock_contents'"
+fi
+lock_teardown
+
+# --- Test 12: --release with a foreign PID recorded → noop, file unchanged ---
+
+echo "Test: --release with a foreign PID recorded is a no-op"
+lock_setup
+printf '%s\n' 121200 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 121200 ".claude-unwrapp"          # live foreign holder
+export DISPATCH_LOCK_SESSION_PID=121201
+lock_proc_pid 121201 ".claude-unwrapp"          # our own session
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "--release foreign exits 0" "0" "$rc"
+assert_eq "--release foreign prints noop" "noop" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "--release foreign leaves the lock file unchanged" \
+  "121200" "$lock_contents"
+lock_teardown
+
+# --- Test 13: unknown argument exits 2 ---------------------------------------
+
+echo "Test: an unknown argument exits 2"
+lock_setup
+# `set -e` is in effect: capture the exit code with an if/else.
+if ( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --bogus ) 2>/dev/null; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "unknown argument exits 2" "2" "$rc"
 lock_teardown
 
 # ============================================================================

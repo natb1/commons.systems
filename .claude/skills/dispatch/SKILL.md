@@ -27,23 +27,60 @@ resolution. Runs unconditionally, whether or not an issue-number argument was
 given.
 
 ```bash
-LOCK=$(.claude/skills/dispatch/scripts/dispatch-acquire-lock)
+LOCK=$(.claude/skills/dispatch/scripts/dispatch-acquire-lock --wait)
 ```
 
-Requires `dangerouslyDisableSandbox: true` — the script writes
-`$PROJECT_ROOT/tmp/dispatch.lock`, which is outside the sandbox write-allowlist
-(same reason `dispatch-sweep` runs that way; see `.claude/rules/sandbox.md`).
+Run this Bash call with **both** `dangerouslyDisableSandbox: true` and an
+elevated `timeout: 600000` (ms):
+
+- `dangerouslyDisableSandbox: true` — the script writes
+  `$PROJECT_ROOT/tmp/dispatch.lock`, which is outside the sandbox write-allowlist
+  (same reason `dispatch-sweep` runs that way; see `.claude/rules/sandbox.md`).
+- `timeout: 600000` — `--wait` blocks on contention until it acquires the lock
+  or `DISPATCH_LOCK_WAIT_TIMEOUT` (default 300 s) elapses, which exceeds the
+  default Bash-call timeout.
 
 Route on `$LOCK`:
 
 - **`acquired`** → this `/dispatch` holds the lock; proceed to Step 1.
-- **`busy`** → another `/dispatch` is active; report "another /dispatch is
-  running — stopping" and **stop** — run no sync, no health gate, no sweep, no
-  selection, and no phase skill.
+- **`busy`** → the wait timeout elapsed without acquiring — a wedged selection
+  in another `/dispatch`. The script's **stderr** carries a one-line diagnostic
+  naming the wait duration and the holding PID; report those and **stop** — run
+  no sync, no health gate, no sweep, no selection, and no phase skill.
 
-The lock is session-scoped and self-healing: when a tick's session ends —
-normally, by crash, or by kill — its PID dies and the next invocation detects
-the stale record and proceeds. A crashed tick never wedges the queue. Same-session
+### Releasing the lock
+
+The lock covers **Steps 0-4 only** — target selection and worktree resolution.
+Steps 5-7 (the phase skill and the pre-implementation relevance review) run with
+the lock **released**.
+
+Release the lock by running:
+
+```bash
+.claude/skills/dispatch/scripts/dispatch-acquire-lock --release
+```
+
+This needs `dangerouslyDisableSandbox: true` (same reason as Step 0); no
+elevated timeout is needed — `--release` returns immediately. It prints
+`released` or `noop`; both are fine — it is a no-op when the lock is already
+released or held by another session, so the skill does not branch on its output.
+
+Release happens at exactly two kinds of point:
+
+- **Proceed path** — as the final action of Step 4, after the
+  `tmp/dispatch-worktree` marker is written, before Step 5.
+- **Every Step 1-4 stop path** — immediately before reporting the stop reason
+  and stopping.
+
+Releasing after Step 4 is safe because the session then owns a worktree (or has
+stopped), and the selection scan skips worktree'd targets — no other tick can
+select the same issue. Later steps cross-reference *Releasing the lock* rather
+than repeating this command.
+
+The lock is scoped to selection and self-healing. The recorded PID is
+session-keyed: if a tick dies before its explicit release, the next tick detects
+the stale record and proceeds, and a `--wait` waiter re-checks holder liveness
+every poll, so it reclaims a dead holder's lock automatically. Same-session
 re-entry (e.g. after a context clear that re-invokes `/dispatch`) re-acquires
 cleanly because the recorded PID matches the re-entering session's own PID.
 
@@ -59,8 +96,9 @@ merge and push are no-ops when local main already equals `origin/main`.
 
 - If the working tree is dirty, stash before invoking — `/commit-merge-push` would
   otherwise commit pending changes directly to `main`.
-- If `/commit-merge-push` reports a merge conflict or push rejection, **stop** and
-  surface the error — do not proceed to target selection.
+- If `/commit-merge-push` reports a merge conflict or push rejection, release the
+  lock (see *Releasing the lock*), then **stop** and surface the error — do not
+  proceed to target selection.
 
 ## 2. Select the Target
 
@@ -119,9 +157,10 @@ merge and push are no-ops when local main already equals `origin/main`.
   - `worktree <N> <branch>` — run from inside an issue worktree; target is `<N>`,
     queue scan already skipped
   - `worktree-closed <N> <branch>` — run from inside a worktree whose issue is
-    closed or unrecognized → report that the current worktree belongs to
-    closed/unrecognized issue `<N>` and **stop** (consistent with the named-target
-    "closed → report and stop" rule in Step 3)
+    closed or unrecognized → release the lock (see *Releasing the lock*), then
+    report that the current worktree belongs to closed/unrecognized issue `<N>`
+    and **stop** (consistent with the named-target "closed → report and stop"
+    rule in Step 3)
   - `empty` — nothing eligible
   - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check. The
     pre-sweep gate above normally catches this first; this is the same gate
@@ -144,7 +183,8 @@ merge and push are no-ops when local main already equals `origin/main`.
   falls through to the next tier. The tier emits the resolved startable leaf, so
   a queue-selected `issue <num>` is always a directly-startable target.
 
-  On `empty` → report that the queue is empty and **stop**.
+  On `empty` → release the lock (see *Releasing the lock*), then report that
+  the queue is empty and **stop**.
 
   **main-broken handler.** `origin/main` itself is red, so no new work is safe
   to start. Do **not** run the sweep, create a worktree, branch, or phase skill.
@@ -153,9 +193,11 @@ merge and push are no-ops when local main already equals `origin/main`.
   `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`. For a failing workflow
   run, fetch its logs with `gh run view <databaseId> --log-failed`; for a failing
   CodeQL check-run (which has no workflow-run id), open its `details_url` from
-  the check-runs response. Summarize the likely cause, report it, and **stop**.
-  Once a PR that fixes main exists the normal ladder picks it up (verify/ready)
-  — this gate only blocks starting new, unrelated work.
+  the check-runs response. These diagnostic `gh` calls run before the stop —
+  keep them. Then, as the action immediately before the final report, release
+  the lock (see *Releasing the lock*); summarize the likely cause, report it,
+  and **stop**. Once a PR that fixes main exists the normal ladder picks it up
+  (verify/ready) — this gate only blocks starting new, unrelated work.
 
 ## 3. Trace to an Open Leaf
 
@@ -189,7 +231,8 @@ Skip leaf tracing when:
   is the already-committed unit of work; retargeting to a sub-issue or blocker
   would be wrong.
 
-If a named target issue is **closed**, report it and **stop**.
+If a named target issue is **closed**, release the lock (see *Releasing the
+lock*), then report it and **stop**.
 
 ## 4. Resolve the Worktree
 
@@ -224,11 +267,11 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
   another session owns it. (`dispatch-select-target` resolves the `help wanted`
   tier to a leaf with no worktree, so for a queue selection this arises only from
   a race — another session created the worktree between selection and worktree
-  resolution.) Report the conflict (name `<path>` and issue `<N>`) and **stop**;
-  do not `EnterWorktree`.
+  resolution.) Release the lock (see *Releasing the lock*), then report the
+  conflict (name `<path>` and issue `<N>`) and **stop**; do not `EnterWorktree`.
 
-As the **last action of this step on every non-`conflict` path** — before any
-phase skill runs — create the recovery marker:
+On every non-`conflict` path, before any phase skill runs, create the recovery
+marker:
 
 ```bash
 mkdir -p tmp && touch tmp/dispatch-worktree
@@ -239,6 +282,10 @@ recovery on this marker — when present, it re-invokes `/dispatch` so the phase
 re-derived from PR/CI ground truth. The marker is an empty boolean flag with no
 payload; it persists for the worktree's life and needs no cleanup — `tmp/` is
 git-ignored, and removing the worktree removes it.
+
+As the **final action of this step on every non-`conflict` (proceed) path** —
+after the marker is written, before Step 5 — release the lock (see *Releasing
+the lock*). The phase skill in Step 5 onward runs lock-free.
 
 ## 5. Derive the Phase
 
