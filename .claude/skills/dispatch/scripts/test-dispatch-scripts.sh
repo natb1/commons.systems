@@ -48,11 +48,13 @@ setup() {
   # Copy the scripts under test into the tmp dir so they can call each other
   # via SCRIPT_DIR resolution without relying on the real filesystem PATH.
   cp "$SCRIPT_DIR/dispatch-phase" "$TMPDIR_TEST/dispatch-phase"
+  cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
+           "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
@@ -70,6 +72,15 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
   "pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels")
+    echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
+    if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
+      cat "$STUB_DIR/pr-list-full.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  "pr list --state open --json number,headRefName")
+    # dispatch-find-pr self-fetch: only the two correlation fields.
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
       cat "$STUB_DIR/pr-list-full.json"
@@ -437,6 +448,58 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 ENV_LIST='['"$(make_pr 42 "42-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
 result=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "DISPATCH_PR_LIST used over self-fetch → verify" "verify" "$result"
+teardown
+
+# ============================================================================
+# dispatch-find-pr tests
+# ============================================================================
+echo ""
+echo "=== dispatch-find-pr ==="
+
+# 1. Matching branch prefix + matching title → prints PR number.
+echo "Test: matching branch prefix + matching title → PR number"
+setup
+printf '[{"number":42,"headRefName":"42-my-feature","title":"feature: 42 something"}]\n' \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "42")
+assert_eq "matching branch prefix + matching title → PR number" "42" "$result"
+teardown
+
+# 2. Matching branch prefix + non-matching title → still prints PR number (the #670 case).
+# The script never reads title — that's the point; this is the regression case from #673.
+echo "Test: matching branch prefix + non-matching title → PR number (#670 case)"
+setup
+printf '[{"number":670,"headRefName":"669-budget-sankey","title":"budget: use schemeTableau10 in sankey chart"}]\n' \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "669")
+assert_eq "matching branch prefix, non-matching title → PR number" "670" "$result"
+teardown
+
+# 3. No PR → prints empty.
+echo "Test: no PR → empty"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "42")
+assert_eq "no PR → empty output" "" "$result"
+teardown
+
+# 4. DISPATCH_PR_LIST overrides self-fetch.
+# pr-list-full.json is empty: a self-fetch would yield empty. The PR lives only
+# in the env var, so a non-empty result proves the env var won.
+echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+result=$(DISPATCH_PR_LIST='[{"number":670,"headRefName":"669-x"}]' "$TMPDIR_TEST/dispatch-find-pr" "669")
+assert_eq "DISPATCH_PR_LIST used over self-fetch → PR number" "670" "$result"
+teardown
+
+# 5. Issue-prefix disambiguation: issue 6 must not match branch "60-foo".
+# The trailing "-" in the startswith match is what prevents the collision.
+echo "Test: issue 6 does not match branch 60-foo"
+setup
+printf '[{"number":10,"headRefName":"60-foo"}]\n' > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "6")
+assert_eq "issue 6 does not match branch 60-foo → empty" "" "$result"
 teardown
 
 # ============================================================================
@@ -1825,6 +1888,182 @@ else
   echo "    stderr: $err"
 fi
 sweep_teardown
+
+# ============================================================================
+# dispatch-acquire-lock tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/stub/         lock file + per-test output capture files
+#   $TMPDIR_TEST/scripts/      a copy of dispatch-acquire-lock
+#   $TMPDIR_TEST/proc/         synthetic /proc tree (comm + status files)
+#
+# DISPATCH_LOCK_FILE and DISPATCH_LOCK_PROC_ROOT are exported so the script
+# never touches the real shared lock. Tests 1-6 set DISPATCH_LOCK_SESSION_PID
+# to bypass the /proc ancestry walk; Test 7 leaves it unset to exercise the
+# walk through a synthetic /proc tree.
+
+lock_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$STUB_DIR" "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/proc"
+
+  cp "$SCRIPT_DIR/dispatch-acquire-lock" "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
+
+  export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
+  export DISPATCH_LOCK_PROC_ROOT="$TMPDIR_TEST/proc"
+}
+
+lock_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  STUB_DIR=""
+  unset DISPATCH_LOCK_FILE DISPATCH_LOCK_SESSION_PID DISPATCH_LOCK_PROC_ROOT
+}
+
+# Helper: write a synthetic <proc>/<pid>/comm file with the given comm string.
+lock_proc_pid() {
+  local pid="$1" comm="$2"
+  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
+  printf '%s\n' "$comm" > "$DISPATCH_LOCK_PROC_ROOT/$pid/comm"
+}
+
+# Helper: write a synthetic <proc>/<pid>/status file recording <ppid> as the
+# parent — the PPid line is all the ancestry walk reads from it.
+lock_proc_status() {
+  local pid="$1" ppid="$2"
+  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
+  printf 'Name:\tbash\nPPid:\t%s\n' "$ppid" > "$DISPATCH_LOCK_PROC_ROOT/$pid/status"
+}
+
+# --- Test 1: first acquisition with an absent lock file ----------------------
+
+echo "Test: first acquisition writes the session PID and prints acquired"
+lock_setup
+export DISPATCH_LOCK_SESSION_PID=100100
+lock_proc_pid 100100 ".claude-unwrapp"
+# The lock file does not exist yet.
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "first-acquisition exits 0" "0" "$rc"
+assert_eq "first-acquisition prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "lock file records the session PID" "100100" "$lock_contents"
+lock_teardown
+
+# --- Test 2: two parallel invocations, distinct sessions ---------------------
+
+echo "Test: two parallel invocations yield exactly one acquired, one busy"
+lock_setup
+# Both sessions are live .claude processes.
+lock_proc_pid 200200 ".claude-unwrapp"
+lock_proc_pid 200300 ".claude-unwrapp"
+# Launch both in the background, each with its own session PID, sharing the
+# one lock file + proc root. The blocking flock serializes them.
+( export DISPATCH_LOCK_SESSION_PID=200200
+  "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) >"$STUB_DIR/out-a" 2>&1 &
+( export DISPATCH_LOCK_SESSION_PID=200300
+  "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) >"$STUB_DIR/out-b" 2>&1 &
+wait
+out_a=$(cat "$STUB_DIR/out-a" 2>/dev/null || true)
+out_b=$(cat "$STUB_DIR/out-b" 2>/dev/null || true)
+sorted=$(printf '%s\n%s\n' "$out_a" "$out_b" | sort)
+assert_eq "parallel invocations: exactly one acquired, one busy" \
+  "$(printf 'acquired\nbusy')" "$sorted"
+lock_teardown
+
+# --- Test 3: stale lock — recorded PID is dead -------------------------------
+
+echo "Test: stale lock with a dead recorded PID is reclaimed"
+lock_setup
+# Pre-write a recorded PID with no /proc entry — a dead process.
+printf '%s\n' 300300 > "$DISPATCH_LOCK_FILE"
+export DISPATCH_LOCK_SESSION_PID=300400
+lock_proc_pid 300400 ".claude-unwrapp"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "stale-dead-PID exits 0" "0" "$rc"
+assert_eq "stale-dead-PID prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "stale-dead-PID lock file rewritten to new session PID" \
+  "300400" "$lock_contents"
+lock_teardown
+
+# --- Test 4: stale lock — recorded PID recycled by a non-.claude process -----
+
+echo "Test: stale lock with a recycled non-.claude PID is reclaimed"
+lock_setup
+printf '%s\n' 400400 > "$DISPATCH_LOCK_FILE"
+# The recorded PID is alive but is NOT a .claude process — PID recycled.
+lock_proc_pid 400400 "bash"
+export DISPATCH_LOCK_SESSION_PID=400500
+lock_proc_pid 400500 ".claude-unwrapp"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "recycled-PID exits 0" "0" "$rc"
+assert_eq "recycled-PID prints acquired" "acquired" "$out"
+lock_teardown
+
+# --- Test 5: same-session re-entry -------------------------------------------
+
+echo "Test: same-session re-entry proceeds (not busy)"
+lock_setup
+# The recorded PID is a live .claude process AND is our own session.
+printf '%s\n' 500500 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 500500 ".claude-unwrapp"
+export DISPATCH_LOCK_SESSION_PID=500500
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "re-entry exits 0" "0" "$rc"
+assert_eq "re-entry prints acquired" "acquired" "$out"
+lock_teardown
+
+# --- Test 6: misconfiguration — non-git dir, no DISPATCH_LOCK_FILE -----------
+
+echo "Test: non-git dir with no DISPATCH_LOCK_FILE exits 2"
+lock_setup
+nongit=$(mktemp -d)
+# `set -e` is in effect: capture the exit code with an if/else. env -u strips
+# the lock-file + proc-root overrides for just this invocation.
+if ( cd "$nongit" && env -u DISPATCH_LOCK_FILE -u DISPATCH_LOCK_PROC_ROOT \
+       "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) 2>"$STUB_DIR/err6"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "misconfiguration exits 2" "2" "$rc"
+err6=$(cat "$STUB_DIR/err6" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -n "$err6" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: misconfiguration writes an error to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: misconfiguration writes an error to stderr"
+  echo "    stderr: '$err6'"
+fi
+rm -rf "$nongit"
+lock_teardown
+
+# --- Test 7: /proc ancestry walk resolves the nearest .claude ancestor -------
+#
+# The only lock test that exercises the /proc walk — DISPATCH_LOCK_SESSION_PID
+# is left unset. `( exec ... )` forks a subshell that exec-replaces itself with
+# the script, so the script's $PPID is this test process ($$). Synthetic
+# ancestry: $$ is a non-.claude shell whose PPid points at a .claude session,
+# so the walk must climb one level past $$ to reach the session PID.
+
+echo "Test: /proc ancestry walk resolves the nearest .claude ancestor"
+lock_setup
+claude_pid=700700
+lock_proc_pid "$$" "bash"                  # script's $PPID — not a .claude proc
+lock_proc_status "$$" "$claude_pid"        # ... its parent is the .claude session
+lock_proc_pid "$claude_pid" ".claude-unwrapp"
+rc=0
+( exec "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) \
+  >"$STUB_DIR/out7" 2>/dev/null || rc=$?
+out=$(cat "$STUB_DIR/out7" 2>/dev/null || true)
+assert_eq "proc-walk exits 0" "0" "$rc"
+assert_eq "proc-walk prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "proc-walk records the .claude ancestor PID, not \$PPID" \
+  "$claude_pid" "$lock_contents"
+lock_teardown
 
 # ============================================================================
 # summary
