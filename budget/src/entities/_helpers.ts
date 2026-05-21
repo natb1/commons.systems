@@ -120,6 +120,13 @@ export function requireEnum<T extends string>(
   return value as T;
 }
 
+export function requireStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.some((x: unknown) => typeof x !== "string")) {
+    throw new DataIntegrityError(`Expected string[] for ${field}`);
+  }
+  return value as string[];
+}
+
 // ── Upload-side validators (throw UploadValidationError) ──────────────────────
 
 export function requireUploadId(value: unknown, entity: string, index: number): string {
