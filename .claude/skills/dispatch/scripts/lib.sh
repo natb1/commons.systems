@@ -396,6 +396,67 @@ kill_worktree_processes() {
   done <<< "$pids"
 }
 
+# Emit one tab-separated `<issue-number>\t<path>\t<branch>` record.
+# Args: $1 = worktree path, $2 = branch name (empty for detached-HEAD/bare).
+# A blank path is a no-op — nothing has been collected yet.
+_emit_worktree_record() {
+  local wt_path="$1" branch="$2" num=""
+  [ -z "$wt_path" ] && return 0
+  if [[ "$branch" =~ ^([1-9][0-9]*)- ]]; then
+    num="${BASH_REMATCH[1]}"
+  fi
+  printf '%s\t%s\t%s\n' "$num" "$wt_path" "$branch"
+}
+
+# Parse `git worktree list --porcelain` into tab-separated records.
+# Emits one `<issue-number>\t<path>\t<branch>` line per registered worktree —
+# including detached-HEAD, bare, and non-issue worktrees:
+#   <issue-number> — leading-digits prefix of the branch (^[1-9][0-9]*-);
+#                    empty when the branch has no such prefix or there is no
+#                    branch line.
+#   <path>         — always present.
+#   <branch>       — branch name with refs/heads/ stripped; empty for
+#                    detached-HEAD / bare worktrees (no `branch` line).
+# Callers that want only issue worktrees skip empty-<issue-number> records.
+list_worktree_records() {
+  local porcelain
+  porcelain=$(git worktree list --porcelain) || {
+    echo "error: git worktree list --porcelain failed" >&2
+    return 1
+  }
+
+  local line wt_path="" branch=""
+  while IFS= read -r line; do
+    if [ -z "$line" ]; then
+      # A blank line closes the current record.
+      _emit_worktree_record "$wt_path" "$branch"
+      wt_path=""
+      branch=""
+    elif [[ "$line" == worktree\ * ]]; then
+      wt_path="${line#worktree }"
+    elif [[ "$line" == branch\ * ]]; then
+      branch="${line#branch }"
+      branch="${branch#refs/heads/}"
+    fi
+  done <<< "$porcelain"
+  # Flush the final record: command substitution strips the porcelain stream's
+  # trailing blank line, so the last record reaches EOF with no closing blank.
+  _emit_worktree_record "$wt_path" "$branch"
+}
+
+# Split one list_worktree_records line into the globals WT_NUM / WT_PATH /
+# WT_BRANCH. Uses parameter expansion, not `IFS=$'\t' read`: tab is an IFS
+# whitespace character, so `read` would trim the empty leading issue-number
+# field of a non-issue / detached / bare record and shift every field left.
+# Parameter expansion preserves empty fields exactly.
+split_worktree_record() {
+  local line="$1"
+  WT_NUM="${line%%$'\t'*}"
+  local rest="${line#*$'\t'}"
+  WT_PATH="${rest%%$'\t'*}"
+  WT_BRANCH="${rest#*$'\t'}"
+}
+
 # Kill processes belonging to worktrees that no longer exist.
 # Scopes the search to this repo's worktree directory (derived from git
 # common dir) to avoid killing processes from unrelated repositories.
@@ -412,16 +473,15 @@ cleanup_stale_worktree_processes() {
   # Prune stale admin entries so the list below reflects on-disk worktrees only.
   git worktree prune 2>/dev/null || true
 
-  # Build set of active worktree paths
+  # Build set of active worktree paths — the <path> field of every registered
+  # worktree record, issue-prefixed or not.
   local active_paths=""
   local line
   while IFS= read -r line; do
-    case "$line" in
-      worktree\ *)
-        active_paths+="${line#worktree } "
-        ;;
-    esac
-  done < <(git worktree list --porcelain 2>/dev/null)
+    split_worktree_record "$line"
+    [ -z "$WT_PATH" ] && continue
+    active_paths+="$WT_PATH "
+  done < <(list_worktree_records)
 
   if [ -z "$active_paths" ]; then
     echo "WARNING: git worktree list returned no entries; skipping stale cleanup" >&2
