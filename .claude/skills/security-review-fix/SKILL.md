@@ -60,12 +60,13 @@ steps in order.
    ```
 
    `<pr-num>` is the PR number resolved in the idempotency preamble. `--paginate`
-   covers repos with many alerts; `state=open` filters to open alerts; the `ref`
-   filter scopes to the PR — this includes pre-existing alerts in code the PR did
-   not change. Capture per alert: the alert `number`, `rule.id`,
-   `rule.security_severity_level`, `most_recent_instance.location` (path and
-   lines), and `html_url`. An empty array means no CodeQL findings — proceed with
-   the `/security-review` findings alone; it is not an error.
+   covers repos with many alerts; the `ref` filter scopes to the PR — this
+   includes pre-existing alerts in code the PR did not change. Capture per alert:
+   the alert `number`, `rule.id`, `rule.severity` (`note`/`warning`/`error` —
+   always present), `rule.security_severity_level` (`low`/`medium`/`high`/
+   `critical`, null for non-security rules), `most_recent_instance.location`
+   (path and lines), and `html_url`. An empty array means no CodeQL findings —
+   proceed with the `/security-review` findings alone; it is not an error.
 
    Combine both sources into one finding set for Step 3.
 
