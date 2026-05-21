@@ -1751,6 +1751,148 @@ fi
 sweep_teardown
 
 # ============================================================================
+# dispatch-acquire-lock tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/stub/         lock file + per-test output capture files
+#   $TMPDIR_TEST/scripts/      a copy of dispatch-acquire-lock
+#   $TMPDIR_TEST/proc/         synthetic /proc tree (comm files only)
+#
+# DISPATCH_LOCK_FILE and DISPATCH_LOCK_PROC_ROOT are exported so the script
+# never touches the real shared lock. DISPATCH_LOCK_SESSION_PID is set per
+# invocation so the /proc ancestry walk is never exercised.
+
+lock_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$STUB_DIR" "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/proc"
+
+  cp "$SCRIPT_DIR/dispatch-acquire-lock" "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
+
+  export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
+  export DISPATCH_LOCK_PROC_ROOT="$TMPDIR_TEST/proc"
+}
+
+lock_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  STUB_DIR=""
+  unset DISPATCH_LOCK_FILE DISPATCH_LOCK_SESSION_PID DISPATCH_LOCK_PROC_ROOT
+}
+
+# Helper: write a synthetic <proc>/<pid>/comm file with the given comm string.
+lock_proc_pid() {
+  local pid="$1" comm="$2"
+  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
+  printf '%s\n' "$comm" > "$DISPATCH_LOCK_PROC_ROOT/$pid/comm"
+}
+
+# --- Test 1: first acquisition with an absent lock file ----------------------
+
+echo "Test: first acquisition writes the session PID and prints acquired"
+lock_setup
+export DISPATCH_LOCK_SESSION_PID=100100
+lock_proc_pid 100100 ".claude-unwrapp"
+# The lock file does not exist yet.
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "first-acquisition exits 0" "0" "$rc"
+assert_eq "first-acquisition prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "lock file records the session PID" "100100" "$lock_contents"
+lock_teardown
+
+# --- Test 2: two parallel invocations, distinct sessions ---------------------
+
+echo "Test: two parallel invocations yield exactly one acquired, one busy"
+lock_setup
+# Both sessions are live .claude processes.
+lock_proc_pid 200200 ".claude-unwrapp"
+lock_proc_pid 200300 ".claude-unwrapp"
+# Launch both in the background, each with its own session PID, sharing the
+# one lock file + proc root. The blocking flock serializes them.
+( export DISPATCH_LOCK_SESSION_PID=200200
+  "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) >"$STUB_DIR/out-a" 2>&1 &
+( export DISPATCH_LOCK_SESSION_PID=200300
+  "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) >"$STUB_DIR/out-b" 2>&1 &
+wait
+out_a=$(cat "$STUB_DIR/out-a" 2>/dev/null || true)
+out_b=$(cat "$STUB_DIR/out-b" 2>/dev/null || true)
+sorted=$(printf '%s\n%s\n' "$out_a" "$out_b" | sort)
+assert_eq "parallel invocations: exactly one acquired, one busy" \
+  "$(printf 'acquired\nbusy')" "$sorted"
+lock_teardown
+
+# --- Test 3: stale lock — recorded PID is dead -------------------------------
+
+echo "Test: stale lock with a dead recorded PID is reclaimed"
+lock_setup
+# Pre-write a recorded PID with no /proc entry — a dead process.
+printf '%s\n' 300300 > "$DISPATCH_LOCK_FILE"
+export DISPATCH_LOCK_SESSION_PID=300400
+lock_proc_pid 300400 ".claude-unwrapp"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "stale-dead-PID exits 0" "0" "$rc"
+assert_eq "stale-dead-PID prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "stale-dead-PID lock file rewritten to new session PID" \
+  "300400" "$lock_contents"
+lock_teardown
+
+# --- Test 4: stale lock — recorded PID recycled by a non-.claude process -----
+
+echo "Test: stale lock with a recycled non-.claude PID is reclaimed"
+lock_setup
+printf '%s\n' 400400 > "$DISPATCH_LOCK_FILE"
+# The recorded PID is alive but is NOT a .claude process — PID recycled.
+lock_proc_pid 400400 "bash"
+export DISPATCH_LOCK_SESSION_PID=400500
+lock_proc_pid 400500 ".claude-unwrapp"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "recycled-PID exits 0" "0" "$rc"
+assert_eq "recycled-PID prints acquired" "acquired" "$out"
+lock_teardown
+
+# --- Test 5: same-session re-entry -------------------------------------------
+
+echo "Test: same-session re-entry proceeds (not busy)"
+lock_setup
+# The recorded PID is a live .claude process AND is our own session.
+printf '%s\n' 500500 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 500500 ".claude-unwrapp"
+export DISPATCH_LOCK_SESSION_PID=500500
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "re-entry exits 0" "0" "$rc"
+assert_eq "re-entry prints acquired" "acquired" "$out"
+lock_teardown
+
+# --- Test 6: misconfiguration — non-git dir, no DISPATCH_LOCK_FILE -----------
+
+echo "Test: non-git dir with no DISPATCH_LOCK_FILE exits 2"
+lock_setup
+nongit=$(mktemp -d)
+# `set -e` is in effect: capture the exit code with an if/else. env -u strips
+# the lock-file + proc-root overrides for just this invocation.
+if ( cd "$nongit" && env -u DISPATCH_LOCK_FILE -u DISPATCH_LOCK_PROC_ROOT \
+       "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) 2>"$STUB_DIR/err6"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "misconfiguration exits 2" "2" "$rc"
+err6=$(cat "$STUB_DIR/err6" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -n "$err6" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: misconfiguration writes an error to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: misconfiguration writes an error to stderr"
+  echo "    stderr: '$err6'"
+fi
+rm -rf "$nongit"
+lock_teardown
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results

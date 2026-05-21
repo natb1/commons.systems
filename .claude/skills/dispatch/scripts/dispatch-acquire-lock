@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# dispatch-acquire-lock — acquire the process-level /dispatch lock once per tick.
+#
+# /dispatch mutates shared state (fetches origin/main, creates/removes
+# worktrees, flips gh labels and PR draft status). Its per-target guards assume
+# serial execution within a tick; two concurrent invocations can race. This
+# script serializes them with a PID-stamped lock file.
+#
+# An fd-based `flock` cannot serialize /dispatch: the skill runs as many
+# separate Bash tool calls, each a fresh shell, so an fd flock would release
+# the instant its Bash call exits. The lock therefore keys on the Claude
+# *session* process — the nearest ancestor whose comm starts with ".claude" —
+# whose lifetime spans the whole tick. The recorded PID is the lock holder;
+# release is implicit and self-healing: when the session dies its PID stops
+# being a live ".claude" process, and the next tick reclaims the lock.
+#
+# Usage:
+#   dispatch-acquire-lock        — print "acquired" or "busy" on stdout.
+#
+# Environment overrides for testability:
+#   DISPATCH_LOCK_FILE        Override the lock-file path. When set, the script
+#                             does NOT require a git repo. Default:
+#                             <project-root>/tmp/dispatch.lock.
+#   DISPATCH_LOCK_SESSION_PID Override the session PID, skipping the /proc
+#                             ancestry walk. Tests always set this.
+#   DISPATCH_LOCK_PROC_ROOT   Root of the /proc walk + liveness check.
+#                             Default: /proc.
+#
+# Stdout protocol (exactly one word):
+#   acquired  this /dispatch holds the lock — proceed with the tick.
+#   busy      another /dispatch is running — stop cleanly, no side effects.
+#
+# Exit codes:
+#   0  acquired or busy (both are normal outcomes; stdout disambiguates).
+#   2  misconfiguration — not in a git repo and DISPATCH_LOCK_FILE is unset.
+#
+# NOT set -e: exits are handled explicitly (matching the sibling dispatch-sweep).
+set -uo pipefail
+
+PROC_ROOT="${DISPATCH_LOCK_PROC_ROOT:-/proc}"
+
+# is_live_claude <pid> — true if <proc-root>/<pid>/comm exists and starts with
+# ".claude" (the comm field is already a basename, e.g. ".claude-unwrapp" on
+# NixOS, so a prefix test is enough).
+is_live_claude() {
+  local pid="$1" comm_file comm
+  comm_file="$PROC_ROOT/$pid/comm"
+  [[ -r "$comm_file" ]] || return 1
+  IFS= read -r comm <"$comm_file" 2>/dev/null || return 1
+  [[ "$comm" == .claude* ]]
+}
+
+# ---- Step 1: resolve the lock file ------------------------------------------
+# An explicit DISPATCH_LOCK_FILE is authoritative and bypasses the git lookup —
+# tests rely on this. Otherwise the lock lives at the shared project-root tmp/
+# (not a per-worktree tmp/) so concurrent ticks in different worktrees contend
+# on the same file. The parent of --git-common-dir is the project root in both
+# classic (.git) and bare (.bare) layouts, same idiom as dispatch-sweep.
+if [[ -n "${DISPATCH_LOCK_FILE:-}" ]]; then
+  LOCK_FILE="$DISPATCH_LOCK_FILE"
+else
+  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+    || { echo "ERROR: not in a git repo and DISPATCH_LOCK_FILE is unset" >&2; exit 2; }
+  PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
+  LOCK_FILE="$PROJECT_ROOT/tmp/dispatch.lock"
+fi
+
+# ---- Step 2: identify the session PID ---------------------------------------
+# An explicit DISPATCH_LOCK_SESSION_PID is authoritative and skips the walk.
+# Otherwise walk own process ancestry: from $PPID upward, the first ancestor
+# whose comm starts with ".claude" is the Claude session process.
+if [[ -n "${DISPATCH_LOCK_SESSION_PID:-}" ]]; then
+  SESSION_PID="$DISPATCH_LOCK_SESSION_PID"
+else
+  SESSION_PID=""
+  pid="$PPID"
+  while [[ "$pid" -gt 1 ]]; do
+    comm_file="$PROC_ROOT/$pid/comm"
+    if [[ -r "$comm_file" ]]; then
+      comm=""
+      IFS= read -r comm <"$comm_file" 2>/dev/null || comm=""
+      if [[ "$comm" == .claude* ]]; then
+        SESSION_PID="$pid"
+        break
+      fi
+    fi
+    # Next pid = the PPid line in <proc-root>/<pid>/status.
+    status_file="$PROC_ROOT/$pid/status"
+    [[ -r "$status_file" ]] || break
+    ppid=""
+    while IFS= read -r line; do
+      if [[ "$line" == PPid:* ]]; then
+        # shellcheck disable=SC2086 # intentional word-split to grab field 2
+        set -- $line
+        ppid="${2:-}"
+        break
+      fi
+    done <"$status_file"
+    [[ "$ppid" =~ ^[0-9]+$ ]] || break
+    pid="$ppid"
+  done
+  # Fallback: no .claude ancestor found (reached pid 1 or hit an unreadable
+  # pid). $PPID is a defensible substitute — the recorded PID only needs to be
+  # a stable identifier for this session. In practice the .claude ancestor is
+  # always found, and tests always set DISPATCH_LOCK_SESSION_PID, so this walk
+  # (and this fallback) is not exercised by tests.
+  [[ -n "$SESSION_PID" ]] || SESSION_PID="$PPID"
+fi
+
+# ---- Step 3: lock + atomic read-check-write ---------------------------------
+# Open the lock file append-mode (>>) so opening does not truncate a recorded
+# PID, then take a BLOCKING flock — a short mutex making the read-check-write
+# below atomic within this single script run. (This is a correct use of flock:
+# the fd lives only for this script's lifetime, which is all the mutex needs.)
+mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || true
+exec {lockfd}>>"$LOCK_FILE"
+flock "$lockfd"
+
+# ---- Step 4: read the recorded PID ------------------------------------------
+# First line of the lock file; may be empty or absent — read defensively.
+recorded=""
+[[ -f "$LOCK_FILE" ]] && IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
+
+# ---- Step 5: decide ---------------------------------------------------------
+# Busy iff a different PID is recorded AND it is still a live .claude process.
+# Otherwise — no record, a stale record (dead PID, or a PID recycled by a
+# non-.claude process), or our own session re-entering — we claim the lock.
+if [[ -n "$recorded" && "$recorded" != "$SESSION_PID" ]] && is_live_claude "$recorded"; then
+  echo "busy"
+  exit 0
+fi
+
+printf '%s\n' "$SESSION_PID" >"$LOCK_FILE"
+echo "acquired"
+exit 0
