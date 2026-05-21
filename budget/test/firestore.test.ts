@@ -9,6 +9,15 @@ const mockUpdateDoc = vi.fn();
 const mockIncrement = vi.fn((n: number) => ({ _increment: n }));
 const mockDeleteDoc = vi.fn();
 const mockGetDoc = vi.fn();
+const mockSetDoc = vi.fn();
+const mockBatchSet = vi.fn();
+const mockBatchUpdate = vi.fn();
+const mockBatchCommit = vi.fn();
+const mockWriteBatch = vi.fn(() => ({
+  set: (...args: unknown[]) => mockBatchSet(...args),
+  update: (...args: unknown[]) => mockBatchUpdate(...args),
+  commit: (...args: unknown[]) => mockBatchCommit(...args),
+}));
 
 vi.mock("firebase/firestore", () => ({
   collection: (...args: unknown[]) => mockCollection(...args),
@@ -19,6 +28,8 @@ vi.mock("firebase/firestore", () => ({
   doc: (...args: unknown[]) => mockDoc(...args),
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
   deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
+  setDoc: (...args: unknown[]) => mockSetDoc(...args),
+  writeBatch: (...args: unknown[]) => mockWriteBatch(...args),
   increment: (n: number) => mockIncrement(n),
   Timestamp: class Timestamp {
     _date: Date;
@@ -35,7 +46,7 @@ vi.mock("../src/firebase.js", () => ({
 }));
 
 import { Timestamp } from "firebase/firestore";
-import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, adjustBudgetPeriodTotal, getBudgets, getBudgetPeriods, getGroupMembers } from "../src/firestore";
+import { getTransactions, updateTransaction, updateBudget, updateBudgetPeriod, adjustBudgetPeriodTotal, getBudgets, getBudgetPeriods, getGroupMembers, createJournalEntry, assertLegStateTransition } from "../src/firestore";
 
 describe("getTransactions", () => {
   beforeEach(() => {
@@ -996,5 +1007,111 @@ describe("getGroupMembers", () => {
       data: () => ({ members: ["valid", 123] }),
     });
     await expect(getGroupMembers("group-1")).rejects.toThrow(/non-string/);
+  });
+});
+
+describe("createJournalEntry", () => {
+  const ts = Timestamp.fromDate(new Date("2025-03-01"));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCollection.mockReturnValue("mock-collection-ref");
+    mockDoc.mockImplementation(() => ({ id: "generated-id" }));
+    mockBatchCommit.mockResolvedValue(undefined);
+  });
+
+  it("rejects unbalanced legs without writing", async () => {
+    await expect(
+      createJournalEntry(
+        "household",
+        ["user@example.com"],
+        { timestamp: ts, description: "Unbalanced" },
+        [
+          { accountId: "acct-expense", debit: 100, credit: 0 },
+          { accountId: "acct-asset", debit: 0, credit: 90 },
+        ],
+      ),
+    ).rejects.toThrow(/unbalanced/i);
+    expect(mockWriteBatch).not.toHaveBeenCalled();
+    expect(mockBatchSet).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+
+  it("rejects a leg with both a debit and a credit without writing", async () => {
+    await expect(
+      createJournalEntry(
+        "household",
+        ["user@example.com"],
+        { timestamp: ts, description: "Both sides" },
+        [
+          { accountId: "acct-expense", debit: 100, credit: 50 },
+          { accountId: "acct-asset", debit: 0, credit: 50 },
+        ],
+      ),
+    ).rejects.toThrow(/both a debit and a credit/i);
+    expect(mockWriteBatch).not.toHaveBeenCalled();
+    expect(mockBatchSet).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+
+  it("rejects fewer than two legs without writing", async () => {
+    await expect(
+      createJournalEntry(
+        "household",
+        ["user@example.com"],
+        { timestamp: ts, description: "One leg" },
+        [{ accountId: "acct-asset", debit: 0, credit: 0 }],
+      ),
+    ).rejects.toThrow(/at least 2 legs/i);
+    expect(mockWriteBatch).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+
+  it("writes a batch of one entry plus one leg per balanced leg", async () => {
+    const id = await createJournalEntry(
+      "household",
+      ["user@example.com"],
+      { timestamp: ts, description: "Groceries" },
+      [
+        { accountId: "acct-expense", debit: 100, credit: 0 },
+        { accountId: "acct-asset", debit: 0, credit: 100 },
+      ],
+    );
+    expect(id).toBe("generated-id");
+    expect(mockWriteBatch).toHaveBeenCalledTimes(1);
+    // one entry doc + two leg docs
+    expect(mockBatchSet).toHaveBeenCalledTimes(3);
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts balanced legs within cent tolerance", async () => {
+    await expect(
+      createJournalEntry(
+        "household",
+        ["user@example.com"],
+        { timestamp: ts, description: "Float drift" },
+        [
+          { accountId: "acct-expense", debit: 0.1 + 0.2, credit: 0 },
+          { accountId: "acct-asset", debit: 0, credit: 0.3 },
+        ],
+      ),
+    ).resolves.toBe("generated-id");
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("assertLegStateTransition", () => {
+  it("allows uncleared → cleared", () => {
+    expect(() => assertLegStateTransition({ cleared: false, reconciledAt: null }, true)).not.toThrow();
+  });
+
+  it("allows cleared → uncleared", () => {
+    expect(() => assertLegStateTransition({ cleared: true, reconciledAt: null }, false)).not.toThrow();
+  });
+
+  it("rejects clearing a reconciled leg (reconciled is terminal)", () => {
+    const reconciledAt = Timestamp.fromDate(new Date("2025-03-15"));
+    expect(() => assertLegStateTransition({ cleared: true, reconciledAt }, true)).toThrow(/reconciled/i);
+    expect(() => assertLegStateTransition({ cleared: true, reconciledAt }, false)).toThrow(/reconciled/i);
   });
 });
