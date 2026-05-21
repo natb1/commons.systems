@@ -54,6 +54,10 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
+  # dispatch-trace-leaf and dispatch-resolve-worktree `source` lib.sh via their
+  # SCRIPT_DIR, which resolves to TMPDIR_TEST for these copies — so lib.sh must
+  # sit alongside them. It is sourced, not executed, so it needs no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
@@ -1755,6 +1759,115 @@ assert_eq "empty-slug title exits non-zero" "1" "$rc"
 teardown
 
 # ============================================================================
+# list_worktree_records (lib.sh) tests
+# ============================================================================
+echo ""
+echo "=== list_worktree_records ==="
+
+# list_worktree_records emits one tab-separated <issue-number>\t<path>\t<branch>
+# line per registered worktree. Each test sources the lib.sh copy and runs the
+# function in a subshell; the git stub serves the porcelain fixture written to
+# worktree-list.txt.
+
+# 1. Normal worktrees with issue-prefixed branches → issue-number populated.
+echo "Test: issue-prefixed branches → number populated"
+setup
+printf 'worktree /worktrees/42-my-feature\nHEAD def456\nbranch refs/heads/42-my-feature\n\nworktree /worktrees/100-another\nHEAD ghi789\nbranch refs/heads/100-another\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$( source "$TMPDIR_TEST/lib.sh"; list_worktree_records )
+expected=$(printf '42\t/worktrees/42-my-feature\t42-my-feature\n100\t/worktrees/100-another\t100-another')
+assert_eq "issue-prefixed branches → records with number" "$expected" "$result"
+teardown
+
+# 2. A worktree with no branch line (detached HEAD) → empty number and branch.
+#    This is the case cleanup_stale_worktree_processes depends on.
+echo "Test: no branch line → empty number and branch"
+setup
+printf 'worktree /worktrees/detached\nHEAD abc123\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$( source "$TMPDIR_TEST/lib.sh"; list_worktree_records )
+expected=$(printf '\t/worktrees/detached\t')
+assert_eq "detached HEAD → empty number, empty branch" "$expected" "$result"
+teardown
+
+# 3. A non-issue branch name (main) → empty number, branch populated.
+echo "Test: non-issue branch → empty number, branch populated"
+setup
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$( source "$TMPDIR_TEST/lib.sh"; list_worktree_records )
+expected=$(printf '\t/repo\tmain')
+assert_eq "non-issue branch → empty number, branch kept" "$expected" "$result"
+teardown
+
+# 4. Mixed fixture (non-issue + bare + issue-prefixed + detached + non-issue) →
+#    every record emitted in git worktree list input order.
+echo "Test: mixed fixture → all records in input order"
+setup
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /repo/.bare\nbare\n\nworktree /worktrees/42-my-feature\nHEAD def456\nbranch refs/heads/42-my-feature\n\nworktree /worktrees/detached\nHEAD aaa111\n\nworktree /worktrees/feature-x\nHEAD bbb222\nbranch refs/heads/feature-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$( source "$TMPDIR_TEST/lib.sh"; list_worktree_records )
+expected=$(printf '\t/repo\tmain\n\t/repo/.bare\t\n42\t/worktrees/42-my-feature\t42-my-feature\n\t/worktrees/detached\t\n\t/worktrees/feature-x\tfeature-x')
+assert_eq "mixed fixture → all records, input order" "$expected" "$result"
+teardown
+
+# ============================================================================
+# split_worktree_record (lib.sh) tests
+# ============================================================================
+echo ""
+echo "=== split_worktree_record ==="
+
+# split_worktree_record splits one list_worktree_records line into the globals
+# WT_NUM / WT_PATH / WT_BRANCH via parameter expansion — preserving the empty
+# leading/trailing fields that `IFS=$'\t' read` would trim. The function is
+# pure (no git), so each test sources lib.sh in a subshell directly.
+
+# 1. Issue-prefixed record → all three fields populated.
+echo "Test: issue-prefixed record → all fields"
+result=$( source "$SCRIPT_DIR/lib.sh"
+          split_worktree_record $'42\t/wt/42-x\t42-x'
+          printf '%s|%s|%s' "$WT_NUM" "$WT_PATH" "$WT_BRANCH" )
+assert_eq "issue-prefixed record split" "42|/wt/42-x|42-x" "$result"
+
+# 2. Non-issue branch record (empty leading issue-number field) → WT_NUM empty,
+#    WT_PATH and WT_BRANCH intact.
+echo "Test: non-issue record → empty WT_NUM, path intact"
+result=$( source "$SCRIPT_DIR/lib.sh"
+          split_worktree_record $'\t/repo\tmain'
+          printf '%s|%s|%s' "$WT_NUM" "$WT_PATH" "$WT_BRANCH" )
+assert_eq "non-issue record split" "|/repo|main" "$result"
+
+# 3. Detached-HEAD / bare record (empty leading and trailing fields) → only
+#    WT_PATH populated.
+echo "Test: detached/bare record → only WT_PATH"
+result=$( source "$SCRIPT_DIR/lib.sh"
+          split_worktree_record $'\t/wt/detached\t'
+          printf '%s|%s|%s' "$WT_NUM" "$WT_PATH" "$WT_BRANCH" )
+assert_eq "detached/bare record split" "|/wt/detached|" "$result"
+
+# 4. Integration: mirrors cleanup_stale_worktree_processes' active-set loop.
+#    Every worktree path, including a non-issue worktree like `main`, must reach
+#    active_paths intact — split_worktree_record must not let the bare branch
+#    name `main` land there in place of the path `/repo`.
+echo "Test: non-issue worktree path reaches the active set"
+setup
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/detached\nHEAD ghi789\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$(
+  source "$TMPDIR_TEST/lib.sh"
+  active_paths=""
+  while IFS= read -r line; do
+    split_worktree_record "$line"
+    [ -z "$WT_PATH" ] && continue
+    active_paths+="$WT_PATH "
+  done < <(list_worktree_records)
+  printf '%s' "$active_paths"
+)
+assert_eq "active_paths holds every full worktree path" \
+  "/repo /worktrees/42-x /worktrees/detached " "$result"
+teardown
+
+# ============================================================================
 # dispatch-sweep tests
 # ============================================================================
 echo ""
@@ -2702,6 +2815,388 @@ assert_eq "cwd-arg: claude_sessions_under exits 0" "0" "$rc"
 assert_eq "cwd-arg: claude invoked as 'agents --json --cwd <path>'" \
   "$(printf 'agents\n--json\n--cwd\n%s' "$CA_DIR")" "$(cat "$CA_DIR/argv")"
 ca_teardown
+
+# ============================================================================
+# dispatch-config-load tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   a copy of dispatch-config-load
+#   $TMPDIR_TEST/config/    synthetic config directory (DISPATCH_CONFIG_DIR)
+#
+# DISPATCH_CONFIG_DIR is exported so the script never touches the real
+# dispatch.config/ directory and does not require a git repo.
+
+config_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/config"
+
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
+
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+}
+
+config_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_CONFIG_DIR
+}
+
+# --- Test 1: valid projects.json prints normalized JSON ----------------------
+
+echo "Test: valid projects.json prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/projects.json" <<'EOF'
+{
+  "projects": [
+    {
+      "key": "test-project",
+      "owner": "test-owner",
+      "number": 42,
+      "statusField": "Status",
+      "statusInProgress": "In Progress",
+      "statusDone": "Done"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>/dev/null); rc=$?
+assert_eq "valid projects.json exits 0" "0" "$rc"
+key=$(printf '%s' "$out" | jq -r '.projects[0].key')
+assert_eq "valid projects.json key" "test-project" "$key"
+owner=$(printf '%s' "$out" | jq -r '.projects[0].owner')
+assert_eq "valid projects.json owner" "test-owner" "$owner"
+config_teardown
+
+# --- Test 2: valid jit.json prints normalized JSON ---------------------------
+
+echo "Test: valid jit.json prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "test-chore",
+      "repo": "test-owner/test-repo",
+      "label": "jit:test-chore",
+      "title": "Test recurring chore",
+      "body": "Test chore body.",
+      "project": "test-project",
+      "remindAfterClose": "12h",
+      "dueAfterClose": "24h",
+      "debounce": "1h"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
+assert_eq "valid jit.json exits 0" "0" "$rc"
+jit_key=$(printf '%s' "$out" | jq -r '.jits[0].key')
+assert_eq "valid jit.json key" "test-chore" "$jit_key"
+jit_label=$(printf '%s' "$out" | jq -r '.jits[0].label')
+assert_eq "valid jit.json label" "jit:test-chore" "$jit_label"
+config_teardown
+
+# --- Test 3: absent file prints no-config and exits 0 ------------------------
+
+echo "Test: absent file prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>/dev/null); rc=$?
+assert_eq "absent file exits 0" "0" "$rc"
+assert_eq "absent file prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 4: invalid JSON exits 1 with an error ------------------------------
+
+echo "Test: invalid JSON exits 1 and stderr mentions the cause"
+config_setup
+printf 'not valid json {{{' > "$DISPATCH_CONFIG_DIR/projects.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>&1 1>/dev/null) || rc=$?
+assert_eq "invalid JSON exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"invalid JSON"* || "$err" == *"parse error"* || "$err" == *"Invalid"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: invalid JSON stderr mentions the cause"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: invalid JSON stderr mentions the cause"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 5: missing required field exits 1 and names the field --------------
+
+echo "Test: missing required field exits 1 and stderr names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/projects.json" <<'EOF'
+{
+  "projects": [
+    {
+      "key": "test-project",
+      "owner": "test-owner",
+      "number": 1,
+      "statusInProgress": "In Progress",
+      "statusDone": "Done"
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>&1 1>/dev/null) || rc=$?
+assert_eq "missing required field exits 1" "1" "$rc"
+if [[ "$err" == *"statusField"* ]]; then
+  assert_eq "missing-field error names the field" "yes" "yes"
+else
+  assert_eq "missing-field error names the field" "yes" "no: $err"
+fi
+config_teardown
+
+# --- Test 6: top-level array exits 1 with a clear error ----------------------
+
+echo "Test: top-level array exits 1 and stderr reports a clear error"
+config_setup
+printf '[1,2,3]' > "$DISPATCH_CONFIG_DIR/projects.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>&1 1>/dev/null) || rc=$?
+assert_eq "top-level array exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"error:"* && "$err" == *"projects.json"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: top-level array stderr has clear error: $err"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: top-level array stderr has clear error"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7: empty config file exits 1 with a clear error --------------------
+
+echo "Test: empty config file exits 1 and stderr reports a clear error"
+config_setup
+printf '' > "$DISPATCH_CONFIG_DIR/projects.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>&1 1>/dev/null) || rc=$?
+assert_eq "empty file exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"error:"* && "$err" == *"projects.json"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: empty file stderr has clear error: $err"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: empty file stderr has clear error"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# ============================================================================
+# dispatch project-helper tests (item-add / status-read / status-write)
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copies of the loader + the three project helpers
+#   $TMPDIR_TEST/config/    synthetic config directory (DISPATCH_CONFIG_DIR)
+#   $TMPDIR_TEST/stub/      gh stub fixtures (item-list / field-list / view)
+#   $TMPDIR_TEST/bin/       the gh PATH stub
+#
+# DISPATCH_CONFIG_DIR points at the synthetic config so the loader resolves the
+# catalog without a git repo. The helpers resolve each other and the loader via
+# SCRIPT_DIR, so all four scripts are co-located. The gh stub's item-edit case
+# mutates item-list.json so a follow-up item-list reflects the Status change.
+
+proj_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$STUB_DIR" "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/bin" \
+    "$TMPDIR_TEST/config"
+
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  cp "$SCRIPT_DIR/dispatch-project-item-add" \
+    "$TMPDIR_TEST/scripts/dispatch-project-item-add"
+  cp "$SCRIPT_DIR/dispatch-project-status-read" \
+    "$TMPDIR_TEST/scripts/dispatch-project-status-read"
+  cp "$SCRIPT_DIR/dispatch-project-status-write" \
+    "$TMPDIR_TEST/scripts/dispatch-project-status-write"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load" \
+           "$TMPDIR_TEST/scripts/dispatch-project-item-add" \
+           "$TMPDIR_TEST/scripts/dispatch-project-status-read" \
+           "$TMPDIR_TEST/scripts/dispatch-project-status-write"
+
+  # Config fixture: one project, key example-project.
+  cat > "$TMPDIR_TEST/config/projects.json" <<'EOF'
+{
+  "projects": [
+    {
+      "key": "example-project",
+      "owner": "example-owner",
+      "number": 1,
+      "statusField": "Status",
+      "statusInProgress": "In Progress",
+      "statusDone": "Done"
+    }
+  ]
+}
+EOF
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+
+  # gh stub fixtures.
+  cat > "$STUB_DIR/item-list.json" <<'EOF'
+{
+  "items": [
+    {
+      "id": "PVTI_item001",
+      "content": {
+        "type": "Issue",
+        "number": 42,
+        "repository": "https://github.com/example-owner/example-repo",
+        "url": "https://github.com/example-owner/example-repo/issues/42"
+      },
+      "status": "Todo"
+    }
+  ],
+  "totalCount": 1
+}
+EOF
+  cat > "$STUB_DIR/field-list.json" <<'EOF'
+{
+  "fields": [
+    { "id": "PVTF_title", "name": "Title", "type": "ProjectV2Field" },
+    {
+      "id": "PVTSSF_status",
+      "name": "Status",
+      "type": "ProjectV2SingleSelectField",
+      "options": [
+        { "id": "opt_todo", "name": "Todo" },
+        { "id": "opt_inprogress", "name": "In Progress" },
+        { "id": "opt_done", "name": "Done" }
+      ]
+    }
+  ],
+  "totalCount": 2
+}
+EOF
+  cat > "$STUB_DIR/project-view.json" <<'EOF'
+{ "id": "PVT_project001", "number": 1, "title": "Example Project" }
+EOF
+
+  # gh PATH stub.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  "project item-add "*)
+    echo "$args" >> "$STUB_DIR/gh-item-add.log"
+    echo '{"id":"PVTI_added001","title":"Added issue","type":"Issue"}'
+    ;;
+  "project item-list "*)
+    cat "$STUB_DIR/item-list.json"
+    ;;
+  "project field-list "*)
+    cat "$STUB_DIR/field-list.json"
+    ;;
+  "project view "*)
+    cat "$STUB_DIR/project-view.json"
+    ;;
+  "project item-edit "*)
+    echo "$args" >> "$STUB_DIR/gh-item-edit.log"
+    # Parse --id and --single-select-option-id out of the args.
+    item_id=""
+    option_id=""
+    set -- $args
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --id) item_id="$2"; shift 2 ;;
+        --single-select-option-id) option_id="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    # Map the option id back to its option name via field-list.json.
+    option_name=$(jq -r --arg oid "$option_id" \
+      '.fields[] | .options[]? | select(.id == $oid) | .name' \
+      "$STUB_DIR/field-list.json")
+    # Set the matching item's status key so a follow-up item-list reflects it.
+    tmp=$(mktemp)
+    jq --arg iid "$item_id" --arg sname "$option_name" \
+      '.items |= map(if .id == $iid then .status = $sname else . end)' \
+      "$STUB_DIR/item-list.json" > "$tmp"
+    mv "$tmp" "$STUB_DIR/item-list.json"
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+  PATH="$TMPDIR_TEST/bin:$PATH"
+}
+
+proj_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  PATH="$SAVED_PATH"
+  TMPDIR_TEST=""
+  STUB_DIR=""
+  unset DISPATCH_CONFIG_DIR
+}
+
+# --- Test 1: adder adds an issue and prints the item id ----------------------
+
+echo "Test: dispatch-project-item-add adds an issue and prints the item id"
+proj_setup
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-project-item-add" example-project \
+  https://github.com/example-owner/example-repo/issues/99 2>/dev/null) || rc=$?
+assert_eq "adder exits 0" "0" "$rc"
+assert_eq "adder prints the new item id" "PVTI_added001" "$out"
+proj_teardown
+
+# --- Test 2: reader returns the item id and Status value ---------------------
+
+echo "Test: dispatch-project-status-read returns the item id and Status"
+proj_setup
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-project-status-read" example-project \
+  https://github.com/example-owner/example-repo/issues/42 2>/dev/null) || rc=$?
+assert_eq "reader exits 0" "0" "$rc"
+item_id=$(printf '%s' "$out" | jq -r '.itemId')
+assert_eq "reader returns the item id" "PVTI_item001" "$item_id"
+status=$(printf '%s' "$out" | jq -r '.status')
+assert_eq "reader returns the Status value" "Todo" "$status"
+proj_teardown
+
+# --- Test 3: reader fails when the issue is not on the project ---------------
+
+echo "Test: dispatch-project-status-read fails for an issue not on the project"
+proj_setup
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-project-status-read" example-project \
+  https://github.com/example-owner/example-repo/issues/777 \
+  >/dev/null 2>&1 || rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: reader exits non-zero for an absent issue"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: reader exits non-zero for an absent issue"
+  echo "    expected: non-zero, actual: 0"
+fi
+proj_teardown
+
+# --- Test 4: writer sets Status; change is visible via the reader ------------
+
+echo "Test: dispatch-project-status-write sets Status, visible via the reader"
+proj_setup
+rc=0
+"$TMPDIR_TEST/scripts/dispatch-project-status-write" example-project \
+  https://github.com/example-owner/example-repo/issues/42 "In Progress" \
+  >/dev/null 2>&1 || rc=$?
+assert_eq "writer exits 0" "0" "$rc"
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-project-status-read" example-project \
+  https://github.com/example-owner/example-repo/issues/42 2>/dev/null) || rc=$?
+assert_eq "reader after write exits 0" "0" "$rc"
+status=$(printf '%s' "$out" | jq -r '.status')
+assert_eq "writer change is visible via the reader" "In Progress" "$status"
+proj_teardown
 
 # ============================================================================
 # summary
