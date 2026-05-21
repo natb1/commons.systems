@@ -9,8 +9,9 @@ Selects the single most pressing task, resolves its worktree, derives the curren
 workflow phase from PR/issue status, and dispatches **exactly one phase skill** —
 then stops. Re-invoke `/dispatch` (or `/loop /dispatch`) to advance to the next phase.
 
-`/dispatch` takes an **optional issue-number argument** (leading `#` optional). With
-an argument, it targets that issue and skips the queue scan.
+`/dispatch` takes an **optional issue-or-PR-number argument** (leading `#`
+optional). With an argument, it targets that issue and skips the queue scan; a
+PR number is resolved to the issue that PR closes (see Step 2).
 
 Run `/dispatch` from the **main worktree**, or from inside an issue worktree to
 continue that issue. Step 4 switches into the target's worktree via `EnterWorktree`;
@@ -102,8 +103,26 @@ merge and push are no-ops when local main already equals `origin/main`.
 
 ## 2. Select the Target
 
-- **Issue argument given** → strip any leading `#`; that issue is the target.
-  Skip the queue scan.
+- **Issue or PR argument given** → strip any leading `#`, then normalize the
+  number to a target issue via the resolver script (`dangerouslyDisableSandbox:
+  true` — it calls `gh`):
+
+  ```bash
+  TARGET=$(.claude/skills/dispatch/scripts/dispatch-resolve-arg <arg>)
+  ```
+
+  An issue number passes through unchanged; a PR number resolves to the single
+  issue that PR closes (GitHub's `Closes #N` closing-issue references). Route on
+  the exit code:
+
+  - **Exit 0** → `$TARGET` is the target issue number; that issue is the target.
+    Skip the queue scan.
+  - **Non-zero exit** → release the lock (see *Releasing the lock*), report the
+    script's stderr message, and **stop**; create no worktree. This covers a PR
+    that closes no issue, a PR that closes more than one issue, and an argument
+    that is neither an issue nor a PR — consistent with the other Step 1-4 stop
+    paths.
+
 - **No argument** → run the `origin/main` CI health gate first, then the
   worktree sweep, then target selection. Both gh-calling scripts need
   `dangerouslyDisableSandbox: true`.
