@@ -41,6 +41,59 @@ func (sf StatementFile) StatementID() string {
 	return sf.Institution + "-" + sf.Account + "-" + sf.Period
 }
 
+// DiscoverOpts controls how Discover interprets a statement directory. The zero
+// value selects the nested {institution}/{account}/[period]/{file} layout; set
+// both Institution and Account to treat the directory as flat — every file is
+// recorded under that institution and account, with the period taken from the
+// filename.
+type DiscoverOpts struct {
+	Institution string
+	Account     string
+}
+
+// Discover walks dir for statement files. With the zero DiscoverOpts it expects
+// the nested layout handled by DiscoverFiles; with both Institution and Account
+// set it treats dir as a flat directory of statement files.
+func Discover(dir string, opts DiscoverOpts) ([]StatementFile, error) {
+	if opts.Institution != "" && opts.Account != "" {
+		return discoverFlatFiles(dir, opts.Institution, opts.Account)
+	}
+	return DiscoverFiles(dir)
+}
+
+// walkStatementFiles walks dir, skipping dot-prefixed directories and files, and
+// calls build for each remaining regular file. build returns the StatementFile
+// to record, or an error to abort the walk.
+func walkStatementFiles(dir string, build func(path string, info os.FileInfo) (StatementFile, error)) ([]StatementFile, error) {
+	dir = filepath.Clean(dir)
+	var files []StatementFile
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if path != dir && strings.HasPrefix(info.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasPrefix(info.Name(), ".") {
+			return nil
+		}
+		sf, err := build(path, info)
+		if err != nil {
+			return err
+		}
+		files = append(files, sf)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
 // DiscoverFiles walks dir looking for statement files. It accepts two layouts:
 //   - {institution}/{account}/{period}/{file} — period from directory name
 //   - {institution}/{account}/{file} — period from filename stem
@@ -48,102 +101,72 @@ func (sf StatementFile) StatementID() string {
 // It returns one StatementFile per file found, skipping dot-prefixed entries.
 func DiscoverFiles(dir string) ([]StatementFile, error) {
 	dir = filepath.Clean(dir)
-	var files []StatementFile
-
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			if path != dir && strings.HasPrefix(info.Name(), ".") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if strings.HasPrefix(info.Name(), ".") {
-			return nil
-		}
-
+	return walkStatementFiles(dir, func(path string, info os.FileInfo) (StatementFile, error) {
 		rel, err := filepath.Rel(dir, path)
 		if err != nil {
-			return err
+			return StatementFile{}, err
 		}
 		parts := strings.Split(rel, string(filepath.Separator))
 		switch len(parts) {
 		case 4:
 			// institution/account/period/file
-			files = append(files, StatementFile{
+			return StatementFile{
 				Path:        path,
 				Institution: parts[0],
 				Account:     parts[1],
 				Period:      parts[2],
-			})
+			}, nil
 		case 3:
 			// institution/account/file (no period directory)
-			stem := filenameStem(parts[2])
-			if stem == "" {
-				return fmt.Errorf("cannot derive period from filename %q: empty stem after removing extension", parts[2])
+			period, err := periodFromStem(parts[2])
+			if err != nil {
+				return StatementFile{}, err
 			}
-			files = append(files, StatementFile{
+			return StatementFile{
 				Path:        path,
 				Institution: parts[0],
 				Account:     parts[1],
-				Period:      stem,
-			})
+				Period:      period,
+			}, nil
 		default:
-			return fmt.Errorf("unexpected path depth for %s: expected institution/account/[period/]file, got %d components", rel, len(parts))
+			return StatementFile{}, fmt.Errorf("unexpected path depth for %s: expected institution/account/[period/]file, got %d components", rel, len(parts))
 		}
-		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
 }
 
-// DiscoverFlatFiles walks dir for every non-dotfile (at any depth >= 1) and
+// discoverFlatFiles walks dir for every non-dotfile (at any depth >= 1) and
 // returns a StatementFile per file using the caller-supplied institution and
 // account. Period is derived from each file's basename with its extension
 // stripped; InferPeriod later overwrites it from document content where possible.
-func DiscoverFlatFiles(dir, institution, account string) ([]StatementFile, error) {
-	dir = filepath.Clean(dir)
-	var files []StatementFile
-
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+func discoverFlatFiles(dir, institution, account string) ([]StatementFile, error) {
+	return walkStatementFiles(dir, func(path string, info os.FileInfo) (StatementFile, error) {
+		period, err := periodFromStem(info.Name())
 		if err != nil {
-			return err
+			return StatementFile{}, err
 		}
-		if info.IsDir() {
-			if path != dir && strings.HasPrefix(info.Name(), ".") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if strings.HasPrefix(info.Name(), ".") {
-			return nil
-		}
-		stem := filenameStem(info.Name())
-		if stem == "" {
-			return fmt.Errorf("cannot derive period from filename %q: empty stem after removing extension", info.Name())
-		}
-		files = append(files, StatementFile{
+		return StatementFile{
 			Path:        path,
 			Institution: institution,
 			Account:     account,
-			Period:      stem,
-		})
-		return nil
+			Period:      period,
+		}, nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
 }
 
 // filenameStem returns the filename without its extension.
 func filenameStem(name string) string {
 	ext := filepath.Ext(name)
 	return strings.TrimSuffix(name, ext)
+}
+
+// periodFromStem derives a statement period from a filename by stripping its
+// extension, erroring when nothing remains.
+func periodFromStem(name string) (string, error) {
+	stem := filenameStem(name)
+	if stem == "" {
+		return "", fmt.Errorf("cannot derive period from filename %q: empty stem after removing extension", name)
+	}
+	return stem, nil
 }
 
 type format int

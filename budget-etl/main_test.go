@@ -12,6 +12,7 @@ import (
 	"github.com/natb1/commons.systems/budget-etl/internal/budget"
 	"github.com/natb1/commons.systems/budget-etl/internal/export"
 	"github.com/natb1/commons.systems/budget-etl/internal/parse"
+	"github.com/natb1/commons.systems/budget-etl/internal/password"
 	"github.com/natb1/commons.systems/budget-etl/internal/rules"
 )
 
@@ -423,7 +424,7 @@ func TestRunMerge(t *testing.T) {
 	outputPath := filepath.Join(tmp, "output.json")
 	statementsDir := filepath.Join(tmp, "statements")
 
-	if err := runMerge(fileOpts{path: inputPath}, statementsDir, "", "", "", fileOpts{path: outputPath}); err != nil {
+	if err := runMerge(fileOpts{path: inputPath}, statementsDir, "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
 		t.Fatalf("runMerge: %v", err)
 	}
 
@@ -555,7 +556,7 @@ func TestRunMergeGroupNameOverride(t *testing.T) {
 	}
 
 	outputPath := filepath.Join(tmp, "output.json")
-	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "override-group", "", "", fileOpts{path: outputPath}); err != nil {
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "override-group", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
 		t.Fatalf("runMerge: %v", err)
 	}
 
@@ -603,7 +604,7 @@ func TestRunMergeDedupOverlappingFiles(t *testing.T) {
 	}
 
 	outputPath := filepath.Join(tmp, "output.json")
-	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", "", "", fileOpts{path: outputPath}); err != nil {
+	if err := runMerge(fileOpts{path: inputPath}, filepath.Join(tmp, "statements"), "", parse.DiscoverOpts{}, fileOpts{path: outputPath}); err != nil {
 		t.Fatalf("runMerge: %v", err)
 	}
 
@@ -946,16 +947,8 @@ func TestPlaintextFlagWritesUnencryptedJSON(t *testing.T) {
 		"-output", outputPath,
 		"-plaintext",
 	)
-	// Hermetic: ensure the password env var is not set, since --plaintext
-	// must reject the combination.
-	env := append([]string(nil), os.Environ()...)
-	filtered := env[:0]
-	for _, kv := range env {
-		if !strings.HasPrefix(kv, "BUDGET_ETL_PASSWORD=") {
-			filtered = append(filtered, kv)
-		}
-	}
-	cmd.Env = append(filtered, "BUDGET_ETL_TEST_RUN_MAIN=1")
+	// Hermetic: drop any password env var so --plaintext is not rejected.
+	cmd.Env = subprocessEnvNoPassword()
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1016,15 +1009,8 @@ func TestPlaintextFlagWithFlatLayout(t *testing.T) {
 		"-plaintext",
 		"-output", outputPath,
 	)
-	// Hermetic: strip BUDGET_ETL_PASSWORD so --plaintext doesn't get rejected.
-	env := append([]string(nil), os.Environ()...)
-	filtered := env[:0]
-	for _, kv := range env {
-		if !strings.HasPrefix(kv, "BUDGET_ETL_PASSWORD=") {
-			filtered = append(filtered, kv)
-		}
-	}
-	cmd.Env = append(filtered, "BUDGET_ETL_TEST_RUN_MAIN=1")
+	// Hermetic: drop any password env var so --plaintext is not rejected.
+	cmd.Env = subprocessEnvNoPassword()
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1073,14 +1059,7 @@ func TestPlaintextFlagWithFlatLayout(t *testing.T) {
 // exclusive.
 func TestPlaintextFlagRejectsKeychain(t *testing.T) {
 	cmd := exec.Command(os.Args[0], "-plaintext", "-keychain", "some-account", "-dir", "x", "-group", "y", "-output", "z")
-	env := append([]string(nil), os.Environ()...)
-	filtered := env[:0]
-	for _, kv := range env {
-		if !strings.HasPrefix(kv, "BUDGET_ETL_PASSWORD=") {
-			filtered = append(filtered, kv)
-		}
-	}
-	cmd.Env = append(filtered, "BUDGET_ETL_TEST_RUN_MAIN=1")
+	cmd.Env = subprocessEnvNoPassword()
 
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -1108,4 +1087,18 @@ func TestPlaintextFlagRejectsEnvPassword(t *testing.T) {
 	if !strings.Contains(string(out), "--plaintext cannot be combined with BUDGET_ETL_PASSWORD") {
 		t.Errorf("missing expected error message; output:\n%s", out)
 	}
+}
+
+// subprocessEnvNoPassword returns the current environment with any password env
+// var removed and the run-main marker appended. Re-exec subprocess tests use it
+// to drive main() hermetically without a password set, regardless of the
+// caller's environment.
+func subprocessEnvNoPassword() []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, password.EnvVar+"=") {
+			env = append(env, kv)
+		}
+	}
+	return append(env, "BUDGET_ETL_TEST_RUN_MAIN=1")
 }

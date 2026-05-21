@@ -63,8 +63,9 @@ func main() {
 
 	if (*institution != "") != (*account != "") {
 		fmt.Fprintln(os.Stderr, "Error: --institution and --account must be set together")
-		os.Exit(2)
+		os.Exit(1)
 	}
+	disc := parse.DiscoverOpts{Institution: *institution, Account: *account}
 
 	var pw string
 	if *plaintextFlag {
@@ -86,7 +87,7 @@ func main() {
 	}
 
 	if *reportPath != "" {
-		if err := runReport(fileOpts{path: *inputPath, password: pw}, *dir, *institution, *account, *reportPath); err != nil {
+		if err := runReport(fileOpts{path: *inputPath, password: pw}, *dir, disc, *reportPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -94,7 +95,7 @@ func main() {
 	}
 
 	if *inputPath != "" && *dir != "" {
-		if err := runMerge(fileOpts{path: *inputPath, password: pw}, *dir, *group, *institution, *account, fileOpts{path: *outputPath, password: pw}); err != nil {
+		if err := runMerge(fileOpts{path: *inputPath, password: pw}, *dir, *group, disc, fileOpts{path: *outputPath, password: pw}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -117,7 +118,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := runDirJSON(*dir, *group, *institution, *account, fileOpts{path: *outputPath, password: pw}); err != nil {
+	if err := runDirJSON(*dir, *group, disc, fileOpts{path: *outputPath, password: pw}); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -135,10 +136,9 @@ type parsedFile struct {
 
 // runDirJSON discovers and parses statement files from dir, dedups transactions
 // by doc ID, and writes a JSON budget file with no rules applied. Use --input
-// to apply rules in a subsequent pass. When institution and account are both
-// non-empty, dir is treated as a flat layout and DiscoverFlatFiles is used.
-func runDirJSON(dir, groupName, institution, account string, output fileOpts) error {
-	parsed, totalTxns, _, err := parseStatementDir(dir, institution, account)
+// to apply rules in a subsequent pass.
+func runDirJSON(dir, groupName string, disc parse.DiscoverOpts, output fileOpts) error {
+	parsed, totalTxns, _, err := parseStatementDir(dir, disc)
 	if err != nil {
 		return err
 	}
@@ -758,21 +758,14 @@ type StatementSummary struct {
 // transactions not already present in input. It applies rules to classify the
 // new transactions, collecting (rather than erroring on) uncategorized ones.
 // Returns the parsed files, uncategorized transaction details, a summary of new
-// statements and transactions, and any fatal error. When institution and account
-// are both non-empty, dir is treated as a flat layout and DiscoverFlatFiles is used.
-func parseAndClassify(input *export.Output, dir, institution, account string) (
+// statements and transactions, and any fatal error.
+func parseAndClassify(input *export.Output, dir string, disc parse.DiscoverOpts) (
 	parsed []parsedFile,
 	uncategorized []UncategorizedTxn,
 	summary StatementSummary,
 	err error,
 ) {
-	var files []parse.StatementFile
-	var ferr error
-	if institution != "" && account != "" {
-		files, ferr = parse.DiscoverFlatFiles(dir, institution, account)
-	} else {
-		files, ferr = parse.DiscoverFiles(dir)
-	}
+	files, ferr := parse.Discover(dir, disc)
 	if ferr != nil {
 		err = fmt.Errorf("discovering files in %s: %w", dir, ferr)
 		return
@@ -918,9 +911,8 @@ func parseAndClassify(input *export.Output, dir, institution, account string) (
 // runReport parses statement files, classifies new transactions against input rules,
 // and writes a JSON inspection report. It exits 0 even when uncategorized transactions
 // exist — the caller decides how to handle them. The encrypted output write is skipped;
-// only the report file is written. When institution and account are both non-empty,
-// dir is treated as a flat layout.
-func runReport(input fileOpts, dir, institution, account, reportPath string) error {
+// only the report file is written.
+func runReport(input fileOpts, dir string, disc parse.DiscoverOpts, reportPath string) error {
 	inp, err := export.ReadFile(input.path, input.password)
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
@@ -929,7 +921,7 @@ func runReport(input fileOpts, dir, institution, account, reportPath string) err
 		return fmt.Errorf("unsupported input version %d (expected 1)", inp.Version)
 	}
 
-	_, uncategorized, summary, err := parseAndClassify(&inp, dir, institution, account)
+	_, uncategorized, summary, err := parseAndClassify(&inp, dir, disc)
 	if err != nil {
 		return err
 	}
@@ -992,8 +984,7 @@ func runReport(input fileOpts, dir, institution, account, reportPath string) err
 // from input are preserved. Transaction-specific rules pre-populate category/budget,
 // then general rules fill in the rest. Normalization rules are applied and budget
 // periods are computed for the merged result. The output is written to --output.
-// When institution and account are both non-empty, dir is treated as a flat layout.
-func runMerge(input fileOpts, dir, groupName, institution, account string, output fileOpts) error {
+func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, output fileOpts) error {
 	// Read input JSON
 	inp, err := export.ReadFile(input.path, input.password)
 	if err != nil {
@@ -1012,7 +1003,7 @@ func runMerge(input fileOpts, dir, groupName, institution, account string, outpu
 	}
 
 	// Parse and classify new (dir-only) transactions
-	parsed, uncatTxns, _, err := parseAndClassify(&inp, dir, institution, account)
+	parsed, uncatTxns, _, err := parseAndClassify(&inp, dir, disc)
 	if err != nil {
 		return err
 	}
