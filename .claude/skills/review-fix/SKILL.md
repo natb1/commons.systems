@@ -19,21 +19,22 @@ implementation and follow-up-issue subagents.
 
 ## Idempotency preamble
 
-Before running any step, resolve the PR number **and its labels** from the current
-branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
+Before running any step, resolve the PR number, its labels, and its body from the
+current branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-PR_JSON=$(gh pr view "$BRANCH" --json number,labels)
+PR_JSON=$(gh pr view "$BRANCH" --json number,labels,body)
 PR_NUM=$(echo "$PR_JSON" | jq -r .number)
 echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-`PR_NUM` is reused in Steps 3, 7, and 8 — do not re-resolve. If the printed labels
-include `dispatch:reviewed` — an interrupted prior run — **skip Steps 1–10
-entirely** and return; the label is the wrapper's terminal action under
-autonomous use and is already applied, so re-entry is a true no-op. Otherwise
-run all steps in order.
+`PR_NUM` is reused in Steps 3, 7, and 8 — do not re-resolve. The PR body stays in
+`PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 5 parses its `Closes #N`
+line(s) to resolve the issue(s) this PR implements. If the printed labels include
+`dispatch:reviewed` — an interrupted prior run — **skip Steps 1–10 entirely** and
+return; the label is the wrapper's terminal action under autonomous use and is
+already applied, so re-entry is a true no-op. Otherwise run all steps in order.
 
 ## Steps
 
@@ -84,27 +85,56 @@ run all steps in order.
    here). Findings in the Informational, Dismissed, and Deferred buckets are
    **not** implemented here. If the Fixed bucket is empty, skip this step.
 
-5. **File follow-up issues for the Deferred bucket.** For each finding in the
-   Deferred bucket, fork a subagent via the Agent tool (`subagent_type:
-   general-purpose`, `model: sonnet`) that invokes the `/file-issue` skill.
-   Build the subagent's `$INPUT` from the title and body composed for that
-   finding in Step 3: the title on the first line, then the body.
-   `/file-issue` owns duplicate detection, issue creation, `@me` assignment,
-   and the `help wanted` label — the subagent invokes it and does no
-   additional `gh` work.
+5. **File follow-up issues for the Deferred bucket — with blocked-by
+   dependencies.** Skip this step only if the Deferred bucket is empty.
 
-   `/file-issue` prints `CREATED <N>` or `EXISTING <N>` on its own line. The
-   subagent parses that line and returns `<N>` (along with the discriminator)
-   to this thread. Capture each `<N>` and attach it to its source finding for
-   the report generators. The discriminator is internal — Step 7's report
-   formats every Deferred entry as `<short description> → #<N>` regardless,
-   since the linked issue is the same either way.
+   First resolve the PR's **implementing issue(s)**: parse the `Closes #N`
+   line(s) from the PR body captured in `PR_JSON` (`echo "$PR_JSON" | jq -r
+   .body`). These are the issue(s) this PR's work delivers.
+
+   Then, for **each** Deferred finding, assess — as a required sub-step, never
+   skipped — what the new tracking issue is blocked by:
+
+   - Deferred because it depends on or builds on this PR's changes → **blocked
+     by the PR's implementing issue(s)**.
+   - Blocked by some other identifiable open issue → **blocked by that issue**.
+   - Unrelated pre-existing code with no sequencing constraint → **independent**.
+   - When unsure, prefer recording the dependency over leaving the issue
+     unlinked.
+
+   For each finding, fork a subagent via the Agent tool (`subagent_type:
+   general-purpose`, `model: sonnet`). Build the subagent's `$INPUT` from the
+   title and body composed for that finding in Step 3: the title on the first
+   line, then the body. Pass the assessed blocker issue number(s) — or an
+   explicit `independent` marker — into the subagent's prompt alongside
+   `$INPUT`. The subagent:
+
+   1. Invokes `/file-issue`, which owns duplicate detection, issue creation,
+      `@me` assignment, and the `help wanted` label. `/file-issue` prints
+      `CREATED <N>` or `EXISTING <N>` on its own line; the subagent parses it.
+   2. For a non-independent finding, records a `blocked_by` dependency **on the
+      new issue `<N>`, targeting each blocker issue number** passed in. The
+      target is the GitHub **issue** — never the PR number, and the dependency
+      is the API relationship, never body text. Use the `ref-github-issues`
+      dependencies API (database-ID resolution with `gh api`, `--input` JSON;
+      see `ref-github-issues`, do not restate the syntax). On the
+      `EXISTING <N>` path, first list `<N>`'s current `blocked_by` (same
+      dependencies API — see `ref-github-issues`) and skip the POST for any
+      blocker already present, so a duplicate does not error. An `independent`
+      finding records no dependency.
+   3. Returns `<N>` (along with the `CREATED`/`EXISTING` discriminator) to this
+      thread.
+
+   Capture each `<N>` and attach it to its source finding for the report
+   generators. The discriminator is internal — Step 7's report formats every
+   Deferred entry as `<short description> → #<N>` regardless, since the linked
+   issue is the same either way.
 
    Run the per-finding subagents in parallel (multiple Agent calls in a single
    message) — there are no sequencing constraints between them. Step 5 can
    also be launched in the same message as Step 4's implementation subagents:
    Step 5 touches only GitHub, Step 4 touches only the working tree, so they
-   do not conflict. If the Deferred bucket is empty, skip this step.
+   do not conflict.
 
 6. **Commit and push the fixes.** Fork `/commit-merge-push` via the Agent tool
    to commit the Step 4 fixes and push. If the Fixed bucket was empty (Step 4
