@@ -9,7 +9,7 @@ The `verify` phase of the issue workflow, dispatched by `/dispatch` only when a
 draft PR has **completed-and-failed** CI. This skill is **single-pass — it has no
 internal loop**. It fixes one round of failed checks, records the outcome, posts it,
 and stops. The `/dispatch` background-job chain drives iteration: each subsequent
-`/dispatch` → `/verify-pr` invocation.
+failure is a fresh `/dispatch` → `/verify-pr` invocation.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
 launch subagents and invoke `/implement-unit`.
