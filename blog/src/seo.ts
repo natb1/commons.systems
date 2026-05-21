@@ -21,6 +21,27 @@ export interface SoftwareApplication {
   description?: string;
 }
 
+export interface Person {
+  name: string;
+  url: string;
+  email?: string;
+  jobTitle?: string;
+  sameAs?: string[];
+}
+
+export function personJsonLd(person: Person): Record<string, unknown> {
+  const json: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    name: person.name,
+    url: person.url,
+  };
+  if (person.email !== undefined) json.email = person.email;
+  if (person.jobTitle !== undefined) json.jobTitle = person.jobTitle;
+  if (person.sameAs && person.sameAs.length > 0) json.sameAs = person.sameAs;
+  return json;
+}
+
 export function softwareApplicationJsonLd(app: SoftwareApplication): Record<string, unknown> {
   const json: Record<string, unknown> = {
     "@context": "https://schema.org",
