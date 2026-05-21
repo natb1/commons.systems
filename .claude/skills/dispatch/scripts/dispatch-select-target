@@ -39,8 +39,8 @@
 #
 # Within each category, default-mode priority (oldest PR wins within a tier):
 #   1. Oldest "security" PR (draft + dispatch:reviewed or dispatch:security-reviewed)
-#   2. Oldest "review"   PR (draft + dispatch:refactored)
-#   3. Oldest "simplify" PR (draft + dispatch:qa-done)
+#   2. Oldest "review"      PR (draft + dispatch:code-reviewed)
+#   3. Oldest "code-review" PR (draft + dispatch:qa-done)
 #   4. Oldest "verify"   PR (draft, CI completed and failed)
 #   5. Oldest open help-wanted issue with no local git worktree, resolved to a
 #      startable open leaf (an issue whose entire open-leaf subtree is
@@ -253,7 +253,7 @@ declare -A FIRST_PR
 declare -A FIRST_ISSUE
 
 # Within-category phase ladder, highest priority first.
-PHASE_PRIORITY=(security review simplify verify)
+PHASE_PRIORITY=(security review code-review verify)
 
 while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "$pr_num" ]] && continue

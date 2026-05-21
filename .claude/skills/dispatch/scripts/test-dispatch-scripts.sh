@@ -406,22 +406,22 @@ result=$("$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "draft + green + no label → qa" "qa" "$result"
 teardown
 
-# 6. Draft + green + dispatch:qa-done → simplify
-echo "Test: draft + green + dispatch:qa-done → simplify"
+# 6. Draft + green + dispatch:qa-done → code-review
+echo "Test: draft + green + dispatch:qa-done → code-review"
 setup
 printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:qa-done"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:qa-done → simplify" "simplify" "$result"
+assert_eq "draft + green + dispatch:qa-done → code-review" "code-review" "$result"
 teardown
 
-# 7. Draft + green + dispatch:refactored → review
-echo "Test: draft + green + dispatch:refactored → review"
+# 7. Draft + green + dispatch:code-reviewed → review
+echo "Test: draft + green + dispatch:code-reviewed → review"
 setup
-printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:refactored"}]' "$GREEN_ROLLUP")" \
+printf '[%s]\n' "$(make_pr 10 "42-my-feature" "true" '[{"name":"dispatch:code-reviewed"}]' "$GREEN_ROLLUP")" \
   > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-phase" "42")
-assert_eq "draft + green + dispatch:refactored → review" "review" "$result"
+assert_eq "draft + green + dispatch:code-reviewed → review" "review" "$result"
 teardown
 
 # 8. Draft + green + dispatch:reviewed → security
@@ -706,15 +706,15 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "done PRs skipped; help-wanted issue returned" "issue 33" "$result"
 teardown
 
-# 8. security is the top non-QA tier: it beats review, simplify, and verify.
-echo "Test: security beats review/simplify/verify"
+# 8. security is the top non-QA tier: it beats review, code-review, and verify.
+echo "Test: security beats review/code-review/verify"
 setup
 SECURITY_LABELS='[{"name":"dispatch:reviewed"}]'
-REVIEW_LABELS='[{"name":"dispatch:refactored"}]'
-SIMPLIFY_LABELS='[{"name":"dispatch:qa-done"}]'
+REVIEW_LABELS='[{"name":"dispatch:code-reviewed"}]'
+CODE_REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
 UNION='['
 UNION+="$(make_pr_union 10 "10-verify" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"','
-UNION+="$(make_pr_union 20 "20-simplify" "2024-01-02T00:00:00Z" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"','
+UNION+="$(make_pr_union 20 "20-code-review" "2024-01-02T00:00:00Z" "true" "$CODE_REVIEW_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 30 "30-review" "2024-01-03T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 40 "40-security" "2024-01-04T00:00:00Z" "true" "$SECURITY_LABELS" "$GREEN_ROLLUP")"
 UNION+=']'
@@ -722,14 +722,14 @@ setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "security beats review/simplify/verify" "pr 40 40-security security" "$result"
+assert_eq "security beats review/code-review/verify" "pr 40 40-security security" "$result"
 teardown
 
 # 9. Within one phase, the oldest PR wins.
 echo "Test: within same phase, oldest PR wins"
 setup
 # Two review-phase PRs; PR 30 is older.
-REVIEW_LABELS='[{"name":"dispatch:refactored"}]'
+REVIEW_LABELS='[{"name":"dispatch:code-reviewed"}]'
 UNION='['
 UNION+="$(make_pr_union 30 "30-review-a" "2024-01-01T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"','
 UNION+="$(make_pr_union 31 "31-review-b" "2024-01-02T00:00:00Z" "true" "$REVIEW_LABELS" "$GREEN_ROLLUP")"
@@ -1090,16 +1090,16 @@ count=$(wc -l < "$STUB_DIR/gh-pr-list-calls.log" | tr -d ' ')
 assert_eq "exactly one gh pr list call regardless of PR count" "1" "$count"
 teardown
 
-# 22. A simplify-phase PR winning emits the simplify phase on the result line.
-echo "Test: simplify PR winner → pr <n> <branch> simplify"
+# 22. A code-review-phase PR winning emits the code-review phase on the result line.
+echo "Test: code-review PR winner → pr <n> <branch> code-review"
 setup
-SIMPLIFY_LABELS='[{"name":"dispatch:qa-done"}]'
-UNION='['"$(make_pr_union 25 "25-simplify-me" "2024-01-01T00:00:00Z" "true" "$SIMPLIFY_LABELS" "$GREEN_ROLLUP")"']'
+CODE_REVIEW_LABELS='[{"name":"dispatch:qa-done"}]'
+UNION='['"$(make_pr_union 25 "25-code-review-me" "2024-01-01T00:00:00Z" "true" "$CODE_REVIEW_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "simplify PR winner emits phase" "pr 25 25-simplify-me simplify" "$result"
+assert_eq "code-review PR winner emits phase" "pr 25 25-code-review-me code-review" "$result"
 teardown
 
 # 23. A lone QA PR with no help-wanted issue emits the qa phase on the result line.
@@ -1487,12 +1487,12 @@ assert_eq "qa applies dispatch:qa-done" \
 assert_eq "qa: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
-echo "Test: simplify → dispatch:refactored (apply only, no label create)"
+echo "Test: code-review → dispatch:code-reviewed (apply only, no label create)"
 setup
-"$TMPDIR_TEST/dispatch-complete-phase" 25 simplify
-assert_eq "simplify applies dispatch:refactored" \
-  "pr edit 25 --add-label dispatch:refactored" "$(cat "$STUB_DIR/gh-pr-edit.log")"
-assert_eq "simplify: no gh label create when label exists" "absent" "$(label_create_state)"
+"$TMPDIR_TEST/dispatch-complete-phase" 25 code-review
+assert_eq "code-review applies dispatch:code-reviewed" \
+  "pr edit 25 --add-label dispatch:code-reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
+assert_eq "code-review: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
 echo "Test: review → dispatch:reviewed (apply only, no label create)"
