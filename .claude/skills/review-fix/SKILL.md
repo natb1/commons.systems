@@ -29,7 +29,7 @@ PR_NUM=$(echo "$PR_JSON" | jq -r .number)
 echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-`PR_NUM` is reused in Steps 5, 7, and 8 — do not re-resolve. If the printed labels
+`PR_NUM` is reused in Steps 3, 7, and 8 — do not re-resolve. If the printed labels
 include `dispatch:reviewed` — an interrupted prior run — **skip Steps 1–10
 entirely** and return; the label is the wrapper's terminal action under
 autonomous use and is already applied, so re-entry is a true no-op. Otherwise
@@ -109,7 +109,9 @@ run all steps in order.
 6. **Commit and push the fixes.** Fork `/commit-merge-push` via the Agent tool
    to commit the Step 4 fixes and push. If the Fixed bucket was empty (Step 4
    was a no-op), this invocation also runs with no pending changes —
-   `/commit-merge-push` tolerates that and creates no commit.
+   `/commit-merge-push` tolerates that and creates no commit. Capture the
+   resulting fix commit SHA(s) — Step 7's Fixed section formats each entry as
+   `<short description>: <commit-SHA>`.
 
 7. **Post a PR comment.** Reuse `PR_NUM` from the idempotency preamble — no
    second `gh pr view`.
