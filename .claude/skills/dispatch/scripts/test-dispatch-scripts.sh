@@ -271,6 +271,14 @@ STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
 num="${1:-}"
 # Strip leading # if present.
 num="${num#\#}"
+# Failure injection: a marker file models a transient gh API failure on this
+# issue's blocked_by lookup. The real issue-blocking exits non-zero (with a
+# gh_api_array stderr diagnostic) on a genuine gh failure — the fake mirrors
+# that contract so dispatch-trace-leaf's failure handling can be exercised.
+if [[ -f "$STUB_DIR/gh-fail-blocked_by-${num}" ]]; then
+  echo "error: gh api call failed for issues/${num}/dependencies/blocked_by" >&2
+  exit 1
+fi
 # issue-blocking calls lib.sh resolve_issue_number then gh api + gh issue view.
 # Our fake: just read a stub file.
 blocker_nums=""
@@ -292,6 +300,12 @@ FAKE
 STUB_DIR="$(cd "$(dirname "$0")/stub" && pwd)"
 num="${1:-}"
 num="${num#\#}"
+# Failure injection — same contract as issue-blocking's, for the sub_issues
+# lookup.
+if [[ -f "$STUB_DIR/gh-fail-sub_issues-${num}" ]]; then
+  echo "error: gh api call failed for issues/${num}/sub_issues" >&2
+  exit 1
+fi
 sub_nums=""
 if [[ -f "$STUB_DIR/subissues-${num}.json" ]]; then
   sub_nums=$(cat "$STUB_DIR/subissues-${num}.json" | jq -r '.[].number' 2>/dev/null || true)
@@ -1464,6 +1478,52 @@ case "$err_out" in
   *) status="bad: $err_out" ;;
 esac
 assert_eq "invalid mode → usage error, exit 1" "ok" "$status"
+teardown
+
+# 13. issue-blocking failure → hard error (exit 1), never emits N as a leaf.
+echo "Test: issue-blocking failure → exit 1, no leaf emitted"
+setup
+# No stub files: 800 would otherwise resolve as a childless leaf. The injected
+# blocked_by failure must abort instead of mis-classifying 800 as startable.
+: > "$STUB_DIR/gh-fail-blocked_by-800"
+stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "issue-blocking failure → exit 1" "1" "$rc"
+assert_eq "issue-blocking failure → no leaf on stdout" "" "$stdout"
+teardown
+
+# 14. issue-sub-issues failure → same hard error. issue-blocking succeeds
+#     (empty = no blockers), then the sub_issues lookup fails.
+echo "Test: issue-sub-issues failure → exit 1, no leaf emitted"
+setup
+: > "$STUB_DIR/gh-fail-sub_issues-800"
+stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "issue-sub-issues failure → exit 1" "1" "$rc"
+assert_eq "issue-sub-issues failure → no leaf on stdout" "" "$stdout"
+teardown
+
+# 15. issue-blocking failure in explicit mode → exit 1, NOT the cycle-fallback
+#     "print N".
+echo "Test: issue-blocking failure (explicit) → exit 1, not cycle-fallback"
+setup
+: > "$STUB_DIR/gh-fail-blocked_by-800"
+stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "explicit" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "issue-blocking failure (explicit) → exit 1" "1" "$rc"
+assert_eq "issue-blocking failure (explicit) → no N printed" "" "$stdout"
+teardown
+
+# 16. A failure one level deep is re-propagated through the recursive frame.
+#     Tests 13-15 inject the failure at the root issue, so find_leaf returns
+#     the rc-3 hard error from its first frame. Here 800 has sub-issue 801 and
+#     it is 801's blocker lookup that fails — exercising the `rc -eq 3` branch
+#     in find_leaf's descent loop, which must carry the hard error up rather
+#     than mask it as "no leaf in this subtree".
+echo "Test: gh failure one level deep → re-propagated, exit 1"
+setup
+printf '[{"number":801}]\n' > "$STUB_DIR/subissues-800.json"
+: > "$STUB_DIR/gh-fail-blocked_by-801"
+stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "deep gh failure → exit 1" "1" "$rc"
+assert_eq "deep gh failure → no leaf on stdout" "" "$stdout"
 teardown
 
 # ============================================================================
