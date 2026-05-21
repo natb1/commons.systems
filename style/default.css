@@ -83,6 +83,13 @@ app-nav > .nav-links + * {
   margin-left: auto;
 }
 
+app-nav .nav-links:has(a[data-align="end"]) {
+  flex: 1;
+}
+app-nav .nav-links a[data-align="end"] {
+  margin-left: auto;
+}
+
 header {
   position: sticky;
   top: 0;

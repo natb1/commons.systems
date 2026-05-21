@@ -44,6 +44,8 @@ The goal is not forced detachment from institutions. That would be dogma, and do
 
 The test is not "how detached am I?" but "can I move between modes when I choose?" Like physical mobility, you don't always need to move, but atrophy of the ability to move is the real danger.
 
+This applies to commons.systems itself. The project is an institution, and it may need to ratchet up — accept resources, add coordination — when that genuinely serves its purpose. Growth is not the pathology; the inability to reverse it is. The practical test is whether an institution degrades by *inaction*: if it contracts simply because no one renews it, standing down is the default and needs no act of will. If contraction would instead require an act of will — dismantling a payroll, unwinding contracts — that act is exactly what a ratcheted institution never performs. The project must stay organized so that standing down is what happens on its own.
+
 ### Show, Not Tell
 
 Philosophical arguments about institutional capture fail to propagate because they try to convert rather than select — they appeal to reason in a world that responds to lived experience.
@@ -95,6 +97,8 @@ Four audiences engage at progressive depth. Each tier validates the previous, an
 
 **Collaborators** read this charter. They share the diagnosis and help identify what to build next. A charter without demonstrated practice is theory. The deepest teeth form here: a collaborator who has spent two years on the charter has a stake in the charter being right. An institution dedicated to fighting institutions that outlives its purpose is the failure mode this whole document warns about.
 
+These tiers describe depth of engagement with the philosophy, not headcount or legal form — an institution can be a user, a practitioner, or a collaborator exactly as an individual can. Whether an institution also funds the project is a separate axis (see Resourcing): paying buys the project's help, it does not move an institution up the ladder.
+
 Skipping tiers does not just produce hollow claims — it accumulates teeth before the previous tier proves they are required. Building for practitioners before users find artifacts useful creates documentation and conventions serving an unvalidated audience. Building for collaborators before practitioners exist creates legitimacy and cultural identity around undemonstrated practice.
 
 ### Dependency Self-Assessment
@@ -102,6 +106,18 @@ Skipping tiers does not just produce hollow claims — it accumulates teeth befo
 The project applies its own framework to its own dependencies. The current dependency self-assessment lives as structured data in `landing/src/site-config.ts`, awaiting a dedicated place alongside the app showcase. Revisit as conditions change; prune if it becomes a compliance exercise rather than a genuine assessment.
 
 For the current technical state of the project, see the [README](https://github.com/natb1/commons.systems/blob/main/README.md). For current priorities, see [ROADMAP.md](ROADMAP.md).
+
+### Resourcing
+
+Reaching beyond the author costs resources the author cannot supply alone. Those resources come from institutions that contract for the project's help. Funding is a ratchet tooth — the Diagnosis names it, and names its specific danger: the justification cycles it creates can incentivize problem persistence. It is a legitimate tooth all the same, on the same terms as any other: accept it when it builds validated capability, and keep it reversible.
+
+The contracting model is direct. A service-curious institution is, in the project's terms, a prospective practitioner — it wants to practice progressive detachment at its own scale, decoupling from its professional-services and platform-vendor dependencies. An engagement delivers a built, forkable artifact first, as proof, then trains the institution's own people to maintain and extend it. The institution ends the engagement as a practitioner: it owns the result, hosts its own data, and can iterate without the project. Paying is an accelerant onto a path that is otherwise free — anyone may fork the public artifacts and practice unaided. The service buys speed and guidance; it never gates the gift.
+
+This is why artifacts come first. Tools built for users — genuinely useful, forkable, local-first — are the portfolio that draws an institution in. This is not a sequential gate: an institution motivated to pay by the portfolio is, by that fact, evidence that the artifacts work. Tier-2 validation and tier-3 engagement arrive together rather than one after the other. The project does not screen clients by their growth strategy — the method itself, forkable and local-first and documented for handoff, embeds the philosophy regardless of why a given institution wants it.
+
+Resourcing follows the mobility test. While demand fits one person, the project is one person. Enough demand justifies additional institutionalization: commons.systems coordinates subcontracts among independent practitioners. That coordination is itself a ratchet tooth, built to degrade by inaction — subcontractors are independents engaged per project, not employees, so when demand falls the coordinating layer simply stops and the project degrades to referrals. The more the practice has propagated, the more gracefully it degrades, because there are more independents to refer work to. The project does not grow a payroll: a payroll converts standing down from a default into an act of will that, by the Diagnosis, never comes.
+
+Revenue is necessary but not sufficient evidence that the practice meets a real need. Falling revenue is an honest signal that the market for the practice is thinning — a legitimate trigger to degrade. Rising revenue is ambiguous. It can mean the practice is meeting a genuine need; it can equally mean it is billing against a manufactured one — and an engagement that sustains the dependency it bills against rather than resolving it is a parasite, the precise pathology the Diagnosis names. Revenue alone cannot tell the two apart. What can is the tier signals in Success and Failure — above all whether buyers leave the engagement with migration freedom and able to maintain the result themselves. Revenue is read alongside those signals; it never validates the philosophy on its own.
 
 ### Scope
 
@@ -123,9 +139,10 @@ Success and failure are tiered to match the audience structure. Each tier's succ
 
 **Tier 3 — Practitioners.** *Only activated if the project has invited forks and adaptation.*
 - **Success:** forks, derivative projects, and independent adaptation by people practicing progressive detachment through their own building — whether or not they reference this project.
-- **Failure (two modes):**
+- **Failure:**
   - Practitioners are courted before users validate the artifacts, producing documentation and conventions that serve an unvalidated audience.
   - Shared terminology and conventions calcify into orthodoxy practitioners cannot deviate from — the project produces the same institutional capture it diagnoses.
+  - A paying engagement leaves the institution dependent on the project rather than able to maintain and extend the result on its own. The service was sold as capability transfer and delivered lock-in — the tier-2 user failure reappearing in a paid relationship, and parasitic by the project's own definition.
   - Silence at this tier (zero forks, zero derivatives) after deliberate publishing: the demonstration is not demonstrating *at the tier the project chose to pursue*.
 
 **Tier 4 — Collaborators.** *Only activated if the project has opened the charter to collective revision.*
@@ -183,6 +200,14 @@ Failure conditions (above) are *observable tripwires*. The entries here are *con
 **Current response:** Architectural preventions (CC-BY-SA, forkable structure, local-first data, no user accounts) and the tier-validation discipline in Success and Failure are the structural mitigations. The deeper question is whether the project can identify when its purpose is served *at the tier it has chosen to pursue* and actually stand down.
 
 **Status:** Theoretical for now. Define what "purpose served" looks like at each tier before the ratchet has a chance to form.
+
+### Funding and the Validation Signal
+
+**Risk:** The project funds growth by selling its method to institutions (see Resourcing). Funding is the ratchet tooth named in the Diagnosis that most directly corrupts judgment: a funded project has a motive to report its hypothesis validated whether or not it is, and to read its own revenue as proof that the philosophy works.
+
+**Current response:** Growth is licensed only by the observable, tier-specific signals in Success and Failure — author daily use, user adoption with migration freedom, forks, practitioner practice — never by revenue. Revenue is necessary but not sufficient evidence of need: falling revenue is a legitimate trigger to degrade; rising revenue is ambiguous — a genuine need and a manufactured one both produce it — and counts only when read alongside the tier signals, never as validation on its own. The graceful-degradation design — no payroll, per-project subcontracts, degradation to referrals — keeps standing down a default rather than a decision someone has to make against their own income.
+
+**Status:** Unresolved. The independence of the validation signal from the funding is the open question. Monitor whether growth decisions track tier signals or revenue.
 
 ---
 
