@@ -206,7 +206,7 @@ It is a no-op when local `main` already equals `origin/main`.
   Within each category the ladder is (highest first; within a tier, oldest PR
   wins; PRs and `help wanted` issues with a local worktree are skipped;
   `waiting`-phase PRs are skipped entirely): oldest `security` PR → oldest
-  `review` PR → oldest `simplify` PR → oldest `verify` PR → oldest `help wanted`
+  `review` PR → oldest `code-review` PR → oldest `verify` PR → oldest `help wanted`
   issue → oldest `qa` PR. Non-QA PRs are ranked closest-to-done first —
   `security` is the closest-to-done non-QA tier; `help wanted` issues rank below
   all non-QA PRs but above QA PRs. A queue with no topic-labeled items resolves
@@ -355,8 +355,8 @@ Map the phase:
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
 | `waiting` | draft PR, CI in progress (running/queued/not started) | monitor CI to completion with a `sonnet` subagent, then re-derive the phase and dispatch it (Step 6) |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
-| `simplify` | draft PR + `dispatch:qa-done` | `/simplify-fix` (applies `dispatch:refactored` itself) |
-| `review` | draft PR + `dispatch:refactored` | `/review-fix` (applies `dispatch:reviewed` itself) |
+| `code-review` | draft PR + `dispatch:qa-done` | `/code-review-fix` (applies `dispatch:code-reviewed` itself) |
+| `review` | draft PR + `dispatch:code-reviewed` | `/review-fix` (applies `dispatch:reviewed` itself) |
 | `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
 | `done` | non-draft (ready) PR | already complete — report and skip |
 
@@ -386,14 +386,14 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
   3. After the subagent returns, re-run Step 5 (`dispatch-phase`) to re-derive
      the phase from the now-complete CI, then dispatch the resolved phase per
      this step — `/verify-pr` if any check failed, otherwise the green-CI
-     phases (`qa` / `simplify` / `review` / `security` / `ready`).
+     phases (`qa` / `code-review` / `review` / `security` / `ready`).
   4. If the re-derived phase is still `waiting` (CI never registered any check),
      report it and **stop** — do not loop.
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done` itself on
   a clean pass; `/dispatch` applies no label.
-- **`simplify`** — invoke `/simplify-fix`. It runs `/simplify`, applies the
+- **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max`, applies the
   recommended fixes, defers important out-of-scope findings to tracking issues,
-  posts a PR comment, and applies the `dispatch:refactored` label itself —
+  posts a PR comment, and applies the `dispatch:code-reviewed` label itself —
   `/dispatch` applies no label.
 - **`review`** — invoke `/review-fix`. It runs `/review`, applies the recommended
   fixes, posts a PR comment, and applies the `dispatch:reviewed` label itself —
@@ -415,9 +415,9 @@ so `/dispatch` cannot launch it.
 ### Applying the progress label
 
 The `dispatch:*` labels are the accumulating progress markers across the full
-workflow. `/dispatch-qa`, `/simplify-fix`, `/review-fix`, and
+workflow. `/dispatch-qa`, `/code-review-fix`, `/review-fix`, and
 `/security-review-fix` each own and apply their own label — `dispatch:qa-done`,
-`dispatch:refactored`, `dispatch:reviewed`, and `dispatch:security-reviewed`
+`dispatch:code-reviewed`, `dispatch:reviewed`, and `dispatch:security-reviewed`
 respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
 
 ## 7. Pre-Implementation Relevance Review

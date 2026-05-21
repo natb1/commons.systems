@@ -3,7 +3,7 @@
 # Usage: dispatch-phase <issue-num|branch>
 #
 # Prints exactly one phase name to stdout:
-#   implement | verify | waiting | qa | simplify | review | security | done
+#   implement | verify | waiting | qa | code-review | review | security | done
 #
 # Argument resolution:
 #   - All-digit arg: treated as an issue number. The matching PR is the one
@@ -133,7 +133,7 @@ if [[ "$ALL_PASSING" != "true" ]]; then
 fi
 
 # CI is green — map the highest dispatch:* label to the next phase.
-# Label chain: qa-done < refactored < reviewed < security-reviewed.
+# Label chain: qa-done < code-reviewed < reviewed < security-reviewed.
 # dispatch:security-reviewed is a /security-review-fix re-entry marker — it maps
 # back to "security"; the skill is idempotent and just finishes "gh pr ready".
 LABELS=$(printf '%s' "$PR" | jq -r '[.labels[].name | select(startswith("dispatch:"))] | join(" ")')
@@ -142,10 +142,10 @@ if echo "$LABELS" | grep -qF "dispatch:security-reviewed"; then
   echo "security"
 elif echo "$LABELS" | grep -qF "dispatch:reviewed"; then
   echo "security"
-elif echo "$LABELS" | grep -qF "dispatch:refactored"; then
+elif echo "$LABELS" | grep -qF "dispatch:code-reviewed"; then
   echo "review"
 elif echo "$LABELS" | grep -qF "dispatch:qa-done"; then
-  echo "simplify"
+  echo "code-review"
 else
   echo "qa"
 fi
