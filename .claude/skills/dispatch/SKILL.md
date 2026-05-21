@@ -23,7 +23,45 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 
 - **Issue argument given** → strip any leading `#`; that issue is the target.
   Skip the queue scan.
-- **No argument** → run the selection script:
+- **No argument** → run the `origin/main` CI health gate first, then the
+  worktree sweep, then target selection. Both gh-calling scripts need
+  `dangerouslyDisableSandbox: true`.
+
+  The health gate must run **before** the sweep: a red main means no new work
+  is safe to start, and the sweep's gh calls are wasted in that case.
+
+  ```bash
+  HEALTH=$(.claude/skills/dispatch/scripts/dispatch-select-target --health-only)
+  ```
+
+  - **`main-broken <sha>`** → see the **main-broken handler** at the end of
+    this step. Do **not** run the sweep or selection.
+  - **`ok`** → run the sweep (also needs `dangerouslyDisableSandbox: true` for
+    the `/proc` walk):
+
+    ```bash
+    SWEEP_OUT=$(.claude/skills/dispatch/scripts/dispatch-sweep 2>tmp/dispatch-sweep-stderr)
+    SWEEP_EXIT=$?
+    ```
+
+    Route on the sweep outcome:
+
+    - **Exit 0, empty stdout** → fall through to `dispatch-select-target`.
+    - **Exit 0, stdout `worktree <N> <branch>`** → an orphaned worktree was
+      adopted. Skip Step 2 and proceed to Step 3 with `<N>` and `explicit` —
+      treat the adoption like an explicit `/dispatch <N>`.
+    - **Non-zero exit, stderr `cleanup-unknown:<path>`** → the sweep found a
+      worktree with no open PR and no inferable issue number. Use
+      `AskUserQuestion` to ask whether to delete `<path>` — its history is
+      only local. This is the only sweep path that can destroy
+      potentially-unmerged code.
+      - **Yes** → run `dispatch-sweep --cleanup-unknown <path>`, then re-run
+        the default `dispatch-sweep`. Loop until it exits 0.
+      - **No** → fall through to `dispatch-select-target`.
+    - **Any other non-zero exit** → log the stderr contents to the conversation
+      as a diagnostic, then fall through to `dispatch-select-target` as
+      defense-in-depth. The sweep is best-effort; a malformed invocation or
+      transient `gh`/`git` failure should not stall the workflow.
 
   ```bash
   .claude/skills/dispatch/scripts/dispatch-select-target
@@ -40,23 +78,13 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
     closed/unrecognized issue `<N>` and **stop** (consistent with the named-target
     "closed → report and stop" rule in Step 2)
   - `empty` — nothing eligible
-  - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check; the queue
-    scan was short-circuited (see the `main-broken` handling block below)
+  - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check. The
+    pre-sweep gate above normally catches this first; this is the same gate
+    re-run as defense-in-depth. See the **main-broken handler** below.
 
   An **explicit issue argument overrides current-worktree detection** — the selection
   script, and therefore its current-worktree detection, runs only when no argument is
   given. `/dispatch #123` run from inside worktree-456 still targets 123.
-
-  Before the priority ladder, the script runs a **top-priority `origin/main` CI
-  health gate**. Every queueable task builds on `origin/main` — branches fork
-  from it and merge it — so a failing check on main's HEAD means nothing is safe
-  to start. The gate aggregates main's HEAD CI from two sources (CodeQL
-  check-runs and Actions workflow runs); a failing conclusion short-circuits the
-  scan to `main-broken <sha>` and the priority ladder is not evaluated.
-  In-progress (not-yet-concluded) checks do **not** trip the gate. The gate is
-  bypassed by an explicit `/dispatch <issue|pr>` argument (the queue scan is not
-  run at all) and by current-worktree continuation (a session continues its own
-  in-progress work regardless of main's state).
 
   Priority order it implements (highest first; within a tier, oldest PR wins; PRs
   and `help wanted` issues with a local worktree are skipped; `waiting`-phase PRs are skipped entirely):
@@ -67,28 +95,37 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 
   On `empty` → report that the queue is empty and **stop**.
 
-  On `main-broken <sha>` → `origin/main` itself is red, so no new work is safe to
-  start. Do **not** create a worktree, branch, or phase skill. Diagnose main
-  instead: enumerate the failing checks on `<sha>` by aggregating
+  **main-broken handler.** `origin/main` itself is red, so no new work is safe
+  to start. Do **not** run the sweep, create a worktree, branch, or phase skill.
+  Diagnose main instead: enumerate the failing checks on `<sha>` by aggregating
   `gh run list --branch main` and
   `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`. For a failing workflow
   run, fetch its logs with `gh run view <databaseId> --log-failed`; for a failing
-  CodeQL check-run (which has no workflow-run id), open its `details_url` from the
-  check-runs response. Summarize the likely cause, report it, and **stop**. Once a
-  PR that fixes main exists the normal ladder picks it up (verify/ready) — this
-  gate only blocks starting new, unrelated work.
+  CodeQL check-run (which has no workflow-run id), open its `details_url` from
+  the check-runs response. Summarize the likely cause, report it, and **stop**.
+  Once a PR that fixes main exists the normal ladder picks it up (verify/ready)
+  — this gate only blocks starting new, unrelated work.
 
 ## 2. Trace to an Open Leaf
 
 When the resolved target is an **open issue with no PR** — whether queue-selected
-(`issue <num>`) or named by argument — trace to its open leaf:
+(`issue <num>`) or named by argument — trace to its open leaf. Pass the mode that
+matches Step 3's resolve call: `queue` if queue-selected, `explicit` if named by
+an explicit `/dispatch` argument:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-trace-leaf <N>
+.claude/skills/dispatch/scripts/dispatch-trace-leaf <N> <queue|explicit>
 ```
 
 It walks open blockers and sub-issues to an open leaf and prints one issue number.
 Retarget to that leaf.
+
+In `queue` mode the descent is worktree-aware: children whose `<N>-*` branch is
+an existing local worktree (owned by another session) are skipped, and the trace
+falls back to the next ready sibling. If every reachable open leaf in the subtree
+is worktree-conflicted, the script exits non-zero with a message on stderr —
+report "subtree fully blocked — all open leaves have worktrees owned by other
+sessions" (name `<N>`) and **stop**; do not dispatch.
 
 Skip leaf tracing when:
 - A PR exists for the target (`pr <num> <branch> <phase>` result, or an explicit
@@ -166,7 +203,7 @@ present. Map the phase:
 
 | Phase | Meaning | Next action |
 |---|---|---|
-| `implement` | no PR on the target | relevance review (Step 6), then `/plan-implement` |
+| `implement` | no PR on the target | relevance review (Step 6), then dispatch its verdict |
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
 | `waiting` | draft PR, CI in progress (running/queued/not started) | monitor CI to completion with a `sonnet` subagent, then re-derive the phase and dispatch it (Step 5) |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
@@ -180,9 +217,10 @@ present. Map the phase:
 Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 `/dispatch` invocation.
 
-- **`implement`** — run the Step 6 relevance review first. If it passes, invoke
-  `/plan-implement`. The draft PR's existence plus its CI status is its own marker —
-  `/plan-implement` gets **no** `dispatch:*` label.
+- **`implement`** — run the Step 6 relevance review and dispatch the verdict it
+  returns (`proceed` / `adjust` / `stop` — see Step 6). The draft PR's existence
+  plus its CI status is its own marker — `/plan-implement` gets **no**
+  `dispatch:*` label.
 - **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of failed
   CI checks, record the outcome, post it, stop. No label.
 - **`waiting`** — CI checks are still running or queued. Monitor them to
@@ -236,15 +274,65 @@ respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
 
 ## 6. Pre-Implementation Relevance Review
 
-Before invoking `/plan-implement` on an `implement`-phase (no-PR) issue, run the
-`ref-ready` Step 3e relevance check against the current codebase: has the codebase
-evolved to make the issue obsolete, or are any requirements already addressed by
-existing code?
+This step runs **only** for the `implement` phase — a no-PR target. Every phase
+with an existing PR (`verify` onward) skips it: implementation is already
+underway. It is the implementation-time counterpart of `ref-ready`'s Step 3e
+relevance check; the two are deliberately separate — Step 3e is creation-time
+and `$BASELINE_BRANCH`-anchored, this step is pre-implementation and
+`createdAt`-anchored.
 
-- **Still relevant** → proceed to invoke `/plan-implement`.
-- **Obsolete or already addressed** → **stop** and report to the user what made the
-  issue obsolete or what already exists, and recommend closing the issue or
-  re-running `/ready`. Do **not** invoke `/plan-implement`.
+Before invoking `/plan-implement` on an `implement`-phase (no-PR) issue, run a
+creation-date-anchored drift analysis. First, fetch the issue's creation
+timestamp (`dangerouslyDisableSandbox: true` — `gh` needs network):
 
-This review is **skipped** for the `verify` case — a PR already exists and
-implementation is underway.
+```bash
+gh issue view <N> --json createdAt -q .createdAt
+```
+
+Then gather evidence of drift since that timestamp across the paths, references, and
+conventions the issue body names.
+
+### Drift-analysis inputs
+
+Inputs 1, 3, and 4 are independent — issue them in parallel (one message,
+multiple tool calls), together with input 2's initial list call. Input 2 then
+has a dependent per-PR follow-up once that list returns.
+
+1. **Commits since creation** — one `git log --since=<createdAt> -- <path1> <path2>
+   ...` across every file path the issue body names. Relevant commits indicate the
+   area is actively changing and may have shifted the issue's assumptions.
+
+2. **Merged PRs since creation that touched the same files** — list merged PRs in
+   the window (`dangerouslyDisableSandbox: true` — `gh` needs network):
+   ```bash
+   gh pr list --state merged --search "merged:>=<createdAt>" --limit 100
+   ```
+   If the result hits the limit, the drift window is too wide to analyze cheaply
+   — report that and recommend re-running `/ready` instead. Otherwise, for the
+   PRs whose titles plausibly relate to the issue's domain, fetch their changed
+   files and keep the ones overlapping the paths the issue names. Titles and
+   descriptions often surface whether the overlap is incidental or substantive.
+
+3. **Named-reference validity** — one `grep`/`rg` with all names alternated as a
+   single pattern. Names include any file paths, module names, function names, CLI
+   commands, env vars, or npm scripts the issue body cites. Flag anything renamed,
+   moved, or removed since the issue was created.
+
+4. **Convention drift** — re-read `CLAUDE.md` and any `.claude/rules/*.md` whose
+   domain the issue touches. Flag approaches the issue assumes that no longer match
+   current conventions (e.g. a deprecated pattern, a renamed package, a changed
+   config shape).
+
+Input 4 stays with the dispatching session. Inputs 1-3 may be handed to a
+one-shot subagent that returns a structured drift summary — decide this before
+the parallel dispatch so the calls are not run twice. The dispatching session
+always owns the verdict.
+
+### Three-way verdict
+
+- **`proceed`** — drift absent or cosmetic; invoke `/plan-implement`.
+- **`adjust`** — issue still wanted but references, conventions, or scope have
+  shifted; invoke `/new-requirement` with the drift findings as the revised
+  understanding, then `/plan-implement`.
+- **`stop`** — codebase has moved past the need; report what changed and recommend
+  closing the issue or re-running `/ready`. Do **not** invoke `/plan-implement`.

@@ -104,13 +104,11 @@ true no-op. Otherwise run all steps in order.
    .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
-7. **Apply the `dispatch:refactored` label.** Ensure the label exists
-   idempotently, then apply it (use `dangerouslyDisableSandbox: true` — `gh`
-   needs network):
+7. **Apply the `dispatch:refactored` label** via `dispatch-complete-phase` (use
+   `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   gh label create "dispatch:refactored" --color BFD4F2 --description "simplify phase complete" 2>/dev/null || true
-   gh pr edit "$PR_NUM" --add-label "dispatch:refactored"
+   .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" simplify
    ```
 
    This skill **owns** its `dispatch:refactored` label — parallel to how
