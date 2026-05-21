@@ -78,12 +78,11 @@ run all steps in order.
    .claude/skills/dispatch/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
-6. **Apply the `dispatch:reviewed` label.** Ensure the label exists idempotently,
-   then apply it (use `dangerouslyDisableSandbox: true` — `gh` needs network):
+6. **Apply the `dispatch:reviewed` label** via `dispatch-complete-phase` (use
+   `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   gh label create "dispatch:reviewed" --color BFD4F2 --description "review phase complete" 2>/dev/null || true
-   gh pr edit "$PR_NUM" --add-label "dispatch:reviewed"
+   .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" review
    ```
 
    This skill **owns** its `dispatch:reviewed` label — unlike the generic
