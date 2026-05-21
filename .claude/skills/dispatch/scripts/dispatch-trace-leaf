@@ -28,7 +28,8 @@
 #
 # Exit codes:
 #   0 — a leaf was found and printed to stdout
-#   1 — usage error (bad issue number or missing/invalid mode)
+#   1 — usage error, or a sibling gh script (issue-blocking / issue-sub-issues)
+#       failed — a hard failure the caller must not treat as "no work"
 #   2 — queue mode only: every reachable open leaf is worktree-conflicted
 set -euo pipefail
 
@@ -66,18 +67,21 @@ open_children() {
   local n="$1"
   local children=()
 
-  # Gather open blockers.
+  # Gather open blockers. A non-zero exit from issue-blocking is a real gh API
+  # failure (empty output on success means genuinely no blockers) — propagate
+  # it as a hard error instead of collapsing it into "this issue has no
+  # children". No 2>/dev/null: let issue-blocking's stderr diagnostic surface.
   local blocker_json
-  blocker_json=$("$SCRIPT_DIR/issue-blocking" "$n" 2>/dev/null) || blocker_json=""
+  blocker_json=$("$SCRIPT_DIR/issue-blocking" "$n") || return 1
   if [[ -n "$blocker_json" ]]; then
     while IFS= read -r num; do
       [[ -n "$num" ]] && children+=("$num")
     done < <(printf '%s' "$blocker_json" | jq -r 'select(.state == "OPEN" or .state == "open") | .number' 2>/dev/null || true)
   fi
 
-  # Gather open sub-issues.
+  # Gather open sub-issues. Same hard-error contract as the blocker lookup.
   local sub_json
-  sub_json=$("$SCRIPT_DIR/issue-sub-issues" "$n" 2>/dev/null) || sub_json=""
+  sub_json=$("$SCRIPT_DIR/issue-sub-issues" "$n") || return 1
   if [[ -n "$sub_json" ]]; then
     while IFS= read -r num; do
       [[ -n "$num" ]] && children+=("$num")
@@ -88,6 +92,10 @@ open_children() {
   if [[ ${#children[@]} -gt 0 ]]; then
     printf '%s\n' "${children[@]}" | sort -un
   fi
+  # Explicit success: the function would otherwise fall off the end returning
+  # the [[ ]] test's exit status (1 when there are no children), which a
+  # caller checking $? cannot distinguish from a sibling-script failure.
+  return 0
 }
 
 # Depth-first search for the lowest-numbered reachable open leaf.
@@ -96,6 +104,9 @@ open_children() {
 # Returns 0 and prints the leaf number on success.
 # Returns 1 if no valid leaf is reachable through this subtree (cycles, or in
 # queue mode every reachable leaf is worktree-conflicted).
+# Returns 3 if a blocker/sub-issue lookup hit a hard error (gh API failure);
+# re-propagated through every recursive frame so the top level can map it to a
+# clean script-level abort instead of mis-selecting the issue as startable.
 declare -A VISITED=()
 
 find_leaf() {
@@ -107,8 +118,14 @@ find_leaf() {
   fi
   VISITED["$n"]=1
 
-  local kids
-  kids=$(open_children "$n")
+  # open_children returns non-zero only on a sibling gh-script failure. set -e
+  # is disabled here (find_leaf is always called from an `if` condition), so
+  # the status must be captured and checked explicitly.
+  local kids rc
+  kids=$(open_children "$n"); rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    return 3
+  fi
 
   if [[ -z "$kids" ]]; then
     # Topological leaf — a valid leaf. Worktree-conflicted children are filtered
@@ -121,23 +138,40 @@ find_leaf() {
   # Descend into children lowest-numbered first; return the first leaf found.
   # In queue mode, skip any child that already has a worktree — if every child
   # is skipped the loop finds nothing and we bubble up.
-  local kid
+  local kid leaf
   while IFS= read -r kid; do
     [[ -z "$kid" ]] && continue
     [[ "$MODE" == "queue" && -n "${CONFLICTED[$kid]+x}" ]] && continue
-    local leaf
-    if leaf=$(find_leaf "$kid"); then
+    # Capture the status explicitly (set -e is disabled here) so a hard error
+    # (rc 3) is distinguishable from "no leaf in this subtree" (rc 1).
+    leaf=$(find_leaf "$kid"); rc=$?
+    if [[ "$rc" -eq 0 ]]; then
       echo "$leaf"
       return 0
     fi
+    [[ "$rc" -eq 3 ]] && return 3
   done <<< "$kids"
 
   return 1
 }
 
 if LEAF=$(find_leaf "$ISSUE_NUM"); then
+  trace_rc=0
+else
+  trace_rc=$?
+fi
+
+if [[ "$trace_rc" -eq 0 ]]; then
   echo "$LEAF"
   exit 0
+fi
+
+# A hard error (gh API failure during blocker/sub-issue resolution) must not be
+# treated as "no work" — aborting is correct in both modes. In particular this
+# stops explicit mode from falling through to the print-N cycle fallback below.
+if [[ "$trace_rc" -eq 3 ]]; then
+  echo "error: dispatch-trace-leaf $ISSUE_NUM: a blocker/sub-issue lookup failed (gh API error); aborting rather than treating $ISSUE_NUM as startable" >&2
+  exit 1
 fi
 
 # In queue mode, no valid leaf is reachable — every leaf is worktree-conflicted
