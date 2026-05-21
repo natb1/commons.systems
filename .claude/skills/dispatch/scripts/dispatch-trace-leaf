@@ -12,9 +12,7 @@
 #              dispatch-resolve-worktree's explicit mode, which yields `enter`
 #              for the recycle-after-completion case).
 #   queue    — descent filters out children whose <N>-* branch is an existing
-#              local worktree (owned by another session). When a recursion
-#              reaches a topological leaf whose own <N>-* worktree exists, it
-#              bubbles up so a sibling can be tried. If a node has open
+#              local worktree (owned by another session). If a node has open
 #              children but every one is filtered out, the descent bubbles up
 #              too — that subtree has no ready work. If every reachable open
 #              leaf in the subtree is conflicted, the script exits non-zero
@@ -93,7 +91,7 @@ open_children() {
 }
 
 # Depth-first search for the lowest-numbered reachable open leaf.
-# Args: $1 = current issue number, $2 = 1 on the initial call, 0 on recursion
+# Args: $1 = current issue number
 # Uses global VISITED associative array for cycle protection.
 # Returns 0 and prints the leaf number on success.
 # Returns 1 if no valid leaf is reachable through this subtree (cycles, or in
@@ -102,7 +100,6 @@ declare -A VISITED=()
 
 find_leaf() {
   local n="$1"
-  local is_root="$2"
 
   if [[ -n "${VISITED[$n]+x}" ]]; then
     # Cycle detected — no leaf reachable via this path.
@@ -114,13 +111,9 @@ find_leaf() {
   kids=$(open_children "$n")
 
   if [[ -z "$kids" ]]; then
-    # Topological leaf. In queue mode a non-root leaf whose own <N>-* worktree
-    # exists belongs to another session; bubble up so a sibling can be tried.
-    # The root argument is never self-filtered — the /dispatch caller resolves
-    # its worktree separately.
-    if [[ "$MODE" == "queue" && "$is_root" == "0" && -n "${CONFLICTED[$n]+x}" ]]; then
-      return 1
-    fi
+    # Topological leaf — a valid leaf. Worktree-conflicted children are filtered
+    # before recursion (see the descent loop below), so a queue-mode leaf
+    # reached here is never itself worktree-conflicted.
     echo "$n"
     return 0
   fi
@@ -133,7 +126,7 @@ find_leaf() {
     [[ -z "$kid" ]] && continue
     [[ "$MODE" == "queue" && -n "${CONFLICTED[$kid]+x}" ]] && continue
     local leaf
-    if leaf=$(find_leaf "$kid" 0); then
+    if leaf=$(find_leaf "$kid"); then
       echo "$leaf"
       return 0
     fi
@@ -142,7 +135,7 @@ find_leaf() {
   return 1
 }
 
-if LEAF=$(find_leaf "$ISSUE_NUM" 1); then
+if LEAF=$(find_leaf "$ISSUE_NUM"); then
   echo "$LEAF"
   exit 0
 fi

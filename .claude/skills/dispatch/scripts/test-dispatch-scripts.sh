@@ -996,7 +996,7 @@ echo "=== dispatch-trace-leaf ==="
 
 # The default empty-worktree-list stub means no <N>-* branch is ever conflicted,
 # so explicit mode and queue mode behave identically for the chain/leaf tests
-# below. New mode-specific behavior is exercised in tests 8-11.
+# below. New mode-specific behavior is exercised in tests 8-12.
 
 # 1. No children → prints self.
 echo "Test: no children → prints self"
