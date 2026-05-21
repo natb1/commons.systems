@@ -91,15 +91,19 @@ Run this step **only when the current branch is `main`**. From an issue worktree
 skip this step — phase skills (`/verify-pr`, `/security-review-fix`) already merge
 `origin/main` into the issue branch at their own entry points.
 
-Invoke `/commit-merge-push` via the Skill tool to fetch `origin/main`, merge it into
-the current branch, and push to `origin HEAD`. From the main worktree this fast-forwards local `main`; the
-merge and push are no-ops when local main already equals `origin/main`.
+Fast-forward local `main` to `origin/main`:
 
-- If the working tree is dirty, stash before invoking — `/commit-merge-push` would
-  otherwise commit pending changes directly to `main`.
-- If `/commit-merge-push` reports a merge conflict or push rejection, release the
-  lock (see *Releasing the lock*), then **stop** and surface the error — do not
-  proceed to target selection.
+```bash
+git fetch origin main && git merge --ff-only origin/main
+```
+
+This brings local `main` up to `origin/main` without pushing. It is a no-op when
+local `main` already equals `origin/main`.
+
+- If `git fetch` fails, or `git merge --ff-only` rejects a non-fast-forward (local
+  `main` has diverged with unexpected commits), release the lock (see *Releasing
+  the lock*), then **stop** and surface the error — do not proceed to target
+  selection.
 
 ## 2. Select the Target
 
