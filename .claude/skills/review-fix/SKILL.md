@@ -17,6 +17,24 @@ This skill runs in the **caller's thread** — it has no `context:` key — so i
 fork `/commit-merge-push`, invoke the built-in `/review`, and launch
 implementation and follow-up-issue subagents.
 
+## Idempotency preamble
+
+Before running any step, resolve the PR number **and its labels** from the current
+branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
+
+```bash
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+PR_JSON=$(gh pr view "$BRANCH" --json number,labels)
+PR_NUM=$(echo "$PR_JSON" | jq -r .number)
+echo "$PR_JSON" | jq -r '.labels[].name'
+```
+
+`PR_NUM` is reused in Steps 7 and 8 — do not re-resolve. If the printed labels
+include `dispatch:reviewed` — an interrupted prior run — **skip Steps 1–10
+entirely** and return; the label is the wrapper's terminal action under
+autonomous use and is already applied, so re-entry is a true no-op. Otherwise
+run all steps in order.
+
 ## Steps
 
 1. **Merge `origin/main` first.** Fork `/commit-merge-push` via the Agent tool to
@@ -96,13 +114,8 @@ implementation and follow-up-issue subagents.
    was a no-op), this invocation also runs with no pending changes —
    `/commit-merge-push` tolerates that and creates no commit.
 
-7. **Post a PR comment.** Resolve the PR number from the current branch (use
-   `dangerouslyDisableSandbox: true` — `gh` needs network):
-
-   ```bash
-   BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   gh pr view "$BRANCH" --json number -q .number
-   ```
+7. **Post a PR comment.** Reuse `PR_NUM` from the idempotency preamble — no
+   second `gh pr view`.
 
    Build the comment body as a 4-section markdown report, in this order:
 
@@ -135,17 +148,14 @@ implementation and follow-up-issue subagents.
    script invokes `gh`):
 
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh <pr-num> tmp/<file>
+   .claude/skills/dispatch/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
-8. **Apply the `dispatch:reviewed` label.** Ensure the label exists
-   idempotently, then apply it — follow the `gh label create` pattern from
-   `dispatch/SKILL.md`'s "Applying the progress label" section (use
-   `dangerouslyDisableSandbox: true`):
+8. **Apply the `dispatch:reviewed` label** via `dispatch-complete-phase` (use
+   `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   gh label create "dispatch:reviewed" --color BFD4F2 --description "review phase complete" 2>/dev/null || true
-   gh pr edit <pr-num> --add-label "dispatch:reviewed"
+   .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" review
    ```
 
    This skill **owns** its `dispatch:reviewed` label — unlike the generic
@@ -171,3 +181,10 @@ Under `/loop /dispatch` there is no user to drive Step 10 — the skill applies
 the `dispatch:reviewed` label (Step 8) and stops; the Step 9 4-section report
 is informational. The label is applied regardless of whether any fixes were
 made, so `/dispatch` can always advance to the next phase.
+
+## Notes
+
+The skill is idempotent: a re-invocation with `dispatch:reviewed` already on the
+PR skips Steps 1–10 and returns. Step 10 (interactive follow-up) is in the skip
+range because attended follow-up edits would be made directly, not by re-running
+the wrapper.

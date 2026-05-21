@@ -73,7 +73,7 @@ if [ "$EXPLICIT" = false ]; then
       nix/*|flake.nix|flake.lock) RUN_NIX=true ;;
       firestore.rules) RUN_RULES=true ;;
       .github/scripts/*) RUN_CI_SCRIPTS=true ;;
-      .claude/skills/ref-pr-workflow/scripts/*) RUN_PR_SCRIPTS=true ;;
+      .claude/skills/dispatch/scripts/*) RUN_PR_SCRIPTS=true ;;
     esac
   done <<< "$CHANGED"
 fi
@@ -166,14 +166,13 @@ if [ "$RUN_CI_SCRIPTS" = true ]; then
   fi
 fi
 
-# Run PR workflow script tests (skip test-helpers.sh -- sourced library, not a test; skip test-issue-state-scripts.sh -- requires Firestore emulator)
+# Run dispatch script tests (skip test-helpers.sh -- sourced library, not a test)
 if [ "$RUN_PR_SCRIPTS" = true ]; then
-  echo "=== PR workflow script tests ==="
+  echo "=== Dispatch script tests ==="
   PR_SCRIPT_FAIL=false
   for test_script in "$SCRIPTS"/test-*.sh; do
     name=$(basename "$test_script")
     [[ "$name" == "test-helpers.sh" ]] && continue
-    [[ "$name" == "test-issue-state-scripts.sh" ]] && continue
     echo "--- $name ---"
     if "$test_script"; then
       echo "PASS: $name"
