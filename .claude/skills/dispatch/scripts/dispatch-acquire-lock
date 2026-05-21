@@ -22,7 +22,8 @@
 #                             does NOT require a git repo. Default:
 #                             <project-root>/tmp/dispatch.lock.
 #   DISPATCH_LOCK_SESSION_PID Override the session PID, skipping the /proc
-#                             ancestry walk. Tests always set this.
+#                             ancestry walk. Most tests set this; one leaves
+#                             it unset to exercise the walk.
 #   DISPATCH_LOCK_PROC_ROOT   Root of the /proc walk + liveness check.
 #                             Default: /proc.
 #
@@ -97,8 +98,8 @@ else
   # Fallback: no .claude ancestor found (reached pid 1 or hit an unreadable
   # pid). $PPID is a defensible substitute — the recorded PID only needs to be
   # a stable identifier for this session. In practice the .claude ancestor is
-  # always found, and tests always set DISPATCH_LOCK_SESSION_PID, so this walk
-  # (and this fallback) is not exercised by tests.
+  # always found; a dedicated test exercises the walk through a synthetic /proc
+  # tree, but this no-ancestor fallback is not exercised by tests.
   [[ -n "$SESSION_PID" ]] || SESSION_PID="$PPID"
 fi
 

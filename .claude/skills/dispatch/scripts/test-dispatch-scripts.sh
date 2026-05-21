@@ -1833,11 +1833,12 @@ sweep_teardown
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/stub/         lock file + per-test output capture files
 #   $TMPDIR_TEST/scripts/      a copy of dispatch-acquire-lock
-#   $TMPDIR_TEST/proc/         synthetic /proc tree (comm files only)
+#   $TMPDIR_TEST/proc/         synthetic /proc tree (comm + status files)
 #
 # DISPATCH_LOCK_FILE and DISPATCH_LOCK_PROC_ROOT are exported so the script
-# never touches the real shared lock. DISPATCH_LOCK_SESSION_PID is set per
-# invocation so the /proc ancestry walk is never exercised.
+# never touches the real shared lock. Tests 1-6 set DISPATCH_LOCK_SESSION_PID
+# to bypass the /proc ancestry walk; Test 7 leaves it unset to exercise the
+# walk through a synthetic /proc tree.
 
 lock_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -1863,6 +1864,14 @@ lock_proc_pid() {
   local pid="$1" comm="$2"
   mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
   printf '%s\n' "$comm" > "$DISPATCH_LOCK_PROC_ROOT/$pid/comm"
+}
+
+# Helper: write a synthetic <proc>/<pid>/status file recording <ppid> as the
+# parent — the PPid line is all the ancestry walk reads from it.
+lock_proc_status() {
+  local pid="$1" ppid="$2"
+  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
+  printf 'Name:\tbash\nPPid:\t%s\n' "$ppid" > "$DISPATCH_LOCK_PROC_ROOT/$pid/status"
 }
 
 # --- Test 1: first acquisition with an absent lock file ----------------------
@@ -1966,6 +1975,31 @@ else
   echo "    stderr: '$err6'"
 fi
 rm -rf "$nongit"
+lock_teardown
+
+# --- Test 7: /proc ancestry walk resolves the nearest .claude ancestor -------
+#
+# The only lock test that exercises the /proc walk — DISPATCH_LOCK_SESSION_PID
+# is left unset. `( exec ... )` forks a subshell that exec-replaces itself with
+# the script, so the script's $PPID is this test process ($$). Synthetic
+# ancestry: $$ is a non-.claude shell whose PPid points at a .claude session,
+# so the walk must climb one level past $$ to reach the session PID.
+
+echo "Test: /proc ancestry walk resolves the nearest .claude ancestor"
+lock_setup
+claude_pid=700700
+lock_proc_pid "$$" "bash"                  # script's $PPID — not a .claude proc
+lock_proc_status "$$" "$claude_pid"        # ... its parent is the .claude session
+lock_proc_pid "$claude_pid" ".claude-unwrapp"
+rc=0
+( exec "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) \
+  >"$STUB_DIR/out7" 2>/dev/null || rc=$?
+out=$(cat "$STUB_DIR/out7" 2>/dev/null || true)
+assert_eq "proc-walk exits 0" "0" "$rc"
+assert_eq "proc-walk prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "proc-walk records the .claude ancestor PID, not \$PPID" \
+  "$claude_pid" "$lock_contents"
 lock_teardown
 
 # ============================================================================
