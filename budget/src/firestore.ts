@@ -407,8 +407,7 @@ export async function createJournalEntry(
   }
   let totalDebit = 0;
   let totalCredit = 0;
-  for (let i = 0; i < legs.length; i++) {
-    const leg = legs[i];
+  for (const [i, leg] of legs.entries()) {
     if (!Number.isFinite(leg.debit) || !Number.isFinite(leg.credit)) {
       throw new DataIntegrityError(`Journal leg ${i} has a non-finite amount (debit=${leg.debit}, credit=${leg.credit})`);
     }
