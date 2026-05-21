@@ -48,11 +48,13 @@ setup() {
   # Copy the scripts under test into the tmp dir so they can call each other
   # via SCRIPT_DIR resolution without relying on the real filesystem PATH.
   cp "$SCRIPT_DIR/dispatch-phase" "$TMPDIR_TEST/dispatch-phase"
+  cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
+           "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
@@ -70,6 +72,15 @@ STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
   "pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels")
+    echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
+    if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
+      cat "$STUB_DIR/pr-list-full.json"
+    else
+      echo "[]"
+    fi
+    ;;
+  "pr list --state open --json number,headRefName")
+    # dispatch-find-pr self-fetch: only the two correlation fields.
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
       cat "$STUB_DIR/pr-list-full.json"
@@ -437,6 +448,58 @@ echo '[]' > "$STUB_DIR/pr-list-full.json"
 ENV_LIST='['"$(make_pr 42 "42-verify" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
 result=$(DISPATCH_PR_LIST="$ENV_LIST" "$TMPDIR_TEST/dispatch-phase" "42")
 assert_eq "DISPATCH_PR_LIST used over self-fetch → verify" "verify" "$result"
+teardown
+
+# ============================================================================
+# dispatch-find-pr tests
+# ============================================================================
+echo ""
+echo "=== dispatch-find-pr ==="
+
+# 1. Matching branch prefix + matching title → prints PR number.
+echo "Test: matching branch prefix + matching title → PR number"
+setup
+printf '[{"number":42,"headRefName":"42-my-feature","title":"feature: 42 something"}]\n' \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "42")
+assert_eq "matching branch prefix + matching title → PR number" "42" "$result"
+teardown
+
+# 2. Matching branch prefix + non-matching title → still prints PR number (the #670 case).
+# The script never reads title — that's the point; this is the regression case from #673.
+echo "Test: matching branch prefix + non-matching title → PR number (#670 case)"
+setup
+printf '[{"number":670,"headRefName":"669-budget-sankey","title":"budget: use schemeTableau10 in sankey chart"}]\n' \
+  > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "669")
+assert_eq "matching branch prefix, non-matching title → PR number" "670" "$result"
+teardown
+
+# 3. No PR → prints empty.
+echo "Test: no PR → empty"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "42")
+assert_eq "no PR → empty output" "" "$result"
+teardown
+
+# 4. DISPATCH_PR_LIST overrides self-fetch.
+# pr-list-full.json is empty: a self-fetch would yield empty. The PR lives only
+# in the env var, so a non-empty result proves the env var won.
+echo "Test: DISPATCH_PR_LIST overrides self-fetch"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+result=$(DISPATCH_PR_LIST='[{"number":670,"headRefName":"669-x"}]' "$TMPDIR_TEST/dispatch-find-pr" "669")
+assert_eq "DISPATCH_PR_LIST used over self-fetch → PR number" "670" "$result"
+teardown
+
+# 5. Issue-prefix disambiguation: issue 6 must not match branch "60-foo".
+# The trailing "-" in the startswith match is what prevents the collision.
+echo "Test: issue 6 does not match branch 60-foo"
+setup
+printf '[{"number":10,"headRefName":"60-foo"}]\n' > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "6")
+assert_eq "issue 6 does not match branch 60-foo → empty" "" "$result"
 teardown
 
 # ============================================================================
