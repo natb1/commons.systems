@@ -52,8 +52,9 @@
 # Exit codes:
 #   0  acquired/busy/released/noop (all are normal outcomes; stdout
 #      disambiguates).
-#   2  misconfiguration — not in a git repo and DISPATCH_LOCK_FILE is unset, or
-#      an unknown/extra command-line argument.
+#   2  the script cannot operate — not in a git repo and DISPATCH_LOCK_FILE is
+#      unset, an unknown/extra command-line argument, or an unexpected internal
+#      sentinel from a flock subshell (a should-never-happen guard).
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch-sweep).
 set -uo pipefail
@@ -177,14 +178,15 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_PID
   case "$result" in
     OK)       return 0 ;;
     'BUSY '*) CONTENDED_PID="${result#BUSY }"; return 1 ;;
-    *)        return 1 ;;
+    *) echo "dispatch-acquire-lock: try_acquire — unexpected subshell output '$result'" >&2
+       exit 2 ;;
   esac
 }
 
 # ---- dispatch the mode ------------------------------------------------------
 case "$MODE" in
   acquire)
-    # Single-shot — byte-identical to the pre-#719 behavior.
+    # Single-shot: one read-check-write attempt, no polling.
     try_acquire && echo acquired || echo busy
     exit 0
     ;;
@@ -223,7 +225,9 @@ case "$MODE" in
     )
     case "$result" in
       RELEASED) echo released ;;
-      *)        echo noop ;;
+      NOOP)     echo noop ;;
+      *) echo "dispatch-acquire-lock: --release — unexpected subshell output '$result'" >&2
+         exit 2 ;;
     esac
     exit 0
     ;;
