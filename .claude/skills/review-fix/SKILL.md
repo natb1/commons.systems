@@ -67,8 +67,9 @@ run all steps in order.
 
    For each **Deferred** finding, compose — from the finding text — a follow-up
    issue **title** (a short imperative summary) and **body** (the finding
-   description, the files the finding names, and a short rationale for why it
-   is out of scope for this PR). `/review` supplies no structured title or body
+   description, the files the finding names, the PR backlink `#<PR_NUM>` reusing
+   `PR_NUM` from the idempotency preamble, and a short rationale for why it is
+   out of scope for this PR). `/review` supplies no structured title or body
    fields, so the wrapper writes both. Carry each finding, its bucket, and —
    for Deferred findings — the composed title and body forward to the Step 5
    subagents and the report generators in Steps 7 and 9. If `/review` returned
@@ -87,9 +88,7 @@ run all steps in order.
    Deferred bucket, fork a subagent via the Agent tool (`subagent_type:
    general-purpose`, `model: sonnet`) that invokes the `/file-issue` skill.
    Build the subagent's `$INPUT` from the title and body composed for that
-   finding in Step 3: the title on the first line, then the body — the finding
-   description, the "Relevant files" list, the PR backlink `#<PR_NUM>` (reuse
-   `PR_NUM` from the idempotency preamble), and the out-of-scope rationale.
+   finding in Step 3: the title on the first line, then the body.
    `/file-issue` owns duplicate detection, issue creation, `@me` assignment,
    and the `help wanted` label — the subagent invokes it and does no
    additional `gh` work.

@@ -27,16 +27,12 @@ All `gh` calls run with `dangerouslyDisableSandbox: true` per
 
 ## Step 2. Duplicate detection
 
-Extract 3–5 representative keywords from the title and run:
+Extract 3–5 representative keywords from the title and run a single search
+that returns each candidate's number, title, and body inline — no
+per-candidate follow-up call is needed:
 
 ```bash
-gh search issues --repo {owner}/{repo} --state open "<keywords>"
-```
-
-For each candidate returned, fetch its body:
-
-```bash
-gh issue view <N> --json title,body
+gh search issues --repo {owner}/{repo} --state open --json number,title,body "<keywords>"
 ```
 
 Judge whether the candidate describes the same actionable change as the new
