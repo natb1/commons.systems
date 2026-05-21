@@ -66,7 +66,7 @@ The QA pass covers **public data only** — documents present in both the QA ser
       printed PR's issue number is the target.
 
    Then, **when the session is not already in the target's worktree**, resolve or
-   create it via `EnterWorktree`, matching `/dispatch` Step 3. `EnterWorktree`
+   create it via `EnterWorktree`, matching `/dispatch` Step 4. `EnterWorktree`
    accepts exactly one of `path` (switch to an existing worktree) or `name`
    (create a new one):
 
