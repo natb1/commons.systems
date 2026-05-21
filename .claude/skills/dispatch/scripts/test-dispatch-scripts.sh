@@ -1511,6 +1511,21 @@ assert_eq "issue-blocking failure (explicit) → exit 1" "1" "$rc"
 assert_eq "issue-blocking failure (explicit) → no N printed" "" "$stdout"
 teardown
 
+# 16. A failure one level deep is re-propagated through the recursive frame.
+#     Tests 13-15 inject the failure at the root issue, so find_leaf returns
+#     the rc-3 hard error from its first frame. Here 800 has sub-issue 801 and
+#     it is 801's blocker lookup that fails — exercising the `rc -eq 3` branch
+#     in find_leaf's descent loop, which must carry the hard error up rather
+#     than mask it as "no leaf in this subtree".
+echo "Test: gh failure one level deep → re-propagated, exit 1"
+setup
+printf '[{"number":801}]\n' > "$STUB_DIR/subissues-800.json"
+: > "$STUB_DIR/gh-fail-blocked_by-801"
+stdout=$("$TMPDIR_TEST/dispatch-trace-leaf" "800" "queue" 2>/dev/null) && rc=0 || rc=$?
+assert_eq "deep gh failure → exit 1" "1" "$rc"
+assert_eq "deep gh failure → no leaf on stdout" "" "$stdout"
+teardown
+
 # ============================================================================
 # dispatch-complete-phase tests
 # ============================================================================
