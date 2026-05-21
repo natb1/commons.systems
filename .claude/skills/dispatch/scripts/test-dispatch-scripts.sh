@@ -3199,6 +3199,203 @@ assert_eq "writer change is visible via the reader" "In Progress" "$status"
 proj_teardown
 
 # ============================================================================
+# dispatch-spawn tests
+# ============================================================================
+echo "=== dispatch-spawn ==="
+#
+# dispatch-spawn is exercised against a fake `claude` — a multi-subcommand
+# temp script DISPATCH_SPAWN_CLAUDE_CMD points at by absolute path, so no real
+# daemon is needed. The same fake also backs the sourced lib-claude-agents.sh
+# helper (dispatch-spawn exports CLAUDE_AGENTS_CMD to it).
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/        copies of dispatch-spawn + lib-claude-agents.sh
+#   $TMPDIR_TEST/worktrees/main/ the main worktree (the spawn subshell cd's here)
+#   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
+#   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
+#   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
+#   $TMPDIR_TEST/rm-log          recorded sessionIds of each `claude rm` call
+#
+# The test shell runs under `set -e`; dispatch-spawn can exit non-zero, so
+# every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
+
+SPAWN_REGISTRY=""
+SPAWN_BG_ARGV=""
+SPAWN_RM_LOG=""
+
+# write_fake_spawn_claude — install the multi-subcommand fake `claude`.
+# Dispatches on $1:
+#   agents   — print the registry fixture (ignores --cwd; the helper filters
+#              client-side here, which is fine for these tests).
+#   --bg     — record full argv to bg-argv; when SPAWN_BG_REGISTERS=1 (default)
+#              parse --name and jq-append the new agent to the fixture so the
+#              verify step finds it.
+#   rm       — append $2 to rm-log.
+write_fake_spawn_claude() {
+  cat > "$TMPDIR_TEST/fake-claude" <<FAKE
+#!/usr/bin/env bash
+set -uo pipefail
+case "\${1:-}" in
+  agents)
+    cat "$SPAWN_REGISTRY"
+    ;;
+  --bg)
+    printf '%s\n' "\$@" > "$SPAWN_BG_ARGV"
+    if [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
+      name=""
+      while [[ \$# -gt 0 ]]; do
+        if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+        shift
+      done
+      tmp=\$(mktemp)
+      jq --arg name "\$name" \
+        '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/main","kind":"background","status":"busy","name":\$name}]' \
+        "$SPAWN_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_REGISTRY"
+    fi
+    ;;
+  rm)
+    printf '%s\n' "\${2:-}" >> "$SPAWN_RM_LOG"
+    ;;
+esac
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-claude"
+}
+
+spawn_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main"
+
+  # dispatch-spawn sources lib-claude-agents.sh from its own directory, so the
+  # helper must sit alongside the copy. It is sourced, not executed — no chmod.
+  cp "$SCRIPT_DIR/dispatch-spawn" "$TMPDIR_TEST/scripts/dispatch-spawn"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn"
+
+  SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_RM_LOG="$TMPDIR_TEST/rm-log"
+  printf '[]' > "$SPAWN_REGISTRY"
+
+  export DISPATCH_SPAWN_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+  export DISPATCH_SPAWN_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+  export DISPATCH_SPAWN_SESSION_ID="sess-self"
+}
+
+spawn_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  SPAWN_REGISTRY=""
+  SPAWN_BG_ARGV=""
+  SPAWN_RM_LOG=""
+  unset DISPATCH_SPAWN_MAIN_WORKTREE DISPATCH_SPAWN_CLAUDE_CMD \
+    DISPATCH_SPAWN_SESSION_ID SPAWN_BG_REGISTERS
+}
+
+# --- Test 1: spawn success ---------------------------------------------------
+
+echo "Test: an empty registry spawns one /dispatch background job"
+spawn_setup
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawn: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "spawn: stdout is 'spawned'" "spawned" "$out"
+# The recorded argv must be exactly: --bg --name dispatch-<id> \
+#   --permission-mode auto /dispatch
+mapfile -t bg_argv < "$SPAWN_BG_ARGV"
+assert_eq "spawn: argv[0] is --bg" "--bg" "${bg_argv[0]:-}"
+assert_eq "spawn: argv[1] is --name" "--name" "${bg_argv[1]:-}"
+case "${bg_argv[2]:-}" in
+  dispatch-*) name_ok=yes ;;
+  *)          name_ok="no: ${bg_argv[2]:-}" ;;
+esac
+assert_eq "spawn: argv[2] is a dispatch-* agent name" "yes" "$name_ok"
+assert_eq "spawn: argv[3] is --permission-mode" "--permission-mode" "${bg_argv[3]:-}"
+assert_eq "spawn: argv[4] is auto" "auto" "${bg_argv[4]:-}"
+assert_eq "spawn: argv[5] is /dispatch" "/dispatch" "${bg_argv[5]:-}"
+spawn_teardown
+
+# --- Test 2: dedup -----------------------------------------------------------
+
+echo "Test: another live dispatch-* session deduplicates the spawn"
+spawn_setup
+printf '%s' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/main","kind":"background","status":"busy","name":"dispatch-aaaa1111"}]' \
+  > "$SPAWN_REGISTRY"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "dedup: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "dedup: stdout is 'deduped'" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: dedup: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dedup: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_BG_ARGV")"
+fi
+spawn_teardown
+
+# --- Test 3: self-exclusion --------------------------------------------------
+
+echo "Test: a dispatch-* session that is this session does not deduplicate"
+spawn_setup
+# The only dispatch-* session in the registry IS this session (sess-self).
+printf '%s' \
+  '[{"sessionId":"sess-self","pid":4242,"cwd":"/main","kind":"background","status":"busy","name":"dispatch-self0000"}]' \
+  > "$SPAWN_REGISTRY"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "self-exclude: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "self-exclude: stdout is 'spawned' (own session is not 'another')" \
+  "spawned" "$out"
+spawn_teardown
+
+# --- Test 4: spawn failure ---------------------------------------------------
+
+echo "Test: a spawned job that never registers exits non-zero with a diagnostic"
+spawn_setup
+write_fake_spawn_claude
+export SPAWN_BG_REGISTERS=0
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>&1 1>/dev/null) || rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: dispatch-spawn exits non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: dispatch-spawn exits non-zero (rc=$rc)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"did not register"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: stderr reports the unregistered agent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: stderr reports the unregistered agent"
+  echo "    stderr: $err"
+fi
+spawn_teardown
+
+# --- Test 5: prune -----------------------------------------------------------
+
+echo "Test: a stopped dispatch-* agent is pruned via 'claude rm'"
+spawn_setup
+printf '%s' \
+  '[{"sessionId":"sess-stale","pid":111,"cwd":"/main","kind":"background","status":"stopped","name":"dispatch-dead0000"}]' \
+  > "$SPAWN_REGISTRY"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "prune: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "prune: stdout is 'spawned' (stopped agent does not dedup)" \
+  "spawned" "$out"
+rm_log=$(cat "$SPAWN_RM_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" == *"sess-stale"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm sess-stale' was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm sess-stale' was invoked"
+  echo "    rm-log: $rm_log"
+fi
+spawn_teardown
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
