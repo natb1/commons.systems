@@ -59,31 +59,32 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
       return 1
     fi
 
-    # Capture stdout and exit code separately — `local out=$(...)` would mask
-    # the exit code. 2>/dev/null drops daemon noise; only the exit code and a
-    # well-formed JSON array on stdout are trusted.
-    local out rc
-    out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json --cwd "$path" 2>/dev/null)
-    rc=$?
-    if [[ "$rc" -ne 0 ]]; then
-      # Non-zero exit: `claude` missing (127), the daemon unreachable, or any
-      # other failure. The session state cannot be determined — unknown.
+    # 2>/dev/null drops daemon noise; only the exit code and a well-formed
+    # JSON array on stdout are trusted. A non-zero exit — `claude` missing
+    # (127), the daemon unreachable, or any other failure — means the session
+    # state cannot be determined: unknown.
+    local out
+    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json --cwd "$path" 2>/dev/null); then
       return 1
     fi
 
-    # A zero exit must still yield a JSON array. Anything else — empty output,
-    # an object, malformed JSON — is unknown, not a definite "no sessions".
-    if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"$out"; then
+    # A zero exit with empty (or whitespace-only) output is unknown too — not a
+    # definite "no sessions".
+    if [[ -z "${out//[[:space:]]/}" ]]; then
       return 1
     fi
 
-    # Valid array (including `[]`): one TSV line per session. Capture first so
-    # a degenerate array (e.g. of non-objects) that makes jq fail extraction
-    # yields unknown (return 1) rather than partial output.
+    # One jq pass validates the JSON is an array and extracts the TSV. A
+    # non-array — object, scalar, or malformed JSON — hits `error`; a degenerate
+    # element that breaks extraction errors mid-pass; either way jq exits
+    # non-zero and the result is unknown. Capture first so partial output from
+    # a mid-stream error is discarded rather than emitted.
     local lines
-    lines=$(jq -r '.[] | [.sessionId, .pid, .status, .name] | @tsv' <<<"$out" 2>/dev/null)
-    rc=$?
-    if [[ "$rc" -ne 0 ]]; then
+    if ! lines=$(jq -r '
+      if type == "array"
+      then .[] | [.sessionId, .pid, .status, .name] | @tsv
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
       return 1
     fi
     # `[]` → empty $lines → emit nothing (zero session lines), still return 0.

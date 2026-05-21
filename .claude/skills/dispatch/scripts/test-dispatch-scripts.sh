@@ -2672,6 +2672,17 @@ assert_eq "multi: claude_sessions_under prints both session TSV lines" \
   "$(printf 's-a\t11\tbusy\talpha\ns-b\t22\tidle\tbeta')" "$out"
 ca_teardown
 
+# --- Test 8: a zero exit with empty output is unknown, not no-sessions ------
+
+echo "Test: a zero exit with empty output is unknown, not a no-sessions result"
+ca_setup
+write_fake_claude '' 0
+if out=$(claude_sessions_under "$CA_DIR"); then rc=0; else rc=$?; fi
+assert_eq "empty-output: claude_sessions_under exits non-zero (unknown)" "1" "$rc"
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "empty-output: worktree_has_live_session reports occupied" "occupied" "$live"
+ca_teardown
+
 # ============================================================================
 # summary
 # ============================================================================
