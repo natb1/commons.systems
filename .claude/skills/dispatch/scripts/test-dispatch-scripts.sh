@@ -49,12 +49,14 @@ setup() {
   # via SCRIPT_DIR resolution without relying on the real filesystem PATH.
   cp "$SCRIPT_DIR/dispatch-phase" "$TMPDIR_TEST/dispatch-phase"
   cp "$SCRIPT_DIR/dispatch-find-pr" "$TMPDIR_TEST/dispatch-find-pr"
+  cp "$SCRIPT_DIR/dispatch-resolve-arg" "$TMPDIR_TEST/dispatch-resolve-arg"
   cp "$SCRIPT_DIR/dispatch-select-target" "$TMPDIR_TEST/dispatch-select-target"
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-find-pr" \
+           "$TMPDIR_TEST/dispatch-resolve-arg" \
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
@@ -146,6 +148,32 @@ case "$args" in
       cat "$STUB_DIR/subissues-${num}.json"
     else
       echo "[]"
+    fi
+    ;;
+  api\ repos/*/issues/*)
+    # dispatch-resolve-arg discriminator: gh api repos/{owner}/{repo}/issues/<N>.
+    # The REST issues endpoint returns PRs too; a PR's JSON carries a
+    # "pull_request" key. The fixture file decides issue-vs-PR; an arg-issue-<N>.err
+    # fixture models a non-404 gh failure; absence of either fixture models a 404
+    # (the number is neither an issue nor a PR).
+    num="${args##*/}"
+    if [[ -f "$STUB_DIR/arg-issue-${num}.json" ]]; then
+      cat "$STUB_DIR/arg-issue-${num}.json"
+    elif [[ -f "$STUB_DIR/arg-issue-${num}.err" ]]; then
+      cat "$STUB_DIR/arg-issue-${num}.err" >&2
+      exit 1
+    else
+      echo "gh: Not Found (HTTP 404)" >&2
+      exit 1
+    fi
+    ;;
+  pr\ view\ *\ --json\ closingIssuesReferences)
+    # dispatch-resolve-arg PR branch: gh pr view <N> --json closingIssuesReferences.
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/arg-closing-${num}.json" ]]; then
+      cat "$STUB_DIR/arg-closing-${num}.json"
+    else
+      echo '{"closingIssuesReferences":[]}'
     fi
     ;;
   label\ create\ *)
@@ -502,6 +530,87 @@ setup
 printf '[{"number":10,"headRefName":"60-foo"}]\n' > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-find-pr" "6")
 assert_eq "issue 6 does not match branch 60-foo → empty" "" "$result"
+teardown
+
+# ============================================================================
+# dispatch-resolve-arg tests
+# ============================================================================
+echo ""
+echo "=== dispatch-resolve-arg ==="
+
+# 1. Issue argument → stdout is the number unchanged, exit 0.
+echo "Test: issue number → passes through unchanged"
+setup
+printf '{"number":736,"state":"open"}\n' > "$STUB_DIR/arg-issue-736.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-arg" "736")
+assert_eq "issue number → passes through" "736" "$result"
+teardown
+
+# 2. Leading '#' is tolerated → same resolution as bare number.
+echo "Test: leading '#' is stripped and resolves correctly"
+setup
+printf '{"number":736,"state":"open"}\n' > "$STUB_DIR/arg-issue-736.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-arg" "#736")
+assert_eq "leading '#' stripped → issue number" "736" "$result"
+teardown
+
+# 3. PR closing exactly one issue → stdout is the closing issue number.
+# PR 717 closes issue 715.
+echo "Test: PR closing one issue → that issue number"
+setup
+printf '{"number":717,"pull_request":{}}\n' > "$STUB_DIR/arg-issue-717.json"
+printf '{"closingIssuesReferences":[{"number":715}]}\n' > "$STUB_DIR/arg-closing-717.json"
+result=$("$TMPDIR_TEST/dispatch-resolve-arg" "717")
+assert_eq "PR closing one issue → closing issue number" "715" "$result"
+teardown
+
+# 4. PR closing zero issues → exit 3.
+# arg-closing-718.json explicitly carries an empty array to model zero references.
+echo "Test: PR with no closing issue → exit 3"
+setup
+printf '{"number":718,"pull_request":{}}\n' > "$STUB_DIR/arg-issue-718.json"
+printf '{"closingIssuesReferences":[]}\n' > "$STUB_DIR/arg-closing-718.json"
+if ( "$TMPDIR_TEST/dispatch-resolve-arg" "718" ) >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "PR closing zero issues → exit 3" "3" "$rc"
+teardown
+
+# 5. PR closing multiple issues → exit 4.
+echo "Test: PR closing multiple issues → exit 4"
+setup
+printf '{"number":719,"pull_request":{}}\n' > "$STUB_DIR/arg-issue-719.json"
+printf '{"closingIssuesReferences":[{"number":700},{"number":701}]}\n' > "$STUB_DIR/arg-closing-719.json"
+if ( "$TMPDIR_TEST/dispatch-resolve-arg" "719" ) >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "PR closing multiple issues → exit 4" "4" "$rc"
+teardown
+
+# 6. Number is neither an issue nor a PR (no fixture → stub 404s) → exit 2.
+echo "Test: unknown number → exit 2"
+setup
+# No arg-issue-999.json: the stub returns 404.
+if ( "$TMPDIR_TEST/dispatch-resolve-arg" "999" ) >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "neither issue nor PR → exit 2" "2" "$rc"
+teardown
+
+# 7. Non-numeric argument → exit 1.
+echo "Test: non-numeric argument → exit 1"
+setup
+if ( "$TMPDIR_TEST/dispatch-resolve-arg" "abc" ) >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "non-numeric argument → exit 1" "1" "$rc"
+teardown
+
+# 8. Missing argument → exit 1.
+echo "Test: missing argument → exit 1"
+setup
+if ( "$TMPDIR_TEST/dispatch-resolve-arg" ) >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "missing argument → exit 1" "1" "$rc"
+teardown
+
+# 9. Non-404 gh failure (auth/network) → exit 1, not misreported as exit 2.
+echo "Test: non-404 lookup failure → exit 1"
+setup
+printf 'gh: HTTP 503: Service unavailable\n' > "$STUB_DIR/arg-issue-998.err"
+if ( "$TMPDIR_TEST/dispatch-resolve-arg" "998" ) >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "non-404 lookup failure → exit 1" "1" "$rc"
 teardown
 
 # ============================================================================
