@@ -10,9 +10,9 @@
 # Environment:
 #   DISPATCH_PR_LIST — optional. A JSON array of open PRs supplied by the
 #     caller (dispatch-select-target passes it to avoid a redundant
-#     gh pr list per PR). When set and non-empty, it is used in place of a
-#     self-issued gh pr list. Must include the fields
-#     number,headRefName,isDraft,statusCheckRollup,labels.
+#     gh pr list per script). When set and non-empty, it is used in place of
+#     a self-issued gh pr list. Must include at least number,headRefName; a
+#     superset list (e.g. the one dispatch-phase needs) is also accepted.
 set -euo pipefail
 
 ARG="${1:-}"
@@ -26,7 +26,7 @@ fi
 if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
   PR_LIST="$DISPATCH_PR_LIST"
 else
-  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+  PR_LIST=$(gh pr list --state open --json number,headRefName)
 fi
 
 # Find the PR whose headRefName starts with "<issue>-" and print its number.

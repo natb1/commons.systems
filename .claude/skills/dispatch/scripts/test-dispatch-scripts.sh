@@ -79,6 +79,15 @@ case "$args" in
       echo "[]"
     fi
     ;;
+  "pr list --state open --json number,headRefName")
+    # dispatch-find-pr self-fetch: only the two correlation fields.
+    echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
+    if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
+      cat "$STUB_DIR/pr-list-full.json"
+    else
+      echo "[]"
+    fi
+    ;;
   "pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels")
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
     if [[ -f "$STUB_DIR/pr-list-union.json" ]]; then
@@ -482,6 +491,15 @@ setup
 printf '[]\n' > "$STUB_DIR/pr-list-full.json"
 result=$(DISPATCH_PR_LIST='[{"number":670,"headRefName":"669-x"}]' "$TMPDIR_TEST/dispatch-find-pr" "669")
 assert_eq "DISPATCH_PR_LIST used over self-fetch → PR number" "670" "$result"
+teardown
+
+# 5. Issue-prefix disambiguation: issue 6 must not match branch "60-foo".
+# The trailing "-" in the startswith match is what prevents the collision.
+echo "Test: issue 6 does not match branch 60-foo"
+setup
+printf '[{"number":10,"headRefName":"60-foo"}]\n' > "$STUB_DIR/pr-list-full.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "6")
+assert_eq "issue 6 does not match branch 60-foo → empty" "" "$result"
 teardown
 
 # ============================================================================
