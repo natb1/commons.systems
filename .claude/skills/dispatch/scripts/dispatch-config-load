@@ -126,13 +126,10 @@ fi
 
 # ---- Step 3: parse and validate ---------------------------------------------
 
-# Validate JSON syntax first. jq exits non-zero on invalid JSON.
-# Capture stderr inline using a subshell to avoid temp files.
-PARSE_ERR=""
+# Validate JSON syntax first. jq exits non-zero on invalid JSON; 2>&1 folds its
+# error message into $PARSED so it can be surfaced without a temp file.
 if ! PARSED=$(jq '.' "$CONFIG_FILE" 2>&1); then
-  # jq merged stdout+stderr in the error case; split off the error message.
-  PARSE_ERR="$PARSED"
-  echo "error: $CONFIG_FILE: invalid JSON: $PARSE_ERR" >&2
+  echo "error: $CONFIG_FILE: invalid JSON: $PARSED" >&2
   exit 1
 fi
 

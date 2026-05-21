@@ -64,4 +64,9 @@ NUMBER=$(printf '%s' "$PROJECT" | jq -r '.number')
 RESULT=$(gh project item-add "$NUMBER" --owner "$OWNER" --url "$ISSUE_URL" \
   --format json)
 
-printf '%s' "$RESULT" | jq -r '.id'
+ITEM_ID=$(printf '%s' "$RESULT" | jq -r '.id // empty')
+if [[ -z "$ITEM_ID" ]]; then
+  echo "error: gh project item-add returned no item id for $ISSUE_URL" >&2
+  exit 1
+fi
+printf '%s\n' "$ITEM_ID"

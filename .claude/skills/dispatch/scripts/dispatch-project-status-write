@@ -90,7 +90,11 @@ fi
 # Propagates the reader's failure if the issue is not on the project.
 
 ITEM_JSON=$("$SCRIPT_DIR/dispatch-project-status-read" "$PROJECT_KEY" "$ISSUE_URL")
-ITEM_ID=$(printf '%s' "$ITEM_JSON" | jq -r '.itemId')
+ITEM_ID=$(printf '%s' "$ITEM_JSON" | jq -r '.itemId // empty')
+if [[ -z "$ITEM_ID" ]]; then
+  echo "error: could not resolve a project item id for $ISSUE_URL" >&2
+  exit 1
+fi
 
 # ---- Step 5: apply the new Status value ------------------------------------
 

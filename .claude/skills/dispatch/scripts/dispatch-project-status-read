@@ -76,6 +76,10 @@ STATUS_KEY=$(printf '%s' "$STATUS_FIELD" | jq -rR '
 
 # ---- Step 2: locate the project item for the issue -------------------------
 
+# gh project item-list has no server-side filter for a specific issue URL, so
+# the matching item is found client-side below. --limit caps the fetch; 5000
+# covers any realistic project. A project larger than that would silently
+# truncate and the lookup could wrongly report the issue as absent.
 ITEMS=$(gh project item-list "$NUMBER" --owner "$OWNER" --limit 5000 \
   --format json)
 
