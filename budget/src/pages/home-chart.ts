@@ -256,6 +256,16 @@ export function hydrateCategorySankey(container: HTMLElement): void {
   endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
   const fg = getThemeFg(container);
 
+  function currentFilterOpts(): FilterTableOptions {
+    return {
+      mode: currentMode,
+      showCardPayment: currentShowCardPayment,
+      unbudgetedOnly: currentUnbudgetedOnly,
+      categoryFilter: currentCategoryFilter,
+      budgetFilter: currentBudgetFilter,
+    };
+  }
+
   function render(): void {
     const containerWidth = container.clientWidth;
     if (containerWidth === 0) return;
@@ -303,7 +313,7 @@ export function hydrateCategorySankey(container: HTMLElement): void {
       return;
     }
     try {
-      filterTable({ mode: currentMode, showCardPayment: currentShowCardPayment, unbudgetedOnly: currentUnbudgetedOnly, categoryFilter: currentCategoryFilter, budgetFilter: currentBudgetFilter });
+      filterTable(currentFilterOpts());
     } catch (error) {
       setTimeout(() => { throw error; }, 0);
     }
@@ -311,25 +321,37 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
   update();
 
-  // Listener for older transactions scroll-loaded by home-hydrate.ts: merges the
-  // new data into allTxns, adjusts the week slider to preserve the current
-  // position, then calls update() to re-render the chart and re-apply filters.
+  // Listener for older transactions scroll-loaded by home-hydrate.ts. The chart
+  // update and the table re-filter run as two independent blocks: a failed chart
+  // serialization or render must not skip the table re-filter, which is the only
+  // thing that re-applies the active filter to scroll-loaded rows (#578).
   document.addEventListener(TRANSACTIONS_APPENDED_EVENT, ((e: CustomEvent<SerializedChartTransaction[]>) => {
-    if (!container.isConnected) return;
+    const newTxns = e.detail;
+
+    // Chart-update block — skipped when the container is gone. Calls render()
+    // directly, not update(): the table re-filter runs as its own block below.
+    if (container.isConnected) {
+      try {
+        assertChartTransactions(newTxns);
+        const targetWeekMs = weeks[currentEndWeekIdx];
+        allTxns.push(...newTxns);
+        weeks = distinctWeeks(allTxns);
+        endSlider.max = String(weeks.length - 1);
+        currentEndWeekIdx = weeks.indexOf(targetWeekMs);
+        if (currentEndWeekIdx === -1) currentEndWeekIdx = weeks.length - 1;
+        endSlider.value = String(currentEndWeekIdx);
+        endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
+        render();
+      } catch (error) {
+        container.textContent = "Chart update failed after loading new transactions.";
+        setTimeout(() => { throw error; }, 0);
+      }
+    }
+
+    // Table re-filter block — runs unconditionally (see listener header).
     try {
-      const newTxns = e.detail;
-      assertChartTransactions(newTxns);
-      const targetWeekMs = weeks[currentEndWeekIdx];
-      allTxns.push(...newTxns);
-      weeks = distinctWeeks(allTxns);
-      endSlider.max = String(weeks.length - 1);
-      currentEndWeekIdx = weeks.indexOf(targetWeekMs);
-      if (currentEndWeekIdx === -1) currentEndWeekIdx = weeks.length - 1;
-      endSlider.value = String(currentEndWeekIdx);
-      endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
-      update();
+      filterTable(currentFilterOpts());
     } catch (error) {
-      container.textContent = "Chart update failed after loading new transactions.";
       setTimeout(() => { throw error; }, 0);
     }
   }) as EventListener);

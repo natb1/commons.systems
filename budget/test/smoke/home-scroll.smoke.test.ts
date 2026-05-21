@@ -136,4 +136,16 @@ describe("home page infinite scroll smoke", () => {
     expect(result).toHaveLength(1);
     expect(result[0].budgetName).toBeNull();
   });
+
+  it("serializeChartTransactions degrades an unknown budget id to null budgetName without throwing", async () => {
+    // A scroll-loaded transaction may reference a budget added after the
+    // hydration-time map was built — the chart degrades it rather than throwing (#578).
+    const { serializeChartTransactions } = await import("../../src/pages/home");
+    const result = serializeChartTransactions(
+      [txn({ id: "t3" as any, budget: "missing-budget" as any })],
+      new Map([["b1", "Groceries"]]),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].budgetName).toBeNull();
+  });
 });

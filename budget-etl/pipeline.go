@@ -12,8 +12,8 @@ import (
 // concurrently, infers the period from document data when possible, and
 // returns the successfully parsed files, the total transaction count across
 // them, and the count of skipped files.
-func parseStatementDir(dir string) (parsed []parsedFile, totalTxns, skipped int, err error) {
-	files, err := parse.DiscoverFiles(dir)
+func parseStatementDir(dir string, disc parse.DiscoverOpts) (parsed []parsedFile, totalTxns, skipped int, err error) {
+	files, err := parse.Discover(dir, disc)
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("discovering files in %s: %w", dir, err)
 	}
