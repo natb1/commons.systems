@@ -221,9 +221,9 @@ user explicitly asked not to label the issue or named a different label set.
 
 ### Description mode
 
-`/file-issue` (invoked in Step 5) already assigned `@me` and applied
-`help wanted` on the issue it returned. Apply only the matched topic label to
-that issue number:
+`/file-issue` (invoked in Step 5) assigns `@me` and applies `help wanted` to
+any issue it creates. Apply only the matched topic label to the issue number
+it returned:
 
 ```bash
 gh issue edit <N> --add-label "<topic>"  # run nothing when no topic matched
