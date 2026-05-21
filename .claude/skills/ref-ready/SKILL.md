@@ -147,7 +147,7 @@ Wait for user approval before proceeding.
 
 ## Step 5. Apply Improvements
 
-This step only modifies GitHub issues (via `gh issue edit`, `gh issue create`, and related `gh` commands). Do not modify source code files.
+This step only modifies GitHub issues (via `gh issue edit`, `/file-issue`, and related `gh` commands). Do not modify source code files.
 
 Apply the approved improvements for each issue in sequence:
 
@@ -161,20 +161,18 @@ Apply the approved improvements for each issue in sequence:
   gh issue edit <sub-N> --body "<improved body>"
   ```
 
-- **Description mode**:
-  ```bash
-  gh issue create --title "<title>" --body "<improved body>"
-  ```
-  Record the new issue number as `<N>`.
+- **Description mode**: invoke `/file-issue` via the Skill tool with `$INPUT` set to the improved title on the first line followed by the improved body. `/file-issue` owns duplicate detection, issue creation, `@me` assignment, and the `help wanted` label — do not call `gh issue create` inline here. Parse the `CREATED <N>` or `EXISTING <N>` line from `/file-issue`'s output. On `EXISTING <N>`, tell the user the proposed issue was filed against existing issue #`<N>` (Step 3a's eval already surfaced candidates, but `/file-issue` is a defense-in-depth recheck and can match a candidate the user did not pick). Record `<N>` for downstream steps.
 
 When decomposition (Step 3f) creates new issues, establish relationships using the `ref-github-issues` API syntax — do not encode relationships as text in issue bodies. Use sub-issues for scope breakdown and dependencies for sequencing constraints.
 
 ## Step 6. Post-Processing
 
-Assign the issue to the current GitHub user and apply the `help wanted` label:
+**Issue number mode only.** Assign the existing issue to the current GitHub user and apply the `help wanted` label:
 
 ```bash
 gh issue edit <N> --add-assignee @me --add-label "help wanted"
 ```
 
 Apply `help wanted` by default. Drop `--add-label "help wanted"` only when the user explicitly asked not to label the issue or named a different label set.
+
+Description mode skips this step — `/file-issue` (invoked in Step 5) already assigns `@me` and applies `help wanted` on the newly created issue.

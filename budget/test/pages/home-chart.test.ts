@@ -932,36 +932,74 @@ describe("transactions-appended event", () => {
     expect(endLabel.textContent).toBe(initialLabelText);
   });
 
-  it("chart error does not propagate through dispatchEvent", () => {
+  it("chart error does not propagate, and the table re-filter still runs", () => {
     vi.useFakeTimers();
     try {
+      // A transactions table the scroll re-filter can act on.
+      const table = document.createElement("div");
+      table.id = "transactions-table";
+      document.body.appendChild(table);
+
       const container = makeContainer([
-        txn({ category: "Food", amount: 50 }),
+        txn({ category: "Food", amount: 50, budgetName: "Food" }),
       ]);
       hydrateCategorySankey(container);
 
-      // Dispatch event with invalid data to trigger an error inside the listener
+      // Activate a budget filter.
+      const budgetInput = document.querySelector("#sankey-budget-filter") as HTMLInputElement;
+      budgetInput.value = "Food";
+      budgetInput.dispatchEvent(new Event("blur"));
+
+      // Append a row that does not match the filter — not yet filtered.
+      const newRow = document.createElement("div");
+      newRow.className = "txn-row";
+      newRow.dataset.category = "Travel";
+      newRow.dataset.budgetName = "Vacation";
+      newRow.dataset.netAmount = "30";
+      table.appendChild(newRow);
+
+      // Dispatch event with invalid data to trigger an error in the chart-update block
       expect(() => {
         document.dispatchEvent(new CustomEvent("transactions-appended", {
           detail: [{ category: "Food", amount: "not a number" }],
         }));
       }).not.toThrow();
 
-      // Container should show error message instead of crashing
+      // Chart shows the error message instead of crashing...
       expect(container.textContent).toContain("Chart update failed");
+      // ...but the table re-filter still ran: the non-matching row is hidden (#578).
+      expect(newRow.style.display).toBe("none");
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("event ignored when container is disconnected", () => {
+  it("table re-filter still runs after the chart container is disconnected", () => {
+    // A transactions table the scroll re-filter can act on.
+    const table = document.createElement("div");
+    table.id = "transactions-table";
+    document.body.appendChild(table);
+
     const container = makeContainer([
-      txn({ category: "Food", amount: 50 }),
+      txn({ category: "Food", amount: 50, budgetName: "Food" }),
     ]);
     hydrateCategorySankey(container);
 
-    // Remove container from DOM
+    // Activate a budget filter.
+    const budgetInput = document.querySelector("#sankey-budget-filter") as HTMLInputElement;
+    budgetInput.value = "Food";
+    budgetInput.dispatchEvent(new Event("blur"));
+
+    // Remove container from DOM — the chart-update block is skipped.
     container.remove();
+
+    // Append a row that does not match the filter — not yet filtered.
+    const newRow = document.createElement("div");
+    newRow.className = "txn-row";
+    newRow.dataset.category = "Travel";
+    newRow.dataset.budgetName = "Vacation";
+    newRow.dataset.netAmount = "30";
+    table.appendChild(newRow);
 
     // Dispatch event — should not throw
     expect(() => {
@@ -969,5 +1007,9 @@ describe("transactions-appended event", () => {
         detail: [txn({ category: "Transport", amount: 30 })],
       }));
     }).not.toThrow();
+
+    // The chart was ignored (container disconnected), but the table re-filter
+    // still ran: the non-matching row is hidden (#578).
+    expect(newRow.style.display).toBe("none");
   });
 });

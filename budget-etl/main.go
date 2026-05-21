@@ -25,12 +25,16 @@ func main() {
 	outputPath := flag.String("output", "", "Write JSON file")
 	inputPath := flag.String("input", "", "Read rules/budgets/transactions from existing JSON file")
 	keychainFlag := flag.String("keychain", "", "macOS Keychain account name for encrypt/decrypt password")
+	plaintextFlag := flag.Bool("plaintext", false, "skip password prompt and write plaintext JSON output (cannot be combined with --keychain or BUDGET_ETL_PASSWORD)")
 	reportPath := flag.String("report", "", "Write JSON inspection report instead of merging. Requires --allow-uncategorized; --output is ignored.")
 	allowUncategorized := flag.Bool("allow-uncategorized", false, "Allow report mode to emit uncategorized transactions as data instead of erroring. Use only with --report.")
+	institution := flag.String("institution", "", "Institution name for flat directory layout (requires --account)")
+	account := flag.String("account", "", "Account name for flat directory layout (requires --institution)")
 
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> --output <path> [--input <path>] [--keychain <name>] [--report <path> --allow-uncategorized]")
+		fmt.Fprintln(os.Stderr, "Usage: budget-etl [--dir <path>] --group <name> --output <path> [--input <path>] [--keychain <name>] [--plaintext] [--report <path> --allow-uncategorized]")
 		fmt.Fprintln(os.Stderr, "  "+password.UsageNote)
+		fmt.Fprintln(os.Stderr, "  --plaintext skips password resolution entirely and writes unencrypted JSON; it cannot be combined with --keychain or "+password.EnvVar+".")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -57,14 +61,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	pw, err := password.Resolve(*keychainFlag)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	if (*institution != "") != (*account != "") {
+		fmt.Fprintln(os.Stderr, "Error: --institution and --account must be set together")
 		os.Exit(1)
+	}
+	disc := parse.DiscoverOpts{Institution: *institution, Account: *account}
+
+	var pw string
+	if *plaintextFlag {
+		if *keychainFlag != "" {
+			fmt.Fprintln(os.Stderr, "Error: --plaintext cannot be combined with --keychain")
+			os.Exit(1)
+		}
+		if _, ok := os.LookupEnv(password.EnvVar); ok {
+			fmt.Fprintf(os.Stderr, "Error: --plaintext cannot be combined with %s being set in the environment; unset it to write plaintext output\n", password.EnvVar)
+			os.Exit(1)
+		}
+	} else {
+		resolved, err := password.Resolve(*keychainFlag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		pw = resolved
 	}
 
 	if *reportPath != "" {
-		if err := runReport(fileOpts{path: *inputPath, password: pw}, *dir, *reportPath); err != nil {
+		if err := runReport(fileOpts{path: *inputPath, password: pw}, *dir, disc, *reportPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -72,7 +95,7 @@ func main() {
 	}
 
 	if *inputPath != "" && *dir != "" {
-		if err := runMerge(fileOpts{path: *inputPath, password: pw}, *dir, *group, fileOpts{path: *outputPath, password: pw}); err != nil {
+		if err := runMerge(fileOpts{path: *inputPath, password: pw}, *dir, *group, disc, fileOpts{path: *outputPath, password: pw}); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -95,7 +118,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := runDirJSON(*dir, *group, fileOpts{path: *outputPath, password: pw}); err != nil {
+	if err := runDirJSON(*dir, *group, disc, fileOpts{path: *outputPath, password: pw}); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -114,8 +137,8 @@ type parsedFile struct {
 // runDirJSON discovers and parses statement files from dir, dedups transactions
 // by doc ID, and writes a JSON budget file with no rules applied. Use --input
 // to apply rules in a subsequent pass.
-func runDirJSON(dir, groupName string, output fileOpts) error {
-	parsed, totalTxns, _, err := parseStatementDir(dir)
+func runDirJSON(dir, groupName string, disc parse.DiscoverOpts, output fileOpts) error {
+	parsed, totalTxns, _, err := parseStatementDir(dir, disc)
 	if err != nil {
 		return err
 	}
@@ -736,13 +759,13 @@ type StatementSummary struct {
 // new transactions, collecting (rather than erroring on) uncategorized ones.
 // Returns the parsed files, uncategorized transaction details, a summary of new
 // statements and transactions, and any fatal error.
-func parseAndClassify(input *export.Output, dir string) (
+func parseAndClassify(input *export.Output, dir string, disc parse.DiscoverOpts) (
 	parsed []parsedFile,
 	uncategorized []UncategorizedTxn,
 	summary StatementSummary,
 	err error,
 ) {
-	files, ferr := parse.DiscoverFiles(dir)
+	files, ferr := parse.Discover(dir, disc)
 	if ferr != nil {
 		err = fmt.Errorf("discovering files in %s: %w", dir, ferr)
 		return
@@ -889,7 +912,7 @@ func parseAndClassify(input *export.Output, dir string) (
 // and writes a JSON inspection report. It exits 0 even when uncategorized transactions
 // exist — the caller decides how to handle them. The encrypted output write is skipped;
 // only the report file is written.
-func runReport(input fileOpts, dir, reportPath string) error {
+func runReport(input fileOpts, dir string, disc parse.DiscoverOpts, reportPath string) error {
 	inp, err := export.ReadFile(input.path, input.password)
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
@@ -898,7 +921,7 @@ func runReport(input fileOpts, dir, reportPath string) error {
 		return fmt.Errorf("unsupported input version %d (expected 1)", inp.Version)
 	}
 
-	_, uncategorized, summary, err := parseAndClassify(&inp, dir)
+	_, uncategorized, summary, err := parseAndClassify(&inp, dir, disc)
 	if err != nil {
 		return err
 	}
@@ -961,7 +984,7 @@ func runReport(input fileOpts, dir, reportPath string) error {
 // from input are preserved. Transaction-specific rules pre-populate category/budget,
 // then general rules fill in the rest. Normalization rules are applied and budget
 // periods are computed for the merged result. The output is written to --output.
-func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
+func runMerge(input fileOpts, dir, groupName string, disc parse.DiscoverOpts, output fileOpts) error {
 	// Read input JSON
 	inp, err := export.ReadFile(input.path, input.password)
 	if err != nil {
@@ -980,7 +1003,7 @@ func runMerge(input fileOpts, dir, groupName string, output fileOpts) error {
 	}
 
 	// Parse and classify new (dir-only) transactions
-	parsed, uncatTxns, _, err := parseAndClassify(&inp, dir)
+	parsed, uncatTxns, _, err := parseAndClassify(&inp, dir, disc)
 	if err != nil {
 		return err
 	}
