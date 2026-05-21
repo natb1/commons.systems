@@ -204,48 +204,50 @@ PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number
 # 30 would silently truncate a ~30-item queue).
 ISSUE_LIST=$(gh issue list --state open --limit 300 --json number,createdAt,labels)
 
-# number → labels-JSON map, built from the open-issue list above. Assigned to a
-# variable first so a jq failure aborts here (set -e + pipefail); mirrors
-# PR_SORTED.
-declare -A ISSUE_LABELS
-ISSUE_LABEL_ROWS=$(printf '%s' "$ISSUE_LIST" | jq -r '.[] | [.number, ((.labels // []) | tojson)] | @tsv')
-while IFS=$'\t' read -r _inum _ilabels; do
-  [[ -z "$_inum" ]] && continue
-  ISSUE_LABELS["$_inum"]="$_ilabels"
-done <<< "$ISSUE_LABEL_ROWS"
+# number → labels-array map as a JSON object, built once from the open-issue
+# list above. pr_category indexes it to resolve each PR's closing issues'
+# labels. Assigned to a variable first so a jq failure aborts here (set -e +
+# pipefail); mirrors PR_SORTED.
+ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
+  | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
 
-# Topic categories, highest priority first. A category tier nests *outside* the
-# phase ladder: the selector exhausts every phase of "bug" before considering
-# "testing infrastructure", and so on.
-CATEGORIES=(bug "testing infrastructure" dispatch other)
+# Topic categories in priority order; "other" is the implicit fallback for any
+# label set with no topic label. A category tier nests *outside* the phase
+# ladder: the selector exhausts every phase of "bug" before considering
+# "testing infrastructure", and so on. TOPIC_CATEGORIES is the single source of
+# the ordering — category_of_labels resolves against it and the default-mode
+# loop iterates CATEGORIES. The companion classifier that *applies* these
+# labels is ref-ready SKILL.md Step 6; keep the two label sets in sync.
+TOPIC_CATEGORIES=(bug "testing infrastructure" dispatch)
+CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
+# Same priority list as a JSON array, for category_of_labels' jq filter.
+TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[inputs]')
 
 # Highest-priority topic category among a JSON array of {name:...} label
-# objects. Exact name match, so the phase label "dispatch:reviewed" never reads
-# as topic "dispatch". A labels array with no topic label resolves to "other".
+# objects — the first TOPIC_CATEGORIES entry that appears as an exact label
+# name, else "other". Exact match, so the phase label "dispatch:reviewed" never
+# reads as topic "dispatch".
 category_of_labels() {
-  printf '%s' "$1" | jq -r '
-    [(.[] | .name)] as $names
-    | if   ($names | index("bug")) then "bug"
-      elif ($names | index("testing infrastructure")) then "testing infrastructure"
-      elif ($names | index("dispatch")) then "dispatch"
-      else "other" end'
+  printf '%s' "$1" | jq -r --argjson cats "$TOPIC_CATEGORIES_JSON" '
+    [.[].name] as $names
+    | first($cats[] | select(. as $c | $names | index($c))) // "other"'
 }
 
-# Topic category of a PR, from the union of its closing issues' labels. A PR
-# that closes no issue — or whose closing issues carry no topic label —
-# resolves to "other".
+# Topic category of a PR: the union of its closing issues' labels, resolved by
+# category_of_labels. A PR that closes no issue — or whose closing issues carry
+# no topic label — resolves to "other".
 pr_category() {
-  local closing="$1" combined='[]' n lbls
-  for n in $(printf '%s' "$closing" | jq -r '.[].number'); do
-    lbls="${ISSUE_LABELS[$n]:-[]}"
-    combined=$(jq -nc --argjson a "$combined" --argjson b "$lbls" '$a + $b')
-  done
+  local combined
+  combined=$(printf '%s' "$1" | jq -c --argjson map "$ISSUE_LABELS_JSON" \
+    '[.[].number | tostring as $n | $map[$n] // [] | .[]]')
   category_of_labels "$combined"
 }
 
 # First-seen PR per (category, phase): key = "<category>|<phase>", value =
-# "<num> <branch>". Both lists are pre-sorted oldest-first, so the first PR
-# captured for a key is the oldest in that category+phase.
+# "<num> <branch>". The "|" separator is collision-free — phase names are fixed
+# identifiers and no TOPIC_CATEGORIES name contains "|". Both lists are
+# pre-sorted oldest-first, so the first PR captured for a key is the oldest in
+# that category+phase.
 declare -A FIRST_PR
 # First-seen help-wanted issue per category: key = category, value = "<num>".
 declare -A FIRST_ISSUE
@@ -330,9 +332,8 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   fi
 done <<< "$ISSUE_SORTED"
 
-# Default mode: iterate categories outermost; within each, the ladder
-# security → review → simplify → verify → help-wanted issue → qa. The first
-# category with any eligible task wins.
+# Default mode: the first category with an eligible task wins (see the header
+# for the full two-tier order).
 for category in "${CATEGORIES[@]}"; do
   for phase in "${PHASE_PRIORITY[@]}"; do
     pr_key="$category|$phase"
