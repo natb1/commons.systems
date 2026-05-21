@@ -17,6 +17,10 @@ import {
   requireString,
   requireStringArray,
   requireTimestamp,
+  requireUploadFiniteNumber,
+  requireUploadId,
+  requireUploadString,
+  requireUploadStringArray,
 } from "./_helpers.js";
 import type { ReconciliationEventSeedData } from "../../seeds/firestore.js";
 
@@ -113,18 +117,16 @@ export function parseFirestoreReconciliationEvent(docSnap: QueryDocumentSnapshot
 
 export function parseRawReconciliationEvent(s: RawReconciliationEvent, i: number): ReconciliationEvent {
   return {
-    id: typeof s.id === "string" && s.id !== "" ? s.id : (() => { throw new Error(`reconciliation-event[${i}] is missing a valid id`); })(),
-    institution: typeof s.institution === "string" && s.institution !== "" ? s.institution : (() => { throw new Error(`reconciliation-event[${i}].institution is missing or empty`); })(),
-    account: typeof s.account === "string" && s.account !== "" ? s.account : (() => { throw new Error(`reconciliation-event[${i}].account is missing or empty`); })(),
+    id: requireUploadId(s.id, "reconciliation-event", i),
+    institution: requireUploadString(s.institution, "reconciliation-event", i, "institution"),
+    account: requireUploadString(s.account, "reconciliation-event", i, "account"),
     reconciledThroughDate: parseISOTimestamp(s.reconciledThroughDate, `reconciliation-event[${i}].reconciledThroughDate`),
-    bankBalance: typeof s.bankBalance === "number" && isFinite(s.bankBalance) ? s.bankBalance : (() => { throw new Error(`reconciliation-event[${i}].bankBalance must be a finite number`); })(),
-    clearedBalance: typeof s.clearedBalance === "number" && isFinite(s.clearedBalance) ? s.clearedBalance : (() => { throw new Error(`reconciliation-event[${i}].clearedBalance must be a finite number`); })(),
-    adjustment: typeof s.adjustment === "number" && isFinite(s.adjustment) ? s.adjustment : (() => { throw new Error(`reconciliation-event[${i}].adjustment must be a finite number`); })(),
-    reconciledBy: typeof s.reconciledBy === "string" && s.reconciledBy !== "" ? s.reconciledBy : (() => { throw new Error(`reconciliation-event[${i}].reconciledBy is missing or empty`); })(),
+    bankBalance: requireUploadFiniteNumber(s.bankBalance, "reconciliation-event", i, "bankBalance"),
+    clearedBalance: requireUploadFiniteNumber(s.clearedBalance, "reconciliation-event", i, "clearedBalance"),
+    adjustment: requireUploadFiniteNumber(s.adjustment, "reconciliation-event", i, "adjustment"),
+    reconciledBy: requireUploadString(s.reconciledBy, "reconciliation-event", i, "reconciledBy"),
     reconciledAt: parseISOTimestamp(s.reconciledAt, `reconciliation-event[${i}].reconciledAt`),
-    legIds: Array.isArray(s.legIds) && s.legIds.every((x: unknown) => typeof x === "string")
-      ? s.legIds
-      : (() => { throw new Error(`reconciliation-event[${i}].legIds must be a string array`); })(),
+    legIds: requireUploadStringArray(s.legIds, "reconciliation-event", i, "legIds"),
     adjustmentEntryId: s.adjustmentEntryId ?? null,
     groupId: null as GroupId | null,
   };

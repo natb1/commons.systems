@@ -31,7 +31,7 @@ import { idbToTransaction } from "./entities/transaction.js";
 import { idbToStatement } from "./entities/statement.js";
 import { idbToStatementItem } from "./entities/statement-item.js";
 import { idbToReconciliationNote } from "./entities/reconciliation-note.js";
-import { idbToAccount } from "./entities/account.js";
+import { idbToAccount, accountDocId } from "./entities/account.js";
 import { idbToJournalEntry } from "./entities/journal-entry.js";
 import { idbToJournalLeg } from "./entities/journal-leg.js";
 import { idbToReconciliationEvent } from "./entities/reconciliation-event.js";
@@ -326,21 +326,19 @@ export class IdbDataSource implements DataSource {
     fields: ReconciliationEventFields,
     legIds: string[],
   ): Promise<ReconciliationEvent> {
-    // Document id = `{institution}_{account}_{reconciledThroughYYYY-MM-DD}` (issue #552).
     const reconciledThrough = new Date(fields.reconciledThroughDateMs).toISOString().slice(0, 10);
-    const id = `${fields.institution}_${fields.account}_${reconciledThrough}`;
+    const id = `${accountDocId(fields.institution, fields.account)}_${reconciledThrough}`;
     const record: IdbReconciliationEvent = { id, ...fields, legIds: [...legIds] };
     await put("reconciliationEvents", record as unknown as Record<string, unknown>);
     // Stamp each cleared leg as reconciled by this event.
-    for (const legId of legIds) {
-      const leg = await get<IdbJournalLeg>("journalLegs", legId);
-      if (!leg) throw new Error(`Journal leg ${legId} not found`);
-      await put("journalLegs", {
-        ...leg,
-        reconciledAtMs: fields.reconciledAtMs,
-        reconciledEventId: id,
-      } as unknown as Record<string, unknown>);
-    }
+    await Promise.all(
+      legIds.map((legId) =>
+        updateRecord<IdbJournalLeg>("journalLegs", legId, "Journal leg", {
+          reconciledAtMs: fields.reconciledAtMs,
+          reconciledEventId: id,
+        }),
+      ),
+    );
     return idbToReconciliationEvent(record);
   }
 

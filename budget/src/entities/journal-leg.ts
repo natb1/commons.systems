@@ -19,6 +19,9 @@ import {
   requireSeedString,
   requireString,
   requireTimestamp,
+  requireUploadId,
+  requireUploadNonNegativeNumber,
+  requireUploadString,
   toMs,
   UploadValidationError,
 } from "./_helpers.js";
@@ -116,21 +119,17 @@ export function parseFirestoreJournalLeg(docSnap: QueryDocumentSnapshot<Document
 // ── Raw upload → JournalLeg ───────────────────────────────────────────────────
 
 export function parseRawJournalLeg(s: RawJournalLeg, i: number): JournalLeg {
-  if (typeof s.debit !== "number" || !isFinite(s.debit) || s.debit < 0) {
-    throw new UploadValidationError(`journal-leg[${i}].debit must be a non-negative finite number`);
-  }
-  if (typeof s.credit !== "number" || !isFinite(s.credit) || s.credit < 0) {
-    throw new UploadValidationError(`journal-leg[${i}].credit must be a non-negative finite number`);
-  }
-  if (s.debit > 0 && s.credit > 0) {
-    throw new UploadValidationError(`Journal leg cannot have both a debit and a credit (debit=${s.debit}, credit=${s.credit})`);
+  const debit = requireUploadNonNegativeNumber(s.debit, "journal-leg", i, "debit");
+  const credit = requireUploadNonNegativeNumber(s.credit, "journal-leg", i, "credit");
+  if (debit > 0 && credit > 0) {
+    throw new UploadValidationError(`Journal leg cannot have both a debit and a credit (debit=${debit}, credit=${credit})`);
   }
   return {
-    id: typeof s.id === "string" && s.id !== "" ? s.id : (() => { throw new UploadValidationError(`journal-leg[${i}] is missing a valid id`); })(),
-    entryId: typeof s.entryId === "string" && s.entryId !== "" ? s.entryId : (() => { throw new UploadValidationError(`journal-leg[${i}].entryId is missing or empty`); })(),
-    accountId: typeof s.accountId === "string" && s.accountId !== "" ? s.accountId : (() => { throw new UploadValidationError(`journal-leg[${i}].accountId is missing or empty`); })(),
-    debit: s.debit,
-    credit: s.credit,
+    id: requireUploadId(s.id, "journal-leg", i),
+    entryId: requireUploadString(s.entryId, "journal-leg", i, "entryId"),
+    accountId: requireUploadString(s.accountId, "journal-leg", i, "accountId"),
+    debit,
+    credit,
     timestamp: parseISOTimestamp(s.timestamp, `journal-leg[${i}].timestamp`),
     cleared: s.cleared === true,
     reconciledAt: s.reconciledAt

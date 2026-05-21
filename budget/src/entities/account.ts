@@ -17,6 +17,10 @@ import {
   requireSeedEnum,
   requireSeedString,
   requireString,
+  requireUploadEnum,
+  requireUploadFiniteNumber,
+  requireUploadId,
+  requireUploadString,
   toMs,
 } from "./_helpers.js";
 import { ACCOUNT_TYPES, type AccountType } from "../schema/enums.js";
@@ -33,6 +37,13 @@ export interface Account {
   readonly openingBalance: number | null;
   readonly openingBalanceDate: Timestamp | null;
   readonly groupId: GroupId | null;
+}
+
+// ── Document id ───────────────────────────────────────────────────────────────
+
+/** The Firestore document id for an account: `{institution}_{account}`. */
+export function accountDocId(institution: string, account: string): string {
+  return `${institution}_${account}`;
 }
 
 // ── IDB storage interface ─────────────────────────────────────────────────────
@@ -90,14 +101,12 @@ export function parseFirestoreAccount(docSnap: QueryDocumentSnapshot<DocumentDat
 
 export function parseRawAccount(s: RawAccount, i: number): Account {
   return {
-    id: typeof s.id === "string" && s.id !== "" ? s.id : (() => { throw new Error(`account[${i}] is missing a valid id`); })(),
-    institution: typeof s.institution === "string" && s.institution !== "" ? s.institution : (() => { throw new Error(`account[${i}].institution is missing or empty`); })(),
-    account: typeof s.account === "string" && s.account !== "" ? s.account : (() => { throw new Error(`account[${i}].account is missing or empty`); })(),
-    accountType: requireEnum(s.accountType, ACCOUNT_TYPES, `account[${i}].accountType`) as AccountType,
+    id: requireUploadId(s.id, "account", i),
+    institution: requireUploadString(s.institution, "account", i, "institution"),
+    account: requireUploadString(s.account, "account", i, "account"),
+    accountType: requireUploadEnum(s.accountType, ACCOUNT_TYPES, `account[${i}].accountType`),
     openingBalance: s.openingBalance != null
-      ? (typeof s.openingBalance === "number" && isFinite(s.openingBalance)
-          ? s.openingBalance
-          : (() => { throw new Error(`account[${i}].openingBalance must be a finite number`); })())
+      ? requireUploadFiniteNumber(s.openingBalance, "account", i, "openingBalance")
       : null,
     openingBalanceDate: s.openingBalanceDate
       ? parseISOTimestamp(s.openingBalanceDate, `account[${i}].openingBalanceDate`)

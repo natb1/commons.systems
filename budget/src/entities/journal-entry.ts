@@ -15,6 +15,9 @@ import {
   requireSeedString,
   requireString,
   requireTimestamp,
+  requireUploadFiniteNumber,
+  requireUploadId,
+  requireUploadString,
 } from "./_helpers.js";
 import type { JournalEntrySeedData } from "../../seeds/firestore.js";
 
@@ -81,11 +84,11 @@ export function parseFirestoreJournalEntry(docSnap: QueryDocumentSnapshot<Docume
 
 export function parseRawJournalEntry(s: RawJournalEntry, i: number): JournalEntry {
   return {
-    id: typeof s.id === "string" && s.id !== "" ? s.id : (() => { throw new Error(`journal-entry[${i}] is missing a valid id`); })(),
+    id: requireUploadId(s.id, "journal-entry", i),
     timestamp: parseISOTimestamp(s.timestamp, `journal-entry[${i}].timestamp`),
-    description: typeof s.description === "string" && s.description !== "" ? s.description : (() => { throw new Error(`journal-entry[${i}].description is missing or empty`); })(),
+    description: requireUploadString(s.description, "journal-entry", i, "description"),
     note: s.note ?? null,
-    legCount: typeof s.legCount === "number" && Number.isFinite(s.legCount) ? s.legCount : (() => { throw new Error(`journal-entry[${i}].legCount must be a finite number`); })(),
+    legCount: requireUploadFiniteNumber(s.legCount, "journal-entry", i, "legCount"),
     groupId: null as GroupId | null,
   };
 }

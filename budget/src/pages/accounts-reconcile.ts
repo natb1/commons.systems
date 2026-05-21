@@ -2,7 +2,7 @@ import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
 import type { Account, JournalEntry, JournalLeg, ReconciliationEvent, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
-import { accountKey } from "../balance.js";
+import { accountDocId } from "../entities/account.js";
 import { buildReconcileRows, clearedBalance, isAged } from "../reconciliation.js";
 
 interface ReconcileQuery {
@@ -20,14 +20,20 @@ export function parseReconcileQuery(search: string): ReconcileQuery {
   };
 }
 
-/** Inclusive-start, exclusive-end UTC millisecond bounds for a `YYYY-MM` period. */
-function periodBounds(period: string): { startMs: number; endMs: number } {
+/** Parse and validate a `YYYY-MM` reconcile period into its year and 1-based month. */
+export function parseReconcilePeriod(period: string): { year: number; month: number } {
   const [yearRaw, monthRaw] = period.split("-");
   const year = Number(yearRaw);
   const month = Number(monthRaw);
   if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
     throw new RangeError(`Invalid reconcile period: ${period}`);
   }
+  return { year, month };
+}
+
+/** Inclusive-start, exclusive-end UTC millisecond bounds for a `YYYY-MM` period. */
+function periodBounds(period: string): { startMs: number; endMs: number } {
+  const { year, month } = parseReconcilePeriod(period);
   return {
     startMs: Date.UTC(year, month - 1, 1),
     endMs: Date.UTC(year, month, 1),
@@ -66,7 +72,7 @@ function renderControls(query: ReconcileQuery, accounts: Account[], journalLegs:
   }).join("");
 
   const periods = query.institution && query.account
-    ? availablePeriods(journalLegs, accountKey(query.institution, query.account).replace("\0", "_"))
+    ? availablePeriods(journalLegs, accountDocId(query.institution, query.account))
     : [];
   const periodOptions = periods.map((p) => {
     const selected = p === query.period ? " selected" : "";
@@ -213,7 +219,7 @@ export function renderReconcileHtml(ctx: RenderReconcileContext): string {
     </div>`;
   }
 
-  const accountId = `${query.institution}_${query.account}`;
+  const accountId = accountDocId(query.institution, query.account);
   const account = accounts.find((a) => a.id === accountId);
   if (account === undefined) {
     throw new Error(`Reconcile account ${accountId} not found`);
@@ -232,8 +238,9 @@ export function renderReconcileHtml(ctx: RenderReconcileContext): string {
   const rows = buildReconcileRows(filteredLegs, entriesById, account.accountType, ctx.nowMs);
   const cleared = clearedBalance(filteredLegs, account.accountType);
   const statementBalance = statementEndingBalance(statements, query.institution, query.account, query.period);
+  const statementAttr = statementBalance !== null ? ` data-statement-balance="${statementBalance}"` : "";
 
-  return `<div id="reconcile-container">
+  return `<div id="reconcile-container"${statementAttr}>
     ${controls}
     ${renderHeader(cleared, statementBalance)}
     ${renderLegList(rows)}

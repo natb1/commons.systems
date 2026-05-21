@@ -4,7 +4,7 @@ import { balancesMatch } from "../reconciliation.js";
 import { formatCurrency } from "../format.js";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
-import { parseReconcileQuery } from "./accounts-reconcile.js";
+import { parseReconcileQuery, parseReconcilePeriod } from "./accounts-reconcile.js";
 
 function replaceQueryParam(name: string, value: string | null): void {
   const url = new URL(location.href);
@@ -23,21 +23,24 @@ function triggerReload(): void {
  * with `month` already 1-based this lands on the last day of the selected month.
  */
 function periodEndMs(period: string): number {
-  const [yearRaw, monthRaw] = period.split("-");
-  const year = Number(yearRaw);
-  const month = Number(monthRaw);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
-    throw new RangeError(`Invalid reconcile period: ${period}`);
-  }
+  const { year, month } = parseReconcilePeriod(period);
   return Date.UTC(year, month, 0);
+}
+
+/** Leg rows whose cleared checkbox is currently checked. */
+function checkedLegRows(container: HTMLElement): HTMLElement[] {
+  const rows: HTMLElement[] = [];
+  for (const row of container.querySelectorAll<HTMLElement>(".reconcile-leg")) {
+    const checkbox = row.querySelector<HTMLInputElement>(".reconcile-cleared-checkbox");
+    if (checkbox?.checked) rows.push(row);
+  }
+  return rows;
 }
 
 /** Sum `data-signed-amount` over every checked leg row in the container. */
 function clearedBalanceFromDom(container: HTMLElement): number {
   let total = 0;
-  for (const row of container.querySelectorAll<HTMLElement>(".reconcile-leg")) {
-    const checkbox = row.querySelector<HTMLInputElement>(".reconcile-cleared-checkbox");
-    if (!checkbox || !checkbox.checked) continue;
+  for (const row of checkedLegRows(container)) {
     const amount = Number(row.dataset.signedAmount);
     if (!Number.isFinite(amount)) {
       throw new Error(`Reconcile leg row has invalid data-signed-amount: ${row.dataset.signedAmount}`);
@@ -49,26 +52,22 @@ function clearedBalanceFromDom(container: HTMLElement): number {
 
 /** Leg ids of every currently-checked leg row. */
 function clearedLegIds(container: HTMLElement): string[] {
-  const ids: string[] = [];
-  for (const row of container.querySelectorAll<HTMLElement>(".reconcile-leg")) {
-    const checkbox = row.querySelector<HTMLInputElement>(".reconcile-cleared-checkbox");
-    if (!checkbox || !checkbox.checked) continue;
+  return checkedLegRows(container).map((row) => {
     const legId = row.dataset.legId;
     if (!legId) throw new Error("Reconcile leg row is missing data-leg-id");
-    ids.push(legId);
-  }
-  return ids;
+    return legId;
+  });
 }
 
 /**
- * The bank's statement-ending balance, read from the reconcile dialog's
- * bank-balance input `defaultValue` (the renderer seeds it with the statement
- * balance). `null` when no statement exists for the account+period.
+ * The bank's statement-ending balance, from the `data-statement-balance`
+ * attribute the renderer sets on the reconcile container. `null` when no
+ * statement exists for the account+period.
  */
 function statementEndingBalance(container: HTMLElement): number | null {
-  const input = container.querySelector<HTMLInputElement>("#reconcile-bank-balance-input");
-  if (!input || input.defaultValue === "") return null;
-  const value = Number(input.defaultValue);
+  const raw = container.dataset.statementBalance;
+  if (raw === undefined || raw === "") return null;
+  const value = Number(raw);
   return Number.isFinite(value) ? value : null;
 }
 

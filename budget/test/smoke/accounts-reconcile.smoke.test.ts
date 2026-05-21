@@ -7,7 +7,7 @@ vi.mock("firebase/firestore", () => timestampMockFactory());
 
 import { renderAccountsReconcile } from "../../src/pages/accounts-reconcile";
 
-// Seed-shaped data for Example Bank / Checking, period 2025-02 (issue #553 reference).
+// Seed-shaped data for Example Bank / Checking, period 2025-02.
 function account(overrides: Partial<Account> = {}): Account {
   return {
     id: "Example Bank_Checking",
