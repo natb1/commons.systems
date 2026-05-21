@@ -70,13 +70,16 @@ STUB
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 RESP_FILE=""
 HAS_DATA=false
-# Parse args to detect -d (POST) vs GET, and find -o target
+# Parse args: detect -d (POST) vs GET, find -o target, log request URLs.
+# Value-taking flags skip their value so it can't be mistaken for a URL.
 ARGS=("$@")
 for ((i=0; i<${#ARGS[@]}; i++)); do
   case "${ARGS[$i]}" in
     -d) HAS_DATA=true; echo "${ARGS[$((i+1))]}" > "$STUB_DIR/curl-body.json"; i=$((i+1)) ;;
     -o) RESP_FILE="${ARGS[$((i+1))]}"; i=$((i+1)) ;;
+    -w) i=$((i+1)) ;;
     --config) i=$((i+1)) ;;
+    https://*) echo "${ARGS[$i]}" >> "$STUB_DIR/curl-urls.log" ;;
   esac
 done
 
@@ -279,6 +282,23 @@ stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "epub" 
 assert_eq "exits 1" "1" "$exit_code"
 assert_contains "stderr mentions HTTP code" "HTTP 403" "$stderr"
 assert_contains "stderr mentions cleanup" "gsutil rm" "$stderr"
+teardown
+
+echo "Test 13: --group with slash -> group ID is percent-encoded in Firestore URL"
+setup
+output=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Private Item" "epub" --group 'has/slash' 2>&1)
+curl_urls=$(cat "$TMPDIR_TEST/stub/curl-urls.log")
+assert_contains "URL contains percent-encoded group ID" "groups/has%2Fslash" "$curl_urls"
+assert_not_contains "URL does not contain raw slash in group ID" "groups/has/slash" "$curl_urls"
+teardown
+
+echo "Test 14: --group with slash, lookup fails -> error quotes the raw group ID"
+setup
+touch "$TMPDIR_TEST/stub/curl-group-fail"
+exit_code=0
+stderr=$(bash "$UPLOAD_SCRIPT" "$TMPDIR_TEST/stub/test-file.cbz" "Title" "pdf" --group 'has/slash' 2>&1) || exit_code=$?
+assert_eq "exits 1" "1" "$exit_code"
+assert_contains "error quotes original unencoded group ID" "group 'has/slash'" "$stderr"
 teardown
 
 echo ""
