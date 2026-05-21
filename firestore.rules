@@ -83,7 +83,8 @@ service cloud.firestore {
         && (!('normalizedPrimary' in request.resource.data) || request.resource.data.normalizedPrimary is bool)
         && (!('normalizedDescription' in request.resource.data) || request.resource.data.normalizedDescription is string || request.resource.data.normalizedDescription == null)
         && (!('statementItemId' in request.resource.data) || request.resource.data.statementItemId is string || request.resource.data.statementItemId == null)
-        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'statementItemId', 'groupId', 'memberEmails', 'note', 'category', 'budget', 'reimbursement', 'normalizedId', 'normalizedPrimary', 'normalizedDescription']);
+        && (!('journalEntryId' in request.resource.data) || request.resource.data.journalEntryId is string || request.resource.data.journalEntryId == null)
+        && request.resource.data.keys().hasOnly(['institution', 'account', 'description', 'amount', 'timestamp', 'statementId', 'statementItemId', 'groupId', 'memberEmails', 'note', 'category', 'budget', 'reimbursement', 'normalizedId', 'normalizedPrimary', 'normalizedDescription', 'journalEntryId']);
       allow create, delete: if false;
     }
 
@@ -452,6 +453,131 @@ service cloud.firestore {
         && request.resource.data.memberEmails == resource.data.memberEmails
         && request.resource.data.createdAt == resource.data.createdAt
         && isValidGoalData();
+      allow delete: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+    }
+
+    // Seed accounts are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-accounts/{accountId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Accounts are the double-entry chart of accounts, scoped to group members via
+    // a denormalized `memberEmails` field. Client writes are denied; accounts are
+    // managed via the Admin SDK.
+    match /budget/{env}/accounts/{accountId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow write: if false;
+    }
+
+    // Seed journal entries are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-journal-entries/{entryId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Validates journal entry field types and constraints on both create and update.
+    // Type/shape only — the balanced-debits invariant is enforced in application code.
+    function isValidJournalEntryData() {
+      return request.resource.data.timestamp is timestamp
+        && request.resource.data.description is string
+        && (!('note' in request.resource.data) || request.resource.data.note is string || request.resource.data.note == null)
+        && request.resource.data.legCount is number
+        && request.resource.data.keys().hasOnly(['timestamp', 'description', 'note', 'legCount', 'groupId', 'memberEmails']);
+    }
+
+    // Journal entries are scoped to group members via a denormalized `memberEmails` field.
+    // CRUD by group members; groupId and memberEmails are immutable on update.
+    match /budget/{env}/journal-entries/{entryId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow create: if isBudgetGroupMember(env, request.resource.data.groupId, request.resource.data.memberEmails)
+        && isValidJournalEntryData();
+      allow update: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberEmails == resource.data.memberEmails
+        && isValidJournalEntryData();
+      allow delete: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+    }
+
+    // Seed journal legs are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-journal-legs/{legId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Validates journal leg field types and constraints on both create and update.
+    // Type/shape only — the debit/credit exclusivity invariant is enforced in application code.
+    function isValidJournalLegData() {
+      return request.resource.data.entryId is string
+        && request.resource.data.accountId is string
+        && request.resource.data.debit is number
+        && request.resource.data.debit >= 0
+        && request.resource.data.credit is number
+        && request.resource.data.credit >= 0
+        && request.resource.data.timestamp is timestamp
+        && request.resource.data.cleared is bool
+        && (!('reconciledAt' in request.resource.data) || request.resource.data.reconciledAt is timestamp || request.resource.data.reconciledAt == null)
+        && (!('reconciledEventId' in request.resource.data) || request.resource.data.reconciledEventId is string || request.resource.data.reconciledEventId == null)
+        && (!('statementItemId' in request.resource.data) || request.resource.data.statementItemId is string || request.resource.data.statementItemId == null)
+        && request.resource.data.keys().hasOnly(['entryId', 'accountId', 'debit', 'credit', 'timestamp', 'cleared', 'reconciledAt', 'reconciledEventId', 'statementItemId', 'groupId', 'memberEmails']);
+    }
+
+    // Journal legs are the flat per-account legs of journal entries, scoped to group
+    // members via a denormalized `memberEmails` field.
+    // CRUD by group members; groupId and memberEmails are immutable on update.
+    match /budget/{env}/journal-legs/{legId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow create: if isBudgetGroupMember(env, request.resource.data.groupId, request.resource.data.memberEmails)
+        && isValidJournalLegData();
+      allow update: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberEmails == resource.data.memberEmails
+        && isValidJournalLegData();
+      allow delete: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+    }
+
+    // Seed reconciliation events are public read-only example data for unauthenticated users
+    match /budget/{env}/seed-reconciliation-events/{eventId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Validates reconciliation event field types and constraints on both create and update.
+    function isValidReconciliationEventData() {
+      return request.resource.data.institution is string
+        && request.resource.data.account is string
+        && request.resource.data.reconciledThroughDate is timestamp
+        && request.resource.data.bankBalance is number
+        && request.resource.data.clearedBalance is number
+        && request.resource.data.adjustment is number
+        && request.resource.data.reconciledBy is string
+        && request.resource.data.reconciledAt is timestamp
+        && request.resource.data.legIds is list
+        && (!('adjustmentEntryId' in request.resource.data) || request.resource.data.adjustmentEntryId is string || request.resource.data.adjustmentEntryId == null)
+        && request.resource.data.keys().hasOnly(['institution', 'account', 'reconciledThroughDate', 'bankBalance', 'clearedBalance', 'adjustment', 'reconciledBy', 'reconciledAt', 'legIds', 'adjustmentEntryId', 'groupId', 'memberEmails']);
+    }
+
+    // Reconciliation events are completed reconciliation snapshots, scoped to group
+    // members via a denormalized `memberEmails` field.
+    // CRUD by group members; groupId and memberEmails are immutable on update.
+    match /budget/{env}/reconciliation-events/{eventId} {
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails;
+      allow create: if isBudgetGroupMember(env, request.resource.data.groupId, request.resource.data.memberEmails)
+        && isValidReconciliationEventData();
+      allow update: if request.auth != null
+        && request.auth.token.email in resource.data.memberEmails
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.memberEmails == resource.data.memberEmails
+        && isValidReconciliationEventData();
       allow delete: if request.auth != null
         && request.auth.token.email in resource.data.memberEmails;
     }
