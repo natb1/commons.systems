@@ -121,9 +121,17 @@ jobs:
         if: steps.changes.outputs.go == 'true'
         run: |
           set -euo pipefail
+          # Capture the module list first: a discovery failure aborts under
+          # set -e, and an empty result fails explicitly — feeding the loop
+          # via process substitution would instead pass the job silently.
+          modules=$(.claude/skills/dispatch/scripts/list-go-modules.sh)
+          if [ -z "$modules" ]; then
+            echo "::error::No Go modules discovered by list-go-modules.sh"
+            exit 1
+          fi
           failed=0
           while IFS= read -r dir; do
             echo "=== go test: $dir ==="
             (cd "$dir" && go test ./...) || failed=1
-          done < <(.claude/skills/dispatch/scripts/list-go-modules.sh)
+          done <<< "$modules"
           exit "$failed"
