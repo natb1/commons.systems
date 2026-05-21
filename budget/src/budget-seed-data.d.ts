@@ -10,6 +10,10 @@ declare module "virtual:budget-seed-data" {
   export type { SeedStatement } from "./entities/statement";
   export type { SeedStatementItem } from "./entities/statement-item";
   export type { SeedReconciliationNote } from "./entities/reconciliation-note";
+  export type { SeedAccount } from "./entities/account";
+  export type { SeedJournalEntry } from "./entities/journal-entry";
+  export type { SeedJournalLeg } from "./entities/journal-leg";
+  export type { SeedReconciliationEvent } from "./entities/reconciliation-event";
   export type { SeedWeeklyAggregate } from "./entities/weekly-aggregate";
 
   export interface SeedData {
@@ -21,6 +25,10 @@ declare module "virtual:budget-seed-data" {
     readonly statements: SeedStatement[];
     readonly statementItems: SeedStatementItem[];
     readonly reconciliationNotes: SeedReconciliationNote[];
+    readonly accounts: SeedAccount[];
+    readonly journalEntries: SeedJournalEntry[];
+    readonly journalLegs: SeedJournalLeg[];
+    readonly reconciliationEvents: SeedReconciliationEvent[];
     readonly weeklyAggregates: SeedWeeklyAggregate[];
   }
 
