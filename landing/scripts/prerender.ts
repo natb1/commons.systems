@@ -33,9 +33,12 @@ const infoPanel = {
   opmlUrl: "/blogroll.opml",
 };
 
-// Static pages must run before prerenderPosts: prerenderPosts overwrites
-// dist/index.html (the shared template source) with home content, after which
-// prerenderStaticPage's marker-based injectors find the slots already filled.
+// prerenderStaticPage must run before prerenderPosts. prerenderPosts rewrites
+// dist/index.html (the shared template) into the finished home page, injecting
+// the home's own og/canonical/JSON-LD tags into <head>. prerenderStaticPage
+// reads dist/index.html as its template and injectBeforeHead only *prepends*
+// its <head> tags — it never strips pre-existing ones — so running it second
+// would leave /about with the home page's SEO tags duplicated alongside its own.
 prerenderStaticPage({
   siteUrl: SITE_URL,
   titleSuffix,

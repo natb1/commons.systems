@@ -33,8 +33,20 @@ const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 const infoPanel = document.getElementById("info-panel");
 if (!infoPanel) throw new Error("#info-panel element not found");
-const hero = document.querySelector<HTMLElement>(".landing-hero");
-if (!hero) throw new Error(".landing-hero element not found");
+// The .landing-hero section is part of the page shell, but prerendering strips
+// it from post and /about pages (blog's stripHomeExtra). Recreate it when
+// absent so the home route can mount the showcase band even after SPA
+// navigation from a page whose prerendered HTML shipped without the section.
+function ensureHero(): HTMLElement {
+  const existing = document.querySelector<HTMLElement>(".landing-hero");
+  if (existing) return existing;
+  const contentGrid = document.querySelector(".content-grid");
+  if (!contentGrid) throw new Error(".content-grid element not found");
+  const section = document.createElement("section");
+  section.className = "landing-hero";
+  contentGrid.before(section);
+  return section;
+}
 
 const header = document.querySelector(".page > header");
 if (!header) throw new Error(".page > header element not found");
@@ -122,7 +134,7 @@ const router = createHistoryRouter(
       afterRender: (outlet, path) => {
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
-        if (!slug) mountHero(hero);
+        if (!slug) mountHero(ensureHero());
         updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, RSS_CONFIG.title, SITE_DEFAULTS);
         updateCanonical(RSS_CONFIG.siteUrl, slug);
         updateInfoPanel();
