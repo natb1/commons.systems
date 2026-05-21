@@ -105,7 +105,7 @@ steps in order.
 Marking the PR ready is the workflow's terminal action. After this change the
 dispatch workflow has no human checkpoint before a PR goes ready — the per-phase
 PR-comment summaries are the audit trail. This is an intentional trade-off for an
-autonomous `/loop /dispatch` run.
+autonomous `/dispatch` background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:security-reviewed` already
 on the PR skips Steps 1–6 and only ensures the PR is ready (Step 7).
