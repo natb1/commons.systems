@@ -779,7 +779,7 @@ teardown
 #
 # The explicit-`/dispatch <issue|pr>` bypass is structural and not script-
 # testable here: an explicit argument skips the queue scan entirely (SKILL.md
-# Step 1), so dispatch-select-target is never invoked on that path.
+# Step 2), so dispatch-select-target is never invoked on that path.
 
 # 21. main green (explicit success checks) → normal selection.
 echo "Test: main green → normal selection"
