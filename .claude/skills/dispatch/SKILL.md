@@ -151,7 +151,9 @@ merge and push are no-ops when local main already equals `origin/main`.
   It prints exactly one line:
   - `pr <num> <branch> <phase>` — a PR to work on; `<phase>` is pre-derived by the
     selection scan, so Step 5 reuses it instead of re-deriving
-  - `issue <num>` — a `help wanted` issue to implement
+  - `issue <num>` — a `help wanted` issue to implement, pre-resolved by the
+    selection scan to a startable open leaf (not necessarily the top-level
+    `help wanted` issue)
   - `worktree <N> <branch>` — run from inside an issue worktree; target is `<N>`,
     queue scan already skipped
   - `worktree-closed <N> <branch>` — run from inside a worktree whose issue is
@@ -175,6 +177,12 @@ merge and push are no-ops when local main already equals `origin/main`.
   are ranked closest-to-done first — `security` is the closest-to-done non-QA
   tier; `help wanted` issues rank below all non-QA PRs but above QA PRs.
 
+  A `help wanted` issue is also skipped when its entire open-leaf subtree is
+  worktree-conflicted — every reachable open leaf already has a worktree owned by
+  another session — exactly as a directly-worktree'd issue is skipped; selection
+  falls through to the next tier. The tier emits the resolved startable leaf, so
+  a queue-selected `issue <num>` is always a directly-startable target.
+
   On `empty` → release the lock (see *Releasing the lock*), then report that
   the queue is empty and **stop**.
 
@@ -193,27 +201,23 @@ merge and push are no-ops when local main already equals `origin/main`.
 
 ## 3. Trace to an Open Leaf
 
-When the resolved target is an **open issue with no PR** — whether queue-selected
-(`issue <num>`) or named by argument — trace to its open leaf. Pass the mode that
-matches Step 4's resolve call: `queue` if queue-selected, `explicit` if named by
-an explicit `/dispatch` argument:
+This step runs **only for an explicit `/dispatch <N>` argument**. A queue-selected
+`issue <num>` is already a resolved startable open leaf — `dispatch-select-target`
+traced it during selection — so re-tracing would just return the same leaf.
+
+When the resolved target is an **explicitly-named open issue with no PR**, trace
+to its open leaf in `explicit` mode:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-trace-leaf <N> <queue|explicit>
+.claude/skills/dispatch/scripts/dispatch-trace-leaf <N> explicit
 ```
 
 It walks open blockers and sub-issues to an open leaf and prints one issue number.
 Retarget to that leaf.
 
-In `queue` mode the descent is worktree-aware: children whose `<N>-*` branch is
-an existing local worktree (owned by another session) are skipped, and the trace
-falls back to the next ready sibling. If every reachable open leaf in the subtree
-is worktree-conflicted, the script exits non-zero with a message on stderr —
-release the lock (see *Releasing the lock*), then report "subtree fully blocked
-— all open leaves have worktrees owned by other sessions" (name `<N>`) and
-**stop**; do not dispatch.
-
 Skip leaf tracing when:
+- The target was queue-selected (`issue <num>`) — `dispatch-select-target` already
+  resolved it to a startable open leaf.
 - A PR exists for the target — check with:
   ```bash
   .claude/skills/dispatch/scripts/dispatch-find-pr <N>
@@ -260,10 +264,11 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
   `<branch>`. This fires the `WorktreeCreate` hook, which runs `sync-issue-context`
   and populates `CLAUDE.local.md` with full issue context.
 - **`conflict <path>`** → a queue-selected target already has a worktree, so
-  another session owns it. (The queue scan skips worktree'd issues, so this arises
-  only when Step 3 leaf-tracing retargets to a blocker or sub-issue that has one.)
-  Release the lock (see *Releasing the lock*), then report the conflict (name
-  `<path>` and issue `<N>`) and **stop**; do not `EnterWorktree`.
+  another session owns it. (`dispatch-select-target` resolves the `help wanted`
+  tier to a leaf with no worktree, so for a queue selection this arises only from
+  a race — another session created the worktree between selection and worktree
+  resolution.) Release the lock (see *Releasing the lock*), then report the
+  conflict (name `<path>` and issue `<N>`) and **stop**; do not `EnterWorktree`.
 
 On every non-`conflict` path, before any phase skill runs, create the recovery
 marker:
@@ -288,8 +293,8 @@ When the target is a **queue-selected PR** (`pr <num> <branch> <phase>` from Ste
 the phase is already on the result line — use it directly and skip the script below.
 
 On every other path — an explicit issue argument, a `worktree <N>` result, or a
-queue-selected `issue <num>` (after leaf tracing in Step 3) — run the phase script
-against the final target (issue number or branch):
+queue-selected `issue <num>` — run the phase script against the final target
+(issue number or branch):
 
 ```bash
 .claude/skills/dispatch/scripts/dispatch-phase <target>
