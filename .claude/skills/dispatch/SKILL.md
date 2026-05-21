@@ -19,6 +19,33 @@ the phase skill runs there.
 Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 `gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
+## 0. Acquire the Dispatch Lock
+
+Run this as the **very first action** — before the `origin/main` health gate,
+the worktree sweep, target selection, and worktree resolution. Runs
+unconditionally, whether or not an issue-number argument was given.
+
+```bash
+LOCK=$(.claude/skills/dispatch/scripts/dispatch-acquire-lock)
+```
+
+Requires `dangerouslyDisableSandbox: true` — the script writes
+`$PROJECT_ROOT/tmp/dispatch.lock`, which is outside the sandbox write-allowlist
+(same reason `dispatch-sweep` runs that way; see `.claude/rules/sandbox.md`).
+
+Route on `$LOCK`:
+
+- **`acquired`** → this `/dispatch` holds the lock; proceed to Step 1.
+- **`busy`** → another `/dispatch` is active; report "another /dispatch is
+  running — stopping" and **stop** — run no health gate, no sweep, no
+  selection, and no phase skill.
+
+The lock is session-scoped and self-healing: when a tick's session ends —
+normally, by crash, or by kill — its PID dies and the next invocation detects
+the stale record and proceeds. A crashed tick never wedges the queue. Same-session
+re-entry (e.g. after a context clear that re-invokes `/dispatch`) re-acquires
+cleanly because the recorded PID matches the re-entering session's own PID.
+
 ## 1. Select the Target
 
 - **Issue argument given** → strip any leading `#`; that issue is the target.
