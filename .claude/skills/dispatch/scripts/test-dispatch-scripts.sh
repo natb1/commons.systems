@@ -2683,6 +2683,26 @@ if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "empty-output: worktree_has_live_session reports occupied" "occupied" "$live"
 ca_teardown
 
+# --- Test 9: claude_sessions_under invokes `claude` with --cwd <path> -------
+
+echo "Test: claude_sessions_under invokes claude with --cwd <path>"
+ca_setup
+# A fake claude that records its argv to a file, then prints a valid empty
+# registry. write_fake_claude ignores argv, so verifying the server-side
+# --cwd filter is actually passed through needs a bespoke fake.
+cat > "$CA_FAKE" <<FAKE
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$CA_DIR/argv"
+echo '[]'
+FAKE
+chmod +x "$CA_FAKE"
+CLAUDE_AGENTS_CMD="$CA_FAKE"
+if claude_sessions_under "$CA_DIR" >/dev/null; then rc=0; else rc=$?; fi
+assert_eq "cwd-arg: claude_sessions_under exits 0" "0" "$rc"
+assert_eq "cwd-arg: claude invoked as 'agents --json --cwd <path>'" \
+  "$(printf 'agents\n--json\n--cwd\n%s' "$CA_DIR")" "$(cat "$CA_DIR/argv")"
+ca_teardown
+
 # ============================================================================
 # summary
 # ============================================================================
