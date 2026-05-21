@@ -46,8 +46,8 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
 | verify | Draft PR, CI failed | [verify-pr](.claude/skills/verify-pr/SKILL.md) |
 | waiting | Draft PR, CI in progress | (nothing — wait) |
 | qa | Draft PR, CI green | [dispatch-qa](.claude/skills/dispatch-qa/SKILL.md) |
-| simplify | Post-QA code quality | `/simplify` (built-in) |
-| review | Post-simplify review | `/review` (built-in) |
+| code-review | Post-QA code quality | `/code-review` (built-in) |
+| review | Post-code-review pass | `/review` (built-in) |
 | security | Post-review security | `/security-review` (built-in) |
 | ready | All reviews complete | flip draft PR to ready |
 
@@ -61,7 +61,7 @@ Entry points               Dispatcher                    Phase skills
 /dispatch     ──────────>  dispatch        ──────────>  plan-implement  (implement)
 (re-invoked                (derives phase               verify-pr       (verify)
  each phase)               from PR/CI                   dispatch-qa     (qa)
-                           ground truth)                simplify        (simplify)
+                           ground truth)                code-review     (code-review)
                                                         review          (review)
                                                         security-review (security)
                                                         gh pr ready     (ready)
@@ -75,8 +75,8 @@ Entry points               Dispatcher                    Phase skills
 2. Draft PR + CI failed → `verify`
 3. Draft PR + CI running → `waiting`
 4. Draft PR + CI green + no label → `qa`
-5. Draft PR + `dispatch:qa-done` label → `simplify`
-6. Draft PR + `dispatch:refactored` label → `review`
+5. Draft PR + `dispatch:qa-done` label → `code-review`
+6. Draft PR + `dispatch:code-reviewed` label → `review`
 7. Draft PR + `dispatch:reviewed` label → `security`
 8. Draft PR + `dispatch:security-reviewed` label → `ready`
 9. Non-draft (ready) PR → `done`

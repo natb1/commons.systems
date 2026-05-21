@@ -178,7 +178,7 @@ area and are orthogonal to the `dispatch:*` phase labels, which mark workflow
 progress. Apply **at most one** topic label.
 
 - **`dispatch`** — concerns the `/dispatch` workflow, one of its phase skills
-  (`/plan-implement`, `/verify-pr`, `/dispatch-qa`, `/simplify-fix`,
+  (`/plan-implement`, `/verify-pr`, `/dispatch-qa`, `/code-review-fix`,
   `/review-fix`, `/security-review-fix`), a `ref-*` reference skill those
   skills use (`ref-ready`, `ref-memory-management`, `ref-github-issues`,
   `ref-write-instructions`), or a `dispatch-*` script under

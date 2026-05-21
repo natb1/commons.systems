@@ -124,7 +124,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
         the issue(s) this PR implements. For **each** tracked issue, record a
         `blocked_by` dependency **on that tracked issue, targeting the flake issue
         `<N>`** — the PR's own work is blocked by the unrelated flake. Note the
-        direction: this is the **reverse** of `/review-fix` and `/simplify-fix`,
+        direction: this is the **reverse** of `/review-fix` and `/code-review-fix`,
         which record `blocked_by` on the *new* issue; here the new flake issue is
         the *blocker* and the PR's existing tracked issue is the *blocked* one.
         Use the `ref-github-issues` dependencies API (database-ID resolution with
