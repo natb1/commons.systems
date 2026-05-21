@@ -199,14 +199,13 @@ progress. Apply **at most one** topic label.
   landing/budget/print/fellspiral feature work matches neither topic. There is
   no "other" sentinel label.
 
-When an issue matches both topics, apply only `dispatch` — it is the narrower,
-named workflow, where `testing infrastructure` is the broad category. The
-`dispatch-*` and `run-*.sh` prefixes partition
-`.claude/skills/dispatch/scripts/`, so most issues match at most one topic
-outright; this tie-break only resolves an issue that genuinely spans both.
+When an issue matches both topics, apply only `dispatch` — the narrower, named
+workflow wins over `testing infrastructure`, the broad category. Most issues
+match at most one topic outright; this tie-break resolves only the rare issue
+that genuinely spans both.
 
 Record the matched label as `<topic>` for the mode-specific command below, or
-treat it as empty when neither matches.
+leave `<topic>` empty when no topic matched.
 
 ### Issue number mode
 
@@ -214,12 +213,11 @@ Assign the issue and apply `help wanted` plus any matched topic label in one
 call:
 
 ```bash
-gh issue edit <N> --add-assignee @me --add-label "help wanted" --add-label "<topic>"
+gh issue edit <N> --add-assignee @me --add-label "help wanted" --add-label "<topic>"  # drop the trailing --add-label when no topic matched
 ```
 
-Omit the `--add-label "<topic>"` argument when no topic matched. Apply
-`help wanted` by default; drop both `--add-label` arguments only when the user
-explicitly asked not to label the issue or named a different label set.
+Apply `help wanted` by default; drop both `--add-label` arguments only when the
+user explicitly asked not to label the issue or named a different label set.
 
 ### Description mode
 
@@ -228,7 +226,5 @@ explicitly asked not to label the issue or named a different label set.
 that issue number:
 
 ```bash
-gh issue edit <N> --add-label "<topic>"
+gh issue edit <N> --add-label "<topic>"  # run nothing when no topic matched
 ```
-
-Run no command when no topic matched.
