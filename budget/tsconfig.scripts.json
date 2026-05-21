@@ -1,0 +1,7 @@
+{
+  "extends": "@commons-systems/config/tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["scripts/migrate-to-journal-entries.ts"]
+}
