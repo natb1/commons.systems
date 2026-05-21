@@ -252,14 +252,12 @@ while IFS= read -r issue_num; do
   #            exactly as a direct worktree is skipped; continue the ladder so
   #            selection never emits a dead-end target.
   #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
-  # The `if cmd=$(...); then ... else status=$?; ... fi` form captures the exit
-  # code without tripping set -e.
   if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue); then
     LEAF_NUM="$leaf"
     break
   else
     trace_status=$?
-    [[ "$trace_status" == 2 ]] && continue
+    [[ "$trace_status" -eq 2 ]] && continue
     echo "error: dispatch-trace-leaf $issue_num queue failed (exit $trace_status)" >&2
     exit 1
   fi
