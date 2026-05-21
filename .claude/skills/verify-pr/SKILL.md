@@ -8,8 +8,8 @@ description: Verify phase — single pass that reproduces and fixes one set of f
 The `verify` phase of the issue workflow, dispatched by `/dispatch` only when a
 draft PR has **completed-and-failed** CI. This skill is **single-pass — it has no
 internal loop**. It fixes one round of failed checks, records the outcome, posts it,
-and stops. `/loop /dispatch` drives iteration: each subsequent failure is a fresh
-`/dispatch` → `/verify-pr` invocation.
+and stops. The `/dispatch` background-job chain drives iteration: each subsequent
+failure is a fresh `/dispatch` → `/verify-pr` invocation.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
 launch subagents and invoke `/implement-unit`.
@@ -124,7 +124,7 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
         the issue(s) this PR implements. For **each** tracked issue, record a
         `blocked_by` dependency **on that tracked issue, targeting the flake issue
         `<N>`** — the PR's own work is blocked by the unrelated flake. Note the
-        direction: this is the **reverse** of `/review-fix` and `/simplify-fix`,
+        direction: this is the **reverse** of `/review-fix` and `/code-review-fix`,
         which record `blocked_by` on the *new* issue; here the new flake issue is
         the *blocker* and the PR's existing tracked issue is the *blocked* one.
         Use the `ref-github-issues` dependencies API (database-ID resolution with
@@ -157,9 +157,9 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
    .claude/skills/dispatch/scripts/post-pr-comment.sh <pr-num> tmp/verify-summary.md
    ```
 
-8. **Stop.** `/loop /dispatch` drives the next iteration — the next `/dispatch` run
-   re-derives the phase from CI ground truth and re-invokes `/verify-pr` if checks
-   still fail.
+8. **Stop.** The `/dispatch` background-job chain drives the next iteration —
+   the next `/dispatch` job re-derives the phase from CI ground truth and
+   re-invokes `/verify-pr` if checks still fail.
 
 ## Accumulator
 
