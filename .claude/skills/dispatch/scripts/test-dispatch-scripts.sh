@@ -1481,9 +1481,6 @@ assert_eq "invalid mode → usage error, exit 1" "ok" "$status"
 teardown
 
 # 13. issue-blocking failure → hard error (exit 1), never emits N as a leaf.
-#     Without the fix, the swallowed failure makes 800 look like a childless
-#     topological leaf and the script prints "800" — selecting a possibly
-#     blocked issue.
 echo "Test: issue-blocking failure → exit 1, no leaf emitted"
 setup
 # No stub files: 800 would otherwise resolve as a childless leaf. The injected
@@ -1505,8 +1502,7 @@ assert_eq "issue-sub-issues failure → no leaf on stdout" "" "$stdout"
 teardown
 
 # 15. issue-blocking failure in explicit mode → exit 1, NOT the cycle-fallback
-#     "print N". Guards the subtlest regression: a gh failure must not fall
-#     through to explicit mode's historical print-self behavior.
+#     "print N".
 echo "Test: issue-blocking failure (explicit) → exit 1, not cycle-fallback"
 setup
 : > "$STUB_DIR/gh-fail-blocked_by-800"

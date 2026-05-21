@@ -138,7 +138,7 @@ find_leaf() {
   # Descend into children lowest-numbered first; return the first leaf found.
   # In queue mode, skip any child that already has a worktree — if every child
   # is skipped the loop finds nothing and we bubble up.
-  local kid leaf rc
+  local kid leaf
   while IFS= read -r kid; do
     [[ -z "$kid" ]] && continue
     [[ "$MODE" == "queue" && -n "${CONFLICTED[$kid]+x}" ]] && continue
