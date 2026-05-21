@@ -2495,6 +2495,142 @@ assert_eq "spare-ancestor walk records the session PID, not the spare daemon" \
 lock_teardown
 
 # ============================================================================
+# dispatch-config-load tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   a copy of dispatch-config-load
+#   $TMPDIR_TEST/config/    synthetic config directory (DISPATCH_CONFIG_DIR)
+#
+# DISPATCH_CONFIG_DIR is exported so the script never touches the real
+# dispatch.config/ directory and does not require a git repo.
+
+config_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/config"
+
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load"
+
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+}
+
+config_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_CONFIG_DIR
+}
+
+# --- Test 1: valid projects.json prints normalized JSON ----------------------
+
+echo "Test: valid projects.json prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/projects.json" <<'EOF'
+{
+  "projects": [
+    {
+      "key": "test-project",
+      "owner": "test-owner",
+      "number": 42,
+      "statusField": "Status",
+      "statusInProgress": "In Progress",
+      "statusDone": "Done"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>/dev/null); rc=$?
+assert_eq "valid projects.json exits 0" "0" "$rc"
+key=$(printf '%s' "$out" | jq -r '.projects[0].key')
+assert_eq "valid projects.json key" "test-project" "$key"
+owner=$(printf '%s' "$out" | jq -r '.projects[0].owner')
+assert_eq "valid projects.json owner" "test-owner" "$owner"
+config_teardown
+
+# --- Test 2: valid jit.json prints normalized JSON ---------------------------
+
+echo "Test: valid jit.json prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{
+  "jits": [
+    {
+      "key": "test-chore",
+      "repo": "test-owner/test-repo",
+      "label": "jit:test-chore",
+      "title": "Test recurring chore",
+      "body": "Test chore body.",
+      "project": "test-project",
+      "remindAfterClose": "12h",
+      "dueAfterClose": "24h",
+      "debounce": "1h"
+    }
+  ]
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" jit 2>/dev/null); rc=$?
+assert_eq "valid jit.json exits 0" "0" "$rc"
+jit_key=$(printf '%s' "$out" | jq -r '.jits[0].key')
+assert_eq "valid jit.json key" "test-chore" "$jit_key"
+jit_label=$(printf '%s' "$out" | jq -r '.jits[0].label')
+assert_eq "valid jit.json label" "jit:test-chore" "$jit_label"
+config_teardown
+
+# --- Test 3: absent file prints no-config and exits 0 ------------------------
+
+echo "Test: absent file prints no-config and exits 0"
+config_setup
+# no file written — config dir is empty
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>/dev/null); rc=$?
+assert_eq "absent file exits 0" "0" "$rc"
+assert_eq "absent file prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 4: invalid JSON exits 1 with an error ------------------------------
+
+echo "Test: invalid JSON exits 1 and stderr mentions the cause"
+config_setup
+printf 'not valid json {{{' > "$DISPATCH_CONFIG_DIR/projects.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>&1 1>/dev/null) || rc=$?
+assert_eq "invalid JSON exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"invalid JSON"* || "$err" == *"parse error"* || "$err" == *"Invalid"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: invalid JSON stderr mentions the cause"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: invalid JSON stderr mentions the cause"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 5: missing required field exits 1 and names the field --------------
+
+echo "Test: missing required field exits 1 and stderr names the field"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/projects.json" <<'EOF'
+{
+  "projects": [
+    {
+      "key": "test-project",
+      "owner": "test-owner",
+      "number": 1,
+      "statusInProgress": "In Progress",
+      "statusDone": "Done"
+    }
+  ]
+}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>&1 1>/dev/null) || rc=$?
+assert_eq "missing required field exits 1" "1" "$rc"
+if [[ "$err" == *"statusField"* ]]; then
+  assert_eq "missing-field error names the field" "yes" "yes"
+else
+  assert_eq "missing-field error names the field" "yes" "no: $err"
+fi
+config_teardown
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results

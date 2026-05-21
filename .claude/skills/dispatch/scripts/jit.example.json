@@ -1,0 +1,15 @@
+{
+  "jits": [
+    {
+      "key": "example-chore",
+      "repo": "example-owner/example-repo",
+      "label": "jit:example-chore",
+      "title": "Example recurring chore",
+      "body": "Recurring example chore. Close this issue when done.",
+      "project": "example-project",
+      "remindAfterClose": "12h",
+      "dueAfterClose": "24h",
+      "debounce": "1h"
+    }
+  ]
+}

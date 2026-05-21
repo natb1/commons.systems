@@ -1,0 +1,12 @@
+{
+  "projects": [
+    {
+      "key": "example-project",
+      "owner": "example-owner",
+      "number": 1,
+      "statusField": "Status",
+      "statusInProgress": "In Progress",
+      "statusDone": "Done"
+    }
+  ]
+}

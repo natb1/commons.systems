@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+# dispatch-config-load — load and validate a local dispatch config file.
+#
+# Reads non-version-controlled config from a project-root dispatch.config/
+# directory (outside every git worktree, shared across worktrees). Validates
+# the parsed JSON against the schema for the requested config type and prints
+# the normalized result to stdout.
+#
+# Usage:
+#   dispatch-config-load <projects|jit>
+#
+# Config files live in <project-root>/dispatch.config/. The project root is
+# the parent of git --git-common-dir (same idiom as dispatch-acquire-lock).
+#
+# Stdout protocol:
+#   <normalized JSON>   file present and valid — prints jq-normalized JSON.
+#   no-config           file absent — the feature is treated as inert.
+#
+# Exit codes:
+#   0  valid JSON printed, or file absent (no-config).
+#   1  file present but invalid JSON or fails schema validation.
+#   2  usage error or environment misconfiguration.
+#
+# Environment overrides for testability:
+#   DISPATCH_CONFIG_DIR   Override the config directory path. When set and
+#                         non-empty, the script does NOT require a git repo.
+#                         Default: <project-root>/dispatch.config/
+#
+# ---- Schema: projects.json --------------------------------------------------
+#
+# Top-level object with a required "projects" array. Each element is an object
+# with these required fields:
+#
+#   key             string (non-empty) — local identifier for the project.
+#   owner           string (non-empty) — GitHub org or user owning the project.
+#   number          number             — GitHub project number.
+#   statusField     string (non-empty) — name of the project's Status field.
+#   statusInProgress string (non-empty) — Status option name for "in progress".
+#   statusDone      string (non-empty) — Status option name for "done".
+#
+# Example (see projects.example.json):
+#   {
+#     "projects": [
+#       { "key": "example-project", "owner": "example-owner", "number": 1,
+#         "statusField": "Status", "statusInProgress": "In Progress",
+#         "statusDone": "Done" }
+#     ]
+#   }
+#
+# ---- Schema: jit.json -------------------------------------------------------
+#
+# Top-level object with a required "jits" array. Each element is an object
+# with these required fields:
+#
+#   key     string (non-empty) — unique identifier for the jit. Used as the
+#           label suffix: the engine stamps "jit:<key>" on created issues.
+#   repo    string (non-empty) — GitHub repo in "owner/repo" form.
+#   label   string (non-empty) — full label name, typically "jit:<key>".
+#   title   string (non-empty) — issue title.
+#   body    string (non-empty) — issue body.
+#   project string (non-empty) — "key" of an entry in projects.json.
+#
+# Optional timing fields (each must be a string if present):
+#
+#   remindAfterClose  duration string, e.g. "12h" — cadence jit: how long
+#                     after the last closed issue to create the next one.
+#   dueAfterClose     duration string, e.g. "24h" — cadence jit: due time
+#                     offset from the last closed issue's closedAt.
+#   dueAfterCreate    duration string — check-script jit: due time offset
+#                     from the issue's createdAt.
+#   debounce          duration string, e.g. "1h" — how often the jit engine
+#                     re-checks this jit (skips network calls within window).
+#   check             object with "script" (string) and optional "args" keys —
+#                     check-script jit: run this script to decide whether to
+#                     create an issue.
+#
+# Timing-field semantics (cadence vs check-script) are validated by the JIT
+# engine, not here. This loader only checks types.
+#
+# Example (see jit.example.json):
+#   {
+#     "jits": [
+#       { "key": "example-chore", "repo": "example-owner/example-repo",
+#         "label": "jit:example-chore", "title": "Example recurring chore",
+#         "body": "Recurring example chore. Close this issue when done.",
+#         "project": "example-project",
+#         "remindAfterClose": "12h", "dueAfterClose": "24h", "debounce": "1h" }
+#     ]
+#   }
+set -euo pipefail
+
+# ---- Step 0: parse arguments ------------------------------------------------
+
+CONFIG_TYPE="${1:-}"
+case "$CONFIG_TYPE" in
+  projects|jit) ;;
+  *)
+    echo "error: usage: dispatch-config-load <projects|jit>" >&2
+    exit 2
+    ;;
+esac
+
+# ---- Step 1: resolve the config directory -----------------------------------
+# An explicit DISPATCH_CONFIG_DIR is authoritative and bypasses the git lookup —
+# tests rely on this. Otherwise the config lives at the shared project-root
+# dispatch.config/ (not a per-worktree path) so all worktrees share one config.
+# The parent of --git-common-dir is the project root in both classic (.git) and
+# bare (.bare) layouts, same idiom as dispatch-acquire-lock.
+if [[ -n "${DISPATCH_CONFIG_DIR:-}" ]]; then
+  CONFIG_DIR="$DISPATCH_CONFIG_DIR"
+else
+  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+    || { echo "error: not in a git repo and DISPATCH_CONFIG_DIR is unset" >&2; exit 2; }
+  PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
+  CONFIG_DIR="$PROJECT_ROOT/dispatch.config"
+fi
+
+# ---- Step 2: locate the target file -----------------------------------------
+
+CONFIG_FILE="$CONFIG_DIR/${CONFIG_TYPE}.json"
+
+if [[ ! -e "$CONFIG_FILE" ]]; then
+  echo "no-config"
+  exit 0
+fi
+
+# ---- Step 3: parse and validate ---------------------------------------------
+
+# Validate JSON syntax first. jq exits non-zero on invalid JSON.
+# Capture stderr inline using a subshell to avoid temp files.
+PARSE_ERR=""
+if ! PARSED=$(jq '.' "$CONFIG_FILE" 2>&1); then
+  # jq merged stdout+stderr in the error case; split off the error message.
+  PARSE_ERR="$PARSED"
+  echo "error: $CONFIG_FILE: invalid JSON: $PARSE_ERR" >&2
+  exit 1
+fi
+
+# Run schema validation. The validator emits one error-description line per
+# problem and nothing when the config is valid.
+case "$CONFIG_TYPE" in
+  projects)
+    ERRORS=$(jq -r '
+      # top-level .projects must be an array
+      if (.projects | type) != "array" then
+        "top-level .projects must be an array, got \(.projects | type)"
+      else
+        .projects | to_entries[] |
+        .value as $item |
+        (.key + 1) as $idx |
+        if ($item | type) != "object" then
+          "projects[\($idx)]: must be an object, got \($item | type)"
+        else
+          # required string fields (non-empty)
+          (["key","owner","statusField","statusInProgress","statusDone"] |
+          .[] |
+          . as $field |
+          if ($item | has($field)) | not then
+            "projects[\($idx)]: missing required field \($field)"
+          elif ($item[$field] | type) != "string" then
+            "projects[\($idx)]: \($field) must be a string, got \($item[$field] | type)"
+          elif ($item[$field] | length) == 0 then
+            "projects[\($idx)]: \($field) must be a non-empty string"
+          else
+            empty
+          end),
+          # required number field
+          if ($item | has("number")) | not then
+            "projects[\($idx)]: missing required field number"
+          elif ($item["number"] | type) != "number" then
+            "projects[\($idx)]: number must be a number, got \($item["number"] | type)"
+          else
+            empty
+          end
+        end
+      end
+    ' "$CONFIG_FILE")
+    ;;
+  jit)
+    ERRORS=$(jq -r '
+      # top-level .jits must be an array
+      if (.jits | type) != "array" then
+        "top-level .jits must be an array, got \(.jits | type)"
+      else
+        .jits | to_entries[] |
+        .value as $item |
+        (.key + 1) as $idx |
+        if ($item | type) != "object" then
+          "jits[\($idx)]: must be an object, got \($item | type)"
+        else
+          # required string fields (non-empty)
+          (["key","repo","label","title","body","project"] |
+          .[] |
+          . as $field |
+          if ($item | has($field)) | not then
+            "jits[\($idx)]: missing required field \($field)"
+          elif ($item[$field] | type) != "string" then
+            "jits[\($idx)]: \($field) must be a string, got \($item[$field] | type)"
+          elif ($item[$field] | length) == 0 then
+            "jits[\($idx)]: \($field) must be a non-empty string"
+          else
+            empty
+          end),
+          # optional timing fields — must be strings if present
+          (["remindAfterClose","dueAfterClose","dueAfterCreate","debounce"] |
+          .[] |
+          . as $field |
+          if ($item | has($field)) and ($item[$field] | type) != "string" then
+            "jits[\($idx)]: \($field) must be a string if present, got \($item[$field] | type)"
+          else
+            empty
+          end)
+        end
+      end
+    ' "$CONFIG_FILE")
+    ;;
+esac
+
+if [[ -n "$ERRORS" ]]; then
+  while IFS= read -r line; do
+    echo "error: $CONFIG_FILE: $line" >&2
+  done <<< "$ERRORS"
+  exit 1
+fi
+
+# ---- Step 4: print normalized JSON ------------------------------------------
+
+printf '%s\n' "$PARSED"
