@@ -4,7 +4,8 @@
 #
 # Output: exactly one line:
 #   pr <num> <branch> <phase>   — a PR to work on, with its already-derived phase
-#   issue <num>                 — a help-wanted issue to implement
+#   issue <num>                 — a help-wanted issue, resolved to a startable
+#                                 open leaf (may differ from the top-level issue)
 #   empty                       — nothing eligible
 #   worktree <N> <branch>       — the current worktree's own open issue (short-circuits the queue scan)
 #   worktree-closed <N> <branch>— the current worktree's issue is closed or unknown
@@ -41,7 +42,9 @@
 #   2. Oldest "review"   PR (draft + dispatch:refactored)
 #   3. Oldest "simplify" PR (draft + dispatch:qa-done)
 #   4. Oldest "verify"   PR (draft, CI completed and failed)
-#   5. Oldest open help-wanted issue with no local git worktree
+#   5. Oldest open help-wanted issue with no local git worktree, resolved to a
+#      startable open leaf (an issue whose entire open-leaf subtree is
+#      worktree-conflicted is skipped, exactly as a direct worktree is)
 #   6. Oldest "qa"       PR (draft, CI green, no dispatch:* label)
 #
 # PRs and help-wanted issues with a local git worktree are skipped (a session is
@@ -273,26 +276,10 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   [[ -z "${FIRST_PR[$pr_key]:-}" ]] && FIRST_PR[$pr_key]="$pr_num $pr_branch"
 done <<< "$PR_SORTED"
 
-# First-seen help-wanted issue per category. The queue is the open-issue list
-# filtered client-side to "help wanted"; issues whose <N>-* worktree exists
-# (a session is working them) are skipped, exactly as before.
-ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r '
-  sort_by(.createdAt) | .[]
-  | select((.labels // []) | any(.name == "help wanted"))
-  | [.number, ((.labels // []) | tojson)] | @tsv')
-while IFS=$'\t' read -r issue_num issue_labels; do
-  [[ -z "$issue_num" ]] && continue
-  # Skip issues whose <N>-* worktree exists (a session is working them).
-  if issue_has_worktree "$issue_num"; then
-    continue
-  fi
-  issue_cat=$(category_of_labels "$issue_labels")
-  [[ -z "${FIRST_ISSUE[$issue_cat]:-}" ]] && FIRST_ISSUE[$issue_cat]="$issue_num"
-done <<< "$ISSUE_SORTED"
-
 if [[ "$QA_MODE" == "true" ]]; then
   # --qa mode: oldest QA PR in the highest-priority category that has one,
-  # without the <phase> field.
+  # without the <phase> field. The issue queue is irrelevant here, so the
+  # leaf-resolution loop below is skipped entirely.
   for category in "${CATEGORIES[@]}"; do
     qa_key="$category|qa"
     if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
@@ -303,6 +290,45 @@ if [[ "$QA_MODE" == "true" ]]; then
   echo "empty"
   exit 0
 fi
+
+# First-seen help-wanted issue per category. The queue is the open-issue list
+# filtered client-side to "help wanted"; issues whose <N>-* worktree exists
+# (a session is working them) are skipped. Each candidate is resolved to a
+# startable open leaf within its subtree, and the leaf — not the top-level
+# help-wanted issue — is what gets recorded; the category is still the
+# top-level issue's own.
+ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r '
+  sort_by(.createdAt) | .[]
+  | select((.labels // []) | any(.name == "help wanted"))
+  | [.number, ((.labels // []) | tojson)] | @tsv')
+while IFS=$'\t' read -r issue_num issue_labels; do
+  [[ -z "$issue_num" ]] && continue
+  # Skip issues whose <N>-* worktree exists (a session is working them).
+  if issue_has_worktree "$issue_num"; then
+    continue
+  fi
+  # Category is the top-level help-wanted issue's own labels. Once a category
+  # has a winner the remaining issues in it are skipped — including the
+  # expensive leaf trace.
+  issue_cat=$(category_of_labels "$issue_labels")
+  [[ -n "${FIRST_ISSUE[$issue_cat]:-}" ]] && continue
+  # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
+  # in queue mode descends open blockers and sub-issues, skipping any child whose
+  # <N>-* branch is an existing local worktree (owned by another session):
+  #   exit 0 — a startable open leaf was found; record it for this category.
+  #   exit 2 — every reachable open leaf is worktree-conflicted. Skip this issue
+  #            exactly as a direct worktree is skipped; a later issue in the
+  #            same category may still fill the slot.
+  #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
+  if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue); then
+    FIRST_ISSUE[$issue_cat]="$leaf"
+  else
+    trace_status=$?
+    [[ "$trace_status" -eq 2 ]] && continue
+    echo "error: dispatch-trace-leaf $issue_num queue failed (exit $trace_status)" >&2
+    exit 1
+  fi
+done <<< "$ISSUE_SORTED"
 
 # Default mode: iterate categories outermost; within each, the ladder
 # security → review → simplify → verify → help-wanted issue → qa. The first
