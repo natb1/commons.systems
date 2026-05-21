@@ -1,21 +1,22 @@
 ---
-name: simplify-fix
-description: Simplify phase — merge origin/main, run the generic /simplify, commit and push the fixes, defer out-of-scope findings as tracking issues, post a PR comment, and apply the dispatch:refactored label
+name: code-review-fix
+description: Code-review phase — merge origin/main, run the generic /code-review, commit and push the fixes, defer out-of-scope findings as tracking issues, post a PR comment, and apply the dispatch:code-reviewed label
 ---
 
-# Simplify and Fix
+# Code Review and Fix
 
-The `simplify` phase of the issue workflow, dispatched by `/dispatch`. This is the
-dispatch-specific wrapper around the generic built-in `/simplify` skill.
-`/simplify` applies in-scope fixes to the working tree and produces findings; it
+The `code-review` phase of the issue workflow, dispatched by `/dispatch`. This is the
+dispatch-specific wrapper around the generic built-in `/code-review` skill.
+`/code-review` applies in-scope fixes to the working tree and surfaces findings with the
+skill's own (fixed vs skipped) disposition; it
 does not commit, push, post a summary, or carry follow-up actions beyond the
-current PR. This skill wraps it: merge current `main`, run `/simplify`, commit
+current PR. This skill wraps it: merge current `main`, run `/code-review`, commit
 and push the fixes, defer important out-of-scope findings to tracking issues via
-`/file-issue` subagents, post a PR comment, and apply the `dispatch:refactored`
+`/file-issue` subagents, post a PR comment, and apply the `dispatch:code-reviewed`
 label.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
-fork `/commit-merge-push`, invoke the built-in `/simplify`, and launch
+fork `/commit-merge-push`, invoke the built-in `/code-review`, and launch
 `/file-issue` subagents.
 
 ## Idempotency preamble
@@ -33,7 +34,7 @@ echo "$PR_JSON" | jq -r '.labels[].name'
 `PR_NUM` is carried through to Steps 5, 6, and 7 — do not re-resolve. The PR body
 stays in `PR_JSON` (`echo "$PR_JSON" | jq -r .body`); Step 5 parses its
 `Closes #N` line(s) to resolve the issue(s) this PR implements. If the PR
-already carries the `dispatch:refactored` label — an interrupted prior run —
+already carries the `dispatch:code-reviewed` label — an interrupted prior run —
 **skip Steps 1–7 entirely** and return; the label is the wrapper's terminal
 action and is already applied, so re-entry is a true no-op. Otherwise run all
 steps in order.
@@ -43,23 +44,24 @@ steps in order.
 1. **Merge `origin/main` first.** Fork `/commit-merge-push` via the Agent tool to
    merge current `main` into the branch. This first invocation runs with no
    pending working-tree changes — `/commit-merge-push` tolerates that: it creates
-   no commit and only fetches, merges `origin/main`, and pushes. Simplifying
+   no commit and only fetches, merges `origin/main`, and pushes. Reviewing
    against current `main` avoids re-reviewing code `main` has already changed.
 
-2. **Run `/simplify`.** Invoke the built-in `/simplify` skill via the Skill tool.
+2. **Run `/code-review max`.** Invoke the built-in `/code-review` skill via the
+   Skill tool with the `max` effort level — the highest thoroughness available.
    It applies in-scope fixes to the working tree and surfaces findings with the
    skill's own (fixed vs skipped) disposition. Any "final reply" / "nothing
-   else" wording in `/simplify`'s prompt scopes only to its findings
+   else" wording in `/code-review`'s prompt scopes only to its findings
    deliverable — once it returns, continue to Step 3.
 
-3. **Classify every finding into the 4-way disposition.** `/simplify` produces a
+3. **Classify every finding into the 4-way disposition.** `/code-review` produces a
    2-way split (fixed vs skipped). The wrapper extends each skipped finding into
    one of three buckets — Informational, Disregarded, or Deferred — using the
-   table in **Finding classification** below. The caller of `/simplify-fix`
-   makes this call; `/simplify` itself does not.
+   table in **Finding classification** below. The caller of `/code-review-fix`
+   makes this call; `/code-review` itself does not.
 
 4. **Commit and push the fixes.** Fork `/commit-merge-push` via the Agent tool to
-   commit the Step 2 edits and push. If `/simplify` produced no code changes,
+   commit the Step 2 edits and push. If `/code-review` produced no code changes,
    this invocation runs with no pending changes — `/commit-merge-push` tolerates
    that and creates no commit. Capture the resulting fix commit SHA (or note the
    no-op) for the Step 6 report.
@@ -138,31 +140,31 @@ steps in order.
    .claude/skills/dispatch/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
-7. **Apply the `dispatch:refactored` label** via `dispatch-complete-phase` (use
+7. **Apply the `dispatch:code-reviewed` label** via `dispatch-complete-phase` (use
    `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" simplify
+   .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" code-review
    ```
 
-   This skill **owns** its `dispatch:refactored` label — parallel to how
+   This skill **owns** its `dispatch:code-reviewed` label — parallel to how
    `/review-fix` owns `dispatch:reviewed` and `/security-review-fix` owns
    `dispatch:security-reviewed` — so `/dispatch` does not apply the label after
    this skill returns.
 
 ## Finding classification
 
-Every `/simplify` finding lands in exactly one of four buckets:
+Every `/code-review` finding lands in exactly one of four buckets:
 
 | Bucket | Meaning |
 |---|---|
-| Fixed | Implemented in Step 2 by `/simplify`. |
+| Fixed | Implemented in Step 2 by `/code-review`. |
 | Informational | Surfaced for human reference; no action recommended. |
 | Disregarded | False positive or trivially wrong; explicitly rejected with a one-line rationale. |
 | Deferred | Important and actionable but out of scope for this PR; a `/file-issue` subagent filed a tracking issue in Step 5. |
 
-`/simplify` itself produces only the 2-way split (fixed vs skipped). The caller
-of `/simplify-fix` extends the skipped findings into the three non-fixed buckets
+`/code-review` itself produces only the 2-way split (fixed vs skipped). The caller
+of `/code-review-fix` extends the skipped findings into the three non-fixed buckets
 in Step 3 — that classification is the wrapper's responsibility, not the
 generic skill's.
 
@@ -172,12 +174,12 @@ Fixed and implement it — full stop — regardless of how trivial the diff is.
 Disregarded is for false positives, trivially wrong findings, or style
 preferences that are not actual improvements; smallness alone never qualifies
 (out-of-scope items go to Deferred, not Disregarded).
-If `/simplify` skipped a small in-scope improvement in Step 2, implement it
+If `/code-review` skipped a small in-scope improvement in Step 2, implement it
 yourself before moving on (working-tree edit only; Step 4's
 `/commit-merge-push` picks it up).
 
 ## Notes
 
-The skill is idempotent: a re-invocation with `dispatch:refactored` already on
+The skill is idempotent: a re-invocation with `dispatch:code-reviewed` already on
 the PR skips Steps 1–7 and returns. The label is the wrapper's terminal action
 and is already applied, so re-entry is a true no-op.
