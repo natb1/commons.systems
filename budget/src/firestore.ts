@@ -143,7 +143,7 @@ function requireDocId(id: string, label: string): void {
 
 export async function updateTransaction(
   txnId: TransactionId,
-  fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
+  fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription" | "journalEntryId">>,
 ): Promise<void> {
   requireDocId(txnId, "transaction");
   if (Object.keys(fields).length === 0) return;

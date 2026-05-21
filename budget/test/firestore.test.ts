@@ -119,6 +119,7 @@ describe("getTransactions", () => {
         timestamp: mockTimestamp,
         statementId: "stmt-2025-01",
         statementItemId: null,
+        journalEntryId: null,
         groupId: null,
         normalizedId: null,
         normalizedPrimary: true,
