@@ -208,10 +208,10 @@ present. Map the phase:
 Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 `/dispatch` invocation.
 
-- **`implement`** — run the Step 6 relevance review and dispatch its verdict:
-  `proceed` invokes `/plan-implement`; `adjust` invokes `/new-requirement` then
-  `/plan-implement`; `stop` reports and skips. The draft PR's existence plus its
-  CI status is its own marker — `/plan-implement` gets **no** `dispatch:*` label.
+- **`implement`** — run the Step 6 relevance review and dispatch the verdict it
+  returns (`proceed` / `adjust` / `stop` — see Step 6). The draft PR's existence
+  plus its CI status is its own marker — `/plan-implement` gets **no**
+  `dispatch:*` label.
 - **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of failed
   CI checks, record the outcome, post it, stop. No label.
 - **`waiting`** — CI checks are still running or queued. Monitor them to
@@ -265,14 +265,18 @@ respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
 
 ## 6. Pre-Implementation Relevance Review
 
-This step is **skipped** for the `verify` case — a PR already exists and
-implementation is underway.
+This step runs **only** for the `implement` phase — a no-PR target. Every phase
+with an existing PR (`verify` onward) skips it: implementation is already
+underway. It is the implementation-time counterpart of `ref-ready`'s Step 3e
+relevance check (which is baseline-branch-anchored for issue editing); keep the
+two in sync when either changes.
 
 Before invoking `/plan-implement` on an `implement`-phase (no-PR) issue, run a
-creation-date-anchored drift analysis. First, fetch the issue's creation timestamp:
+creation-date-anchored drift analysis. First, fetch the issue's creation
+timestamp (`dangerouslyDisableSandbox: true` — `gh` needs network):
 
 ```bash
-gh issue view <N> --json createdAt -q .createdAt   # dangerouslyDisableSandbox: true
+gh issue view <N> --json createdAt -q .createdAt
 ```
 
 Then gather evidence of drift since that timestamp across the paths, references, and
@@ -280,20 +284,24 @@ conventions the issue body names.
 
 ### Drift-analysis inputs
 
-The four inputs are independent — issue them in parallel (single message, multiple
-tool calls):
+Inputs 1, 3, and 4 are independent — issue them in parallel (one message,
+multiple tool calls), together with input 2's initial list call. Input 2 then
+has a dependent per-PR follow-up once that list returns.
 
 1. **Commits since creation** — one `git log --since=<createdAt> -- <path1> <path2>
    ...` across every file path the issue body names. Relevant commits indicate the
    area is actively changing and may have shifted the issue's assumptions.
 
-2. **Merged PRs since creation that touched the same files** — run:
+2. **Merged PRs since creation that touched the same files** — list merged PRs in
+   the window (`dangerouslyDisableSandbox: true` — `gh` needs network):
    ```bash
-   gh pr list --state merged --search "merged:>=<createdAt>"   # dangerouslyDisableSandbox: true
+   gh pr list --state merged --search "merged:>=<createdAt>" --limit 100
    ```
-   Filter results to PRs whose changed files overlap with the paths the issue names.
-   Titles and descriptions often surface whether the overlap is incidental or
-   substantive.
+   If the result hits the limit, the drift window is too wide to analyze cheaply
+   — report that and recommend re-running `/ready` instead. Otherwise, for the
+   PRs whose titles plausibly relate to the issue's domain, fetch their changed
+   files and keep the ones overlapping the paths the issue names. Titles and
+   descriptions often surface whether the overlap is incidental or substantive.
 
 3. **Named-reference validity** — one `grep`/`rg` with all names alternated as a
    single pattern. Names include any file paths, module names, function names, CLI
@@ -305,13 +313,16 @@ tool calls):
    current conventions (e.g. a deprecated pattern, a renamed package, a changed
    config shape).
 
-If log output is noisy, hand inputs 1-3 to a one-shot subagent — the dispatching
-session still owns the verdict.
+Input 4 stays with the dispatching session. Inputs 1-3 may be handed to a
+one-shot subagent that returns a structured drift summary — decide this before
+the parallel dispatch so the calls are not run twice. The dispatching session
+always owns the verdict.
 
 ### Three-way verdict
 
 - **`proceed`** — drift absent or cosmetic; invoke `/plan-implement`.
 - **`adjust`** — issue still wanted but references, conventions, or scope have
-  shifted; invoke `/new-requirement` first, then `/plan-implement`.
+  shifted; invoke `/new-requirement` with the drift findings as the revised
+  understanding, then `/plan-implement`.
 - **`stop`** — codebase has moved past the need; report what changed and recommend
   closing the issue or re-running `/ready`. Do **not** invoke `/plan-implement`.
