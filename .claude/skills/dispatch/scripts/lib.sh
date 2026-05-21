@@ -448,6 +448,26 @@ list_worktree_records() {
   _emit_worktree_record "$wt_path" "$branch"
 }
 
+# Split one list_worktree_records line into the globals WT_NUM / WT_PATH /
+# WT_BRANCH.
+#
+# Do NOT parse list_worktree_records output with `IFS=$'\t' read -r num path
+# branch`: tab is an IFS *whitespace* character, so `read` trims a leading or
+# trailing tab and collapses consecutive tabs. list_worktree_records leaves the
+# issue-number field empty for bare / detached-HEAD / non-issue worktrees, so
+# those records begin with a tab — `read` strips it and every field shifts one
+# position left (the path lands in `num`, the branch in `path`). Parameter
+# expansion does no trimming or run-collapsing, so it preserves empty fields
+# exactly. Every record has exactly two tabs (three fields), so the split below
+# is unambiguous.
+split_worktree_record() {
+  local line="$1"
+  WT_NUM="${line%%$'\t'*}"      # field 1: before the first tab
+  local rest="${line#*$'\t'}"  # everything after the first tab
+  WT_PATH="${rest%%$'\t'*}"    # field 2: before the second tab
+  WT_BRANCH="${rest#*$'\t'}"   # field 3: after the second tab
+}
+
 # Kill processes belonging to worktrees that no longer exist.
 # Scopes the search to this repo's worktree directory (derived from git
 # common dir) to avoid killing processes from unrelated repositories.
@@ -465,12 +485,15 @@ cleanup_stale_worktree_processes() {
   git worktree prune 2>/dev/null || true
 
   # Build set of active worktree paths — the <path> field of every registered
-  # worktree record (issue-prefixed or not, branch or detached).
+  # worktree record (issue-prefixed or not, branch or detached). split_worktree_record
+  # is trim-safe: non-issue / detached worktrees have an empty leading issue-number
+  # field, which `IFS=$'\t' read` would strip — shifting the path out of WT_PATH.
   local active_paths=""
-  local rec_num rec_path rec_branch
-  while IFS=$'\t' read -r rec_num rec_path rec_branch; do
-    [ -z "$rec_path" ] && continue
-    active_paths+="$rec_path "
+  local line
+  while IFS= read -r line; do
+    split_worktree_record "$line"
+    [ -z "$WT_PATH" ] && continue
+    active_paths+="$WT_PATH "
   done < <(list_worktree_records)
 
   if [ -z "$active_paths" ]; then

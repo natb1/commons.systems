@@ -45,14 +45,17 @@ if [[ "$CURRENT_BRANCH" == "$ISSUE"-* ]]; then
 fi
 
 # `enter` / `conflict` — scan local worktrees for one whose branch carries the
-# <issue>-* prefix, via the shared list_worktree_records helper (lib.sh). Records
-# arrive in `git worktree list` order, so the first matching record wins.
-while IFS=$'\t' read -r num path branch; do
-  if [[ "$num" == "$ISSUE" ]]; then
+# <issue>-* prefix, via the shared list_worktree_records helper (lib.sh).
+# split_worktree_record splits each line into WT_NUM / WT_PATH / WT_BRANCH
+# (trim-safe — see lib.sh). Records arrive in `git worktree list` order, so the
+# first matching record wins.
+while IFS= read -r line; do
+  split_worktree_record "$line"
+  if [[ "$WT_NUM" == "$ISSUE" ]]; then
     if [[ "$MODE" == "explicit" ]]; then
-      echo "enter $path"
+      echo "enter $WT_PATH"
     else
-      echo "conflict $path"
+      echo "conflict $WT_PATH"
     fi
     exit 0
   fi

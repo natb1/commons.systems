@@ -44,13 +44,16 @@ if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]] \
 fi
 
 # In queue mode, build the set of issue-number prefixes that own a local
-# worktree. list_worktree_records (lib.sh) does the shared porcelain parse; each
-# record's first tab-separated field is the branch's issue-number prefix, empty
-# for non-issue / branchless worktrees.
+# worktree. list_worktree_records (lib.sh) does the shared porcelain parse;
+# split_worktree_record splits each line into WT_NUM / WT_PATH / WT_BRANCH —
+# WT_NUM is the branch's issue-number prefix, empty for non-issue / branchless
+# worktrees. (A plain `IFS=$'\t' read` would mis-parse those empty-prefix
+# records — see split_worktree_record in lib.sh.)
 declare -A CONFLICTED=()
 if [[ "$MODE" == "queue" ]]; then
-  while IFS=$'\t' read -r num path branch; do
-    [[ -n "$num" ]] && CONFLICTED["$num"]=1
+  while IFS= read -r line; do
+    split_worktree_record "$line"
+    [[ -n "$WT_NUM" ]] && CONFLICTED["$WT_NUM"]=1
   done < <(list_worktree_records)
 fi
 

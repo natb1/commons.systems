@@ -1752,6 +1752,66 @@ assert_eq "mixed fixture → all records, input order" "$expected" "$result"
 teardown
 
 # ============================================================================
+# split_worktree_record (lib.sh) tests
+# ============================================================================
+echo ""
+echo "=== split_worktree_record ==="
+
+# split_worktree_record splits one list_worktree_records line into the globals
+# WT_NUM / WT_PATH / WT_BRANCH via parameter expansion — preserving the empty
+# leading/trailing fields that `IFS=$'\t' read` would trim. The function is
+# pure (no git), so each test sources lib.sh in a subshell directly.
+
+# 1. Issue-prefixed record → all three fields populated.
+echo "Test: issue-prefixed record → all fields"
+result=$( source "$SCRIPT_DIR/lib.sh"
+          split_worktree_record $'42\t/wt/42-x\t42-x'
+          printf '%s|%s|%s' "$WT_NUM" "$WT_PATH" "$WT_BRANCH" )
+assert_eq "issue-prefixed record split" "42|/wt/42-x|42-x" "$result"
+
+# 2. Non-issue branch record (empty leading issue-number field) → WT_NUM empty,
+#    WT_PATH and WT_BRANCH intact. This is the record the IFS=$'\t' read idiom
+#    mis-parsed: the leading tab was trimmed, shifting the path into WT_NUM.
+echo "Test: non-issue record → empty WT_NUM, path intact"
+result=$( source "$SCRIPT_DIR/lib.sh"
+          split_worktree_record $'\t/repo\tmain'
+          printf '%s|%s|%s' "$WT_NUM" "$WT_PATH" "$WT_BRANCH" )
+assert_eq "non-issue record split" "|/repo|main" "$result"
+
+# 3. Detached-HEAD / bare record (empty leading and trailing fields) → only
+#    WT_PATH populated.
+echo "Test: detached/bare record → only WT_PATH"
+result=$( source "$SCRIPT_DIR/lib.sh"
+          split_worktree_record $'\t/wt/detached\t'
+          printf '%s|%s|%s' "$WT_NUM" "$WT_PATH" "$WT_BRANCH" )
+assert_eq "detached/bare record split" "|/wt/detached|" "$result"
+
+# 4. Consumer regression: cleanup_stale_worktree_processes' active-set loop.
+#    A non-issue worktree (main) must contribute its FULL PATH to active_paths.
+#    Pre-fix, the `IFS=$'\t' read -r rec_num rec_path rec_branch` loop trimmed
+#    the empty leading issue-number field and recorded the bare branch name
+#    `main` instead of `/repo` — so a process under that worktree failed the
+#    active-set test and was killed as "stale". This test mirrors the loop and
+#    fails on the pre-fix code.
+echo "Test: non-issue worktree path reaches the active set"
+setup
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/detached\nHEAD ghi789\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$(
+  source "$TMPDIR_TEST/lib.sh"
+  active_paths=""
+  while IFS= read -r line; do
+    split_worktree_record "$line"
+    [ -z "$WT_PATH" ] && continue
+    active_paths+="$WT_PATH "
+  done < <(list_worktree_records)
+  printf '%s' "$active_paths"
+)
+assert_eq "active_paths holds every full worktree path" \
+  "/repo /worktrees/42-x /worktrees/detached " "$result"
+teardown
+
+# ============================================================================
 # dispatch-sweep tests
 # ============================================================================
 echo ""
