@@ -73,6 +73,8 @@ export interface Transaction {
   readonly statementId: StatementId | null;
   /** Explicit link to the immutable statement line item this transaction was imported from. Null or undefined for manually entered transactions and older records written before the statement-items backfill. */
   readonly statementItemId?: StatementItemId | null;
+  /** Link to the JournalEntry this transaction maps to under the double-entry model. Null for historical rows until the migration script (issue #552) backfills them. */
+  readonly journalEntryId?: string | null;
   readonly groupId: GroupId | null;
   readonly normalizedId: string | null;
   readonly normalizedPrimary: boolean;
@@ -157,6 +159,7 @@ export function parseFirestoreTransaction(docSnap: QueryDocumentSnapshot<Documen
     timestamp: optionalTimestamp(data.timestamp, "timestamp"),
     statementId: optionalString(data.statementId, "statementId") as StatementId | null,
     statementItemId: optionalString(data.statementItemId, "statementItemId") as StatementItemId | null,
+    journalEntryId: optionalString(data.journalEntryId, "journalEntryId"),
     groupId: optionalString(data.groupId, "groupId") as GroupId | null,
     normalizedId: optionalString(data.normalizedId, "normalizedId"),
     // Defaults to true for un-normalized transactions (field may be missing or null)
