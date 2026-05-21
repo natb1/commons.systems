@@ -91,14 +91,13 @@ Run this step **only when the current branch is `main`**. From an issue worktree
 skip this step — phase skills (`/verify-pr`, `/security-review-fix`) already merge
 `origin/main` into the issue branch at their own entry points.
 
-Fast-forward local `main` to `origin/main`:
+Fast-forward local `main` to `origin/main` — no push:
 
 ```bash
 git fetch origin main && git merge --ff-only origin/main
 ```
 
-This brings local `main` up to `origin/main` without pushing. It is a no-op when
-local `main` already equals `origin/main`.
+It is a no-op when local `main` already equals `origin/main`.
 
 - If `git fetch` fails, or `git merge --ff-only` rejects a non-fast-forward (local
   `main` has diverged with unexpected commits), release the lock (see *Releasing
