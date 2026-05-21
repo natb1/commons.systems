@@ -16,14 +16,8 @@
         <p class="tagline">Know the software that runs your business.</p>
         <nav><app-nav id="nav"></app-nav><button id="panel-toggle" class="panel-toggle" aria-label="Toggle info panel" aria-expanded="false">&#9656;</button></nav>
       </header>
-      <section class="landing-hero" aria-label="Featured">
-        <div class="landing-hero-band" data-placeholder="true">OPEN-SOURCE · LOCAL-FIRST · FORK AND OWN</div>
-        <div class="landing-hero-grid" data-placeholder="true">
-          <div class="landing-hero-card">Budget (placeholder)</div>
-          <div class="landing-hero-card">Audio (placeholder)</div>
-          <div class="landing-hero-card">Print (placeholder)</div>
-        </div>
-      </section>
+      <!-- Filled at runtime by mountHero (main.ts) and at build time by injectHomeExtra (prerender.ts) -->
+      <section class="landing-hero" aria-label="Featured"></section>
       <div class="content-grid">
         <main id="app"></main>
         <aside id="info-panel" class="sidebar"></aside>
