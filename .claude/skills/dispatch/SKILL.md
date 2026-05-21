@@ -24,8 +24,8 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 
 Run this as the **very first action** — before the `origin/main` sync, the
 `origin/main` health gate, the worktree sweep, target selection, and worktree
-resolution. Runs unconditionally, whether or not an issue-number argument was
-given.
+resolution. Runs unconditionally, whether or not an issue-or-PR-number argument
+was given.
 
 ```bash
 LOCK=$(.claude/skills/dispatch/scripts/dispatch-acquire-lock --wait)
