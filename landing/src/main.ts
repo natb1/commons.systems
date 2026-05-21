@@ -13,14 +13,16 @@ import { renderInfoPanel, hydrateInfoPanel } from "@commons-systems/blog/compone
 import buildTimeContent from "virtual:blog-post-content";
 import buildTimeMetadata from "virtual:blog-post-metadata";
 import { createFetchPost } from "@commons-systems/blog/github";
-import { updateOgMeta } from "@commons-systems/blog/og-meta";
+import { updateOgMeta, updateStaticPageMeta } from "@commons-systems/blog/og-meta";
 import { updateCanonical } from "@commons-systems/blog/canonical";
 import { getPosts, type PostMeta } from "@commons-systems/blog/firestore";
 import { initPanelToggle } from "@commons-systems/components/panel-toggle";
 import "@commons-systems/components/nav";
 import type { AppNavElement } from "@commons-systems/components/nav";
 import { BLOG_ROLL_ENTRIES, createStrategies } from "./blog-roll/config.js";
-import { INFO_PANEL_LINK_SECTIONS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
+import { ABOUT_PAGE_META, INFO_PANEL_LINK_SECTIONS, NAV_LINKS, SITE_DEFAULTS, SITE_URL } from "./site-config.js";
+import { mountHero } from "./showcase-render.js";
+import { renderAboutHtml, mountAboutPanel } from "./pages/about.js";
 import { isInGroup, ADMIN_GROUP_ID } from "@commons-systems/authutil/groups";
 import { db, NAMESPACE, trackPageView, initAppCheck, signIn, signOut, onAuthStateChanged } from "./firebase.js";
 import { deferAppCheckInit } from "@commons-systems/firebaseutil/defer-appcheck";
@@ -31,6 +33,20 @@ const app = document.getElementById("app");
 if (!app) throw new Error("#app element not found");
 const infoPanel = document.getElementById("info-panel");
 if (!infoPanel) throw new Error("#info-panel element not found");
+// The .landing-hero section is part of the page shell, but prerendering strips
+// it from post and /about pages (blog's stripHomeExtra). Recreate it when
+// absent so the home route can mount the showcase band even after SPA
+// navigation from a page whose prerendered HTML shipped without the section.
+function ensureHero(): HTMLElement {
+  const existing = document.querySelector<HTMLElement>(".landing-hero");
+  if (existing) return existing;
+  const contentGrid = document.querySelector(".content-grid");
+  if (!contentGrid) throw new Error(".content-grid element not found");
+  const section = document.createElement("section");
+  section.className = "landing-hero";
+  contentGrid.before(section);
+  return section;
+}
 
 const header = document.querySelector(".page > header");
 if (!header) throw new Error(".page > header element not found");
@@ -63,13 +79,14 @@ const updateInfoPanel = (): void => {
   lastRenderedPosts = cachedPosts;
 }
 
-navEl.links = [{ href: "/", label: "Home" }];
+navEl.links = NAV_LINKS;
 navEl.addEventListener("sign-in", () => signIn());
 navEl.addEventListener("sign-out", () => void signOut());
 
 function updateNav(path: string): void {
   navEl.showAuth = path === "/admin";
   navEl.user = currentUser;
+  document.body.dataset.route = path === "/" ? "home" : path === "/about" ? "about" : "other";
 }
 
 const toggle = document.getElementById("panel-toggle");
@@ -117,9 +134,20 @@ const router = createHistoryRouter(
       afterRender: (outlet, path) => {
         const slug = path.startsWith("/post/") ? path.slice(6) : undefined;
         hydrateHome(outlet, cachedPosts, boundFetchPost, slug);
+        if (!slug) mountHero(ensureHero());
         updateOgMeta(RSS_CONFIG.siteUrl, slug ? cachedPosts.find((p) => p.id === slug) : undefined, RSS_CONFIG.title, SITE_DEFAULTS);
         updateCanonical(RSS_CONFIG.siteUrl, slug);
         updateInfoPanel();
+      },
+    },
+    {
+      path: "/about",
+      render: () => renderAboutHtml(),
+      afterRender: () => {
+        updateStaticPageMeta(RSS_CONFIG.siteUrl, ABOUT_PAGE_META, RSS_CONFIG.title);
+        updateCanonical(RSS_CONFIG.siteUrl, undefined, "/about");
+        mountAboutPanel(infoPanel);
+        lastRenderedPosts = undefined;
       },
     },
     {

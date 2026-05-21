@@ -14,6 +14,17 @@ export interface SiteDefaults {
 
 export type OgTagEntry = { attr: "property" | "name"; key: string; content: string };
 
+/** Metadata for a static page (e.g. /about). `url` is a root-relative path
+ * starting with "/" — it is concatenated onto `siteUrl` to form og:url. */
+export interface StaticPageMeta {
+  url: string;
+  title: string;
+  description: string;
+  /** Absolute path from site root; included in og:image / twitter:image when provided. */
+  image?: string;
+  type?: "website" | "profile";
+}
+
 const OG_PROPERTIES = ["og:title", "og:description", "og:image", "og:type", "og:url"] as const;
 const TWITTER_NAMES = ["twitter:card", "twitter:title", "twitter:description", "twitter:image"] as const;
 
@@ -72,6 +83,46 @@ function removeOgTags(): void {
   }
   for (const name of TWITTER_NAMES) {
     document.querySelector(`meta[name="${name}"]`)?.remove();
+  }
+}
+
+/**
+ * Builds OG/description meta entries for a static page (e.g. /about).
+ * `page.url` must be a root-relative path starting with "/" (e.g. "/about"); it is
+ * concatenated onto `siteUrl` to form og:url. Passing a full absolute URL doubles the origin.
+ */
+export function staticPageOgEntries(siteUrl: string, page: StaticPageMeta): OgTagEntry[] {
+  if (!page.url.startsWith("/")) {
+    throw new Error("staticPageOgEntries: page.url must be a root-relative path starting with '/'");
+  }
+  const entries: OgTagEntry[] = [
+    { attr: "name", key: "description", content: page.description },
+    { attr: "property", key: "og:title", content: page.title },
+    { attr: "property", key: "og:description", content: page.description },
+    { attr: "property", key: "og:type", content: page.type ?? "website" },
+    { attr: "property", key: "og:url", content: `${siteUrl}${page.url}` },
+    { attr: "name", key: "twitter:card", content: "summary_large_image" },
+    { attr: "name", key: "twitter:title", content: page.title },
+    { attr: "name", key: "twitter:description", content: page.description },
+  ];
+  if (page.image !== undefined) {
+    const imageUrl = `${siteUrl}${page.image}`;
+    entries.push({ attr: "property", key: "og:image", content: imageUrl });
+    entries.push({ attr: "name", key: "twitter:image", content: imageUrl });
+  }
+  return entries;
+}
+
+export function updateStaticPageMeta(
+  siteUrl: string,
+  page: StaticPageMeta,
+  titleSuffix?: string,
+): void {
+  document.title = titleSuffix ? formatPageTitle(titleSuffix, page.title) : page.title;
+  staticPageOgEntries(siteUrl, page).forEach((e) => setMetaTag(e.attr, e.key, e.content));
+  if (page.image === undefined) {
+    document.querySelector('meta[property="og:image"]')?.remove();
+    document.querySelector('meta[name="twitter:image"]')?.remove();
   }
 }
 
