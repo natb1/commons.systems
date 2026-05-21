@@ -1039,11 +1039,15 @@ teardown
 echo ""
 echo "=== dispatch-trace-leaf ==="
 
+# The default empty-worktree-list stub means no <N>-* branch is ever conflicted,
+# so explicit mode and queue mode behave identically for the chain/leaf tests
+# below. New mode-specific behavior is exercised in tests 8-12.
+
 # 1. No children → prints self.
 echo "Test: no children → prints self"
 setup
 # No stub files means no blockers and no sub-issues.
-result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100")
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" "explicit")
 assert_eq "no children → self (100)" "100" "$result"
 teardown
 
@@ -1057,7 +1061,7 @@ printf '{"title":"Issue 101","body":"","comments":[],"number":101,"state":"OPEN"
   > "$STUB_DIR/issue-101.json"
 printf '{"title":"Issue 102","body":"","comments":[],"number":102,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-102.json"
-result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100")
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" "explicit")
 assert_eq "blocker chain 100→101→102 → leaf 102" "102" "$result"
 teardown
 
@@ -1070,7 +1074,7 @@ printf '{"title":"Issue 200","body":"","comments":[],"number":200,"state":"OPEN"
   > "$STUB_DIR/issue-200.json"
 printf '{"title":"Issue 201","body":"","comments":[],"number":201,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-201.json"
-result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100")
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" "explicit")
 assert_eq "multiple children → lowest leaf (200)" "200" "$result"
 teardown
 
@@ -1083,7 +1087,7 @@ printf '{"title":"Issue 300","body":"","comments":[],"number":300,"state":"CLOSE
   > "$STUB_DIR/issue-300.json"
 printf '{"title":"Issue 301","body":"","comments":[],"number":301,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-301.json"
-result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100")
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" "explicit")
 assert_eq "closed children ignored → open leaf 301" "301" "$result"
 teardown
 
@@ -1093,7 +1097,7 @@ setup
 printf '[{"number":400}]\n' > "$STUB_DIR/subissues-100.json"
 printf '{"title":"Issue 400","body":"","comments":[],"number":400,"state":"CLOSED"}\n' \
   > "$STUB_DIR/issue-400.json"
-result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100")
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" "explicit")
 assert_eq "all children closed → self (100)" "100" "$result"
 teardown
 
@@ -1105,7 +1109,7 @@ printf '[{"number":500}]\n' > "$STUB_DIR/subissues-100.json"
 printf '[{"number":100}]\n' > "$STUB_DIR/subissues-500.json"
 printf '{"title":"Issue 500","body":"","comments":[],"number":500,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-500.json"
-result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100")
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" "explicit")
 assert_eq "cycle → fallback to N (100)" "100" "$result"
 teardown
 
@@ -1115,8 +1119,80 @@ setup
 printf '[{"number":601}]\n' > "$STUB_DIR/subissues-600.json"
 printf '{"title":"Issue 601","body":"","comments":[],"number":601,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-601.json"
-result=$("$TMPDIR_TEST/dispatch-trace-leaf" "600")
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "600" "explicit")
 assert_eq "sub-issues chain 600→601 → leaf 601" "601" "$result"
+teardown
+
+# 8. Queue mode: conflicted child is skipped → sibling is returned.
+echo "Test: queue mode → skips conflicted child, returns sibling"
+setup
+# 700 has two open sub-issues: 701 (worktree-owned) and 702 (clean).
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+# Pretend another session owns 701's worktree on branch 701-feature.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: conflicted child 701 skipped → sibling 702" "702" "$result"
+teardown
+
+# 9. Explicit mode: conflicted child returned unchanged (no worktree filtering).
+echo "Test: explicit mode → conflicted child returned (no filtering)"
+setup
+# Same fixture as test 8, but invoked in explicit mode.
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
+assert_eq "explicit: lowest leaf 701 unchanged" "701" "$result"
+teardown
+
+# 10. Queue mode: every child is worktree-conflicted → non-zero exit.
+echo "Test: queue mode → all leaves conflicted, exits non-zero"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+# Both children's worktrees exist.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\nworktree /worktrees/702-feature\nHEAD ghi789\nbranch refs/heads/702-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"worktree-conflicted"*"EXIT="[1-9]*) status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "queue: all blocked → non-zero with stderr message" "ok" "$status"
+teardown
+
+# 11. Missing mode → arity error on stderr, exit 1.
+echo "Test: missing mode arg → usage error"
+setup
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"usage:"*"EXIT=1") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "missing mode → usage error, exit 1" "ok" "$status"
+teardown
+
+# 12. Invalid mode string → usage error on stderr, exit 1.
+echo "Test: invalid mode arg → usage error"
+setup
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" "bogus" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"usage:"*"EXIT=1") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "invalid mode → usage error, exit 1" "ok" "$status"
 teardown
 
 # ============================================================================

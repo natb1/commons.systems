@@ -109,14 +109,23 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 ## 2. Trace to an Open Leaf
 
 When the resolved target is an **open issue with no PR** — whether queue-selected
-(`issue <num>`) or named by argument — trace to its open leaf:
+(`issue <num>`) or named by argument — trace to its open leaf. Pass the mode that
+matches Step 3's resolve call: `queue` if queue-selected, `explicit` if named by
+an explicit `/dispatch` argument:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-trace-leaf <N>
+.claude/skills/dispatch/scripts/dispatch-trace-leaf <N> <queue|explicit>
 ```
 
 It walks open blockers and sub-issues to an open leaf and prints one issue number.
 Retarget to that leaf.
+
+In `queue` mode the descent is worktree-aware: children whose `<N>-*` branch is
+an existing local worktree (owned by another session) are skipped, and the trace
+falls back to the next ready sibling. If every reachable open leaf in the subtree
+is worktree-conflicted, the script exits non-zero with a message on stderr —
+report "subtree fully blocked — all open leaves have worktrees owned by other
+sessions" (name `<N>`) and **stop**; do not dispatch.
 
 Skip leaf tracing when:
 - A PR exists for the target — check with:
