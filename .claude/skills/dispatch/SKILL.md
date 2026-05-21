@@ -166,7 +166,7 @@ present. Map the phase:
 
 | Phase | Meaning | Next action |
 |---|---|---|
-| `implement` | no PR on the target | relevance review (Step 6) → proceed / adjust via `/new-requirement` then proceed / stop |
+| `implement` | no PR on the target | relevance review (Step 6), then dispatch its verdict |
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
 | `waiting` | draft PR, CI in progress (running/queued/not started) | monitor CI to completion with a `sonnet` subagent, then re-derive the phase and dispatch it (Step 5) |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
@@ -180,17 +180,10 @@ present. Map the phase:
 Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 `/dispatch` invocation.
 
-- **`implement`** — run the Step 6 relevance review first. Three outcomes:
-  - **Proceed** — drift absent or cosmetic → invoke `/plan-implement` directly.
-  - **Adjust** — issue still wanted but assumptions shifted → invoke `/new-requirement`
-    first (it clarifies, updates the remote issue body, re-syncs `CLAUDE.local.md`,
-    and revises the active plan), then invoke `/plan-implement`.
-  - **Stop** — codebase has moved past the need → report and skip; do not invoke
-    `/plan-implement`.
-
-  The draft PR's existence plus its CI status is its own marker —
-  `/plan-implement` gets **no** `dispatch:*` label (applies to the proceed and
-  adjust-then-proceed branches; the stop branch never invokes `/plan-implement`).
+- **`implement`** — run the Step 6 relevance review and dispatch its verdict:
+  `proceed` invokes `/plan-implement`; `adjust` invokes `/new-requirement` then
+  `/plan-implement`; `stop` reports and skips. The draft PR's existence plus its
+  CI status is its own marker — `/plan-implement` gets **no** `dispatch:*` label.
 - **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of failed
   CI checks, record the outcome, post it, stop. No label.
 - **`waiting`** — CI checks are still running or queued. Monitor them to
@@ -259,9 +252,12 @@ conventions the issue body names.
 
 ### Drift-analysis inputs
 
-1. **Commits since creation** — run `git log --since=<createdAt> -- <impacted paths>`
-   for each file path the issue body names. Relevant commits indicate the area is
-   actively changing and may have shifted the issue's assumptions.
+The four inputs are independent — issue them in parallel (single message, multiple
+tool calls):
+
+1. **Commits since creation** — one `git log --since=<createdAt> -- <path1> <path2>
+   ...` across every file path the issue body names. Relevant commits indicate the
+   area is actively changing and may have shifted the issue's assumptions.
 
 2. **Merged PRs since creation that touched the same files** — run:
    ```bash
@@ -271,26 +267,23 @@ conventions the issue body names.
    Titles and descriptions often surface whether the overlap is incidental or
    substantive.
 
-3. **Named-reference validity** — grep for any file paths, module names, function
-   names, CLI commands, env vars, or npm scripts the issue body names. Flag anything
-   renamed, moved, or removed since the issue was created.
+3. **Named-reference validity** — one `grep`/`rg` with all names alternated as a
+   single pattern. Names include any file paths, module names, function names, CLI
+   commands, env vars, or npm scripts the issue body cites. Flag anything renamed,
+   moved, or removed since the issue was created.
 
 4. **Convention drift** — re-read `CLAUDE.md` and any `.claude/rules/*.md` whose
    domain the issue touches. Flag approaches the issue assumes that no longer match
    current conventions (e.g. a deprecated pattern, a renamed package, a changed
    config shape).
 
-A one-shot subagent may be used when log trawling is noisy, but the dispatching
-session owns the verdict.
+If log output is noisy, hand inputs 1-3 to a one-shot subagent — the dispatching
+session still owns the verdict.
 
 ### Three-way verdict
 
-- **Still relevant as-is** — drift is absent or cosmetic → proceed to
-  `/plan-implement`.
-- **Relevant but assumptions shifted** — the issue is still wanted, but references,
-  conventions, or scope need re-syncing → invoke `/new-requirement` first (it
-  clarifies, updates the remote issue body, re-syncs `CLAUDE.local.md`, and revises
-  the active plan), then proceed to `/plan-implement`.
-- **Obsolete or substantially addressed** — the codebase has moved past the need →
-  **stop** and report what changed; recommend closing the issue or re-running
-  `/ready`. Do **not** invoke `/plan-implement`.
+- **`proceed`** — drift absent or cosmetic; invoke `/plan-implement`.
+- **`adjust`** — issue still wanted but references, conventions, or scope have
+  shifted; invoke `/new-requirement` first, then `/plan-implement`.
+- **`stop`** — codebase has moved past the need; report what changed and recommend
+  closing the issue or re-running `/ready`. Do **not** invoke `/plan-implement`.
