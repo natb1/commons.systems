@@ -27,6 +27,11 @@
 # Uses sibling scripts:
 #   issue-blocking   — prints JSON for each open blocker (gh issue view output)
 #   issue-sub-issues — prints JSON for each sub-issue (gh issue view output)
+#
+# Exit codes:
+#   0 — a leaf was found and printed to stdout
+#   1 — usage error (bad issue number or missing/invalid mode)
+#   2 — queue mode only: every reachable open leaf is worktree-conflicted
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -58,8 +63,7 @@ if [[ "$MODE" == "queue" ]]; then
 fi
 
 # Collect open children of an issue: open blockers union open sub-issues.
-# Outputs sorted unique issue numbers, one per line, lowest first. No
-# worktree filtering here — the caller (find_leaf) applies it.
+# Outputs sorted unique issue numbers, one per line, lowest first.
 open_children() {
   local n="$1"
   local children=()
@@ -89,7 +93,7 @@ open_children() {
 }
 
 # Depth-first search for the lowest-numbered reachable open leaf.
-# Args: $1 = current issue number, $2 = depth (0 for initial call)
+# Args: $1 = current issue number, $2 = 1 on the initial call, 0 on recursion
 # Uses global VISITED associative array for cycle protection.
 # Returns 0 and prints the leaf number on success.
 # Returns 1 if no valid leaf is reachable through this subtree (cycles, or in
@@ -98,7 +102,7 @@ declare -A VISITED=()
 
 find_leaf() {
   local n="$1"
-  local depth="$2"
+  local is_root="$2"
 
   if [[ -n "${VISITED[$n]+x}" ]]; then
     # Cycle detected — no leaf reachable via this path.
@@ -106,57 +110,39 @@ find_leaf() {
   fi
   VISITED["$n"]=1
 
-  local raw_kids
-  raw_kids=$(open_children "$n")
+  local kids
+  kids=$(open_children "$n")
 
-  if [[ -z "$raw_kids" ]]; then
-    # Topological leaf — no open blockers, no open sub-issues. In queue mode,
-    # a leaf reached by recursion whose own <N>-* branch is conflicted is not
-    # a valid leaf (another session owns it); bubble up so a sibling can be
-    # tried. The initial argument is never self-filtered — its worktree is
-    # resolved separately by the /dispatch caller.
-    if [[ "$MODE" == "queue" && "$depth" -gt 0 && -n "${CONFLICTED[$n]+x}" ]]; then
+  if [[ -z "$kids" ]]; then
+    # Topological leaf. In queue mode a non-root leaf whose own <N>-* worktree
+    # exists belongs to another session; bubble up so a sibling can be tried.
+    # The root argument is never self-filtered — the /dispatch caller resolves
+    # its worktree separately.
+    if [[ "$MODE" == "queue" && "$is_root" == "0" && -n "${CONFLICTED[$n]+x}" ]]; then
       return 1
     fi
     echo "$n"
     return 0
   fi
 
-  # Has open children. Filter them in queue mode; then descend lowest-first
-  # and return the first leaf found. If filtering empties the child set, the
-  # for loop does not execute and we bubble up — that subtree has no ready
-  # work even though n itself is open.
-  local kids="$raw_kids"
-  if [[ "$MODE" == "queue" ]]; then
-    local kept=()
-    local c
-    while IFS= read -r c; do
-      [[ -z "$c" ]] && continue
-      [[ -z "${CONFLICTED[$c]+x}" ]] && kept+=("$c")
-    done <<< "$raw_kids"
-    if [[ ${#kept[@]} -gt 0 ]]; then
-      kids=$(printf '%s\n' "${kept[@]}")
-    else
-      kids=""
-    fi
-  fi
-
+  # Descend into children lowest-numbered first; return the first leaf found.
+  # In queue mode, skip any child that already has a worktree — if every child
+  # is skipped the loop finds nothing and we bubble up.
   local kid
   while IFS= read -r kid; do
     [[ -z "$kid" ]] && continue
+    [[ "$MODE" == "queue" && -n "${CONFLICTED[$kid]+x}" ]] && continue
     local leaf
-    if leaf=$(find_leaf "$kid" $((depth + 1))); then
+    if leaf=$(find_leaf "$kid" 0); then
       echo "$leaf"
       return 0
     fi
   done <<< "$kids"
 
-  # All children led to cycles, were conflict-filtered, or yielded no valid
-  # leaf below them.
   return 1
 }
 
-if LEAF=$(find_leaf "$ISSUE_NUM" 0); then
+if LEAF=$(find_leaf "$ISSUE_NUM" 1); then
   echo "$LEAF"
   exit 0
 fi

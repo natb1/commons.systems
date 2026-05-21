@@ -1128,7 +1128,7 @@ esac
 assert_eq "queue: all blocked → non-zero with stderr message" "ok" "$status"
 teardown
 
-# 11. Invalid mode → arity error on stderr, exit 1.
+# 11. Missing mode → arity error on stderr, exit 1.
 echo "Test: missing mode arg → usage error"
 setup
 err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
@@ -1137,6 +1137,17 @@ case "$err_out" in
   *) status="bad: $err_out" ;;
 esac
 assert_eq "missing mode → usage error, exit 1" "ok" "$status"
+teardown
+
+# 12. Invalid mode string → usage error on stderr, exit 1.
+echo "Test: invalid mode arg → usage error"
+setup
+err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "100" "bogus" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
+case "$err_out" in
+  *"usage:"*"EXIT=1") status="ok" ;;
+  *) status="bad: $err_out" ;;
+esac
+assert_eq "invalid mode → usage error, exit 1" "ok" "$status"
 teardown
 
 # ============================================================================
