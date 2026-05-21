@@ -9,8 +9,9 @@
 # An fd-based `flock` cannot serialize /dispatch: the skill runs as many
 # separate Bash tool calls, each a fresh shell, so an fd flock would release
 # the instant its Bash call exits. The lock therefore keys on the Claude
-# *session* process — the nearest ancestor whose comm starts with ".claude" —
-# whose lifetime spans the whole tick. The recorded PID is the lock holder.
+# *session* process — the nearest ancestor whose comm starts with ".claude"
+# and is not a background daemon (e.g. a `--bg-spare` spare) — whose lifetime
+# spans the whole tick. The recorded PID is the lock holder.
 #
 # Release is implicit and self-healing: when the session dies its PID stops
 # being a live ".claude" process, so the next tick's read-check-write reclaims
@@ -79,15 +80,36 @@ WAIT_INTERVAL="${DISPATCH_LOCK_WAIT_INTERVAL:-5}"
 
 PROC_ROOT="${DISPATCH_LOCK_PROC_ROOT:-/proc}"
 
-# is_live_claude <pid> — true if <proc-root>/<pid>/comm exists and starts with
-# ".claude" (the comm field is already a basename, e.g. ".claude-unwrapp" on
-# NixOS, so a prefix test is enough).
+# Cmdline substrings that mark a non-session Claude daemon — a process whose
+# comm starts with ".claude" but which is NOT a /dispatch session. The
+# canonical case is `.claude-unwrapped --bg-spare`, a long-lived background-
+# spare daemon: the kernel truncates its comm to ".claude-unwrapp", identical
+# to a real session, so only its cmdline distinguishes the two. Extend this
+# list if other non-session Claude daemon flags appear.
+NON_SESSION_CMDLINE_MARKERS=(--bg-spare)
+
+# is_live_claude <pid> — true if <pid> is a live Claude *session* process.
+# First requires <proc-root>/<pid>/comm to exist and start with ".claude" (the
+# comm field is already a basename, e.g. ".claude-unwrapp" on NixOS, so a
+# prefix test is enough). Then reads <proc-root>/<pid>/cmdline and rejects the
+# pid if it carries any NON_SESSION_CMDLINE_MARKERS substring — a background
+# daemon, not a session. If the cmdline file is unreadable the comm-only
+# verdict stands (conservative: treat it as a session).
 is_live_claude() {
-  local pid="$1" comm_file comm
+  local pid="$1" comm_file comm cmdline_file cmdline marker
   comm_file="$PROC_ROOT/$pid/comm"
   [[ -r "$comm_file" ]] || return 1
   IFS= read -r comm <"$comm_file" 2>/dev/null || return 1
-  [[ "$comm" == .claude* ]]
+  [[ "$comm" == .claude* ]] || return 1
+  # /proc cmdline is NUL-separated; translate NULs to spaces before the
+  # substring match. Unreadable cmdline → keep the comm-only verdict.
+  cmdline_file="$PROC_ROOT/$pid/cmdline"
+  [[ -r "$cmdline_file" ]] || return 0
+  cmdline=$(tr '\0' ' ' <"$cmdline_file" 2>/dev/null) || return 0
+  for marker in "${NON_SESSION_CMDLINE_MARKERS[@]}"; do
+    [[ "$cmdline" == *"$marker"* ]] && return 1
+  done
+  return 0
 }
 
 # ---- Step 1: resolve the lock file ------------------------------------------

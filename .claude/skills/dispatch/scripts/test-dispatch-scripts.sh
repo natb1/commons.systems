@@ -2027,6 +2027,15 @@ lock_proc_status() {
   printf 'Name:\tbash\nPPid:\t%s\n' "$ppid" > "$DISPATCH_LOCK_PROC_ROOT/$pid/status"
 }
 
+# Helper: write a synthetic <proc>/<pid>/cmdline file with NUL-separated argv,
+# matching the kernel's /proc cmdline format. Used to mark a process as a
+# non-session Claude daemon (e.g. argv carrying `--bg-spare`).
+lock_proc_cmdline() {
+  local pid="$1"; shift
+  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
+  printf '%s\0' "$@" > "$DISPATCH_LOCK_PROC_ROOT/$pid/cmdline"
+}
+
 # --- Test 1: first acquisition with an absent lock file ----------------------
 
 echo "Test: first acquisition writes the session PID and prints acquired"
@@ -2268,6 +2277,57 @@ else
   rc=$?
 fi
 assert_eq "unknown argument exits 2" "2" "$rc"
+lock_teardown
+
+# --- Test 14: a recorded --bg-spare daemon PID is reclaimable (non-holder) ---
+#
+# The recorded PID is alive with comm ".claude-unwrapp" — identical to a real
+# session — but its cmdline carries `--bg-spare`, marking a background-spare
+# daemon, not a /dispatch session. is_live_claude must reject it, so the
+# calling session reclaims the lock. The comm-only predicate would wrongly
+# report busy and wedge the lock on the daemon.
+
+echo "Test: a recorded --bg-spare daemon PID is reclaimable, not a holder"
+lock_setup
+printf '%s\n' 141400 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 141400 ".claude-unwrapp"                   # comm looks like a session
+lock_proc_cmdline 141400 ".claude-unwrapped" "--bg-spare"  # ... but cmdline marks a spare daemon
+export DISPATCH_LOCK_SESSION_PID=141401
+lock_proc_pid 141401 ".claude-unwrapp"                   # our own live session
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "bg-spare-holder exits 0" "0" "$rc"
+assert_eq "bg-spare-holder prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "bg-spare-holder lock file rewritten to the caller's session PID" \
+  "141401" "$lock_contents"
+lock_teardown
+
+# --- Test 15: the ancestry walk skips a --bg-spare daemon ancestor -----------
+#
+# Like Test 7, DISPATCH_LOCK_SESSION_PID is unset so the /proc walk runs. The
+# script's $PPID ($$) is a non-.claude shell; its parent is a --bg-spare
+# daemon (`.claude` comm, `--bg-spare` cmdline); the grandparent is a real
+# .claude session. The walk must skip the spare daemon and record the session.
+
+echo "Test: the ancestry walk skips a --bg-spare daemon ancestor"
+lock_setup
+spare_pid=151500
+session_pid=151501
+lock_proc_pid "$$" "bash"                       # script's $PPID — not a .claude proc
+lock_proc_status "$$" "$spare_pid"              # ... its parent is the spare daemon
+lock_proc_pid "$spare_pid" ".claude-unwrapp"    # spare daemon: comm looks like a session
+lock_proc_cmdline "$spare_pid" ".claude-unwrapped" "--bg-spare"  # ... but cmdline marks it
+lock_proc_status "$spare_pid" "$session_pid"    # ... its parent is the real session
+lock_proc_pid "$session_pid" ".claude-unwrapp"  # real session (no cmdline → comm-only verdict)
+rc=0
+( exec "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) \
+  >"$STUB_DIR/out15" 2>/dev/null || rc=$?
+out=$(cat "$STUB_DIR/out15" 2>/dev/null || true)
+assert_eq "spare-ancestor walk exits 0" "0" "$rc"
+assert_eq "spare-ancestor walk prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "spare-ancestor walk records the session PID, not the spare daemon" \
+  "$session_pid" "$lock_contents"
 lock_teardown
 
 # ============================================================================
