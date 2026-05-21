@@ -36,7 +36,7 @@ Do not proceed to step 2.
 Check these locations in order. The first match wins. Print one line stating which path you chose so the user can audit.
 
 1. `${CLAUDE_PLUGIN_ROOT}/bin/budget-etl-<platform>` — the binary shipped with the plugin. Use it if it exists and is executable.
-2. `~/.cache/commons-systems/bin/budget-etl-<platform>` — a previously-downloaded copy.
+2. `~/.cache/commons-systems/bin/budget-etl-<platform>` — a previously-downloaded copy. Use it if it exists and is executable (a failed download may leave a stale non-executable file here).
 3. Download from GitHub Releases:
 
    ```bash
@@ -56,7 +56,7 @@ The invocation is `/budget <path>` with an optional `--output <out>`.
 
 **Branch A — Directory with existing `institution/account/[period]/file` layout:**
 
-If `<path>` is a directory, check whether it already matches the required layout. Walk the directory tree to see if direct subdirectories contain an `institution` or `account` pattern (e.g., checking one level deep for folders, then one more level, to detect paths like `boa/checking/` or `boa/checking/2025-01/`). If the layout is 3–4 levels deep, use the directory as-is. Skip all the staging steps below and proceed directly to step 4 without `--institution` or `--account` flags.
+If `<path>` is a directory, check whether it already matches the required layout. Walk the directory tree to see if direct subdirectories contain an `institution` or `account` pattern (e.g., checking one level deep for folders, then one more level, to detect paths like `boa/checking/` or `boa/checking/2025-01/`). If the layout is 3–4 levels deep, use the directory as-is: bind `INPUT_DIR` to `<path>`. Skip the staging steps below and proceed directly to step 4 without `--institution` or `--account` flags.
 
 **Branch B — Single file, glob, or flat directory:**
 
@@ -71,11 +71,11 @@ INPUT_DIR="$(mktemp -d)"
 cp "<path>" "$INPUT_DIR/"
 ```
 
-If `<path>` is a glob or multiple paths, copy each file into the same temp dir. Use `$INPUT_DIR` as the input dir.
+If `<path>` is a glob or multiple paths, copy each file into the same temp dir. If `<path>` is a flat directory, copy its files with `cp "<path>"/* "$INPUT_DIR/"`. Use `$INPUT_DIR` as the input dir.
 
 **Output path:**
 
-The default output is `./budget.json` in the user's current working directory. Honor `--output <out>` when given.
+The default output is `./budget.json` in the user's current working directory. Honor `--output <out>` when given. Bind the chosen path to `OUTPUT_PATH` for step 4.
 
 ## Step 4 — Run the binary
 
