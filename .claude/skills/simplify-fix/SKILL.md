@@ -104,7 +104,7 @@ true no-op. Otherwise run all steps in order.
    invokes `gh`) and also print the report to chat:
 
    ```bash
-   .claude/skills/ref-pr-workflow/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
+   .claude/skills/dispatch/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
 7. **Apply the `dispatch:refactored` label** via `dispatch-complete-phase` (use
