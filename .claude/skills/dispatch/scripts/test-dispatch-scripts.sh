@@ -827,6 +827,78 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "worktree continuation bypasses gate → worktree 42 42-some-slug" "worktree 42 42-some-slug" "$result"
 teardown
 
+# --- --health-only mode (issue #683 AC: gate before sweep) ------------------
+# --health-only runs the pre-ladder bypasses and the gate, then exits without
+# the queue scan. /dispatch SKILL.md calls it before dispatch-sweep so the
+# sweep does not run while main is red.
+
+# 27a. --health-only, main green, not in a worktree → "ok", exit 0.
+echo "Test: --health-only + main green → ok"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[{"headSha":"mainhead0","conclusion":"success"}]' \
+  > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
+assert_eq "--health-only main green → ok" "ok" "$result"
+assert_eq "--health-only main green → exit 0" "0" "$rc"
+teardown
+
+# 27b. --health-only, main red, not in a worktree → "main-broken <sha>", exit 0.
+echo "Test: --health-only + main red → main-broken"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
+assert_eq "--health-only main red → main-broken mainhead0" "main-broken mainhead0" "$result"
+assert_eq "--health-only main red → exit 0" "0" "$rc"
+teardown
+
+# 27c. --health-only, main red, current branch is <N>-foo with open issue <N>
+#      → "ok" (current-worktree bypass preserved).
+echo "Test: --health-only + worktree branch bypasses red main"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
+printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
+assert_eq "--health-only worktree branch bypasses red main → ok" "ok" "$result"
+assert_eq "--health-only worktree branch → exit 0" "0" "$rc"
+teardown
+
+# 27d. --health-only --qa is mutually exclusive → exit non-zero, error on stderr.
+echo "Test: --health-only + --qa → error"
+setup
+err_file="$TMPDIR_TEST/err.txt"
+if "$TMPDIR_TEST/dispatch-select-target" --health-only --qa >/dev/null 2>"$err_file"; then
+  rc=0
+else
+  rc=$?
+fi
+[[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
+assert_eq "--health-only --qa exits non-zero" "yes" "$rc_nonzero"
+err_contents=$(cat "$err_file")
+[[ "$err_contents" == *"mutually exclusive"* ]] && err_msg=ok || err_msg="missing: $err_contents"
+assert_eq "--health-only --qa error mentions mutually exclusive" "ok" "$err_msg"
+teardown
+
 # 28. Selecting a target issues exactly one gh pr list call (down from 1 + N).
 echo "Test: dispatch-select-target fetches the open-PR list once"
 setup
@@ -1189,6 +1261,454 @@ echo '{"title":"!!!"}' > "$STUB_DIR/issue-title-42.json"
 if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "empty-slug title exits non-zero" "1" "$rc"
 teardown
+
+# ============================================================================
+# dispatch-sweep tests
+# ============================================================================
+echo ""
+echo "=== dispatch-sweep ==="
+
+# Sweep tests use their own setup/teardown — the script under test sources
+# lib-worktree-in-sync.sh from SCRIPT_DIR and shells out to gh/git in patterns
+# the main suite's shims don't cover.
+#
+# Per-test layout under TMPDIR_TEST:
+#   bin/                          PATH shim dir (gh, git)
+#   scripts/dispatch-sweep        copy of the script under test
+#   scripts/lib-worktree-in-sync.sh   sourced helper
+#   project/                      fake project root
+#   project/.bare/                fake git common dir (parent = project/)
+#   project/worktrees/<n>-<slug>/ fake worktrees
+#   project/tmp/                  sweep log default dir
+#   proc/                         synthetic /proc tree (overridden per test)
+#   stub/                         per-test JSON + record files (calls, gh out)
+#
+# Shims:
+#   gh   — gh-pr-list-all.json drives `pr list --state all`; each entry carries
+#          {state, headRefName, number}, partitioned by the script into
+#          MERGED_BY_BRANCH / OPEN_BY_BRANCH.
+#   git  — knows worktree list/remove/prune, branch -D, -C <p> status,
+#          -C <p> rev-list --count, -C <p> log -1 --format=%ct, and
+#          rev-parse --path-format=absolute --git-common-dir.
+#          Every mutating call is appended to $STUB_DIR/calls.
+
+sweep_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/scripts" \
+           "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees" \
+           "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/proc"
+
+  cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
+  cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
+
+  # Default empty gh output (each test may overwrite).
+  echo '[]' > "$STUB_DIR/gh-pr-list-all.json"
+
+  # Default empty worktree list (each test should overwrite with its records).
+  : > "$STUB_DIR/worktree-list.txt"
+
+  # gh shim — only the call dispatch-sweep makes.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  "pr list --state all --json number,headRefName,state --limit 200")
+    cat "$STUB_DIR/gh-pr-list-all.json"
+    ;;
+  *)
+    echo "gh sweep stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  # git shim — multi-mode; records every mutating call so tests can assert.
+  cat > "$TMPDIR_TEST/bin/git" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+PROJECT_ROOT_FAKE="$(cd "$(dirname "$0")/.." && pwd)/project"
+
+# Detect `-C <path>` prefix.
+if [[ "${1:-}" == "-C" ]]; then
+  ctx_path="$2"
+  shift 2
+  sub="$1"; shift
+  rest="$*"
+  case "$sub $rest" in
+    "status --porcelain")
+      # Per-path porcelain output; default empty (clean).
+      key=$(echo "$ctx_path" | tr '/' '_')
+      f="$STUB_DIR/status${key}.txt"
+      [[ -f "$f" ]] && cat "$f"
+      exit 0
+      ;;
+    "rev-list --count HEAD --not --remotes")
+      key=$(echo "$ctx_path" | tr '/' '_')
+      f="$STUB_DIR/revlist${key}.txt"
+      if [[ -f "$f" ]]; then cat "$f"; else echo "0"; fi
+      exit 0
+      ;;
+    "log -1 --format=%ct HEAD")
+      key=$(echo "$ctx_path" | tr '/' '_')
+      f="$STUB_DIR/headct${key}.txt"
+      if [[ -f "$f" ]]; then cat "$f"; else exit 1; fi
+      exit 0
+      ;;
+    *)
+      echo "git -C stub: unknown invocation: -C $ctx_path $sub $rest" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+args="$*"
+case "$args" in
+  "rev-parse --path-format=absolute --git-common-dir")
+    echo "$PROJECT_ROOT_FAKE/.bare"
+    ;;
+  "worktree list --porcelain")
+    cat "$STUB_DIR/worktree-list.txt"
+    ;;
+  "worktree remove --force "*)
+    path="${args#worktree remove --force }"
+    echo "worktree-remove-force:$path" >> "$STUB_DIR/calls"
+    ;;
+  "worktree remove "*)
+    path="${args#worktree remove }"
+    echo "worktree-remove:$path" >> "$STUB_DIR/calls"
+    ;;
+  "worktree prune")
+    echo "worktree-prune" >> "$STUB_DIR/calls"
+    ;;
+  "branch -D "*)
+    name="${args#branch -D }"
+    echo "branch-D:$name" >> "$STUB_DIR/calls"
+    ;;
+  *)
+    echo "git sweep stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git"
+
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+
+  # Defaults for dispatch-sweep env overrides.
+  export DISPATCH_SWEEP_PROC_ROOT="$TMPDIR_TEST/proc"
+  export DISPATCH_SWEEP_LOG_FILE="$STUB_DIR/sweep.log"
+  export DISPATCH_SWEEP_NOW="2026-01-01T00:00:00Z"
+}
+
+sweep_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  STUB_DIR=""
+  export PATH="$SAVED_PATH"
+  unset DISPATCH_SWEEP_PROC_ROOT DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW
+}
+
+# Helper: register a worktree in the porcelain list AND create its directory.
+# Each record is the blank-line-terminated block dispatch-sweep parses.
+sweep_register_wt() {
+  local wt_path="$1" branch="$2"
+  mkdir -p "$wt_path"
+  printf 'worktree %s\nHEAD abc123\nbranch refs/heads/%s\n\n' \
+    "$wt_path" "$branch" >> "$STUB_DIR/worktree-list.txt"
+}
+
+# Helper: prepend a fake main worktree record (the script skips it).
+sweep_register_main() {
+  printf 'worktree %s\nHEAD mainsha\nbranch refs/heads/main\n\n' \
+    "$TMPDIR_TEST/project/worktrees/main" >> "$STUB_DIR/worktree-list.txt"
+}
+
+# Helper: write a synthetic /proc/<pid> entry with comm and cwd symlink.
+sweep_proc_pid() {
+  local pid="$1" comm="$2" cwd="$3"
+  local pid_dir="$DISPATCH_SWEEP_PROC_ROOT/$pid"
+  mkdir -p "$pid_dir"
+  printf '%s\n' "$comm" > "$pid_dir/comm"
+  # cwd is a symlink; readlink -f resolves it.
+  ln -s "$cwd" "$pid_dir/cwd"
+}
+
+# Convenience: convert an absolute path to the status/revlist/headct key
+# used by the git -C shim.
+sweep_path_key() {
+  echo "$1" | tr '/' '_'
+}
+
+# --- Test 1: merged classification triggers cleanup --------------------------
+
+echo "Test: merged worktree (in-sync) is removed + branch deleted"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/42-feature"
+sweep_register_wt "$WT_PATH" "42-feature"
+echo '[{"number":100,"headRefName":"42-feature","state":"MERGED"}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Clean tree + zero unpushed (defaults already match this — explicit for clarity).
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+
+# Run the sweep; capture stdout, stderr, and exit code.
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "merged sweep exits 0" "0" "$rc"
+assert_eq "merged sweep emits no stdout (nothing to adopt)" "" "$out"
+
+# Calls recorded.
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: merged worktree remove call recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: merged worktree remove call recorded"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "branch-D:42-feature"; then
+  PASS=$((PASS + 1)); echo "  PASS: merged branch -D call recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: merged branch -D call recorded"
+fi
+
+# Log entry.
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_MERGED: '$WT_PATH' branch=42-feature pr=#100" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_MERGED log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test 2: active vs orphaned via synthetic /proc --------------------------
+
+echo "Test: /proc walk distinguishes active vs orphaned worktrees"
+sweep_setup
+ACTIVE_WT="$TMPDIR_TEST/project/worktrees/50-active"
+ORPHAN_WT="$TMPDIR_TEST/project/worktrees/51-orphan"
+sweep_register_wt "$ACTIVE_WT" "50-active"
+sweep_register_wt "$ORPHAN_WT" "51-orphan"
+# Neither branch merged or has an open PR — both are eligible for adoption
+# via issue-number inference (^[0-9]+-).
+# Orphan needs a HEAD commit time for the adoption tiebreaker.
+ORPHAN_KEY=$(sweep_path_key "$ORPHAN_WT")
+echo "1700000000" > "$STUB_DIR/headct${ORPHAN_KEY}.txt"
+
+# Synthetic /proc:
+#   pid 1001: .claude-unwrapp cwd inside ACTIVE_WT → marks 50-active active.
+#   pid 1002: bash (non-claude comm) — proves comm filter is required.
+#   pid 1003: .claude with cwd elsewhere — proves cwd check classifies, not comm.
+sweep_proc_pid 1001 ".claude-unwrapp" "$ACTIVE_WT"
+sweep_proc_pid 1002 "bash" "$ACTIVE_WT"
+mkdir -p "$TMPDIR_TEST/elsewhere"
+sweep_proc_pid 1003 ".claude" "$TMPDIR_TEST/elsewhere"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "active/orphan sweep exits 0" "0" "$rc"
+assert_eq "only orphan adopted" "worktree 51 51-orphan" "$out"
+
+# Log: ACTIVE for 50, ORPHANED for 51, ADOPT for 51.
+TOTAL=$((TOTAL + 1))
+if grep -q "ACTIVE: '$ACTIVE_WT' branch=50-active pid=1001" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ACTIVE log line for 50-active with pid 1001"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE log line for 50-active with pid 1001"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ORPHANED: '$ORPHAN_WT' branch=51-orphan" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ORPHANED log line for 51-orphan"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ORPHANED log line for 51-orphan"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ADOPT_ORPHAN: '$ORPHAN_WT' branch=51-orphan issue=51" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN log line for 51-orphan"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN log line for 51-orphan"
+fi
+sweep_teardown
+
+# --- Test 3: oldest-orphan tiebreaker ----------------------------------------
+
+echo "Test: oldest orphan wins by HEAD commit time"
+sweep_setup
+OLD_WT="$TMPDIR_TEST/project/worktrees/52-old"
+NEW_WT="$TMPDIR_TEST/project/worktrees/53-new"
+sweep_register_wt "$OLD_WT" "52-old"
+sweep_register_wt "$NEW_WT" "53-new"
+OLD_KEY=$(sweep_path_key "$OLD_WT")
+NEW_KEY=$(sweep_path_key "$NEW_WT")
+echo "1000" > "$STUB_DIR/headct${OLD_KEY}.txt"
+echo "2000" > "$STUB_DIR/headct${NEW_KEY}.txt"
+# Empty /proc → both orphans.
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "oldest-orphan sweep exits 0" "0" "$rc"
+assert_eq "older orphan adopted" "worktree 52 52-old" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "ADOPT_ORPHAN: '$OLD_WT' branch=52-old issue=52 ct=1000" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN for older worktree (ct=1000)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN for older worktree (ct=1000)"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+sweep_teardown
+
+# --- Test 4a: inferable issue number, no PR, not merged → adopt --------------
+
+echo "Test: orphan with inferable issue number is adoptable"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/42-foo-bar"
+sweep_register_wt "$WT_PATH" "42-foo-bar"
+KEY=$(sweep_path_key "$WT_PATH")
+echo "1500000000" > "$STUB_DIR/headct${KEY}.txt"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "inferable-issue sweep exits 0" "0" "$rc"
+assert_eq "inferable issue orphan adopted" "worktree 42 42-foo-bar" "$out"
+sweep_teardown
+
+# --- Test 4b: non-inferable branch, no PR → halt with cleanup-unknown --------
+
+echo "Test: orphan with no PR and no inferable issue number halts"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/feature-foo"
+sweep_register_wt "$WT_PATH" "feature-foo"
+# No headct file: even if reached, no adoption — but the script halts first.
+
+err_file="$TMPDIR_TEST/stderr.txt"
+# `set -e` is in effect: capture exit code with an if/else, not `cmd; rc=$?`.
+if out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>"$err_file"); then rc=0; else rc=$?; fi
+assert_eq "unknown-orphan sweep exits 3" "3" "$rc"
+err=$(cat "$err_file")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"cleanup-unknown:$WT_PATH"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stderr carries cleanup-unknown directive"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stderr carries cleanup-unknown directive"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "HALT_UNKNOWN: '$WT_PATH' branch=feature-foo" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: HALT_UNKNOWN log line for feature-foo"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: HALT_UNKNOWN log line for feature-foo"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+sweep_teardown
+
+# --- Test 5: --cleanup-unknown <path> removes a single worktree --------------
+
+echo "Test: --cleanup-unknown removes only the specified worktree"
+sweep_setup
+TARGET_WT="$TMPDIR_TEST/project/worktrees/feature-foo"
+OTHER_WT="$TMPDIR_TEST/project/worktrees/42-other"
+sweep_register_wt "$TARGET_WT" "feature-foo"
+sweep_register_wt "$OTHER_WT" "42-other"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" --cleanup-unknown "$TARGET_WT" 2>/dev/null); rc=$?
+assert_eq "--cleanup-unknown exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove-force:$TARGET_WT"; then
+  PASS=$((PASS + 1)); echo "  PASS: forced remove call recorded for target"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: forced remove call recorded for target"
+  echo "    calls: $calls"
+fi
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -q "$OTHER_WT"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: other worktree untouched (it appears in calls)"
+  echo "    calls: $calls"
+else
+  PASS=$((PASS + 1)); echo "  PASS: other worktree untouched"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "CLEANUP_UNKNOWN: '$TARGET_WT'" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: CLEANUP_UNKNOWN log line for target"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: CLEANUP_UNKNOWN log line for target"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+sweep_teardown
+
+# --- Test 6: --cleanup-unknown rejects path outside WORKTREES_ROOT -----------
+
+echo "Test: --cleanup-unknown rejects path outside WORKTREES_ROOT"
+sweep_setup
+OUTSIDE_PATH="$TMPDIR_TEST/not-a-worktree"
+mkdir -p "$OUTSIDE_PATH"
+err_file="$TMPDIR_TEST/cleanup-outside-err.txt"
+if "$TMPDIR_TEST/scripts/dispatch-sweep" --cleanup-unknown "$OUTSIDE_PATH" 2>"$err_file"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "--cleanup-unknown outside WORKTREES_ROOT exits 2" "2" "$rc"
+err=$(cat "$err_file")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"not a direct child"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stderr explains direct-child requirement"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stderr explains direct-child requirement"
+  echo "    stderr: $err"
+fi
+sweep_teardown
+
+# --- Test 7: --cleanup-unknown refuses to remove main ------------------------
+
+echo "Test: --cleanup-unknown refuses to remove main"
+sweep_setup
+MAIN_PATH="$TMPDIR_TEST/project/worktrees/main"
+mkdir -p "$MAIN_PATH"
+err_file="$TMPDIR_TEST/cleanup-main-err.txt"
+if "$TMPDIR_TEST/scripts/dispatch-sweep" --cleanup-unknown "$MAIN_PATH" 2>"$err_file"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "--cleanup-unknown main exits 2" "2" "$rc"
+err=$(cat "$err_file")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"is main"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stderr identifies main as off-limits"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stderr identifies main as off-limits"
+  echo "    stderr: $err"
+fi
+sweep_teardown
+
+# --- Test 8: --cleanup-unknown without a path argument fails -----------------
+
+echo "Test: --cleanup-unknown without a path argument fails"
+sweep_setup
+err_file="$TMPDIR_TEST/cleanup-noarg-err.txt"
+if "$TMPDIR_TEST/scripts/dispatch-sweep" --cleanup-unknown 2>"$err_file"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "--cleanup-unknown without path exits 2" "2" "$rc"
+err=$(cat "$err_file")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"requires a path argument"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: stderr explains missing path argument"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: stderr explains missing path argument"
+  echo "    stderr: $err"
+fi
+sweep_teardown
 
 # ============================================================================
 # summary
