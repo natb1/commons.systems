@@ -19,6 +19,34 @@ the phase skill runs there.
 Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 `gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
+## 0. Acquire the Dispatch Lock
+
+Run this as the **very first action** — before the `origin/main` sync, the
+`origin/main` health gate, the worktree sweep, target selection, and worktree
+resolution. Runs unconditionally, whether or not an issue-number argument was
+given.
+
+```bash
+LOCK=$(.claude/skills/dispatch/scripts/dispatch-acquire-lock)
+```
+
+Requires `dangerouslyDisableSandbox: true` — the script writes
+`$PROJECT_ROOT/tmp/dispatch.lock`, which is outside the sandbox write-allowlist
+(same reason `dispatch-sweep` runs that way; see `.claude/rules/sandbox.md`).
+
+Route on `$LOCK`:
+
+- **`acquired`** → this `/dispatch` holds the lock; proceed to Step 1.
+- **`busy`** → another `/dispatch` is active; report "another /dispatch is
+  running — stopping" and **stop** — run no sync, no health gate, no sweep, no
+  selection, and no phase skill.
+
+The lock is session-scoped and self-healing: when a tick's session ends —
+normally, by crash, or by kill — its PID dies and the next invocation detects
+the stale record and proceeds. A crashed tick never wedges the queue. Same-session
+re-entry (e.g. after a context clear that re-invokes `/dispatch`) re-acquires
+cleanly because the recorded PID matches the re-entering session's own PID.
+
 ## 1. Sync local main with `origin/main`
 
 Run this step **only when the current branch is `main`**. From an issue worktree,
@@ -143,8 +171,15 @@ report "subtree fully blocked — all open leaves have worktrees owned by other
 sessions" (name `<N>`) and **stop**; do not dispatch.
 
 Skip leaf tracing when:
-- A PR exists for the target (`pr <num> <branch> <phase>` result, or an explicit
-  issue argument that already has a PR) — implementation is already underway.
+- A PR exists for the target — check with:
+  ```bash
+  .claude/skills/dispatch/scripts/dispatch-find-pr <N>
+  ```
+  If it prints a PR number, implementation is already underway; skip leaf tracing.
+  This applies whether the target arrived as a `pr <num> <branch> <phase>` queue
+  result or as an explicit issue argument. **Do not infer PR existence from title
+  search or other ad-hoc `gh` queries** — `dispatch-find-pr` is the only correct
+  check (see Step 4).
 - The target was current-worktree detected (`worktree <N>` result) — the worktree
   is the already-committed unit of work; retargeting to a sub-issue or blocker
   would be wrong.
@@ -214,7 +249,16 @@ against the final target (issue number or branch):
 
 It prints exactly one phase name. CI status is checked **before** labels — a draft PR
 with non-green CI is always `verify`, regardless of which `dispatch:*` labels are
-present. Map the phase:
+present.
+
+**Do not infer the phase from hand-rolled `gh` queries.** `dispatch-phase` is the
+only valid phase-derivation path (or the pre-derived `<phase>` field from
+`dispatch-select-target` for queue-selected PRs). PR existence in particular
+**must not** be checked via title search (e.g. `gh pr list --search "<N> in:title"`)
+— a PR's title may not contain the issue number. The only correct PR-existence check
+is `dispatch-find-pr <N>`, which uses the `<issue>-` branch-prefix convention.
+
+Map the phase:
 
 | Phase | Meaning | Next action |
 |---|---|---|
@@ -296,9 +340,19 @@ relevance check; the two are deliberately separate — Step 3e is creation-time
 and `$BASELINE_BRANCH`-anchored, this step is pre-implementation and
 `createdAt`-anchored.
 
-Before invoking `/plan-implement` on an `implement`-phase (no-PR) issue, run a
-creation-date-anchored drift analysis. First, fetch the issue's creation
-timestamp (`dangerouslyDisableSandbox: true` — `gh` needs network):
+Before invoking `/plan-implement` on an `implement`-phase issue, confirm no PR
+exists for the target by running:
+
+```bash
+.claude/skills/dispatch/scripts/dispatch-find-pr <N>
+```
+
+If it prints a PR number, **skip this relevance review** and advance directly to
+phase derivation (Step 4) — a PR already exists and implementation is underway.
+
+If `dispatch-find-pr` prints nothing, run a creation-date-anchored drift
+analysis. First, fetch the issue's creation timestamp
+(`dangerouslyDisableSandbox: true` — `gh` needs network):
 
 ```bash
 gh issue view <N> --json createdAt -q .createdAt
