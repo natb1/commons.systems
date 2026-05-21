@@ -32,13 +32,10 @@ fi
 if echo "$CHANGED" | grep -qE '^(firestore\.rules$|storage\.rules$|rules-test/|\.claude/skills/dispatch/scripts/|firebase\.json$|package\.json$|package-lock\.json$)'; then
   echo "rules=true" >> "$GITHUB_OUTPUT"
 fi
-# go-tests needs the Go toolchain. Set go=true when any file under a Go module
-# changed. Module roots are discovered from go.mod locations, so a new Go
-# module needs no edit here.
-GO_MODULE_PREFIXES=$(
-  find . -name go.mod -not -path './node_modules/*' \
-    -exec dirname {} \; | sed 's|^\./||; s|$|/|'
-)
+# go-tests needs the Go toolchain. Set go=true when a changed file is under a
+# discovered Go module. list-go-modules.sh discovers module roots from go.mod
+# locations, so a new Go module needs no edit here.
+GO_MODULE_PREFIXES=$("$(dirname "$0")/list-go-modules.sh" | sed 's|$|/|')
 if [ -n "$GO_MODULE_PREFIXES" ]; then
   GO_REGEX=$(printf '%s\n' "$GO_MODULE_PREFIXES" | paste -sd'|' -)
   if echo "$CHANGED" | grep -qE "^($GO_REGEX)"; then

@@ -112,7 +112,7 @@ jobs:
       - name: Detect changed file categories
         id: changes
         run: .claude/skills/dispatch/scripts/detect-changes.sh
-      - name: Set up Go
+      - name: Set up Go (if Go files changed)
         if: steps.changes.outputs.go == 'true'
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
@@ -122,9 +122,8 @@ jobs:
         run: |
           set -euo pipefail
           failed=0
-          while IFS= read -r modfile; do
-            dir=$(dirname "$modfile")
+          while IFS= read -r dir; do
             echo "=== go test: $dir ==="
             (cd "$dir" && go test ./...) || failed=1
-          done < <(find . -name go.mod -not -path './node_modules/*' | sort)
+          done < <(.claude/skills/dispatch/scripts/list-go-modules.sh)
           exit "$failed"
