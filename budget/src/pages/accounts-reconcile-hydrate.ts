@@ -1,12 +1,10 @@
 import { getActiveDataSource } from "../active-data-source.js";
-import type {
-  ReconciliationClassification,
-  ReconciliationEntityType,
-  StatementItemId,
-  TransactionId,
-} from "../firestore.js";
+import type { ReconciliationEventFields } from "../data-source.js";
+import { balancesMatch } from "../reconciliation.js";
+import { formatCurrency } from "../format.js";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
+import { parseReconcileQuery } from "./accounts-reconcile.js";
 
 function replaceQueryParam(name: string, value: string | null): void {
   const url = new URL(location.href);
@@ -19,20 +17,78 @@ function triggerReload(): void {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-function parseClassification(raw: string): ReconciliationClassification | "" {
-  if (raw === "timing" || raw === "missing_entry" || raw === "discrepancy") return raw;
-  return "";
+/**
+ * The last calendar day of a `YYYY-MM` period, as epoch milliseconds (UTC).
+ * `Date.UTC(year, month, 0)` rolls back to the last day of the prior month —
+ * with `month` already 1-based this lands on the last day of the selected month.
+ */
+function periodEndMs(period: string): number {
+  const [yearRaw, monthRaw] = period.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new RangeError(`Invalid reconcile period: ${period}`);
+  }
+  return Date.UTC(year, month, 0);
 }
 
-function parseEntityType(raw: string): ReconciliationEntityType | null {
-  if (raw === "transaction" || raw === "statementItem") return raw;
-  return null;
+/** Sum `data-signed-amount` over every checked leg row in the container. */
+function clearedBalanceFromDom(container: HTMLElement): number {
+  let total = 0;
+  for (const row of container.querySelectorAll<HTMLElement>(".reconcile-leg")) {
+    const checkbox = row.querySelector<HTMLInputElement>(".reconcile-cleared-checkbox");
+    if (!checkbox || !checkbox.checked) continue;
+    const amount = Number(row.dataset.signedAmount);
+    if (!Number.isFinite(amount)) {
+      throw new Error(`Reconcile leg row has invalid data-signed-amount: ${row.dataset.signedAmount}`);
+    }
+    total += amount;
+  }
+  return total;
+}
+
+/** Leg ids of every currently-checked leg row. */
+function clearedLegIds(container: HTMLElement): string[] {
+  const ids: string[] = [];
+  for (const row of container.querySelectorAll<HTMLElement>(".reconcile-leg")) {
+    const checkbox = row.querySelector<HTMLInputElement>(".reconcile-cleared-checkbox");
+    if (!checkbox || !checkbox.checked) continue;
+    const legId = row.dataset.legId;
+    if (!legId) throw new Error("Reconcile leg row is missing data-leg-id");
+    ids.push(legId);
+  }
+  return ids;
+}
+
+/**
+ * The bank's statement-ending balance, read from the reconcile dialog's
+ * bank-balance input `defaultValue` (the renderer seeds it with the statement
+ * balance). `null` when no statement exists for the account+period.
+ */
+function statementEndingBalance(container: HTMLElement): number | null {
+  const input = container.querySelector<HTMLInputElement>("#reconcile-bank-balance-input");
+  if (!input || input.defaultValue === "") return null;
+  const value = Number(input.defaultValue);
+  return Number.isFinite(value) ? value : null;
+}
+
+/** Recompute the header cleared-balance and difference in place — no full reload. */
+function updateHeaderTotals(container: HTMLElement): void {
+  const cleared = clearedBalanceFromDom(container);
+  const clearedEl = container.querySelector<HTMLElement>(".reconcile-cleared-balance");
+  if (clearedEl) {
+    clearedEl.textContent = `Cleared balance: ${formatCurrency(cleared)}`;
+  }
+  const statementBalance = statementEndingBalance(container);
+  const differenceEl = container.querySelector<HTMLElement>(".reconcile-difference");
+  if (differenceEl && statementBalance !== null) {
+    differenceEl.textContent = `Difference: ${formatCurrency(cleared - statementBalance)}`;
+  }
 }
 
 export function hydrateAccountsReconcile(container: HTMLElement): void {
   const accountSelect = container.querySelector<HTMLSelectElement>("#reconcile-account-select");
   const periodSelect = container.querySelector<HTMLSelectElement>("#reconcile-period-select");
-  const toleranceInput = container.querySelector<HTMLInputElement>("#reconcile-tolerance-input");
 
   if (accountSelect) {
     accountSelect.addEventListener("change", () => {
@@ -58,92 +114,112 @@ export function hydrateAccountsReconcile(container: HTMLElement): void {
     });
   }
 
-  if (toleranceInput) {
-    toleranceInput.addEventListener("change", () => {
-      replaceQueryParam("tolerance", toleranceInput.value || null);
-      triggerReload();
-    });
-  }
-
-  container.addEventListener("click", (event) => {
+  // Cleared-checkbox toggle: persist the leg's cleared flag, then recompute the
+  // header totals live. On a persist failure, revert the checkbox and log.
+  container.addEventListener("change", (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLButtonElement)) return;
-    if (!target.classList.contains("reconcile-confirm")) return;
-    const txnId = target.dataset.txnId as TransactionId | undefined;
-    const statementItemId = target.dataset.statementItemId as StatementItemId | undefined;
-    if (!txnId || !statementItemId) return;
-    target.disabled = true;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (!target.classList.contains("reconcile-cleared-checkbox")) return;
+    const row = target.closest<HTMLElement>(".reconcile-leg");
+    const legId = row?.dataset.legId;
+    if (!legId || !row) return;
+    const nextChecked = target.checked;
+    updateHeaderTotals(container);
+    delete row.dataset.clearedSaved;
     getActiveDataSource()
-      .updateTransactionStatementItemLink(txnId, statementItemId)
-      .then(() => triggerReload())
-      .catch((error) => {
-        target.disabled = false;
+      .updateJournalLegCleared(legId, nextChecked)
+      .then(() => {
+        // Signal a settled write — lets tests wait for persistence deterministically.
+        row.dataset.clearedSaved = String(nextChecked);
+      })
+      .catch((error: unknown) => {
+        target.checked = !nextChecked;
+        updateHeaderTotals(container);
         if (deferProgrammerError(error)) return;
-        logError(error, { operation: "reconcile-confirm-match" });
+        logError(error, { operation: "reconcile-toggle-cleared" });
       });
   });
 
-  container.addEventListener("change", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLSelectElement)) return;
-    if (!target.classList.contains("reconcile-classification")) return;
-    void persistClassification(target);
-  });
+  const dialog = container.querySelector<HTMLDialogElement>("#reconcile-dialog");
 
-  container.addEventListener("blur", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) return;
-    if (!target.classList.contains("reconcile-note")) return;
-    void persistNote(target);
-  }, true);
-}
-
-async function persistClassification(select: HTMLSelectElement): Promise<void> {
-  const entityType = parseEntityType(select.dataset.entityType ?? "");
-  const entityId = select.dataset.entityId ?? "";
-  if (!entityType || !entityId) return;
-
-  const classification = parseClassification(select.value);
-  try {
-    if (classification === "") {
-      await getActiveDataSource().deleteReconciliationNote(entityType, entityId);
-      return;
-    }
-    const noteInput = select
-      .closest(".reconcile-classification-row")
-      ?.querySelector<HTMLInputElement>(".reconcile-note");
-    await getActiveDataSource().upsertReconciliationNote({
-      entityType,
-      entityId,
-      classification,
-      note: noteInput?.value ?? "",
+  // Reconcile button opens the dialog.
+  const openButton = container.querySelector<HTMLButtonElement>("#reconcile-open-dialog");
+  if (openButton && dialog) {
+    openButton.addEventListener("click", () => {
+      dialog.showModal();
     });
-  } catch (error) {
-    if (deferProgrammerError(error)) return;
-    logError(error, { operation: "reconcile-classify" });
+  }
+
+  // Cancel button closes the dialog without reconciling.
+  const cancelButton = container.querySelector<HTMLButtonElement>("#reconcile-cancel");
+  if (cancelButton && dialog) {
+    cancelButton.addEventListener("click", () => {
+      dialog.close();
+    });
+  }
+
+  // Dialog submit: compare entered bank balance to the cleared balance.
+  const dialogForm = container.querySelector<HTMLFormElement>("#reconcile-dialog-form");
+  if (dialogForm && dialog) {
+    dialogForm.addEventListener("submit", (event) => {
+      // The form is method="dialog"; submitting closes the dialog by default.
+      // On mismatch we keep it open, so handle the submit explicitly.
+      event.preventDefault();
+      void handleReconcileSubmit(container, dialog);
+    });
   }
 }
 
-async function persistNote(input: HTMLInputElement): Promise<void> {
-  const entityType = parseEntityType(input.dataset.entityType ?? "");
-  const entityId = input.dataset.entityId ?? "";
-  if (!entityType || !entityId) return;
+async function handleReconcileSubmit(container: HTMLElement, dialog: HTMLDialogElement): Promise<void> {
+  const bankInput = container.querySelector<HTMLInputElement>("#reconcile-bank-balance-input");
+  const differenceDisplay = container.querySelector<HTMLElement>("#reconcile-difference-display");
+  if (!bankInput) throw new Error("#reconcile-bank-balance-input not found");
 
-  const select = input
-    .closest(".reconcile-classification-row")
-    ?.querySelector<HTMLSelectElement>(".reconcile-classification");
-  const classification = parseClassification(select?.value ?? "");
-  if (classification === "") return;
+  const bankBalance = Number(bankInput.value);
+  if (!Number.isFinite(bankBalance)) {
+    if (differenceDisplay) differenceDisplay.textContent = "Enter a valid bank balance.";
+    return;
+  }
+
+  const cleared = clearedBalanceFromDom(container);
+
+  if (!balancesMatch(bankBalance, cleared)) {
+    // Mismatch: surface the signed difference (cleared − bank) and keep the
+    // dialog open. Mismatch-resolution UX is sibling issue #554.
+    const difference = cleared - bankBalance;
+    if (differenceDisplay) {
+      differenceDisplay.textContent = `Difference: ${formatCurrency(difference)}`;
+    }
+    return;
+  }
+
+  const query = parseReconcileQuery(location.search);
+  if (!query.institution || !query.account || !query.period) {
+    throw new Error("Reconcile submit requires institution, account, and period query params");
+  }
+
+  const legIds = clearedLegIds(container);
+  const fields: ReconciliationEventFields = {
+    institution: query.institution,
+    account: query.account,
+    reconciledThroughDateMs: periodEndMs(query.period),
+    bankBalance,
+    clearedBalance: cleared,
+    adjustment: 0,
+    reconciledBy: "local",
+    reconciledAtMs: Date.now(),
+    adjustmentEntryId: null,
+  };
 
   try {
-    await getActiveDataSource().upsertReconciliationNote({
-      entityType,
-      entityId,
-      classification,
-      note: input.value,
-    });
+    await getActiveDataSource().createReconciliationEvent(fields, legIds);
+    dialog.close();
+    triggerReload();
   } catch (error) {
     if (deferProgrammerError(error)) return;
-    logError(error, { operation: "reconcile-note" });
+    if (differenceDisplay) {
+      differenceDisplay.textContent = "Reconcile failed — please try again.";
+    }
+    logError(error, { operation: "reconcile-finalize" });
   }
 }

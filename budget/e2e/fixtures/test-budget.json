@@ -81,7 +81,26 @@
   "normalizationRules": [],
   "statements": [
     {"id": "stmt-bankone-1234-2025-06", "statementId": "bankone-1234-2025-06", "institution": "bankone", "account": "1234", "balance": 1234.56, "period": "2025-06"},
-    {"id": "stmt-cap1-4444-2025-06", "statementId": "capital_one-4444-2025-06", "institution": "banktwo", "account": "4444", "balance": -150.25, "period": "2025-06"}
+    {"id": "stmt-cap1-4444-2025-06", "statementId": "capital_one-4444-2025-06", "institution": "banktwo", "account": "4444", "balance": -150.25, "period": "2025-06"},
+    {"id": "stmt-testbank-checking-2025-03", "statementId": "Test Bank-Checking-2025-03", "institution": "Test Bank", "account": "Checking", "balance": 250, "period": "2025-03"}
+  ],
+  "accounts": [
+    {"id": "Test Bank_Checking", "institution": "Test Bank", "account": "Checking", "accountType": "asset", "openingBalance": 0, "openingBalanceDate": "2025-03-01T00:00:00Z"},
+    {"id": "Budget_Uncategorized Income", "institution": "Budget", "account": "Uncategorized Income", "accountType": "income"},
+    {"id": "Budget_Uncategorized Expense", "institution": "Budget", "account": "Uncategorized Expense", "accountType": "expense"}
+  ],
+  "journalEntries": [
+    {"id": "fixture-je-deposit-1", "timestamp": "2025-03-05T00:00:00Z", "description": "Opening Deposit", "legCount": 2},
+    {"id": "fixture-je-deposit-2", "timestamp": "2025-03-12T00:00:00Z", "description": "Payroll Deposit", "legCount": 2},
+    {"id": "fixture-je-expense-1", "timestamp": "2025-03-20T00:00:00Z", "description": "Grocery Store", "legCount": 2}
+  ],
+  "journalLegs": [
+    {"id": "fixture-jl-deposit-1-checking", "entryId": "fixture-je-deposit-1", "accountId": "Test Bank_Checking", "debit": 100, "credit": 0, "timestamp": "2025-03-05T00:00:00Z", "cleared": false},
+    {"id": "fixture-jl-deposit-1-income", "entryId": "fixture-je-deposit-1", "accountId": "Budget_Uncategorized Income", "debit": 0, "credit": 100, "timestamp": "2025-03-05T00:00:00Z", "cleared": false},
+    {"id": "fixture-jl-deposit-2-checking", "entryId": "fixture-je-deposit-2", "accountId": "Test Bank_Checking", "debit": 200, "credit": 0, "timestamp": "2025-03-12T00:00:00Z", "cleared": false},
+    {"id": "fixture-jl-deposit-2-income", "entryId": "fixture-je-deposit-2", "accountId": "Budget_Uncategorized Income", "debit": 0, "credit": 200, "timestamp": "2025-03-12T00:00:00Z", "cleared": false},
+    {"id": "fixture-jl-expense-1-expense", "entryId": "fixture-je-expense-1", "accountId": "Budget_Uncategorized Expense", "debit": 50, "credit": 0, "timestamp": "2025-03-20T00:00:00Z", "cleared": false},
+    {"id": "fixture-jl-expense-1-checking", "entryId": "fixture-je-expense-1", "accountId": "Test Bank_Checking", "debit": 0, "credit": 50, "timestamp": "2025-03-20T00:00:00Z", "cleared": false}
   ],
   "weeklyAggregates": [
     {"id": "2025-06-09", "weekStart": "2025-06-09T00:00:00Z", "creditTotal": 2900.00, "unbudgetedTotal": 29.99}
