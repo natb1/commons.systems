@@ -33,6 +33,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 ISSUE_NUM="${1:-}"
 MODE="${2:-}"
@@ -43,21 +44,14 @@ if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]] \
 fi
 
 # In queue mode, build the set of issue-number prefixes that own a local
-# worktree. Same porcelain-record parser as dispatch-resolve-worktree: records
-# are blank-line-delimited; each opens with "worktree <path>" and a branch
-# checkout carries "branch refs/heads/<name>". The number prefix is the leading
-# digits up to the first "-".
+# worktree. list_worktree_records (lib.sh) does the shared porcelain parse; each
+# record's first tab-separated field is the branch's issue-number prefix, empty
+# for non-issue / branchless worktrees.
 declare -A CONFLICTED=()
 if [[ "$MODE" == "queue" ]]; then
-  while IFS= read -r line; do
-    if [[ "$line" == branch\ * ]]; then
-      branch="${line#branch }"
-      branch="${branch#refs/heads/}"
-      if [[ "$branch" =~ ^([1-9][0-9]*)- ]]; then
-        CONFLICTED["${BASH_REMATCH[1]}"]=1
-      fi
-    fi
-  done < <(git worktree list --porcelain)
+  while IFS=$'\t' read -r num path branch; do
+    [[ -n "$num" ]] && CONFLICTED["$num"]=1
+  done < <(list_worktree_records)
 fi
 
 # Collect open children of an issue: open blockers union open sub-issues.

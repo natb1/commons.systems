@@ -54,6 +54,10 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
+  # dispatch-trace-leaf and dispatch-resolve-worktree `source` lib.sh via their
+  # SCRIPT_DIR, which resolves to TMPDIR_TEST for these copies — so lib.sh must
+  # sit alongside them. It is sourced, not executed, so it needs no chmod +x.
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
@@ -1692,6 +1696,59 @@ setup
 echo '{"title":"!!!"}' > "$STUB_DIR/issue-title-42.json"
 if "$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "empty-slug title exits non-zero" "1" "$rc"
+teardown
+
+# ============================================================================
+# list_worktree_records (lib.sh) tests
+# ============================================================================
+echo ""
+echo "=== list_worktree_records ==="
+
+# list_worktree_records emits one tab-separated <issue-number>\t<path>\t<branch>
+# line per registered worktree. Each test sources the lib.sh copy and runs the
+# function in a subshell; the git stub serves the porcelain fixture written to
+# worktree-list.txt.
+
+# 1. Normal worktrees with issue-prefixed branches → issue-number populated.
+echo "Test: issue-prefixed branches → number populated"
+setup
+printf 'worktree /worktrees/42-my-feature\nHEAD def456\nbranch refs/heads/42-my-feature\n\nworktree /worktrees/100-another\nHEAD ghi789\nbranch refs/heads/100-another\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$( source "$TMPDIR_TEST/lib.sh"; list_worktree_records )
+expected=$(printf '42\t/worktrees/42-my-feature\t42-my-feature\n100\t/worktrees/100-another\t100-another')
+assert_eq "issue-prefixed branches → records with number" "$expected" "$result"
+teardown
+
+# 2. A worktree with no branch line (detached HEAD) → empty number and branch.
+#    This is the case cleanup_stale_worktree_processes depends on.
+echo "Test: no branch line → empty number and branch"
+setup
+printf 'worktree /worktrees/detached\nHEAD abc123\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$( source "$TMPDIR_TEST/lib.sh"; list_worktree_records )
+expected=$(printf '\t/worktrees/detached\t')
+assert_eq "detached HEAD → empty number, empty branch" "$expected" "$result"
+teardown
+
+# 3. A non-issue branch name (main) → empty number, branch populated.
+echo "Test: non-issue branch → empty number, branch populated"
+setup
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$( source "$TMPDIR_TEST/lib.sh"; list_worktree_records )
+expected=$(printf '\t/repo\tmain')
+assert_eq "non-issue branch → empty number, branch kept" "$expected" "$result"
+teardown
+
+# 4. Mixed fixture (non-issue + bare + issue-prefixed + detached + non-issue) →
+#    every record emitted in git worktree list input order.
+echo "Test: mixed fixture → all records in input order"
+setup
+printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /repo/.bare\nbare\n\nworktree /worktrees/42-my-feature\nHEAD def456\nbranch refs/heads/42-my-feature\n\nworktree /worktrees/detached\nHEAD aaa111\n\nworktree /worktrees/feature-x\nHEAD bbb222\nbranch refs/heads/feature-x\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$( source "$TMPDIR_TEST/lib.sh"; list_worktree_records )
+expected=$(printf '\t/repo\tmain\n\t/repo/.bare\t\n42\t/worktrees/42-my-feature\t42-my-feature\n\t/worktrees/detached\t\n\t/worktrees/feature-x\tfeature-x')
+assert_eq "mixed fixture → all records, input order" "$expected" "$result"
 teardown
 
 # ============================================================================
