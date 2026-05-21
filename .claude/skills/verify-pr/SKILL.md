@@ -64,8 +64,9 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
 
    The subagent returns `{ reproduced: bool, reproduce_command, failure_excerpt,
    why_not_caught, is_flake: bool }`. `why_not_caught` is a free-text diagnosis
-   (missing test, disabled rule, skipped hook, env drift, flake, etc.) — human
-   context only. `is_flake` is the **structured branch key**: the subagent sets it
+   (missing test, disabled rule, skipped hook, env drift, flake, etc.) —
+   human-readable context, not a structured branch key. `is_flake` is the
+   **structured branch key**: the subagent sets it
    `true` only when it diagnoses the failure as a **flake** — a non-deterministic
    failure unrelated to the PR's own changes (a pre-existing flaky test, a
    CI-infrastructure hiccup, an upstream timing race). The flake branch below
