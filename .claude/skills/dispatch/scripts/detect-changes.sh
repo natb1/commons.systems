@@ -32,8 +32,13 @@ fi
 if echo "$CHANGED" | grep -qE '^(firestore\.rules$|storage\.rules$|rules-test/|\.claude/skills/dispatch/scripts/|firebase\.json$|package\.json$|package-lock\.json$)'; then
   echo "rules=true" >> "$GITHUB_OUTPUT"
 fi
-# go-tests needs the Go toolchain. The budget-etl module is not a package.json
-# workspace, so set go=true when anything in budget-etl/ changed.
-if echo "$CHANGED" | grep -qE '^budget-etl/'; then
-  echo "go=true" >> "$GITHUB_OUTPUT"
+# go-tests needs the Go toolchain. Set go=true when a changed file is under a
+# discovered Go module. list-go-modules.sh discovers module roots from go.mod
+# locations, so a new Go module needs no edit here.
+GO_MODULE_PREFIXES=$("$(dirname "$0")/list-go-modules.sh" | sed 's|$|/|')
+if [ -n "$GO_MODULE_PREFIXES" ]; then
+  GO_REGEX=$(printf '%s\n' "$GO_MODULE_PREFIXES" | paste -sd'|' -)
+  if echo "$CHANGED" | grep -qE "^($GO_REGEX)"; then
+    echo "go=true" >> "$GITHUB_OUTPUT"
+  fi
 fi

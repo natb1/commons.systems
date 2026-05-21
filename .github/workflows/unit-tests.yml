@@ -112,12 +112,26 @@ jobs:
       - name: Detect changed file categories
         id: changes
         run: .claude/skills/dispatch/scripts/detect-changes.sh
-      - name: Set up Go (if budget-etl changed)
+      - name: Set up Go (if Go files changed)
         if: steps.changes.outputs.go == 'true'
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: budget-etl/go.mod
+          go-version: stable
       - name: Run Go tests
         if: steps.changes.outputs.go == 'true'
-        run: go test ./...
-        working-directory: budget-etl
+        run: |
+          set -euo pipefail
+          # Capture the module list first: a discovery failure aborts under
+          # set -e, and an empty result fails explicitly — feeding the loop
+          # via process substitution would instead pass the job silently.
+          modules=$(.claude/skills/dispatch/scripts/list-go-modules.sh)
+          if [ -z "$modules" ]; then
+            echo "::error::No Go modules discovered by list-go-modules.sh"
+            exit 1
+          fi
+          failed=0
+          while IFS= read -r dir; do
+            echo "=== go test: $dir ==="
+            (cd "$dir" && go test ./...) || failed=1
+          done <<< "$modules"
+          exit "$failed"
