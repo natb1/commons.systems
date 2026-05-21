@@ -2690,6 +2690,40 @@ else
 fi
 config_teardown
 
+# --- Test 6: top-level array exits 1 with a clear error ----------------------
+
+echo "Test: top-level array exits 1 and stderr reports a clear error"
+config_setup
+printf '[1,2,3]' > "$DISPATCH_CONFIG_DIR/projects.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>&1 1>/dev/null) || rc=$?
+assert_eq "top-level array exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"error:"* && "$err" == *"projects.json"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: top-level array stderr has clear error: $err"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: top-level array stderr has clear error"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 7: empty config file exits 1 with a clear error --------------------
+
+echo "Test: empty config file exits 1 and stderr reports a clear error"
+config_setup
+printf '' > "$DISPATCH_CONFIG_DIR/projects.json"
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" projects 2>&1 1>/dev/null) || rc=$?
+assert_eq "empty file exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"error:"* && "$err" == *"projects.json"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: empty file stderr has clear error: $err"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: empty file stderr has clear error"
+  echo "    stderr: $err"
+fi
+config_teardown
+
 # ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
 # ============================================================================

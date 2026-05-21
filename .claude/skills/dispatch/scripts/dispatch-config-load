@@ -133,13 +133,22 @@ if ! PARSED=$(jq '.' "$CONFIG_FILE" 2>&1); then
   exit 1
 fi
 
+# An empty or whitespace-only file produces zero JSON values: jq '.' prints
+# nothing and exits 0, leaving $PARSED empty. Treat that as malformed input.
+if [[ -z "$PARSED" ]]; then
+  echo "error: $CONFIG_FILE: file is empty or contains no JSON value" >&2
+  exit 1
+fi
+
 # Run schema validation. The validator emits one error-description line per
 # problem and nothing when the config is valid.
 case "$CONFIG_TYPE" in
   projects)
     ERRORS=$(jq -r '
-      # top-level .projects must be an array
-      if (.projects | type) != "array" then
+      # top-level value must be an object; .projects must be an array
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      elif (.projects | type) != "array" then
         "top-level .projects must be an array, got \(.projects | type)"
       else
         .projects | to_entries[] |
@@ -175,8 +184,10 @@ case "$CONFIG_TYPE" in
     ;;
   jit)
     ERRORS=$(jq -r '
-      # top-level .jits must be an array
-      if (.jits | type) != "array" then
+      # top-level value must be an object; .jits must be an array
+      if type != "object" then
+        "top-level value must be a JSON object, got \(type)"
+      elif (.jits | type) != "array" then
         "top-level .jits must be an array, got \(.jits | type)"
       else
         .jits | to_entries[] |
