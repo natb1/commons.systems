@@ -10,10 +10,10 @@
 # create metadata (color and description).
 #
 # Phase → label:
-#   qa       → dispatch:qa-done
+#   qa          → dispatch:qa-done
 #   code-review → dispatch:code-reviewed
-#   review   → dispatch:reviewed
-#   security → dispatch:security-reviewed
+#   review      → dispatch:reviewed
+#   security    → dispatch:security-reviewed
 #
 # Missing args or an unknown phase is a clear error, not a fallback.
 set -euo pipefail

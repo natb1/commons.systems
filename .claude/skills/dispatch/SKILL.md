@@ -232,7 +232,6 @@ It is a no-op when local `main` already equals `origin/main`.
   and **stop**. Once a PR that fixes main exists the normal ladder picks it up
   (verify/ready) — this gate only blocks starting new, unrelated work.
 
-
 ## 3. Trace to an Open Leaf
 
 This step runs **only for an explicit `/dispatch <N>` argument**. A queue-selected
