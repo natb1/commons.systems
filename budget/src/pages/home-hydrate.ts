@@ -9,7 +9,7 @@ import { DataIntegrityError } from "@commons-systems/firestoreutil/errors";
 import { removeDropdown, registerAutocompleteListeners, _resetForTest as _resetAutocomplete } from "@commons-systems/components/autocomplete";
 import { showInputError, handleSaveError, parseJsonArray, addAutocompleteListeners } from "./hydrate-util.js";
 import { renderTransactionRows, compareByTimestampDesc, SCROLL_BATCH_WEEKS, serializeChartTransactions } from "./home.js";
-import { TRANSACTIONS_APPENDED_EVENT } from "./home-chart.js";
+import { TRANSACTIONS_APPENDED_EVENT, type SerializedChartTransaction } from "./home-chart.js";
 
 /**
  * Parse the budget name-to-ID mapping from a data attribute.
@@ -276,13 +276,18 @@ export function hydrateTransactionTable(container: HTMLElement): void {
   }
 
   function notifyChart(txns: Transaction[]): void {
+    let chartTxns: SerializedChartTransaction[];
     try {
-      const chartTxns = serializeChartTransactions(txns, budgetIdToName);
-      document.dispatchEvent(new CustomEvent(TRANSACTIONS_APPENDED_EVENT, { detail: chartTxns }));
+      chartTxns = serializeChartTransactions(txns, budgetIdToName);
     } catch (chartError) {
-      // Intentional silent degradation — chart misses this transaction batch rather than showing an error.
+      // resolveBudgetName degrades unknown ids, so serialization should no
+      // longer throw (#578); the empty-batch fallback covers it if it ever does.
       logError(chartError, { operation: "update-chart-scroll" });
+      chartTxns = [];
     }
+    // Dispatched outside the catch: a chart-serialization failure must not skip
+    // the event — it is the table re-filter's only trigger for scroll-loaded rows (#578).
+    document.dispatchEvent(new CustomEvent(TRANSACTIONS_APPENDED_EVENT, { detail: chartTxns }));
   }
 
   let loading = false;
