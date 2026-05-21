@@ -114,6 +114,9 @@ type Output struct {
 	Rules              []Rule              `json:"rules"`
 	NormalizationRules []NormalizationRule `json:"normalizationRules"`
 	WeeklyAggregates   []WeeklyAggregate   `json:"weeklyAggregates"`
+	JournalEntries     []JournalEntry      `json:"journalEntries"`
+	JournalLegs        []JournalLeg        `json:"journalLegs"`
+	Accounts           []Account           `json:"accounts"`
 }
 
 // WeeklyAggregate is a pre-computed weekly credit and unbudgeted spending total.
@@ -154,6 +157,40 @@ type Transaction struct {
 	NormalizedPrimary     bool    `json:"normalizedPrimary"`
 	NormalizedDescription *string `json:"normalizedDescription"`
 	Virtual               bool    `json:"virtual"`
+	JournalEntryID        *string `json:"journalEntryId"`
+}
+
+// Account is a financial account record in the JSON output.
+type Account struct {
+	ID                 string   `json:"id"`
+	Institution        string   `json:"institution"`
+	Account            string   `json:"account"`
+	AccountType        string   `json:"accountType"`
+	OpeningBalance     *float64 `json:"openingBalance"`
+	OpeningBalanceDate *string  `json:"openingBalanceDate"`
+}
+
+// JournalEntry is a double-entry journal entry in the JSON output.
+type JournalEntry struct {
+	ID          string  `json:"id"`
+	Timestamp   string  `json:"timestamp"`
+	Description string  `json:"description"`
+	Note        *string `json:"note"`
+	LegCount    int     `json:"legCount"`
+}
+
+// JournalLeg is a single leg of a double-entry journal entry in the JSON output.
+type JournalLeg struct {
+	ID               string  `json:"id"`
+	EntryID          string  `json:"entryId"`
+	AccountID        string  `json:"accountId"`
+	Debit            float64 `json:"debit"`
+	Credit           float64 `json:"credit"`
+	Timestamp        string  `json:"timestamp"`
+	Cleared          bool    `json:"cleared"`
+	ReconciledAt     *string `json:"reconciledAt"`
+	ReconciledEventID *string `json:"reconciledEventId"`
+	StatementItemID  *string `json:"statementItemId"`
 }
 
 // Budget is a budget definition in the JSON output.

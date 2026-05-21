@@ -658,6 +658,378 @@ func TestPlaintextFileWithPassword(t *testing.T) {
 	}
 }
 
+func TestJournalEntryRoundTrip(t *testing.T) {
+	note := "quarterly adjustment"
+	entryID := "je-001"
+
+	entry := JournalEntry{
+		ID:          entryID,
+		Timestamp:   "2025-06-15T10:30:00Z",
+		Description: "Transfer to savings",
+		Note:        &note,
+		LegCount:    2,
+	}
+
+	b, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("Marshal JournalEntry: %v", err)
+	}
+
+	var got JournalEntry
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("Unmarshal JournalEntry: %v", err)
+	}
+
+	if got.ID != entryID {
+		t.Errorf("id = %q, want %q", got.ID, entryID)
+	}
+	if got.Timestamp != "2025-06-15T10:30:00Z" {
+		t.Errorf("timestamp = %q, want 2025-06-15T10:30:00Z", got.Timestamp)
+	}
+	if got.Description != "Transfer to savings" {
+		t.Errorf("description = %q, want Transfer to savings", got.Description)
+	}
+	if got.Note == nil || *got.Note != note {
+		t.Errorf("note = %v, want %q", got.Note, note)
+	}
+	if got.LegCount != 2 {
+		t.Errorf("legCount = %d, want 2", got.LegCount)
+	}
+
+	// Nil note round-trips as JSON null.
+	entryNoNote := JournalEntry{
+		ID:          "je-002",
+		Timestamp:   "2025-06-15T10:30:00Z",
+		Description: "Paycheck",
+		Note:        nil,
+		LegCount:    2,
+	}
+	b2, err := json.Marshal(entryNoNote)
+	if err != nil {
+		t.Fatalf("Marshal JournalEntry (nil note): %v", err)
+	}
+	var got2 JournalEntry
+	if err := json.Unmarshal(b2, &got2); err != nil {
+		t.Fatalf("Unmarshal JournalEntry (nil note): %v", err)
+	}
+	if got2.Note != nil {
+		t.Errorf("note = %v, want nil", got2.Note)
+	}
+}
+
+func TestJournalLegRoundTrip(t *testing.T) {
+	reconciledAt := "2025-06-20T00:00:00Z"
+	reconciledEventID := "event-999"
+	statementItemID := "stmt-item-42"
+
+	leg := JournalLeg{
+		ID:                "jl-001",
+		EntryID:           "je-001",
+		AccountID:         "acct-bankone-1234",
+		Debit:             52.30,
+		Credit:            0,
+		Timestamp:         "2025-06-15T10:30:00Z",
+		Cleared:           true,
+		ReconciledAt:      &reconciledAt,
+		ReconciledEventID: &reconciledEventID,
+		StatementItemID:   &statementItemID,
+	}
+
+	b, err := json.Marshal(leg)
+	if err != nil {
+		t.Fatalf("Marshal JournalLeg: %v", err)
+	}
+
+	var got JournalLeg
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("Unmarshal JournalLeg: %v", err)
+	}
+
+	if got.ID != "jl-001" {
+		t.Errorf("id = %q, want jl-001", got.ID)
+	}
+	if got.EntryID != "je-001" {
+		t.Errorf("entryId = %q, want je-001", got.EntryID)
+	}
+	if got.AccountID != "acct-bankone-1234" {
+		t.Errorf("accountId = %q, want acct-bankone-1234", got.AccountID)
+	}
+	if got.Debit != 52.30 {
+		t.Errorf("debit = %v, want 52.30", got.Debit)
+	}
+	if got.Credit != 0 {
+		t.Errorf("credit = %v, want 0", got.Credit)
+	}
+	if !got.Cleared {
+		t.Errorf("cleared = false, want true")
+	}
+	if got.ReconciledAt == nil || *got.ReconciledAt != reconciledAt {
+		t.Errorf("reconciledAt = %v, want %q", got.ReconciledAt, reconciledAt)
+	}
+	if got.ReconciledEventID == nil || *got.ReconciledEventID != reconciledEventID {
+		t.Errorf("reconciledEventId = %v, want %q", got.ReconciledEventID, reconciledEventID)
+	}
+	if got.StatementItemID == nil || *got.StatementItemID != statementItemID {
+		t.Errorf("statementItemId = %v, want %q", got.StatementItemID, statementItemID)
+	}
+
+	// Nil optional fields round-trip as JSON null.
+	legNoOptionals := JournalLeg{
+		ID:        "jl-002",
+		EntryID:   "je-001",
+		AccountID: "acct-bankone-1234",
+		Debit:     0,
+		Credit:    100.00,
+		Timestamp: "2025-06-15T10:30:00Z",
+		Cleared:   false,
+	}
+	b2, err := json.Marshal(legNoOptionals)
+	if err != nil {
+		t.Fatalf("Marshal JournalLeg (nil optionals): %v", err)
+	}
+	var got2 JournalLeg
+	if err := json.Unmarshal(b2, &got2); err != nil {
+		t.Fatalf("Unmarshal JournalLeg (nil optionals): %v", err)
+	}
+	if got2.ReconciledAt != nil {
+		t.Errorf("reconciledAt = %v, want nil", got2.ReconciledAt)
+	}
+	if got2.ReconciledEventID != nil {
+		t.Errorf("reconciledEventId = %v, want nil", got2.ReconciledEventID)
+	}
+	if got2.StatementItemID != nil {
+		t.Errorf("statementItemId = %v, want nil", got2.StatementItemID)
+	}
+}
+
+func TestAccountRoundTrip(t *testing.T) {
+	openingBalance := 500.00
+	openingBalanceDate := "2025-01-01T00:00:00Z"
+
+	acct := Account{
+		ID:                 "acct-bankone-1234",
+		Institution:        "bankone",
+		Account:            "1234",
+		AccountType:        "asset",
+		OpeningBalance:     &openingBalance,
+		OpeningBalanceDate: &openingBalanceDate,
+	}
+
+	b, err := json.Marshal(acct)
+	if err != nil {
+		t.Fatalf("Marshal Account: %v", err)
+	}
+
+	var got Account
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("Unmarshal Account: %v", err)
+	}
+
+	if got.ID != "acct-bankone-1234" {
+		t.Errorf("id = %q, want acct-bankone-1234", got.ID)
+	}
+	if got.Institution != "bankone" {
+		t.Errorf("institution = %q, want bankone", got.Institution)
+	}
+	if got.Account != "1234" {
+		t.Errorf("account = %q, want 1234", got.Account)
+	}
+	if got.AccountType != "asset" {
+		t.Errorf("accountType = %q, want asset", got.AccountType)
+	}
+	if got.OpeningBalance == nil || *got.OpeningBalance != openingBalance {
+		t.Errorf("openingBalance = %v, want %v", got.OpeningBalance, openingBalance)
+	}
+	if got.OpeningBalanceDate == nil || *got.OpeningBalanceDate != openingBalanceDate {
+		t.Errorf("openingBalanceDate = %v, want %q", got.OpeningBalanceDate, openingBalanceDate)
+	}
+
+	// Nil optional fields round-trip as JSON null.
+	acctNoOptionals := Account{
+		ID:          "acct-banktwo-5678",
+		Institution: "banktwo",
+		Account:     "5678",
+		AccountType: "liability",
+	}
+	b2, err := json.Marshal(acctNoOptionals)
+	if err != nil {
+		t.Fatalf("Marshal Account (nil optionals): %v", err)
+	}
+	var got2 Account
+	if err := json.Unmarshal(b2, &got2); err != nil {
+		t.Fatalf("Unmarshal Account (nil optionals): %v", err)
+	}
+	if got2.OpeningBalance != nil {
+		t.Errorf("openingBalance = %v, want nil", got2.OpeningBalance)
+	}
+	if got2.OpeningBalanceDate != nil {
+		t.Errorf("openingBalanceDate = %v, want nil", got2.OpeningBalanceDate)
+	}
+}
+
+func TestTransactionJournalEntryIDRoundTrip(t *testing.T) {
+	jeID := "je-001"
+
+	txnWithID := Transaction{
+		ID:             "txn-001",
+		Institution:    "bankone",
+		Account:        "1234",
+		Description:    "KROGER #1234",
+		Amount:         52.30,
+		Timestamp:      "2025-06-10T00:00:00Z",
+		StatementID:    "bankone-1234-2025-06",
+		Category:       "Food:Groceries",
+		JournalEntryID: &jeID,
+	}
+
+	b, err := json.Marshal(txnWithID)
+	if err != nil {
+		t.Fatalf("Marshal Transaction with JournalEntryID: %v", err)
+	}
+
+	var got Transaction
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("Unmarshal Transaction with JournalEntryID: %v", err)
+	}
+
+	if got.JournalEntryID == nil || *got.JournalEntryID != jeID {
+		t.Errorf("journalEntryId = %v, want %q", got.JournalEntryID, jeID)
+	}
+
+	// Nil JournalEntryID round-trips as JSON null.
+	txnNoID := Transaction{
+		ID:          "txn-002",
+		Institution: "bankone",
+		Account:     "1234",
+		Description: "ATM WITHDRAWAL",
+		Amount:      20.00,
+		Timestamp:   "2025-06-11T00:00:00Z",
+		StatementID: "bankone-1234-2025-06",
+		Category:    "Cash",
+	}
+	b2, err := json.Marshal(txnNoID)
+	if err != nil {
+		t.Fatalf("Marshal Transaction without JournalEntryID: %v", err)
+	}
+	var got2 Transaction
+	if err := json.Unmarshal(b2, &got2); err != nil {
+		t.Fatalf("Unmarshal Transaction without JournalEntryID: %v", err)
+	}
+	if got2.JournalEntryID != nil {
+		t.Errorf("journalEntryId = %v, want nil", got2.JournalEntryID)
+	}
+
+	// Verify JSON key name is camelCase.
+	if !strings.Contains(string(b), `"journalEntryId":"je-001"`) {
+		t.Errorf("JSON missing journalEntryId key, got: %s", string(b))
+	}
+}
+
+func TestOutputCarriesJournalCollections(t *testing.T) {
+	note := "initial entry"
+	reconciledAt := "2025-06-20T00:00:00Z"
+	openingBalance := 1000.00
+	openingBalanceDate := "2025-01-01T00:00:00Z"
+	jeID := "je-001"
+
+	out := Output{
+		Version:   1,
+		GroupName: "household",
+		Transactions: []Transaction{
+			{
+				ID:             "txn-001",
+				Institution:    "bankone",
+				Account:        "1234",
+				Description:    "KROGER #1234",
+				Amount:         52.30,
+				Timestamp:      "2025-06-10T00:00:00Z",
+				StatementID:    "bankone-1234-2025-06",
+				Category:       "Food:Groceries",
+				JournalEntryID: &jeID,
+			},
+		},
+		JournalEntries: []JournalEntry{
+			{
+				ID:          "je-001",
+				Timestamp:   "2025-06-10T00:00:00Z",
+				Description: "KROGER #1234",
+				Note:        &note,
+				LegCount:    2,
+			},
+		},
+		JournalLegs: []JournalLeg{
+			{
+				ID:           "jl-001",
+				EntryID:      "je-001",
+				AccountID:    "acct-bankone-1234",
+				Debit:        52.30,
+				Credit:       0,
+				Timestamp:    "2025-06-10T00:00:00Z",
+				Cleared:      true,
+				ReconciledAt: &reconciledAt,
+			},
+		},
+		Accounts: []Account{
+			{
+				ID:                 "acct-bankone-1234",
+				Institution:        "bankone",
+				Account:            "1234",
+				AccountType:        "asset",
+				OpeningBalance:     &openingBalance,
+				OpeningBalanceDate: &openingBalanceDate,
+			},
+		},
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "budget.json")
+
+	if err := WriteFile(path, out, ""); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	var got Output
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	if len(got.JournalEntries) != 1 {
+		t.Fatalf("journalEntries count = %d, want 1", len(got.JournalEntries))
+	}
+	if got.JournalEntries[0].ID != "je-001" {
+		t.Errorf("journalEntries[0].id = %q, want je-001", got.JournalEntries[0].ID)
+	}
+	if got.JournalEntries[0].LegCount != 2 {
+		t.Errorf("journalEntries[0].legCount = %d, want 2", got.JournalEntries[0].LegCount)
+	}
+
+	if len(got.JournalLegs) != 1 {
+		t.Fatalf("journalLegs count = %d, want 1", len(got.JournalLegs))
+	}
+	if got.JournalLegs[0].Debit != 52.30 {
+		t.Errorf("journalLegs[0].debit = %v, want 52.30", got.JournalLegs[0].Debit)
+	}
+	if !got.JournalLegs[0].Cleared {
+		t.Errorf("journalLegs[0].cleared = false, want true")
+	}
+
+	if len(got.Accounts) != 1 {
+		t.Fatalf("accounts count = %d, want 1", len(got.Accounts))
+	}
+	if got.Accounts[0].AccountType != "asset" {
+		t.Errorf("accounts[0].accountType = %q, want asset", got.Accounts[0].AccountType)
+	}
+
+	if got.Transactions[0].JournalEntryID == nil || *got.Transactions[0].JournalEntryID != "je-001" {
+		t.Errorf("transactions[0].journalEntryId = %v, want je-001", got.Transactions[0].JournalEntryID)
+	}
+}
+
 // TestWriteGoldenFile generates a BENC-encrypted golden file for cross-implementation
 // interop testing (Go encrypts → TypeScript decrypts). Skipped unless -generate-golden
 // flag is set. Run manually:
