@@ -73,7 +73,7 @@ implement→verify transition marker.
 
 ### 4. Stop
 
-Stop. `/loop /dispatch` advances to the `verify` phase.
+Stop. The next `/dispatch` background job advances to the `verify` phase.
 
 ## Requirement changes mid-session
 

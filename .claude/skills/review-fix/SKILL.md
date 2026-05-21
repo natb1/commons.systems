@@ -206,10 +206,10 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
 
 ## Autonomous vs. attended
 
-Under `/loop /dispatch` there is no user to drive Step 10 — the skill applies
-the `dispatch:reviewed` label (Step 8) and stops; the Step 9 4-section report
-is informational. The label is applied regardless of whether any fixes were
-made, so `/dispatch` can always advance to the next phase.
+In an autonomous `/dispatch` background job there is no user to drive Step 10 —
+the skill applies the `dispatch:reviewed` label (Step 8) and stops; the Step 9
+4-section report is informational. The label is applied regardless of whether
+any fixes were made, so `/dispatch` can always advance to the next phase.
 
 ## Notes
 
