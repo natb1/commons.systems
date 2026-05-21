@@ -6,7 +6,7 @@ description: Security phase — merge origin/main, gather findings from /securit
 # Security Review and Fix
 
 The `security` phase of the issue workflow, dispatched by `/dispatch`. This is the
-dispatch-specific wrapper around the generic built-in `/security-review` skill.
+dispatch-specific wrapper around the generic `/security-review` skill.
 `/security-review` only produces findings — it applies no fixes, commits nothing,
 and posts no summary. This skill wraps it: merge current `main`, run
 `/security-review` and gather the PR's CodeQL code-scanning alerts, implement the
@@ -17,7 +17,7 @@ This is the workflow's **terminal actionable phase** — it marks the PR ready
 itself, so there is no separate `ready` phase after it.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
-fork `/commit-merge-push`, invoke the built-in `/security-review`, and launch
+fork `/commit-merge-push`, invoke `/security-review`, and launch
 implementation subagents.
 
 ## Idempotency preamble
@@ -46,7 +46,7 @@ steps in order.
 2. **Gather findings from both sources.** The finding set carried into Step 3
    combines two sources, gathered **independently**:
 
-   **(a) `/security-review`.** Invoke the built-in `/security-review` skill via
+   **(a) `/security-review`.** Invoke the `/security-review` skill via
    the Skill tool — the generic security review. It produces findings; it applies
    no fixes. Any "final reply" / "nothing else" wording in `/security-review`'s
    prompt scopes only to its findings deliverable — once it returns, continue.
