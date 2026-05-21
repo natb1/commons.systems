@@ -132,9 +132,9 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
         first list the tracked issue's current `blocked_by`, and skip the POST if
         the flake issue is already present, so a re-run against the same
         fingerprint does not re-add the dependency or error.
-     4. **Record a flake iteration in the accumulator** (Step 6) — see
-        [Accumulator](#accumulator); a flake entry is visually distinct from a
-        generic no-repro one.
+     4. **Record a flake iteration in the accumulator** (the skill's top-level
+        Step 6) — see [Accumulator](#accumulator); a flake entry is visually
+        distinct from a generic no-repro one.
      5. **Post the accumulator (Step 7) and stop (Step 8). Push nothing** — the
         same terminal behavior as the generic no-repro outcome. On the next
         `/dispatch` run the PR's tracked issue carries a `blocked_by` against the
@@ -179,9 +179,9 @@ Cross-iteration memory lives entirely in `tmp/verify-summary.md` (see
   - **Flake issue** — *`flake` outcome only* — the tracking issue filed via
     `/file-issue`, written as `#<N> (CREATED)` or `#<N> (EXISTING)`. Omit for
     every other outcome.
-  - **Fingerprint** — *`flake` outcome only* — the dedupe key computed in Step 4
-    (the failing check name plus the stable identifier). Omit for every other
-    outcome.
+  - **Fingerprint** — *`flake` outcome only* — the dedupe key computed in the
+    Flake sub-path (the failing check name plus the stable identifier). Omit for
+    every other outcome.
 
 `tmp/` is git-ignored, so the accumulator never enters a commit; it persists for the
 worktree's life.
