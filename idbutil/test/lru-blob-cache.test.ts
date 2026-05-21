@@ -272,3 +272,33 @@ describe("onUpgrade hook", () => {
     await deleteDb(name);
   });
 });
+
+describe("error paths", () => {
+  // Opening an existing database at a version lower than the stored one is a
+  // spec-defined failure: the open request errors instead of upgrading. This
+  // exercises `openDb` rejecting and that rejection propagating out of the
+  // public read/write methods.
+  it("getEntry rejects when the database fails to open", async () => {
+    const name = uniqueDbName();
+    const created = createLruBlobCache({ name, version: 2 });
+    await created.putEntry("k", new ArrayBuffer(8));
+    await created.closeDb();
+
+    const stale = createLruBlobCache({ name, version: 1 });
+    await expect(stale.getEntry("k")).rejects.toThrow();
+
+    await deleteDb(name);
+  });
+
+  it("putEntry rejects when the database fails to open", async () => {
+    const name = uniqueDbName();
+    const created = createLruBlobCache({ name, version: 2 });
+    await created.putEntry("k", new ArrayBuffer(8));
+    await created.closeDb();
+
+    const stale = createLruBlobCache({ name, version: 1 });
+    await expect(stale.putEntry("k2", new ArrayBuffer(8))).rejects.toThrow();
+
+    await deleteDb(name);
+  });
+});
