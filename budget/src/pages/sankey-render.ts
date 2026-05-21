@@ -18,11 +18,13 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const OVERLAP_GAP = 8;
 const NODE_SCALE = 0.6;
 
+const LIGHTEN_TARGET = "#fff";
+
 function categoryColor(topLevelIndex: number, depth: number): string {
   const base = schemeTableau10[topLevelIndex % schemeTableau10.length];
   if (depth <= 1) return base;
   const factor = Math.min(0.3 * (depth - 1), 0.6);
-  return interpolateRgb(base, "#fff")(factor);
+  return interpolateRgb(base, LIGHTEN_TARGET)(factor);
 }
 
 function tooltipText(data: CategoryNode, rootValue: number): string {
