@@ -25,8 +25,8 @@ Run this step **only when the current branch is `main`**. From an issue worktree
 skip this step — phase skills (`/verify-pr`, `/security-review-fix`) already merge
 `origin/main` into the issue branch at their own entry points.
 
-Invoke `/commit-merge-push` to fetch `origin/main`, merge it into the current branch,
-and push to `origin HEAD`. From the main worktree this fast-forwards local `main`; the
+Invoke `/commit-merge-push` via the Skill tool to fetch `origin/main`, merge it into
+the current branch, and push to `origin HEAD`. From the main worktree this fast-forwards local `main`; the
 merge and push are no-ops when local main already equals `origin/main`.
 
 - If the working tree is dirty, stash before invoking — `/commit-merge-push` would
