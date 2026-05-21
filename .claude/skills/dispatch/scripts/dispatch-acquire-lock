@@ -75,14 +75,9 @@ else
   SESSION_PID=""
   pid="$PPID"
   while [[ "$pid" -gt 1 ]]; do
-    comm_file="$PROC_ROOT/$pid/comm"
-    if [[ -r "$comm_file" ]]; then
-      comm=""
-      IFS= read -r comm <"$comm_file" 2>/dev/null || comm=""
-      if [[ "$comm" == .claude* ]]; then
-        SESSION_PID="$pid"
-        break
-      fi
+    if is_live_claude "$pid"; then
+      SESSION_PID="$pid"
+      break
     fi
     # Next pid = the PPid line in <proc-root>/<pid>/status.
     status_file="$PROC_ROOT/$pid/status"
@@ -117,9 +112,10 @@ exec {lockfd}>>"$LOCK_FILE"
 flock "$lockfd"
 
 # ---- Step 4: read the recorded PID ------------------------------------------
-# First line of the lock file; may be empty or absent — read defensively.
+# First line of the lock file. The Step 3 `>>` open created the file if it was
+# absent, so it always exists here; it may still be empty — read defensively.
 recorded=""
-[[ -f "$LOCK_FILE" ]] && IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
+IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
 
 # ---- Step 5: decide ---------------------------------------------------------
 # Busy iff a different PID is recorded AND it is still a live .claude process.
