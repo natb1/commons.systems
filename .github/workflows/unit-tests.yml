@@ -112,12 +112,19 @@ jobs:
       - name: Detect changed file categories
         id: changes
         run: .claude/skills/dispatch/scripts/detect-changes.sh
-      - name: Set up Go (if budget-etl changed)
+      - name: Set up Go
         if: steps.changes.outputs.go == 'true'
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: budget-etl/go.mod
+          go-version: stable
       - name: Run Go tests
         if: steps.changes.outputs.go == 'true'
-        run: go test ./...
-        working-directory: budget-etl
+        run: |
+          set -euo pipefail
+          failed=0
+          while IFS= read -r modfile; do
+            dir=$(dirname "$modfile")
+            echo "=== go test: $dir ==="
+            (cd "$dir" && go test ./...) || failed=1
+          done < <(find . -name go.mod -not -path './node_modules/*' | sort)
+          exit "$failed"
