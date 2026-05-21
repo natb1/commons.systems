@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dispatch-acquire-lock — acquire the process-level /dispatch lock once per tick.
+# dispatch-acquire-lock — acquire/release the process-level /dispatch lock.
 #
 # /dispatch mutates shared state (fetches origin/main, creates/removes
 # worktrees, flips gh labels and PR draft status). Its per-target guards assume
@@ -10,33 +10,71 @@
 # separate Bash tool calls, each a fresh shell, so an fd flock would release
 # the instant its Bash call exits. The lock therefore keys on the Claude
 # *session* process — the nearest ancestor whose comm starts with ".claude" —
-# whose lifetime spans the whole tick. The recorded PID is the lock holder;
-# release is implicit and self-healing: when the session dies its PID stops
-# being a live ".claude" process, and the next tick reclaims the lock.
+# whose lifetime spans the whole tick. The recorded PID is the lock holder.
+#
+# Release is implicit and self-healing: when the session dies its PID stops
+# being a live ".claude" process, so the next tick's read-check-write reclaims
+# the lock automatically. `--release` is an explicit optional fast-path that
+# the lock holder can call to release immediately — clearing the recorded PID
+# without waiting for self-healing to notice the session has moved on.
 #
 # Usage:
-#   dispatch-acquire-lock        — print "acquired" or "busy" on stdout.
+#   dispatch-acquire-lock            — single-shot: print "acquired" or "busy".
+#   dispatch-acquire-lock --wait     — poll until acquired or the wait timeout
+#                                      elapses; print "acquired" or "busy".
+#   dispatch-acquire-lock --release  — clear our own recorded PID from the lock
+#                                      file; print "released" or "noop".
 #
 # Environment overrides for testability:
-#   DISPATCH_LOCK_FILE        Override the lock-file path. When set, the script
-#                             does NOT require a git repo. Default:
-#                             <project-root>/tmp/dispatch.lock.
-#   DISPATCH_LOCK_SESSION_PID Override the session PID, skipping the /proc
-#                             ancestry walk. Most tests set this; one leaves
-#                             it unset to exercise the walk.
-#   DISPATCH_LOCK_PROC_ROOT   Root of the /proc walk + liveness check.
-#                             Default: /proc.
+#   DISPATCH_LOCK_FILE          Override the lock-file path. When set, the
+#                               script does NOT require a git repo. Default:
+#                               <project-root>/tmp/dispatch.lock.
+#   DISPATCH_LOCK_SESSION_PID   Override the session PID, skipping the /proc
+#                               ancestry walk. Most tests set this; one leaves
+#                               it unset to exercise the walk.
+#   DISPATCH_LOCK_PROC_ROOT     Root of the /proc walk + liveness check.
+#                               Default: /proc.
+#   DISPATCH_LOCK_WAIT_TIMEOUT  --wait: max wall-clock seconds to poll before
+#                               giving up. 0 is valid (one attempt only).
+#                               Default: 300.
+#   DISPATCH_LOCK_WAIT_INTERVAL --wait: poll gap in seconds (fractional
+#                               allowed). Default: 5.
 #
 # Stdout protocol (exactly one word):
 #   acquired  this /dispatch holds the lock — proceed with the tick.
-#   busy      another /dispatch is running — stop cleanly, no side effects.
+#   busy      another /dispatch holds the lock — stop cleanly, no side effects.
+#             Under --wait this means the wait timeout elapsed; a one-line
+#             diagnostic (elapsed time + holding PID) is written to stderr.
+#   released  --release: our own recorded PID was cleared from the lock file.
+#   noop      --release: nothing to release — the lock was unheld or held by
+#             another session, so the file was left untouched.
 #
 # Exit codes:
-#   0  acquired or busy (both are normal outcomes; stdout disambiguates).
-#   2  misconfiguration — not in a git repo and DISPATCH_LOCK_FILE is unset.
+#   0  acquired/busy/released/noop (all are normal outcomes; stdout
+#      disambiguates).
+#   2  misconfiguration — not in a git repo and DISPATCH_LOCK_FILE is unset, or
+#      an unknown/extra command-line argument.
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch-sweep).
 set -uo pipefail
+
+# ---- Step 0: parse the mode -------------------------------------------------
+# Done before any side effect so an unknown argument exits 2 cleanly: no lock
+# file resolved, no /proc walk, no file touched.
+MODE="acquire"
+if [[ $# -gt 0 ]]; then
+  case "$1" in
+    --wait)    MODE="wait" ;;
+    --release) MODE="release" ;;
+    *) echo "dispatch-acquire-lock: unknown argument '$1'" >&2; exit 2 ;;
+  esac
+  if [[ $# -gt 1 ]]; then
+    echo "dispatch-acquire-lock: unknown argument '$2'" >&2; exit 2
+  fi
+fi
+
+WAIT_TIMEOUT="${DISPATCH_LOCK_WAIT_TIMEOUT:-300}"
+WAIT_INTERVAL="${DISPATCH_LOCK_WAIT_INTERVAL:-5}"
 
 PROC_ROOT="${DISPATCH_LOCK_PROC_ROOT:-/proc}"
 
@@ -103,30 +141,90 @@ else
   [[ -n "$SESSION_PID" ]] || SESSION_PID="$PPID"
 fi
 
-# ---- Step 3: lock + atomic read-check-write ---------------------------------
-# Open the lock file append-mode (>>) so opening does not truncate a recorded
-# PID, then take a BLOCKING flock — a short mutex making the read-check-write
-# below atomic within this single script run. (This is a correct use of flock:
-# the fd lives only for this script's lifetime, which is all the mutex needs.)
+# The lock-file directory must exist before the first `exec 9>>` open.
 mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || true
-exec {lockfd}>>"$LOCK_FILE"
-flock "$lockfd"
 
-# ---- Step 4: read the recorded PID ------------------------------------------
-# First line of the lock file. The Step 3 `>>` open created the file if it was
-# absent, so it always exists here; it may still be empty — read defensively.
-recorded=""
-IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
+# ---- try_acquire — one atomic, flock-bounded read-check-write ---------------
+# Returns 0 (acquired) or 1 (contended); on contention sets the global
+# CONTENDED_PID to the live foreign holder's PID.
+#
+# The flock MUST be released between polls so a --wait loop does not block
+# other sessions. The brace-group `{ ...; } {fd}>>FILE` idiom does NOT release
+# the lock (and hides the fd var from the body). A command-substitution
+# subshell with a fixed numeric fd does: fd 9 closes when the subshell exits,
+# releasing the flock. The subshell prints a sentinel the parent decodes.
+CONTENDED_PID=""
+try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_PID
+  CONTENDED_PID=""
+  local result
+  result=$(
+    exec 9>>"$LOCK_FILE"
+    flock 9                # blocking — a short mutex over the read-check-write
+    local recorded=""
+    IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
+    # Busy iff a different PID is recorded AND it is still a live .claude
+    # process. Otherwise — no record, a stale record (dead PID, or a PID
+    # recycled by a non-.claude process), or our own session re-entering — we
+    # claim the lock.
+    if [[ -n "$recorded" && "$recorded" != "$SESSION_PID" ]] \
+         && is_live_claude "$recorded"; then
+      printf 'BUSY %s' "$recorded"
+    else
+      printf '%s\n' "$SESSION_PID" >"$LOCK_FILE"
+      printf 'OK'
+    fi
+  )
+  case "$result" in
+    OK)       return 0 ;;
+    'BUSY '*) CONTENDED_PID="${result#BUSY }"; return 1 ;;
+    *)        return 1 ;;
+  esac
+}
 
-# ---- Step 5: decide ---------------------------------------------------------
-# Busy iff a different PID is recorded AND it is still a live .claude process.
-# Otherwise — no record, a stale record (dead PID, or a PID recycled by a
-# non-.claude process), or our own session re-entering — we claim the lock.
-if [[ -n "$recorded" && "$recorded" != "$SESSION_PID" ]] && is_live_claude "$recorded"; then
-  echo "busy"
-  exit 0
-fi
+# ---- dispatch the mode ------------------------------------------------------
+case "$MODE" in
+  acquire)
+    # Single-shot — byte-identical to the pre-#719 behavior.
+    try_acquire && echo acquired || echo busy
+    exit 0
+    ;;
 
-printf '%s\n' "$SESSION_PID" >"$LOCK_FILE"
-echo "acquired"
-exit 0
+  wait)
+    # Poll until acquired or the wall-clock timeout elapses. try_acquire runs
+    # first each iteration, so WAIT_TIMEOUT=0 still makes one real attempt.
+    SECONDS=0
+    while true; do
+      if try_acquire; then echo acquired; exit 0; fi
+      if (( SECONDS >= WAIT_TIMEOUT )); then
+        echo busy
+        echo "dispatch-acquire-lock: gave up after ${SECONDS}s; held by PID ${CONTENDED_PID:-unknown}" >&2
+        exit 0
+      fi
+      sleep "$WAIT_INTERVAL"
+    done
+    ;;
+
+  release)
+    # Re-read the recorded PID under flock and clear it ONLY if it is our own
+    # session. Truncate with `:` rather than `rm` — `rm` would orphan a
+    # concurrent acquire's already-open fd. A no-op when the lock is unheld or
+    # held by another session.
+    result=$(
+      exec 9>>"$LOCK_FILE"
+      flock 9
+      recorded=""    # plain var: this subshell runs at script top level
+      IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
+      if [[ -n "$recorded" && "$recorded" == "$SESSION_PID" ]]; then
+        : >"$LOCK_FILE"
+        printf 'RELEASED'
+      else
+        printf 'NOOP'
+      fi
+    )
+    case "$result" in
+      RELEASED) echo released ;;
+      *)        echo noop ;;
+    esac
+    exit 0
+    ;;
+esac
