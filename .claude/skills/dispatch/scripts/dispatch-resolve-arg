@@ -17,18 +17,16 @@
 #
 # Exit codes:
 #   0 — success; resolved issue number on stdout
-#   1 — usage error (non-numeric argument, missing argument)
+#   1 — usage error (bad argument), or the issue/PR lookup failed for a
+#       non-404 reason (auth, network)
 #   2 — the number is neither an open issue nor a PR (HTTP 404)
 #   3 — the number is a PR but it has no closing-issue reference (no "Closes #N")
 #   4 — the number is a PR that closes more than one issue; user must specify
 set -euo pipefail
 
 ARG="${1:-}"
-
-# Strip a single leading '#'.
 ARG="${ARG#\#}"
 
-# Validate: must be a positive integer.
 if [[ -z "$ARG" || ! "$ARG" =~ ^[1-9][0-9]*$ ]]; then
   echo "error: usage: dispatch-resolve-arg <number> (got: '${1:-}')" >&2
   exit 1
@@ -36,21 +34,21 @@ fi
 
 N="$ARG"
 
-# Fetch the issue/PR metadata from the REST issues endpoint.
-# The issues endpoint returns PRs too; the "pull_request" key distinguishes them.
-# A 404 means the number is neither an issue nor a PR.
-if issue_json=$(gh api "repos/{owner}/{repo}/issues/$N" 2>/dev/null); then
-  :
-else
-  echo "error: #$N is neither an issue nor a PR (not found in this repository)" >&2
-  exit 2
+# A 404 means the number is neither an issue nor a PR; any other gh failure
+# (auth, network) is surfaced as a distinct error rather than misreported as
+# "not found".
+if ! issue_json=$(gh api "repos/{owner}/{repo}/issues/$N" 2>&1); then
+  if [[ "$issue_json" == *404* || "$issue_json" == *"Not Found"* ]]; then
+    echo "error: #$N is neither an issue nor a PR (not found in this repository)" >&2
+    exit 2
+  fi
+  echo "error: failed to look up #$N: $issue_json" >&2
+  exit 1
 fi
 
-# Determine whether it is a PR or an issue.
-if echo "$issue_json" | jq -e 'has("pull_request")' > /dev/null 2>&1; then
-  # It is a PR — resolve to the closing issue.
+if printf '%s' "$issue_json" | jq -e 'has("pull_request")' > /dev/null 2>&1; then
   closing_json=$(gh pr view "$N" --json closingIssuesReferences)
-  count=$(echo "$closing_json" | jq '.closingIssuesReferences | length')
+  count=$(printf '%s' "$closing_json" | jq '.closingIssuesReferences | length')
 
   if [[ "$count" -eq 0 ]]; then
     echo "error: PR #$N has no closing-issue reference (no 'Closes #N' keyword found)" >&2
@@ -58,14 +56,12 @@ if echo "$issue_json" | jq -e 'has("pull_request")' > /dev/null 2>&1; then
   fi
 
   if [[ "$count" -gt 1 ]]; then
-    closing_nums=$(echo "$closing_json" | jq -r '.closingIssuesReferences[].number' | tr '\n' ' ' | sed 's/ $//')
+    closing_nums=$(printf '%s' "$closing_json" | jq -r '[.closingIssuesReferences[].number] | join(" ")')
     echo "error: PR #$N closes multiple issues ($closing_nums); pass the specific issue number instead" >&2
     exit 4
   fi
 
-  # Exactly one closing issue — print it.
-  echo "$closing_json" | jq -r '.closingIssuesReferences[0].number'
+  printf '%s' "$closing_json" | jq -r '.closingIssuesReferences[0].number'
 else
-  # It is an issue — pass through.
   echo "$N"
 fi

@@ -153,11 +153,15 @@ case "$args" in
   api\ repos/*/issues/*)
     # dispatch-resolve-arg discriminator: gh api repos/{owner}/{repo}/issues/<N>.
     # The REST issues endpoint returns PRs too; a PR's JSON carries a
-    # "pull_request" key. The fixture file decides issue-vs-PR; absence of a
-    # fixture models a 404 (the number is neither an issue nor a PR).
+    # "pull_request" key. The fixture file decides issue-vs-PR; an arg-issue-<N>.err
+    # fixture models a non-404 gh failure; absence of either fixture models a 404
+    # (the number is neither an issue nor a PR).
     num="${args##*/}"
     if [[ -f "$STUB_DIR/arg-issue-${num}.json" ]]; then
       cat "$STUB_DIR/arg-issue-${num}.json"
+    elif [[ -f "$STUB_DIR/arg-issue-${num}.err" ]]; then
+      cat "$STUB_DIR/arg-issue-${num}.err" >&2
+      exit 1
     else
       echo "gh: Not Found (HTTP 404)" >&2
       exit 1
@@ -590,6 +594,21 @@ echo "Test: non-numeric argument → exit 1"
 setup
 if ( "$TMPDIR_TEST/dispatch-resolve-arg" "abc" ) >/dev/null 2>&1; then rc=0; else rc=$?; fi
 assert_eq "non-numeric argument → exit 1" "1" "$rc"
+teardown
+
+# 8. Missing argument → exit 1.
+echo "Test: missing argument → exit 1"
+setup
+if ( "$TMPDIR_TEST/dispatch-resolve-arg" ) >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "missing argument → exit 1" "1" "$rc"
+teardown
+
+# 9. Non-404 gh failure (auth/network) → exit 1, not misreported as exit 2.
+echo "Test: non-404 lookup failure → exit 1"
+setup
+printf 'gh: HTTP 503: Service unavailable\n' > "$STUB_DIR/arg-issue-998.err"
+if ( "$TMPDIR_TEST/dispatch-resolve-arg" "998" ) >/dev/null 2>&1; then rc=0; else rc=$?; fi
+assert_eq "non-404 lookup failure → exit 1" "1" "$rc"
 teardown
 
 # ============================================================================
