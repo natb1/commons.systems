@@ -11,12 +11,12 @@ dispatch-specific wrapper around the generic built-in `/simplify` skill.
 does not commit, push, post a summary, or carry follow-up actions beyond the
 current PR. This skill wraps it: merge current `main`, run `/simplify`, commit
 and push the fixes, defer important out-of-scope findings to tracking issues via
-`/ready` subagents, post a PR comment, and apply the `dispatch:refactored`
+`/file-issue` subagents, post a PR comment, and apply the `dispatch:refactored`
 label.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
-fork `/commit-merge-push`, invoke the built-in `/simplify`, and launch `/ready`
-subagents.
+fork `/commit-merge-push`, invoke the built-in `/simplify`, and launch
+`/file-issue` subagents.
 
 ## Idempotency preamble
 
@@ -61,23 +61,26 @@ true no-op. Otherwise run all steps in order.
    that and creates no commit. Capture the resulting fix commit SHA (or note the
    no-op) for the Step 6 report.
 
-5. **For each Deferred finding, spawn a `/ready` subagent to create a tracking
-   issue.** Launch one Agent tool invocation per finding
-   (`subagent_type: general-purpose`; choose the model per `/implement-unit`'s
-   model-selection heuristic — see that skill; do not restate it here). The
-   subagent prompt **must**:
+5. **File follow-up issues for the Deferred bucket.** For each Deferred
+   finding, fork a subagent via the Agent tool (`subagent_type:
+   general-purpose`, `model: sonnet`) that invokes the `/file-issue` skill.
+   Build the subagent's `$INPUT` from the finding: a short imperative title on
+   the first line, then the body — the finding text, the files the finding
+   names, the PR backlink `#<PR_NUM>` (reuse `PR_NUM` from the idempotency
+   preamble), and a short rationale for why the finding is out of scope for
+   this PR. `/file-issue` owns duplicate detection, issue creation, `@me`
+   assignment, and the `help wanted` label — the subagent invokes it and does
+   no additional `gh` work.
 
-   - Tell the subagent to use `/ready` in description mode, passing the finding
-     text as the issue description.
-   - **Forbid `/ref-ready` Step 4 plan-mode approval** — subagents cannot prompt
-     the user, so the plan-mode approval gate would block them. Skip it.
-   - State that the finding text is the full context — no further codebase
-     search is required to flesh out the issue scope.
-   - Ask the subagent to return the new issue number so the Step 6 report can
-     reference it.
+   `/file-issue` prints `CREATED <N>` or `EXISTING <N>` on its own line. The
+   subagent parses that line and returns `<N>` to this thread; capture each
+   `<N>` and attach it to its source finding so the Step 6 report can
+   reference it. This is the same `$INPUT` shape and parse contract as
+   `/review-fix` Step 5.
 
-   Run subagents in parallel — fan them out in a single message with multiple
-   Agent tool calls — since each one creates an independent issue.
+   Run the per-finding subagents in parallel — fan them out in a single
+   message with multiple Agent tool calls — since each one files an
+   independent issue. If the Deferred bucket is empty, skip this step.
 
 6. **Post a PR comment with the four-section report.** Reuse the `PR_NUM`
    captured in the preamble — do not re-resolve.
@@ -125,7 +128,7 @@ Every `/simplify` finding lands in exactly one of four buckets:
 | Fixed | Implemented in Step 2 by `/simplify`. |
 | Informational | Surfaced for human reference; no action recommended. |
 | Disregarded | False positive or trivially wrong; explicitly rejected with a one-line rationale. |
-| Deferred | Important and actionable but out of scope for this PR; a `/ready` subagent created a tracking issue in Step 5. |
+| Deferred | Important and actionable but out of scope for this PR; a `/file-issue` subagent filed a tracking issue in Step 5. |
 
 `/simplify` itself produces only the 2-way split (fixed vs skipped). The caller
 of `/simplify-fix` extends the skipped findings into the three non-fixed buckets
