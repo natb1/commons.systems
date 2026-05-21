@@ -195,7 +195,7 @@ issue_has_worktree() {
 # closingIssuesReferences drives topic-category resolution: a PR inherits the
 # highest-priority topic among the labels of every issue it closes.
 PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences)
-PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number, .createdAt, .headRefName, (.closingIssuesReferences | tojson)] | @tsv')
+PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number, .createdAt, .headRefName, (.closingIssuesReferences // [] | tojson)] | @tsv')
 
 # Fetch every open issue once, carrying labels. This single list serves two
 # roles: filtered client-side to "help wanted" it is the issue queue; indexed
