@@ -168,8 +168,9 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
  * A scroll-loaded transaction can reference a budget added after the
  * hydration-time `budgetIdToName` map was built. The chart is a derived view,
  * so it treats such a transaction as unbudgeted instead of aborting
- * serialization (#578). The table path (`buildRowParts`) still throws loudly on
- * an unknown id — the source of truth surfaces genuine data corruption.
+ * serialization (#578). The editable table path (`buildRowParts`) stays strict
+ * and still throws on an unknown id: silently degrading it to unbudgeted there
+ * would misrepresent a transaction the user edits.
  */
 function resolveBudgetName(budgetId: string | null, budgetIdToName: Map<string, string>): string | null {
   if (budgetId === null) return null;
