@@ -52,6 +52,19 @@ Sandboxed Bash calls run in an isolated network namespace. Servers started with
 Use `dangerouslyDisableSandbox: true` on Bash calls that check local server
 connectivity (e.g., `curl http://localhost:*`, `ss -tlnp`, readiness polls).
 
+## claude agents --json
+
+`claude agents --json` lists live Claude sessions. It reaches the local Claude
+daemon over a Unix socket, which the sandbox's network-namespace isolation
+blocks. A sandboxed call does not error — it returns an empty `[]`,
+indistinguishable from a genuine "no live sessions" result. A caller that
+trusts that `[]` would wrongly conclude a worktree is free.
+
+Use `dangerouslyDisableSandbox: true` on every Bash call that runs
+`claude agents --json` directly, or that runs a script sourcing
+`.claude/skills/dispatch/scripts/lib-claude-agents.sh` (whose
+`claude_sessions_under` / `worktree_has_live_session` helpers shell out to it).
+
 ## pass / GPG pinentry
 
 `pass show <path>` decrypts a GPG-encrypted secret store entry. GPG cannot
