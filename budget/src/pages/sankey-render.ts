@@ -1,4 +1,5 @@
 import { hierarchy, tree, type HierarchyNode } from "d3-hierarchy";
+import { interpolateRgb } from "d3-interpolate";
 import { schemeTableau10 } from "d3-scale-chromatic";
 import { formatCurrency } from "../format.js";
 import type { CategoryNode } from "./category-node.js";
@@ -20,14 +21,8 @@ const NODE_SCALE = 0.6;
 function categoryColor(topLevelIndex: number, depth: number): string {
   const base = schemeTableau10[topLevelIndex % schemeTableau10.length];
   if (depth <= 1) return base;
-  const r = parseInt(base.slice(1, 3), 16);
-  const g = parseInt(base.slice(3, 5), 16);
-  const b = parseInt(base.slice(5, 7), 16);
   const factor = Math.min(0.3 * (depth - 1), 0.6);
-  const lr = Math.round(r + (255 - r) * factor);
-  const lg = Math.round(g + (255 - g) * factor);
-  const lb = Math.round(b + (255 - b) * factor);
-  return `#${lr.toString(16).padStart(2, "0")}${lg.toString(16).padStart(2, "0")}${lb.toString(16).padStart(2, "0")}`;
+  return interpolateRgb(base, "#fff")(factor);
 }
 
 function tooltipText(data: CategoryNode, rootValue: number): string {
