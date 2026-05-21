@@ -167,12 +167,64 @@ When decomposition (Step 3f) creates new issues, establish relationships using t
 
 ## Step 6. Post-Processing
 
-**Issue number mode only.** Assign the existing issue to the current GitHub user and apply the `help wanted` label:
+Post-processing assigns the issue, applies `help wanted`, and applies at most
+one topic label. Classification is identical in both input modes; only the
+`gh` command differs.
+
+### Topic classification
+
+Classify the issue's topic from its title and body. Topic labels mark subject
+area and are orthogonal to the `dispatch:*` phase labels, which mark workflow
+progress. Apply **at most one** topic label.
+
+- **`dispatch`** — concerns the `/dispatch` workflow, one of its phase skills
+  (`/plan-implement`, `/verify-pr`, `/dispatch-qa`, `/simplify-fix`,
+  `/review-fix`, `/security-review-fix`), a `ref-*` reference skill those
+  skills use (`ref-ready`, `ref-memory-management`, `ref-github-issues`,
+  `ref-write-instructions`), or a `dispatch-*` script under
+  `.claude/skills/dispatch/scripts/` (e.g. `dispatch-select-target`,
+  `dispatch-phase`, `dispatch-trace-leaf`). Keyword signals: "dispatch",
+  "phase skill", "issue workflow", "queue selection", "worktree resolution".
+
+- **`testing infrastructure`** — concerns CI workflows under
+  `.github/workflows/` (e.g. `pr-checks.yml`, `unit-tests.yml`), the unit or
+  acceptance test harness, Vitest or Playwright configuration, test fixtures or
+  seed data, or a `run-*.sh` test runner under
+  `.claude/skills/dispatch/scripts/` (e.g. `run-unit-tests.sh`,
+  `run-acceptance-tests.sh`, `run-lint.sh`, `run-typecheck.sh`). Keyword
+  signals: "CI", "unit test", "acceptance test", "Vitest", "Playwright",
+  "fixture", "seed data", "test runner".
+
+- **Neither** — apply no topic label. Most product and
+  landing/budget/print/fellspiral feature work matches neither topic. There is
+  no "other" sentinel label.
+
+When an issue matches both topics, apply only `dispatch` — the narrower, named
+workflow wins over `testing infrastructure`, the broad category. Most issues
+match at most one topic outright; this tie-break resolves only the rare issue
+that genuinely spans both.
+
+Record the matched label as `<topic>` for the mode-specific command below, or
+leave `<topic>` empty when no topic matched.
+
+### Issue number mode
+
+Assign the issue and apply `help wanted` plus any matched topic label in one
+call:
 
 ```bash
-gh issue edit <N> --add-assignee @me --add-label "help wanted"
+gh issue edit <N> --add-assignee @me --add-label "help wanted" --add-label "<topic>"  # drop the trailing --add-label when no topic matched
 ```
 
-Apply `help wanted` by default. Drop `--add-label "help wanted"` only when the user explicitly asked not to label the issue or named a different label set.
+Apply `help wanted` by default; drop both `--add-label` arguments only when the
+user explicitly asked not to label the issue or named a different label set.
 
-Description mode skips this step — `/file-issue` (invoked in Step 5) already assigns `@me` and applies `help wanted` on the newly created issue.
+### Description mode
+
+`/file-issue` (invoked in Step 5) assigns `@me` and applies `help wanted` to
+any issue it creates. Apply only the matched topic label to the issue number
+it returned:
+
+```bash
+gh issue edit <N> --add-label "<topic>"  # run nothing when no topic matched
+```
