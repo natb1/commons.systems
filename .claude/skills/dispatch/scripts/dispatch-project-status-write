@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# dispatch-project-status-write — set a project item's single-select Status.
+#
+# Resolves a project from the local dispatch config (via dispatch-config-load),
+# resolves the project node id, the Status field id, and the target option id,
+# locates the issue's project item (via dispatch-project-status-read), and
+# applies the new Status value.
+#
+# Usage:
+#   dispatch-project-status-write <project-key> <issue-url> <status-value>
+#
+# Arguments:
+#   <project-key>   key of an entry in dispatch.config/projects.json.
+#   <issue-url>     full GitHub issue URL, e.g.
+#                   https://github.com/owner/repo/issues/42
+#   <status-value>  the Status option name to set, e.g. "In Progress".
+#
+# Exit codes:
+#   0  Status applied.
+#   1  no config present, project key absent, the Status field or option is
+#      not found, the issue is not on the project, or gh failure.
+#   2  usage error.
+#
+# Dependency: invokes the `gh` CLI. Per .claude/rules/sandbox.md, callers must
+# wrap this script with dangerouslyDisableSandbox — gh's TLS validation is
+# blocked by the sandbox. This script does not alter its behavior for the
+# sandbox; that is the caller's responsibility.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ---- Step 0: parse arguments ------------------------------------------------
+
+if [[ $# -ne 3 ]]; then
+  echo "error: usage: dispatch-project-status-write <project-key> <issue-url> <status-value>" >&2
+  exit 2
+fi
+PROJECT_KEY="$1"
+ISSUE_URL="$2"
+STATUS_VALUE="$3"
+if [[ -z "$PROJECT_KEY" || -z "$ISSUE_URL" || -z "$STATUS_VALUE" ]]; then
+  echo "error: usage: dispatch-project-status-write <project-key> <issue-url> <status-value>" >&2
+  exit 2
+fi
+
+# ---- Step 1: resolve the project from local config -------------------------
+
+PROJECTS=$("$SCRIPT_DIR/dispatch-config-load" projects)
+if [[ "$PROJECTS" == "no-config" ]]; then
+  echo "error: no projects.json config present; cannot resolve project '$PROJECT_KEY'" >&2
+  exit 1
+fi
+
+PROJECT=$(printf '%s' "$PROJECTS" | jq -c --arg key "$PROJECT_KEY" \
+  '.projects[] | select(.key == $key)')
+if [[ -z "$PROJECT" ]]; then
+  echo "error: project key '$PROJECT_KEY' not found in projects.json" >&2
+  exit 1
+fi
+
+OWNER=$(printf '%s' "$PROJECT" | jq -r '.owner')
+NUMBER=$(printf '%s' "$PROJECT" | jq -r '.number')
+STATUS_FIELD=$(printf '%s' "$PROJECT" | jq -r '.statusField')
+
+# ---- Step 2: resolve the project node id -----------------------------------
+
+PROJECT_VIEW=$(gh project view "$NUMBER" --owner "$OWNER" --format json)
+PROJECT_NODE_ID=$(printf '%s' "$PROJECT_VIEW" | jq -r '.id')
+
+# ---- Step 3: resolve the Status field id and the target option id ----------
+
+FIELDS=$(gh project field-list "$NUMBER" --owner "$OWNER" --format json)
+
+FIELD=$(printf '%s' "$FIELDS" | jq -c --arg name "$STATUS_FIELD" \
+  '.fields[] | select(.name == $name)')
+if [[ -z "$FIELD" ]]; then
+  echo "error: Status field '$STATUS_FIELD' not found on project '$PROJECT_KEY'" >&2
+  exit 1
+fi
+FIELD_ID=$(printf '%s' "$FIELD" | jq -r '.id')
+
+OPTION_ID=$(printf '%s' "$FIELD" | jq -r --arg opt "$STATUS_VALUE" \
+  '(.options[]? | select(.name == $opt) | .id) // empty')
+if [[ -z "$OPTION_ID" ]]; then
+  echo "error: Status option '$STATUS_VALUE' not found in field '$STATUS_FIELD' on project '$PROJECT_KEY'" >&2
+  exit 1
+fi
+
+# ---- Step 4: resolve the item id via the status reader ---------------------
+# Propagates the reader's failure if the issue is not on the project.
+
+ITEM_JSON=$("$SCRIPT_DIR/dispatch-project-status-read" "$PROJECT_KEY" "$ISSUE_URL")
+ITEM_ID=$(printf '%s' "$ITEM_JSON" | jq -r '.itemId')
+
+# ---- Step 5: apply the new Status value ------------------------------------
+
+gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" \
+  --field-id "$FIELD_ID" --single-select-option-id "$OPTION_ID" >/dev/null
+
+echo "set Status to '$STATUS_VALUE' for $ISSUE_URL"

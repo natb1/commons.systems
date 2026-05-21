@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# dispatch-project-item-add — add a GitHub issue to a project.
+#
+# Resolves a project from the local dispatch config (via dispatch-config-load)
+# and adds the given issue to it, printing the new project item id.
+#
+# Usage:
+#   dispatch-project-item-add <project-key> <issue-url>
+#
+# Arguments:
+#   <project-key>  key of an entry in dispatch.config/projects.json.
+#   <issue-url>    full GitHub issue URL, e.g.
+#                  https://github.com/owner/repo/issues/42
+#
+# Stdout:
+#   The new project item id (e.g. PVTI_...) on success.
+#
+# Exit codes:
+#   0  issue added; item id printed.
+#   1  no config present, project key absent, or gh failure.
+#   2  usage error.
+#
+# Dependency: invokes the `gh` CLI. Per .claude/rules/sandbox.md, callers must
+# wrap this script with dangerouslyDisableSandbox — gh's TLS validation is
+# blocked by the sandbox. This script does not alter its behavior for the
+# sandbox; that is the caller's responsibility.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ---- Step 0: parse arguments ------------------------------------------------
+
+if [[ $# -ne 2 ]]; then
+  echo "error: usage: dispatch-project-item-add <project-key> <issue-url>" >&2
+  exit 2
+fi
+PROJECT_KEY="$1"
+ISSUE_URL="$2"
+if [[ -z "$PROJECT_KEY" || -z "$ISSUE_URL" ]]; then
+  echo "error: usage: dispatch-project-item-add <project-key> <issue-url>" >&2
+  exit 2
+fi
+
+# ---- Step 1: resolve the project from local config -------------------------
+
+PROJECTS=$("$SCRIPT_DIR/dispatch-config-load" projects)
+if [[ "$PROJECTS" == "no-config" ]]; then
+  echo "error: no projects.json config present; cannot resolve project '$PROJECT_KEY'" >&2
+  exit 1
+fi
+
+PROJECT=$(printf '%s' "$PROJECTS" | jq -c --arg key "$PROJECT_KEY" \
+  '.projects[] | select(.key == $key)')
+if [[ -z "$PROJECT" ]]; then
+  echo "error: project key '$PROJECT_KEY' not found in projects.json" >&2
+  exit 1
+fi
+
+OWNER=$(printf '%s' "$PROJECT" | jq -r '.owner')
+NUMBER=$(printf '%s' "$PROJECT" | jq -r '.number')
+
+# ---- Step 2: add the issue to the project ----------------------------------
+
+RESULT=$(gh project item-add "$NUMBER" --owner "$OWNER" --url "$ISSUE_URL" \
+  --format json)
+
+printf '%s' "$RESULT" | jq -r '.id'
