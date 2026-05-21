@@ -268,8 +268,9 @@ respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
 This step runs **only** for the `implement` phase — a no-PR target. Every phase
 with an existing PR (`verify` onward) skips it: implementation is already
 underway. It is the implementation-time counterpart of `ref-ready`'s Step 3e
-relevance check (which is baseline-branch-anchored for issue editing); keep the
-two in sync when either changes.
+relevance check; the two are deliberately separate — Step 3e is creation-time
+and `$BASELINE_BRANCH`-anchored, this step is pre-implementation and
+`createdAt`-anchored.
 
 Before invoking `/plan-implement` on an `implement`-phase (no-PR) issue, run a
 creation-date-anchored drift analysis. First, fetch the issue's creation
