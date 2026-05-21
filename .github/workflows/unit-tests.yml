@@ -79,6 +79,8 @@ jobs:
         run: .claude/skills/dispatch/scripts/test-dispatch-scripts.sh
       - name: Run worktree-remove hook tests
         run: .claude/hooks/test-worktree-remove.sh
+      - name: Run statusline hook tests
+        run: .claude/hooks/test-statusline.sh
 
   playwright-version-sync:
     runs-on: ubuntu-latest
