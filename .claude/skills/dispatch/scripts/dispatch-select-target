@@ -4,7 +4,8 @@
 #
 # Output: exactly one line:
 #   pr <num> <branch> <phase>   — a PR to work on, with its already-derived phase
-#   issue <num>                 — a help-wanted issue to implement
+#   issue <num>                 — a help-wanted issue, resolved to a startable
+#                                 open leaf (may differ from the top-level issue)
 #   empty                       — nothing eligible
 #   worktree <N> <branch>       — the current worktree's own open issue (short-circuits the queue scan)
 #   worktree-closed <N> <branch>— the current worktree's issue is closed or unknown
@@ -31,7 +32,9 @@
 #   2. Oldest "review"   PR (draft + dispatch:refactored)
 #   3. Oldest "simplify" PR (draft + dispatch:qa-done)
 #   4. Oldest "verify"   PR (draft, CI completed and failed)
-#   5. Oldest open help-wanted issue with no local git worktree
+#   5. Oldest open help-wanted issue with no local git worktree, resolved to a
+#      startable open leaf (an issue whose entire open-leaf subtree is
+#      worktree-conflicted is skipped, exactly as a direct worktree is)
 #   6. Oldest "qa"       PR (draft, CI green, no dispatch:* label)
 #
 # PRs and help-wanted issues with a local git worktree are skipped (a session is
@@ -228,24 +231,42 @@ for phase in "${PHASE_PRIORITY[@]}"; do
   fi
 done
 
-# Fetch help-wanted issues oldest-first; pick the oldest with no local worktree.
+# Fetch help-wanted issues oldest-first; pick the oldest with no local worktree
+# and a startable open leaf.
 ISSUE_LIST=$(gh issue list --label "help wanted" --state open --json number,createdAt)
 # Sort into a variable first so a jq failure aborts here (set -e + pipefail);
 # a process substitution would swallow it as empty input. Mirrors PR_SORTED.
 ISSUE_NUMS_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r 'sort_by(.createdAt) | .[].number')
-ISSUE_NUM=""
+LEAF_NUM=""
 while IFS= read -r issue_num; do
   [[ -z "$issue_num" ]] && continue
   # Skip issues whose <N>-* worktree exists (a session is working them).
   if issue_has_worktree "$issue_num"; then
     continue
   fi
-  ISSUE_NUM="$issue_num"
-  break
+  # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
+  # in queue mode descends open blockers and sub-issues, skipping any child whose
+  # <N>-* branch is an existing local worktree (owned by another session):
+  #   exit 0 — a startable open leaf was found; select it.
+  #   exit 2 — every reachable open leaf is worktree-conflicted. Skip this issue
+  #            exactly as a direct worktree is skipped; continue the ladder so
+  #            selection never emits a dead-end target.
+  #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
+  # The `if cmd=$(...); then ... else status=$?; ... fi` form captures the exit
+  # code without tripping set -e.
+  if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue); then
+    LEAF_NUM="$leaf"
+    break
+  else
+    trace_status=$?
+    [[ "$trace_status" == 2 ]] && continue
+    echo "error: dispatch-trace-leaf $issue_num queue failed (exit $trace_status)" >&2
+    exit 1
+  fi
 done <<< "$ISSUE_NUMS_SORTED"
 
-if [[ -n "$ISSUE_NUM" ]]; then
-  echo "issue $ISSUE_NUM"
+if [[ -n "$LEAF_NUM" ]]; then
+  echo "issue $LEAF_NUM"
   exit 0
 fi
 
