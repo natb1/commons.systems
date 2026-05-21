@@ -1141,6 +1141,95 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "issue 6 not masked by 60-foo worktree" "issue 6" "$result"
 teardown
 
+# --- help-wanted leaf reachability (issue #715) -----------------------------
+# dispatch-select-target runs dispatch-trace-leaf <N> queue for each help-wanted
+# candidate and skips any whose subtree is fully worktree-conflicted (trace
+# exits 2), exactly as a direct worktree is skipped. Sub-issue 5500 sits on
+# branch 5500-blocked, which does NOT prefix-match 55-, so issue 55 is never
+# falsely flagged as directly worktree'd.
+
+# 28. A help-wanted issue with a fully worktree-conflicted subtree is skipped;
+#     the next help-wanted issue is selected.
+echo "Test: subtree-blocked help-wanted issue skipped → next issue chosen"
+setup
+setup_union_pr_list '[]'
+# Issue 55 (older) has open sub-issue 5500; issue 66 (newer) has no children.
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"},{"number":66,"createdAt":"2024-01-02T00:00:00Z"}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+# Sub-issue 5500's worktree exists (owned by another session) → trace 55 exits 2.
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "subtree-blocked issue 55 skipped → issue 66 chosen" "issue 66" "$result"
+teardown
+
+# 29. Every help-wanted issue is subtree-blocked → falls through to a QA PR.
+echo "Test: all help-wanted issues subtree-blocked → QA PR selected"
+setup
+UNION='['"$(make_pr_union 20 "20-qa" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "subtree-blocked issue 55 → falls through to QA PR" "pr 20 20-qa qa" "$result"
+teardown
+
+# 30. Every help-wanted issue is subtree-blocked and no QA PR → empty.
+echo "Test: all help-wanted issues subtree-blocked, no QA PR → empty"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "subtree-blocked issue 55, no QA PR → empty" "empty" "$result"
+teardown
+
+# 31. A help-wanted issue with a startable open leaf emits the resolved leaf
+#     number (which differs from the top-level issue).
+echo "Test: help-wanted issue resolves to its startable leaf"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
+printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-5500.json"
+# No worktree for 5500 — the leaf is startable.
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "help-wanted issue 55 resolves to leaf 5500" "issue 5500" "$result"
+teardown
+
+# 32. dispatch-trace-leaf exit 1 (usage error) is a hard failure, never a skip.
+echo "Test: dispatch-trace-leaf exit 1 → dispatch-select-target hard-fails"
+setup
+setup_union_pr_list '[]'
+printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z"}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Replace the copied leaf-trace script with a stub that always exits 1.
+cat > "$TMPDIR_TEST/dispatch-trace-leaf" <<'STUB'
+#!/usr/bin/env bash
+echo "error: usage" >&2
+exit 1
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-trace-leaf"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+[[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
+assert_eq "dispatch-trace-leaf exit 1 → select-target exits non-zero" "yes" "$rc_nonzero"
+[[ "$result" != issue* ]] && no_issue=yes || no_issue=no
+assert_eq "dispatch-trace-leaf exit 1 → no issue line emitted" "yes" "$no_issue"
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================
