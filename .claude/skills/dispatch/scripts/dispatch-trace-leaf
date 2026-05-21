@@ -48,8 +48,7 @@ fi
 # worktree. list_worktree_records (lib.sh) does the shared porcelain parse;
 # split_worktree_record splits each line into WT_NUM / WT_PATH / WT_BRANCH —
 # WT_NUM is the branch's issue-number prefix, empty for non-issue / branchless
-# worktrees. (A plain `IFS=$'\t' read` would mis-parse those empty-prefix
-# records — see split_worktree_record in lib.sh.)
+# worktrees.
 declare -A CONFLICTED=()
 if [[ "$MODE" == "queue" ]]; then
   while IFS= read -r line; do

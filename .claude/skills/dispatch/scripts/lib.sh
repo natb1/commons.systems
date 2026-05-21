@@ -417,11 +417,7 @@ _emit_worktree_record() {
 #   <path>         — always present.
 #   <branch>       — branch name with refs/heads/ stripped; empty for
 #                    detached-HEAD / bare worktrees (no `branch` line).
-# This is the single shared porcelain record-walk: callers no longer each
-# re-implement the blank-line-delimited walk or the <issue-number>-<slug>
-# branch-naming convention. Callers that want only issue worktrees skip records
-# whose issue-number field is empty. A `git worktree list` failure surfaces as a
-# clear error (per .claude/rules/code-style.md) rather than an invented fallback.
+# Callers that want only issue worktrees skip empty-<issue-number> records.
 list_worktree_records() {
   local porcelain
   porcelain=$(git worktree list --porcelain) || {
@@ -449,23 +445,16 @@ list_worktree_records() {
 }
 
 # Split one list_worktree_records line into the globals WT_NUM / WT_PATH /
-# WT_BRANCH.
-#
-# Do NOT parse list_worktree_records output with `IFS=$'\t' read -r num path
-# branch`: tab is an IFS *whitespace* character, so `read` trims a leading or
-# trailing tab and collapses consecutive tabs. list_worktree_records leaves the
-# issue-number field empty for bare / detached-HEAD / non-issue worktrees, so
-# those records begin with a tab — `read` strips it and every field shifts one
-# position left (the path lands in `num`, the branch in `path`). Parameter
-# expansion does no trimming or run-collapsing, so it preserves empty fields
-# exactly. Every record has exactly two tabs (three fields), so the split below
-# is unambiguous.
+# WT_BRANCH. Uses parameter expansion, not `IFS=$'\t' read`: tab is an IFS
+# whitespace character, so `read` would trim the empty leading issue-number
+# field of a non-issue / detached / bare record and shift every field left.
+# Parameter expansion preserves empty fields exactly.
 split_worktree_record() {
   local line="$1"
-  WT_NUM="${line%%$'\t'*}"      # field 1: before the first tab
-  local rest="${line#*$'\t'}"  # everything after the first tab
-  WT_PATH="${rest%%$'\t'*}"    # field 2: before the second tab
-  WT_BRANCH="${rest#*$'\t'}"   # field 3: after the second tab
+  WT_NUM="${line%%$'\t'*}"
+  local rest="${line#*$'\t'}"
+  WT_PATH="${rest%%$'\t'*}"
+  WT_BRANCH="${rest#*$'\t'}"
 }
 
 # Kill processes belonging to worktrees that no longer exist.
@@ -485,9 +474,7 @@ cleanup_stale_worktree_processes() {
   git worktree prune 2>/dev/null || true
 
   # Build set of active worktree paths — the <path> field of every registered
-  # worktree record (issue-prefixed or not, branch or detached). split_worktree_record
-  # is trim-safe: non-issue / detached worktrees have an empty leading issue-number
-  # field, which `IFS=$'\t' read` would strip — shifting the path out of WT_PATH.
+  # worktree record, issue-prefixed or not.
   local active_paths=""
   local line
   while IFS= read -r line; do

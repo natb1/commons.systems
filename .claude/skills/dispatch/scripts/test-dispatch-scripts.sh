@@ -1830,8 +1830,7 @@ result=$( source "$SCRIPT_DIR/lib.sh"
 assert_eq "issue-prefixed record split" "42|/wt/42-x|42-x" "$result"
 
 # 2. Non-issue branch record (empty leading issue-number field) → WT_NUM empty,
-#    WT_PATH and WT_BRANCH intact. This is the record the IFS=$'\t' read idiom
-#    mis-parsed: the leading tab was trimmed, shifting the path into WT_NUM.
+#    WT_PATH and WT_BRANCH intact.
 echo "Test: non-issue record → empty WT_NUM, path intact"
 result=$( source "$SCRIPT_DIR/lib.sh"
           split_worktree_record $'\t/repo\tmain'
@@ -1846,13 +1845,10 @@ result=$( source "$SCRIPT_DIR/lib.sh"
           printf '%s|%s|%s' "$WT_NUM" "$WT_PATH" "$WT_BRANCH" )
 assert_eq "detached/bare record split" "|/wt/detached|" "$result"
 
-# 4. Consumer regression: cleanup_stale_worktree_processes' active-set loop.
-#    A non-issue worktree (main) must contribute its FULL PATH to active_paths.
-#    Pre-fix, the `IFS=$'\t' read -r rec_num rec_path rec_branch` loop trimmed
-#    the empty leading issue-number field and recorded the bare branch name
-#    `main` instead of `/repo` — so a process under that worktree failed the
-#    active-set test and was killed as "stale". This test mirrors the loop and
-#    fails on the pre-fix code.
+# 4. Integration: mirrors cleanup_stale_worktree_processes' active-set loop.
+#    Every worktree path, including a non-issue worktree like `main`, must reach
+#    active_paths intact — split_worktree_record must not let the bare branch
+#    name `main` land there in place of the path `/repo`.
 echo "Test: non-issue worktree path reaches the active set"
 setup
 printf 'worktree /repo\nHEAD abc123\nbranch refs/heads/main\n\nworktree /worktrees/42-x\nHEAD def456\nbranch refs/heads/42-x\n\nworktree /worktrees/detached\nHEAD ghi789\n\n' \
