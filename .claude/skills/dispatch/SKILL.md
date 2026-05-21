@@ -119,8 +119,15 @@ It walks open blockers and sub-issues to an open leaf and prints one issue numbe
 Retarget to that leaf.
 
 Skip leaf tracing when:
-- A PR exists for the target (`pr <num> <branch> <phase>` result, or an explicit
-  issue argument that already has a PR) — implementation is already underway.
+- A PR exists for the target — check with:
+  ```bash
+  .claude/skills/dispatch/scripts/dispatch-find-pr <N>
+  ```
+  If it prints a PR number, implementation is already underway; skip leaf tracing.
+  This applies whether the target arrived as a `pr <num> <branch> <phase>` queue
+  result or as an explicit issue argument. **Do not infer PR existence from title
+  search or other ad-hoc `gh` queries** — `dispatch-find-pr` is the only correct
+  check (see Step 4).
 - The target was current-worktree detected (`worktree <N>` result) — the worktree
   is the already-committed unit of work; retargeting to a sub-issue or blocker
   would be wrong.
@@ -190,7 +197,16 @@ against the final target (issue number or branch):
 
 It prints exactly one phase name. CI status is checked **before** labels — a draft PR
 with non-green CI is always `verify`, regardless of which `dispatch:*` labels are
-present. Map the phase:
+present.
+
+**Do not infer the phase from hand-rolled `gh` queries.** `dispatch-phase` is the
+only valid phase-derivation path (or the pre-derived `<phase>` field from
+`dispatch-select-target` for queue-selected PRs). PR existence in particular
+**must not** be checked via title search (e.g. `gh pr list --search "<N> in:title"`)
+— a PR's title may not contain the issue number. The only correct PR-existence check
+is `dispatch-find-pr <N>`, which uses the `<issue>-` branch-prefix convention.
+
+Map the phase:
 
 | Phase | Meaning | Next action |
 |---|---|---|
@@ -264,15 +280,21 @@ respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
 
 ## 6. Pre-Implementation Relevance Review
 
-Before invoking `/plan-implement` on an `implement`-phase (no-PR) issue, run the
-`ref-ready` Step 3e relevance check against the current codebase: has the codebase
-evolved to make the issue obsolete, or are any requirements already addressed by
-existing code?
+Before invoking `/plan-implement` on an `implement`-phase issue, confirm no PR
+exists for the target by running:
+
+```bash
+.claude/skills/dispatch/scripts/dispatch-find-pr <N>
+```
+
+If it prints a PR number, **skip this relevance review** and advance directly to
+phase derivation (Step 4) — a PR already exists and implementation is underway.
+
+If `dispatch-find-pr` prints nothing, run the `ref-ready` Step 3e relevance check
+against the current codebase: has the codebase evolved to make the issue obsolete,
+or are any requirements already addressed by existing code?
 
 - **Still relevant** → proceed to invoke `/plan-implement`.
 - **Obsolete or already addressed** → **stop** and report to the user what made the
   issue obsolete or what already exists, and recommend closing the issue or
   re-running `/ready`. Do **not** invoke `/plan-implement`.
-
-This review is **skipped** for the `verify` case — a PR already exists and
-implementation is underway.

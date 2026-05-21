@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Print the open PR number for an issue, or nothing if no PR exists.
+# Usage: dispatch-find-pr <issue-num>
+#
+# This is the canonical PR-existence check for the dispatch workflow.
+# PR existence MUST NOT be inferred from title search or other ad-hoc
+# gh queries. The only correct correlation is the branch-name prefix
+# convention: the PR whose headRefName starts with "<issue>-".
+#
+# Environment:
+#   DISPATCH_PR_LIST — optional. A JSON array of open PRs supplied by the
+#     caller (dispatch-select-target passes it to avoid a redundant
+#     gh pr list per PR). When set and non-empty, it is used in place of a
+#     self-issued gh pr list. Must include the fields
+#     number,headRefName,isDraft,statusCheckRollup,labels.
+set -euo pipefail
+
+ARG="${1:-}"
+if [[ -z "$ARG" || ! "$ARG" =~ ^[0-9]+$ ]]; then
+  echo "error: usage: dispatch-find-pr <issue-num>" >&2
+  exit 1
+fi
+
+# Use the caller-supplied open-PR list when DISPATCH_PR_LIST is set.
+# Otherwise fetch the list ourselves — standalone callers rely on this path.
+if [[ -n "${DISPATCH_PR_LIST:-}" ]]; then
+  PR_LIST="$DISPATCH_PR_LIST"
+else
+  PR_LIST=$(gh pr list --state open --json number,headRefName,isDraft,statusCheckRollup,labels)
+fi
+
+# Find the PR whose headRefName starts with "<issue>-" and print its number.
+printf '%s' "$PR_LIST" | jq -r --arg num "${ARG}-" \
+  'map(select(.headRefName | startswith($num))) | .[0].number // empty'
