@@ -1919,7 +1919,8 @@ lock_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   STUB_DIR=""
-  unset DISPATCH_LOCK_FILE DISPATCH_LOCK_SESSION_PID DISPATCH_LOCK_PROC_ROOT
+  unset DISPATCH_LOCK_FILE DISPATCH_LOCK_SESSION_PID DISPATCH_LOCK_PROC_ROOT \
+    DISPATCH_LOCK_WAIT_INTERVAL DISPATCH_LOCK_WAIT_TIMEOUT
 }
 
 # Helper: write a synthetic <proc>/<pid>/comm file with the given comm string.
@@ -1935,6 +1936,15 @@ lock_proc_status() {
   local pid="$1" ppid="$2"
   mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
   printf 'Name:\tbash\nPPid:\t%s\n' "$ppid" > "$DISPATCH_LOCK_PROC_ROOT/$pid/status"
+}
+
+# Helper: write a synthetic <proc>/<pid>/cmdline file with NUL-separated argv,
+# matching the kernel's /proc cmdline format. Used to mark a process as a
+# non-session Claude daemon (e.g. argv carrying `--bg-spare`).
+lock_proc_cmdline() {
+  local pid="$1"; shift
+  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
+  printf '%s\0' "$@" > "$DISPATCH_LOCK_PROC_ROOT/$pid/cmdline"
 }
 
 # --- Test 1: first acquisition with an absent lock file ----------------------
@@ -2063,6 +2073,172 @@ assert_eq "proc-walk prints acquired" "acquired" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
 assert_eq "proc-walk records the .claude ancestor PID, not \$PPID" \
   "$claude_pid" "$lock_contents"
+lock_teardown
+
+# --- Test 8: --wait with an own-session record acquires immediately ----------
+#
+# An own-session PID is recorded. --wait must NOT poll — try_acquire claims it
+# on iteration 1. WAIT_TIMEOUT=0 proves no wait happened: a real wait would
+# have to time out, which 0 cannot survive.
+
+echo "Test: --wait with an own-session record acquires immediately"
+lock_setup
+printf '%s\n' 800800 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 800800 ".claude-unwrapp"
+export DISPATCH_LOCK_SESSION_PID=800800
+export DISPATCH_LOCK_WAIT_TIMEOUT=0
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --wait 2>/dev/null); rc=$?
+assert_eq "--wait own-session exits 0" "0" "$rc"
+assert_eq "--wait own-session prints acquired" "acquired" "$out"
+lock_teardown
+
+# --- Test 9: --wait against a live foreign holder times out → busy -----------
+#
+# The recorded PID is a live foreign .claude session that never goes away. The
+# --wait loop polls until WAIT_TIMEOUT elapses, then prints busy and exits 0.
+
+echo "Test: --wait against a live foreign holder times out and prints busy"
+lock_setup
+printf '%s\n' 900900 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 900900 ".claude-unwrapp"          # live foreign holder
+export DISPATCH_LOCK_SESSION_PID=900901
+lock_proc_pid 900901 ".claude-unwrapp"          # our own session
+export DISPATCH_LOCK_WAIT_TIMEOUT=1
+export DISPATCH_LOCK_WAIT_INTERVAL=0.2
+# `set -e` is in effect: capture the exit code with an if/else.
+if out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --wait 2>/dev/null); then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "--wait timeout exits 0" "0" "$rc"
+assert_eq "--wait timeout prints busy" "busy" "$out"
+lock_teardown
+
+# --- Test 10: --wait acquires once a contended holder goes stale -------------
+#
+# The recorded PID is a live foreign holder when --wait starts. Mid-wait its
+# synthetic /proc entry is removed, so the next poll's liveness check fails and
+# the waiter reclaims the lock — recording its own session PID.
+
+echo "Test: --wait acquires once a contended holder goes stale"
+lock_setup
+printf '%s\n' 101010 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 101010 ".claude-unwrapp"          # live foreign holder
+export DISPATCH_LOCK_SESSION_PID=101011
+lock_proc_pid 101011 ".claude-unwrapp"          # our own session
+export DISPATCH_LOCK_WAIT_INTERVAL=0.1
+export DISPATCH_LOCK_WAIT_TIMEOUT=10
+( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --wait ) >"$STUB_DIR/out10" 2>&1 &
+wait_pid=$!
+sleep 0.5
+# Holder goes away — next poll's liveness check fails, waiter reclaims.
+rm -rf "$DISPATCH_LOCK_PROC_ROOT/101010"
+wait "$wait_pid"
+out=$(cat "$STUB_DIR/out10" 2>/dev/null || true)
+assert_eq "--wait reclaim prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "--wait reclaim records our session PID" "101011" "$lock_contents"
+lock_teardown
+
+# --- Test 11: --release with an own-session record → released, file emptied --
+
+echo "Test: --release with an own-session record clears the lock file"
+lock_setup
+printf '%s\n' 111100 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 111100 ".claude-unwrapp"
+export DISPATCH_LOCK_SESSION_PID=111100
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "--release own-session exits 0" "0" "$rc"
+assert_eq "--release own-session prints released" "released" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$lock_contents" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: --release empties the lock file"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: --release empties the lock file"
+  echo "    lock file: '$lock_contents'"
+fi
+lock_teardown
+
+# --- Test 12: --release with a foreign PID recorded → noop, file unchanged ---
+
+echo "Test: --release with a foreign PID recorded is a no-op"
+lock_setup
+printf '%s\n' 121200 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 121200 ".claude-unwrapp"          # live foreign holder
+export DISPATCH_LOCK_SESSION_PID=121201
+lock_proc_pid 121201 ".claude-unwrapp"          # our own session
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "--release foreign exits 0" "0" "$rc"
+assert_eq "--release foreign prints noop" "noop" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "--release foreign leaves the lock file unchanged" \
+  "121200" "$lock_contents"
+lock_teardown
+
+# --- Test 13: unknown argument exits 2 ---------------------------------------
+
+echo "Test: an unknown argument exits 2"
+lock_setup
+# `set -e` is in effect: capture the exit code with an if/else.
+if ( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --bogus ) 2>/dev/null; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "unknown argument exits 2" "2" "$rc"
+lock_teardown
+
+# --- Test 14: a recorded --bg-spare daemon PID is reclaimable (non-holder) ---
+#
+# The recorded PID is alive with comm ".claude-unwrapp" — identical to a real
+# session — but its cmdline carries `--bg-spare`, marking a background-spare
+# daemon, not a /dispatch session. is_live_claude must reject it, so the
+# calling session reclaims the lock. The comm-only predicate would wrongly
+# report busy and wedge the lock on the daemon.
+
+echo "Test: a recorded --bg-spare daemon PID is reclaimable, not a holder"
+lock_setup
+printf '%s\n' 141400 > "$DISPATCH_LOCK_FILE"
+lock_proc_pid 141400 ".claude-unwrapp"                   # comm looks like a session
+lock_proc_cmdline 141400 ".claude-unwrapped" "--bg-spare"  # ... but cmdline marks a spare daemon
+export DISPATCH_LOCK_SESSION_PID=141401
+lock_proc_pid 141401 ".claude-unwrapp"                   # our own live session
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "bg-spare-holder exits 0" "0" "$rc"
+assert_eq "bg-spare-holder prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "bg-spare-holder lock file rewritten to the caller's session PID" \
+  "141401" "$lock_contents"
+lock_teardown
+
+# --- Test 15: the ancestry walk skips a --bg-spare daemon ancestor -----------
+#
+# Like Test 7, DISPATCH_LOCK_SESSION_PID is unset so the /proc walk runs. The
+# script's $PPID ($$) is a non-.claude shell; its parent is a --bg-spare
+# daemon (`.claude` comm, `--bg-spare` cmdline); the grandparent is a real
+# .claude session. The walk must skip the spare daemon and record the session.
+
+echo "Test: the ancestry walk skips a --bg-spare daemon ancestor"
+lock_setup
+spare_pid=151500
+session_pid=151501
+lock_proc_pid "$$" "bash"                       # script's $PPID — not a .claude proc
+lock_proc_status "$$" "$spare_pid"              # ... its parent is the spare daemon
+lock_proc_pid "$spare_pid" ".claude-unwrapp"    # spare daemon: comm looks like a session
+lock_proc_cmdline "$spare_pid" ".claude-unwrapped" "--bg-spare"  # ... but cmdline marks it
+lock_proc_status "$spare_pid" "$session_pid"    # ... its parent is the real session
+lock_proc_pid "$session_pid" ".claude-unwrapp"  # real session (no cmdline → comm-only verdict)
+rc=0
+( exec "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) \
+  >"$STUB_DIR/out15" 2>/dev/null || rc=$?
+out=$(cat "$STUB_DIR/out15" 2>/dev/null || true)
+assert_eq "spare-ancestor walk exits 0" "0" "$rc"
+assert_eq "spare-ancestor walk prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "spare-ancestor walk records the session PID, not the spare daemon" \
+  "$session_pid" "$lock_contents"
 lock_teardown
 
 # ============================================================================
