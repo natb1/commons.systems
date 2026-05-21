@@ -1,24 +1,50 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { timestampMockFactory, ts, createMockDataSource } from "../helpers";
 import type { DataSource } from "../../src/data-source";
-import type { StatementItem, StatementItemId, Statement, Transaction, TransactionId } from "../../src/firestore";
+import type { Account, JournalEntry, JournalLeg, ReconciliationEvent, Statement } from "../../src/firestore";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
 import { renderAccountsReconcile } from "../../src/pages/accounts-reconcile";
 
-function item(overrides: Partial<StatementItem> = {}): StatementItem {
+// Seed-shaped data for Example Bank / Checking, period 2025-02 (issue #553 reference).
+function account(overrides: Partial<Account> = {}): Account {
   return {
-    id: "si-1",
-    statementItemId: "si-1" as StatementItemId,
-    statementId: "stmt-1" as any,
-    institution: "Bank",
+    id: "Example Bank_Checking",
+    institution: "Example Bank",
     account: "Checking",
-    period: "2025-02",
-    amount: -42.17,
-    timestamp: ts("2025-02-08"),
-    description: "SHELL GAS",
-    fitid: "F1",
+    accountType: "asset",
+    openingBalance: 1500,
+    openingBalanceDate: ts("2024-10-01"),
+    groupId: null,
+    ...overrides,
+  };
+}
+
+function entry(overrides: Partial<JournalEntry> = {}): JournalEntry {
+  return {
+    id: "je-grocery",
+    timestamp: ts("2025-02-05"),
+    description: "Grocery Store",
+    note: null,
+    legCount: 2,
+    groupId: null,
+    ...overrides,
+  };
+}
+
+function leg(overrides: Partial<JournalLeg> = {}): JournalLeg {
+  return {
+    id: "jl-grocery-checking",
+    entryId: "je-grocery",
+    accountId: "Example Bank_Checking",
+    debit: 0,
+    credit: 84.5,
+    timestamp: ts("2025-02-05"),
+    cleared: true,
+    reconciledAt: null,
+    reconciledEventId: null,
+    statementItemId: null,
     groupId: null,
     ...overrides,
   };
@@ -26,13 +52,13 @@ function item(overrides: Partial<StatementItem> = {}): StatementItem {
 
 function stmt(overrides: Partial<Statement> = {}): Statement {
   return {
-    id: "s-1",
-    statementId: "stmt-1" as any,
-    institution: "Bank",
+    id: "stmt-checking-2025-02",
+    statementId: "stmt-checking-2025-02" as any,
+    institution: "Example Bank",
     account: "Checking",
-    balance: 1000,
+    balance: 2315.5,
     period: "2025-02",
-    balanceDate: null,
+    balanceDate: "2025-02-28",
     lastTransactionDate: null,
     groupId: null,
     virtual: false,
@@ -40,25 +66,20 @@ function stmt(overrides: Partial<Statement> = {}): Statement {
   };
 }
 
-function txn(overrides: Partial<Transaction> = {}): Transaction {
+function event(overrides: Partial<ReconciliationEvent> = {}): ReconciliationEvent {
   return {
-    id: "t-1" as TransactionId,
-    institution: "Bank",
+    id: "Example Bank_Checking_2025-02-28",
+    institution: "Example Bank",
     account: "Checking",
-    description: "Gas Station",
-    amount: 42.17,
-    note: "",
-    category: "Transportation:Fuel",
-    reimbursement: 0,
-    budget: null,
-    timestamp: ts("2025-02-08"),
-    statementId: null,
-    statementItemId: null,
+    reconciledThroughDate: ts("2025-02-28"),
+    bankBalance: 2315.5,
+    clearedBalance: 2315.5,
+    adjustment: 0,
+    reconciledBy: "user@example.com",
+    reconciledAt: ts("2025-02-28"),
+    legIds: ["jl-grocery-checking"],
+    adjustmentEntryId: null,
     groupId: null,
-    normalizedId: null,
-    normalizedPrimary: true,
-    normalizedDescription: null,
-    virtual: false,
     ...overrides,
   };
 }
@@ -71,44 +92,79 @@ describe("accounts-reconcile page smoke", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // location.search drives parseReconcileQuery
-    // @ts-expect-error jsdom allows reassigning location
-    window.history.replaceState(null, "", "/accounts/reconcile?institution=Bank&account=Checking&period=2025-02");
+    window.history.replaceState(
+      null,
+      "",
+      "/accounts/reconcile?institution=Example%20Bank&account=Checking&period=2025-02",
+    );
   });
 
-  it("renders heading, controls, and three-column skeleton", async () => {
+  it("renders heading, controls, and the journal-leg list", async () => {
     const html = await renderAccountsReconcile(seedOptions({
-      getStatementItems: vi.fn().mockResolvedValue([item()]),
-      getTransactions: vi.fn().mockResolvedValue([txn()]),
+      getAccounts: vi.fn().mockResolvedValue([account()]),
+      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
+      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
+      getReconciliationEvents: vi.fn().mockResolvedValue([]),
       getStatements: vi.fn().mockResolvedValue([stmt()]),
-      getReconciliationNotes: vi.fn().mockResolvedValue([]),
     }));
     expect(html).toContain("<h2>Reconcile account</h2>");
     expect(html).toContain('id="reconcile-container"');
     expect(html).toContain('id="reconcile-controls"');
-    expect(html).toContain("reconcile-column-matched");
-    expect(html).toContain("reconcile-column-unmatched-items");
-    expect(html).toContain("reconcile-column-unmatched-txns");
+    expect(html).toContain('id="reconcile-leg-list"');
+    expect(html).toContain("Grocery Store");
   });
 
-  it("renders account and period selectors from statements", async () => {
+  it("renders header totals and the reconcile dialog", async () => {
     const html = await renderAccountsReconcile(seedOptions({
-      getStatementItems: vi.fn().mockResolvedValue([]),
-      getTransactions: vi.fn().mockResolvedValue([]),
-      getStatements: vi.fn().mockResolvedValue([
-        stmt({ institution: "Bank", account: "Checking", period: "2025-01" }),
-        stmt({ institution: "Bank", account: "Checking", period: "2025-02" }),
-        stmt({ institution: "Credit Union", account: "Savings", period: "2025-02" }),
+      getAccounts: vi.fn().mockResolvedValue([account()]),
+      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
+      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
+      getReconciliationEvents: vi.fn().mockResolvedValue([]),
+      getStatements: vi.fn().mockResolvedValue([stmt()]),
+    }));
+    expect(html).toContain("Cleared balance:");
+    expect(html).toContain("Statement-ending balance:");
+    expect(html).toContain('id="reconcile-dialog"');
+    expect(html).toContain('id="reconcile-open-dialog"');
+  });
+
+  it("renders the account selector from accounts", async () => {
+    const html = await renderAccountsReconcile(seedOptions({
+      getAccounts: vi.fn().mockResolvedValue([
+        account(),
+        account({ id: "Example Credit Union_Savings", institution: "Example Credit Union", account: "Savings" }),
       ]),
-      getReconciliationNotes: vi.fn().mockResolvedValue([]),
+      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
+      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
+      getReconciliationEvents: vi.fn().mockResolvedValue([]),
+      getStatements: vi.fn().mockResolvedValue([stmt()]),
     }));
     expect(html).toContain('id="reconcile-account-select"');
     expect(html).toContain('id="reconcile-period-select"');
-    expect(html).toContain("Bank — Checking");
-    expect(html).toContain("Credit Union — Savings");
+    expect(html).toContain("Example Bank — Checking");
+    expect(html).toContain("Example Credit Union — Savings");
+  });
+
+  it("lists a past reconciliation when one exists", async () => {
+    const html = await renderAccountsReconcile(seedOptions({
+      getAccounts: vi.fn().mockResolvedValue([account()]),
+      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
+      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
+      getReconciliationEvents: vi.fn().mockResolvedValue([event()]),
+      getStatements: vi.fn().mockResolvedValue([stmt()]),
+    }));
+    expect(html).toContain("Past reconciliations");
+    expect(html).toContain('data-event-id="Example Bank_Checking_2025-02-28"');
   });
 
   it("renders seed-data notice when not authorized", async () => {
-    const html = await renderAccountsReconcile(seedOptions());
+    const html = await renderAccountsReconcile(seedOptions({
+      getAccounts: vi.fn().mockResolvedValue([account()]),
+      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
+      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
+      getReconciliationEvents: vi.fn().mockResolvedValue([]),
+      getStatements: vi.fn().mockResolvedValue([stmt()]),
+    }));
     expect(html).toContain("seed-data-notice");
   });
 });

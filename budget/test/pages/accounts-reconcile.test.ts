@@ -1,55 +1,55 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { DataSource } from "../../src/data-source";
-import { timestampMockFactory, createMockDataSource, ts } from "../helpers";
+import { timestampMockFactory, ts } from "../helpers";
 
 vi.mock("firebase/firestore", () => timestampMockFactory());
 
 import { renderReconcileHtml, parseReconcileQuery } from "../../src/pages/accounts-reconcile";
 import type {
-  StatementItem,
-  StatementItemId,
-  Transaction,
-  TransactionId,
+  Account,
+  JournalEntry,
+  JournalLeg,
+  ReconciliationEvent,
   Statement,
-  ReconciliationNote,
 } from "../../src/firestore";
 
-function item(overrides: Partial<StatementItem> = {}): StatementItem {
+function account(overrides: Partial<Account> = {}): Account {
   return {
-    id: "si-1",
-    statementItemId: "si-1" as StatementItemId,
-    statementId: "stmt-1" as any,
+    id: "Bank_Checking",
     institution: "Bank",
     account: "Checking",
-    period: "2025-02",
-    amount: -20,
-    timestamp: ts("2025-02-10"),
-    description: "Coffee Shop",
-    fitid: "F1",
+    accountType: "asset",
+    openingBalance: null,
+    openingBalanceDate: null,
     groupId: null,
     ...overrides,
   };
 }
 
-function txn(overrides: Partial<Transaction> = {}): Transaction {
+function entry(overrides: Partial<JournalEntry> = {}): JournalEntry {
   return {
-    id: "t-1" as TransactionId,
-    institution: "Bank",
-    account: "Checking",
-    description: "Coffee Shop",
-    amount: 20,
-    note: "",
-    category: "Food",
-    reimbursement: 0,
-    budget: null,
+    id: "entry-1",
     timestamp: ts("2025-02-10"),
-    statementId: null,
+    description: "Entry",
+    note: null,
+    legCount: 2,
+    groupId: null,
+    ...overrides,
+  };
+}
+
+function leg(overrides: Partial<JournalLeg> = {}): JournalLeg {
+  return {
+    id: "leg-1",
+    entryId: "entry-1",
+    accountId: "Bank_Checking",
+    debit: 0,
+    credit: 0,
+    timestamp: ts("2025-02-10"),
+    cleared: false,
+    reconciledAt: null,
+    reconciledEventId: null,
     statementItemId: null,
     groupId: null,
-    normalizedId: null,
-    normalizedPrimary: true,
-    normalizedDescription: null,
-    virtual: false,
     ...overrides,
   };
 }
@@ -70,27 +70,54 @@ function stmt(overrides: Partial<Statement> = {}): Statement {
   };
 }
 
+function event(overrides: Partial<ReconciliationEvent> = {}): ReconciliationEvent {
+  return {
+    id: "Bank_Checking_2025-02-28",
+    institution: "Bank",
+    account: "Checking",
+    reconciledThroughDate: ts("2025-02-28"),
+    bankBalance: 500,
+    clearedBalance: 500,
+    adjustment: 0,
+    reconciledBy: "user@example.com",
+    reconciledAt: ts("2025-02-28"),
+    legIds: ["leg-1"],
+    adjustmentEntryId: null,
+    groupId: null,
+    ...overrides,
+  };
+}
+
+function ctx(overrides: Partial<Parameters<typeof renderReconcileHtml>[0]> = {}) {
+  return {
+    journalLegs: [] as JournalLeg[],
+    journalEntries: [] as JournalEntry[],
+    reconciliationEvents: [] as ReconciliationEvent[],
+    accounts: [account()],
+    statements: [] as Statement[],
+    query: { institution: "Bank", account: "Checking", period: "2025-02" },
+    ...overrides,
+  };
+}
+
 describe("parseReconcileQuery", () => {
-  it("returns defaults for empty query string", () => {
+  it("returns nulls for an empty query string", () => {
     const q = parseReconcileQuery("");
     expect(q.institution).toBeNull();
     expect(q.account).toBeNull();
     expect(q.period).toBeNull();
-    expect(q.toleranceDays).toBe(3);
   });
 
-  it("parses full query", () => {
-    const q = parseReconcileQuery("?institution=Bank&account=Checking&period=2025-02&tolerance=7");
+  it("parses institution, account, and period", () => {
+    const q = parseReconcileQuery("?institution=Bank&account=Checking&period=2025-02");
     expect(q.institution).toBe("Bank");
     expect(q.account).toBe("Checking");
     expect(q.period).toBe("2025-02");
-    expect(q.toleranceDays).toBe(7);
   });
 
-  it("ignores tolerance values outside [0, 30]", () => {
-    expect(parseReconcileQuery("?tolerance=-1").toleranceDays).toBe(3);
-    expect(parseReconcileQuery("?tolerance=31").toleranceDays).toBe(3);
-    expect(parseReconcileQuery("?tolerance=abc").toleranceDays).toBe(3);
+  it("does not expose a tolerance field", () => {
+    const q = parseReconcileQuery("?tolerance=7");
+    expect(q).not.toHaveProperty("toleranceDays");
   });
 });
 
@@ -100,132 +127,149 @@ describe("renderReconcileHtml", () => {
   });
 
   it("renders a prompt when no account selected", () => {
-    const html = renderReconcileHtml({
-      statementItems: [],
-      transactions: [],
-      statements: [stmt()],
-      notes: [],
-      query: { institution: null, account: null, period: null, toleranceDays: 3 },
-    });
+    const html = renderReconcileHtml(ctx({
+      query: { institution: null, account: null, period: null },
+    }));
     expect(html).toContain("Select an account and period to reconcile");
     expect(html).toContain("reconcile-controls");
   });
 
-  it("renders three columns with seeded data", () => {
-    const nowMs = ts("2025-02-20").toMillis();
-    const items = [
-      item({ id: "si-m", statementItemId: "si-m" as StatementItemId, amount: -50, timestamp: ts("2025-02-10"), description: "Matched Store" }),
-      item({ id: "si-u", statementItemId: "si-u" as StatementItemId, amount: -10, timestamp: ts("2025-02-15"), description: "Unmatched Store" }),
-    ];
-    const txns = [
-      txn({ id: "t-match" as TransactionId, amount: 50, timestamp: ts("2025-02-10"), description: "Matched Txn" }),
-      txn({ id: "t-only" as TransactionId, amount: 88, timestamp: ts("2025-02-12"), description: "Only Txn" }),
-    ];
-    const html = renderReconcileHtml({
-      statementItems: items,
-      transactions: txns,
-      statements: [stmt()],
-      notes: [],
-      query: { institution: "Bank", account: "Checking", period: "2025-02", toleranceDays: 3 },
-      nowMs,
-    });
-    expect(html).toMatch(/Matched \(1\)/);
-    expect(html).toMatch(/Unmatched statement items \(1\)/);
-    expect(html).toMatch(/Unmatched transactions \(1\)/);
-    expect(html).toContain("Matched Store");
-    expect(html).toContain("Unmatched Store");
-    expect(html).toContain("Only Txn");
+  it("renders a single journal-leg list for the selected account and period", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [
+        entry({ id: "e-1", description: "Grocery Store" }),
+        entry({ id: "e-2", description: "Payroll" }),
+      ],
+      journalLegs: [
+        leg({ id: "leg-a", entryId: "e-1", debit: 50, timestamp: ts("2025-02-05") }),
+        leg({ id: "leg-b", entryId: "e-2", debit: 100, timestamp: ts("2025-02-14") }),
+      ],
+    }));
+    expect(html).toContain('id="reconcile-leg-list"');
+    expect(html).toContain("Grocery Store");
+    expect(html).toContain("Payroll");
+    expect(html).toContain('data-leg-id="leg-a"');
+    expect(html).toContain('data-signed-amount="50"');
+    expect(html).toContain("reconcile-cleared-checkbox");
   });
 
-  it("renders Confirm button for suggested matches and omits it for explicit matches", () => {
-    const explicitItem = item({ id: "si-e", statementItemId: "si-e" as StatementItemId, amount: -100, timestamp: ts("2025-02-10") });
-    const suggestedItem = item({ id: "si-s", statementItemId: "si-s" as StatementItemId, amount: -30, timestamp: ts("2025-02-12"), description: "SuggestedItem" });
-    const txns = [
-      txn({ id: "t-explicit" as TransactionId, amount: 100, timestamp: ts("2025-02-10"), statementItemId: "si-e" as StatementItemId }),
-      txn({ id: "t-suggested" as TransactionId, amount: 30, timestamp: ts("2025-02-12"), description: "SuggestedTxn" }),
-    ];
-    const html = renderReconcileHtml({
-      statementItems: [explicitItem, suggestedItem],
-      transactions: txns,
-      statements: [stmt()],
-      notes: [],
-      query: { institution: "Bank", account: "Checking", period: "2025-02", toleranceDays: 3 },
-    });
-    expect(html).toContain("reconcile-match-suggested");
-    expect(html).toContain("reconcile-match-explicit");
-    const suggestedIdx = html.indexOf("reconcile-match-suggested");
-    expect(html.slice(suggestedIdx).includes("Confirm match")).toBe(true);
+  it("excludes legs outside the selected period", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-old", description: "Old Leg" })],
+      journalLegs: [leg({ id: "leg-old", entryId: "e-old", debit: 10, timestamp: ts("2025-01-15") })],
+    }));
+    expect(html).not.toContain("Old Leg");
+    expect(html).toContain("No journal legs for this account and period");
   });
 
-  it("renders an aging badge for items older than 30 days", () => {
+  it("renders header totals: cleared balance, statement balance, difference", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-1" })],
+      journalLegs: [
+        leg({ id: "leg-a", entryId: "e-1", debit: 200, cleared: true, timestamp: ts("2025-02-05") }),
+        leg({ id: "leg-b", entryId: "e-1", debit: 50, cleared: false, timestamp: ts("2025-02-06") }),
+      ],
+      statements: [stmt({ balance: 150 })],
+    }));
+    expect(html).toContain("Cleared balance:");
+    expect(html).toContain("Statement-ending balance:");
+    expect(html).toContain("Difference:");
+    expect(html).toContain('id="reconcile-open-dialog"');
+  });
+
+  it("omits the statement balance and difference when no statement exists", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-1" })],
+      journalLegs: [leg({ id: "leg-a", entryId: "e-1", debit: 200, timestamp: ts("2025-02-05") })],
+      statements: [],
+    }));
+    expect(html).toContain("Cleared balance:");
+    expect(html).not.toContain("Statement-ending balance:");
+    expect(html).not.toContain("Difference:");
+  });
+
+  it("disables the checkbox for a reconciled leg", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-1" })],
+      journalLegs: [
+        leg({
+          id: "leg-recon",
+          entryId: "e-1",
+          debit: 100,
+          cleared: true,
+          reconciledAt: ts("2025-02-28"),
+          reconciledEventId: "Bank_Checking_2025-02-28",
+          timestamp: ts("2025-02-05"),
+        }),
+      ],
+    }));
+    const legIdx = html.indexOf('data-leg-id="leg-recon"');
+    const legMarkup = html.slice(legIdx, legIdx + 300);
+    expect(legMarkup).toContain("disabled");
+    expect(legMarkup).toContain("checked");
+  });
+
+  it("renders an aging badge for an uncleared leg older than 30 days", () => {
     const nowMs = ts("2025-03-20").toMillis();
-    const oldItem = item({ timestamp: ts("2025-02-01"), description: "Old" });
-    const freshItem = item({ id: "si-fresh", statementItemId: "si-fresh" as StatementItemId, timestamp: ts("2025-03-15"), description: "Fresh" });
-    const html = renderReconcileHtml({
-      statementItems: [oldItem, freshItem],
-      transactions: [],
-      statements: [stmt()],
-      notes: [],
-      query: { institution: "Bank", account: "Checking", period: "2025-02", toleranceDays: 3 },
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-old" })],
+      journalLegs: [
+        leg({ id: "leg-old", entryId: "e-old", debit: 10, cleared: false, timestamp: ts("2025-02-01") }),
+      ],
+      query: { institution: "Bank", account: "Checking", period: "2025-02" },
       nowMs,
-    });
+    }));
     expect(html).toMatch(/reconcile-aging.*47d/);
   });
 
-  it("renders classification selects for unmatched items", () => {
-    const html = renderReconcileHtml({
-      statementItems: [item()],
-      transactions: [],
-      statements: [stmt()],
-      notes: [],
-      query: { institution: "Bank", account: "Checking", period: "2025-02", toleranceDays: 3 },
-    });
-    expect(html).toContain("reconcile-classification");
-    expect(html).toContain("Timing");
-    expect(html).toContain("Missing entry");
-    expect(html).toContain("Discrepancy");
+  it("does not render an aging badge on a cleared leg", () => {
+    const nowMs = ts("2025-03-20").toMillis();
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-old" })],
+      journalLegs: [
+        leg({ id: "leg-old", entryId: "e-old", debit: 10, cleared: true, timestamp: ts("2025-02-01") }),
+      ],
+      nowMs,
+    }));
+    expect(html).not.toContain("reconcile-aging");
   });
 
-  it("renders existing classification when a reconciliation note is present", () => {
-    const note: ReconciliationNote = {
-      id: "statementItem_si-1",
-      entityType: "statementItem",
-      entityId: "si-1",
-      classification: "timing",
-      note: "waiting on post",
-      updatedAt: ts("2025-02-20"),
-      updatedBy: "user@example.com",
-      groupId: null,
-    };
-    const html = renderReconcileHtml({
-      statementItems: [item()],
-      transactions: [],
-      statements: [stmt()],
-      notes: [note],
-      query: { institution: "Bank", account: "Checking", period: "2025-02", toleranceDays: 3 },
-    });
-    expect(html).toContain('value="timing" selected');
-    expect(html).toContain("waiting on post");
+  it("renders a reconcile dialog defaulting to the statement-ending balance", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-1" })],
+      journalLegs: [leg({ id: "leg-a", entryId: "e-1", debit: 200, timestamp: ts("2025-02-05") })],
+      statements: [stmt({ balance: 321.5 })],
+    }));
+    expect(html).toContain('id="reconcile-dialog"');
+    expect(html).toContain('id="reconcile-bank-balance-input"');
+    expect(html).toContain('value="321.5"');
+    expect(html).toContain('id="reconcile-difference-display"');
   });
 
-  it("tolerance change re-classifies items as matched", () => {
-    const items = [item({ timestamp: ts("2025-02-05") })];
-    const txns = [txn({ timestamp: ts("2025-02-10") })];
-    const loose = renderReconcileHtml({
-      statementItems: items,
-      transactions: txns,
-      statements: [stmt()],
-      notes: [],
-      query: { institution: "Bank", account: "Checking", period: "2025-02", toleranceDays: 7 },
-    });
-    expect(loose).toMatch(/Matched \(1\)/);
-    const tight = renderReconcileHtml({
-      statementItems: items,
-      transactions: txns,
-      statements: [stmt()],
-      notes: [],
-      query: { institution: "Bank", account: "Checking", period: "2025-02", toleranceDays: 3 },
-    });
-    expect(tight).toMatch(/Matched \(0\)/);
+  it("lists past reconciliations for the selected account", () => {
+    const html = renderReconcileHtml(ctx({
+      reconciliationEvents: [
+        event({ id: "Bank_Checking_2025-02-28" }),
+        event({ id: "Other_Savings_2025-02-28", institution: "Other", account: "Savings" }),
+      ],
+    }));
+    expect(html).toContain('id="reconcile-past"');
+    expect(html).toContain("Past reconciliations");
+    expect(html).toContain('data-event-id="Bank_Checking_2025-02-28"');
+    expect(html).not.toContain('data-event-id="Other_Savings_2025-02-28"');
+  });
+
+  it("throws when the selected account is missing", () => {
+    expect(() => renderReconcileHtml(ctx({ accounts: [] }))).toThrow(/not found/);
+  });
+
+  it("does not render any three-column markup", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-1" })],
+      journalLegs: [leg({ id: "leg-a", entryId: "e-1", debit: 10, timestamp: ts("2025-02-05") })],
+    }));
+    expect(html).not.toContain("reconcile-columns");
+    expect(html).not.toContain("reconcile-column-");
+    expect(html).not.toContain("reconcile-match-");
   });
 });
