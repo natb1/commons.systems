@@ -89,6 +89,10 @@ main {
 .landing-hero {
   margin-block: 2rem;
 }
+body[data-route="about"] .landing-hero,
+body[data-route="other"] .landing-hero {
+  display: none;
+}
 
 .landing-hero-band {
   background: var(--accent);
@@ -108,6 +112,25 @@ main {
   margin: 0.25rem 0 0;
   font-size: clamp(0.85rem, 2.2vw, 1rem);
   opacity: 0.9;
+}
+.landing-hero-band-cta {
+  margin: 0.25rem 0 0;
+  font-size: clamp(0.85rem, 2.2vw, 1rem);
+}
+.landing-hero-band-cta a {
+  color: inherit;
+  text-decoration: underline;
+}
+.landing-hero-band-cta a:hover {
+  color: var(--bg);
+  opacity: 0.75;
+}
+.landing-hero-band-cta a:focus-visible {
+  outline: 2px solid var(--bg);
+  outline-offset: 2px;
+}
+.landing-hero-band-cta span {
+  opacity: 0.6;
 }
 .landing-hero-grid {
   display: grid;
@@ -155,6 +178,92 @@ main {
 
 @media (max-width: 768px) {
   .landing-hero-grid { grid-template-columns: 1fr; }
+}
+
+.profile-card {
+  text-align: center;
+}
+.profile-photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 240px;
+  margin: 0 auto 0.75rem;
+  border: 1px solid var(--border);
+}
+.profile-card .profile-name {
+  margin: 0;
+  font-weight: 700;
+}
+.profile-card .profile-location {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.profile-cta {
+  margin-block-start: 1rem;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--border);
+}
+.profile-cta-prompt {
+  margin: 0 0 0.6rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.profile-cta-link {
+  display: block;
+  border: 1px solid var(--border);
+  padding: 0.6rem 0.75rem;
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+  transition: border-color 0.15s ease, outline-color 0.15s ease;
+}
+.profile-cta-link:hover,
+.profile-cta-link:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The /about sidebar carries the profile card and contact CTA — primary
+   content, not the collapsible secondary nav the homepage panel holds.
+   layout.css collapses .sidebar behind the panel toggle below 768px; on
+   /about render it inline in normal flow instead so the contact link stays
+   visible, and drop the now-purposeless toggle. */
+@media (max-width: 767px) {
+  body[data-route="about"] .sidebar {
+    display: block;
+    position: static;
+    width: auto;
+    max-height: none;
+    border: none;
+    padding: 0;
+  }
+
+  body[data-route="about"] .panel-toggle {
+    display: none;
+  }
+}
+
+/* Deliverables list on /about: an amber rule marks each selling point and
+   gives it its own block instead of a dense paragraph. */
+.about-deliverables {
+  list-style: none;
+  margin-block: 1.25rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.about-deliverables li {
+  border-inline-start: 2px solid var(--accent);
+  padding-inline-start: 0.85rem;
+  line-height: 1.55;
+}
+.about-deliverables strong {
+  display: block;
 }
 
 /* Post body uses serif for long-form prose. Code descendants revert to the

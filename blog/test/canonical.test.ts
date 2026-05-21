@@ -49,4 +49,22 @@ describe("updateCanonical", () => {
   it("throws when siteUrl is empty", () => {
     expect(() => updateCanonical("")).toThrow(/siteUrl is required/);
   });
+
+  it("uses explicitPath when provided", () => {
+    updateCanonical("https://example.com", undefined, "/about");
+    const el = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    expect(el!.getAttribute("href")).toBe("https://example.com/about");
+  });
+
+  it("explicitPath overrides slug", () => {
+    updateCanonical("https://example.com", "some-post", "/about");
+    const el = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    expect(el!.getAttribute("href")).toBe("https://example.com/about");
+  });
+
+  it("throws when explicitPath does not start with /", () => {
+    expect(() => updateCanonical("https://example.com", undefined, "about")).toThrow(
+      /explicitPath must start with/,
+    );
+  });
 });
