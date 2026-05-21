@@ -161,11 +161,19 @@ function renderNormalizedGroup(opts: RenderGroupOptions): string {
   </details>`;
 }
 
+/**
+ * Resolve a budget id to its name for chart serialization, degrading an unknown
+ * id to `null` rather than throwing.
+ *
+ * A scroll-loaded transaction can reference a budget added after the
+ * hydration-time `budgetIdToName` map was built. The chart is a derived view,
+ * so it treats such a transaction as unbudgeted instead of aborting
+ * serialization (#578). The table path (`buildRowParts`) still throws loudly on
+ * an unknown id — the source of truth surfaces genuine data corruption.
+ */
 function resolveBudgetName(budgetId: string | null, budgetIdToName: Map<string, string>): string | null {
   if (budgetId === null) return null;
-  const name = budgetIdToName.get(budgetId);
-  if (name === undefined) throw new DataIntegrityError(`Transaction references unknown budget ID: ${budgetId}`);
-  return name;
+  return budgetIdToName.get(budgetId) ?? null;
 }
 
 export function serializeChartTransactions(transactions: Transaction[], budgetIdToName: Map<string, string>): SerializedChartTransaction[] {

@@ -311,25 +311,48 @@ export function hydrateCategorySankey(container: HTMLElement): void {
 
   update();
 
-  // Listener for older transactions scroll-loaded by home-hydrate.ts: merges the
-  // new data into allTxns, adjusts the week slider to preserve the current
-  // position, then calls update() to re-render the chart and re-apply filters.
+  // Listener for older transactions scroll-loaded by home-hydrate.ts. The chart
+  // update and the table re-filter run as two independent blocks: a failed chart
+  // serialization or render must not skip the table re-filter, which is the only
+  // thing that re-applies the active filter to scroll-loaded rows (#578).
   document.addEventListener(TRANSACTIONS_APPENDED_EVENT, ((e: CustomEvent<SerializedChartTransaction[]>) => {
-    if (!container.isConnected) return;
+    const newTxns = e.detail;
+
+    // Chart-update block: merge the new data into allTxns, adjust the week
+    // slider to preserve position, then re-render. Skipped when the chart
+    // container is gone; render() is called directly since the table re-filter
+    // now runs separately below.
+    if (container.isConnected) {
+      try {
+        assertChartTransactions(newTxns);
+        const targetWeekMs = weeks[currentEndWeekIdx];
+        allTxns.push(...newTxns);
+        weeks = distinctWeeks(allTxns);
+        endSlider.max = String(weeks.length - 1);
+        currentEndWeekIdx = weeks.indexOf(targetWeekMs);
+        if (currentEndWeekIdx === -1) currentEndWeekIdx = weeks.length - 1;
+        endSlider.value = String(currentEndWeekIdx);
+        endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
+        render();
+      } catch (error) {
+        container.textContent = "Chart update failed after loading new transactions.";
+        setTimeout(() => { throw error; }, 0);
+      }
+    }
+
+    // Table re-filter block: re-apply the active filter to the newly inserted
+    // rows. Runs unconditionally — not gated on the chart container, not inside
+    // the chart try/catch — so a failed chart serialization or render cannot
+    // leave scroll-loaded rows with stale visibility (#578).
     try {
-      const newTxns = e.detail;
-      assertChartTransactions(newTxns);
-      const targetWeekMs = weeks[currentEndWeekIdx];
-      allTxns.push(...newTxns);
-      weeks = distinctWeeks(allTxns);
-      endSlider.max = String(weeks.length - 1);
-      currentEndWeekIdx = weeks.indexOf(targetWeekMs);
-      if (currentEndWeekIdx === -1) currentEndWeekIdx = weeks.length - 1;
-      endSlider.value = String(currentEndWeekIdx);
-      endLabel.textContent = formatDate(weeks[currentEndWeekIdx]);
-      update();
+      filterTable({
+        mode: currentMode,
+        showCardPayment: currentShowCardPayment,
+        unbudgetedOnly: currentUnbudgetedOnly,
+        categoryFilter: currentCategoryFilter,
+        budgetFilter: currentBudgetFilter,
+      });
     } catch (error) {
-      container.textContent = "Chart update failed after loading new transactions.";
       setTimeout(() => { throw error; }, 0);
     }
   }) as EventListener);
