@@ -22,7 +22,7 @@ export function renderAboutPanelHtml(): string {
       <p class="profile-name">Nathan Buesgens</p>
       <p class="profile-location">Baltimore, MD</p>
       <div class="profile-cta">
-        <p class="profile-cta-prompt">Email me directly — you'll reach the person who will build your solution.</p>
+        <p class="profile-cta-prompt">Email me directly — you'll reach the person who will build your software.</p>
         <a class="profile-cta-link" href="mailto:nathan@natb1.com">nathan@natb1.com</a>
       </div>
     </section>

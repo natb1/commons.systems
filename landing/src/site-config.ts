@@ -1,6 +1,6 @@
 import type { LinkSection } from "@commons-systems/blog/components/info-panel";
 import type { NavLink } from "@commons-systems/blog/prerender";
-import type { SiteDefaults } from "@commons-systems/blog/og-meta";
+import type { SiteDefaults, StaticPageMeta } from "@commons-systems/blog/og-meta";
 import type { Organization, Author, Person, SoftwareApplication } from "@commons-systems/blog/seo";
 
 export const SITE_URL = "https://commons.systems";
@@ -10,11 +10,11 @@ export const NAV_LINKS: NavLink[] = [
   { href: "/about", label: "About", align: "end" },
 ];
 
-export const ABOUT_PAGE_META = {
+export const ABOUT_PAGE_META: StaticPageMeta = {
   url: "/about",
   title: "About",
   description: "Nathan Buesgens — independent contractor focused on training the AI skills that decouple a business from professional services and platform vendors.",
-  type: "profile" as const,
+  type: "profile",
 };
 
 export const PERSON: Person = {
