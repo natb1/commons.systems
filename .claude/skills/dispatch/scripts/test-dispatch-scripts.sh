@@ -1095,6 +1095,30 @@ assert_eq "qa applies dispatch:qa-done" \
 assert_eq "qa: no gh label create when label exists" "absent" "$(label_create_state)"
 teardown
 
+echo "Test: simplify → dispatch:refactored (apply only, no label create)"
+setup
+"$TMPDIR_TEST/dispatch-complete-phase" 25 simplify
+assert_eq "simplify applies dispatch:refactored" \
+  "pr edit 25 --add-label dispatch:refactored" "$(cat "$STUB_DIR/gh-pr-edit.log")"
+assert_eq "simplify: no gh label create when label exists" "absent" "$(label_create_state)"
+teardown
+
+echo "Test: review → dispatch:reviewed (apply only, no label create)"
+setup
+"$TMPDIR_TEST/dispatch-complete-phase" 30 review
+assert_eq "review applies dispatch:reviewed" \
+  "pr edit 30 --add-label dispatch:reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
+assert_eq "review: no gh label create when label exists" "absent" "$(label_create_state)"
+teardown
+
+echo "Test: security → dispatch:security-reviewed (apply only, no label create)"
+setup
+"$TMPDIR_TEST/dispatch-complete-phase" 40 security
+assert_eq "security applies dispatch:security-reviewed" \
+  "pr edit 40 --add-label dispatch:security-reviewed" "$(cat "$STUB_DIR/gh-pr-edit.log")"
+assert_eq "security: no gh label create when label exists" "absent" "$(label_create_state)"
+teardown
+
 # Label missing: the apply fails "not found", so the script creates the
 # label (BFD4F2, "dispatch workflow: <suffix> phase complete") and retries.
 echo "Test: label missing → create then retry"
@@ -1131,6 +1155,22 @@ setup
 if "$TMPDIR_TEST/dispatch-complete-phase" 25 2>/dev/null; then rc=0; else rc=$?; fi
 assert_eq "missing phase arg exits non-zero" "1" "$rc"
 teardown
+
+# Static guard: only dispatch-complete-phase contains the BFD4F2 hex color.
+# Exclude this test file (which references BFD4F2 in fixtures and comments)
+# rather than whitelisting specific extensions — that way any future
+# regression in a .sh wrapper is caught alongside .md regressions.
+echo "Test: only dispatch-complete-phase contains the BFD4F2 hex"
+REPO_ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
+# grep exits 2 on permission errors (e.g. sandbox-blocked directories); treat
+# that as non-fatal — the important check is the matched file list, not whether
+# grep could read every directory.
+matches=$(grep -rl 'BFD4F2' "$REPO_ROOT/.claude" \
+  --exclude='test-dispatch-scripts.sh' 2>/dev/null \
+  | sed "s|$REPO_ROOT/||" | sort || true)
+assert_eq "only dispatch-complete-phase owns BFD4F2" \
+  ".claude/skills/dispatch/scripts/dispatch-complete-phase" \
+  "$matches"
 
 # ============================================================================
 # dispatch-resolve-worktree tests
