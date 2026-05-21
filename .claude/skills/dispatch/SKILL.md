@@ -7,7 +7,10 @@ description: Orchestrate the issue workflow — select the next task, derive its
 
 Selects the single most pressing task, resolves its worktree, derives the current
 workflow phase from PR/issue status, and dispatches **exactly one phase skill** —
-then stops. Re-invoke `/dispatch` (or `/loop /dispatch`) to advance to the next phase.
+then stops. Each `/dispatch` is a `claude --bg` background job (#725): a job
+advances one phase, passes the baton to a fresh `/dispatch` job, then
+self-closes (`claude stop`). That self-perpetuating chain advances the
+workflow; the #725 heartbeat re-seeds it when no job is running.
 
 `/dispatch` takes an **optional issue-or-PR-number argument** (leading `#`
 optional). With an argument, it targets that issue and skips the queue scan; a
