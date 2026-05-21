@@ -109,14 +109,23 @@ Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 ## 2. Trace to an Open Leaf
 
 When the resolved target is an **open issue with no PR** — whether queue-selected
-(`issue <num>`) or named by argument — trace to its open leaf:
+(`issue <num>`) or named by argument — trace to its open leaf. Pass the mode that
+matches Step 3's resolve call: `queue` if queue-selected, `explicit` if named by
+an explicit `/dispatch` argument:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-trace-leaf <N>
+.claude/skills/dispatch/scripts/dispatch-trace-leaf <N> <queue|explicit>
 ```
 
 It walks open blockers and sub-issues to an open leaf and prints one issue number.
 Retarget to that leaf.
+
+In `queue` mode the descent is worktree-aware: children whose `<N>-*` branch is
+an existing local worktree (owned by another session) are skipped, and the trace
+falls back to the next ready sibling. If every reachable open leaf in the subtree
+is worktree-conflicted, the script exits non-zero with a message on stderr —
+report "subtree fully blocked — all open leaves have worktrees owned by other
+sessions" (name `<N>`) and **stop**; do not dispatch.
 
 Skip leaf tracing when:
 - A PR exists for the target (`pr <num> <branch> <phase>` result, or an explicit
@@ -194,7 +203,7 @@ present. Map the phase:
 
 | Phase | Meaning | Next action |
 |---|---|---|
-| `implement` | no PR on the target | relevance review (Step 6), then `/plan-implement` |
+| `implement` | no PR on the target | relevance review (Step 6), then dispatch its verdict |
 | `verify` | draft PR, CI completed and failed | `/verify-pr` |
 | `waiting` | draft PR, CI in progress (running/queued/not started) | monitor CI to completion with a `sonnet` subagent, then re-derive the phase and dispatch it (Step 5) |
 | `qa` | draft PR, CI green, no `dispatch:*` label | `/dispatch-qa` |
@@ -208,9 +217,10 @@ present. Map the phase:
 Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 `/dispatch` invocation.
 
-- **`implement`** — run the Step 6 relevance review first. If it passes, invoke
-  `/plan-implement`. The draft PR's existence plus its CI status is its own marker —
-  `/plan-implement` gets **no** `dispatch:*` label.
+- **`implement`** — run the Step 6 relevance review and dispatch the verdict it
+  returns (`proceed` / `adjust` / `stop` — see Step 6). The draft PR's existence
+  plus its CI status is its own marker — `/plan-implement` gets **no**
+  `dispatch:*` label.
 - **`verify`** — invoke `/verify-pr`. It runs a single pass: fix one set of failed
   CI checks, record the outcome, post it, stop. No label.
 - **`waiting`** — CI checks are still running or queued. Monitor them to
@@ -264,15 +274,65 @@ respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
 
 ## 6. Pre-Implementation Relevance Review
 
-Before invoking `/plan-implement` on an `implement`-phase (no-PR) issue, run the
-`ref-ready` Step 3e relevance check against the current codebase: has the codebase
-evolved to make the issue obsolete, or are any requirements already addressed by
-existing code?
+This step runs **only** for the `implement` phase — a no-PR target. Every phase
+with an existing PR (`verify` onward) skips it: implementation is already
+underway. It is the implementation-time counterpart of `ref-ready`'s Step 3e
+relevance check; the two are deliberately separate — Step 3e is creation-time
+and `$BASELINE_BRANCH`-anchored, this step is pre-implementation and
+`createdAt`-anchored.
 
-- **Still relevant** → proceed to invoke `/plan-implement`.
-- **Obsolete or already addressed** → **stop** and report to the user what made the
-  issue obsolete or what already exists, and recommend closing the issue or
-  re-running `/ready`. Do **not** invoke `/plan-implement`.
+Before invoking `/plan-implement` on an `implement`-phase (no-PR) issue, run a
+creation-date-anchored drift analysis. First, fetch the issue's creation
+timestamp (`dangerouslyDisableSandbox: true` — `gh` needs network):
 
-This review is **skipped** for the `verify` case — a PR already exists and
-implementation is underway.
+```bash
+gh issue view <N> --json createdAt -q .createdAt
+```
+
+Then gather evidence of drift since that timestamp across the paths, references, and
+conventions the issue body names.
+
+### Drift-analysis inputs
+
+Inputs 1, 3, and 4 are independent — issue them in parallel (one message,
+multiple tool calls), together with input 2's initial list call. Input 2 then
+has a dependent per-PR follow-up once that list returns.
+
+1. **Commits since creation** — one `git log --since=<createdAt> -- <path1> <path2>
+   ...` across every file path the issue body names. Relevant commits indicate the
+   area is actively changing and may have shifted the issue's assumptions.
+
+2. **Merged PRs since creation that touched the same files** — list merged PRs in
+   the window (`dangerouslyDisableSandbox: true` — `gh` needs network):
+   ```bash
+   gh pr list --state merged --search "merged:>=<createdAt>" --limit 100
+   ```
+   If the result hits the limit, the drift window is too wide to analyze cheaply
+   — report that and recommend re-running `/ready` instead. Otherwise, for the
+   PRs whose titles plausibly relate to the issue's domain, fetch their changed
+   files and keep the ones overlapping the paths the issue names. Titles and
+   descriptions often surface whether the overlap is incidental or substantive.
+
+3. **Named-reference validity** — one `grep`/`rg` with all names alternated as a
+   single pattern. Names include any file paths, module names, function names, CLI
+   commands, env vars, or npm scripts the issue body cites. Flag anything renamed,
+   moved, or removed since the issue was created.
+
+4. **Convention drift** — re-read `CLAUDE.md` and any `.claude/rules/*.md` whose
+   domain the issue touches. Flag approaches the issue assumes that no longer match
+   current conventions (e.g. a deprecated pattern, a renamed package, a changed
+   config shape).
+
+Input 4 stays with the dispatching session. Inputs 1-3 may be handed to a
+one-shot subagent that returns a structured drift summary — decide this before
+the parallel dispatch so the calls are not run twice. The dispatching session
+always owns the verdict.
+
+### Three-way verdict
+
+- **`proceed`** — drift absent or cosmetic; invoke `/plan-implement`.
+- **`adjust`** — issue still wanted but references, conventions, or scope have
+  shifted; invoke `/new-requirement` with the drift findings as the revised
+  understanding, then `/plan-implement`.
+- **`stop`** — codebase has moved past the need; report what changed and recommend
+  closing the issue or re-running `/ready`. Do **not** invoke `/plan-implement`.
