@@ -65,13 +65,32 @@ core::get_auth_token() {
   printf '%s\n' "$token"
 }
 
+# Percent-encodes a single path segment (whole value). Use for document IDs
+# that must stay within one URL segment — e.g. group_id "foo/bar" -> "foo%2Fbar".
+core::url_encode_segment() {
+  jq -rn --arg s "$1" '$s | @uri'
+}
+
+# Percent-encodes each slash-delimited segment, preserving the separators.
+# Use for multi-segment paths like "audio/prod/groups" so the "/" structure
+# survives — "audio/prod/groups" stays "audio/prod/groups" but any reserved
+# characters within each segment are encoded.
+core::url_encode_path() {
+  jq -rn --arg s "$1" '$s | split("/") | map(@uri) | join("/")'
+}
+
 core::lookup_group_members() {
   local project="$1"
   local groups_path="$2"
   local group_id="$3"
   local token="$4"
 
-  local url="https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/${groups_path}/${group_id}"
+  local encoded_project encoded_groups_path encoded_group_id
+  encoded_project="$(core::url_encode_path "$project")"
+  encoded_groups_path="$(core::url_encode_path "$groups_path")"
+  encoded_group_id="$(core::url_encode_segment "$group_id")"
+
+  local url="https://firestore.googleapis.com/v1/projects/${encoded_project}/databases/(default)/documents/${encoded_groups_path}/${encoded_group_id}"
   local resp_file
   resp_file="$(mktemp)"
   core::register_temp_file "$resp_file"
@@ -146,7 +165,11 @@ core::create_firestore_doc() {
   local body_json="$4"
   local gcs_dest="$5"
 
-  local url="https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/${collection_path}"
+  local encoded_project encoded_collection_path
+  encoded_project="$(core::url_encode_path "$project")"
+  encoded_collection_path="$(core::url_encode_path "$collection_path")"
+
+  local url="https://firestore.googleapis.com/v1/projects/${encoded_project}/databases/(default)/documents/${encoded_collection_path}"
   local resp_file
   resp_file="$(mktemp)"
   core::register_temp_file "$resp_file"
