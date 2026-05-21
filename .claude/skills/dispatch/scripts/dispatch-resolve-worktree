@@ -33,6 +33,9 @@ if [[ ! "$ISSUE" =~ ^[1-9][0-9]*$ ]] || [[ "$MODE" != "explicit" && "$MODE" != "
   exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
 # `here` — the current branch already is the target's branch. Mode-independent,
 # checked before the worktree scan.
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -41,27 +44,19 @@ if [[ "$CURRENT_BRANCH" == "$ISSUE"-* ]]; then
   exit 0
 fi
 
-# `enter` / `conflict` — scan local worktrees for a <issue>-* branch. git
-# worktree list --porcelain emits blank-line-delimited records; each opens with
-# a "worktree <path>" line and (for a branch checkout) carries a
-# "branch refs/heads/<name>" line. Use the first matching record.
-WORKTREE_PATH=""
-while IFS= read -r line; do
-  if [[ "$line" == worktree\ * ]]; then
-    WORKTREE_PATH="${line#worktree }"
-  elif [[ "$line" == branch\ * ]]; then
-    branch="${line#branch }"
-    branch="${branch#refs/heads/}"
-    if [[ "$branch" == "$ISSUE"-* ]]; then
-      if [[ "$MODE" == "explicit" ]]; then
-        echo "enter $WORKTREE_PATH"
-      else
-        echo "conflict $WORKTREE_PATH"
-      fi
-      exit 0
+# `enter` / `conflict` — scan local worktrees for one whose branch carries the
+# <issue>-* prefix, via the shared list_worktree_records helper (lib.sh). Records
+# arrive in `git worktree list` order, so the first matching record wins.
+while IFS=$'\t' read -r num path branch; do
+  if [[ "$num" == "$ISSUE" ]]; then
+    if [[ "$MODE" == "explicit" ]]; then
+      echo "enter $path"
+    else
+      echo "conflict $path"
     fi
+    exit 0
   fi
-done < <(git worktree list --porcelain)
+done < <(list_worktree_records)
 
 # `create` — no worktree matched. Build a sanitized <issue>-<slug> branch name
 # from the issue title. `jq -e` exits non-zero on a null/missing .title, so the
