@@ -9,6 +9,7 @@ import {
   staticPageOgEntries,
   type OgTagEntry,
   type SiteDefaults,
+  type StaticPageMeta,
 } from "./og-meta.ts";
 import { validatePublishedPosts, type PostMeta, type PublishedPost } from "./post-types.ts";
 import { formatPageTitle } from "./page-title.ts";
@@ -57,13 +58,9 @@ export interface StaticPageConfig {
   siteUrl: string;
   titleSuffix: string;
   distDir: string;
-  /** e.g. "/about" — leading slash required, no trailing slash. */
-  path: string;
-  pageTitle: string;
-  pageDescription: string;
-  /** Absolute path from site root; included in og:image / twitter:image when provided. */
-  pageImage?: string;
-  pageType?: "website" | "profile";
+  /** Page metadata; `page.url` is also the output path (e.g. "/about" — leading
+   *  slash required, no trailing slash). */
+  page: StaticPageMeta;
   /** Injected into `<main id="app">`. */
   bodyHtml: string;
   navLinks: NavLink[];
@@ -286,11 +283,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
     siteUrl,
     titleSuffix,
     distDir,
-    path,
-    pageTitle,
-    pageDescription,
-    pageImage,
-    pageType,
+    page,
     bodyHtml,
     navLinks,
     panelHtml,
@@ -301,22 +294,14 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
 
   const template = readFileSync(join(distDir, "index.html"), "utf-8");
 
-  const ogBlock = ogTagsToHtml(
-    staticPageOgEntries(siteUrl, {
-      url: path,
-      title: pageTitle,
-      description: pageDescription,
-      image: pageImage,
-      type: pageType,
-    }),
-  );
+  const ogBlock = ogTagsToHtml(staticPageOgEntries(siteUrl, page));
 
   const jsonLdHtml = (jsonLdBlocks ?? [])
     .map((block) => jsonLdScriptTag(block))
     .join("\n    ");
 
   const seoHead = buildSeoHeadHtml([
-    canonicalLinkTag(`${siteUrl}${path}`),
+    canonicalLinkTag(`${siteUrl}${page.url}`),
     jsonLdHtml,
     relMe && relMe.length > 0 ? relMeLinkTags(relMe) : "",
   ]);
@@ -326,7 +311,7 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
   const beforeTitle = html;
   html = html.replace(
     /<title>.*?<\/title>/,
-    `<title>${escapeHtml(formatPageTitle(titleSuffix, pageTitle))}</title>`,
+    `<title>${escapeHtml(formatPageTitle(titleSuffix, page.title))}</title>`,
   );
   if (html === beforeTitle) throw new Error(`<title> tag not found in template`);
 
@@ -341,8 +326,8 @@ export function prerenderStaticPage(config: StaticPageConfig): void {
     html = stripHomeExtra(html);
   }
 
-  const outDir = join(distDir, path);
+  const outDir = join(distDir, page.url);
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, "index.html"), html);
-  console.log(`Pre-rendered: ${path}/index.html`);
+  console.log(`Pre-rendered: ${page.url}/index.html`);
 }

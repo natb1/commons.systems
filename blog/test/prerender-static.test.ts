@@ -26,14 +26,20 @@ const TEMPLATE = `<!DOCTYPE html>
 const MARKDOWN_HELLO = `# Hello World Title
 This is the **hello world** post.`;
 
-function makeStaticConfig(overrides: Partial<StaticPageConfig> = {}): StaticPageConfig {
+function makeStaticConfig(
+  overrides: Partial<StaticPageConfig> = {},
+  pageOverrides: Partial<StaticPageConfig["page"]> = {},
+): StaticPageConfig {
   return {
     siteUrl: "https://example.com",
     titleSuffix: "My Blog",
     distDir: "/dist",
-    path: "/about",
-    pageTitle: "About",
-    pageDescription: "About this site",
+    page: {
+      url: "/about",
+      title: "About",
+      description: "About this site",
+      ...pageOverrides,
+    },
     bodyHtml: '<article id="about-body">About body</article>',
     navLinks: [
       { href: "/", label: "Home" },
@@ -77,7 +83,7 @@ describe("prerenderStaticPage", () => {
   });
 
   it("injects og:* and twitter:* meta tags with page-specific values", () => {
-    prerenderStaticPage(makeStaticConfig({ pageImage: "/og-card.png" }));
+    prerenderStaticPage(makeStaticConfig({}, { image: "/og-card.png" }));
     const html = getWrittenHtml("/dist/about/index.html");
     expect(html).toContain('<meta property="og:title" content="About">');
     expect(html).toContain('<meta property="og:description" content="About this site">');
@@ -91,8 +97,8 @@ describe("prerenderStaticPage", () => {
     expect(html).toContain('<meta name="description" content="About this site">');
   });
 
-  it("uses og:type 'profile' when pageType is profile", () => {
-    prerenderStaticPage(makeStaticConfig({ pageType: "profile" }));
+  it("uses og:type 'profile' when page.type is profile", () => {
+    prerenderStaticPage(makeStaticConfig({}, { type: "profile" }));
     const html = getWrittenHtml("/dist/about/index.html");
     expect(html).toContain('<meta property="og:type" content="profile">');
     expect(html).not.toContain('<meta property="og:type" content="website">');
@@ -197,10 +203,13 @@ describe("prerenderStaticPage", () => {
 
   it("escapes HTML in title and description", () => {
     prerenderStaticPage(
-      makeStaticConfig({
-        pageTitle: 'Say "Hi" & <Bye>',
-        pageDescription: 'A <script>alert("xss")</script> page',
-      }),
+      makeStaticConfig(
+        {},
+        {
+          title: 'Say "Hi" & <Bye>',
+          description: 'A <script>alert("xss")</script> page',
+        },
+      ),
     );
     const html = getWrittenHtml("/dist/about/index.html");
     expect(html).toContain(
@@ -226,7 +235,7 @@ describe("prerenderStaticPage", () => {
     expect(html).not.toContain('rel="me"');
   });
 
-  it("omits og:image / twitter:image when pageImage is absent", () => {
+  it("omits og:image / twitter:image when page.image is absent", () => {
     prerenderStaticPage(makeStaticConfig());
     const html = getWrittenHtml("/dist/about/index.html");
     expect(html).not.toContain("og:image");
