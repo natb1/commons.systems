@@ -30,9 +30,45 @@ const secondTxn = {
   virtual: false,
 };
 
+const journalEntry = {
+  id: "je-1",
+  timestampMs: 1718064000000,
+  description: "KROGER",
+  note: null,
+  legCount: 2,
+};
+
+const journalLeg = {
+  id: "jl-1",
+  entryId: "je-1",
+  accountId: "bankone_1234",
+  debit: 52.3,
+  credit: 0,
+  timestampMs: 1718064000000,
+  cleared: false,
+  reconciledAtMs: null,
+  reconciledEventId: null,
+  statementItemId: null,
+};
+
+const account = {
+  id: "bankone_1234",
+  institution: "bankone",
+  account: "1234",
+  accountType: "asset" as const,
+  openingBalance: null,
+  openingBalanceDateMs: null,
+};
+
 function makeParsedData() {
   const base = makeBaseParsedData();
-  return { ...base, transactions: [...base.transactions, secondTxn] };
+  return {
+    ...base,
+    transactions: [...base.transactions, secondTxn],
+    journalEntries: [journalEntry],
+    journalLegs: [journalLeg],
+    accounts: [account],
+  };
 }
 
 // Each test gets a fresh database by deleting between tests
@@ -85,6 +121,38 @@ describe("storeParsedData + getAll round-trip", () => {
     expect(results).toHaveLength(1);
     expect(results[0]).toEqual(data.normalizationRules[0]);
   });
+
+  it("stores and retrieves journalEntries", async () => {
+    const data = makeParsedData();
+    await storeParsedData(data);
+    const results = await getAll("journalEntries");
+    expect(results).toHaveLength(1);
+    expect(results[0]).toEqual(data.journalEntries[0]);
+  });
+
+  it("stores and retrieves journalLegs", async () => {
+    const data = makeParsedData();
+    await storeParsedData(data);
+    const results = await getAll("journalLegs");
+    expect(results).toHaveLength(1);
+    expect(results[0]).toEqual(data.journalLegs[0]);
+  });
+
+  it("stores and retrieves accounts", async () => {
+    const data = makeParsedData();
+    await storeParsedData(data);
+    const results = await getAll("accounts");
+    expect(results).toHaveLength(1);
+    expect(results[0]).toEqual(data.accounts[0]);
+  });
+
+  it("creates the journalEntries, journalLegs, and accounts object stores on upgrade", async () => {
+    // storeParsedData triggers onUpgrade, which must create every store in STORE_NAMES.
+    await storeParsedData(makeParsedData());
+    expect(await getAll("journalEntries")).toHaveLength(1);
+    expect(await getAll("journalLegs")).toHaveLength(1);
+    expect(await getAll("accounts")).toHaveLength(1);
+  });
 });
 
 describe("put + get", () => {
@@ -128,6 +196,9 @@ describe("clearAll", () => {
     expect(await getAll("budgetPeriods")).toHaveLength(0);
     expect(await getAll("rules")).toHaveLength(0);
     expect(await getAll("normalizationRules")).toHaveLength(0);
+    expect(await getAll("journalEntries")).toHaveLength(0);
+    expect(await getAll("journalLegs")).toHaveLength(0);
+    expect(await getAll("accounts")).toHaveLength(0);
     expect(await getAll("meta")).toHaveLength(0);
   });
 });

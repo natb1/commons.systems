@@ -108,6 +108,9 @@ export function makeParsedData(overrides: Partial<ParsedData> = {}): ParsedData 
     statementItems: [],
     reconciliationNotes: [],
     weeklyAggregates: [],
+    journalEntries: [],
+    journalLegs: [],
+    accounts: [],
     meta: {
       key: "upload",
       groupName: "household",

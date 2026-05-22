@@ -4,6 +4,9 @@ import type {
   Budget,
   BudgetPeriod,
   WeeklyAggregate,
+  JournalEntry,
+  JournalLeg,
+  Account,
 } from "./firestore.js";
 import type { ParsedData } from "./idb.js";
 import type { RawTransaction } from "./entities/transaction.js";
@@ -21,6 +24,12 @@ import type { NormalizationRule, RawNormalizationRule } from "./entities/normali
 import { parseRawNormalizationRule, normalizationRuleToIdbRecord } from "./entities/normalization-rule.js";
 import type { RawWeeklyAggregate } from "./entities/weekly-aggregate.js";
 import { parseRawWeeklyAggregate, weeklyAggregateToIdbRecord } from "./entities/weekly-aggregate.js";
+import type { RawJournalEntry } from "./entities/journal-entry.js";
+import { parseRawJournalEntry, journalEntryToIdbRecord } from "./entities/journal-entry.js";
+import type { RawJournalLeg } from "./entities/journal-leg.js";
+import { parseRawJournalLeg, journalLegToIdbRecord } from "./entities/journal-leg.js";
+import type { RawAccount } from "./entities/account.js";
+import { parseRawAccount, accountToIdbRecord } from "./entities/account.js";
 // Re-export so existing import sites keep working.
 export { UploadValidationError };
 
@@ -36,6 +45,9 @@ interface RawOutput {
   normalizationRules: RawNormalizationRule[];
   statements: RawStatement[];
   weeklyAggregates?: RawWeeklyAggregate[];
+  journalEntries?: RawJournalEntry[];
+  journalLegs?: RawJournalLeg[];
+  accounts?: RawAccount[];
 }
 
 export interface ParsedUpload {
@@ -46,6 +58,9 @@ export interface ParsedUpload {
   rules: Rule[];
   normalizationRules: NormalizationRule[];
   weeklyAggregates: WeeklyAggregate[];
+  journalEntries: JournalEntry[];
+  journalLegs: JournalLeg[];
+  accounts: Account[];
   groupName: string;
   version: number;
   exportedAt: string;
@@ -89,6 +104,9 @@ export function parseUploadedJson(text: string): ParsedUpload {
   const normalizationRules: NormalizationRule[] = (raw.normalizationRules ?? []).map((r: RawNormalizationRule, i: number) => parseRawNormalizationRule(r, i));
   const statements: Statement[] = (raw.statements ?? []).map((s: RawStatement, i: number) => parseRawStatement(s, i));
   const weeklyAggregates: WeeklyAggregate[] = (raw.weeklyAggregates ?? []).map((a: RawWeeklyAggregate, i: number) => parseRawWeeklyAggregate(a, i));
+  const journalEntries: JournalEntry[] = (raw.journalEntries ?? []).map((e: RawJournalEntry, i: number) => parseRawJournalEntry(e, i));
+  const journalLegs: JournalLeg[] = (raw.journalLegs ?? []).map((l: RawJournalLeg, i: number) => parseRawJournalLeg(l, i));
+  const accounts: Account[] = (raw.accounts ?? []).map((a: RawAccount, i: number) => parseRawAccount(a, i));
 
   return {
     transactions,
@@ -98,6 +116,9 @@ export function parseUploadedJson(text: string): ParsedUpload {
     rules,
     normalizationRules,
     weeklyAggregates,
+    journalEntries,
+    journalLegs,
+    accounts,
     groupName: raw.groupName,
     version: raw.version,
     exportedAt: raw.exportedAt,
@@ -116,6 +137,9 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
     statementItems: [],
     reconciliationNotes: [],
     weeklyAggregates: parsed.weeklyAggregates.map(weeklyAggregateToIdbRecord),
+    journalEntries: parsed.journalEntries.map(journalEntryToIdbRecord),
+    journalLegs: parsed.journalLegs.map(journalLegToIdbRecord),
+    accounts: parsed.accounts.map(accountToIdbRecord),
     meta: {
       key: "upload",
       groupName: parsed.groupName,

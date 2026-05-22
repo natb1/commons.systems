@@ -17,6 +17,12 @@ import type { IdbNormalizationRule } from "./entities/normalization-rule.js";
 export type { IdbNormalizationRule };
 import type { IdbWeeklyAggregate } from "./entities/weekly-aggregate.js";
 export type { IdbWeeklyAggregate };
+import type { IdbJournalEntry } from "./entities/journal-entry.js";
+export type { IdbJournalEntry };
+import type { IdbJournalLeg } from "./entities/journal-leg.js";
+export type { IdbJournalLeg };
+import type { IdbAccount } from "./entities/account.js";
+export type { IdbAccount };
 
 const STORE_NAMES = [
   "transactions",
@@ -28,6 +34,9 @@ const STORE_NAMES = [
   "statementItems",
   "reconciliationNotes",
   "weeklyAggregates",
+  "journalEntries",
+  "journalLegs",
+  "accounts",
   "meta",
 ] as const;
 
@@ -35,7 +44,7 @@ export type StoreName = (typeof STORE_NAMES)[number];
 
 const { openDb, closeDb: closeDbConn } = createDbConnection({
   name: "budget",
-  version: 4,
+  version: 5,
   onUpgrade(db) {
     for (const name of STORE_NAMES) {
       if (!db.objectStoreNames.contains(name)) {
@@ -65,6 +74,9 @@ export interface ParsedData {
   statementItems: IdbStatementItem[];
   reconciliationNotes: IdbReconciliationNote[];
   weeklyAggregates: IdbWeeklyAggregate[];
+  journalEntries: IdbJournalEntry[];
+  journalLegs: IdbJournalLeg[];
+  accounts: IdbAccount[];
   meta: UploadMeta;
 }
 
@@ -99,6 +111,9 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
   for (const record of data.statementItems) stores.statementItems.put(record);
   for (const record of data.reconciliationNotes) stores.reconciliationNotes.put(record);
   for (const record of data.weeklyAggregates) stores.weeklyAggregates.put(record);
+  for (const record of data.journalEntries) stores.journalEntries.put(record);
+  for (const record of data.journalLegs) stores.journalLegs.put(record);
+  for (const record of data.accounts) stores.accounts.put(record);
   stores.meta.put(data.meta);
 
   await new Promise<void>((resolve, reject) => {
