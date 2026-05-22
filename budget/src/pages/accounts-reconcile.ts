@@ -1,54 +1,61 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import type { StatementItem, Transaction, Statement, ReconciliationNote } from "../firestore.js";
+import type { Account, JournalEntry, JournalLeg, ReconciliationEvent, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
-import { accountKey } from "../balance.js";
-import {
-  reconcile,
-  isAged,
-  type ReconciliationMatch,
-  type UnmatchedStatementItem,
-  type UnmatchedTransaction,
-} from "../reconciliation.js";
-
-const DEFAULT_TOLERANCE_DAYS = 3;
-const MIN_TOLERANCE_DAYS = 0;
-const MAX_TOLERANCE_DAYS = 30;
+import { accountDocId } from "../entities/account.js";
+import { buildReconcileRows, clearedBalance, isAged } from "../reconciliation.js";
 
 interface ReconcileQuery {
   institution: string | null;
   account: string | null;
   period: string | null;
-  toleranceDays: number;
 }
 
 export function parseReconcileQuery(search: string): ReconcileQuery {
   const params = new URLSearchParams(search);
-  const raw = params.get("tolerance");
-  const parsed = raw === null ? Number.NaN : Number(raw);
-  const toleranceDays = Number.isFinite(parsed) && parsed >= MIN_TOLERANCE_DAYS && parsed <= MAX_TOLERANCE_DAYS
-    ? parsed
-    : DEFAULT_TOLERANCE_DAYS;
   return {
     institution: params.get("institution"),
     account: params.get("account"),
     period: params.get("period"),
-    toleranceDays,
   };
 }
 
-function availableAccounts(statements: Statement[]): Map<string, { institution: string; account: string }> {
-  const result = new Map<string, { institution: string; account: string }>();
-  for (const s of statements) {
-    result.set(accountKey(s.institution, s.account), { institution: s.institution, account: s.account });
+/** Parse and validate a `YYYY-MM` reconcile period into its year and 1-based month. */
+export function parseReconcilePeriod(period: string): { year: number; month: number } {
+  const [yearRaw, monthRaw] = period.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new RangeError(`Invalid reconcile period: ${period}`);
   }
-  return result;
+  return { year, month };
 }
 
-function availablePeriods(statements: Statement[], institution: string, account: string): string[] {
+/** Inclusive-start, exclusive-end UTC millisecond bounds for a `YYYY-MM` period. */
+function periodBounds(period: string): { startMs: number; endMs: number } {
+  const { year, month } = parseReconcilePeriod(period);
+  return {
+    startMs: Date.UTC(year, month - 1, 1),
+    endMs: Date.UTC(year, month, 1),
+  };
+}
+
+function availableAccounts(accounts: Account[]): { institution: string; account: string }[] {
+  return accounts
+    .map((a) => ({ institution: a.institution, account: a.account }))
+    .sort((a, b) => {
+      const ak = `${a.institution}\t${a.account}`;
+      const bk = `${b.institution}\t${b.account}`;
+      return ak.localeCompare(bk);
+    });
+}
+
+function availablePeriods(legs: JournalLeg[], accountId: string): string[] {
   const periods = new Set<string>();
-  for (const s of statements) {
-    if (s.institution === institution && s.account === account) periods.add(s.period);
+  for (const leg of legs) {
+    if (leg.accountId !== accountId) continue;
+    const d = leg.timestamp.toDate();
+    periods.add(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
   }
   return [...periods].sort().reverse();
 }
@@ -57,21 +64,15 @@ function formatDateShort(ms: number): string {
   return new Date(ms).toLocaleDateString();
 }
 
-function renderControls(query: ReconcileQuery, statements: Statement[]): string {
-  const accounts = [...availableAccounts(statements).values()].sort((a, b) => {
-    const ak = `${a.institution}\t${a.account}`;
-    const bk = `${b.institution}\t${b.account}`;
-    return ak.localeCompare(bk);
-  });
-
-  const accountOptions = accounts.map((a) => {
+function renderControls(query: ReconcileQuery, accounts: Account[], journalLegs: JournalLeg[]): string {
+  const accountOptions = availableAccounts(accounts).map((a) => {
     const value = `${a.institution}\t${a.account}`;
     const selected = a.institution === query.institution && a.account === query.account ? " selected" : "";
     return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(a.institution)} — ${escapeHtml(a.account)}</option>`;
   }).join("");
 
   const periods = query.institution && query.account
-    ? availablePeriods(statements, query.institution, query.account)
+    ? availablePeriods(journalLegs, accountDocId(query.institution, query.account))
     : [];
   const periodOptions = periods.map((p) => {
     const selected = p === query.period ? " selected" : "";
@@ -90,166 +91,126 @@ function renderControls(query: ReconcileQuery, statements: Statement[]): string 
         ${periods.length === 0 ? '<option value="">—</option>' : periodOptions}
       </select>
     </label>
-    <label>Date tolerance (days):
-      <input type="number"
-             id="reconcile-tolerance-input"
-             min="${MIN_TOLERANCE_DAYS}"
-             max="${MAX_TOLERANCE_DAYS}"
-             value="${query.toleranceDays}">
-    </label>
   </div>`;
 }
 
-function renderMatchedColumn(matches: ReconciliationMatch[]): string {
-  if (matches.length === 0) {
-    return `<p class="reconcile-empty">No matches yet.</p>`;
-  }
-  const rows = matches.map((m) => {
-    const itemDate = formatDateShort(m.item.timestamp.toMillis());
-    const txnDate = m.txn.timestamp ? formatDateShort(m.txn.timestamp.toMillis()) : "";
-    const confirmBtn = m.matchType === "suggested"
-      ? `<button class="reconcile-confirm"
-                 data-txn-id="${escapeHtml(m.txn.id)}"
-                 data-statement-item-id="${escapeHtml(m.item.statementItemId)}">Confirm match</button>`
-      : "";
-    return `<li class="reconcile-match reconcile-match-${m.matchType}">
-      <div class="reconcile-match-row">
-        <span class="reconcile-match-badge">${m.matchType}</span>
-        <div class="reconcile-match-item">
-          <span class="reconcile-date">${escapeHtml(itemDate)}</span>
-          <span class="reconcile-description">${escapeHtml(m.item.description)}</span>
-          <span class="reconcile-amount">${escapeHtml(formatCurrency(m.item.amount))}</span>
-        </div>
-        <div class="reconcile-match-txn">
-          <span class="reconcile-date">${escapeHtml(txnDate)}</span>
-          <span class="reconcile-description">${escapeHtml(m.txn.description)}</span>
-          <span class="reconcile-amount">${escapeHtml(formatCurrency(-m.txn.amount))}</span>
-        </div>
-        ${confirmBtn}
-      </div>
-    </li>`;
-  }).join("");
-  return `<ul class="reconcile-list">${rows}</ul>`;
-}
-
-function classificationSelect(entityType: "statementItem" | "transaction", entityId: string, existing?: ReconciliationNote): string {
-  const current = existing?.classification ?? "";
-  const opt = (value: string, label: string) =>
-    `<option value="${value}"${current === value ? " selected" : ""}>${label}</option>`;
-  return `<select class="reconcile-classification"
-                  data-entity-type="${entityType}"
-                  data-entity-id="${escapeHtml(entityId)}">
-    <option value=""${current === "" ? " selected" : ""}>Uncategorized</option>
-    ${opt("timing", "Timing")}
-    ${opt("missing_entry", "Missing entry")}
-    ${opt("discrepancy", "Discrepancy")}
-  </select>`;
-}
-
-function noteInput(entityType: "statementItem" | "transaction", entityId: string, existing?: ReconciliationNote): string {
-  const value = existing?.note ?? "";
-  return `<input type="text"
-                 class="reconcile-note"
-                 data-entity-type="${entityType}"
-                 data-entity-id="${escapeHtml(entityId)}"
-                 placeholder="Note"
-                 value="${escapeHtml(value)}">`;
-}
-
-function renderUnmatchedItemsColumn(items: UnmatchedStatementItem[], notes: Map<string, ReconciliationNote>): string {
-  if (items.length === 0) {
-    return `<p class="reconcile-empty">No unmatched statement items.</p>`;
-  }
-  const rows = items.map(({ item, ageDays }) => {
-    const date = formatDateShort(item.timestamp.toMillis());
-    const existing = notes.get(`statementItem_${item.statementItemId}`);
-    const aging = isAged(ageDays)
-      ? `<span class="reconcile-aging" data-age-days="${ageDays}">${ageDays}d</span>`
-      : "";
-    return `<li class="reconcile-unmatched" data-statement-item-id="${escapeHtml(item.statementItemId)}">
-      <div class="reconcile-unmatched-row">
-        <span class="reconcile-date">${escapeHtml(date)}</span>
-        <span class="reconcile-description">${escapeHtml(item.description)}</span>
-        <span class="reconcile-amount">${escapeHtml(formatCurrency(item.amount))}</span>
-        ${aging}
-      </div>
-      <div class="reconcile-classification-row">
-        ${classificationSelect("statementItem", item.statementItemId, existing)}
-        ${noteInput("statementItem", item.statementItemId, existing)}
-      </div>
-    </li>`;
-  }).join("");
-  return `<ul class="reconcile-list">${rows}</ul>`;
-}
-
-function renderUnmatchedTxnsColumn(txns: UnmatchedTransaction[], notes: Map<string, ReconciliationNote>): string {
-  if (txns.length === 0) {
-    return `<p class="reconcile-empty">No unmatched transactions.</p>`;
-  }
-  const rows = txns.map(({ txn, ageDays }) => {
-    const date = txn.timestamp ? formatDateShort(txn.timestamp.toMillis()) : "";
-    const existing = notes.get(`transaction_${txn.id}`);
-    const aging = txn.timestamp && isAged(ageDays)
-      ? `<span class="reconcile-aging" data-age-days="${ageDays}">${ageDays}d</span>`
-      : "";
-    return `<li class="reconcile-unmatched" data-txn-id="${escapeHtml(txn.id)}">
-      <div class="reconcile-unmatched-row">
-        <span class="reconcile-date">${escapeHtml(date)}</span>
-        <span class="reconcile-description">${escapeHtml(txn.description)}</span>
-        <span class="reconcile-amount">${escapeHtml(formatCurrency(-txn.amount))}</span>
-        ${aging}
-      </div>
-      <div class="reconcile-classification-row">
-        ${classificationSelect("transaction", txn.id, existing)}
-        ${noteInput("transaction", txn.id, existing)}
-      </div>
-    </li>`;
-  }).join("");
-  return `<ul class="reconcile-list">${rows}</ul>`;
-}
-
-function filterByAccountAndPeriod<T extends { institution: string; account: string; period?: string; timestamp?: { toMillis(): number } | null }>(
-  records: T[],
+/**
+ * The most recent `Statement` for the account+period, by `balanceDate` then `period`.
+ * Returns `null` when no statement exists — an expected optional, not an error.
+ */
+function statementEndingBalance(
+  statements: Statement[],
   institution: string,
   account: string,
   period: string,
-): T[] {
-  return records.filter((r) => {
-    if (r.institution !== institution || r.account !== account) return false;
-    if (r.period !== undefined) return r.period === period;
-    return true;
-  });
+): number | null {
+  const matching = statements.filter(
+    (s) => s.institution === institution && s.account === account && s.period === period,
+  );
+  if (matching.length === 0) return null;
+  const mostRecent = matching.reduce((best, s) =>
+    (s.balanceDate ?? "") > (best.balanceDate ?? "") ? s : best,
+  );
+  return mostRecent.balance;
 }
 
-function transactionsForAccountPeriod(
-  txns: Transaction[],
-  institution: string,
-  account: string,
-  period: string,
-): Transaction[] {
-  return txns.filter((t) => {
-    if (t.institution !== institution || t.account !== account) return false;
-    if (t.timestamp === null) return false;
-    const d = t.timestamp.toDate();
-    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    return key === period;
-  });
+function renderLegList(rows: ReturnType<typeof buildReconcileRows>): string {
+  if (rows.length === 0) {
+    return `<p class="reconcile-empty">No journal legs for this account and period.</p>`;
+  }
+  const items = rows.map((row) => {
+    const { leg } = row;
+    const reconciled = leg.reconciledEventId !== null || leg.reconciledAt !== null;
+    const checkedAttr = leg.cleared ? " checked" : "";
+    const disabledAttr = reconciled ? " disabled" : "";
+    const aging = !leg.cleared && isAged(row.ageDays)
+      ? ` <span class="reconcile-aging" data-age-days="${Math.floor(row.ageDays)}">${Math.floor(row.ageDays)}d</span>`
+      : "";
+    return `<li class="reconcile-leg" data-leg-id="${escapeHtml(leg.id)}" data-signed-amount="${row.signedAmount}">
+      <label class="reconcile-cleared">
+        <input type="checkbox" class="reconcile-cleared-checkbox"${checkedAttr}${disabledAttr}>
+      </label>
+      <span class="reconcile-date">${escapeHtml(formatDateShort(leg.timestamp.toMillis()))}</span>
+      <span class="reconcile-description">${escapeHtml(row.description)}${aging}</span>
+      <span class="reconcile-amount">${escapeHtml(formatCurrency(row.signedAmount))}</span>
+      <span class="reconcile-running-balance">${escapeHtml(formatCurrency(row.runningBalance))}</span>
+    </li>`;
+  }).join("");
+  return `<ul id="reconcile-leg-list" class="reconcile-list">${items}</ul>`;
+}
+
+function renderHeader(cleared: number, statementBalance: number | null): string {
+  const statementRow = statementBalance !== null
+    ? `<span class="reconcile-statement-balance">Statement-ending balance: ${escapeHtml(formatCurrency(statementBalance))}</span>`
+    : "";
+  const difference = statementBalance !== null
+    ? `<span class="reconcile-difference">Difference: ${escapeHtml(formatCurrency(cleared - statementBalance))}</span>`
+    : "";
+  return `<div id="reconcile-header" class="reconcile-header">
+    <span class="reconcile-cleared-balance">Cleared balance: ${escapeHtml(formatCurrency(cleared))}</span>
+    ${statementRow}
+    ${difference}
+    <button id="reconcile-open-dialog" type="button">Reconcile</button>
+  </div>`;
+}
+
+function renderDialog(statementBalance: number | null): string {
+  const defaultValue = statementBalance !== null ? String(statementBalance) : "";
+  return `<dialog id="reconcile-dialog">
+    <form method="dialog" id="reconcile-dialog-form">
+      <label>Bank's cleared balance:
+        <input type="number"
+               id="reconcile-bank-balance-input"
+               step="0.01"
+               value="${escapeHtml(defaultValue)}">
+      </label>
+      <p id="reconcile-difference-display" class="reconcile-difference-display"></p>
+      <div class="reconcile-dialog-actions">
+        <button type="submit" id="reconcile-submit">Reconcile</button>
+        <button type="button" id="reconcile-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>`;
+}
+
+function renderPastReconciliations(events: ReconciliationEvent[], institution: string, account: string): string {
+  const matching = events
+    .filter((e) => e.institution === institution && e.account === account)
+    .sort((a, b) => b.reconciledThroughDate.toMillis() - a.reconciledThroughDate.toMillis());
+  if (matching.length === 0) {
+    return `<section id="reconcile-past" class="reconcile-past">
+      <h3>Past reconciliations</h3>
+      <p class="reconcile-empty">No past reconciliations.</p>
+    </section>`;
+  }
+  const rows = matching.map((e) => {
+    const through = formatDateShort(e.reconciledThroughDate.toMillis());
+    return `<li class="reconcile-past-event" data-event-id="${escapeHtml(e.id)}">
+      <span class="reconcile-date">${escapeHtml(through)}</span>
+      <span class="reconcile-amount">${escapeHtml(formatCurrency(e.clearedBalance))}</span>
+    </li>`;
+  }).join("");
+  return `<section id="reconcile-past" class="reconcile-past">
+    <h3>Past reconciliations</h3>
+    <ul class="reconcile-list">${rows}</ul>
+  </section>`;
 }
 
 export interface RenderReconcileContext {
-  statementItems: StatementItem[];
-  transactions: Transaction[];
+  journalLegs: JournalLeg[];
+  journalEntries: JournalEntry[];
+  reconciliationEvents: ReconciliationEvent[];
+  accounts: Account[];
   statements: Statement[];
-  notes: ReconciliationNote[];
   query: ReconcileQuery;
   nowMs?: number;
 }
 
 /** Pure HTML renderer, extracted for testability. */
 export function renderReconcileHtml(ctx: RenderReconcileContext): string {
-  const { statementItems, transactions, statements, notes, query } = ctx;
+  const { journalLegs, journalEntries, reconciliationEvents, accounts, statements, query } = ctx;
 
-  const controls = renderControls(query, statements);
+  const controls = renderControls(query, accounts, journalLegs);
 
   if (!query.institution || !query.account || !query.period) {
     return `<div id="reconcile-container">
@@ -258,29 +219,33 @@ export function renderReconcileHtml(ctx: RenderReconcileContext): string {
     </div>`;
   }
 
-  const scopedItems = filterByAccountAndPeriod(statementItems, query.institution, query.account, query.period);
-  const scopedTxns = transactionsForAccountPeriod(transactions, query.institution, query.account, query.period);
-  const result = reconcile(scopedItems, scopedTxns, query.toleranceDays, ctx.nowMs);
+  const accountId = accountDocId(query.institution, query.account);
+  const account = accounts.find((a) => a.id === accountId);
+  if (account === undefined) {
+    throw new Error(`Reconcile account ${accountId} not found`);
+  }
 
-  const notesMap = new Map<string, ReconciliationNote>();
-  for (const n of notes) notesMap.set(`${n.entityType}_${n.entityId}`, n);
+  const { startMs, endMs } = periodBounds(query.period);
+  const filteredLegs = journalLegs.filter((leg) => {
+    if (leg.accountId !== accountId) return false;
+    const ms = leg.timestamp.toMillis();
+    return ms >= startMs && ms < endMs;
+  });
 
-  return `<div id="reconcile-container">
+  const entriesById = new Map<string, JournalEntry>();
+  for (const entry of journalEntries) entriesById.set(entry.id, entry);
+
+  const rows = buildReconcileRows(filteredLegs, entriesById, account.accountType, ctx.nowMs);
+  const cleared = clearedBalance(filteredLegs, account.accountType);
+  const statementBalance = statementEndingBalance(statements, query.institution, query.account, query.period);
+  const statementAttr = statementBalance !== null ? ` data-statement-balance="${statementBalance}"` : "";
+
+  return `<div id="reconcile-container"${statementAttr}>
     ${controls}
-    <section class="reconcile-columns">
-      <div class="reconcile-column reconcile-column-matched">
-        <h3>Matched (${result.matched.length})</h3>
-        ${renderMatchedColumn(result.matched)}
-      </div>
-      <div class="reconcile-column reconcile-column-unmatched-items">
-        <h3>Unmatched statement items (${result.unmatchedItems.length})</h3>
-        ${renderUnmatchedItemsColumn(result.unmatchedItems, notesMap)}
-      </div>
-      <div class="reconcile-column reconcile-column-unmatched-txns">
-        <h3>Unmatched transactions (${result.unmatchedTransactions.length})</h3>
-        ${renderUnmatchedTxnsColumn(result.unmatchedTransactions, notesMap)}
-      </div>
-    </section>
+    ${renderHeader(cleared, statementBalance)}
+    ${renderLegList(rows)}
+    ${renderDialog(statementBalance)}
+    ${renderPastReconciliations(reconciliationEvents, query.institution, query.account)}
   </div>`;
 }
 
@@ -290,17 +255,19 @@ export async function renderAccountsReconcile(options: RenderPageOptions): Promi
 
   let body: string;
   try {
-    const [statementItems, transactions, statements, notes] = await Promise.all([
-      dataSource.getStatementItems(),
-      dataSource.getTransactions(),
+    const [journalLegs, journalEntries, reconciliationEvents, accounts, statements] = await Promise.all([
+      dataSource.getJournalLegs(),
+      dataSource.getJournalEntries(),
+      dataSource.getReconciliationEvents(),
+      dataSource.getAccounts(),
       dataSource.getStatements(),
-      dataSource.getReconciliationNotes(),
     ]);
     body = renderReconcileHtml({
-      statementItems,
-      transactions,
+      journalLegs,
+      journalEntries,
+      reconciliationEvents,
+      accounts,
       statements,
-      notes,
       query,
     });
   } catch (error) {
