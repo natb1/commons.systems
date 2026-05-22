@@ -163,6 +163,24 @@ export function requireUploadEnum<T extends string>(
   return value as T;
 }
 
+export function requireUploadNonNegativeNumber(
+  value: unknown, entity: string, index: number, field: string,
+): number {
+  if (typeof value !== "number" || !isFinite(value) || value < 0) {
+    throw new UploadValidationError(`${entity}[${index}].${field} must be a non-negative finite number`);
+  }
+  return value;
+}
+
+export function requireUploadStringArray(
+  value: unknown, entity: string, index: number, field: string,
+): string[] {
+  if (!Array.isArray(value) || value.some((x: unknown) => typeof x !== "string")) {
+    throw new UploadValidationError(`${entity}[${index}].${field} must be a string array`);
+  }
+  return value as string[];
+}
+
 // ── Seed-side validators (throw plain Error; run at vite build time) ──────────
 
 export function toMs(d: unknown): number | null {
