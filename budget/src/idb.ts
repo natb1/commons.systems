@@ -7,6 +7,14 @@ import type { IdbStatementItem } from "./entities/statement-item.js";
 export type { IdbStatementItem };
 import type { IdbReconciliationNote } from "./entities/reconciliation-note.js";
 export type { IdbReconciliationNote };
+import type { IdbAccount } from "./entities/account.js";
+export type { IdbAccount };
+import type { IdbJournalEntry } from "./entities/journal-entry.js";
+export type { IdbJournalEntry };
+import type { IdbJournalLeg } from "./entities/journal-leg.js";
+export type { IdbJournalLeg };
+import type { IdbReconciliationEvent } from "./entities/reconciliation-event.js";
+export type { IdbReconciliationEvent };
 import type { IdbBudget } from "./entities/budget.js";
 export type { IdbBudget };
 import type { IdbBudgetPeriod } from "./entities/budget-period.js";
@@ -17,12 +25,6 @@ import type { IdbNormalizationRule } from "./entities/normalization-rule.js";
 export type { IdbNormalizationRule };
 import type { IdbWeeklyAggregate } from "./entities/weekly-aggregate.js";
 export type { IdbWeeklyAggregate };
-import type { IdbJournalEntry } from "./entities/journal-entry.js";
-export type { IdbJournalEntry };
-import type { IdbJournalLeg } from "./entities/journal-leg.js";
-export type { IdbJournalLeg };
-import type { IdbAccount } from "./entities/account.js";
-export type { IdbAccount };
 
 const STORE_NAMES = [
   "transactions",
@@ -33,10 +35,11 @@ const STORE_NAMES = [
   "statements",
   "statementItems",
   "reconciliationNotes",
-  "weeklyAggregates",
+  "accounts",
   "journalEntries",
   "journalLegs",
-  "accounts",
+  "reconciliationEvents",
+  "weeklyAggregates",
   "meta",
 ] as const;
 
@@ -73,10 +76,11 @@ export interface ParsedData {
   statements: IdbStatement[];
   statementItems: IdbStatementItem[];
   reconciliationNotes: IdbReconciliationNote[];
-  weeklyAggregates: IdbWeeklyAggregate[];
+  accounts: IdbAccount[];
   journalEntries: IdbJournalEntry[];
   journalLegs: IdbJournalLeg[];
-  accounts: IdbAccount[];
+  reconciliationEvents: IdbReconciliationEvent[];
+  weeklyAggregates: IdbWeeklyAggregate[];
   meta: UploadMeta;
 }
 
@@ -110,10 +114,11 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
   for (const record of data.statements) stores.statements.put(record);
   for (const record of data.statementItems) stores.statementItems.put(record);
   for (const record of data.reconciliationNotes) stores.reconciliationNotes.put(record);
-  for (const record of data.weeklyAggregates) stores.weeklyAggregates.put(record);
+  for (const record of data.accounts) stores.accounts.put(record);
   for (const record of data.journalEntries) stores.journalEntries.put(record);
   for (const record of data.journalLegs) stores.journalLegs.put(record);
-  for (const record of data.accounts) stores.accounts.put(record);
+  for (const record of data.reconciliationEvents) stores.reconciliationEvents.put(record);
+  for (const record of data.weeklyAggregates) stores.weeklyAggregates.put(record);
   stores.meta.put(data.meta);
 
   await new Promise<void>((resolve, reject) => {

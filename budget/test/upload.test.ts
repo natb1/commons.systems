@@ -43,7 +43,6 @@ const validInput = {
       normalizedId: null,
       normalizedPrimary: true,
       normalizedDescription: null,
-      journalEntryId: "je-1",
     },
   ],
   budgets: [
@@ -89,39 +88,6 @@ const validInput = {
       institution: "",
       account: "",
       priority: 1,
-    },
-  ],
-  accounts: [
-    {
-      id: "bankone_1234",
-      institution: "bankone",
-      account: "1234",
-      accountType: "asset",
-      openingBalance: null,
-      openingBalanceDate: null,
-    },
-  ],
-  journalEntries: [
-    {
-      id: "je-1",
-      timestamp: "2025-06-10T00:00:00Z",
-      description: "KROGER",
-      note: null,
-      legCount: 2,
-    },
-  ],
-  journalLegs: [
-    {
-      id: "jl-1",
-      entryId: "je-1",
-      accountId: "bankone_1234",
-      debit: 52.3,
-      credit: 0,
-      timestamp: "2025-06-10T00:00:00Z",
-      cleared: false,
-      reconciledAt: null,
-      reconciledEventId: null,
-      statementItemId: null,
     },
   ],
 };
@@ -350,38 +316,6 @@ describe("parseUploadedJson", () => {
       'Invalid rule type value: "unknown"',
     );
   });
-
-  it("parses journalEntries, journalLegs, and accounts", () => {
-    const result = parseUploadedJson(JSON.stringify(validInput));
-
-    expect(result.journalEntries).toHaveLength(1);
-    expect(result.journalEntries[0].id).toBe("je-1");
-    expect(result.journalEntries[0].description).toBe("KROGER");
-    expect(result.journalEntries[0].legCount).toBe(2);
-
-    expect(result.journalLegs).toHaveLength(1);
-    expect(result.journalLegs[0].id).toBe("jl-1");
-    expect(result.journalLegs[0].entryId).toBe("je-1");
-    expect(result.journalLegs[0].accountId).toBe("bankone_1234");
-    expect(result.journalLegs[0].debit).toBe(52.3);
-
-    expect(result.accounts).toHaveLength(1);
-    expect(result.accounts[0].id).toBe("bankone_1234");
-    expect(result.accounts[0].accountType).toBe("asset");
-  });
-
-  it("parses transaction journalEntryId", () => {
-    const result = parseUploadedJson(JSON.stringify(validInput));
-    expect(result.transactions[0].journalEntryId).toBe("je-1");
-  });
-
-  it("tolerates missing journalEntries, journalLegs, and accounts arrays", () => {
-    const { accounts: _a, journalEntries: _e, journalLegs: _l, ...input } = validInput;
-    const result = parseUploadedJson(JSON.stringify(input));
-    expect(result.journalEntries).toEqual([]);
-    expect(result.journalLegs).toEqual([]);
-    expect(result.accounts).toEqual([]);
-  });
 });
 
 describe("toParsedData", () => {
@@ -432,34 +366,5 @@ describe("toParsedData", () => {
     const parsed = parseUploadedJson(JSON.stringify(input));
     const data = toParsedData(parsed);
     expect(data.transactions[0].timestampMs).toBeNull();
-  });
-
-  it("maps journalEntries, journalLegs, and accounts to IDB records", () => {
-    const parsed = parseUploadedJson(JSON.stringify(validInput));
-    const data = toParsedData(parsed);
-
-    const expectedTs = Date.parse("2025-06-10T00:00:00Z");
-
-    expect(data.journalEntries).toHaveLength(1);
-    expect(data.journalEntries[0].id).toBe("je-1");
-    expect(data.journalEntries[0].timestampMs).toBe(expectedTs);
-    expect(data.journalEntries[0].legCount).toBe(2);
-
-    expect(data.journalLegs).toHaveLength(1);
-    expect(data.journalLegs[0].id).toBe("jl-1");
-    expect(data.journalLegs[0].entryId).toBe("je-1");
-    expect(data.journalLegs[0].timestampMs).toBe(expectedTs);
-    expect(data.journalLegs[0].reconciledAtMs).toBeNull();
-
-    expect(data.accounts).toHaveLength(1);
-    expect(data.accounts[0].id).toBe("bankone_1234");
-    expect(data.accounts[0].accountType).toBe("asset");
-    expect(data.accounts[0].openingBalanceDateMs).toBeNull();
-  });
-
-  it("carries transaction journalEntryId into the IdbTransaction", () => {
-    const parsed = parseUploadedJson(JSON.stringify(validInput));
-    const data = toParsedData(parsed);
-    expect(data.transactions[0].journalEntryId).toBe("je-1");
   });
 });

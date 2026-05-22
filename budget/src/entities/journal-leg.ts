@@ -1,8 +1,7 @@
 /**
  * Single source of truth for the JournalLeg entity.
- * JournalLeg is a read-only entity: it has Firestore read, IDB storage, upload parse,
- * and seed declaration layers, but no export path (not in exportToJson).
- * All per-entity representations are defined or imported here; adaptor functions live alongside them.
+ * All per-entity representations (domain, IDB, raw/upload, seed declaration, seed data)
+ * are defined or imported here; adaptor functions live alongside them.
  * Flat collection — easier to query for all legs in account X in period Y.
  */
 import { Timestamp } from "firebase/firestore";
@@ -10,7 +9,6 @@ import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { GroupId } from "@commons-systems/authutil/groups";
 import {
   DataIntegrityError,
-  UploadValidationError,
   msToTs,
   optionalString,
   optionalTimestamp,
@@ -21,10 +19,11 @@ import {
   requireSeedString,
   requireString,
   requireTimestamp,
-  requireUploadFiniteNumber,
   requireUploadId,
+  requireUploadNonNegativeNumber,
   requireUploadString,
   toMs,
+  UploadValidationError,
 } from "./_helpers.js";
 import type { JournalLegSeedData } from "../../seeds/firestore.js";
 
@@ -69,10 +68,10 @@ export interface RawJournalLeg {
   debit: number;
   credit: number;
   timestamp: string;
-  cleared: boolean;
-  reconciledAt: string | null;
-  reconciledEventId: string | null;
-  statementItemId: string | null;
+  cleared?: boolean;
+  reconciledAt?: string | null;
+  reconciledEventId?: string | null;
+  statementItemId?: string | null;
 }
 
 // ── Seed data type alias ──────────────────────────────────────────────────────
@@ -119,48 +118,47 @@ export function parseFirestoreJournalLeg(docSnap: QueryDocumentSnapshot<Document
 
 // ── Raw upload → JournalLeg ───────────────────────────────────────────────────
 
-export function parseRawJournalLeg(l: RawJournalLeg, i: number): JournalLeg {
-  const debit = requireUploadFiniteNumber(l.debit, "journalLeg", i, "debit");
-  const credit = requireUploadFiniteNumber(l.credit, "journalLeg", i, "credit");
-  if (debit < 0 || credit < 0) {
-    throw new UploadValidationError(`journalLeg[${i}] debit/credit must be non-negative (debit=${debit}, credit=${credit})`);
-  }
+export function parseRawJournalLeg(s: RawJournalLeg, i: number): JournalLeg {
+  const debit = requireUploadNonNegativeNumber(s.debit, "journal-leg", i, "debit");
+  const credit = requireUploadNonNegativeNumber(s.credit, "journal-leg", i, "credit");
   if (debit > 0 && credit > 0) {
-    throw new UploadValidationError(`journalLeg[${i}] cannot have both a debit and a credit (debit=${debit}, credit=${credit})`);
+    throw new UploadValidationError(`Journal leg cannot have both a debit and a credit (debit=${debit}, credit=${credit})`);
   }
   return {
-    id: requireUploadId(l.id, "journalLeg", i),
-    entryId: requireUploadString(l.entryId, "journalLeg", i, "entryId"),
-    accountId: requireUploadString(l.accountId, "journalLeg", i, "accountId"),
+    id: requireUploadId(s.id, "journal-leg", i),
+    entryId: requireUploadString(s.entryId, "journal-leg", i, "entryId"),
+    accountId: requireUploadString(s.accountId, "journal-leg", i, "accountId"),
     debit,
     credit,
-    timestamp: parseISOTimestamp(l.timestamp, "journalLeg.timestamp"),
-    cleared: l.cleared === true,
-    reconciledAt: l.reconciledAt ? parseISOTimestamp(l.reconciledAt, "journalLeg.reconciledAt") : null,
-    reconciledEventId: l.reconciledEventId || null,
-    statementItemId: l.statementItemId || null,
+    timestamp: parseISOTimestamp(s.timestamp, `journal-leg[${i}].timestamp`),
+    cleared: s.cleared === true,
+    reconciledAt: s.reconciledAt
+      ? parseISOTimestamp(s.reconciledAt, `journal-leg[${i}].reconciledAt`)
+      : null,
+    reconciledEventId: s.reconciledEventId ?? null,
+    statementItemId: s.statementItemId ?? null,
     groupId: null as GroupId | null,
   };
 }
 
-// ── JournalLeg → IdbJournalLeg ───────────────────────────────────────────────
+// ── JournalLeg → IdbJournalLeg ────────────────────────────────────────────────
 
-export function journalLegToIdbRecord(l: JournalLeg): IdbJournalLeg {
+export function journalLegToIdbRecord(s: JournalLeg): IdbJournalLeg {
   return {
-    id: l.id,
-    entryId: l.entryId,
-    accountId: l.accountId,
-    debit: l.debit,
-    credit: l.credit,
-    timestampMs: l.timestamp.toMillis(),
-    cleared: l.cleared,
-    reconciledAtMs: l.reconciledAt?.toMillis() ?? null,
-    reconciledEventId: l.reconciledEventId,
-    statementItemId: l.statementItemId,
+    id: s.id,
+    entryId: s.entryId,
+    accountId: s.accountId,
+    debit: s.debit,
+    credit: s.credit,
+    timestampMs: s.timestamp.toMillis(),
+    cleared: s.cleared,
+    reconciledAtMs: s.reconciledAt?.toMillis() ?? null,
+    reconciledEventId: s.reconciledEventId,
+    statementItemId: s.statementItemId,
   };
 }
 
-// ── IdbJournalLeg → JournalLeg ───────────────────────────────────────────────
+// ── IdbJournalLeg → JournalLeg ────────────────────────────────────────────────
 
 export function idbToJournalLeg(row: IdbJournalLeg): JournalLeg {
   return {
@@ -175,6 +173,25 @@ export function idbToJournalLeg(row: IdbJournalLeg): JournalLeg {
     reconciledEventId: row.reconciledEventId,
     statementItemId: row.statementItemId,
     groupId: null as GroupId | null,
+  };
+}
+
+// ── IdbJournalLeg → RawJournalLeg (export) ────────────────────────────────────
+
+export function journalLegToRawJson(s: IdbJournalLeg): object {
+  return {
+    id: s.id,
+    entryId: s.entryId,
+    accountId: s.accountId,
+    debit: s.debit,
+    credit: s.credit,
+    timestamp: new Date(s.timestampMs).toISOString(),
+    cleared: s.cleared,
+    reconciledAt: s.reconciledAtMs != null
+      ? new Date(s.reconciledAtMs).toISOString()
+      : null,
+    reconciledEventId: s.reconciledEventId ?? null,
+    statementItemId: s.statementItemId ?? null,
   };
 }
 

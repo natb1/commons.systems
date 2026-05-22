@@ -9,6 +9,14 @@ import { serializeSeedStatementItem } from "./entities/statement-item.js";
 import type { StatementItemSeedData } from "./entities/statement-item.js";
 import { serializeSeedReconciliationNote } from "./entities/reconciliation-note.js";
 import type { ReconciliationNoteSeedData } from "./entities/reconciliation-note.js";
+import { serializeSeedAccount } from "./entities/account.js";
+import type { AccountSeedData } from "./entities/account.js";
+import { serializeSeedJournalEntry } from "./entities/journal-entry.js";
+import type { JournalEntrySeedData } from "./entities/journal-entry.js";
+import { serializeSeedJournalLeg } from "./entities/journal-leg.js";
+import type { JournalLegSeedData } from "./entities/journal-leg.js";
+import { serializeSeedReconciliationEvent } from "./entities/reconciliation-event.js";
+import type { ReconciliationEventSeedData } from "./entities/reconciliation-event.js";
 import { serializeSeedBudget } from "./entities/budget.js";
 import type { BudgetSeedData } from "./entities/budget.js";
 import { serializeSeedBudgetPeriod } from "./entities/budget-period.js";
@@ -19,12 +27,6 @@ import { serializeSeedNormalizationRule } from "./entities/normalization-rule.js
 import type { NormalizationRuleSeedData } from "./entities/normalization-rule.js";
 import { serializeSeedWeeklyAggregate } from "./entities/weekly-aggregate.js";
 import type { WeeklyAggregateSeedData } from "./entities/weekly-aggregate.js";
-import { serializeSeedJournalEntry } from "./entities/journal-entry.js";
-import type { JournalEntrySeedData } from "./entities/journal-entry.js";
-import { serializeSeedJournalLeg } from "./entities/journal-leg.js";
-import type { JournalLegSeedData } from "./entities/journal-leg.js";
-import { serializeSeedAccount } from "./entities/account.js";
-import type { AccountSeedData } from "./entities/account.js";
 
 const VIRTUAL_MODULE_ID = "virtual:budget-seed-data";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
@@ -58,6 +60,18 @@ export function serializeSeedData(): SeedData {
     serializeSeedWeeklyAggregate(raw as unknown as WeeklyAggregateSeedData, id)
   );
 
+  const statementItems = findCollection("seed-statement-items").map(({ id, data: raw }) =>
+    serializeSeedStatementItem(raw as unknown as StatementItemSeedData, id)
+  );
+
+  const reconciliationNotes = findCollection("seed-reconciliation-notes").map(({ id, data: raw }) =>
+    serializeSeedReconciliationNote(raw as unknown as ReconciliationNoteSeedData, id)
+  );
+
+  const accounts = findCollection("seed-accounts").map(({ id, data: raw }) =>
+    serializeSeedAccount(raw as unknown as AccountSeedData, id)
+  );
+
   const journalEntries = findCollection("seed-journal-entries").map(({ id, data: raw }) =>
     serializeSeedJournalEntry(raw as unknown as JournalEntrySeedData, id)
   );
@@ -66,16 +80,8 @@ export function serializeSeedData(): SeedData {
     serializeSeedJournalLeg(raw as unknown as JournalLegSeedData, id)
   );
 
-  const accounts = findCollection("seed-accounts").map(({ id, data: raw }) =>
-    serializeSeedAccount(raw as unknown as AccountSeedData, id)
-  );
-
-  const statementItems = findCollection("seed-statement-items").map(({ id, data: raw }) =>
-    serializeSeedStatementItem(raw as unknown as StatementItemSeedData, id)
-  );
-
-  const reconciliationNotes = findCollection("seed-reconciliation-notes").map(({ id, data: raw }) =>
-    serializeSeedReconciliationNote(raw as unknown as ReconciliationNoteSeedData, id)
+  const reconciliationEvents = findCollection("seed-reconciliation-events").map(({ id, data: raw }) =>
+    serializeSeedReconciliationEvent(raw as unknown as ReconciliationEventSeedData, id)
   );
 
   return {
@@ -87,10 +93,11 @@ export function serializeSeedData(): SeedData {
     statements,
     statementItems,
     reconciliationNotes,
-    weeklyAggregates,
+    accounts,
     journalEntries,
     journalLegs,
-    accounts,
+    reconciliationEvents,
+    weeklyAggregates,
   };
 }
 

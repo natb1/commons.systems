@@ -1,8 +1,7 @@
 /**
  * Single source of truth for the JournalEntry entity.
- * JournalEntry is a read-only entity: it has Firestore read, IDB storage, upload parse,
- * and seed declaration layers, but no export path (not in exportToJson).
- * All per-entity representations are defined or imported here; adaptor functions live alongside them.
+ * All per-entity representations (domain, IDB, raw/upload, seed declaration, seed data)
+ * are defined or imported here; adaptor functions live alongside them.
  */
 import { Timestamp } from "firebase/firestore";
 import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
@@ -50,7 +49,7 @@ export interface RawJournalEntry {
   id: string;
   timestamp: string;
   description: string;
-  note: string | null;
+  note?: string | null;
   legCount: number;
 }
 
@@ -83,30 +82,30 @@ export function parseFirestoreJournalEntry(docSnap: QueryDocumentSnapshot<Docume
 
 // ── Raw upload → JournalEntry ─────────────────────────────────────────────────
 
-export function parseRawJournalEntry(e: RawJournalEntry, i: number): JournalEntry {
+export function parseRawJournalEntry(s: RawJournalEntry, i: number): JournalEntry {
   return {
-    id: requireUploadId(e.id, "journalEntry", i),
-    timestamp: parseISOTimestamp(e.timestamp, "journalEntry.timestamp"),
-    description: requireUploadString(e.description, "journalEntry", i, "description"),
-    note: e.note == null ? null : e.note,
-    legCount: requireUploadFiniteNumber(e.legCount, "journalEntry", i, "legCount"),
+    id: requireUploadId(s.id, "journal-entry", i),
+    timestamp: parseISOTimestamp(s.timestamp, `journal-entry[${i}].timestamp`),
+    description: requireUploadString(s.description, "journal-entry", i, "description"),
+    note: s.note ?? null,
+    legCount: requireUploadFiniteNumber(s.legCount, "journal-entry", i, "legCount"),
     groupId: null as GroupId | null,
   };
 }
 
-// ── JournalEntry → IdbJournalEntry ───────────────────────────────────────────
+// ── JournalEntry → IdbJournalEntry ────────────────────────────────────────────
 
-export function journalEntryToIdbRecord(e: JournalEntry): IdbJournalEntry {
+export function journalEntryToIdbRecord(s: JournalEntry): IdbJournalEntry {
   return {
-    id: e.id,
-    timestampMs: e.timestamp.toMillis(),
-    description: e.description,
-    note: e.note,
-    legCount: e.legCount,
+    id: s.id,
+    timestampMs: s.timestamp.toMillis(),
+    description: s.description,
+    note: s.note,
+    legCount: s.legCount,
   };
 }
 
-// ── IdbJournalEntry → JournalEntry ───────────────────────────────────────────
+// ── IdbJournalEntry → JournalEntry ────────────────────────────────────────────
 
 export function idbToJournalEntry(row: IdbJournalEntry): JournalEntry {
   return {
@@ -116,6 +115,18 @@ export function idbToJournalEntry(row: IdbJournalEntry): JournalEntry {
     note: row.note,
     legCount: row.legCount,
     groupId: null as GroupId | null,
+  };
+}
+
+// ── IdbJournalEntry → RawJournalEntry (export) ────────────────────────────────
+
+export function journalEntryToRawJson(s: IdbJournalEntry): object {
+  return {
+    id: s.id,
+    timestamp: new Date(s.timestampMs).toISOString(),
+    description: s.description,
+    note: s.note ?? null,
+    legCount: s.legCount,
   };
 }
 

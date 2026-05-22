@@ -140,6 +140,14 @@ function setupMocks() {
         return Promise.resolve([]);
       case "reconciliationNotes":
         return Promise.resolve([]);
+      case "accounts":
+        return Promise.resolve([]);
+      case "journalEntries":
+        return Promise.resolve([]);
+      case "journalLegs":
+        return Promise.resolve([]);
+      case "reconciliationEvents":
+        return Promise.resolve([]);
       default:
         throw new Error(`Unmocked store name in test: "${storeName}"`);
     }
