@@ -49,14 +49,15 @@ Route on `$LOCK`:
 - **`acquired`** → this `/dispatch` holds the lock; proceed to Step 1.
 - **`busy`** → the wait timeout elapsed without acquiring — a wedged selection
   in another `/dispatch`. The script's **stderr** carries a one-line diagnostic
-  naming the wait duration and the holding PID; report those and **stop** — run
-  no sync, no health gate, no sweep, no selection, and no phase skill.
+  naming the wait duration and the holding PID; report those then **proceed to
+  Step 8** (early-stop) — run no sync, no health gate, no sweep, no selection,
+  and no phase skill.
 
 ### Releasing the lock
 
 The lock covers **Steps 0-4 only** — target selection and worktree resolution.
-Steps 5-7 (the phase skill and the pre-implementation relevance review) run with
-the lock **released**.
+Steps 5-8 (the phase skill, the pre-implementation relevance review, and the
+hand-off) run with the lock **released**.
 
 Release the lock by running:
 
@@ -74,7 +75,7 @@ Release happens at exactly two kinds of point:
 - **Proceed path** — as the final action of Step 4, after the
   `tmp/dispatch-worktree` marker is written, before Step 5.
 - **Every Step 1-4 stop path** — immediately before reporting the stop reason
-  and stopping.
+  and proceeding to Step 8.
 
 Releasing after Step 4 is safe because the session then owns a worktree (or has
 stopped), and the selection scan skips worktree'd targets — no other tick can
@@ -104,8 +105,8 @@ It is a no-op when local `main` already equals `origin/main`.
 
 - If `git fetch` fails, or `git merge --ff-only` rejects a non-fast-forward (local
   `main` has diverged with unexpected commits), release the lock (see *Releasing
-  the lock*), then **stop** and surface the error — do not proceed to target
-  selection.
+  the lock*), surface the error, then **proceed to Step 8** (early-stop) — do
+  not proceed to target selection.
 
 ## 2. Select the Target
 
@@ -124,7 +125,8 @@ It is a no-op when local `main` already equals `origin/main`.
   - **Exit 0** → `$TARGET` is the target issue number; that issue is the target.
     Skip the queue scan.
   - **Non-zero exit** → release the lock (see *Releasing the lock*), report the
-    script's stderr message, and **stop**; create no worktree. This covers a PR
+    script's stderr message, then **proceed to Step 8** (early-stop); create no
+    worktree. This covers a PR
     that closes no issue, a PR that closes more than one issue, and an argument
     that is neither an issue nor a PR — consistent with the other Step 1-4 stop
     paths.
@@ -184,8 +186,8 @@ It is a no-op when local `main` already equals `origin/main`.
   - `worktree-closed <N> <branch>` — run from inside a worktree whose issue is
     closed or unrecognized → release the lock (see *Releasing the lock*), then
     report that the current worktree belongs to closed/unrecognized issue `<N>`
-    and **stop** (consistent with the named-target "closed → report and stop"
-    rule in Step 3)
+    and **proceed to Step 8** (early-stop) (consistent with the named-target
+    "closed → report and stop" rule in Step 3)
   - `empty` — nothing eligible
   - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check. The
     pre-sweep gate above normally catches this first; this is the same gate
@@ -219,8 +221,8 @@ It is a no-op when local `main` already equals `origin/main`.
   falls through to the next tier. The tier emits the resolved startable leaf, so
   a queue-selected `issue <num>` is always a directly-startable target.
 
-  On `empty` → release the lock (see *Releasing the lock*), then report that
-  the queue is empty and **stop**.
+  On `empty` → release the lock (see *Releasing the lock*), report that
+  the queue is empty, then **proceed to Step 8** (early-stop).
 
   **main-broken handler.** `origin/main` itself is red, so no new work is safe
   to start. Do **not** run the sweep, create a worktree, branch, or phase skill.
@@ -232,7 +234,8 @@ It is a no-op when local `main` already equals `origin/main`.
   the check-runs response. These diagnostic `gh` calls run before the stop —
   keep them. Then, as the action immediately before the final report, release
   the lock (see *Releasing the lock*); summarize the likely cause, report it,
-  and **stop**. Once a PR that fixes main exists the normal ladder picks it up
+  then **proceed to Step 8** (early-stop). Once a PR that fixes main exists the
+  normal ladder picks it up
   (verify/ready) — this gate only blocks starting new, unrelated work.
 
 ## 3. Trace to an Open Leaf
@@ -268,7 +271,7 @@ Skip leaf tracing when:
   would be wrong.
 
 If a named target issue is **closed**, release the lock (see *Releasing the
-lock*), then report it and **stop**.
+lock*), report it, then **proceed to Step 8** (early-stop).
 
 ## 4. Resolve the Worktree
 
@@ -304,7 +307,8 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
   tier to a leaf with no worktree, so for a queue selection this arises only from
   a race — another session created the worktree between selection and worktree
   resolution.) Release the lock (see *Releasing the lock*), then report the
-  conflict (name `<path>` and issue `<N>`) and **stop**; do not `EnterWorktree`.
+  conflict (name `<path>` and issue `<N>`), then **proceed to Step 8**
+  (early-stop); do not `EnterWorktree`.
 
 On every non-`conflict` path, before any phase skill runs, create the recovery
 marker:
@@ -358,7 +362,7 @@ Map the phase:
 | `code-review` | draft PR + `dispatch:qa-done` | `/code-review-fix` (applies `dispatch:code-reviewed` itself) |
 | `review` | draft PR + `dispatch:code-reviewed` | `/review-fix` (applies `dispatch:reviewed` itself) |
 | `security` | draft PR + `dispatch:reviewed` (or `dispatch:security-reviewed` — re-entry; `/security-review-fix` is idempotent) | `/security-review-fix` (applies `dispatch:security-reviewed` and marks ready itself) |
-| `done` | non-draft (ready) PR | already complete — report and skip |
+| `done` | non-draft (ready) PR | already complete — report, then Step 8 (early-stop) |
 
 ## 6. Dispatch One Phase, Then Stop
 
@@ -388,7 +392,7 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
      this step — `/verify-pr` if any check failed, otherwise the green-CI
      phases (`qa` / `code-review` / `review` / `security` / `ready`).
   4. If the re-derived phase is still `waiting` (CI never registered any check),
-     report it and **stop** — do not loop.
+     report it, then **proceed to Step 8** (early-stop) — do not loop.
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done` itself on
   a clean pass; `/dispatch` applies no label.
 - **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max`, applies the
@@ -402,12 +406,16 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
   gathers the PR's CodeQL code-scanning alerts, applies the recommended fixes,
   posts a PR comment, applies the `dispatch:security-reviewed` label, and marks
   the PR ready. It is idempotent on re-entry — `/dispatch` applies no label.
-- **`done`** — report that the PR is already ready and skip.
+- **`done`** — report that the PR is already ready, then **proceed to Step 8**
+  (early-stop). No phase skill ran, so Step 8 spawns no successor and
+  self-closes.
 
 The PR stays a **draft** through every phase; the `security` phase's
 `/security-review-fix` flips it to ready as the workflow's terminal action.
 
-After dispatching the one phase, **STOP** — do not advance to the next phase.
+After the one phase skill has run to completion, **proceed to Step 8**
+(phase-completed) — do not advance to the next phase here; Step 8 hands off and
+ends the job.
 
 `/ultrareview` is intentionally **never** invoked: it is user-triggered and billed,
 so `/dispatch` cannot launch it.
@@ -493,4 +501,100 @@ always owns the verdict.
   shifted; invoke `/new-requirement` with the drift findings as the revised
   understanding, then `/plan-implement`.
 - **`stop`** — codebase has moved past the need; report what changed and recommend
-  closing the issue or re-running `/ready`. Do **not** invoke `/plan-implement`.
+  closing the issue or re-running `/ready`. Do **not** invoke `/plan-implement`;
+  **proceed to Step 8** (early-stop).
+
+## 8. Hand off and self-close
+
+Every Step 0–7 termination routes here — Step 8 is the single way a `/dispatch`
+job ends. A job that just finished a phase passes the baton to a fresh
+`/dispatch` job and self-closes; that self-perpetuating chain, re-seeded by the
+#725 heartbeat, is what advances the workflow.
+
+Each termination reaches Step 8 with one of two dispositions, named by the step
+that routed here:
+
+- **phase-completed** — a phase skill (`/plan-implement`, `/verify-pr`,
+  `/dispatch-qa`, `/code-review-fix`, `/review-fix`, or `/security-review-fix`)
+  ran to completion. Only the Step 6 post-dispatch hand-off arrives this way.
+- **early-stop** — the job stopped before any phase skill ran: a busy lock, a
+  fetch / non-fast-forward failure, an empty queue, `main-broken`, a resolver
+  failure, a `worktree-closed` or closed-issue target, a worktree `conflict`, a
+  `waiting` phase that stayed `waiting`, a `done` PR, or an `implement`
+  relevance verdict of `stop`.
+
+Run these in order.
+
+**1. Return to the main worktree.** If this job entered an issue worktree via
+`EnterWorktree` in Step 4 (the `enter` and `create` outcomes), call
+`ExitWorktree` with `action: "keep"`: return to the main worktree and leave the
+issue worktree on disk as an adoptable orphan. This must run **before** the
+step-2 spawn, so the successor's selection scan does not misread this
+still-finishing job as a live session owning the issue worktree. `ExitWorktree`
+is a no-op when `EnterWorktree` was not called this session, so it is harmless
+on the early stops that never reached a worktree.
+
+**2. Pass the baton.** On the **phase-completed** disposition only, spawn the
+successor `/dispatch` job (run with `dangerouslyDisableSandbox: true` — the
+script reaches the local Claude daemon over a socket; see
+`.claude/rules/sandbox.md`):
+
+```bash
+.claude/skills/dispatch/scripts/dispatch-spawn
+```
+
+It prints `spawned` (a successor was started) or `deduped` (another `dispatch-*`
+job is already running, so none was needed) and exits 0; it exits non-zero when
+a job was spawned but did not register. **early-stop** dispositions skip this
+step — they spawn no successor; the #725 heartbeat re-seeds the chain if it has
+drained.
+
+**3. Print the completion report.** State what this job did: the phase that ran
+and its outcome, or the reason it stopped early.
+
+**4. Terminal disposition.** Take exactly one of the following, in this
+priority:
+
+- **`dispatch-spawn` failed** — a phase-completed run whose step-2 spawn exited
+  non-zero. Do **not** self-close. Report the failed baton-pass and stop,
+  leaving this job open so the failure is visible and the spawn can be retried.
+
+- **The report surfaces a deviation** — a phase-completed run whose step-2
+  spawn succeeded, but whose completion report surfaces a deviation from the
+  approved plan, or a result that does not fully satisfy the issue's acceptance
+  criteria. Do **not** self-close — self-closing would bury the deviation in a
+  closed job's transcript. The baton was already passed in step 2, so the chain
+  keeps moving; route this item to the office-hours queue for human review.
+  Resolve the PR for the target with
+  `.claude/skills/dispatch/scripts/dispatch-find-pr <N>` and apply the
+  `dispatch:office-hours` label to it (`gh`, `dangerouslyDisableSandbox: true`):
+
+  ```bash
+  gh pr edit <pr-num> --add-label dispatch:office-hours
+  ```
+
+  If that fails because the label does not exist yet, create it and retry —
+  the same apply-first / create-on-"not found" idiom `dispatch-complete-phase`
+  uses:
+
+  ```bash
+  gh label create dispatch:office-hours --color BFD4F2 \
+    --description "dispatch workflow: blocked on a human — awaiting input or review"
+  gh pr edit <pr-num> --add-label dispatch:office-hours
+  ```
+
+  `dispatch:office-hours` is the office-hours queue's marker, shared with #757,
+  whose input-block detection hooks are the label's other writer; whichever
+  writer runs first creates it. Then stop — report that the item is parked in
+  the office-hours queue for human review.
+
+- **Clean completion or early-stop** — an early-stop, or a phase-completed run
+  whose `dispatch-spawn` succeeded and whose report surfaces nothing that needs
+  the user. Self-close (`dangerouslyDisableSandbox: true`):
+
+  ```bash
+  claude stop "$CLAUDE_CODE_SESSION_ID"
+  ```
+
+  The job ends; the successor it spawned — or, for an early-stop, the #725
+  heartbeat — carries the workflow forward.
