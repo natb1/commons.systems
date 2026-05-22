@@ -1,4 +1,5 @@
 import { test, expect } from "@commons-systems/config/playwright-test";
+import { uploadFixture } from "./helpers";
 
 test.describe("accounts reconcile view", () => {
   test("navigating from accounts page reaches the reconcile view with query prefilled", async ({ page }) => {
@@ -14,40 +15,78 @@ test.describe("accounts reconcile view", () => {
     await expect(page.locator("#reconcile-controls")).toBeVisible();
   });
 
-  test("renders three columns for a seeded account/period with data", async ({ page }) => {
+  test("renders the journal-leg list for a seeded account/period", async ({ page }) => {
     await page.goto(
       "/accounts/reconcile?institution=Example%20Bank&account=Checking&period=2025-02",
     );
     await expect(page.locator("#reconcile-container")).toBeVisible({ timeout: 10000 });
-    await expect(page.locator(".reconcile-column-matched")).toBeVisible();
-    await expect(page.locator(".reconcile-column-unmatched-items")).toBeVisible();
-    await expect(page.locator(".reconcile-column-unmatched-txns")).toBeVisible();
+    await expect(page.locator("#reconcile-leg-list")).toBeVisible();
+    await expect(page.locator("#reconcile-leg-list .reconcile-leg").first()).toBeVisible();
+    await expect(page.locator("#reconcile-header")).toBeVisible();
+    await expect(page.locator(".reconcile-cleared-balance")).toBeVisible();
+    await expect(page.locator("#reconcile-open-dialog")).toBeVisible();
   });
 
-  test("changing the tolerance input re-renders the page", async ({ page }) => {
-    await page.goto(
-      "/accounts/reconcile?institution=Example%20Bank&account=Checking&period=2025-02&tolerance=3",
-    );
-    await expect(page.locator("#reconcile-container")).toBeVisible({ timeout: 10000 });
-    const tolerance = page.locator("#reconcile-tolerance-input");
-    await tolerance.fill("7");
-    await tolerance.dispatchEvent("change");
-    await expect(page).toHaveURL(/tolerance=7/);
-  });
+  test("happy-path reconcile: clear all legs, match the bank balance, finalize", async ({ page }) => {
+    // Upload mode is writable; seed mode would throw "Seed data is read-only"
+    // on the reconcile write. The fixture seeds a `Test Bank` / `Checking`
+    // asset account with three uncleared legs in `2025-03` totalling 250.
+    await page.goto("/transactions");
+    await expect(page.locator("#seed-data-notice")).toBeVisible({ timeout: 15000 });
+    await uploadFixture(page);
+    await expect(page.locator("#transactions-table")).toBeVisible({ timeout: 10000 });
+    // Wait for the local-mode transition (IDB meta write) before navigating away.
+    await expect(page.locator(".local-group-name")).toHaveText("Test Household", { timeout: 10000 });
 
-  test("aging badge renders when statement items are older than 30 days", async ({ page }) => {
-    // Seed has one item on 2025-02-14 ("UNKNOWN MERCHANT"). Use the default tolerance — the
-    // page always renders; badges appear only if the host system clock is >30 days after the
-    // item date. This check is conditional on that condition being true at test time.
     await page.goto(
-      "/accounts/reconcile?institution=Example%20Bank&account=Checking&period=2025-02",
+      "/accounts/reconcile?institution=Test%20Bank&account=Checking&period=2025-03",
     );
     await expect(page.locator("#reconcile-container")).toBeVisible({ timeout: 10000 });
-    const agingBadges = page.locator(".reconcile-aging");
-    const nowMs = Date.now();
-    const itemMs = Date.parse("2025-02-14T00:00:00Z");
-    const daysSince = Math.floor((nowMs - itemMs) / (24 * 60 * 60 * 1000));
-    test.skip(daysSince <= 30, "Seeded statement item is not old enough to be aged");
-    await expect(agingBadges.first()).toBeVisible();
+
+    const legRows = page.locator("#reconcile-leg-list .reconcile-leg");
+    await expect(legRows).toHaveCount(3);
+
+    // Clear every leg. After all three: cleared balance = 100 + 200 - 50 = 250.
+    // The hydrate handler stamps `data-cleared-saved` once the IDB write settles.
+    const checkboxes = page.locator("#reconcile-leg-list .reconcile-cleared-checkbox");
+    for (let i = 0; i < 3; i++) {
+      await checkboxes.nth(i).check();
+      await expect(legRows.nth(i)).toHaveAttribute("data-cleared-saved", "true", { timeout: 5000 });
+    }
+    await expect(page.locator(".reconcile-cleared-balance")).toContainText("250");
+
+    // Reload to confirm every cleared toggle persisted to IDB before reconciling.
+    await page.reload();
+    await expect(page.locator("#reconcile-leg-list")).toBeVisible({ timeout: 10000 });
+    const reloadedCheckboxes = page.locator("#reconcile-leg-list .reconcile-cleared-checkbox");
+    await expect(reloadedCheckboxes).toHaveCount(3);
+    for (let i = 0; i < 3; i++) {
+      await expect(reloadedCheckboxes.nth(i)).toBeChecked();
+    }
+    await expect(page.locator(".reconcile-cleared-balance")).toContainText("250");
+
+    // No past reconciliations yet.
+    await expect(page.locator("#reconcile-past .reconcile-past-event")).toHaveCount(0);
+
+    // Open the dialog; the bank-balance input defaults to the statement balance.
+    await page.locator("#reconcile-open-dialog").click();
+    const dialog = page.locator("#reconcile-dialog");
+    await expect(dialog).toBeVisible();
+    const bankInput = page.locator("#reconcile-bank-balance-input");
+    await bankInput.fill("250");
+
+    await page.locator("#reconcile-submit").click();
+
+    // On match the dialog closes and the page reloads with the finalized event.
+    await expect(dialog).toBeHidden();
+    await expect(page.locator("#reconcile-past .reconcile-past-event")).toHaveCount(1);
+
+    // Reconciled legs render disabled — their cleared flag is now terminal.
+    const reconciledCheckboxes = page.locator("#reconcile-leg-list .reconcile-cleared-checkbox");
+    await expect(reconciledCheckboxes).toHaveCount(3);
+    for (let i = 0; i < 3; i++) {
+      await expect(reconciledCheckboxes.nth(i)).toBeDisabled();
+      await expect(reconciledCheckboxes.nth(i)).toBeChecked();
+    }
   });
 });
