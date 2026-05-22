@@ -1643,6 +1643,42 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "jit with no open issue → falls through to issue queue" "issue 55" "$result"
 teardown
 
+# JS9. A leading-zero duration is parsed as base-10, not octal. jit-x's
+#      "012h" must mean 12h (octal would make it 10h, flipping the winner).
+echo "Test: JIT scan — leading-zero duration parses as base-10, not octal"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "jit-x", "repo": "natb1/household", "label": "jit:jit-x",
+    "title": "Jit X", "body": "Jit X.", "project": "household",
+    "remindAfterClose": "12h", "dueAfterClose": "012h" },
+  { "key": "jit-y", "repo": "natb1/household", "label": "jit:jit-y",
+    "title": "Jit Y", "body": "Jit Y.", "project": "household",
+    "remindAfterClose": "12h", "dueAfterClose": "11h" }
+] }
+EOF
+# Both closed at the same instant: jit-x due = +12h, jit-y due = +11h, so
+# jit-y is earlier and wins. Octal-parsing "012h" as 10h would wrongly pick
+# jit-x.
+printf '[{"number":10,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_jit-x.json"
+printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_jit-x.json"
+printf '[{"number":20,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_jit-y.json"
+printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_jit-y.json"
+printf '{"items":[{"id":"PVTI_010","content":{"url":"https://github.com/natb1/household/issues/10"},"status":"Todo"},{"id":"PVTI_020","content":{"url":"https://github.com/natb1/household/issues/20"},"status":"Todo"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "leading-zero duration is base-10 → earlier-due jit-y wins" \
+  "jit-reminder natb1/household 20 household PVTI_020" "$result"
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================

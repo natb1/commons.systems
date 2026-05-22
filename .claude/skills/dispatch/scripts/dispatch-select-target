@@ -134,7 +134,9 @@ parse_duration() {
     echo "error: invalid duration '$spec' (expected <integer><s|m|h|d|w>)" >&2
     exit 1
   fi
-  local n="${BASH_REMATCH[1]}" unit="${BASH_REMATCH[2]}"
+  # 10# forces base-10: bash arithmetic reads a leading-zero literal as octal,
+  # so an unforced "010h" would compute as 8h and "08h"/"09d" would hard-error.
+  local n=$(( 10#${BASH_REMATCH[1]} )) unit="${BASH_REMATCH[2]}"
   case "$unit" in
     s) echo "$n" ;;
     m) echo "$(( n * 60 ))" ;;
