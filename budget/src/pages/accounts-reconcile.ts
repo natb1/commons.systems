@@ -3,7 +3,7 @@ import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./re
 import type { Account, JournalEntry, JournalLeg, ReconciliationEvent, Statement } from "../firestore.js";
 import { formatCurrency } from "../format.js";
 import { accountDocId } from "../entities/account.js";
-import { buildReconcileRows, clearedBalance, isAged } from "../reconciliation.js";
+import { buildReconcileRows, clearedBalance, isAged, ADJUSTMENT_SUSPENSE_ACCOUNT_ID } from "../reconciliation.js";
 
 interface ReconcileQuery {
   institution: string | null;
@@ -165,6 +165,11 @@ function renderDialog(statementBalance: number | null): string {
                value="${escapeHtml(defaultValue)}">
       </label>
       <p id="reconcile-difference-display" class="reconcile-difference-display"></p>
+      <div id="reconcile-mismatch-actions" hidden>
+        <button type="button" id="reconcile-adjust-selections">Adjust cleared selections</button>
+        <button type="button" id="reconcile-create-adjustment">Create adjustment entry</button>
+        <small class="reconcile-escape-hatch-note">Use only for small, unexplained differences.</small>
+      </div>
       <div class="reconcile-dialog-actions">
         <button type="submit" id="reconcile-submit">Reconcile</button>
         <button type="button" id="reconcile-cancel">Cancel</button>
@@ -185,9 +190,13 @@ function renderPastReconciliations(events: ReconciliationEvent[], institution: s
   }
   const rows = matching.map((e) => {
     const through = formatDateShort(e.reconciledThroughDate.toMillis());
+    const adjustmentIndicator = Math.round(e.adjustment * 100) !== 0
+      ? `<span class="reconcile-adjustment-indicator" data-adjustment-entry-id="${escapeHtml(e.adjustmentEntryId ?? "")}">${escapeHtml(formatCurrency(e.adjustment))}</span>`
+      : "";
     return `<li class="reconcile-past-event" data-event-id="${escapeHtml(e.id)}">
       <span class="reconcile-date">${escapeHtml(through)}</span>
       <span class="reconcile-amount">${escapeHtml(formatCurrency(e.clearedBalance))}</span>
+      ${adjustmentIndicator}
     </li>`;
   }).join("");
   return `<section id="reconcile-past" class="reconcile-past">
@@ -239,8 +248,12 @@ export function renderReconcileHtml(ctx: RenderReconcileContext): string {
   const cleared = clearedBalance(filteredLegs, account.accountType);
   const statementBalance = statementEndingBalance(statements, query.institution, query.account, query.period);
   const statementAttr = statementBalance !== null ? ` data-statement-balance="${statementBalance}"` : "";
+  const accountTypeAttr = ` data-account-type="${escapeHtml(account.accountType)}"`;
+  const suspenseAttr = accounts.some((a) => a.id === ADJUSTMENT_SUSPENSE_ACCOUNT_ID)
+    ? ` data-suspense-account-id="${escapeHtml(ADJUSTMENT_SUSPENSE_ACCOUNT_ID)}"`
+    : "";
 
-  return `<div id="reconcile-container"${statementAttr}>
+  return `<div id="reconcile-container"${statementAttr}${accountTypeAttr}${suspenseAttr}>
     ${controls}
     ${renderHeader(cleared, statementBalance)}
     ${renderLegList(rows)}

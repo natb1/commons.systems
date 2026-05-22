@@ -263,6 +263,59 @@ describe("renderReconcileHtml", () => {
     expect(() => renderReconcileHtml(ctx({ accounts: [] }))).toThrow(/not found/);
   });
 
+  it("carries the account type on the container", () => {
+    const html = renderReconcileHtml(ctx());
+    expect(html).toContain('data-account-type="asset"');
+  });
+
+  it("carries the suspense account id when one is present", () => {
+    const html = renderReconcileHtml(ctx({
+      accounts: [
+        account(),
+        account({
+          id: "Budget_Adjustment Suspense",
+          institution: "Budget",
+          account: "Adjustment Suspense",
+          accountType: "equity",
+        }),
+      ],
+    }));
+    expect(html).toContain('data-suspense-account-id="Budget_Adjustment Suspense"');
+  });
+
+  it("omits the suspense account id when no suspense account exists", () => {
+    const html = renderReconcileHtml(ctx());
+    expect(html).not.toContain("data-suspense-account-id");
+  });
+
+  it("renders the hidden mismatch actions in the dialog", () => {
+    const html = renderReconcileHtml(ctx());
+    expect(html).toContain('id="reconcile-mismatch-actions"');
+    expect(html).toContain('id="reconcile-adjust-selections"');
+    expect(html).toContain('id="reconcile-create-adjustment"');
+    expect(html).toContain("Adjust cleared selections");
+    expect(html).toContain("Create adjustment entry");
+    expect(html).toContain("Use only for small, unexplained differences.");
+    const idx = html.indexOf('id="reconcile-mismatch-actions"');
+    const markup = html.slice(idx, idx + 60);
+    expect(markup).toContain("hidden");
+  });
+
+  it("renders an adjustment indicator for a past reconciliation with a non-zero adjustment", () => {
+    const html = renderReconcileHtml(ctx({
+      reconciliationEvents: [event({ adjustment: 25, adjustmentEntryId: "adj-entry-1" })],
+    }));
+    expect(html).toContain("reconcile-adjustment-indicator");
+    expect(html).toContain('data-adjustment-entry-id="adj-entry-1"');
+  });
+
+  it("renders no adjustment indicator for a past reconciliation with a zero adjustment", () => {
+    const html = renderReconcileHtml(ctx({
+      reconciliationEvents: [event()],
+    }));
+    expect(html).not.toContain("reconcile-adjustment-indicator");
+  });
+
   it("does not render any three-column markup", () => {
     const html = renderReconcileHtml(ctx({
       journalEntries: [entry({ id: "e-1" })],
