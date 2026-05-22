@@ -97,6 +97,7 @@ export interface IdbTransaction {
   timestampMs: number | null;
   statementId: string | null;
   statementItemId: string | null;
+  journalEntryId?: string | null;
   normalizedId: string | null;
   normalizedPrimary: boolean;
   normalizedDescription: string | null;
@@ -114,6 +115,7 @@ export interface RawTransaction {
   timestamp: string;
   statementId: string;
   statementItemId?: string | null;
+  journalEntryId?: string | null;
   category: string;
   budget: string | null;
   note: string;
@@ -185,6 +187,7 @@ export function parseRawTransaction(t: RawTransaction, i: number): Transaction {
     timestamp: t.timestamp ? parseISOTimestamp(t.timestamp, "transaction.timestamp") : null,
     statementId: (t.statementId || null) as StatementId | null,
     statementItemId: (t.statementItemId || null) as StatementItemId | null,
+    journalEntryId: t.journalEntryId || null,
     groupId: null as GroupId | null,
     normalizedId: t.normalizedId || null,
     normalizedPrimary: t.normalizedPrimary !== false,
@@ -209,6 +212,7 @@ export function transactionToIdbRecord(t: Transaction): IdbTransaction {
     timestampMs: t.timestamp?.toMillis() ?? null,
     statementId: t.statementId,
     statementItemId: t.statementItemId ?? null,
+    journalEntryId: t.journalEntryId ?? null,
     normalizedId: t.normalizedId,
     normalizedPrimary: t.normalizedPrimary,
     normalizedDescription: t.normalizedDescription,
@@ -232,6 +236,7 @@ export function idbToTransaction(row: IdbTransaction): Transaction {
     timestamp: msToTs(row.timestampMs),
     statementId: (row.statementId ?? null) as StatementId | null,
     statementItemId: (row.statementItemId ?? null) as StatementItemId | null,
+    journalEntryId: row.journalEntryId ?? null,
     groupId: null as GroupId | null,
     normalizedId: row.normalizedId,
     normalizedPrimary: row.normalizedPrimary,
@@ -252,6 +257,7 @@ export function transactionToRawJson(t: IdbTransaction): RawTransaction {
     timestamp: msToISO(t.timestampMs),
     statementId: nullToEmpty(t.statementId),
     statementItemId: t.statementItemId ?? null,
+    journalEntryId: t.journalEntryId ?? null,
     category: t.category,
     budget: t.budget,
     note: t.note,
