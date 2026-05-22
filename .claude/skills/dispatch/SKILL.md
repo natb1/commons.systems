@@ -578,11 +578,14 @@ priority:
   uses:
 
   ```bash
-  gh label create dispatch:office-hours --color BFD4F2 \
+  gh label create dispatch:office-hours \
     --description "dispatch workflow: blocked on a human — awaiting input or review"
   gh pr edit <pr-num> --add-label dispatch:office-hours
   ```
 
+  Pass no `--color`: `dispatch-complete-phase` is the single source of the
+  `dispatch:*` label-colour metadata, and #757 owns `dispatch:office-hours`'s
+  canonical definition — Step 8 only needs the label to exist.
   `dispatch:office-hours` is the office-hours queue's marker, shared with #757,
   whose input-block detection hooks are the label's other writer; whichever
   writer runs first creates it. Then stop — report that the item is parked in
