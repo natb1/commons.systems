@@ -19,6 +19,12 @@ import { serializeSeedNormalizationRule } from "./entities/normalization-rule.js
 import type { NormalizationRuleSeedData } from "./entities/normalization-rule.js";
 import { serializeSeedWeeklyAggregate } from "./entities/weekly-aggregate.js";
 import type { WeeklyAggregateSeedData } from "./entities/weekly-aggregate.js";
+import { serializeSeedJournalEntry } from "./entities/journal-entry.js";
+import type { JournalEntrySeedData } from "./entities/journal-entry.js";
+import { serializeSeedJournalLeg } from "./entities/journal-leg.js";
+import type { JournalLegSeedData } from "./entities/journal-leg.js";
+import { serializeSeedAccount } from "./entities/account.js";
+import type { AccountSeedData } from "./entities/account.js";
 
 const VIRTUAL_MODULE_ID = "virtual:budget-seed-data";
 const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
@@ -52,6 +58,18 @@ export function serializeSeedData(): SeedData {
     serializeSeedWeeklyAggregate(raw as unknown as WeeklyAggregateSeedData, id)
   );
 
+  const journalEntries = findCollection("seed-journal-entries").map(({ id, data: raw }) =>
+    serializeSeedJournalEntry(raw as unknown as JournalEntrySeedData, id)
+  );
+
+  const journalLegs = findCollection("seed-journal-legs").map(({ id, data: raw }) =>
+    serializeSeedJournalLeg(raw as unknown as JournalLegSeedData, id)
+  );
+
+  const accounts = findCollection("seed-accounts").map(({ id, data: raw }) =>
+    serializeSeedAccount(raw as unknown as AccountSeedData, id)
+  );
+
   const statementItems = findCollection("seed-statement-items").map(({ id, data: raw }) =>
     serializeSeedStatementItem(raw as unknown as StatementItemSeedData, id)
   );
@@ -70,6 +88,9 @@ export function serializeSeedData(): SeedData {
     statementItems,
     reconciliationNotes,
     weeklyAggregates,
+    journalEntries,
+    journalLegs,
+    accounts,
   };
 }
 

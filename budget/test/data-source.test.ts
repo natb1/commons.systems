@@ -170,6 +170,76 @@ describe("IdbDataSource", () => {
     expect(aggs[0].unbudgetedTotal).toBe(75.50);
   });
 
+  it("reads journal entries from IDB", async () => {
+    await storeParsedData(makeParsedData({
+      journalEntries: [{
+        id: "je-1",
+        timestampMs: 1700000000000,
+        description: "Grocery Store",
+        note: null,
+        legCount: 2,
+      }],
+    }));
+    const ds = new IdbDataSource();
+    const entries = await ds.getJournalEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].id).toBe("je-1");
+    expect(entries[0].timestamp.toMillis()).toBe(1700000000000);
+    expect(entries[0].description).toBe("Grocery Store");
+    expect(entries[0].note).toBeNull();
+    expect(entries[0].legCount).toBe(2);
+  });
+
+  it("reads journal legs from IDB", async () => {
+    await storeParsedData(makeParsedData({
+      journalLegs: [{
+        id: "jl-1",
+        entryId: "je-1",
+        accountId: "Budget_Uncategorized Expense",
+        debit: 84.50,
+        credit: 0,
+        timestampMs: 1700000000000,
+        cleared: false,
+        reconciledAtMs: null,
+        reconciledEventId: null,
+        statementItemId: null,
+      }],
+    }));
+    const ds = new IdbDataSource();
+    const legs = await ds.getJournalLegs();
+    expect(legs).toHaveLength(1);
+    expect(legs[0].id).toBe("jl-1");
+    expect(legs[0].entryId).toBe("je-1");
+    expect(legs[0].accountId).toBe("Budget_Uncategorized Expense");
+    expect(legs[0].debit).toBe(84.50);
+    expect(legs[0].credit).toBe(0);
+    expect(legs[0].timestamp.toMillis()).toBe(1700000000000);
+    expect(legs[0].cleared).toBe(false);
+    expect(legs[0].reconciledAt).toBeNull();
+  });
+
+  it("reads accounts from IDB", async () => {
+    await storeParsedData(makeParsedData({
+      accounts: [{
+        id: "TestBank_Checking",
+        institution: "TestBank",
+        account: "Checking",
+        accountType: "asset",
+        openingBalance: 1500,
+        openingBalanceDateMs: 1696118400000, // 2023-10-01T00:00:00Z
+      }],
+    }));
+    const ds = new IdbDataSource();
+    const accts = await ds.getAccounts();
+    expect(accts).toHaveLength(1);
+    expect(accts[0].id).toBe("TestBank_Checking");
+    expect(accts[0].institution).toBe("TestBank");
+    expect(accts[0].account).toBe("Checking");
+    expect(accts[0].accountType).toBe("asset");
+    expect(accts[0].openingBalance).toBe(1500);
+    expect(accts[0].openingBalanceDate!.toMillis()).toBe(1696118400000);
+  });
+
   it("deleteRule removes from IDB", async () => {
     await storeParsedData(makeParsedData());
     const ds = new IdbDataSource();
@@ -386,5 +456,46 @@ describe("SeedDataSource", () => {
     expect(aggs[0].creditTotal).toBe(500);
     expect(aggs[0].unbudgetedTotal).toBe(75);
     expect(aggs[0].groupId).toBeNull();
+  });
+
+  it("getJournalEntries returns seed journal entries with Timestamp objects", async () => {
+    const ds = new SeedDataSource();
+    const entries = await ds.getJournalEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].id).toBe("seed-je-1");
+    expect(entries[0].timestamp.toMillis()).toBe(1700000000000);
+    expect(entries[0].description).toBe("Grocery Store");
+    expect(entries[0].note).toBeNull();
+    expect(entries[0].legCount).toBe(2);
+    expect(entries[0].groupId).toBeNull();
+  });
+
+  it("getJournalLegs returns seed journal legs with Timestamp objects", async () => {
+    const ds = new SeedDataSource();
+    const legs = await ds.getJournalLegs();
+    expect(legs).toHaveLength(2);
+    const leg = legs.find(l => l.id === "seed-jl-1")!;
+    expect(leg).toBeDefined();
+    expect(leg.entryId).toBe("seed-je-1");
+    expect(leg.accountId).toBe("Budget_Uncategorized Expense");
+    expect(leg.debit).toBe(45.67);
+    expect(leg.credit).toBe(0);
+    expect(leg.timestamp.toMillis()).toBe(1700000000000);
+    expect(leg.cleared).toBe(false);
+    expect(leg.reconciledAt).toBeNull();
+    expect(leg.groupId).toBeNull();
+  });
+
+  it("getAccounts returns seed accounts", async () => {
+    const ds = new SeedDataSource();
+    const accts = await ds.getAccounts();
+    expect(accts).toHaveLength(1);
+    expect(accts[0].id).toBe("TestBank_Checking");
+    expect(accts[0].institution).toBe("TestBank");
+    expect(accts[0].account).toBe("Checking");
+    expect(accts[0].accountType).toBe("asset");
+    expect(accts[0].openingBalance).toBeNull();
+    expect(accts[0].openingBalanceDate).toBeNull();
+    expect(accts[0].groupId).toBeNull();
   });
 });

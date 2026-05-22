@@ -11,6 +11,9 @@ declare module "virtual:budget-seed-data" {
   export type { SeedStatementItem } from "./entities/statement-item";
   export type { SeedReconciliationNote } from "./entities/reconciliation-note";
   export type { SeedWeeklyAggregate } from "./entities/weekly-aggregate";
+  export type { SeedJournalEntry } from "./entities/journal-entry";
+  export type { SeedJournalLeg } from "./entities/journal-leg";
+  export type { SeedAccount } from "./entities/account";
 
   export interface SeedData {
     readonly transactions: SeedTransaction[];
@@ -22,6 +25,9 @@ declare module "virtual:budget-seed-data" {
     readonly statementItems: SeedStatementItem[];
     readonly reconciliationNotes: SeedReconciliationNote[];
     readonly weeklyAggregates: SeedWeeklyAggregate[];
+    readonly journalEntries: SeedJournalEntry[];
+    readonly journalLegs: SeedJournalLeg[];
+    readonly accounts: SeedAccount[];
   }
 
   const seedData: SeedData;

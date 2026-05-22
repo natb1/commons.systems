@@ -10,6 +10,9 @@ const EXPECTED_COLLECTIONS = [
   "normalizationRules",
   "statements",
   "weeklyAggregates",
+  "journalEntries",
+  "journalLegs",
+  "accounts",
 ] as const;
 
 describe("budgetSeedDataPlugin", () => {
@@ -67,7 +70,7 @@ describe("budgetSeedDataPlugin", () => {
       return data;
     }
 
-    it("has all 7 collection keys", () => {
+    it("has all 10 collection keys", () => {
       const d = getData();
       for (const key of EXPECTED_COLLECTIONS) {
         expect(d).toHaveProperty(key);
@@ -145,6 +148,41 @@ describe("budgetSeedDataPlugin", () => {
       for (const s of stmts) {
         expect(s).not.toHaveProperty("memberEmails");
         expect(s).not.toHaveProperty("groupId");
+      }
+    });
+
+    it("journalEntries have id, timestampMs (number), no memberEmails or groupId", () => {
+      const entries = getData().journalEntries as Record<string, unknown>[];
+      expect(entries.length).toBeGreaterThan(0);
+      for (const e of entries) {
+        expect(typeof e.id).toBe("string");
+        expect(typeof e.timestampMs).toBe("number");
+        expect(e).not.toHaveProperty("memberEmails");
+        expect(e).not.toHaveProperty("groupId");
+      }
+    });
+
+    it("journalLegs have id, timestampMs (number), no memberEmails or groupId", () => {
+      const legs = getData().journalLegs as Record<string, unknown>[];
+      expect(legs.length).toBeGreaterThan(0);
+      for (const l of legs) {
+        expect(typeof l.id).toBe("string");
+        expect(typeof l.timestampMs).toBe("number");
+        expect(l).not.toHaveProperty("memberEmails");
+        expect(l).not.toHaveProperty("groupId");
+      }
+    });
+
+    it("accounts have id, institution, account, accountType, no memberEmails or groupId", () => {
+      const accts = getData().accounts as Record<string, unknown>[];
+      expect(accts.length).toBeGreaterThan(0);
+      for (const a of accts) {
+        expect(typeof a.id).toBe("string");
+        expect(typeof a.institution).toBe("string");
+        expect(typeof a.account).toBe("string");
+        expect(typeof a.accountType).toBe("string");
+        expect(a).not.toHaveProperty("memberEmails");
+        expect(a).not.toHaveProperty("groupId");
       }
     });
   });

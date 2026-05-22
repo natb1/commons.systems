@@ -19,9 +19,12 @@ import type {
   RuleId,
   NormalizationRuleId,
 } from "./firestore.js";
+import type { JournalEntry } from "./entities/journal-entry.js";
+import type { JournalLeg } from "./entities/journal-leg.js";
+import type { Account } from "./entities/account.js";
 import seedData from "virtual:budget-seed-data";
 import { getAll, get, put, deleteRecord } from "./idb.js";
-import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
+import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate, IdbJournalEntry, IdbJournalLeg, IdbAccount } from "./idb.js";
 import { idbToTransaction } from "./entities/transaction.js";
 import { idbToStatement } from "./entities/statement.js";
 import { idbToStatementItem } from "./entities/statement-item.js";
@@ -31,6 +34,9 @@ import { idbToBudgetPeriod } from "./entities/budget-period.js";
 import { idbToRule } from "./entities/rule.js";
 import { idbToNormalizationRule } from "./entities/normalization-rule.js";
 import { idbToWeeklyAggregate } from "./entities/weekly-aggregate.js";
+import { idbToJournalEntry } from "./entities/journal-entry.js";
+import { idbToJournalLeg } from "./entities/journal-leg.js";
+import { idbToAccount } from "./entities/account.js";
 import { filterByTimestamp } from "./entities/_helpers.js";
 
 export interface TransactionQuery {
@@ -55,6 +61,9 @@ export interface DataSource {
   getRules(): Promise<Rule[]>;
   getNormalizationRules(): Promise<NormalizationRule[]>;
   getWeeklyAggregates(): Promise<WeeklyAggregate[]>;
+  getJournalEntries(): Promise<JournalEntry[]>;
+  getJournalLegs(): Promise<JournalLeg[]>;
+  getAccounts(): Promise<Account[]>;
   updateTransaction(
     id: TransactionId,
     fields: Partial<Pick<Transaction, "note" | "category" | "reimbursement" | "budget" | "normalizedId" | "normalizedPrimary" | "normalizedDescription">>,
@@ -112,6 +121,15 @@ export class SeedDataSource implements DataSource {
   }
   async getWeeklyAggregates(): Promise<WeeklyAggregate[]> {
     return seedData.weeklyAggregates.map(idbToWeeklyAggregate);
+  }
+  async getJournalEntries(): Promise<JournalEntry[]> {
+    return seedData.journalEntries.map(idbToJournalEntry);
+  }
+  async getJournalLegs(): Promise<JournalLeg[]> {
+    return seedData.journalLegs.map(idbToJournalLeg);
+  }
+  async getAccounts(): Promise<Account[]> {
+    return seedData.accounts.map(idbToAccount);
   }
   async updateTransaction(): Promise<void> {
     throw new Error("Seed data is read-only");
@@ -211,6 +229,21 @@ export class IdbDataSource implements DataSource {
   async getWeeklyAggregates(): Promise<WeeklyAggregate[]> {
     const rows = await getAll<IdbWeeklyAggregate>("weeklyAggregates");
     return rows.map(idbToWeeklyAggregate);
+  }
+
+  async getJournalEntries(): Promise<JournalEntry[]> {
+    const rows = await getAll<IdbJournalEntry>("journalEntries");
+    return rows.map(idbToJournalEntry);
+  }
+
+  async getJournalLegs(): Promise<JournalLeg[]> {
+    const rows = await getAll<IdbJournalLeg>("journalLegs");
+    return rows.map(idbToJournalLeg);
+  }
+
+  async getAccounts(): Promise<Account[]> {
+    const rows = await getAll<IdbAccount>("accounts");
+    return rows.map(idbToAccount);
   }
 
   async updateTransaction(
