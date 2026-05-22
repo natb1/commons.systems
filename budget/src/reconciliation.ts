@@ -90,8 +90,8 @@ export function clearedBalance(legs: JournalLeg[], accountType: AccountType): nu
 }
 
 /**
- * Cent-tolerant equality. Compares in integer cents to avoid floating-point drift at
- * the 1-cent boundary — the same pattern `reconcile` uses for amount matching.
+ * Cent-tolerant equality. Compares in integer cents to avoid floating-point drift
+ * at the 1-cent boundary.
  */
 export function balancesMatch(a: number, b: number): boolean {
   return Math.round(a * 100) === Math.round(b * 100);

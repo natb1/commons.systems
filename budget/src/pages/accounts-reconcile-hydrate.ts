@@ -174,8 +174,11 @@ async function handleReconcileSubmit(container: HTMLElement, dialog: HTMLDialogE
   const differenceDisplay = container.querySelector<HTMLElement>("#reconcile-difference-display");
   if (!bankInput) throw new Error("#reconcile-bank-balance-input not found");
 
-  const bankBalance = Number(bankInput.value);
-  if (!Number.isFinite(bankBalance)) {
+  // Number("") is 0, not NaN — guard the empty input explicitly so an
+  // un-filled dialog is rejected rather than reconciled against a zero balance.
+  const bankInputRaw = bankInput.value.trim();
+  const bankBalance = Number(bankInputRaw);
+  if (bankInputRaw === "" || !Number.isFinite(bankBalance)) {
     if (differenceDisplay) differenceDisplay.textContent = "Enter a valid bank balance.";
     return;
   }
