@@ -29,7 +29,7 @@
 #
 # Exit codes:
 #   0  deduped or spawned (stdout disambiguates).
-#   1  a job was spawned but never registered — see stderr.
+#   1  the successor never registered in 'claude agents --json' — see stderr.
 #   2  the script cannot operate — an unexpected command-line argument, or not
 #      in a git repo with DISPATCH_SPAWN_MAIN_WORKTREE unset.
 #
@@ -149,8 +149,12 @@ done <<<"$sessions"
 # one new dispatch agent at a time, so ~30 bits is ample.
 SHORT_ID=$(printf '%04x%04x' "$RANDOM" "$RANDOM")
 AGENT_NAME="dispatch-$SHORT_ID"
-( cd "$MAIN_WORKTREE" && "$CLAUDE_CMD" --bg --name "$AGENT_NAME" \
-    --permission-mode auto "/dispatch" ) >/dev/null 2>&1 || true
+# Capture the spawn's combined output so a failure diagnostic can surface why
+# (`cd` failed, `claude` missing, `--bg` rejected). `|| true` keeps a non-zero
+# spawn from aborting the script — Step 5's registry check is the source of
+# truth for whether the agent actually came up.
+spawn_output=$( ( cd "$MAIN_WORKTREE" && "$CLAUDE_CMD" --bg --name "$AGENT_NAME" \
+    --permission-mode auto "/dispatch" ) 2>&1 ) || true
 
 # ---- Step 5: verify the new agent registered -------------------------------
 registered=""
@@ -166,5 +170,9 @@ if [[ -n "$registered" ]]; then
   echo spawned
   exit 0
 fi
-echo "dispatch-spawn: spawned '$AGENT_NAME' but it did not register in 'claude agents --json'" >&2
+if [[ -n "${spawn_output//[[:space:]]/}" ]]; then
+  echo "dispatch-spawn: '$AGENT_NAME' did not register in 'claude agents --json' after 'claude --bg'; output: $spawn_output" >&2
+else
+  echo "dispatch-spawn: '$AGENT_NAME' did not register in 'claude agents --json' after 'claude --bg'" >&2
+fi
 exit 1

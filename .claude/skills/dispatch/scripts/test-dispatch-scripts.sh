@@ -3225,8 +3225,11 @@ SPAWN_RM_LOG=""
 
 # write_fake_spawn_claude — install the multi-subcommand fake `claude`.
 # Dispatches on $1:
-#   agents   — print the registry fixture (ignores --cwd; the helper filters
-#              client-side here, which is fine for these tests).
+#   agents   — print the registry fixture verbatim. The fake ignores --cwd:
+#              claude_sessions_under does no client-side path filtering — it
+#              trusts server-side `--cwd` filtering — so every fixture session
+#              is returned. Fine here: each fixture holds only sessions a test
+#              means dispatch-spawn to see.
 #   --bg     — record full argv to bg-argv; when SPAWN_BG_REGISTERS=1 (default)
 #              parse --name and jq-append the new agent to the fixture so the
 #              verify step finds it.
@@ -3392,6 +3395,29 @@ if [[ "$rm_log" == *"sess-stale"* ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm sess-stale' was invoked"
   echo "    rm-log: $rm_log"
+fi
+spawn_teardown
+
+# --- Test 6: unqueryable registry fails safe ---------------------------------
+
+echo "Test: an unparseable session registry fails safe — spawns nothing"
+spawn_setup
+# A registry that is not a JSON array: lib-claude-agents.sh's
+# claude_sessions_under cannot parse it and returns 1 (unknown). dispatch-spawn
+# must treat unknown as "a dispatch agent may be running" and spawn nothing —
+# the documented fail-safe in the script's Step 3 dedup guard.
+printf '%s' 'not-a-json-array' > "$SPAWN_REGISTRY"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "unknown-registry: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "unknown-registry: stdout is 'deduped'" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unknown-registry: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unknown-registry: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_BG_ARGV")"
 fi
 spawn_teardown
 
