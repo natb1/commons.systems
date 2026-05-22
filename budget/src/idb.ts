@@ -7,6 +7,14 @@ import type { IdbStatementItem } from "./entities/statement-item.js";
 export type { IdbStatementItem };
 import type { IdbReconciliationNote } from "./entities/reconciliation-note.js";
 export type { IdbReconciliationNote };
+import type { IdbAccount } from "./entities/account.js";
+export type { IdbAccount };
+import type { IdbJournalEntry } from "./entities/journal-entry.js";
+export type { IdbJournalEntry };
+import type { IdbJournalLeg } from "./entities/journal-leg.js";
+export type { IdbJournalLeg };
+import type { IdbReconciliationEvent } from "./entities/reconciliation-event.js";
+export type { IdbReconciliationEvent };
 import type { IdbBudget } from "./entities/budget.js";
 export type { IdbBudget };
 import type { IdbBudgetPeriod } from "./entities/budget-period.js";
@@ -27,6 +35,10 @@ const STORE_NAMES = [
   "statements",
   "statementItems",
   "reconciliationNotes",
+  "accounts",
+  "journalEntries",
+  "journalLegs",
+  "reconciliationEvents",
   "weeklyAggregates",
   "meta",
 ] as const;
@@ -35,7 +47,7 @@ export type StoreName = (typeof STORE_NAMES)[number];
 
 const { openDb, closeDb: closeDbConn } = createDbConnection({
   name: "budget",
-  version: 4,
+  version: 5,
   onUpgrade(db) {
     for (const name of STORE_NAMES) {
       if (!db.objectStoreNames.contains(name)) {
@@ -64,6 +76,10 @@ export interface ParsedData {
   statements: IdbStatement[];
   statementItems: IdbStatementItem[];
   reconciliationNotes: IdbReconciliationNote[];
+  accounts: IdbAccount[];
+  journalEntries: IdbJournalEntry[];
+  journalLegs: IdbJournalLeg[];
+  reconciliationEvents: IdbReconciliationEvent[];
   weeklyAggregates: IdbWeeklyAggregate[];
   meta: UploadMeta;
 }
@@ -98,6 +114,10 @@ export async function storeParsedData(data: ParsedData): Promise<void> {
   for (const record of data.statements) stores.statements.put(record);
   for (const record of data.statementItems) stores.statementItems.put(record);
   for (const record of data.reconciliationNotes) stores.reconciliationNotes.put(record);
+  for (const record of data.accounts) stores.accounts.put(record);
+  for (const record of data.journalEntries) stores.journalEntries.put(record);
+  for (const record of data.journalLegs) stores.journalLegs.put(record);
+  for (const record of data.reconciliationEvents) stores.reconciliationEvents.put(record);
   for (const record of data.weeklyAggregates) stores.weeklyAggregates.put(record);
   stores.meta.put(data.meta);
 

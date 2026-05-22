@@ -4,6 +4,10 @@ import type {
   Budget,
   BudgetPeriod,
   WeeklyAggregate,
+  Account,
+  JournalEntry,
+  JournalLeg,
+  ReconciliationEvent,
 } from "./firestore.js";
 import type { ParsedData } from "./idb.js";
 import type { RawTransaction } from "./entities/transaction.js";
@@ -21,6 +25,14 @@ import type { NormalizationRule, RawNormalizationRule } from "./entities/normali
 import { parseRawNormalizationRule, normalizationRuleToIdbRecord } from "./entities/normalization-rule.js";
 import type { RawWeeklyAggregate } from "./entities/weekly-aggregate.js";
 import { parseRawWeeklyAggregate, weeklyAggregateToIdbRecord } from "./entities/weekly-aggregate.js";
+import type { RawAccount } from "./entities/account.js";
+import { parseRawAccount, accountToIdbRecord } from "./entities/account.js";
+import type { RawJournalEntry } from "./entities/journal-entry.js";
+import { parseRawJournalEntry, journalEntryToIdbRecord } from "./entities/journal-entry.js";
+import type { RawJournalLeg } from "./entities/journal-leg.js";
+import { parseRawJournalLeg, journalLegToIdbRecord } from "./entities/journal-leg.js";
+import type { RawReconciliationEvent } from "./entities/reconciliation-event.js";
+import { parseRawReconciliationEvent, reconciliationEventToIdbRecord } from "./entities/reconciliation-event.js";
 // Re-export so existing import sites keep working.
 export { UploadValidationError };
 
@@ -35,6 +47,10 @@ interface RawOutput {
   rules: RawRule[];
   normalizationRules: RawNormalizationRule[];
   statements: RawStatement[];
+  accounts?: RawAccount[];
+  journalEntries?: RawJournalEntry[];
+  journalLegs?: RawJournalLeg[];
+  reconciliationEvents?: RawReconciliationEvent[];
   weeklyAggregates?: RawWeeklyAggregate[];
 }
 
@@ -45,6 +61,10 @@ export interface ParsedUpload {
   budgetPeriods: BudgetPeriod[];
   rules: Rule[];
   normalizationRules: NormalizationRule[];
+  accounts: Account[];
+  journalEntries: JournalEntry[];
+  journalLegs: JournalLeg[];
+  reconciliationEvents: ReconciliationEvent[];
   weeklyAggregates: WeeklyAggregate[];
   groupName: string;
   version: number;
@@ -88,6 +108,10 @@ export function parseUploadedJson(text: string): ParsedUpload {
   const rules: Rule[] = (raw.rules ?? []).map((r: RawRule, i: number) => parseRawRule(r, i));
   const normalizationRules: NormalizationRule[] = (raw.normalizationRules ?? []).map((r: RawNormalizationRule, i: number) => parseRawNormalizationRule(r, i));
   const statements: Statement[] = (raw.statements ?? []).map((s: RawStatement, i: number) => parseRawStatement(s, i));
+  const accounts: Account[] = (raw.accounts ?? []).map((a: RawAccount, i: number) => parseRawAccount(a, i));
+  const journalEntries: JournalEntry[] = (raw.journalEntries ?? []).map((e: RawJournalEntry, i: number) => parseRawJournalEntry(e, i));
+  const journalLegs: JournalLeg[] = (raw.journalLegs ?? []).map((l: RawJournalLeg, i: number) => parseRawJournalLeg(l, i));
+  const reconciliationEvents: ReconciliationEvent[] = (raw.reconciliationEvents ?? []).map((e: RawReconciliationEvent, i: number) => parseRawReconciliationEvent(e, i));
   const weeklyAggregates: WeeklyAggregate[] = (raw.weeklyAggregates ?? []).map((a: RawWeeklyAggregate, i: number) => parseRawWeeklyAggregate(a, i));
 
   return {
@@ -97,6 +121,10 @@ export function parseUploadedJson(text: string): ParsedUpload {
     budgetPeriods,
     rules,
     normalizationRules,
+    accounts,
+    journalEntries,
+    journalLegs,
+    reconciliationEvents,
     weeklyAggregates,
     groupName: raw.groupName,
     version: raw.version,
@@ -115,6 +143,10 @@ export function toParsedData(parsed: ParsedUpload): ParsedData {
     statements: parsed.statements.map(statementToIdbRecord),
     statementItems: [],
     reconciliationNotes: [],
+    accounts: parsed.accounts.map(accountToIdbRecord),
+    journalEntries: parsed.journalEntries.map(journalEntryToIdbRecord),
+    journalLegs: parsed.journalLegs.map(journalLegToIdbRecord),
+    reconciliationEvents: parsed.reconciliationEvents.map(reconciliationEventToIdbRecord),
     weeklyAggregates: parsed.weeklyAggregates.map(weeklyAggregateToIdbRecord),
     meta: {
       key: "upload",

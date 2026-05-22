@@ -7,6 +7,10 @@ import type {
   ReconciliationNote,
   ReconciliationEntityType,
   ReconciliationClassification,
+  Account,
+  JournalEntry,
+  JournalLeg,
+  ReconciliationEvent,
   Budget,
   BudgetOverride,
   BudgetPeriod,
@@ -19,13 +23,18 @@ import type {
   RuleId,
   NormalizationRuleId,
 } from "./firestore.js";
+import { assertLegStateTransition } from "./firestore.js";
 import seedData from "virtual:budget-seed-data";
 import { getAll, get, put, deleteRecord } from "./idb.js";
-import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
+import type { IdbTransaction, IdbStatement, IdbStatementItem, IdbReconciliationNote, IdbAccount, IdbJournalEntry, IdbJournalLeg, IdbReconciliationEvent, IdbBudget, IdbBudgetPeriod, IdbRule, IdbNormalizationRule, IdbWeeklyAggregate } from "./idb.js";
 import { idbToTransaction } from "./entities/transaction.js";
 import { idbToStatement } from "./entities/statement.js";
 import { idbToStatementItem } from "./entities/statement-item.js";
 import { idbToReconciliationNote } from "./entities/reconciliation-note.js";
+import { idbToAccount, accountDocId } from "./entities/account.js";
+import { idbToJournalEntry } from "./entities/journal-entry.js";
+import { idbToJournalLeg } from "./entities/journal-leg.js";
+import { idbToReconciliationEvent } from "./entities/reconciliation-event.js";
 import { idbToBudget } from "./entities/budget.js";
 import { idbToBudgetPeriod } from "./entities/budget-period.js";
 import { idbToRule } from "./entities/rule.js";
@@ -45,11 +54,22 @@ export interface ReconciliationNoteFields {
   note: string;
 }
 
+/**
+ * Everything an `IdbReconciliationEvent` record needs except the `legIds` array
+ * (passed separately) and the document `id` (derived from institution + account
+ * + reconciled-through date).
+ */
+export type ReconciliationEventFields = Omit<IdbReconciliationEvent, "id" | "legIds">;
+
 export interface DataSource {
   getTransactions(query?: TransactionQuery): Promise<Transaction[]>;
   getStatements(): Promise<Statement[]>;
   getStatementItems(): Promise<StatementItem[]>;
   getReconciliationNotes(): Promise<ReconciliationNote[]>;
+  getAccounts(): Promise<Account[]>;
+  getJournalEntries(): Promise<JournalEntry[]>;
+  getJournalLegs(): Promise<JournalLeg[]>;
+  getReconciliationEvents(): Promise<ReconciliationEvent[]>;
   getBudgets(): Promise<Budget[]>;
   getBudgetPeriods(): Promise<BudgetPeriod[]>;
   getRules(): Promise<Rule[]>;
@@ -62,6 +82,8 @@ export interface DataSource {
   updateTransactionStatementItemLink(id: TransactionId, statementItemId: StatementItemId | null): Promise<void>;
   upsertReconciliationNote(fields: ReconciliationNoteFields): Promise<void>;
   deleteReconciliationNote(entityType: ReconciliationEntityType, entityId: string): Promise<void>;
+  updateJournalLegCleared(legId: string, cleared: boolean): Promise<void>;
+  createReconciliationEvent(fields: ReconciliationEventFields, legIds: string[]): Promise<ReconciliationEvent>;
   updateBudget(
     id: BudgetId,
     fields: Partial<Pick<Budget, "name" | "allowance" | "allowancePeriod" | "rollover">>,
@@ -98,6 +120,18 @@ export class SeedDataSource implements DataSource {
   async getReconciliationNotes(): Promise<ReconciliationNote[]> {
     return seedData.reconciliationNotes.map(idbToReconciliationNote);
   }
+  async getAccounts(): Promise<Account[]> {
+    return seedData.accounts.map(idbToAccount);
+  }
+  async getJournalEntries(): Promise<JournalEntry[]> {
+    return seedData.journalEntries.map(idbToJournalEntry);
+  }
+  async getJournalLegs(): Promise<JournalLeg[]> {
+    return seedData.journalLegs.map(idbToJournalLeg);
+  }
+  async getReconciliationEvents(): Promise<ReconciliationEvent[]> {
+    return seedData.reconciliationEvents.map(idbToReconciliationEvent);
+  }
   async getBudgets(): Promise<Budget[]> {
     return seedData.budgets.map(idbToBudget);
   }
@@ -123,6 +157,12 @@ export class SeedDataSource implements DataSource {
     throw new Error("Seed data is read-only");
   }
   async deleteReconciliationNote(): Promise<void> {
+    throw new Error("Seed data is read-only");
+  }
+  async updateJournalLegCleared(): Promise<void> {
+    throw new Error("Seed data is read-only");
+  }
+  async createReconciliationEvent(): Promise<ReconciliationEvent> {
     throw new Error("Seed data is read-only");
   }
   async updateBudget(): Promise<void> {
@@ -188,6 +228,26 @@ export class IdbDataSource implements DataSource {
     return rows.map(idbToReconciliationNote);
   }
 
+  async getAccounts(): Promise<Account[]> {
+    const rows = await getAll<IdbAccount>("accounts");
+    return rows.map(idbToAccount);
+  }
+
+  async getJournalEntries(): Promise<JournalEntry[]> {
+    const rows = await getAll<IdbJournalEntry>("journalEntries");
+    return rows.map(idbToJournalEntry);
+  }
+
+  async getJournalLegs(): Promise<JournalLeg[]> {
+    const rows = await getAll<IdbJournalLeg>("journalLegs");
+    return rows.map(idbToJournalLeg);
+  }
+
+  async getReconciliationEvents(): Promise<ReconciliationEvent[]> {
+    const rows = await getAll<IdbReconciliationEvent>("reconciliationEvents");
+    return rows.map(idbToReconciliationEvent);
+  }
+
   async getBudgets(): Promise<Budget[]> {
     const rows = await getAll<IdbBudget>("budgets");
     return rows.map(idbToBudget);
@@ -249,6 +309,37 @@ export class IdbDataSource implements DataSource {
   ): Promise<void> {
     const id = `${entityType}_${entityId}`;
     await deleteRecord("reconciliationNotes", id);
+  }
+
+  async updateJournalLegCleared(legId: string, cleared: boolean): Promise<void> {
+    const row = await get<IdbJournalLeg>("journalLegs", legId);
+    if (!row) throw new Error(`Journal leg ${legId} not found`);
+    // assertLegStateTransition reads the domain shape; only cleared/reconciledAt matter.
+    assertLegStateTransition(
+      { cleared: row.cleared, reconciledAt: row.reconciledAtMs == null ? null : Timestamp.fromMillis(row.reconciledAtMs) },
+      cleared,
+    );
+    await put("journalLegs", { ...row, cleared } as unknown as Record<string, unknown>);
+  }
+
+  async createReconciliationEvent(
+    fields: ReconciliationEventFields,
+    legIds: string[],
+  ): Promise<ReconciliationEvent> {
+    const reconciledThrough = new Date(fields.reconciledThroughDateMs).toISOString().slice(0, 10);
+    const id = `${accountDocId(fields.institution, fields.account)}_${reconciledThrough}`;
+    const record: IdbReconciliationEvent = { id, ...fields, legIds: [...legIds] };
+    await put("reconciliationEvents", record as unknown as Record<string, unknown>);
+    // Stamp each cleared leg as reconciled by this event.
+    await Promise.all(
+      legIds.map((legId) =>
+        updateRecord<IdbJournalLeg>("journalLegs", legId, "Journal leg", {
+          reconciledAtMs: fields.reconciledAtMs,
+          reconciledEventId: id,
+        }),
+      ),
+    );
+    return idbToReconciliationEvent(record);
   }
 
   async updateBudget(
