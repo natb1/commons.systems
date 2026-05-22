@@ -49,6 +49,7 @@
 #
 # PRs and help-wanted issues with a local git worktree are skipped (a session is
 # actively working them).
+# A PR is also skipped when an issue it closes is blocked_by an open issue.
 # "done" (non-draft) PRs are skipped entirely.
 # "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
 # A queue with no topic-labeled items resolves entirely to "other", reproducing
@@ -60,6 +61,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 QA_MODE=false
 HEALTH_ONLY=false
 
@@ -262,6 +264,27 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   if has_worktree "$pr_branch"; then
     continue
   fi
+
+  # Skip a PR whose work is gated by an open blocker: any issue it closes is
+  # blocked_by an open issue. A blocked issue's PR must not advance through
+  # any PR-ladder phase — selection falls through to the next candidate,
+  # exactly as for a worktree-conflicted PR. The PR becomes selectable once
+  # the blocker closes. A closing issue blocked only by already-closed issues
+  # is not gated. Skipping here (before FIRST_PR is populated) covers --qa
+  # mode too, since --qa reads the same FIRST_PR map.
+  pr_blocked=false
+  while IFS= read -r closing_num; do
+    [[ -z "$closing_num" ]] && continue
+    open_blockers=$(count_open_blockers "$closing_num") || {
+      echo "error: dispatch-select-target: blocked_by lookup failed for issue #$closing_num" >&2
+      exit 1
+    }
+    if [[ "$open_blockers" -gt 0 ]]; then
+      pr_blocked=true
+      break
+    fi
+  done < <(printf '%s' "$pr_closing" | jq -r '.[].number')
+  [[ "$pr_blocked" == "true" ]] && continue
 
   # Determine phase for this PR, reusing the PR list fetched above.
   phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$pr_branch")

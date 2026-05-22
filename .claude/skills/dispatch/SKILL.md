@@ -204,8 +204,9 @@ It is a no-op when local `main` already equals `origin/main`.
   the next.
 
   Within each category the ladder is (highest first; within a tier, oldest PR
-  wins; PRs and `help wanted` issues with a local worktree are skipped;
-  `waiting`-phase PRs are skipped entirely): oldest `security` PR → oldest
+  wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
+  whose closing issue is `blocked_by` an open issue is skipped; `waiting`-phase
+  PRs are skipped entirely): oldest `security` PR → oldest
   `review` PR → oldest `code-review` PR → oldest `verify` PR → oldest `help wanted`
   issue → oldest `qa` PR. Non-QA PRs are ranked closest-to-done first —
   `security` is the closest-to-done non-QA tier; `help wanted` issues rank below
@@ -266,6 +267,15 @@ Skip leaf tracing when:
 - The target was current-worktree detected (`worktree <N>` result) — the worktree
   is the already-committed unit of work; retargeting to a sub-issue or blocker
   would be wrong.
+
+If the resolved target issue `<N>` is **`blocked_by` an open issue**, release
+the lock (see *Releasing the lock*), report the open blocker, and **stop**.
+Check this **before** leaf tracing and the PR-existence skip above — it applies
+whether or not a PR exists, and is the explicit-path counterpart of the
+PR-ladder blocker skip `dispatch-select-target` applies during queue selection.
+Determine it by running `issue-blocking <N>`: if it prints any blocker whose
+`state` is `OPEN`, the target is blocked. `issue-blocking` lists closed blockers
+too, so a target blocked only by already-closed issues is **not** blocked.
 
 If a named target issue is **closed**, release the lock (see *Releasing the
 lock*), then report it and **stop**.
