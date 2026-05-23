@@ -130,6 +130,12 @@ export function hydrateAccountsReconcile(container: HTMLElement): void {
       .then(() => {
         // Signal a settled write — lets tests wait for persistence deterministically.
         row.dataset.clearedSaved = String(nextChecked);
+        // When the user confirms a suggestion by checking it, promote the row
+        // from suggested to fully confirmed by removing the visual hint.
+        if (nextChecked && row.classList.contains("reconcile-suggested")) {
+          row.classList.remove("reconcile-suggested");
+          row.querySelector(".reconcile-suggested-badge")?.remove();
+        }
       })
       .catch((error: unknown) => {
         target.checked = !nextChecked;
@@ -138,6 +144,14 @@ export function hydrateAccountsReconcile(container: HTMLElement): void {
         logError(error, { operation: "reconcile-toggle-cleared" });
       });
   });
+
+  // Confirm-all button: bulk-promote every suggested row to user-confirmed cleared.
+  const confirmAllButton = container.querySelector<HTMLButtonElement>("#reconcile-confirm-all");
+  if (confirmAllButton) {
+    confirmAllButton.addEventListener("click", () => {
+      void handleConfirmAll(container);
+    });
+  }
 
   const dialog = container.querySelector<HTMLDialogElement>("#reconcile-dialog");
 
@@ -167,6 +181,48 @@ export function hydrateAccountsReconcile(container: HTMLElement): void {
       void handleReconcileSubmit(container, dialog);
     });
   }
+}
+
+/**
+ * Bulk-confirm all suggested legs: check each checkbox, persist via the data
+ * source, and remove the suggestion styling. On any persist failure, revert
+ * that row's visual state and log the error.
+ */
+async function handleConfirmAll(container: HTMLElement): Promise<void> {
+  const suggestedRows = Array.from(
+    container.querySelectorAll<HTMLElement>(".reconcile-leg.reconcile-suggested"),
+  );
+  if (suggestedRows.length === 0) return;
+
+  // Optimistically mark all rows checked and update the header before any
+  // async work, matching the pattern used by the per-row change handler.
+  for (const row of suggestedRows) {
+    const checkbox = row.querySelector<HTMLInputElement>(".reconcile-cleared-checkbox");
+    if (checkbox) checkbox.checked = true;
+  }
+  updateHeaderTotals(container);
+
+  // Persist each leg. Run all in parallel; revert individual rows that fail.
+  await Promise.all(
+    suggestedRows.map(async (row) => {
+      const legId = row.dataset.legId;
+      if (!legId) return;
+      const checkbox = row.querySelector<HTMLInputElement>(".reconcile-cleared-checkbox");
+      try {
+        await getActiveDataSource().updateJournalLegCleared(legId, true);
+        // Promote: remove suggestion styling from successfully-persisted rows.
+        row.classList.remove("reconcile-suggested");
+        row.querySelector(".reconcile-suggested-badge")?.remove();
+        if (checkbox) row.dataset.clearedSaved = "true";
+      } catch (error: unknown) {
+        // Revert this row on failure.
+        if (checkbox) checkbox.checked = false;
+        updateHeaderTotals(container);
+        if (deferProgrammerError(error)) return;
+        logError(error, { operation: "reconcile-confirm-all" });
+      }
+    }),
+  );
 }
 
 async function handleReconcileSubmit(container: HTMLElement, dialog: HTMLDialogElement): Promise<void> {
