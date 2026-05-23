@@ -268,14 +268,10 @@ Skip leaf tracing when:
   is the already-committed unit of work; retargeting to a sub-issue or blocker
   would be wrong.
 
-If the resolved target issue `<N>` is **`blocked_by` an open issue**, release
-the lock (see *Releasing the lock*), report the open blocker, and **stop**.
-Check this **before** leaf tracing and the PR-existence skip above — it applies
-whether or not a PR exists, and is the explicit-path counterpart of the
-PR-ladder blocker skip `dispatch-select-target` applies during queue selection.
-Determine it by running `issue-blocking <N>`: if it prints any blocker whose
-`state` is `OPEN`, the target is blocked. `issue-blocking` lists closed blockers
-too, so a target blocked only by already-closed issues is **not** blocked.
+If the resolved target issue `<N>` has any **open** blocker — run
+`issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
+lock (see *Releasing the lock*), report the open blocker, and **stop**. This
+guard applies even when a PR exists; closed blockers do not gate.
 
 If a named target issue is **closed**, release the lock (see *Releasing the
 lock*), then report it and **stop**.
