@@ -55,11 +55,9 @@ gh_api_array() {
   fi
 }
 
-# Count the open issues that block <issue-num> via GitHub's blocked_by
-# dependency edges (the same edges issue-blocking reads). Prints a single
-# integer to stdout. A blocker that is itself already closed does not gate
-# work, so only open blockers are counted. Returns non-zero (via gh_api_array)
-# if the dependency lookup fails — callers must surface that, not swallow it.
+# Count the open blockers of <issue-num> via GitHub's blocked_by dependency
+# edges. Prints an integer; closed blockers do not gate work, so only open
+# blockers are counted.
 count_open_blockers() {
   local issue_num="$1"
   gh_api_array "/repos/{owner}/{repo}/issues/$issue_num/dependencies/blocked_by" \

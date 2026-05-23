@@ -265,13 +265,17 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
     continue
   fi
 
-  # Skip a PR whose work is gated by an open blocker: any issue it closes is
-  # blocked_by an open issue. A blocked issue's PR must not advance through
-  # any PR-ladder phase — selection falls through to the next candidate,
-  # exactly as for a worktree-conflicted PR. The PR becomes selectable once
-  # the blocker closes. A closing issue blocked only by already-closed issues
-  # is not gated. Skipping here (before FIRST_PR is populated) covers --qa
-  # mode too, since --qa reads the same FIRST_PR map.
+  # Determine phase for this PR, reusing the PR list fetched above.
+  phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$pr_branch")
+
+  # "done" PRs are complete; "waiting" PRs have nothing actionable yet.
+  case "$phase" in
+    done|waiting) continue ;;
+  esac
+
+  # Skip PRs gated by an open blocker. Placed after the done/waiting filter so
+  # PRs that would be discarded anyway don't pay the per-closing-issue gh-api
+  # round-trip, and before FIRST_PR is populated so --qa inherits the skip.
   pr_blocked=false
   while IFS= read -r closing_num; do
     [[ -z "$closing_num" ]] && continue
@@ -285,14 +289,6 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
     fi
   done < <(printf '%s' "$pr_closing" | jq -r '.[].number')
   [[ "$pr_blocked" == "true" ]] && continue
-
-  # Determine phase for this PR, reusing the PR list fetched above.
-  phase=$(DISPATCH_PR_LIST="$PR_LIST" "$SCRIPT_DIR/dispatch-phase" "$pr_branch")
-
-  # "done" PRs are complete; "waiting" PRs have nothing actionable yet.
-  case "$phase" in
-    done|waiting) continue ;;
-  esac
 
   # Record the oldest PR seen in this category+phase. The :- guard keeps the
   # unset-key read from aborting under set -u.
