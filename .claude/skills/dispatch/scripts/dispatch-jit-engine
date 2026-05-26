@@ -337,45 +337,16 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
     fi
   fi
 
-  # ---- 4f: create the issue and add it to the project ----------------------
-  if [[ "$CREATE" -eq 1 ]]; then
-    CREATE_RC=0
-    CREATE_OUT=$(gh issue create --repo "$REPO" --title "$TITLE" --body "$BODY" \
-      --label "$LABEL" 2>&1) || CREATE_RC=$?
-    if [[ "$CREATE_RC" -ne 0 ]]; then
-      echo "$KEY: error (gh issue create failed: $CREATE_OUT)" >&2
-      HARD_ERROR=1
-      continue
-    fi
-    # gh issue create prints the new issue URL on stdout. The trailing path
-    # segment is the issue number.
-    ISSUE_URL=$(printf '%s' "$CREATE_OUT" | tail -n1)
-    ISSUE_NUM="${ISSUE_URL##*/}"
-    if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
-      echo "$KEY: error (could not parse issue number from '$CREATE_OUT')" >&2
-      HARD_ERROR=1
-      continue
-    fi
-    ADD_RC=0
-    ADD_OUT=$("$SCRIPT_DIR/dispatch-project-item-add" "$PROJECT" "$ISSUE_URL" 2>&1) \
-      || ADD_RC=$?
-    if [[ "$ADD_RC" -ne 0 ]]; then
-      echo "$KEY: error (could not add issue #$ISSUE_NUM to project '$PROJECT': $ADD_OUT)" >&2
-      HARD_ERROR=1
-      continue
-    fi
-    ITEM_ID="$ADD_OUT"
-
-    # Stamp the computed due time on the project item's date field. A jit with
-    # neither dueAfterClose nor dueAfterCreate skips the stamp — the sync
-    # Function reads the stamped field, but cadence-only jits without a sync
-    # consumer remain valid.
-    if [[ "$HAS_DUE_AFTER_CLOSE" != "true" && "$HAS_DUE_AFTER_CREATE" != "true" ]]; then
-      echo "$KEY: created #$ISSUE_NUM (no dueAfter*; due not stamped)"
-      state_set "$KEY" "$NOW"
-      continue
-    fi
-
+  # ---- 4f: compute the due time (if configured) ----------------------------
+  # Done BEFORE issue creation so the due time can be embedded directly in the
+  # issue body. The agenda sync Function (functions/src/agenda-sync.ts) parses
+  # the body marker; the GitHub project's `Due` field is not used.
+  #
+  # A jit with neither dueAfterClose nor dueAfterCreate skips the stamp — the
+  # sync Function logs and skips a jit issue without a marker, but cadence-only
+  # jits without a sync consumer remain valid.
+  DUE_ISO=""
+  if [[ "$HAS_DUE_AFTER_CLOSE" == "true" || "$HAS_DUE_AFTER_CREATE" == "true" ]]; then
     DUE_EPOCH=""
     if [[ "$HAS_REMIND" == "true" ]]; then
       DUE_AFTER_CLOSE_SPEC=$(printf '%s' "$jit" | jq -r '.dueAfterClose')
@@ -399,17 +370,50 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
       fi
       DUE_EPOCH=$(( NOW + DUE_AFTER_CREATE_SECS ))
     fi
-    DUE_DATE=$(date -u -d "@$DUE_EPOCH" +%Y-%m-%d)
+    DUE_ISO=$(date -u -d "@$DUE_EPOCH" +%Y-%m-%dT%H:%M:%SZ)
+  fi
 
-    DUE_RC=0
-    DUE_OUT=$("$SCRIPT_DIR/dispatch-project-due-write" "$PROJECT" "$ITEM_ID" "$DUE_DATE" 2>&1) \
-      || DUE_RC=$?
-    if [[ "$DUE_RC" -ne 0 ]]; then
-      echo "$KEY: error (could not stamp due date on #$ISSUE_NUM: $DUE_OUT)" >&2
+  # ---- 4g: create the issue and add it to the project ----------------------
+  if [[ "$CREATE" -eq 1 ]]; then
+    # Append the due-time marker to the body when configured. The format is a
+    # hidden HTML comment so it renders invisibly in the GitHub UI; the sync
+    # Function parses it with a regex.
+    ISSUE_BODY="$BODY"
+    if [[ -n "$DUE_ISO" ]]; then
+      ISSUE_BODY="${BODY}"$'\n\n'"<!-- jit-due: $DUE_ISO -->"
+    fi
+
+    CREATE_RC=0
+    CREATE_OUT=$(gh issue create --repo "$REPO" --title "$TITLE" --body "$ISSUE_BODY" \
+      --label "$LABEL" 2>&1) || CREATE_RC=$?
+    if [[ "$CREATE_RC" -ne 0 ]]; then
+      echo "$KEY: error (gh issue create failed: $CREATE_OUT)" >&2
       HARD_ERROR=1
       continue
     fi
-    echo "$KEY: created #$ISSUE_NUM (due $DUE_DATE)"
+    # gh issue create prints the new issue URL on stdout. The trailing path
+    # segment is the issue number.
+    ISSUE_URL=$(printf '%s' "$CREATE_OUT" | tail -n1)
+    ISSUE_NUM="${ISSUE_URL##*/}"
+    if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+      echo "$KEY: error (could not parse issue number from '$CREATE_OUT')" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    ADD_RC=0
+    ADD_OUT=$("$SCRIPT_DIR/dispatch-project-item-add" "$PROJECT" "$ISSUE_URL" 2>&1) \
+      || ADD_RC=$?
+    if [[ "$ADD_RC" -ne 0 ]]; then
+      echo "$KEY: error (could not add issue #$ISSUE_NUM to project '$PROJECT': $ADD_OUT)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+
+    if [[ -n "$DUE_ISO" ]]; then
+      echo "$KEY: created #$ISSUE_NUM (due $DUE_ISO)"
+    else
+      echo "$KEY: created #$ISSUE_NUM (no dueAfter*; due not stamped)"
+    fi
     state_set "$KEY" "$NOW"
   fi
 done

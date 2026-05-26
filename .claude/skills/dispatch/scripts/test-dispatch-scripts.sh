@@ -3710,13 +3710,10 @@ proj_setup() {
     "$TMPDIR_TEST/scripts/dispatch-project-status-read"
   cp "$SCRIPT_DIR/dispatch-project-status-write" \
     "$TMPDIR_TEST/scripts/dispatch-project-status-write"
-  cp "$SCRIPT_DIR/dispatch-project-due-write" \
-    "$TMPDIR_TEST/scripts/dispatch-project-due-write"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-config-load" \
            "$TMPDIR_TEST/scripts/dispatch-project-item-add" \
            "$TMPDIR_TEST/scripts/dispatch-project-status-read" \
-           "$TMPDIR_TEST/scripts/dispatch-project-status-write" \
-           "$TMPDIR_TEST/scripts/dispatch-project-due-write"
+           "$TMPDIR_TEST/scripts/dispatch-project-status-write"
 
   # Config fixture: one project, key example-project.
   cat > "$TMPDIR_TEST/config/projects.json" <<'EOF'
@@ -3766,10 +3763,9 @@ EOF
         { "id": "opt_inprogress", "name": "In Progress" },
         { "id": "opt_done", "name": "Done" }
       ]
-    },
-    { "id": "PVTF_due", "name": "Due", "type": "ProjectV2DateField" }
+    }
   ],
-  "totalCount": 3
+  "totalCount": 2
 }
 EOF
   cat > "$STUB_DIR/project-view.json" <<'EOF'
@@ -3900,57 +3896,6 @@ out=$("$TMPDIR_TEST/scripts/dispatch-project-status-read" example-project \
 assert_eq "reader after write exits 0" "0" "$rc"
 status=$(printf '%s' "$out" | jq -r '.status')
 assert_eq "writer change is visible via the reader" "In Progress" "$status"
-proj_teardown
-
-# --- Test 5: due-write writes a date to the item's date field ---------------
-
-echo "Test: dispatch-project-due-write writes a date to the Due field"
-proj_setup
-rc=0
-"$TMPDIR_TEST/scripts/dispatch-project-due-write" example-project \
-  PVTI_item001 2026-03-15 >/dev/null 2>&1 || rc=$?
-assert_eq "due-write exits 0" "0" "$rc"
-edit_log=$(cat "$STUB_DIR/gh-item-edit.log" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$edit_log" == *"PVTI_item001"* && "$edit_log" == *"--date 2026-03-15"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: due-write logged item id and --date"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: due-write logged item id and --date"
-  echo "    gh-item-edit.log: $edit_log"
-fi
-proj_teardown
-
-# --- Test 6: due-write fails when the date field is missing -----------------
-
-echo "Test: dispatch-project-due-write fails when the date field is missing"
-proj_setup
-# Remove the Due field from the field-list fixture.
-tmp=$(mktemp)
-jq '.fields |= map(select(.name != "Due")) | .totalCount = (.fields | length)' \
-  "$STUB_DIR/field-list.json" > "$tmp"
-mv "$tmp" "$STUB_DIR/field-list.json"
-rc=0
-"$TMPDIR_TEST/scripts/dispatch-project-due-write" example-project \
-  PVTI_item001 2026-03-15 >/dev/null 2>&1 || rc=$?
-TOTAL=$((TOTAL + 1))
-if [[ "$rc" -ne 0 ]]; then
-  PASS=$((PASS + 1))
-  echo "  PASS: due-write exits non-zero when Due field missing"
-else
-  FAIL=$((FAIL + 1))
-  echo "  FAIL: due-write exits non-zero when Due field missing"
-  echo "    expected: non-zero, actual: 0"
-fi
-proj_teardown
-
-# --- Test 7: due-write usage error → exit 2 ---------------------------------
-
-echo "Test: dispatch-project-due-write with too few arguments exits 2"
-proj_setup
-rc=0
-"$TMPDIR_TEST/scripts/dispatch-project-due-write" example-project \
-  >/dev/null 2>&1 || rc=$?
-assert_eq "due-write usage error exits 2" "2" "$rc"
 proj_teardown
 
 # ============================================================================
@@ -4324,29 +4269,20 @@ jit_setup() {
     "$TMPDIR_TEST/scripts/dispatch-config-load"
   cp "$SCRIPT_DIR/dispatch-project-item-add" \
     "$TMPDIR_TEST/scripts/dispatch-project-item-add"
-  cp "$SCRIPT_DIR/dispatch-project-due-write" \
-    "$TMPDIR_TEST/scripts/dispatch-project-due-write"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-jit-engine" \
            "$TMPDIR_TEST/scripts/dispatch-config-load" \
-           "$TMPDIR_TEST/scripts/dispatch-project-item-add" \
-           "$TMPDIR_TEST/scripts/dispatch-project-due-write"
+           "$TMPDIR_TEST/scripts/dispatch-project-item-add"
 
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
   export DISPATCH_JIT_STATE_DIR="$TMPDIR_TEST/state"
   export DISPATCH_JIT_SCRIPT_DIR="$TMPDIR_TEST/checkdir"
   export DISPATCH_JIT_NOW="$JIT_NOW_EPOCH"
 
-  # Fixtures for the due-write helper: a project view and a Due date field.
-  cat > "$STUB_DIR/field-list.json" <<'EOF'
-{ "fields": [ { "id": "PVTF_due", "name": "Due", "type": "ProjectV2DateField" } ] }
-EOF
-  cat > "$STUB_DIR/project-view.json" <<'EOF'
-{ "id": "PVT_jit001", "number": 1, "title": "Test Project" }
-EOF
-
   # gh PATH stub. Every matched subcommand is appended to gh-calls.log so the
   # debounce test can assert the log is absent (zero gh calls). issue list reads
-  # open-issues.json / closed-issues.json fixtures if present, else "[]".
+  # open-issues.json / closed-issues.json fixtures if present, else "[]". The
+  # `issue create` case captures stdin to gh-issue-create-body.txt so tests can
+  # verify the body (including the jit-due marker) the engine sent.
   cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
@@ -4376,15 +4312,6 @@ case "$args" in
     ;;
   "project item-add "*)
     echo '{"id":"PVTI_jit001","title":"JIT issue","type":"Issue"}'
-    ;;
-  "project view "*)
-    cat "$STUB_DIR/project-view.json"
-    ;;
-  "project field-list "*)
-    cat "$STUB_DIR/field-list.json"
-    ;;
-  "project item-edit "*)
-    echo "$args" >> "$STUB_DIR/gh-item-edit.log"
     ;;
   *)
     echo "gh stub: unknown invocation: $args" >&2
@@ -4463,10 +4390,12 @@ rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
 assert_eq "cold start exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"daily-chore: created #123 (due 2026-01-01)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: cold start reports created #123 (due 2026-01-01)"
+# Cold start with remind=12h, due=24h, NOW=2026-01-01T00:00:00Z:
+# DUE = NOW + 24h - 12h = 2026-01-01T12:00:00Z.
+if [[ "$out" == *"daily-chore: created #123 (due 2026-01-01T12:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cold start reports created #123 (due 2026-01-01T12:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: cold start reports created #123 (due 2026-01-01)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: cold start reports created #123 (due 2026-01-01T12:00:00Z)"
   echo "    actual: $out"
 fi
 calls=$(cat "$STUB_DIR/gh-calls.log")
@@ -4481,13 +4410,13 @@ else
   echo "  FAIL: cold start invoked label create / list / create / item-add"
   echo "    gh-calls.log: $calls"
 fi
-edit_log=$(cat "$STUB_DIR/gh-item-edit.log" 2>/dev/null || true)
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$edit_log" == *"project item-edit"* && "$edit_log" == *"--date 2026-01-01"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: cold start stamped --date 2026-01-01"
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-01T12:00:00Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: cold start embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: cold start stamped --date 2026-01-01"
-  echo "    gh-item-edit.log: $edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: cold start embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
 fi
 jit_teardown
 
@@ -4563,19 +4492,21 @@ rc=0
 out=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
 assert_eq "past-window exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"daily-chore: created #123 (due 2026-01-01)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: past-window reports created #123 (due 2026-01-01)"
+# closedAt = NOW − 24h, dueAfterClose = 24h → DUE = closedAt + 24h = NOW =
+# 2026-01-01T00:00:00Z.
+if [[ "$out" == *"daily-chore: created #123 (due 2026-01-01T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: past-window reports created #123 (due 2026-01-01T00:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: past-window reports created #123 (due 2026-01-01)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: past-window reports created #123 (due 2026-01-01T00:00:00Z)"
   echo "    actual: $out"
 fi
-edit_log=$(cat "$STUB_DIR/gh-item-edit.log" 2>/dev/null || true)
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$edit_log" == *"project item-edit"* && "$edit_log" == *"--date 2026-01-01"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: past-window stamped --date 2026-01-01"
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-01T00:00:00Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: past-window embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: past-window stamped --date 2026-01-01"
-  echo "    gh-item-edit.log: $edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: past-window embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
 fi
 jit_teardown
 
@@ -4651,19 +4582,21 @@ out=$(MOCK_CHECK_RC=0 "$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) \
   || rc=$?
 assert_eq "check-fire exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out" == *"email-review: created #123 (due 2026-01-02)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: check-fire reports created #123 (due 2026-01-02)"
+# Check-script jit, dueAfterCreate = 24h, NOW = 2026-01-01T00:00:00Z →
+# DUE = NOW + 24h = 2026-01-02T00:00:00Z.
+if [[ "$out" == *"email-review: created #123 (due 2026-01-02T00:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: check-fire reports created #123 (due 2026-01-02T00:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: check-fire reports created #123 (due 2026-01-02)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: check-fire reports created #123 (due 2026-01-02T00:00:00Z)"
   echo "    actual: $out"
 fi
-edit_log=$(cat "$STUB_DIR/gh-item-edit.log" 2>/dev/null || true)
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$edit_log" == *"project item-edit"* && "$edit_log" == *"--date 2026-01-02"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: check-fire stamped --date 2026-01-02"
+if [[ "$create_log" == *"<!-- jit-due: 2026-01-02T00:00:00Z -->"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: check-fire embedded jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: check-fire stamped --date 2026-01-02"
-  echo "    gh-item-edit.log: $edit_log"
+  FAIL=$((FAIL + 1)); echo "  FAIL: check-fire embedded jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
 fi
 jit_teardown
 
@@ -4823,10 +4756,10 @@ rc=0
 out1=$("$TMPDIR_TEST/scripts/dispatch-jit-engine" 2>/dev/null) || rc=$?
 assert_eq "idempotency run 1 exits 0" "0" "$rc"
 TOTAL=$((TOTAL + 1))
-if [[ "$out1" == *"daily-chore: created #123 (due 2026-01-01)"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: idempotency run 1 created #123 (due 2026-01-01)"
+if [[ "$out1" == *"daily-chore: created #123 (due 2026-01-01T12:00:00Z)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: idempotency run 1 created #123 (due 2026-01-01T12:00:00Z)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: idempotency run 1 created #123 (due 2026-01-01)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: idempotency run 1 created #123 (due 2026-01-01T12:00:00Z)"
   echo "    actual: $out1"
 fi
 # Run 1 stamped the state file with a numeric timestamp for the jit key.
@@ -4862,9 +4795,9 @@ assert_eq "idempotency run 2 made no second issue create" \
   "$creates_before" "$creates_after"
 jit_teardown
 
-# --- Test 11: cadence jit with no dueAfter* → not stamped --------------------
+# --- Test 11: cadence jit with no dueAfter* → no marker in body --------------
 
-echo "Test: dispatch-jit-engine with no dueAfter* does not stamp the due date"
+echo "Test: dispatch-jit-engine with no dueAfter* embeds no jit-due marker"
 jit_setup
 jit_write_projects
 cat > "$TMPDIR_TEST/config/jit.json" <<'EOF'
@@ -4892,12 +4825,13 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: no-dueAfter reports created #123 (no dueAfter*; due not stamped)"
   echo "    actual: $out"
 fi
+create_log=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ ! -f "$STUB_DIR/gh-item-edit.log" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: no-dueAfter made no project item-edit call"
+if [[ "$create_log" != *"jit-due"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no-dueAfter embedded no jit-due marker in issue body"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: no-dueAfter made no project item-edit call"
-  echo "    gh-item-edit.log: $(cat "$STUB_DIR/gh-item-edit.log")"
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-dueAfter embedded no jit-due marker in issue body"
+  echo "    gh-issue-create.log: $create_log"
 fi
 jit_teardown
 

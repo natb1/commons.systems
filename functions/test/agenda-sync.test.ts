@@ -31,7 +31,7 @@ vi.mock("firebase-functions/params", () => ({
 import {
   syncAgendaCore,
   fetchOpenJitIssuesLive,
-  fetchProjectDueDatesLive,
+  parseJitDueMarker,
   type JitIssue,
 } from "../src/agenda-sync";
 
@@ -94,6 +94,7 @@ function makeIssue(overrides: Partial<JitIssue> = {}): JitIssue {
     body: "Recurring daily chore. Close when done.",
     jitKey: "daily-chore",
     repo: "natb1/household",
+    dueAt: new Date("2026-01-15T12:00:00Z"),
     ...overrides,
   };
 }
@@ -103,13 +104,16 @@ describe("syncAgendaCore", () => {
     vi.restoreAllMocks();
   });
 
-  it("writes one item per open jit issue with a Due date", async () => {
+  it("writes one item per open jit issue with a due time", async () => {
     const store = createInMemoryFirestore();
-    const issue = makeIssue({ number: 42, jitKey: "daily-chore" });
+    const issue = makeIssue({
+      number: 42,
+      jitKey: "daily-chore",
+      dueAt: new Date("2026-01-15T12:00:00Z"),
+    });
 
     const result = await syncAgendaCore({
       fetchOpenJitIssues: async () => [issue],
-      fetchProjectDueDates: async () => new Map([[42, "2026-01-15"]]),
       firestore: store as unknown as Firestore,
       namespace: "agenda/prod",
       memberEmails: ["owner@example.com"],
@@ -127,17 +131,16 @@ describe("syncAgendaCore", () => {
     expect(written.jitKey).toBe("daily-chore");
     expect(written.memberEmails).toEqual(["owner@example.com"]);
     expect(written.updatedAt).toBe("__server_timestamp__");
-    expect(written.dueAt.toDate().toISOString()).toBe("2026-01-15T00:00:00.000Z");
+    expect(written.dueAt.toDate().toISOString()).toBe("2026-01-15T12:00:00.000Z");
   });
 
-  it("skips an issue with no Due date", async () => {
+  it("skips an issue with no due time", async () => {
     const store = createInMemoryFirestore();
     const withDate = makeIssue({ number: 1, jitKey: "daily-chore" });
-    const noDate = makeIssue({ number: 2, jitKey: "budget-review" });
+    const noDate = makeIssue({ number: 2, jitKey: "budget-review", dueAt: null });
 
     const result = await syncAgendaCore({
       fetchOpenJitIssues: async () => [withDate, noDate],
-      fetchProjectDueDates: async () => new Map([[1, "2026-02-01"]]),
       firestore: store as unknown as Firestore,
       namespace: "agenda/prod",
       memberEmails: ["owner@example.com"],
@@ -157,7 +160,6 @@ describe("syncAgendaCore", () => {
 
     const result = await syncAgendaCore({
       fetchOpenJitIssues: async () => [],
-      fetchProjectDueDates: async () => new Map(),
       firestore: store as unknown as Firestore,
       namespace: "agenda/prod",
       memberEmails: ["owner@example.com"],
@@ -173,7 +175,6 @@ describe("syncAgendaCore", () => {
 
     const deps = {
       fetchOpenJitIssues: async () => [issue],
-      fetchProjectDueDates: async () => new Map([[10, "2026-03-01"]]),
       firestore: store as unknown as Firestore,
       namespace: "agenda/prod",
       memberEmails: ["owner@example.com"],
@@ -194,7 +195,6 @@ describe("syncAgendaCore", () => {
 
     await syncAgendaCore({
       fetchOpenJitIssues: async () => [issue],
-      fetchProjectDueDates: async () => new Map([[7, "2026-04-15"]]),
       firestore: store as unknown as Firestore,
       namespace: "agenda/prod",
       memberEmails: ["a@example.com", "b@example.com"],
@@ -207,12 +207,34 @@ describe("syncAgendaCore", () => {
   });
 });
 
+describe("parseJitDueMarker", () => {
+  it("parses a well-formed marker", () => {
+    const body = "Body text\n\n<!-- jit-due: 2026-01-15T12:00:00Z -->";
+    const result = parseJitDueMarker(body);
+    expect(result?.toISOString()).toBe("2026-01-15T12:00:00.000Z");
+  });
+
+  it("tolerates extra whitespace inside the marker", () => {
+    const body = "<!--   jit-due:   2026-02-01T00:00:00Z   -->";
+    const result = parseJitDueMarker(body);
+    expect(result?.toISOString()).toBe("2026-02-01T00:00:00.000Z");
+  });
+
+  it("returns null when no marker is present", () => {
+    expect(parseJitDueMarker("Plain body, no marker.")).toBeNull();
+  });
+
+  it("returns null when the marker is malformed", () => {
+    expect(parseJitDueMarker("<!-- jit-due: not-a-date -->")).toBeNull();
+  });
+});
+
 describe("fetchOpenJitIssuesLive", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("posts a GraphQL query and returns jit-labelled issues", async () => {
+  it("posts a GraphQL query and returns jit-labelled issues with parsed due times", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -227,10 +249,17 @@ describe("fetchOpenJitIssuesLive", () => {
                   {
                     number: 42,
                     title: "Daily chore",
-                    body: "Body text",
+                    body:
+                      "Body text\n\n<!-- jit-due: 2026-01-15T12:00:00Z -->",
                     labels: {
                       nodes: [{ name: "jit:daily-chore" }, { name: "help wanted" }],
                     },
+                  },
+                  {
+                    number: 50,
+                    title: "Old jit issue without a marker",
+                    body: "Just the body, no marker yet.",
+                    labels: { nodes: [{ name: "jit:legacy" }] },
                   },
                   {
                     number: 43,
@@ -267,13 +296,18 @@ describe("fetchOpenJitIssuesLive", () => {
       cursor: null,
     });
 
-    expect(issues).toHaveLength(1);
-    expect(issues[0]).toEqual({
+    expect(issues).toHaveLength(2);
+    expect(issues[0]).toMatchObject({
       number: 42,
       title: "Daily chore",
-      body: "Body text",
       jitKey: "daily-chore",
       repo: "natb1/household",
+    });
+    expect(issues[0].dueAt?.toISOString()).toBe("2026-01-15T12:00:00.000Z");
+    expect(issues[1]).toMatchObject({
+      number: 50,
+      jitKey: "legacy",
+      dueAt: null,
     });
   });
 
@@ -310,75 +344,5 @@ describe("fetchOpenJitIssuesLive", () => {
     await expect(
       fetchOpenJitIssuesLive("natb1/household", "test-token"),
     ).rejects.toThrow(/Bad credentials/);
-  });
-});
-
-describe("fetchProjectDueDatesLive", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("returns a Map of issue number to Due date string", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: () => Promise.resolve(""),
-      json: () =>
-        Promise.resolve({
-          data: {
-            user: {
-              projectV2: {
-                items: {
-                  pageInfo: { endCursor: null, hasNextPage: false },
-                  nodes: [
-                    {
-                      content: { number: 42 },
-                      fieldValueByName: { date: "2026-01-15" },
-                    },
-                    {
-                      content: { number: 99 },
-                      fieldValueByName: { date: "2026-02-01" },
-                    },
-                    {
-                      content: { number: 7 },
-                      fieldValueByName: null,
-                    },
-                  ],
-                },
-              },
-            },
-          },
-        }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const dueDates = await fetchProjectDueDatesLive(
-      "natb1",
-      5,
-      "test-token",
-      [42, 7],
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(init.body as string) as {
-      query: string;
-      variables: { owner: string; number: number; cursor: string | null };
-    };
-    expect(body.query).toContain("projectV2(number: $number)");
-    expect(body.variables).toEqual({ owner: "natb1", number: 5, cursor: null });
-
-    expect(dueDates.size).toBe(1);
-    expect(dueDates.get(42)).toBe("2026-01-15");
-  });
-
-  it("returns an empty map when given no issue numbers (no fetch)", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    const dueDates = await fetchProjectDueDatesLive("natb1", 5, "test-token", []);
-
-    expect(dueDates.size).toBe(0);
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

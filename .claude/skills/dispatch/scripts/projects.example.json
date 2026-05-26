@@ -6,8 +6,7 @@
       "number": 1,
       "statusField": "Status",
       "statusInProgress": "In Progress",
-      "statusDone": "Done",
-      "dueField": "Due"
+      "statusDone": "Done"
     }
   ]
 }
