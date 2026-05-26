@@ -3313,6 +3313,56 @@ assert_eq "non-array-json lock file is unchanged" \
   "sess-1818-foreign" "$lock_contents"
 lock_teardown
 
+# --- Test 19: malformed-JSON daemon stdout → foreign holder treated as live ---
+#
+# `claude agents --json` exits 0 but prints truncated/malformed JSON (a partial
+# array like `[{"sessionId":`). jq cannot parse this — it exits non-zero — and
+# is_live_session must treat the jq parse failure as opaque/live (return 0).
+# The lock must NOT be stolen.
+
+echo "Test: malformed-JSON daemon stdout treats a foreign holder as live"
+lock_setup
+printf '%s\n' "sess-1919-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1919-self"
+lock_fake_claude_payload '[{"sessionId":'
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "malformed-json exits 0" "0" "$rc"
+assert_eq "malformed-json prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "malformed-json lock file is unchanged" \
+  "sess-1919-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 6c: --release with CLAUDE_CODE_SESSION_ID unset → exit 2 ----------
+#
+# The Step 2 CLAUDE_CODE_SESSION_ID guard runs before the `case "$MODE"` dispatch
+# so `--release` fails the same way as a plain acquire when the session-id is
+# unset. The foreign lock holder must be left untouched.
+
+echo "Test: --release with unset CLAUDE_CODE_SESSION_ID exits 2, lock unchanged"
+lock_setup
+printf '%s\n' "sess-6c-foreign" > "$DISPATCH_LOCK_FILE"
+lock_fake_claude_sessions   # not queried; guard fires before the mode dispatch
+if ( env -u CLAUDE_CODE_SESSION_ID \
+       "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release ) 2>"$STUB_DIR/err6c"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "--release missing CLAUDE_CODE_SESSION_ID exits 2" "2" "$rc"
+err6c=$(cat "$STUB_DIR/err6c" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$err6c" == *"CLAUDE_CODE_SESSION_ID is unset"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: --release missing-session-id writes the session-id error to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: --release missing-session-id writes the session-id error to stderr"
+  echo "    stderr: '$err6c'"
+fi
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "--release missing-session-id leaves the foreign lock intact" \
+  "sess-6c-foreign" "$lock_contents"
+lock_teardown
+
 # ============================================================================
 # lib-claude-agents.sh tests
 # ============================================================================
