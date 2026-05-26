@@ -2883,83 +2883,111 @@ sweep_teardown
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/stub/         lock file + per-test output capture files
 #   $TMPDIR_TEST/scripts/      a copy of dispatch-acquire-lock
-#   $TMPDIR_TEST/proc/         synthetic /proc tree (comm + status files)
+#   $TMPDIR_TEST/fake/         fake `claude` script for the liveness check
 #
-# DISPATCH_LOCK_FILE and DISPATCH_LOCK_PROC_ROOT are exported so the script
-# never touches the real shared lock. Tests 1-6 set DISPATCH_LOCK_SESSION_PID
-# to bypass the /proc ancestry walk; Test 7 leaves it unset to exercise the
-# walk through a synthetic /proc tree.
+# DISPATCH_LOCK_FILE is exported so the script never touches the real shared
+# lock. Every test sets CLAUDE_CODE_SESSION_ID directly to identify the caller,
+# and uses lock_fake_claude_sessions to stub `claude agents --json` for the
+# foreign-holder liveness check via CLAUDE_AGENTS_CMD.
 
 lock_setup() {
   TMPDIR_TEST=$(mktemp -d)
   STUB_DIR="$TMPDIR_TEST/stub"
-  mkdir -p "$STUB_DIR" "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/proc"
+  mkdir -p "$STUB_DIR" "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/fake"
 
   cp "$SCRIPT_DIR/dispatch-acquire-lock" "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
 
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
-  export DISPATCH_LOCK_PROC_ROOT="$TMPDIR_TEST/proc"
 }
 
 lock_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   STUB_DIR=""
-  unset DISPATCH_LOCK_FILE DISPATCH_LOCK_SESSION_PID DISPATCH_LOCK_PROC_ROOT \
+  unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     DISPATCH_LOCK_WAIT_INTERVAL DISPATCH_LOCK_WAIT_TIMEOUT
 }
 
-# Helper: write a synthetic <proc>/<pid>/comm file with the given comm string.
-lock_proc_pid() {
-  local pid="$1" comm="$2"
-  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
-  printf '%s\n' "$comm" > "$DISPATCH_LOCK_PROC_ROOT/$pid/comm"
+# Helper: install a fake `claude` whose `agents --json` invocation prints a
+# JSON array of session objects carrying the given sessionIds (and exits 0).
+# Points CLAUDE_AGENTS_CMD at the fake. Call with zero args to simulate an
+# empty registry (`[]`). Safe to re-invoke mid-test: regenerates the fake.
+lock_fake_claude_sessions() {
+  local fake="$TMPDIR_TEST/fake/claude"
+  local payload="[" sid first=1
+  for sid in "$@"; do
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"x\"}"
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/fake/payload.json"
+  cat > "$fake" <<FAKE
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/fake/payload.json"
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
 }
 
-# Helper: write a synthetic <proc>/<pid>/status file recording <ppid> as the
-# parent — the PPid line is all the ancestry walk reads from it.
-lock_proc_status() {
-  local pid="$1" ppid="$2"
-  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
-  printf 'Name:\tbash\nPPid:\t%s\n' "$ppid" > "$DISPATCH_LOCK_PROC_ROOT/$pid/status"
+# Helper: install a fake `claude` whose `agents --json` invocation exits with
+# the given non-zero code (and prints nothing). Used to exercise the
+# fail-safe "treat foreign holder as live when the daemon cannot be queried"
+# contract.
+lock_fake_claude_failure() {
+  local exit_code="${1:-1}"
+  local fake="$TMPDIR_TEST/fake/claude"
+  cat > "$fake" <<FAKE
+#!/usr/bin/env bash
+exit $exit_code
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
 }
 
-# Helper: write a synthetic <proc>/<pid>/cmdline file with NUL-separated argv,
-# matching the kernel's /proc cmdline format. Used to mark a process as a
-# non-session Claude daemon (e.g. argv carrying `--bg-spare`).
-lock_proc_cmdline() {
-  local pid="$1"; shift
-  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
-  printf '%s\0' "$@" > "$DISPATCH_LOCK_PROC_ROOT/$pid/cmdline"
+# Helper: install a fake `claude` that exits 0 with the given literal stdout
+# payload. Used to exercise is_live_session's fail-safe branches for output
+# that is not a parseable JSON array of sessions (whitespace-only, non-array
+# JSON like `{}`/`null`, malformed JSON).
+lock_fake_claude_payload() {
+  local payload="$1"
+  local fake="$TMPDIR_TEST/fake/claude"
+  printf '%s' "$payload" > "$TMPDIR_TEST/fake/payload.txt"
+  cat > "$fake" <<FAKE
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/fake/payload.txt"
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
 }
 
 # --- Test 1: first acquisition with an absent lock file ----------------------
 
-echo "Test: first acquisition writes the session PID and prints acquired"
+echo "Test: first acquisition writes the sessionId and prints acquired"
 lock_setup
-export DISPATCH_LOCK_SESSION_PID=100100
-lock_proc_pid 100100 ".claude-unwrapp"
+export CLAUDE_CODE_SESSION_ID="sess-100"
+lock_fake_claude_sessions "sess-100"
 # The lock file does not exist yet.
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
 assert_eq "first-acquisition exits 0" "0" "$rc"
 assert_eq "first-acquisition prints acquired" "acquired" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "lock file records the session PID" "100100" "$lock_contents"
+assert_eq "lock file records the sessionId" "sess-100" "$lock_contents"
 lock_teardown
 
 # --- Test 2: two parallel invocations, distinct sessions ---------------------
 
 echo "Test: two parallel invocations yield exactly one acquired, one busy"
 lock_setup
-# Both sessions are live .claude processes.
-lock_proc_pid 200200 ".claude-unwrapp"
-lock_proc_pid 200300 ".claude-unwrapp"
-# Launch both in the background, each with its own session PID, sharing the
-# one lock file + proc root. The blocking flock serializes them.
-( export DISPATCH_LOCK_SESSION_PID=200200
+# Both sessionIds are present in the registry — both are live.
+lock_fake_claude_sessions "sess-200a" "sess-200b"
+# Launch both in the background, each with its own sessionId, sharing the
+# one lock file. The blocking flock serializes them.
+( export CLAUDE_CODE_SESSION_ID="sess-200a"
   "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) >"$STUB_DIR/out-a" 2>&1 &
-( export DISPATCH_LOCK_SESSION_PID=200300
+( export CLAUDE_CODE_SESSION_ID="sess-200b"
   "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) >"$STUB_DIR/out-b" 2>&1 &
 wait
 out_a=$(cat "$STUB_DIR/out-a" 2>/dev/null || true)
@@ -2969,110 +2997,116 @@ assert_eq "parallel invocations: exactly one acquired, one busy" \
   "$(printf 'acquired\nbusy')" "$sorted"
 lock_teardown
 
-# --- Test 3: stale lock — recorded PID is dead -------------------------------
+# --- Test 3: stale lock — recorded sessionId not in the registry -------------
 
-echo "Test: stale lock with a dead recorded PID is reclaimed"
+echo "Test: stale lock with a recorded sessionId absent from the registry is reclaimed"
 lock_setup
-# Pre-write a recorded PID with no /proc entry — a dead process.
-printf '%s\n' 300300 > "$DISPATCH_LOCK_FILE"
-export DISPATCH_LOCK_SESSION_PID=300400
-lock_proc_pid 300400 ".claude-unwrapp"
+# Pre-write a recorded sessionId that no longer appears in the registry.
+printf '%s\n' "sess-300-gone" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-300-new"
+lock_fake_claude_sessions "sess-300-new"   # registry knows only our session
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
-assert_eq "stale-dead-PID exits 0" "0" "$rc"
-assert_eq "stale-dead-PID prints acquired" "acquired" "$out"
+assert_eq "stale-absent-sid exits 0" "0" "$rc"
+assert_eq "stale-absent-sid prints acquired" "acquired" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "stale-dead-PID lock file rewritten to new session PID" \
-  "300400" "$lock_contents"
+assert_eq "stale-absent-sid lock file rewritten to new sessionId" \
+  "sess-300-new" "$lock_contents"
 lock_teardown
 
-# --- Test 4: stale lock — recorded PID recycled by a non-.claude process -----
+# --- Test 4: stale lock — registry empty (no live sessions at all) -----------
 
-echo "Test: stale lock with a recycled non-.claude PID is reclaimed"
+echo "Test: stale lock with an empty registry is reclaimed"
 lock_setup
-printf '%s\n' 400400 > "$DISPATCH_LOCK_FILE"
-# The recorded PID is alive but is NOT a .claude process — PID recycled.
-lock_proc_pid 400400 "bash"
-export DISPATCH_LOCK_SESSION_PID=400500
-lock_proc_pid 400500 ".claude-unwrapp"
+printf '%s\n' "sess-400-gone" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-400-new"
+lock_fake_claude_sessions   # zero args → empty registry `[]`
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
-assert_eq "recycled-PID exits 0" "0" "$rc"
-assert_eq "recycled-PID prints acquired" "acquired" "$out"
+assert_eq "empty-registry exits 0" "0" "$rc"
+assert_eq "empty-registry prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "empty-registry lock file rewritten to new sessionId" \
+  "sess-400-new" "$lock_contents"
 lock_teardown
 
 # --- Test 5: same-session re-entry -------------------------------------------
 
 echo "Test: same-session re-entry proceeds (not busy)"
 lock_setup
-# The recorded PID is a live .claude process AND is our own session.
-printf '%s\n' 500500 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 500500 ".claude-unwrapp"
-export DISPATCH_LOCK_SESSION_PID=500500
+# The recorded sessionId is our own session and is in the registry.
+printf '%s\n' "sess-500" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-500"
+lock_fake_claude_sessions "sess-500"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
 assert_eq "re-entry exits 0" "0" "$rc"
 assert_eq "re-entry prints acquired" "acquired" "$out"
 lock_teardown
 
-# --- Test 6: misconfiguration — non-git dir, no DISPATCH_LOCK_FILE -----------
+# --- Test 6a: misconfiguration — non-git dir, no DISPATCH_LOCK_FILE ----------
 
 echo "Test: non-git dir with no DISPATCH_LOCK_FILE exits 2"
 lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-600"
+lock_fake_claude_sessions "sess-600"
 nongit=$(mktemp -d)
 # `set -e` is in effect: capture the exit code with an if/else. env -u strips
-# the lock-file + proc-root overrides for just this invocation.
-if ( cd "$nongit" && env -u DISPATCH_LOCK_FILE -u DISPATCH_LOCK_PROC_ROOT \
+# the lock-file override for just this invocation.
+if ( cd "$nongit" && env -u DISPATCH_LOCK_FILE \
        "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) 2>"$STUB_DIR/err6"; then
   rc=0
 else
   rc=$?
 fi
-assert_eq "misconfiguration exits 2" "2" "$rc"
+assert_eq "misconfiguration (non-git) exits 2" "2" "$rc"
 err6=$(cat "$STUB_DIR/err6" 2>/dev/null || true)
+# Assert the specific git-error message, not just non-empty stderr — this keeps
+# the test's intent ("the git-lookup guard fired") robust to guard reordering:
+# if Step 2 ever moved before Step 1, this assertion would fail rather than
+# silently passing for the wrong reason.
 TOTAL=$((TOTAL + 1))
-if [[ -n "$err6" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: misconfiguration writes an error to stderr"
+if [[ "$err6" == *"not in a git repo"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-git misconfiguration writes the git-error to stderr"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: misconfiguration writes an error to stderr"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-git misconfiguration writes the git-error to stderr"
   echo "    stderr: '$err6'"
 fi
 rm -rf "$nongit"
 lock_teardown
 
-# --- Test 7: /proc ancestry walk resolves the nearest .claude ancestor -------
-#
-# The only lock test that exercises the /proc walk — DISPATCH_LOCK_SESSION_PID
-# is left unset. `( exec ... )` forks a subshell that exec-replaces itself with
-# the script, so the script's $PPID is this test process ($$). Synthetic
-# ancestry: $$ is a non-.claude shell whose PPid points at a .claude session,
-# so the walk must climb one level past $$ to reach the session PID.
+# --- Test 6b: misconfiguration — CLAUDE_CODE_SESSION_ID unset → exit 2 -------
 
-echo "Test: /proc ancestry walk resolves the nearest .claude ancestor"
+echo "Test: unset CLAUDE_CODE_SESSION_ID exits 2"
 lock_setup
-claude_pid=700700
-lock_proc_pid "$$" "bash"                  # script's $PPID — not a .claude proc
-lock_proc_status "$$" "$claude_pid"        # ... its parent is the .claude session
-lock_proc_pid "$claude_pid" ".claude-unwrapp"
-rc=0
-( exec "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) \
-  >"$STUB_DIR/out7" 2>/dev/null || rc=$?
-out=$(cat "$STUB_DIR/out7" 2>/dev/null || true)
-assert_eq "proc-walk exits 0" "0" "$rc"
-assert_eq "proc-walk prints acquired" "acquired" "$out"
-lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "proc-walk records the .claude ancestor PID, not \$PPID" \
-  "$claude_pid" "$lock_contents"
+lock_fake_claude_sessions   # not strictly needed; daemon is never queried
+# `set -e` is in effect: capture the exit code with an if/else. env -u strips
+# CLAUDE_CODE_SESSION_ID for just this invocation.
+if ( env -u CLAUDE_CODE_SESSION_ID \
+       "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) 2>"$STUB_DIR/err6b"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "missing CLAUDE_CODE_SESSION_ID exits 2" "2" "$rc"
+err6b=$(cat "$STUB_DIR/err6b" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$err6b" == *"CLAUDE_CODE_SESSION_ID is unset"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing CLAUDE_CODE_SESSION_ID writes the session-id error to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing CLAUDE_CODE_SESSION_ID writes the session-id error to stderr"
+  echo "    stderr: '$err6b'"
+fi
 lock_teardown
 
 # --- Test 8: --wait with an own-session record acquires immediately ----------
 #
-# An own-session PID is recorded. --wait must NOT poll — try_acquire claims it
-# on iteration 1. WAIT_TIMEOUT=0 proves no wait happened: a real wait would
-# have to time out, which 0 cannot survive.
+# Our sessionId is recorded. --wait must NOT poll — try_acquire claims it on
+# iteration 1. WAIT_TIMEOUT=0 proves no wait happened: a real wait would have
+# to time out, which 0 cannot survive.
 
 echo "Test: --wait with an own-session record acquires immediately"
 lock_setup
-printf '%s\n' 800800 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 800800 ".claude-unwrapp"
-export DISPATCH_LOCK_SESSION_PID=800800
+printf '%s\n' "sess-800" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-800"
+lock_fake_claude_sessions "sess-800"
 export DISPATCH_LOCK_WAIT_TIMEOUT=0
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --wait 2>/dev/null); rc=$?
 assert_eq "--wait own-session exits 0" "0" "$rc"
@@ -3081,15 +3115,15 @@ lock_teardown
 
 # --- Test 9: --wait against a live foreign holder times out → busy -----------
 #
-# The recorded PID is a live foreign .claude session that never goes away. The
-# --wait loop polls until WAIT_TIMEOUT elapses, then prints busy and exits 0.
+# The recorded sessionId is a live foreign session that never leaves the
+# registry. The --wait loop polls until WAIT_TIMEOUT elapses, then prints busy
+# and exits 0.
 
 echo "Test: --wait against a live foreign holder times out and prints busy"
 lock_setup
-printf '%s\n' 900900 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 900900 ".claude-unwrapp"          # live foreign holder
-export DISPATCH_LOCK_SESSION_PID=900901
-lock_proc_pid 900901 ".claude-unwrapp"          # our own session
+printf '%s\n' "sess-900-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-900-self"
+lock_fake_claude_sessions "sess-900-foreign" "sess-900-self"
 export DISPATCH_LOCK_WAIT_TIMEOUT=1
 export DISPATCH_LOCK_WAIT_INTERVAL=0.2
 # `set -e` is in effect: capture the exit code with an if/else.
@@ -3104,37 +3138,39 @@ lock_teardown
 
 # --- Test 10: --wait acquires once a contended holder goes stale -------------
 #
-# The recorded PID is a live foreign holder when --wait starts. Mid-wait its
-# synthetic /proc entry is removed, so the next poll's liveness check fails and
-# the waiter reclaims the lock — recording its own session PID.
+# The recorded sessionId is live when --wait starts. Mid-wait we regenerate
+# the fake `claude` to omit that sessionId, so the next poll's liveness check
+# fails and the waiter reclaims the lock — recording its own sessionId.
 
 echo "Test: --wait acquires once a contended holder goes stale"
 lock_setup
-printf '%s\n' 101010 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 101010 ".claude-unwrapp"          # live foreign holder
-export DISPATCH_LOCK_SESSION_PID=101011
-lock_proc_pid 101011 ".claude-unwrapp"          # our own session
+printf '%s\n' "sess-1010-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1010-self"
+lock_fake_claude_sessions "sess-1010-foreign" "sess-1010-self"
 export DISPATCH_LOCK_WAIT_INTERVAL=0.1
 export DISPATCH_LOCK_WAIT_TIMEOUT=10
 ( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --wait ) >"$STUB_DIR/out10" 2>&1 &
 wait_pid=$!
 sleep 0.5
-# Holder goes away — next poll's liveness check fails, waiter reclaims.
-rm -rf "$DISPATCH_LOCK_PROC_ROOT/101010"
+# Holder goes away — regenerate the registry without its sessionId. The
+# waiter has already exported CLAUDE_AGENTS_CMD; the fake script reads its
+# payload file at run time, so rewriting the payload (and overwriting the
+# script) is picked up by the next poll.
+lock_fake_claude_sessions "sess-1010-self"
 wait "$wait_pid"
 out=$(cat "$STUB_DIR/out10" 2>/dev/null || true)
 assert_eq "--wait reclaim prints acquired" "acquired" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "--wait reclaim records our session PID" "101011" "$lock_contents"
+assert_eq "--wait reclaim records our sessionId" "sess-1010-self" "$lock_contents"
 lock_teardown
 
 # --- Test 11: --release with an own-session record → released, file emptied --
 
 echo "Test: --release with an own-session record clears the lock file"
 lock_setup
-printf '%s\n' 111100 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 111100 ".claude-unwrapp"
-export DISPATCH_LOCK_SESSION_PID=111100
+printf '%s\n' "sess-1111" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1111"
+lock_fake_claude_sessions "sess-1111"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
 assert_eq "--release own-session exits 0" "0" "$rc"
 assert_eq "--release own-session prints released" "released" "$out"
@@ -3148,84 +3184,183 @@ else
 fi
 lock_teardown
 
-# --- Test 12: --release with a foreign PID recorded → noop, file unchanged ---
+# --- Test 12: --release with a foreign sessionId recorded → noop -------------
 
-echo "Test: --release with a foreign PID recorded is a no-op"
+echo "Test: --release with a foreign sessionId recorded is a no-op"
 lock_setup
-printf '%s\n' 121200 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 121200 ".claude-unwrapp"          # live foreign holder
-export DISPATCH_LOCK_SESSION_PID=121201
-lock_proc_pid 121201 ".claude-unwrapp"          # our own session
+printf '%s\n' "sess-1212-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1212-self"
+lock_fake_claude_sessions "sess-1212-foreign" "sess-1212-self"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
 assert_eq "--release foreign exits 0" "0" "$rc"
 assert_eq "--release foreign prints noop" "noop" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
 assert_eq "--release foreign leaves the lock file unchanged" \
-  "121200" "$lock_contents"
+  "sess-1212-foreign" "$lock_contents"
 lock_teardown
 
 # --- Test 13: unknown argument exits 2 ---------------------------------------
 
 echo "Test: an unknown argument exits 2"
 lock_setup
+# Set CLAUDE_CODE_SESSION_ID so the test exercises the arg-parse guard
+# specifically. Without this, the script also exits 2 on the session-id guard
+# (Step 2) — if Step 0 (arg parse) were ever moved after Step 2, this test
+# would silently keep passing for the wrong reason.
+export CLAUDE_CODE_SESSION_ID="sess-1300"
 # `set -e` is in effect: capture the exit code with an if/else.
-if ( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --bogus ) 2>/dev/null; then
+if ( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --bogus ) 2>"$STUB_DIR/err13"; then
   rc=0
 else
   rc=$?
 fi
 assert_eq "unknown argument exits 2" "2" "$rc"
+err13=$(cat "$STUB_DIR/err13" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$err13" == *"unknown argument"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unknown argument writes the arg-parse error to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unknown argument writes the arg-parse error to stderr"
+  echo "    stderr: '$err13'"
+fi
 lock_teardown
 
-# --- Test 14: a recorded --bg-spare daemon PID is reclaimable (non-holder) ---
-#
-# The recorded PID is alive with comm ".claude-unwrapp" — identical to a real
-# session — but its cmdline carries `--bg-spare`, marking a background-spare
-# daemon, not a /dispatch session. is_live_claude must reject it, so the
-# calling session reclaims the lock. The comm-only predicate would wrongly
-# report busy and wedge the lock on the daemon.
+# --- Test 14: a recorded sessionId absent from a non-empty registry is reclaimable
 
-echo "Test: a recorded --bg-spare daemon PID is reclaimable, not a holder"
+echo "Test: a recorded sessionId absent from a non-empty registry is reclaimable"
 lock_setup
-printf '%s\n' 141400 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 141400 ".claude-unwrapp"                   # comm looks like a session
-lock_proc_cmdline 141400 ".claude-unwrapped" "--bg-spare"  # ... but cmdline marks a spare daemon
-export DISPATCH_LOCK_SESSION_PID=141401
-lock_proc_pid 141401 ".claude-unwrapp"                   # our own live session
+printf '%s\n' "sess-1414-gone" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1414-self"
+# Registry has live sessions, but not the recorded holder — its session ended.
+lock_fake_claude_sessions "sess-1414-other" "sess-1414-self"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
-assert_eq "bg-spare-holder exits 0" "0" "$rc"
-assert_eq "bg-spare-holder prints acquired" "acquired" "$out"
+assert_eq "absent-from-registry exits 0" "0" "$rc"
+assert_eq "absent-from-registry prints acquired" "acquired" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "bg-spare-holder lock file rewritten to the caller's session PID" \
-  "141401" "$lock_contents"
+assert_eq "absent-from-registry lock file rewritten to caller's sessionId" \
+  "sess-1414-self" "$lock_contents"
 lock_teardown
 
-# --- Test 15: the ancestry walk skips a --bg-spare daemon ancestor -----------
+# --- Test 15: daemon-unreachable → foreign holder treated as live → busy -----
 #
-# Like Test 7, DISPATCH_LOCK_SESSION_PID is unset so the /proc walk runs. The
-# script's $PPID ($$) is a non-.claude shell; its parent is a --bg-spare
-# daemon (`.claude` comm, `--bg-spare` cmdline); the grandparent is a real
-# .claude session. The walk must skip the spare daemon and record the session.
+# `claude agents --json` exits non-zero (binary missing, daemon down, etc.).
+# The fail-safe contract says treat the recorded foreign holder as live — the
+# lock must NOT be stolen. The caller prints busy.
 
-echo "Test: the ancestry walk skips a --bg-spare daemon ancestor"
+echo "Test: daemon-unreachable treats a foreign holder as live (lock not stolen)"
 lock_setup
-spare_pid=151500
-session_pid=151501
-lock_proc_pid "$$" "bash"                       # script's $PPID — not a .claude proc
-lock_proc_status "$$" "$spare_pid"              # ... its parent is the spare daemon
-lock_proc_pid "$spare_pid" ".claude-unwrapp"    # spare daemon: comm looks like a session
-lock_proc_cmdline "$spare_pid" ".claude-unwrapped" "--bg-spare"  # ... but cmdline marks it
-lock_proc_status "$spare_pid" "$session_pid"    # ... its parent is the real session
-lock_proc_pid "$session_pid" ".claude-unwrapp"  # real session (no cmdline → comm-only verdict)
-rc=0
-( exec "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) \
-  >"$STUB_DIR/out15" 2>/dev/null || rc=$?
-out=$(cat "$STUB_DIR/out15" 2>/dev/null || true)
-assert_eq "spare-ancestor walk exits 0" "0" "$rc"
-assert_eq "spare-ancestor walk prints acquired" "acquired" "$out"
+printf '%s\n' "sess-1515-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1515-self"
+lock_fake_claude_failure 1
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "daemon-unreachable exits 0" "0" "$rc"
+assert_eq "daemon-unreachable prints busy" "busy" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "spare-ancestor walk records the session PID, not the spare daemon" \
-  "$session_pid" "$lock_contents"
+assert_eq "daemon-unreachable lock file is unchanged" \
+  "sess-1515-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 16: --release with no lock file → noop, no error -------------------
+#
+# Tests 11/12 always pre-write a sessionId before --release; this exercises the
+# absent-file branch that the script must treat as `noop` (nothing recorded to
+# clear).
+
+echo "Test: --release with no lock file prints noop"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-1616"
+lock_fake_claude_sessions "sess-1616"
+# Lock file deliberately not created.
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "--release absent-file exits 0" "0" "$rc"
+assert_eq "--release absent-file prints noop" "noop" "$out"
+lock_teardown
+
+# --- Test 17: opaque-failure stdout (whitespace-only) → foreign holder live --
+#
+# `claude agents --json` exits 0 but prints only whitespace. is_live_session
+# must treat this as opaque/live (return 0) — the lock must not be stolen.
+
+echo "Test: whitespace-only daemon stdout treats a foreign holder as live"
+lock_setup
+printf '%s\n' "sess-1717-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1717-self"
+lock_fake_claude_payload $'   \n\t  \n'
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "whitespace-stdout exits 0" "0" "$rc"
+assert_eq "whitespace-stdout prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "whitespace-stdout lock file is unchanged" \
+  "sess-1717-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 18: non-array JSON stdout (object) → foreign holder live -----------
+#
+# `claude agents --json` exits 0 but prints a JSON object instead of an array
+# (a daemon bug or API change). is_live_session's jq guard hits `error("not a
+# JSON array")` and the function returns 0 (live). The lock must not be stolen.
+
+echo "Test: non-array JSON daemon stdout treats a foreign holder as live"
+lock_setup
+printf '%s\n' "sess-1818-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1818-self"
+lock_fake_claude_payload '{"error":"unexpected shape"}'
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "non-array-json exits 0" "0" "$rc"
+assert_eq "non-array-json prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "non-array-json lock file is unchanged" \
+  "sess-1818-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 19: malformed-JSON daemon stdout → foreign holder treated as live ---
+#
+# `claude agents --json` exits 0 but prints truncated/malformed JSON (a partial
+# array like `[{"sessionId":`). jq cannot parse this — it exits non-zero — and
+# is_live_session must treat the jq parse failure as opaque/live (return 0).
+# The lock must NOT be stolen.
+
+echo "Test: malformed-JSON daemon stdout treats a foreign holder as live"
+lock_setup
+printf '%s\n' "sess-1919-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1919-self"
+lock_fake_claude_payload '[{"sessionId":'
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "malformed-json exits 0" "0" "$rc"
+assert_eq "malformed-json prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "malformed-json lock file is unchanged" \
+  "sess-1919-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 6c: --release with CLAUDE_CODE_SESSION_ID unset → exit 2 ----------
+#
+# The Step 2 CLAUDE_CODE_SESSION_ID guard runs before the `case "$MODE"` dispatch
+# so `--release` fails the same way as a plain acquire when the session-id is
+# unset. The foreign lock holder must be left untouched.
+
+echo "Test: --release with unset CLAUDE_CODE_SESSION_ID exits 2, lock unchanged"
+lock_setup
+printf '%s\n' "sess-6c-foreign" > "$DISPATCH_LOCK_FILE"
+lock_fake_claude_sessions   # not queried; guard fires before the mode dispatch
+if ( env -u CLAUDE_CODE_SESSION_ID \
+       "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release ) 2>"$STUB_DIR/err6c"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "--release missing CLAUDE_CODE_SESSION_ID exits 2" "2" "$rc"
+err6c=$(cat "$STUB_DIR/err6c" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$err6c" == *"CLAUDE_CODE_SESSION_ID is unset"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: --release missing-session-id writes the session-id error to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: --release missing-session-id writes the session-id error to stderr"
+  echo "    stderr: '$err6c'"
+fi
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "--release missing-session-id leaves the foreign lock intact" \
+  "sess-6c-foreign" "$lock_contents"
 lock_teardown
 
 # ============================================================================
