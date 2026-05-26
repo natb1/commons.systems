@@ -181,16 +181,16 @@ type JournalEntry struct {
 
 // JournalLeg is a single leg of a double-entry journal entry in the JSON output.
 type JournalLeg struct {
-	ID               string  `json:"id"`
-	EntryID          string  `json:"entryId"`
-	AccountID        string  `json:"accountId"`
-	Debit            float64 `json:"debit"`
-	Credit           float64 `json:"credit"`
-	Timestamp        string  `json:"timestamp"`
-	Cleared          bool    `json:"cleared"`
-	ReconciledAt     *string `json:"reconciledAt"`
+	ID                string  `json:"id"`
+	EntryID           string  `json:"entryId"`
+	AccountID         string  `json:"accountId"`
+	Debit             float64 `json:"debit"`
+	Credit            float64 `json:"credit"`
+	Timestamp         string  `json:"timestamp"`
+	Cleared           bool    `json:"cleared"`
+	ReconciledAt      *string `json:"reconciledAt"`
 	ReconciledEventID *string `json:"reconciledEventId"`
-	StatementItemID  *string `json:"statementItemId"`
+	StatementItemID   *string `json:"statementItemId"`
 }
 
 // Budget is a budget definition in the JSON output.

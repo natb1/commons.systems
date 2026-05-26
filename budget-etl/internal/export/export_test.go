@@ -1017,6 +1017,9 @@ func TestOutputCarriesJournalCollections(t *testing.T) {
 	if !got.JournalLegs[0].Cleared {
 		t.Errorf("journalLegs[0].cleared = false, want true")
 	}
+	if got.JournalLegs[0].ReconciledAt == nil || *got.JournalLegs[0].ReconciledAt != reconciledAt {
+		t.Errorf("journalLegs[0].reconciledAt = %v, want %q", got.JournalLegs[0].ReconciledAt, reconciledAt)
+	}
 
 	if len(got.Accounts) != 1 {
 		t.Fatalf("accounts count = %d, want 1", len(got.Accounts))
