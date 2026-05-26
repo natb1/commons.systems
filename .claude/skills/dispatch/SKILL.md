@@ -189,12 +189,11 @@ continue to target selection.
     no inferable issue number. Use `AskUserQuestion` to ask whether to delete
     `<path>` — its history is only local. This is the only sweep path that can
     destroy potentially-unmerged code.
-    - **Yes** → run `.claude/skills/dispatch/scripts/dispatch-sweep
-      --cleanup-unknown <path>`
-      (`dangerouslyDisableSandbox: true`), then re-run `dispatch-select-target`
-      and route on its new output. If the new output is another
-      `cleanup-unknown` (a second unknown orphan), repeat — confirm the next
-      path with `AskUserQuestion`.
+    - **Yes** → re-run `dispatch-select-target --cleanup-confirm <path>` and
+      route on its new output. The script performs the cleanup and resumes
+      selection; if a second unknown orphan exists it halts again with
+      `cleanup-unknown <path2>` — confirm that path with a fresh
+      `AskUserQuestion`.
     - **No** → re-run `dispatch-select-target --no-sweep` and route on its new
       output. The flag bypasses the sweep so the next call doesn't immediately
       re-halt on the same unknown orphan.
