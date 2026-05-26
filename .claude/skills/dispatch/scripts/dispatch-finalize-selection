@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# dispatch-finalize-selection — canonical Step 5 proceed-path exit. Writes the
+# tmp/dispatch-worktree marker that signals "Step 5 completed" (the lock script
+# reads it on subsequent ticks to reclaim a marker-bearing foreign holder), then
+# execs dispatch-acquire-lock --release so the wrapper's exit code is the
+# release call's exit code. See `.claude/skills/dispatch/SKILL.md` Step 5 and
+# Step 0 "Releasing the lock".
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+mkdir -p tmp && touch tmp/dispatch-worktree
+exec "$SCRIPT_DIR/dispatch-acquire-lock" --release
