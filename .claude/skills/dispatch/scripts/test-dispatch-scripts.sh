@@ -81,6 +81,18 @@ setup() {
   mkdir -p "$TMPDIR_TEST/config"
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
 
+  # Default no-op dispatch-sweep stub: silent, exit 0 (no orphan to adopt).
+  # dispatch-select-target invokes "$SCRIPT_DIR/dispatch-sweep" in default mode
+  # between the main-broken gate and the queue ladder; with this stub the call
+  # is inert and every existing default-mode test stays green. Tests that
+  # exercise sweep integration overwrite this stub before invoking
+  # dispatch-select-target.
+  cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/dispatch-sweep"
+
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
   # resolve to TMPDIR_TEST correctly.
@@ -882,6 +894,8 @@ assert_eq "lone waiting PR → empty" "empty" "$result"
 teardown
 
 # 16. Open issue worktree → worktree output, queue scan skipped.
+# The default no-op dispatch-sweep stub installed by setup() is in place but
+# unused — current-worktree continuation short-circuits before the sweep call.
 echo "Test: open issue worktree → worktree <N> <branch>, scan skipped"
 setup
 # Seed a verify PR that would normally be selected — proves the scan is skipped.
@@ -1776,6 +1790,123 @@ printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
 [[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
 assert_eq "invalid duration → exits non-zero" "yes" "$rc_nonzero"
+teardown
+
+# --- sweep routing (issue #803) ---------------------------------------------
+# dispatch-select-target invokes dispatch-sweep internally in default mode,
+# between the main-broken gate and the queue ladder. The sweep call comes
+# AFTER current-worktree continuation, so a session inside an <issue>-*
+# worktree always continues there even when an orphan exists elsewhere.
+# Tests below overwrite the default no-op sweep stub seeded by setup() to
+# exercise the routing branches.
+
+# SR1. (AC b) Inside an active <issue>-* worktree with an orphan elsewhere →
+#      still worktree <N> <branch>. The sweep stub would emit an adoption
+#      directive if invoked; the assert proves it never was.
+echo "Test: worktree continuation precedes sweep adoption (regression — #803)"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
+printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
+# Sweep stub would adopt an orphan at issue 725 if invoked — proves the sweep
+# never ran (current-worktree continuation short-circuited first).
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-some-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "worktree continuation beats sweep adoption" "worktree 42 42-some-slug" "$result"
+teardown
+
+# SR2. (AC c) Outside any worktree, orphan present → worktree-adopted.
+echo "Test: outside any worktree, orphan present → worktree-adopted"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "sweep adoption → worktree-adopted 725 725-orphan" "worktree-adopted 725 725-orphan" "$result"
+teardown
+
+# SR3. (AC d) Outside any worktree, no orphan → ladder result.
+echo "Test: outside any worktree, no orphan → ladder result"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Default no-op sweep stub from setup() is unchanged → sweep falls through.
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "no orphan → ladder picks verify PR" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# SR4. cleanup-unknown propagation: sweep exits 3 with stderr "cleanup-unknown:<path>".
+echo "Test: sweep exit 3 + cleanup-unknown stderr → cleanup-unknown <path>"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "cleanup-unknown:/tmp/some-orphan" >&2
+exit 3
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "cleanup-unknown propagated to stdout" "cleanup-unknown /tmp/some-orphan" "$result"
+assert_eq "cleanup-unknown route exits 0" "0" "$rc"
+teardown
+
+# SR5. --no-sweep bypasses the sweep call. A sweep stub that would adopt an
+#      orphan is installed; the flag must prove it was never invoked.
+echo "Test: --no-sweep bypasses the sweep call"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Stub would emit worktree-adopted-style adoption directive if invoked.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" --no-sweep)
+assert_eq "--no-sweep skips adoption → ladder result" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# SR6. A non-3 non-zero sweep exit logs a diagnostic but falls through to the
+#      ladder — defense-in-depth so a malformed sweep does not stall dispatch.
+echo "Test: sweep exit 2 (unrelated failure) → warning, fall through to ladder"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "some unrelated sweep error" >&2
+exit 2
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null)
+assert_eq "sweep exit 2 → falls through to ladder result" "pr 10 10-verify-me verify" "$result"
 teardown
 
 # ============================================================================
