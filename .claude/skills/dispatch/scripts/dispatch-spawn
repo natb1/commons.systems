@@ -156,7 +156,10 @@ fi
 while IFS=$'\t' read -r sid _ status name; do
   [[ -z "$sid" ]] && continue
   [[ "$name" == dispatch-* ]] || continue    # not a dispatch job
-  [[ "$status" == "stopped" ]] && continue   # not live
+  # Defensive: `claude agents --json` only lists live sessions, so a "stopped"
+  # row should not appear here in normal operation. The check survives a
+  # registry that nonetheless surfaces a terminal status.
+  [[ "$status" == "stopped" ]] && continue
   [[ "$sid" == "$SESSION_ID" ]] && continue  # this very session — not "another"
   # Another live dispatch-* session already owns the chain; spawn nothing.
   echo deduped
