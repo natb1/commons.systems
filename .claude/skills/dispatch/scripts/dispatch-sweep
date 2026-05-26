@@ -48,6 +48,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # shellcheck source=./lib-worktree-in-sync.sh
 source "$SCRIPT_DIR/lib-worktree-in-sync.sh"
+# shellcheck source=./lib.sh
+source "$SCRIPT_DIR/lib.sh"
 
 # Resolve project root + worktrees root from the git common dir. The parent of
 # --git-common-dir is the project root in both classic (.git) and bare (.bare)
@@ -314,6 +316,30 @@ while [[ $i -lt ${#ORPHAN_PATHS[@]} ]]; do
   # <branch>" directive. Log and skip — the operator has the log to investigate.
   if [[ -z "$issue_num" ]]; then
     log "SKIP_ORPHAN_NO_ISSUE_NUM: '$wt_path' branch=$wt_branch pr=#$open_pr"
+    continue
+  fi
+
+  # Closed-issue gate. Fetch state with one gh call; fail loud on error —
+  # no silent fallback to "open" (would cause stale-orphan adoption).
+  if ! issue_state=$(gh issue view "$issue_num" --json state -q .state 2>>"$LOG_FILE"); then
+    log "ERROR_ISSUE_STATE_FETCH: '$wt_path' branch=$wt_branch issue=#$issue_num"
+    echo "ERROR: failed to fetch state for issue #$issue_num" >&2
+    exit 1
+  fi
+  if [[ "$issue_state" == "CLOSED" ]]; then
+    log "SKIP_ORPHAN_CLOSED_ISSUE: '$wt_path' branch=$wt_branch issue=#$issue_num"
+    continue
+  fi
+
+  # Open-blocker gate. count_open_blockers (lib.sh) returns the integer
+  # count and exits non-zero on gh failure (gh_api_array writes its own
+  # descriptive stderr). Fail loud — no silent fallback to "not blocked".
+  if ! n_blockers=$(count_open_blockers "$issue_num"); then
+    log "ERROR_BLOCKER_COUNT: '$wt_path' branch=$wt_branch issue=#$issue_num"
+    exit 1
+  fi
+  if [[ "$n_blockers" -gt 0 ]]; then
+    log "SKIP_ORPHAN_BLOCKED: '$wt_path' branch=$wt_branch issue=#$issue_num blockers=$n_blockers"
     continue
   fi
 
