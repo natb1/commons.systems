@@ -49,6 +49,7 @@
 #
 # PRs and help-wanted issues with a local git worktree are skipped (a session is
 # actively working them).
+# A PR is also skipped when an issue it closes is blocked_by an open issue.
 # "done" (non-draft) PRs are skipped entirely.
 # "waiting" PRs (draft, CI still running/queued/not started) are skipped entirely.
 # A queue with no topic-labeled items resolves entirely to "other", reproducing
@@ -60,6 +61,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 QA_MODE=false
 HEALTH_ONLY=false
 
@@ -270,6 +272,23 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   case "$phase" in
     done|waiting) continue ;;
   esac
+
+  # Skip PRs gated by an open blocker. Placed after the done/waiting filter so
+  # PRs that would be discarded anyway don't pay the per-closing-issue gh-api
+  # round-trip, and before FIRST_PR is populated so --qa inherits the skip.
+  pr_blocked=false
+  while IFS= read -r closing_num; do
+    [[ -z "$closing_num" ]] && continue
+    open_blockers=$(count_open_blockers "$closing_num") || {
+      echo "error: dispatch-select-target: blocked_by lookup failed for issue #$closing_num" >&2
+      exit 1
+    }
+    if [[ "$open_blockers" -gt 0 ]]; then
+      pr_blocked=true
+      break
+    fi
+  done < <(printf '%s' "$pr_closing" | jq -r '.[].number')
+  [[ "$pr_blocked" == "true" ]] && continue
 
   # Record the oldest PR seen in this category+phase. The :- guard keeps the
   # unset-key read from aborting under set -u.
