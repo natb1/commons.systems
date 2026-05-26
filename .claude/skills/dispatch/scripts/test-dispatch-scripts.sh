@@ -3954,6 +3954,344 @@ assert_eq "due-write usage error exits 2" "2" "$rc"
 proj_teardown
 
 # ============================================================================
+# dispatch-spawn tests
+# ============================================================================
+echo "=== dispatch-spawn ==="
+#
+# dispatch-spawn is exercised against a fake `claude` — a multi-subcommand
+# temp script DISPATCH_SPAWN_CLAUDE_CMD points at by absolute path, so no real
+# daemon is needed. The same fake also backs the sourced lib-claude-agents.sh
+# helper (dispatch-spawn exports CLAUDE_AGENTS_CMD to it).
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/        copies of dispatch-spawn + lib-claude-agents.sh
+#   $TMPDIR_TEST/worktrees/main/ the main worktree (the spawn subshell cd's here)
+#   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
+#   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
+#   $TMPDIR_TEST/jobs/           the on-disk jobs ledger (DISPATCH_SPAWN_JOBS_DIR)
+#   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
+#   $TMPDIR_TEST/rm-log          recorded job-ids of each `claude rm` call
+#   $TMPDIR_TEST/stop-log        recorded job-ids of each `claude stop` call
+#
+# The test shell runs under `set -e`; dispatch-spawn can exit non-zero, so
+# every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
+
+SPAWN_REGISTRY=""
+SPAWN_JOBS_DIR=""
+SPAWN_BG_ARGV=""
+SPAWN_RM_LOG=""
+SPAWN_STOP_LOG=""
+
+# write_fake_spawn_claude — install the multi-subcommand fake `claude`.
+# Dispatches on $1:
+#   agents   — print the registry fixture verbatim. The fake ignores --cwd:
+#              claude_sessions_under does no client-side path filtering — it
+#              trusts server-side `--cwd` filtering — so every fixture session
+#              is returned. Fine here: each fixture holds only sessions a test
+#              means dispatch-spawn to see.
+#   --bg     — record full argv to bg-argv; when SPAWN_BG_REGISTERS=1 (default)
+#              parse --name and jq-append the new agent to the fixture so the
+#              verify step finds it.
+#   rm       — append $2 (the job-id) to rm-log.
+#   stop     — append $2 (the job-id) to stop-log.
+write_fake_spawn_claude() {
+  cat > "$TMPDIR_TEST/fake-claude" <<FAKE
+#!/usr/bin/env bash
+set -uo pipefail
+case "\${1:-}" in
+  agents)
+    cat "$SPAWN_REGISTRY"
+    ;;
+  --bg)
+    printf '%s\n' "\$@" > "$SPAWN_BG_ARGV"
+    if [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
+      name=""
+      while [[ \$# -gt 0 ]]; do
+        if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+        shift
+      done
+      tmp=\$(mktemp)
+      jq --arg name "\$name" \
+        '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/main","kind":"background","status":"busy","name":\$name}]' \
+        "$SPAWN_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_REGISTRY"
+    fi
+    ;;
+  rm)
+    printf '%s\n' "\${2:-}" >> "$SPAWN_RM_LOG"
+    ;;
+  stop)
+    printf '%s\n' "\${2:-}" >> "$SPAWN_STOP_LOG"
+    ;;
+esac
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-claude"
+}
+
+spawn_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main" \
+    "$TMPDIR_TEST/jobs"
+
+  # dispatch-spawn sources lib-claude-agents.sh from its own directory, so the
+  # helper must sit alongside the copy. It is sourced, not executed — no chmod.
+  cp "$SCRIPT_DIR/dispatch-spawn" "$TMPDIR_TEST/scripts/dispatch-spawn"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn"
+
+  SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_JOBS_DIR="$TMPDIR_TEST/jobs"
+  SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_RM_LOG="$TMPDIR_TEST/rm-log"
+  SPAWN_STOP_LOG="$TMPDIR_TEST/stop-log"
+  printf '[]' > "$SPAWN_REGISTRY"
+
+  export DISPATCH_SPAWN_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+  export DISPATCH_SPAWN_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+  export DISPATCH_SPAWN_SESSION_ID="sess-self"
+  export DISPATCH_SPAWN_JOBS_DIR="$SPAWN_JOBS_DIR"
+}
+
+spawn_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  SPAWN_REGISTRY=""
+  SPAWN_JOBS_DIR=""
+  SPAWN_BG_ARGV=""
+  SPAWN_RM_LOG=""
+  SPAWN_STOP_LOG=""
+  unset DISPATCH_SPAWN_MAIN_WORKTREE DISPATCH_SPAWN_CLAUDE_CMD \
+    DISPATCH_SPAWN_SESSION_ID DISPATCH_SPAWN_JOBS_DIR SPAWN_BG_REGISTERS
+}
+
+# --- Test 1: spawn success ---------------------------------------------------
+
+echo "Test: an empty registry spawns one /dispatch background job"
+spawn_setup
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawn: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "spawn: stdout is 'spawned'" "spawned" "$out"
+# The recorded argv must be exactly: --bg --name dispatch-<id> \
+#   --permission-mode auto /dispatch
+mapfile -t bg_argv < "$SPAWN_BG_ARGV"
+assert_eq "spawn: argv[0] is --bg" "--bg" "${bg_argv[0]:-}"
+assert_eq "spawn: argv[1] is --name" "--name" "${bg_argv[1]:-}"
+case "${bg_argv[2]:-}" in
+  dispatch-*) name_ok=yes ;;
+  *)          name_ok="no: ${bg_argv[2]:-}" ;;
+esac
+assert_eq "spawn: argv[2] is a dispatch-* agent name" "yes" "$name_ok"
+assert_eq "spawn: argv[3] is --permission-mode" "--permission-mode" "${bg_argv[3]:-}"
+assert_eq "spawn: argv[4] is auto" "auto" "${bg_argv[4]:-}"
+assert_eq "spawn: argv[5] is /dispatch" "/dispatch" "${bg_argv[5]:-}"
+spawn_teardown
+
+# --- Test 2: dedup -----------------------------------------------------------
+
+echo "Test: another live dispatch-* session deduplicates the spawn"
+spawn_setup
+printf '%s' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/main","kind":"background","status":"busy","name":"dispatch-aaaa1111"}]' \
+  > "$SPAWN_REGISTRY"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "dedup: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "dedup: stdout is 'deduped'" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: dedup: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dedup: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_BG_ARGV")"
+fi
+spawn_teardown
+
+# --- Test 3: self-exclusion --------------------------------------------------
+
+echo "Test: a dispatch-* session that is this session does not deduplicate"
+spawn_setup
+# The only dispatch-* session in the registry IS this session (sess-self).
+printf '%s' \
+  '[{"sessionId":"sess-self","pid":4242,"cwd":"/main","kind":"background","status":"busy","name":"dispatch-self0000"}]' \
+  > "$SPAWN_REGISTRY"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "self-exclude: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "self-exclude: stdout is 'spawned' (own session is not 'another')" \
+  "spawned" "$out"
+spawn_teardown
+
+# --- Test 4: spawn failure ---------------------------------------------------
+
+echo "Test: a spawned job that never registers exits non-zero with a diagnostic"
+spawn_setup
+write_fake_spawn_claude
+export SPAWN_BG_REGISTERS=0
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>&1 1>/dev/null) || rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: dispatch-spawn exits non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: dispatch-spawn exits non-zero (rc=$rc)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"did not register"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: stderr reports the unregistered agent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: stderr reports the unregistered agent"
+  echo "    stderr: $err"
+fi
+spawn_teardown
+
+# --- Test 5: prune -----------------------------------------------------------
+
+echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
+spawn_setup
+# Seed the on-disk ledger with three entries:
+#   abcd1234  — stopped dispatch-* (the rm target)
+#   ef015678  — stopped non-dispatch (must NOT be pruned)
+#   9999cccc  — live (working) dispatch-* (must NOT be pruned)
+mkdir -p "$SPAWN_JOBS_DIR/abcd1234" "$SPAWN_JOBS_DIR/ef015678" \
+  "$SPAWN_JOBS_DIR/9999cccc"
+printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
+  > "$SPAWN_JOBS_DIR/abcd1234/state.json"
+printf '%s' '{"name":"manual-session","state":"stopped"}' \
+  > "$SPAWN_JOBS_DIR/ef015678/state.json"
+printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
+  > "$SPAWN_JOBS_DIR/9999cccc/state.json"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "prune: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "prune: stdout is 'spawned' (stopped agent does not dedup)" \
+  "spawned" "$out"
+rm_log=$(cat "$SPAWN_RM_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" == *"abcd1234"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm abcd1234' (directory basename, not sessionId) was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm abcd1234' (directory basename) was invoked"
+  echo "    rm-log: $rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" != *"ef015678"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: non-dispatch agent 'ef015678' was not pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: non-dispatch agent 'ef015678' was not pruned"
+  echo "    rm-log: $rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" != *"9999cccc"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: live dispatch-* agent '9999cccc' was not pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: live dispatch-* agent '9999cccc' was not pruned"
+  echo "    rm-log: $rm_log"
+fi
+spawn_teardown
+
+# --- Test 6: unqueryable registry fails safe ---------------------------------
+
+echo "Test: an unparseable session registry fails safe — spawns nothing"
+spawn_setup
+# A registry that is not a JSON array: lib-claude-agents.sh's
+# claude_sessions_under cannot parse it and returns 1 (unknown). dispatch-spawn
+# must treat unknown as "a dispatch agent may be running" and spawn nothing —
+# the documented fail-safe in the script's Step 3 dedup guard.
+printf '%s' 'not-a-json-array' > "$SPAWN_REGISTRY"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "unknown-registry: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "unknown-registry: stdout is 'deduped'" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unknown-registry: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unknown-registry: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_BG_ARGV")"
+fi
+spawn_teardown
+
+# ============================================================================
+# dispatch-self-close tests
+# ============================================================================
+echo "=== dispatch-self-close ==="
+#
+# dispatch-self-close runs `claude stop <job-id>` against the basename of
+# $CLAUDE_JOB_DIR. The fake `claude` records its argv in SPAWN_STOP_LOG (see
+# write_fake_spawn_claude). When CLAUDE_JOB_DIR is unset, the script is a no-op
+# — the foreground-safe gate that protects an interactive /dispatch from
+# stopping the user's live conversation.
+
+selfclose_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts"
+  cp "$SCRIPT_DIR/dispatch-self-close" "$TMPDIR_TEST/scripts/dispatch-self-close"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-self-close"
+
+  # Reuse the dispatch-spawn fake `claude` writer: it already dispatches on
+  # `stop` and appends $2 to SPAWN_STOP_LOG. The unused SPAWN_REGISTRY /
+  # SPAWN_BG_ARGV / SPAWN_RM_LOG paths still need to be set because the writer
+  # interpolates them into the fake-claude script body.
+  SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_RM_LOG="$TMPDIR_TEST/rm-log"
+  SPAWN_STOP_LOG="$TMPDIR_TEST/stop-log"
+  printf '[]' > "$SPAWN_REGISTRY"
+  write_fake_spawn_claude
+
+  export DISPATCH_SELF_CLOSE_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+}
+
+selfclose_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  SPAWN_REGISTRY=""
+  SPAWN_BG_ARGV=""
+  SPAWN_RM_LOG=""
+  SPAWN_STOP_LOG=""
+  unset DISPATCH_SELF_CLOSE_CLAUDE_CMD CLAUDE_JOB_DIR
+}
+
+# --- Test 1: managed-job → stops itself --------------------------------------
+
+echo "Test: a managed background job stops itself by job-id (basename of CLAUDE_JOB_DIR)"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+if out=$("$TMPDIR_TEST/scripts/dispatch-self-close" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "self-close: dispatch-self-close exits 0" "0" "$rc"
+stop_log=$(cat "$SPAWN_STOP_LOG" 2>/dev/null || true)
+assert_eq "self-close: 'claude stop abcd1234' was invoked (basename, not full path)" \
+  "abcd1234" "$stop_log"
+selfclose_teardown
+
+# --- Test 2: interactive → no-op ---------------------------------------------
+
+echo "Test: an interactive session (CLAUDE_JOB_DIR unset) is a no-op with a diagnostic"
+selfclose_setup
+unset CLAUDE_JOB_DIR
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-self-close" 2>&1 1>/dev/null) || rc=$?
+assert_eq "interactive: dispatch-self-close exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"not a managed background job"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: interactive: stderr reports 'not a managed background job'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: stderr reports 'not a managed background job'"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_STOP_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: interactive: no 'claude stop' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: no 'claude stop' invocation recorded"
+  echo "    stop-log: $(cat "$SPAWN_STOP_LOG")"
+fi
+selfclose_teardown
+
+# ============================================================================
 # dispatch-jit-engine tests
 # ============================================================================
 #
