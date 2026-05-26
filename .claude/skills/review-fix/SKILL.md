@@ -14,8 +14,8 @@ for the Deferred bucket via `/file-issue`, commit and push, post a 4-section PR
 comment, and apply the `dispatch:reviewed` label.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
-fork `/commit-merge-push`, invoke the built-in `/review`, and launch
-implementation and follow-up-issue subagents.
+fork `/commit-merge-push`, fork a subagent that invokes the built-in `/review`,
+and launch implementation and follow-up-issue subagents.
 
 ## Idempotency preamble
 

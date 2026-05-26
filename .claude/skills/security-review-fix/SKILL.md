@@ -17,8 +17,8 @@ This is the workflow's **terminal actionable phase** — it marks the PR ready
 itself, so there is no separate `ready` phase after it.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
-fork `/commit-merge-push`, invoke the built-in `/security-review`, and launch
-implementation subagents.
+fork `/commit-merge-push`, fork a subagent that invokes the built-in
+`/security-review`, and launch implementation subagents.
 
 ## Idempotency preamble
 
@@ -44,7 +44,8 @@ steps in order.
    current `main` avoids re-reviewing code `main` has already changed.
 
 2. **Gather findings from both sources.** The finding set carried into Step 3
-   combines two sources, gathered **independently**:
+   combines two sources, gathered **independently** — issue the (a) Agent
+   call and the (b) `gh api` fetch in the same message so they overlap:
 
    **(a) `/security-review`.** Fork a subagent via the Agent tool
    (`subagent_type: general-purpose`, `model: sonnet`) that invokes the
