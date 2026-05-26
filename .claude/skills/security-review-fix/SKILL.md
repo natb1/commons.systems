@@ -20,18 +20,20 @@ tool, and launch implementation subagents.
 
 ## Idempotency preamble
 
-Before running any step, resolve the PR number **and its labels** from the current
+Before running any step, resolve the PR number and its labels from the current
 branch (use `dangerouslyDisableSandbox: true` — `gh` needs network):
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-gh pr view "$BRANCH" --json number,labels
+PR_JSON=$(gh pr view "$BRANCH" --json number,labels)
+PR_NUM=$(echo "$PR_JSON" | jq -r .number)
+echo "$PR_JSON" | jq -r '.labels[].name'
 ```
 
-This prints the PR number and its labels as JSON. If the PR already carries the
-`dispatch:security-reviewed` label — an interrupted prior run — **skip Steps 1–6
-entirely** and go straight to Step 7 to ensure the PR is ready. Otherwise run all
-steps in order.
+`PR_NUM` is carried through to Steps 5, 6, and 7 — do not re-resolve. If the PR
+already carries the `dispatch:security-reviewed` label — an interrupted prior
+run — **skip Steps 1–6 entirely** and go straight to Step 7 to ensure the PR is
+ready. Otherwise run all steps in order.
 
 ## Steps
 
@@ -60,7 +62,7 @@ steps in order.
    ```
 
    Use the PR number resolved in the idempotency preamble for the CodeQL subagent.
-   If the branch has no open PR (`gh pr view` printed nothing in the preamble),
+   If the branch has no open PR (`gh pr view` exited non-zero in the preamble),
    pass that fact to the CodeQL subagent so it reports "could not run" instead of
    fetching with an invalid ref.
 
@@ -145,7 +147,11 @@ steps in order.
      `html_url` so the finding is traceable.
    - **OWASP** and **STRIDE** — inferred from `rule` (id, tags, description).
    - **Confidence** — from `rule.security_severity_level`:
-     `critical`/`high` → `high`, `medium` → `medium`, `low` or null → `low`.
+     `critical`/`high` → `high`, `medium` → `medium`, `low` → `low`. For
+     non-security rules (`security_severity_level` is null), fall back to
+     `rule.severity` (always present): `error` → `medium`, `warning`/`note` →
+     `low`. This preserves signal from non-security rules instead of
+     collapsing them all to `low`.
    - **Recommended fix** — the rule's remediation guidance.
 
    If the branch has no open PR, this subagent reports the CodeQL scan as
@@ -159,9 +165,11 @@ steps in order.
    De-duplication matters here: subagents 8 and 9 (built-in scan, CodeQL)
    overlap the six domain subagents, so the same issue often arrives from
    several sources. When two or more findings name the **same root issue at the
-   same location**, collapse them into one: union their OWASP and STRIDE tags,
-   take the highest confidence among them, and record which subagents flagged
-   it. Distinct issues — even in the same file — stay separate.
+   same location**, collapse them into one: pick the most specific OWASP
+   category and STRIDE element across the duplicates (a single value each per
+   the Per-finding schema), take the highest confidence among them, and record
+   which subagents flagged it. Distinct issues — even in the same file — stay
+   separate.
 
    Then classify each de-duplicated finding into exactly one of:
 
@@ -187,13 +195,8 @@ steps in order.
    actionable findings), this invocation also runs with no pending changes —
    `/commit-merge-push` tolerates that and creates no commit.
 
-5. **Post a PR comment.** Resolve the PR number from the current branch (use
-   `dangerouslyDisableSandbox: true` — `gh` needs network):
-
-   ```bash
-   BRANCH=$(git rev-parse --abbrev-ref HEAD)
-   gh pr view "$BRANCH" --json number -q .number
-   ```
+5. **Post a PR comment.** Reuse the `PR_NUM` captured in the preamble — do not
+   re-resolve.
 
    Write the comment body to a file under the repo's `tmp/` directory. The body
    summarizes **every** finding from Step 2 and its disposition — fixed (with
@@ -205,14 +208,14 @@ steps in order.
    `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/post-pr-comment.sh <pr-num> tmp/<file>
+   .claude/skills/dispatch/scripts/post-pr-comment.sh "$PR_NUM" tmp/<file>
    ```
 
 6. **Apply the `dispatch:security-reviewed` label** via `dispatch-complete-phase`
    (use `dangerouslyDisableSandbox: true` — the script calls `gh`):
 
    ```bash
-   .claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> security
+   .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" security
    ```
 
    This skill **owns** its `dispatch:security-reviewed` label — unlike the generic
