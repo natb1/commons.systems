@@ -312,6 +312,23 @@ describe("exportToJson", () => {
     expect(data.budgets[0].overrides[0].balance).toBe(50);
   });
 
+  it("round-trip preserves journalEntryId on transactions", async () => {
+    const original = mockGetAll.getMockImplementation()!;
+    mockGetAll.mockImplementation((storeName: string) =>
+      storeName === "transactions"
+        ? Promise.resolve([{ ...idbTransactions[0], journalEntryId: "je-001" }])
+        : original(storeName),
+    );
+    const json = await exportToJson();
+    expect(JSON.parse(json).transactions[0].journalEntryId).toBe("je-001");
+
+    const parsed = parseUploadedJson(json);
+    expect(parsed.transactions[0].journalEntryId).toBe("je-001");
+
+    const data = toParsedData(parsed);
+    expect(data.transactions[0].journalEntryId).toBe("je-001");
+  });
+
   it("round-trip: export -> parseUploadedJson -> toParsedData produces equivalent IDB data", async () => {
     const json = await exportToJson();
     const parsed = parseUploadedJson(json);
