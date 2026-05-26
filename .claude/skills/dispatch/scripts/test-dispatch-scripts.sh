@@ -54,6 +54,13 @@ setup() {
   cp "$SCRIPT_DIR/dispatch-trace-leaf" "$TMPDIR_TEST/dispatch-trace-leaf"
   cp "$SCRIPT_DIR/dispatch-complete-phase" "$TMPDIR_TEST/dispatch-complete-phase"
   cp "$SCRIPT_DIR/dispatch-resolve-worktree" "$TMPDIR_TEST/dispatch-resolve-worktree"
+  # dispatch-select-target's JIT scan calls dispatch-config-load and
+  # dispatch-project-status-read as "$SCRIPT_DIR/<name>". SCRIPT_DIR resolves to
+  # TMPDIR_TEST for the copied dispatch-select-target, so the two helpers must
+  # sit directly in TMPDIR_TEST (NOT TMPDIR_TEST/scripts/).
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/dispatch-config-load"
+  cp "$SCRIPT_DIR/dispatch-project-status-read" \
+    "$TMPDIR_TEST/dispatch-project-status-read"
   # dispatch-trace-leaf and dispatch-resolve-worktree `source` lib.sh via their
   # SCRIPT_DIR, which resolves to TMPDIR_TEST for these copies — so lib.sh must
   # sit alongside them. It is sourced, not executed, so it needs no chmod +x.
@@ -64,7 +71,15 @@ setup() {
            "$TMPDIR_TEST/dispatch-select-target" \
            "$TMPDIR_TEST/dispatch-trace-leaf" \
            "$TMPDIR_TEST/dispatch-complete-phase" \
-           "$TMPDIR_TEST/dispatch-resolve-worktree"
+           "$TMPDIR_TEST/dispatch-resolve-worktree" \
+           "$TMPDIR_TEST/dispatch-config-load" \
+           "$TMPDIR_TEST/dispatch-project-status-read"
+
+  # JIT scan config dir. With no jit.json written into it, dispatch-config-load
+  # jit returns "no-config", so jit_scan returns immediately — every existing
+  # dispatch-select-target test stays green.
+  mkdir -p "$TMPDIR_TEST/config"
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
 
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
@@ -227,6 +242,35 @@ case "$args" in
     if [[ -f "$STUB_DIR/main-run-list.json" ]]; then cat "$STUB_DIR/main-run-list.json"
     else echo '[]'; fi
     ;;
+  issue\ list\ --repo\ *)
+    # JIT scan: gh issue list --repo <repo> --label <label> --state <open|closed> --json ...
+    # Fixtures are keyed by sanitized label + state; absent fixture → empty list.
+    jit_label=""
+    jit_state=""
+    set -- $args
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --label) jit_label="$2"; shift 2 ;;
+        --state) jit_state="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    jit_key=$(printf '%s' "$jit_label" | tr '/:' '__')
+    jit_fixture="$STUB_DIR/jit-issues-${jit_state}-${jit_key}.json"
+    if [[ -f "$jit_fixture" ]]; then
+      cat "$jit_fixture"
+    else
+      echo "[]"
+    fi
+    ;;
+  "project item-list "*)
+    # JIT scan via dispatch-project-status-read.
+    if [[ -f "$STUB_DIR/project-item-list.json" ]]; then
+      cat "$STUB_DIR/project-item-list.json"
+    else
+      echo '{"items":[],"totalCount":0}'
+    fi
+    ;;
   *)
     echo "gh stub: unknown invocation: $args" >&2
     exit 1
@@ -332,6 +376,7 @@ teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   export PATH="$SAVED_PATH"
+  unset DISPATCH_CONFIG_DIR
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
@@ -1393,6 +1438,344 @@ if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else 
 assert_eq "dispatch-trace-leaf exit 1 → select-target exits non-zero" "yes" "$rc_nonzero"
 [[ "$result" != issue* ]] && no_issue=yes || no_issue=no
 assert_eq "dispatch-trace-leaf exit 1 → no issue line emitted" "yes" "$no_issue"
+teardown
+
+# ============================================================================
+# --- JIT scan ---
+# dispatch-select-target's JIT scan runs after current-worktree continuation
+# and before the main-broken health gate. It is inert with no jit.json.
+# A JIT test seeds:
+#   $DISPATCH_CONFIG_DIR/jit.json       — the jit definitions
+#   $DISPATCH_CONFIG_DIR/projects.json  — the project catalog
+#   $STUB_DIR/jit-issues-open-<label>.json   — the jit's open issue(s)
+#   $STUB_DIR/jit-issues-closed-<label>.json — closed issues (cadence jits)
+#   $STUB_DIR/project-item-list.json    — the project's items, by content.url
+# Sanitized label = label with '/' and ':' replaced by '_'.
+# ============================================================================
+
+# A one-project catalog reused by the JIT tests below.
+JIT_PROJECTS_JSON='{
+  "projects": [
+    { "key": "household", "owner": "natb1", "number": 5,
+      "statusField": "Status", "statusInProgress": "In Progress",
+      "statusDone": "Done" }
+  ]
+}'
+
+# JS1. No jit.json → the scan is skipped and selection behaves as today.
+echo "Test: JIT scan — no jit.json → scan skipped, normal selection"
+setup
+# No jit.json written into $DISPATCH_CONFIG_DIR. Seed a normal issue queue.
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+printf '[{"number":55,"createdAt":"2024-03-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "no jit.json → scan inert, normal selection" "issue 55" "$result"
+teardown
+
+# JS2. Cadence jit with a prior closed issue → due from closedAt + dueAfterClose.
+echo "Test: JIT scan — cadence jit, prior closed issue → jit-reminder"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "daily-chore", "repo": "natb1/household", "label": "jit:daily-chore",
+    "title": "Daily chore", "body": "Recurring daily chore.",
+    "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24h" }
+] }
+EOF
+printf '[{"number":42,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_daily-chore.json"
+printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_daily-chore.json"
+printf '{"items":[{"id":"PVTI_001","content":{"url":"https://github.com/natb1/household/issues/42"},"status":"Todo"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "cadence jit with closed issue → jit-reminder" \
+  "jit-reminder natb1/household 42 household PVTI_001" "$result"
+teardown
+
+# JS3. Cadence jit, no closed issue → cold-start due from
+#      createdAt + dueAfterClose − remindAfterClose.
+echo "Test: JIT scan — cadence jit, cold start (no closed issue) → jit-reminder"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "daily-chore", "repo": "natb1/household", "label": "jit:daily-chore",
+    "title": "Daily chore", "body": "Recurring daily chore.",
+    "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24h" }
+] }
+EOF
+printf '[{"number":42,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_daily-chore.json"
+# No closed-issue fixture → cold start.
+printf '{"items":[{"id":"PVTI_001","content":{"url":"https://github.com/natb1/household/issues/42"},"status":"Todo"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "cadence jit cold start → jit-reminder" \
+  "jit-reminder natb1/household 42 household PVTI_001" "$result"
+teardown
+
+# JS4. Check-script jit → due from createdAt + dueAfterCreate.
+echo "Test: JIT scan — check-script jit → jit-reminder"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "email-review", "repo": "natb1/household", "label": "jit:email-review",
+    "title": "Email review", "body": "Review the inbox.",
+    "project": "household", "dueAfterCreate": "48h" }
+] }
+EOF
+printf '[{"number":77,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_email-review.json"
+printf '{"items":[{"id":"PVTI_077","content":{"url":"https://github.com/natb1/household/issues/77"},"status":"Todo"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "check-script jit → jit-reminder" \
+  "jit-reminder natb1/household 77 household PVTI_077" "$result"
+teardown
+
+# JS5a. In-Progress exclusion → the jit is skipped, selection falls through.
+echo "Test: JIT scan — In Progress status excludes the jit"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "daily-chore", "repo": "natb1/household", "label": "jit:daily-chore",
+    "title": "Daily chore", "body": "Recurring daily chore.",
+    "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24h" }
+] }
+EOF
+printf '[{"number":42,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_daily-chore.json"
+printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_daily-chore.json"
+printf '{"items":[{"id":"PVTI_001","content":{"url":"https://github.com/natb1/household/issues/42"},"status":"In Progress"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+printf '[{"number":55,"createdAt":"2024-03-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "In Progress jit excluded → falls through to issue queue" "issue 55" "$result"
+teardown
+
+# JS5b. Done exclusion → the jit is skipped, selection falls through.
+echo "Test: JIT scan — Done status excludes the jit"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "daily-chore", "repo": "natb1/household", "label": "jit:daily-chore",
+    "title": "Daily chore", "body": "Recurring daily chore.",
+    "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24h" }
+] }
+EOF
+printf '[{"number":42,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_daily-chore.json"
+printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_daily-chore.json"
+printf '{"items":[{"id":"PVTI_001","content":{"url":"https://github.com/natb1/household/issues/42"},"status":"Done"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "Done jit excluded → falls through to empty" "empty" "$result"
+teardown
+
+# JS6. Two eligible jits → the earlier-due one wins (verifies due arithmetic).
+echo "Test: JIT scan — two eligible jits, earlier due wins"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "jit-a", "repo": "natb1/household", "label": "jit:jit-a",
+    "title": "Jit A", "body": "Jit A.", "project": "household",
+    "remindAfterClose": "12h", "dueAfterClose": "24h" },
+  { "key": "jit-b", "repo": "natb1/household", "label": "jit:jit-b",
+    "title": "Jit B", "body": "Jit B.", "project": "household",
+    "remindAfterClose": "12h", "dueAfterClose": "24h" }
+] }
+EOF
+# jit-a: closed 2026-05-10 → due 2026-05-11. jit-b: closed 2026-05-05 → due
+# 2026-05-06 — earlier, so jit-b wins.
+printf '[{"number":10,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_jit-a.json"
+printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_jit-a.json"
+printf '[{"number":20,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_jit-b.json"
+printf '[{"closedAt":"2026-05-05T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_jit-b.json"
+printf '{"items":[{"id":"PVTI_010","content":{"url":"https://github.com/natb1/household/issues/10"},"status":"Todo"},{"id":"PVTI_020","content":{"url":"https://github.com/natb1/household/issues/20"},"status":"Todo"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "two jits → earlier-due jit-b wins" \
+  "jit-reminder natb1/household 20 household PVTI_020" "$result"
+teardown
+
+# JS6b. Flip the offsets so the other jit wins — ordering is genuinely
+#       due-driven, not fixture-order-driven.
+echo "Test: JIT scan — two eligible jits, ordering flips with the offsets"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "jit-a", "repo": "natb1/household", "label": "jit:jit-a",
+    "title": "Jit A", "body": "Jit A.", "project": "household",
+    "remindAfterClose": "12h", "dueAfterClose": "24h" },
+  { "key": "jit-b", "repo": "natb1/household", "label": "jit:jit-b",
+    "title": "Jit B", "body": "Jit B.", "project": "household",
+    "remindAfterClose": "12h", "dueAfterClose": "24h" }
+] }
+EOF
+# jit-a: closed 2026-05-01 → due 2026-05-02 — now the earlier one, jit-a wins.
+printf '[{"number":10,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_jit-a.json"
+printf '[{"closedAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_jit-a.json"
+printf '[{"number":20,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_jit-b.json"
+printf '[{"closedAt":"2026-05-05T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_jit-b.json"
+printf '{"items":[{"id":"PVTI_010","content":{"url":"https://github.com/natb1/household/issues/10"},"status":"Todo"},{"id":"PVTI_020","content":{"url":"https://github.com/natb1/household/issues/20"},"status":"Todo"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "flipped offsets → earlier-due jit-a wins" \
+  "jit-reminder natb1/household 10 household PVTI_010" "$result"
+teardown
+
+# JS7. jit-reminder is emitted even when origin/main is red — the scan runs
+#      before the main-broken gate.
+echo "Test: JIT scan — jit-reminder emitted even when origin/main is red"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "daily-chore", "repo": "natb1/household", "label": "jit:daily-chore",
+    "title": "Daily chore", "body": "Recurring daily chore.",
+    "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24h" }
+] }
+EOF
+printf '[{"number":42,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_daily-chore.json"
+printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_daily-chore.json"
+printf '{"items":[{"id":"PVTI_001","content":{"url":"https://github.com/natb1/household/issues/42"},"status":"Todo"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Red main: a failing check-run on main's HEAD.
+printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
+printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
+  > "$STUB_DIR/main-check-runs.json"
+printf '[]' > "$STUB_DIR/main-run-list.json"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "jit-reminder beats red main (default mode)" \
+  "jit-reminder natb1/household 42 household PVTI_001" "$result"
+# Same in --health-only mode.
+result=$("$TMPDIR_TEST/dispatch-select-target" --health-only)
+assert_eq "jit-reminder beats red main (--health-only mode)" \
+  "jit-reminder natb1/household 42 household PVTI_001" "$result"
+teardown
+
+# JS8. A jit with no open issue contributes no candidate → falls through.
+echo "Test: JIT scan — jit with no open issue contributes no candidate"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "daily-chore", "repo": "natb1/household", "label": "jit:daily-chore",
+    "title": "Daily chore", "body": "Recurring daily chore.",
+    "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24h" }
+] }
+EOF
+# No open-issue fixture → the gh stub returns [] → no candidate.
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+printf '[{"number":55,"createdAt":"2024-03-01T00:00:00Z","labels":[{"name":"help wanted"}]}]\n' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "jit with no open issue → falls through to issue queue" "issue 55" "$result"
+teardown
+
+# JS9. A leading-zero duration is parsed as base-10, not octal. jit-x's
+#      "012h" must mean 12h (octal would make it 10h, flipping the winner).
+echo "Test: JIT scan — leading-zero duration parses as base-10, not octal"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "jit-x", "repo": "natb1/household", "label": "jit:jit-x",
+    "title": "Jit X", "body": "Jit X.", "project": "household",
+    "remindAfterClose": "12h", "dueAfterClose": "012h" },
+  { "key": "jit-y", "repo": "natb1/household", "label": "jit:jit-y",
+    "title": "Jit Y", "body": "Jit Y.", "project": "household",
+    "remindAfterClose": "12h", "dueAfterClose": "11h" }
+] }
+EOF
+# Both closed at the same instant: jit-x due = +12h, jit-y due = +11h, so
+# jit-y is earlier and wins. Octal-parsing "012h" as 10h would wrongly pick
+# jit-x.
+printf '[{"number":10,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_jit-x.json"
+printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_jit-x.json"
+printf '[{"number":20,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_jit-y.json"
+printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_jit-y.json"
+printf '{"items":[{"id":"PVTI_010","content":{"url":"https://github.com/natb1/household/issues/10"},"status":"Todo"},{"id":"PVTI_020","content":{"url":"https://github.com/natb1/household/issues/20"},"status":"Todo"}]}\n' \
+  > "$STUB_DIR/project-item-list.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "leading-zero duration is base-10 → earlier-due jit-y wins" \
+  "jit-reminder natb1/household 20 household PVTI_020" "$result"
+teardown
+
+# JS10. parse_duration rejects an invalid duration string → dispatch-select-target
+#       exits non-zero before emitting any candidate.
+echo "Test: JIT scan — parse_duration rejects invalid duration"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "bad-duration", "repo": "natb1/household", "label": "jit:bad-duration",
+    "title": "Bad duration", "body": "Has an invalid dueAfterClose.",
+    "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24" }
+] }
+EOF
+# Open issue exists so the loop body runs; closed issue exists so max_closed is
+# non-empty and parse_duration is reached immediately (no cold-start branch).
+printf '[{"number":99,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_bad-duration.json"
+printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_bad-duration.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+[[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
+assert_eq "invalid duration → exits non-zero" "yes" "$rc_nonzero"
 teardown
 
 # ============================================================================

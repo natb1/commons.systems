@@ -166,6 +166,10 @@ continue to target selection.
 
   - **`main-broken <sha>`** → see the **main-broken handler** at the end of
     this step. Do **not** run the sweep or selection.
+  - **`jit-reminder <repo> <num> <project> <item-id>`** → see the
+    **jit-reminder handler** at the end of this step. Do **not** run the sweep
+    or selection — the JIT scan precedes the main-broken health gate, so a jit
+    reminder is surfaced even when `origin/main` is red.
   - **`ok`** → run the sweep (also needs `dangerouslyDisableSandbox: true` for
     the `/proc` walk):
 
@@ -214,6 +218,10 @@ continue to target selection.
   - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check. The
     pre-sweep gate above normally catches this first; this is the same gate
     re-run as defense-in-depth. See the **main-broken handler** below.
+  - `jit-reminder <repo> <num> <project> <item-id>` — a JIT issue due for a
+    reminder. The `--health-only` call earlier in this step normally catches
+    this first (the JIT scan is deterministic); this is the same scan re-run as
+    defense-in-depth. See the **jit-reminder handler** below.
 
   An **explicit issue argument overrides current-worktree detection** — the selection
   script, and therefore its current-worktree detection, runs only when no argument is
@@ -259,6 +267,49 @@ continue to target selection.
   the lock (see *Releasing the lock*); summarize the likely cause, report it,
   and **stop**. Once a PR that fixes main exists the normal ladder picks it up
   (verify/ready) — this gate only blocks starting new, unrelated work.
+
+  **jit-reminder handler.** The JIT scan selected `<num>` in `<repo>` as the
+  earliest-due open JIT issue. Claim it, summarize it for the user, and stop —
+  no worktree, no PR, no phase skill, no leaf trace. Steps 4, 5, and 6-7 are all
+  skipped.
+
+  1. **Claim the issue inside the scoped lock window.** The lock is still held
+     from Step 0 — the reminder path is a Step 3 stop path and never reaches
+     Step 5's proceed-path release, so the claim runs under the lock, exactly as
+     the JIT engine does. Resolve the project's In-Progress status value from
+     local config, then write it:
+
+     ```bash
+     IN_PROGRESS=$(.claude/skills/dispatch/scripts/dispatch-config-load projects \
+       | jq -r --arg key "<project>" \
+         '.projects[] | select(.key == $key) | .statusInProgress')
+     .claude/skills/dispatch/scripts/dispatch-project-status-write \
+       <project> "https://github.com/<repo>/issues/<num>" "$IN_PROGRESS"
+     ```
+
+     The `dispatch-project-status-write` call needs `dangerouslyDisableSandbox:
+     true` — it calls `gh` (see `.claude/rules/sandbox.md`).
+  2. **Release the lock.** This is a Steps 1-5 stop path — release the lock (see
+     *Releasing the lock*) immediately after the claim, before the summary.
+  3. **Summarize the issue for the user.** Fetch the issue
+     (`dangerouslyDisableSandbox: true` — `gh` needs network):
+
+     ```bash
+     gh issue view <num> --repo <repo> --json number,title,body
+     ```
+
+     Present its number, title, and body to the user as a human-readable
+     reminder, framed as the most-overdue / soonest-due JIT reminder the scan
+     surfaced. The `jit-reminder` line carries no due timestamp — do not state a
+     precise computed due time.
+  4. **Stop the tick.** The `In Progress` status the claim just wrote stops a
+     later `/dispatch` tick from re-selecting this issue.
+
+  A `jit-reminder` run is a **jit summary session** — an office-hours session
+  (#755): the summary is surfaced to the user for a human to read, not consumed
+  as autonomous dispatch-chain work. #755's two-queue infrastructure is not yet
+  built, so this handler is that documented intent plus the mechanical claim →
+  release → summarize → stop branch above.
 
 ## 4. Trace to an Open Leaf
 
