@@ -234,6 +234,12 @@ async function handleReconcileSubmit(container: HTMLElement, dialog: HTMLDialogE
  * signed difference recorded as the event's `adjustment`.
  */
 async function handleCreateAdjustment(container: HTMLElement, dialog: HTMLDialogElement): Promise<void> {
+  const createButton = container.querySelector<HTMLButtonElement>("#reconcile-create-adjustment");
+  // Re-entrancy guard. Once the button is disabled below, the browser stops
+  // dispatching its click events — this catches a second click that was
+  // already queued before the disable took effect.
+  if (createButton?.disabled) return;
+
   const bankInput = container.querySelector<HTMLInputElement>("#reconcile-bank-balance-input");
   const differenceDisplay = container.querySelector<HTMLElement>("#reconcile-difference-display");
   if (!bankInput) throw new Error("#reconcile-bank-balance-input not found");
@@ -247,6 +253,16 @@ async function handleCreateAdjustment(container: HTMLElement, dialog: HTMLDialog
 
   const cleared = clearedBalanceFromDom(container);
   const difference = cleared - bankBalance;
+
+  // The user can edit the bank balance to match the cleared total after the
+  // mismatch actions appear. Refuse to write a zero-amount adjustment entry —
+  // the user should submit the dialog instead.
+  if (balancesMatch(bankBalance, cleared)) {
+    if (differenceDisplay) {
+      differenceDisplay.textContent = "Balances match — submit to reconcile without an adjustment.";
+    }
+    return;
+  }
 
   const query = parseReconcileQuery(location.search);
   if (!query.institution || !query.account || !query.period) {
@@ -266,6 +282,7 @@ async function handleCreateAdjustment(container: HTMLElement, dialog: HTMLDialog
     return;
   }
 
+  if (createButton) createButton.disabled = true;
   try {
     const { entry, legs } = buildAdjustmentEntry({
       difference,
@@ -287,6 +304,8 @@ async function handleCreateAdjustment(container: HTMLElement, dialog: HTMLDialog
       differenceDisplay.textContent = "Adjustment entry failed — please try again.";
     }
     logError(error, { operation: "reconcile-create-adjustment" });
+  } finally {
+    if (createButton) createButton.disabled = false;
   }
 }
 
