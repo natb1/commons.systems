@@ -15,10 +15,14 @@
 #
 # Foreign-holder liveness is resolved via `claude agents --json`, the daemon-
 # backed registry of live sessions. A recorded holder is "live" iff its
-# sessionId appears in the registry; otherwise it is reclaimable. The query is
-# fail-safe: any failure (binary missing, non-zero exit, empty output, non-
-# array JSON, jq failure) is treated as "live" so the lock is never stolen
-# from a possibly-held foreign holder when the daemon cannot be queried.
+# sessionId appears in a successfully-parsed registry; otherwise it is
+# reclaimable. The query distinguishes two outcomes:
+#   - Definite zero: zero exit + a valid JSON array (including `[]`) that does
+#     not contain the recorded sessionId → not live → reclaim.
+#   - Opaque failure: binary missing, non-zero exit, whitespace-only stdout,
+#     non-array JSON, or jq parse failure → treated as live (fail safe) so
+#     the lock is never stolen from a possibly-held foreign holder when the
+#     daemon cannot be queried.
 #
 # Release is implicit and self-healing: when the session ends its sessionId
 # stops appearing in `claude agents --json`, so the next tick's read-check-
@@ -89,14 +93,25 @@ WAIT_TIMEOUT="${DISPATCH_LOCK_WAIT_TIMEOUT:-300}"
 WAIT_INTERVAL="${DISPATCH_LOCK_WAIT_INTERVAL:-5}"
 
 # is_live_session <sessionId> — true if <sessionId> appears in the daemon's
-# live-session registry. Mirrors the defensive pattern from
-# lib-claude-agents.sh::claude_sessions_under: any failure mode (binary
-# missing, non-zero exit, empty output, non-array JSON, jq failure) is treated
-# as live (return 0) so the lock is never stolen from a possibly-held foreign
-# holder when the daemon cannot be queried.
+# live-session registry. Covers the same failure modes that
+# lib-claude-agents.sh::claude_sessions_under treats as UNKNOWN (binary
+# missing, non-zero exit, whitespace-only output, non-array JSON, jq failure),
+# but inverts the return convention: this function returns 0 (LIVE — keep the
+# lock) instead of 1 (unknown — caller folds to occupied). The helper's
+# question is "is anything running under this path?"; ours is "is THIS
+# sessionId still alive?", and the global registry has no --cwd filter. A
+# zero-exit, valid `[]` is a definite "no live sessions anywhere" and returns
+# 1 (reclaim); only opaque failures fail safe to LIVE.
+#
+# The `9>&-` redirection closes fd 9 (the flock fd, opened by the caller's
+# subshell) in the `claude` child. flock is on the open file description and
+# is released only when the LAST referencing fd closes; without the close,
+# any background helper `claude` ever spawns would inherit fd 9 and hold the
+# flock past our subshell's exit. Today `claude agents --json` is a query-and-
+# exit client, but the cost of defending against a future fork is one redir.
 is_live_session() {
   local sid="$1" out sids
-  if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null); then
+  if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null 9>&-); then
     return 0
   fi
   if [[ -z "${out//[[:space:]]/}" ]]; then

@@ -2841,6 +2841,23 @@ FAKE
   export CLAUDE_AGENTS_CMD="$fake"
 }
 
+# Helper: install a fake `claude` that exits 0 with the given literal stdout
+# payload. Used to exercise is_live_session's fail-safe branches for output
+# that is not a parseable JSON array of sessions (whitespace-only, non-array
+# JSON like `{}`/`null`, malformed JSON).
+lock_fake_claude_payload() {
+  local payload="$1"
+  local fake="$TMPDIR_TEST/fake/claude"
+  printf '%s' "$payload" > "$TMPDIR_TEST/fake/payload.txt"
+  cat > "$fake" <<FAKE
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/fake/payload.txt"
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
+}
+
 # --- Test 1: first acquisition with an absent lock file ----------------------
 
 echo "Test: first acquisition writes the sessionId and prints acquired"
@@ -2901,6 +2918,9 @@ lock_fake_claude_sessions   # zero args → empty registry `[]`
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
 assert_eq "empty-registry exits 0" "0" "$rc"
 assert_eq "empty-registry prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "empty-registry lock file rewritten to new sessionId" \
+  "sess-400-new" "$lock_contents"
 lock_teardown
 
 # --- Test 5: same-session re-entry -------------------------------------------
@@ -2933,11 +2953,15 @@ else
 fi
 assert_eq "misconfiguration (non-git) exits 2" "2" "$rc"
 err6=$(cat "$STUB_DIR/err6" 2>/dev/null || true)
+# Assert the specific git-error message, not just non-empty stderr — this keeps
+# the test's intent ("the git-lookup guard fired") robust to guard reordering:
+# if Step 2 ever moved before Step 1, this assertion would fail rather than
+# silently passing for the wrong reason.
 TOTAL=$((TOTAL + 1))
-if [[ -n "$err6" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: non-git misconfiguration writes an error to stderr"
+if [[ "$err6" == *"not in a git repo"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-git misconfiguration writes the git-error to stderr"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: non-git misconfiguration writes an error to stderr"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-git misconfiguration writes the git-error to stderr"
   echo "    stderr: '$err6'"
 fi
 rm -rf "$nongit"
@@ -2959,10 +2983,10 @@ fi
 assert_eq "missing CLAUDE_CODE_SESSION_ID exits 2" "2" "$rc"
 err6b=$(cat "$STUB_DIR/err6b" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ -n "$err6b" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: missing CLAUDE_CODE_SESSION_ID writes an error to stderr"
+if [[ "$err6b" == *"CLAUDE_CODE_SESSION_ID is unset"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing CLAUDE_CODE_SESSION_ID writes the session-id error to stderr"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: missing CLAUDE_CODE_SESSION_ID writes an error to stderr"
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing CLAUDE_CODE_SESSION_ID writes the session-id error to stderr"
   echo "    stderr: '$err6b'"
 fi
 lock_teardown
@@ -3074,13 +3098,26 @@ lock_teardown
 
 echo "Test: an unknown argument exits 2"
 lock_setup
+# Set CLAUDE_CODE_SESSION_ID so the test exercises the arg-parse guard
+# specifically. Without this, the script also exits 2 on the session-id guard
+# (Step 2) — if Step 0 (arg parse) were ever moved after Step 2, this test
+# would silently keep passing for the wrong reason.
+export CLAUDE_CODE_SESSION_ID="sess-1300"
 # `set -e` is in effect: capture the exit code with an if/else.
-if ( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --bogus ) 2>/dev/null; then
+if ( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --bogus ) 2>"$STUB_DIR/err13"; then
   rc=0
 else
   rc=$?
 fi
 assert_eq "unknown argument exits 2" "2" "$rc"
+err13=$(cat "$STUB_DIR/err13" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$err13" == *"unknown argument"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unknown argument writes the arg-parse error to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unknown argument writes the arg-parse error to stderr"
+  echo "    stderr: '$err13'"
+fi
 lock_teardown
 
 # --- Test 14: a recorded sessionId absent from a non-empty registry is reclaimable
@@ -3116,6 +3153,59 @@ assert_eq "daemon-unreachable prints busy" "busy" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
 assert_eq "daemon-unreachable lock file is unchanged" \
   "sess-1515-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 16: --release with no lock file → noop, no error -------------------
+#
+# Tests 11/12 always pre-write a sessionId before --release; this exercises the
+# absent-file branch that the script must treat as `noop` (nothing recorded to
+# clear).
+
+echo "Test: --release with no lock file prints noop"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-1616"
+lock_fake_claude_sessions "sess-1616"
+# Lock file deliberately not created.
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "--release absent-file exits 0" "0" "$rc"
+assert_eq "--release absent-file prints noop" "noop" "$out"
+lock_teardown
+
+# --- Test 17: opaque-failure stdout (whitespace-only) → foreign holder live --
+#
+# `claude agents --json` exits 0 but prints only whitespace. is_live_session
+# must treat this as opaque/live (return 0) — the lock must not be stolen.
+
+echo "Test: whitespace-only daemon stdout treats a foreign holder as live"
+lock_setup
+printf '%s\n' "sess-1717-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1717-self"
+lock_fake_claude_payload $'   \n\t  \n'
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "whitespace-stdout exits 0" "0" "$rc"
+assert_eq "whitespace-stdout prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "whitespace-stdout lock file is unchanged" \
+  "sess-1717-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 18: non-array JSON stdout (object) → foreign holder live -----------
+#
+# `claude agents --json` exits 0 but prints a JSON object instead of an array
+# (a daemon bug or API change). is_live_session's jq guard hits `error("not a
+# JSON array")` and the function returns 0 (live). The lock must not be stolen.
+
+echo "Test: non-array JSON daemon stdout treats a foreign holder as live"
+lock_setup
+printf '%s\n' "sess-1818-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1818-self"
+lock_fake_claude_payload '{"error":"unexpected shape"}'
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "non-array-json exits 0" "0" "$rc"
+assert_eq "non-array-json prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "non-array-json lock file is unchanged" \
+  "sess-1818-foreign" "$lock_contents"
 lock_teardown
 
 # ============================================================================
