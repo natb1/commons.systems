@@ -38,6 +38,12 @@
 #   statusInProgress string (non-empty) — Status option name for "in progress".
 #   statusDone      string (non-empty) — Status option name for "done".
 #
+# Optional fields:
+#
+#   dueField        string (non-empty) — name of the project's date field for
+#                   recording a jit issue's computed due time. Defaults to
+#                   "Due" when absent.
+#
 # Example (see projects.example.json):
 #   {
 #     "projects": [
@@ -175,6 +181,12 @@ case "$CONFIG_TYPE" in
             "projects[\($idx)]: missing required field number"
           elif ($item["number"] | type) != "number" then
             "projects[\($idx)]: number must be a number, got \($item["number"] | type)"
+          else
+            empty
+          end,
+          # optional dueField — must be a non-empty string if present
+          if ($item | has("dueField")) and (($item["dueField"] | type) != "string" or ($item["dueField"] | length) == 0) then
+            "projects[\($idx)]: dueField must be a non-empty string if present, got \($item["dueField"] | type)"
           else
             empty
           end

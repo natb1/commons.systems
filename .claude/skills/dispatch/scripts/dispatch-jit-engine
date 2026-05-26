@@ -171,6 +171,8 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
 
   HAS_REMIND=$(printf '%s' "$jit" | jq 'has("remindAfterClose")')
   HAS_CHECK=$(printf '%s' "$jit"  | jq 'has("check")')
+  HAS_DUE_AFTER_CLOSE=$(printf '%s' "$jit"  | jq 'has("dueAfterClose")')
+  HAS_DUE_AFTER_CREATE=$(printf '%s' "$jit" | jq 'has("dueAfterCreate")')
 
   # ---- 4a: validate the jit shape -------------------------------------------
   # Exactly one of remindAfterClose (cadence) or check (check-script) must be
@@ -362,7 +364,52 @@ for (( i = 0; i < JIT_COUNT; i++ )); do
       HARD_ERROR=1
       continue
     fi
-    echo "$KEY: created #$ISSUE_NUM"
+    ITEM_ID="$ADD_OUT"
+
+    # Stamp the computed due time on the project item's date field. A jit with
+    # neither dueAfterClose nor dueAfterCreate skips the stamp — the sync
+    # Function reads the stamped field, but cadence-only jits without a sync
+    # consumer remain valid.
+    if [[ "$HAS_DUE_AFTER_CLOSE" != "true" && "$HAS_DUE_AFTER_CREATE" != "true" ]]; then
+      echo "$KEY: created #$ISSUE_NUM (no dueAfter*; due not stamped)"
+      state_set "$KEY" "$NOW"
+      continue
+    fi
+
+    DUE_EPOCH=""
+    if [[ "$HAS_REMIND" == "true" ]]; then
+      DUE_AFTER_CLOSE_SPEC=$(printf '%s' "$jit" | jq -r '.dueAfterClose')
+      if ! DUE_AFTER_CLOSE_SECS=$(parse_duration "$DUE_AFTER_CLOSE_SPEC"); then
+        echo "$KEY: error (dueAfterClose: cannot parse duration '$DUE_AFTER_CLOSE_SPEC')" >&2
+        HARD_ERROR=1
+        continue
+      fi
+      if [[ -z "$MAX_CLOSED_AT" ]]; then
+        # Cold start: anchor on NOW (= the new issue's createdAt at stamp time).
+        DUE_EPOCH=$(( NOW + DUE_AFTER_CLOSE_SECS - REMIND_SECS ))
+      else
+        DUE_EPOCH=$(( CLOSED_EPOCH + DUE_AFTER_CLOSE_SECS ))
+      fi
+    else
+      DUE_AFTER_CREATE_SPEC=$(printf '%s' "$jit" | jq -r '.dueAfterCreate')
+      if ! DUE_AFTER_CREATE_SECS=$(parse_duration "$DUE_AFTER_CREATE_SPEC"); then
+        echo "$KEY: error (dueAfterCreate: cannot parse duration '$DUE_AFTER_CREATE_SPEC')" >&2
+        HARD_ERROR=1
+        continue
+      fi
+      DUE_EPOCH=$(( NOW + DUE_AFTER_CREATE_SECS ))
+    fi
+    DUE_DATE=$(date -u -d "@$DUE_EPOCH" +%Y-%m-%d)
+
+    DUE_RC=0
+    DUE_OUT=$("$SCRIPT_DIR/dispatch-project-due-write" "$PROJECT" "$ITEM_ID" "$DUE_DATE" 2>&1) \
+      || DUE_RC=$?
+    if [[ "$DUE_RC" -ne 0 ]]; then
+      echo "$KEY: error (could not stamp due date on #$ISSUE_NUM: $DUE_OUT)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    echo "$KEY: created #$ISSUE_NUM (due $DUE_DATE)"
     state_set "$KEY" "$NOW"
   fi
 done
