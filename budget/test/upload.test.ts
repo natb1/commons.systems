@@ -367,4 +367,24 @@ describe("toParsedData", () => {
     const data = toParsedData(parsed);
     expect(data.transactions[0].timestampMs).toBeNull();
   });
+
+  it("threads journalEntryId from RawTransaction through to IdbTransaction", () => {
+    const input = {
+      ...validInput,
+      transactions: [{ ...validInput.transactions[0], journalEntryId: "je-001" }],
+    };
+    const parsed = parseUploadedJson(JSON.stringify(input));
+    expect(parsed.transactions[0].journalEntryId).toBe("je-001");
+
+    const data = toParsedData(parsed);
+    expect(data.transactions[0].journalEntryId).toBe("je-001");
+  });
+
+  it("defaults missing journalEntryId to null on RawTransaction and IdbTransaction", () => {
+    const parsed = parseUploadedJson(JSON.stringify(validInput));
+    expect(parsed.transactions[0].journalEntryId).toBeNull();
+
+    const data = toParsedData(parsed);
+    expect(data.transactions[0].journalEntryId).toBeNull();
+  });
 });

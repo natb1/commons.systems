@@ -14,8 +14,8 @@ for the Deferred bucket via `/file-issue`, commit and push, post a 4-section PR
 comment, and apply the `dispatch:reviewed` label.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
-fork `/commit-merge-push`, invoke the built-in `/review`, and launch
-implementation and follow-up-issue subagents.
+fork `/commit-merge-push`, fork a subagent that invokes the built-in `/review`,
+and launch implementation and follow-up-issue subagents.
 
 ## Idempotency preamble
 
@@ -44,12 +44,18 @@ already applied, so re-entry is a true no-op. Otherwise run all steps in order.
    no commit and only fetches, merges `origin/main`, and pushes. Reviewing against
    current `main` avoids re-reviewing code `main` has already changed.
 
-2. **Run `/review`.** Invoke the built-in `/review` skill via the Skill tool —
-   the generic PR review. It produces findings; it applies no fixes. `/review`
-   is built-in and uneditable: pass it no output contract and consume its
-   natural output as-is. Any "final reply" / "nothing else" wording in
-   `/review`'s prompt scopes only to its findings deliverable — once it
-   returns, continue to Step 3.
+2. **Run `/review`.** Fork a subagent via the Agent tool
+   (`subagent_type: general-purpose`, `model: sonnet`) that invokes the
+   built-in `/review` skill via the Skill tool inside the subagent and returns
+   its output verbatim — the generic PR review. It produces findings; it
+   applies no fixes. The subagent boundary is the control-flow guarantee: the
+   parent never sees the inner Skill's prompt template, so it remains on this
+   step when the Agent call returns. `/review` is built-in and uneditable: the
+   subagent passes the inner skill no output contract and returns its natural
+   output as-is. Keep the "once it returns, continue to Step 3" wording inside
+   the **subagent's** prompt as defense-in-depth for the inner Skill
+   invocation. Any "final reply" / "nothing else" wording in `/review`'s
+   prompt scopes only to its findings deliverable.
 
 3. **Classify findings into four buckets.** Walk every finding from `/review`
    and judge it from the finding's natural text — `/review` supplies no
