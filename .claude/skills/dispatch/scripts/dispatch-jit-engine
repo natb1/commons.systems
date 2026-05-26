@@ -1,0 +1,374 @@
+#!/usr/bin/env bash
+# dispatch-jit-engine — generic just-in-time (jit) issue-generation engine.
+#
+# Reads the local jit.json config (via dispatch-config-load) and, for each jit
+# definition, decides whether a recurring "jit" issue is due and — if so —
+# creates it in the jit's repo and adds it to the jit's project. No jit name is
+# hardcoded: the engine is fully driven by config.
+#
+# Per jit the engine:
+#   1. Validates the jit's shape (cadence jit vs check-script jit).
+#   2. Debounces — skips with no network call if the jit's last check is within
+#      its `debounce` window (tracked in a project-root state file).
+#   3. Ensures the jit's label exists in its repo (idempotent).
+#   4. Skips if an open issue with the jit's label already exists.
+#   5. Decides whether to create:
+#        cadence jit (remindAfterClose) — create when the newest closed issue
+#          with the label closed more than remindAfterClose ago, or when no
+#          closed issue has ever existed (cold start).
+#        check-script jit (check) — run the check script; create when it fires.
+#   6. Creates the issue, adds it to the jit's project, records the last check.
+#
+# Usage:
+#   dispatch-jit-engine            — process every jit in jit.json.
+#
+# Stdout protocol (one line per jit that ran):
+#   <key>: created #<num>          an issue was created.
+#   <key>: skipped (<reason>)      no issue created — reason given.
+#   <key>: debounced               the debounce window has not elapsed.
+# Errors are written to stderr as:
+#   <key>: error (<description>)   this jit hit a hard error; others continue.
+#
+# Exit codes:
+#   0  every jit completed cleanly (created / skipped / debounced).
+#   1  at least one jit hit a hard error (invalid shape, check-script error,
+#      gh failure, project-add failure). Per-jit stdout lines for the jits that
+#      did succeed are still printed.
+#   2  the engine itself cannot operate (the config loader exits 2, or an
+#      environment misconfiguration).
+#
+# With no jit.json present the config loader reports "no-config" and the engine
+# is a silent no-op (exit 0, no output).
+#
+# Environment overrides for testability:
+#   DISPATCH_CONFIG_DIR     Override the config directory. Read by
+#                           dispatch-config-load (the engine sets nothing — it
+#                           flows through the environment).
+#   DISPATCH_JIT_STATE_DIR  Override the state-file directory. When set, the
+#                           engine does NOT require a git repo. Default:
+#                           <project-root>/tmp.
+#   DISPATCH_JIT_NOW        Override "now" as epoch seconds. Default: date +%s.
+#   DISPATCH_JIT_SCRIPT_DIR Override where check-scripts are resolved. Default:
+#                           the engine's own directory.
+#
+# Dependency: invokes the `gh` CLI directly. Per .claude/rules/sandbox.md the
+# caller (the /dispatch SKILL step) must wrap this script with
+# dangerouslyDisableSandbox — gh's TLS validation is blocked by the sandbox.
+# This script sets nothing sandbox-related; that is the caller's responsibility.
+#
+# NOT set -e: per-jit hard errors must not abort the loop. Exit codes from gh,
+# check scripts, and the config loader are captured explicitly with `|| rc=$?`.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ---- parse_duration <str> — duration string to seconds ----------------------
+# Accepts <int><unit> where unit is one of s|m|h|d|w. Prints the duration in
+# seconds on stdout and returns 0. On unparseable input prints nothing and
+# returns 1 — the caller treats that as a hard error for the jit.
+parse_duration() {
+  local spec="$1" num unit
+  if [[ ! "$spec" =~ ^([0-9]+)([smhdw])$ ]]; then
+    return 1
+  fi
+  num="${BASH_REMATCH[1]}"
+  unit="${BASH_REMATCH[2]}"
+  case "$unit" in
+    s) printf '%s\n' "$(( num * 1 ))" ;;
+    m) printf '%s\n' "$(( num * 60 ))" ;;
+    h) printf '%s\n' "$(( num * 3600 ))" ;;
+    d) printf '%s\n' "$(( num * 86400 ))" ;;
+    w) printf '%s\n' "$(( num * 604800 ))" ;;
+  esac
+  return 0
+}
+
+# ---- Step 0: load and validate the jit config -------------------------------
+# dispatch-config-load handles DISPATCH_CONFIG_DIR resolution and schema
+# validation. "no-config" → silent no-op. A non-zero exit → the loader already
+# printed its error; propagate a hard failure.
+CFG=""
+CFG_RC=0
+CFG=$("$SCRIPT_DIR/dispatch-config-load" jit) || CFG_RC=$?
+if [[ "$CFG_RC" -ne 0 ]]; then
+  # The loader exited non-zero (invalid config or environment error) and has
+  # already written a descriptive message to stderr.
+  exit "$CFG_RC"
+fi
+if [[ "$CFG" == "no-config" ]]; then
+  exit 0
+fi
+
+# ---- Step 1: resolve the state directory and file --------------------------
+# An explicit DISPATCH_JIT_STATE_DIR is authoritative and bypasses the git
+# lookup — tests rely on this. Otherwise the state file lives at the shared
+# project-root tmp/ (co-located with tmp/dispatch.lock), shared across
+# worktrees. The parent of --git-common-dir is the project root in both classic
+# (.git) and bare (.bare) layouts, same idiom as dispatch-acquire-lock.
+if [[ -n "${DISPATCH_JIT_STATE_DIR:-}" ]]; then
+  STATE_DIR="$DISPATCH_JIT_STATE_DIR"
+else
+  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+    || { echo "error: not in a git repo and DISPATCH_JIT_STATE_DIR is unset" >&2; exit 2; }
+  PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
+  STATE_DIR="$PROJECT_ROOT/tmp"
+fi
+STATE_FILE="$STATE_DIR/dispatch-jit-state.json"
+
+# ---- Step 2: resolve "now" and the check-script directory -------------------
+NOW="${DISPATCH_JIT_NOW:-$(date +%s)}"
+JIT_SCRIPT_DIR="${DISPATCH_JIT_SCRIPT_DIR:-$SCRIPT_DIR}"
+
+# ---- state-file helpers -----------------------------------------------------
+# The state file is a JSON object mapping <key> → last-check epoch (number).
+# An absent file is treated as the empty object {}.
+
+# read_state — print the current state object (compact JSON). Absent → "{}".
+read_state() {
+  if [[ -f "$STATE_FILE" ]]; then
+    jq -c '.' "$STATE_FILE"
+  else
+    printf '{}\n'
+  fi
+}
+
+# state_get <key> — print the recorded last-check epoch for <key>, or nothing.
+state_get() {
+  local key="$1"
+  read_state | jq -r --arg k "$key" '.[$k] // empty'
+}
+
+# state_set <key> <epoch> — incremental read-modify-write: set <key> to <epoch>
+# in the state object and write it back.
+state_set() {
+  local key="$1" epoch="$2" current updated
+  current=$(read_state)
+  updated=$(printf '%s' "$current" | jq -c --arg k "$key" --argjson v "$epoch" \
+    '.[$k] = $v')
+  mkdir -p "$STATE_DIR"
+  printf '%s\n' "$updated" >"$STATE_FILE"
+}
+
+# ---- Step 3: read every jit object into a bash array ------------------------
+# Reading the jits up front (rather than piping jq into a `while read` loop)
+# keeps the loop body in the current shell, so the HARD_ERROR flag and state
+# mutations survive.
+JIT_COUNT=$(printf '%s' "$CFG" | jq '.jits | length')
+mapfile -t JITS < <(printf '%s' "$CFG" | jq -c '.jits[]')
+
+HARD_ERROR=0
+
+# ---- Step 4: process each jit -----------------------------------------------
+for (( i = 0; i < JIT_COUNT; i++ )); do
+  jit="${JITS[$i]}"
+
+  KEY=$(printf '%s' "$jit"     | jq -r '.key')
+  REPO=$(printf '%s' "$jit"    | jq -r '.repo')
+  LABEL=$(printf '%s' "$jit"   | jq -r '.label')
+  TITLE=$(printf '%s' "$jit"   | jq -r '.title')
+  BODY=$(printf '%s' "$jit"    | jq -r '.body')
+  PROJECT=$(printf '%s' "$jit" | jq -r '.project')
+
+  HAS_REMIND=$(printf '%s' "$jit" | jq 'has("remindAfterClose")')
+  HAS_CHECK=$(printf '%s' "$jit"  | jq 'has("check")')
+
+  # ---- 4a: validate the jit shape -------------------------------------------
+  # Exactly one of remindAfterClose (cadence) or check (check-script) must be
+  # present — the loader does NOT enforce this.
+  if [[ "$HAS_REMIND" == "true" && "$HAS_CHECK" == "true" ]]; then
+    echo "$KEY: error (jit has both remindAfterClose and check; exactly one is required)" >&2
+    HARD_ERROR=1
+    continue
+  fi
+  if [[ "$HAS_REMIND" != "true" && "$HAS_CHECK" != "true" ]]; then
+    echo "$KEY: error (jit has neither remindAfterClose nor check; exactly one is required)" >&2
+    HARD_ERROR=1
+    continue
+  fi
+
+  # A check-script jit's `check` must be an object with a non-empty string
+  # `.script`; an optional `.args`, if present, must be a JSON array.
+  if [[ "$HAS_CHECK" == "true" ]]; then
+    CHECK_TYPE=$(printf '%s' "$jit" | jq -r '.check | type')
+    if [[ "$CHECK_TYPE" != "object" ]]; then
+      echo "$KEY: error (check must be an object, got $CHECK_TYPE)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    CHECK_SCRIPT=$(printf '%s' "$jit" | jq -r '.check.script // empty')
+    if [[ -z "$CHECK_SCRIPT" ]]; then
+      echo "$KEY: error (check.script must be a non-empty string)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    CHECK_SCRIPT_TYPE=$(printf '%s' "$jit" | jq -r '.check.script | type')
+    if [[ "$CHECK_SCRIPT_TYPE" != "string" ]]; then
+      echo "$KEY: error (check.script must be a string, got $CHECK_SCRIPT_TYPE)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    HAS_ARGS=$(printf '%s' "$jit" | jq '.check | has("args")')
+    if [[ "$HAS_ARGS" == "true" ]]; then
+      ARGS_TYPE=$(printf '%s' "$jit" | jq -r '.check.args | type')
+      if [[ "$ARGS_TYPE" != "array" ]]; then
+        echo "$KEY: error (check.args must be an array if present, got $ARGS_TYPE)" >&2
+        HARD_ERROR=1
+        continue
+      fi
+    fi
+  fi
+
+  # ---- 4b: debounce ---------------------------------------------------------
+  # Skip with no gh/network/check-script call when a prior last-check entry
+  # exists and now − last-check < debounce. State is left unchanged.
+  HAS_DEBOUNCE=$(printf '%s' "$jit" | jq 'has("debounce")')
+  if [[ "$HAS_DEBOUNCE" == "true" ]]; then
+    DEBOUNCE_SPEC=$(printf '%s' "$jit" | jq -r '.debounce')
+    if ! DEBOUNCE_SECS=$(parse_duration "$DEBOUNCE_SPEC"); then
+      echo "$KEY: error (debounce: cannot parse duration '$DEBOUNCE_SPEC')" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    LAST_CHECK=$(state_get "$KEY")
+    if [[ -n "$LAST_CHECK" ]] && (( NOW - LAST_CHECK < DEBOUNCE_SECS )); then
+      echo "$KEY: debounced"
+      continue
+    fi
+  fi
+
+  # ---- 4c: ensure the label exists ------------------------------------------
+  # Idempotent: `gh label create` exits non-zero with an "already exists"
+  # message when the label is present — tolerate ONLY that case. Done before
+  # the open-issue guard so `gh issue list --label` never names a missing
+  # label.
+  LABEL_RC=0
+  LABEL_OUT=$(gh label create "$LABEL" --repo "$REPO" --color "ededed" \
+    --description "JIT-generated recurring issue" 2>&1) || LABEL_RC=$?
+  if [[ "$LABEL_RC" -ne 0 ]]; then
+    if [[ "$LABEL_OUT" != *"already exists"* ]]; then
+      echo "$KEY: error (gh label create failed: $LABEL_OUT)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+  fi
+
+  # ---- 4d: open-issue guard -------------------------------------------------
+  # At most one open issue per jit. If one is already open, skip and stamp the
+  # last-check time so debounce holds off the next tick.
+  OPEN_RC=0
+  OPEN_JSON=$(gh issue list --repo "$REPO" --label "$LABEL" --state open \
+    --json number 2>&1) || OPEN_RC=$?
+  if [[ "$OPEN_RC" -ne 0 ]]; then
+    echo "$KEY: error (gh issue list --state open failed: $OPEN_JSON)" >&2
+    HARD_ERROR=1
+    continue
+  fi
+  OPEN_COUNT=$(printf '%s' "$OPEN_JSON" | jq 'length')
+  if [[ "$OPEN_COUNT" -gt 0 ]]; then
+    echo "$KEY: skipped (open issue exists)"
+    state_set "$KEY" "$NOW"
+    continue
+  fi
+
+  # ---- 4e: create decision --------------------------------------------------
+  CREATE=0
+  if [[ "$HAS_REMIND" == "true" ]]; then
+    # Cadence jit: create when the newest closed issue with the label closed
+    # more than remindAfterClose ago, or when no closed issue exists (cold
+    # start).
+    REMIND_SPEC=$(printf '%s' "$jit" | jq -r '.remindAfterClose')
+    if [[ -z "$REMIND_SPEC" || "$REMIND_SPEC" == "null" ]]; then
+      echo "$KEY: error (remindAfterClose must be a non-empty string)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    if ! REMIND_SECS=$(parse_duration "$REMIND_SPEC"); then
+      echo "$KEY: error (remindAfterClose: cannot parse duration '$REMIND_SPEC')" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    CLOSED_RC=0
+    CLOSED_JSON=$(gh issue list --repo "$REPO" --label "$LABEL" --state closed \
+      --json number,closedAt 2>&1) || CLOSED_RC=$?
+    if [[ "$CLOSED_RC" -ne 0 ]]; then
+      echo "$KEY: error (gh issue list --state closed failed: $CLOSED_JSON)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    MAX_CLOSED_AT=$(printf '%s' "$CLOSED_JSON" | jq -r \
+      'map(.closedAt) | max // empty')
+    if [[ -z "$MAX_CLOSED_AT" ]]; then
+      # Cold start — no closed issue has ever existed.
+      CREATE=1
+    else
+      CLOSED_EPOCH=""
+      CLOSED_EPOCH=$(date -d "$MAX_CLOSED_AT" +%s 2>/dev/null) || {
+        echo "$KEY: error (cannot parse closedAt timestamp '$MAX_CLOSED_AT')" >&2
+        HARD_ERROR=1
+        continue
+      }
+      if (( NOW - CLOSED_EPOCH > REMIND_SECS )); then
+        CREATE=1
+      else
+        echo "$KEY: skipped (within remindAfterClose)"
+        state_set "$KEY" "$NOW"
+        continue
+      fi
+    fi
+  else
+    # Check-script jit: run the check script. Exit 0 = fire, 1 = no-fire,
+    # >=2 = error.
+    CHECK_PATH="$JIT_SCRIPT_DIR/$CHECK_SCRIPT"
+    mapfile -t CHECK_ARGS < <(printf '%s' "$jit" | jq -r '.check.args // [] | .[]')
+    CHECK_RC=0
+    "$CHECK_PATH" "${CHECK_ARGS[@]}" || CHECK_RC=$?
+    if [[ "$CHECK_RC" -eq 0 ]]; then
+      CREATE=1
+    elif [[ "$CHECK_RC" -eq 1 ]]; then
+      echo "$KEY: skipped (check did not fire)"
+      state_set "$KEY" "$NOW"
+      continue
+    else
+      echo "$KEY: error (check script exited $CHECK_RC)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+  fi
+
+  # ---- 4f: create the issue and add it to the project ----------------------
+  if [[ "$CREATE" -eq 1 ]]; then
+    CREATE_RC=0
+    CREATE_OUT=$(gh issue create --repo "$REPO" --title "$TITLE" --body "$BODY" \
+      --label "$LABEL" 2>&1) || CREATE_RC=$?
+    if [[ "$CREATE_RC" -ne 0 ]]; then
+      echo "$KEY: error (gh issue create failed: $CREATE_OUT)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    # gh issue create prints the new issue URL on stdout. The trailing path
+    # segment is the issue number.
+    ISSUE_URL=$(printf '%s' "$CREATE_OUT" | tail -n1)
+    ISSUE_NUM="${ISSUE_URL##*/}"
+    if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
+      echo "$KEY: error (could not parse issue number from '$CREATE_OUT')" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    ADD_RC=0
+    ADD_OUT=$("$SCRIPT_DIR/dispatch-project-item-add" "$PROJECT" "$ISSUE_URL" 2>&1) \
+      || ADD_RC=$?
+    if [[ "$ADD_RC" -ne 0 ]]; then
+      echo "$KEY: error (could not add issue #$ISSUE_NUM to project '$PROJECT': $ADD_OUT)" >&2
+      HARD_ERROR=1
+      continue
+    fi
+    echo "$KEY: created #$ISSUE_NUM"
+    state_set "$KEY" "$NOW"
+  fi
+done
+
+# ---- Step 5: exit -----------------------------------------------------------
+if [[ "$HARD_ERROR" -ne 0 ]]; then
+  exit 1
+fi
+exit 0
