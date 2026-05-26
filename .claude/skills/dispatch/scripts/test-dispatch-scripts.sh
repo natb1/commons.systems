@@ -2831,7 +2831,7 @@ assert_eq "blocked-orphan sweep exits 0" "0" "$rc"
 assert_eq "blocked-orphan stdout is empty" "" "$out"
 
 TOTAL=$((TOTAL + 1))
-if grep -q "SKIP_ORPHAN_BLOCKED: '$WT_PATH' branch=61-blocked issue=#61 blockers=1" "$DISPATCH_SWEEP_LOG_FILE"; then
+if grep -q "SKIP_ORPHAN_BLOCKED: '$WT_PATH' branch=61-blocked issue=61 blockers=1" "$DISPATCH_SWEEP_LOG_FILE"; then
   PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_BLOCKED log line for 61-blocked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_BLOCKED log line for 61-blocked"
@@ -2862,7 +2862,7 @@ assert_eq "closed-issue sweep exits 0" "0" "$rc"
 assert_eq "closed-issue stdout is empty" "" "$out"
 
 TOTAL=$((TOTAL + 1))
-if grep -q "SKIP_ORPHAN_CLOSED_ISSUE: '$WT_PATH' branch=62-closed issue=#62" "$DISPATCH_SWEEP_LOG_FILE"; then
+if grep -q "SKIP_ORPHAN_CLOSED_ISSUE: '$WT_PATH' branch=62-closed issue=62" "$DISPATCH_SWEEP_LOG_FILE"; then
   PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_CLOSED_ISSUE log line for 62-closed"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_CLOSED_ISSUE log line for 62-closed"
