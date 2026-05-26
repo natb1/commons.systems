@@ -1909,6 +1909,67 @@ result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null)
 assert_eq "sweep exit 2 → falls through to ladder result" "pr 10 10-verify-me verify" "$result"
 teardown
 
+# SR7. --cleanup-confirm <path> calls dispatch-sweep --cleanup-unknown <path>
+#      first, then re-runs the default sweep+route block. With a sweep stub
+#      that exits 0 / empty stdout on the second call, the script falls
+#      through to the ladder. Proves both calls happen and that routing after
+#      cleanup is identical to default mode.
+echo "Test: --cleanup-confirm <path> runs cleanup then resumes selection"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Sweep stub logs each invocation's args and is silent / exit 0 otherwise.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$STUB_DIR/dispatch-sweep-calls.log"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/some-orphan" 2>/dev/null)
+assert_eq "cleanup-confirm → falls through to ladder result" "pr 10 10-verify-me verify" "$result"
+assert_eq "dispatch-sweep called twice (cleanup + resume)" \
+  "2" "$(wc -l < "$STUB_DIR/dispatch-sweep-calls.log" | tr -d ' ')"
+assert_eq "first sweep call carries --cleanup-unknown <path>" \
+  "--cleanup-unknown /tmp/some-orphan" \
+  "$(sed -n '1p' "$STUB_DIR/dispatch-sweep-calls.log")"
+assert_eq "second sweep call carries no args" \
+  "" "$(sed -n '2p' "$STUB_DIR/dispatch-sweep-calls.log")"
+teardown
+
+# SR8. --cleanup-confirm <path> halts at the next unknown orphan: the
+#      post-cleanup sweep emits cleanup-unknown:<path2> on stderr and exits 3,
+#      and the script propagates cleanup-unknown <path2> on stdout. Proves
+#      multiple unknown orphans iterate one-at-a-time via repeated SKILL.md
+#      AskUserQuestion confirmations rather than being silently consumed.
+echo "Test: --cleanup-confirm <path> halts on the next unknown orphan"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Sweep stub: first call (cleanup) exits 0; second call (resume) emits a new
+# unknown orphan on stderr and exits 3.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$STUB_DIR/dispatch-sweep-calls.log"
+n=\$(wc -l < "$STUB_DIR/dispatch-sweep-calls.log" | tr -d ' ')
+if [[ "\$n" -eq 1 ]]; then
+  exit 0
+else
+  echo "cleanup-unknown:/tmp/second-orphan" >&2
+  exit 3
+fi
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/first-orphan" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "second unknown orphan propagated to stdout" \
+  "cleanup-unknown /tmp/second-orphan" "$result"
+assert_eq "halting on next unknown orphan exits 0" "0" "$rc"
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================
