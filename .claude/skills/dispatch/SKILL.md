@@ -61,28 +61,41 @@ The lock covers **Steps 0-5 only** — target selection and worktree resolution.
 Steps 6-9 (the phase skill, the pre-implementation relevance review, and the
 hand-off) run with the lock **released**.
 
-Release the lock by running:
+Release happens at exactly two kinds of point, each with its own canonical
+command:
 
-```bash
-.claude/skills/dispatch/scripts/dispatch-acquire-lock --release
-```
-
-This needs `dangerouslyDisableSandbox: true` (same reason as Step 0); no
-elevated timeout is needed — `--release` returns immediately. It prints
-`released` or `noop`; both are fine — it is a no-op when the lock is already
-released or held by another session, so the skill does not branch on its output.
-
-Release happens at exactly two kinds of point:
-
-- **Proceed path** — as the final action of Step 5, after the
-  `tmp/dispatch-worktree` marker is written, before Step 6.
+- **Proceed path** — as the final action of Step 5, run
+  `dispatch-finalize-selection`. The wrapper writes the
+  `tmp/dispatch-worktree` marker (see *Step 5* and the marker paragraph below)
+  and execs `dispatch-acquire-lock --release` in one step.
 - **Every Steps 1-5 stop path** — immediately before reporting the stop reason
-  and proceeding to Step 9 (early-stop).
+  and proceeding to Step 9 (early-stop), run
+  `.claude/skills/dispatch/scripts/dispatch-acquire-lock --release` directly.
+  Stop paths fire before the marker is written, so the strict
+  `CLAUDE_CODE_SESSION_ID`-match branch applies.
+
+Both calls need `dangerouslyDisableSandbox: true` (same reason as Step 0); no
+elevated timeout is needed — `--release` returns immediately. They print
+`released` or `noop`; both are fine — `noop` is a no-op when the lock is
+already released or recorded against a different session whose worktree has no
+marker, so the skill does not branch on the output.
 
 Releasing after Step 5 is safe because the session then owns a worktree (or has
 stopped), and the selection scan skips worktree'd targets — no other tick can
 select the same issue. Later steps cross-reference *Releasing the lock* rather
-than repeating this command.
+than repeating these commands.
+
+The `tmp/dispatch-worktree` marker is the canonical post-Step-5 reclaim signal:
+a recorded holder whose worktree carries the marker is past Step 5, so its
+lock is reclaimable by any subsequent tick regardless of session-id provenance.
+The acquire path skips the busy branch when the foreign holder's cwd has the
+marker, and `--release` succeeds (truncates and prints `released`) when EITHER
+the caller's sessionId matches the holder OR the holder's cwd has the marker.
+This closes the silent-`noop` failure mode for any post-Step-5 caller whose
+`CLAUDE_CODE_SESSION_ID` was re-derived from a different context (a subagent
+or hook). Pre-marker callers — Steps 1-4 stop paths and the Step 5 `conflict`
+stop — keep strict sessionId-match semantics by construction because the
+marker is absent.
 
 The lock is scoped to selection and self-healing. The recorded sessionId
 (`CLAUDE_CODE_SESSION_ID`) outlives any single Bash call within a tick: if a
@@ -400,22 +413,30 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
   conflict (name `<path>` and issue `<N>`), then **proceed to Step 9**
   (early-stop); do not `EnterWorktree`.
 
-On every non-`conflict` path, before any phase skill runs, create the recovery
-marker:
+As the **final action of this step on every non-`conflict` (proceed) path** —
+before Step 6 — run:
 
 ```bash
-mkdir -p tmp && touch tmp/dispatch-worktree
+.claude/skills/dispatch/scripts/dispatch-finalize-selection
 ```
 
-`restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
-recovery on this marker — when present, it re-invokes `/dispatch` so the phase is
-re-derived from PR/CI ground truth. The marker is an empty boolean flag with no
-payload; it persists for the worktree's life and needs no cleanup — `tmp/` is
-git-ignored, and removing the worktree removes it.
+The wrapper writes the `tmp/dispatch-worktree` marker and releases the lock
+(see *Releasing the lock*) in one step. The phase skill in Step 6 onward runs
+lock-free. The wrapper needs `dangerouslyDisableSandbox: true` (same reason as
+the underlying `dispatch-acquire-lock --release` — see *Releasing the lock*).
 
-As the **final action of this step on every non-`conflict` (proceed) path** —
-after the marker is written, before Step 6 — release the lock (see *Releasing
-the lock*). The phase skill in Step 6 onward runs lock-free.
+The marker is the canonical "Step 5 completed" signal. Two consumers read it:
+`restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
+recovery on it — when present, it re-invokes `/dispatch` so the phase is
+re-derived from PR/CI ground truth — and the lock script keys post-Step-5
+reclaim on it (see *Releasing the lock*). `.claude/hooks/worktree-create.sh`
+also writes the marker as its final action on every successful WorktreeCreate,
+so a fresh (or re-entered) worktree is marker-bearing the moment
+`EnterWorktree` returns — `dispatch-finalize-selection`'s marker write is the
+in-skill defense for the `here` path and for any code path that bypasses the
+hook. The marker is an empty boolean flag with no payload; it persists for the
+worktree's life and needs no cleanup — `tmp/` is git-ignored, and removing the
+worktree removes it.
 
 ## 6. Derive the Phase
 
