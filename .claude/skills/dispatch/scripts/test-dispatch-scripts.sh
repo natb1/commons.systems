@@ -5308,6 +5308,52 @@ else
 fi
 cal_teardown
 
+# --- Test 11: all-day event files an issue with "all-day" title -------------
+
+echo "Test: dispatch-jit-calendar-import files all-day events with date-only start/end"
+cal_setup
+# All-day event today — Google Calendar uses start.date / end.date (no time)
+# and end is exclusive. Tomorrow's date end makes it cover today.
+cat > "$STUB_DIR/events.json" <<'EOF'
+{
+  "items": [
+    {
+      "id": "evt-allday",
+      "status": "confirmed",
+      "summary": "Birthday",
+      "start": {"date": "2026-05-26"},
+      "end":   {"date": "2026-05-27"},
+      "reminders": {"useDefault": true}
+    }
+  ]
+}
+EOF
+rc=0
+out=$("$TMPDIR_TEST/scripts/dispatch-jit-calendar-import" 2>/dev/null) || rc=$?
+assert_eq "all-day exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$out" == *"calendar: created #777 (evt-allday)"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: all-day reports created #777 (evt-allday)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: all-day reports created #777 (evt-allday)"
+  echo "    actual: $out"
+fi
+TOTAL=$((TOTAL + 1))
+create_args=$(cat "$STUB_DIR/gh-issue-create.log" 2>/dev/null || echo "")
+if [[ "$create_args" == *"event=evt-allday"* \
+   && "$create_args" == *"start=2026-05-26"* \
+   && "$create_args" == *"end=2026-05-27"* \
+   && "$create_args" == *"(all-day)"* \
+   && "$create_args" != *"(00:00)"* ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: all-day title and body carry (all-day), not (00:00)"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: all-day title and body carry (all-day), not (00:00)"
+  echo "    gh-issue-create.log: $create_args"
+fi
+cal_teardown
+
 # ============================================================================
 # summary
 # ============================================================================

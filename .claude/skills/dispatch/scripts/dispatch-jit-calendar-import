@@ -189,19 +189,23 @@ TOKEN_RESPONSE=$(curl -sf -X POST \
   "https://oauth2.googleapis.com/token" 2>/dev/null) || TOKEN_RC=$?
 if [[ "$TOKEN_RC" -ne 0 ]]; then
   echo "calendar: error (refresh-token exchange failed: curl exit $TOKEN_RC)" >&2
-  exit 1
+  exit 2
 fi
 ACCESS_TOKEN=$(printf '%s' "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
 if [[ -z "$ACCESS_TOKEN" ]]; then
   ERR=$(printf '%s' "$TOKEN_RESPONSE" | jq -r '.error_description // .error // "no access_token in response"')
   echo "calendar: error (refresh-token exchange: $ERR)" >&2
-  exit 1
+  exit 2
 fi
 
 # ---- Step 5: list open jit:calendar issues ---------------------------------
+# Limit guards a runaway loop and matches expected steady-state volume for a
+# household calendar; if the list ever hits this ceiling, emit a warning so
+# dedup misses surface instead of silently creating duplicates.
+LIST_LIMIT=1000
 LIST_RC=0
 OPEN_JSON=$(gh issue list --repo "$CALENDAR_REPO" --label "$CALENDAR_LABEL" \
-  --state open --json number,body --limit 200 2>&1) || LIST_RC=$?
+  --state open --json number,body --limit "$LIST_LIMIT" 2>&1) || LIST_RC=$?
 if [[ "$LIST_RC" -ne 0 ]]; then
   echo "calendar: error (gh issue list failed: $OPEN_JSON)" >&2
   exit 1
@@ -227,6 +231,10 @@ parse_marker() {
 OPEN_EVENT_IDS=""
 PAST_ISSUES=""
 ISSUE_COUNT=$(printf '%s' "$OPEN_JSON" | jq 'length')
+if (( ISSUE_COUNT >= LIST_LIMIT )); then
+  echo "calendar: error (open '$CALENDAR_LABEL' issues hit list limit $LIST_LIMIT; dedup may miss IDs and create duplicates — raise LIST_LIMIT or backlog must be cleared)" >&2
+  HARD_ERROR=1
+fi
 for (( i = 0; i < ISSUE_COUNT; i++ )); do
   ISSUE_NUM=$(printf '%s' "$OPEN_JSON" | jq -r ".[$i].number")
   ISSUE_BODY=$(printf '%s' "$OPEN_JSON" | jq -r ".[$i].body // \"\"")
@@ -242,7 +250,7 @@ for (( i = 0; i < ISSUE_COUNT; i++ )); do
       HARD_ERROR=1
       continue
     }
-    if (( END_EPOCH < NOW )); then
+    if (( END_EPOCH <= NOW )); then
       PAST_ISSUES+="$ISSUE_NUM $EVENT_ID"$'\n'
     fi
   fi
@@ -272,7 +280,14 @@ if [[ "$CAL_RC" -ne 0 ]]; then
   echo "calendar: error (calendar metadata fetch failed: curl exit $CAL_RC)" >&2
   exit 1
 fi
-DEFAULT_REMINDERS=$(printf '%s' "$CAL_META" | jq -c '.defaultReminders // []')
+DEFAULT_REMINDERS_RC=0
+DEFAULT_REMINDERS=$(printf '%s' "$CAL_META" | jq -c '.defaultReminders // []' 2>/dev/null) \
+  || DEFAULT_REMINDERS_RC=$?
+if [[ "$DEFAULT_REMINDERS_RC" -ne 0 || -z "$DEFAULT_REMINDERS" ]]; then
+  echo "calendar: error (malformed calendar metadata; defaulting reminders to [])" >&2
+  HARD_ERROR=1
+  DEFAULT_REMINDERS='[]'
+fi
 
 # ---- Step 8: fetch events --------------------------------------------------
 # Window: [start of today local, NOW + lookahead]. timeMin/timeMax are RFC3339.
@@ -304,7 +319,11 @@ fi
 # Project to a compact per-event shape, exclude cancelled and declined-by-self.
 # reminders is the effective list — useDefault → defaultReminders, else
 # overrides // [].
-mapfile -t EVENTS < <(printf '%s' "$EVENTS_JSON" | jq -c \
+# Capture jq output into a variable first so a malformed EVENTS_JSON surfaces
+# as an error instead of a silent empty EVENTS array hidden inside a process
+# substitution.
+PROJ_RC=0
+EVENTS_PROJECTED=$(printf '%s' "$EVENTS_JSON" | jq -c \
   --argjson defaultReminders "$DEFAULT_REMINDERS" \
   '.items[]?
    | select(.status != "cancelled")
@@ -324,7 +343,16 @@ mapfile -t EVENTS < <(printf '%s' "$EVENTS_JSON" | jq -c \
          else (.reminders.overrides // [])
          end
        )
-     }')
+     }' 2>/dev/null) || PROJ_RC=$?
+if [[ "$PROJ_RC" -ne 0 ]]; then
+  echo "calendar: error (events projection failed: malformed events response)" >&2
+  exit 1
+fi
+if [[ -n "$EVENTS_PROJECTED" ]]; then
+  mapfile -t EVENTS <<<"$EVENTS_PROJECTED"
+else
+  EVENTS=()
+fi
 
 # ---- Step 10: ensure the label exists (idempotent) -------------------------
 LABEL_RC=0
@@ -404,12 +432,19 @@ for evt in "${EVENTS[@]}"; do
     DESCRIPTION="${DESCRIPTION:0:500}…"
   fi
 
-  START_LOCAL=$(date -d "$EVENT_START" '+%a %d %b %Y, %H:%M' 2>/dev/null || echo "$EVENT_START")
-  END_LOCAL=$(date -d "$EVENT_END" '+%H:%M' 2>/dev/null || echo "$EVENT_END")
-  START_TIME_SHORT=$(date -d "$EVENT_START" '+%H:%M' 2>/dev/null || echo "$EVENT_START")
-
-  TITLE="📅 ${SUMMARY} (${START_TIME_SHORT})"
-  BODY="**When:** ${START_LOCAL}–${END_LOCAL}"$'\n'
+  # All-day events have date-only start/end (no 'T'); show them as "all-day"
+  # instead of a misleading "00:00".
+  if [[ "$EVENT_START" != *T* ]]; then
+    START_LOCAL=$(date -d "$EVENT_START" '+%a %d %b %Y' 2>/dev/null || echo "$EVENT_START")
+    TITLE="📅 ${SUMMARY} (all-day)"
+    BODY="**When:** ${START_LOCAL} (all-day)"$'\n'
+  else
+    START_LOCAL=$(date -d "$EVENT_START" '+%a %d %b %Y, %H:%M' 2>/dev/null || echo "$EVENT_START")
+    END_LOCAL=$(date -d "$EVENT_END" '+%H:%M' 2>/dev/null || echo "$EVENT_END")
+    START_TIME_SHORT=$(date -d "$EVENT_START" '+%H:%M' 2>/dev/null || echo "$EVENT_START")
+    TITLE="📅 ${SUMMARY} (${START_TIME_SHORT})"
+    BODY="**When:** ${START_LOCAL}–${END_LOCAL}"$'\n'
+  fi
   if [[ -n "$LOCATION" && "$LOCATION" != "null" ]]; then
     BODY+="**Where:** ${LOCATION}"$'\n'
   fi
