@@ -47,12 +47,22 @@ steps in order.
    no commit and only fetches, merges `origin/main`, and pushes. Reviewing
    against current `main` avoids re-reviewing code `main` has already changed.
 
-2. **Run `/code-review max`.** Invoke the built-in `/code-review` skill via the
-   Skill tool with the `max` effort level — the highest thoroughness available.
-   It applies in-scope fixes to the working tree and surfaces findings with the
-   skill's own (fixed vs skipped) disposition. Any "final reply" / "nothing
-   else" wording in `/code-review`'s prompt scopes only to its findings
-   deliverable — once it returns, continue to Step 3.
+2. **Run `/code-review max`.** Fork a subagent via the Agent tool
+   (`subagent_type: general-purpose`, `model: sonnet`) that invokes the
+   built-in `/code-review` skill via the Skill tool with the `max` effort
+   argument inside the subagent and returns its output verbatim — the highest
+   thoroughness available. It applies in-scope fixes to the working tree and
+   surfaces findings with the skill's own (fixed vs skipped) disposition. The
+   subagent boundary is the control-flow guarantee: the parent never sees the
+   inner Skill's prompt template, so it remains on this step when the Agent
+   call returns. The subagent inherits the parent's worktree filesystem —
+   working-tree edits made by `/code-review` inside the subagent surface on
+   disk for Step 4's `/commit-merge-push` with no additional plumbing. The
+   subagent passes the inner skill no output contract and returns its natural
+   output as-is. Keep the "once it returns, continue to Step 3" wording inside
+   the **subagent's** prompt as defense-in-depth for the inner Skill
+   invocation. Any "final reply" / "nothing else" wording in `/code-review`'s
+   prompt scopes only to its findings deliverable.
 
 3. **Classify every finding into the 4-way disposition.** `/code-review` produces a
    2-way split (fixed vs skipped). The wrapper extends each skipped finding into
