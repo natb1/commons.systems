@@ -55,6 +55,15 @@ gh_api_array() {
   fi
 }
 
+# Count the open blockers of <issue-num> via GitHub's blocked_by dependency
+# edges. Prints an integer; closed blockers do not gate work, so only open
+# blockers are counted.
+count_open_blockers() {
+  local issue_num="$1"
+  gh_api_array "/repos/{owner}/{repo}/issues/$issue_num/dependencies/blocked_by" \
+    '[.[] | select(.state == "open" or .state == "OPEN")] | length'
+}
+
 # Detect what Firebase features the app uses.
 # Sets global variables: USES_FIRESTORE, USES_AUTH, USES_STORAGE, USES_FUNCTIONS
 # Args: $1 = path to app src/ directory, $2 = repo root, $3 = app name
