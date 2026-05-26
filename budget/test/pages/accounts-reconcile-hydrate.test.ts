@@ -220,6 +220,34 @@ describe("hydrateAccountsReconcile — confirm-all", () => {
     expect(row.querySelector(".reconcile-suggested-badge")).toBeNull();
   });
 
+  it("unchecking a suggested checkbox dismisses the suggestion styling", async () => {
+    const wrapper = renderAndHydrate({
+      journalEntries: [entry({ id: "e-1", description: "Coffee" })],
+      journalLegs: [
+        leg({ id: "leg-x", entryId: "e-1", debit: 5, cleared: false, statementItemId: "si-x" as any, timestamp: ts("2025-02-10") }),
+      ],
+      statementItems: [
+        statementItem({ id: "si-x", statementItemId: "si-x" as any, amount: -5, timestamp: ts("2025-02-10") }),
+      ],
+    });
+
+    const row = wrapper.querySelector<HTMLElement>('[data-leg-id="leg-x"]')!;
+    expect(row.classList.contains("reconcile-suggested")).toBe(true);
+    expect(row.querySelector(".reconcile-suggested-badge")).not.toBeNull();
+
+    const checkbox = row.querySelector<HTMLInputElement>(".reconcile-cleared-checkbox")!;
+    // Reject the suggestion: uncheck and fire change.
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush();
+
+    expect(mockDataSource.updateJournalLegCleared).toHaveBeenCalledWith("leg-x", false);
+
+    // Rejection dismisses the badge so Confirm-all cannot re-clear the row.
+    expect(row.classList.contains("reconcile-suggested")).toBe(false);
+    expect(row.querySelector(".reconcile-suggested-badge")).toBeNull();
+  });
+
   it("toggling a confirmed cleared row back to false uses the existing path without errors", async () => {
     // Render a leg that is already cleared (confirmed, not suggested).
     const wrapper = renderAndHydrate({

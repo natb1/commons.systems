@@ -130,9 +130,10 @@ export function hydrateAccountsReconcile(container: HTMLElement): void {
       .then(() => {
         // Signal a settled write — lets tests wait for persistence deterministically.
         row.dataset.clearedSaved = String(nextChecked);
-        // When the user confirms a suggestion by checking it, promote the row
-        // from suggested to fully confirmed by removing the visual hint.
-        if (nextChecked && row.classList.contains("reconcile-suggested")) {
+        // Any explicit toggle dismisses the suggestion — checking confirms it,
+        // unchecking rejects it. Either way the row leaves the suggested pool
+        // so a later Confirm-all click cannot re-clear a rejection.
+        if (row.classList.contains("reconcile-suggested")) {
           row.classList.remove("reconcile-suggested");
           row.querySelector(".reconcile-suggested-badge")?.remove();
         }
