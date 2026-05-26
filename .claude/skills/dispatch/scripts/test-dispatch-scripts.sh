@@ -2913,12 +2913,26 @@ lock_teardown() {
 # JSON array of session objects carrying the given sessionIds (and exits 0).
 # Points CLAUDE_AGENTS_CMD at the fake. Call with zero args to simulate an
 # empty registry (`[]`). Safe to re-invoke mid-test: regenerates the fake.
+#
+# Each argument is either a bare sessionId or a `sid=cwd` entry. A bare sid
+# emits `"cwd":""`; a `sid=/path` entry emits `"cwd":"/path"`. The cwd field
+# feeds the marker-based reclaim path in dispatch-acquire-lock — tests that
+# do not care about cwd can keep passing bare sessionIds unchanged.
 lock_fake_claude_sessions() {
   local fake="$TMPDIR_TEST/fake/claude"
-  local payload="[" sid first=1
-  for sid in "$@"; do
+  local payload="[" entry sid cwd first=1
+  for entry in "$@"; do
+    if [[ "$entry" == *=* ]]; then
+      sid="${entry%%=*}"
+      cwd="${entry#*=}"
+    else
+      sid="$entry"
+      cwd=""
+    fi
     if (( first )); then first=0; else payload+=","; fi
-    payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"x\"}"
+    # Test paths under $TMPDIR_TEST never contain quotes or backslashes, so
+    # raw interpolation is sufficient (no JSON-escaping needed).
+    payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"x\",\"cwd\":\"$cwd\"}"
   done
   payload+="]"
   printf '%s' "$payload" > "$TMPDIR_TEST/fake/payload.json"
@@ -3361,6 +3375,98 @@ fi
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
 assert_eq "--release missing-session-id leaves the foreign lock intact" \
   "sess-6c-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 20: live foreign holder with marker → reclaim ----------------------
+#
+# A foreign holder's session is still live AND its cwd carries the
+# tmp/dispatch-worktree marker, meaning it has completed Step 5. acquire must
+# reclaim the lock (lenient branch) rather than block.
+
+echo "Test: live foreign holder with marker → reclaim"
+lock_setup
+printf '%s\n' "sess-2020-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2020-self"
+# Build the foreign holder's marker-bearing cwd inside the test tmp tree.
+foreign_cwd="$TMPDIR_TEST/foreign-worktree"
+mkdir -p "$foreign_cwd/tmp"
+touch "$foreign_cwd/tmp/dispatch-worktree"
+lock_fake_claude_sessions "sess-2020-foreign=$foreign_cwd" "sess-2020-self=$TMPDIR_TEST"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "past-Step-5 holder reclaim exits 0" "0" "$rc"
+assert_eq "past-Step-5 holder reclaim prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "past-Step-5 holder reclaim rewrites lock to caller's sessionId" \
+  "sess-2020-self" "$lock_contents"
+lock_teardown
+
+# --- Test 21: live foreign holder WITHOUT marker → busy (regression) ---------
+#
+# Today's strict blocking behavior on an in-flight Step 0–5 holder MUST be
+# preserved: a live foreign holder whose cwd has no marker is still in
+# selection and the lock must hold it.
+
+echo "Test: live foreign holder without marker → busy (in-flight)"
+lock_setup
+printf '%s\n' "sess-2121-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2121-self"
+foreign_cwd="$TMPDIR_TEST/foreign-worktree-no-marker"
+mkdir -p "$foreign_cwd"   # cwd exists but marker file does NOT
+lock_fake_claude_sessions "sess-2121-foreign=$foreign_cwd" "sess-2121-self=$TMPDIR_TEST"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "in-flight holder blocks: exits 0" "0" "$rc"
+assert_eq "in-flight holder blocks: prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "in-flight holder blocks: lock file unchanged" \
+  "sess-2121-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 22: --release with marker present → released (lenient) ------------
+#
+# A caller whose CLAUDE_CODE_SESSION_ID differs from the recorded holder can
+# still --release when the holder's cwd carries the marker. Closes the silent
+# `noop` leak that today blocks subsequent /dispatch ticks.
+
+echo "Test: --release with marker present from a different-sessionId caller → released"
+lock_setup
+printf '%s\n' "sess-2222-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2222-self"
+foreign_cwd="$TMPDIR_TEST/foreign-worktree-with-marker"
+mkdir -p "$foreign_cwd/tmp"
+touch "$foreign_cwd/tmp/dispatch-worktree"
+lock_fake_claude_sessions "sess-2222-foreign=$foreign_cwd" "sess-2222-self=$TMPDIR_TEST"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "lenient --release exits 0" "0" "$rc"
+assert_eq "lenient --release prints released" "released" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ -z "$lock_contents" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: lenient --release empties the lock file"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: lenient --release empties the lock file"
+  echo "    lock file: '$lock_contents'"
+fi
+lock_teardown
+
+# --- Test 23: --release with NO marker → noop (strict pre-marker) -----------
+#
+# Refinement of Test 12: the marker is what flips the verdict to released.
+# Without a marker, a different-sessionId caller's --release stays a noop and
+# the lock file is left intact for the in-flight holder.
+
+echo "Test: --release with foreign holder and NO marker → noop (pre-marker stop path)"
+lock_setup
+printf '%s\n' "sess-2323-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-2323-self"
+foreign_cwd="$TMPDIR_TEST/foreign-worktree-no-marker-release"
+mkdir -p "$foreign_cwd"   # no marker
+lock_fake_claude_sessions "sess-2323-foreign=$foreign_cwd" "sess-2323-self=$TMPDIR_TEST"
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "pre-marker --release exits 0" "0" "$rc"
+assert_eq "pre-marker --release prints noop" "noop" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "pre-marker --release leaves the lock file unchanged" \
+  "sess-2323-foreign" "$lock_contents"
 lock_teardown
 
 # ============================================================================
