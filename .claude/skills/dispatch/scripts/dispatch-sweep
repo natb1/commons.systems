@@ -37,6 +37,9 @@
 # Exit codes:
 #   0  normal sweep — may have emitted an adoption directive on stdout, or
 #      successfully completed --cleanup-unknown.
+#   1  gh API failure inside an orphan-classification gate (issue state or
+#      blocker count). Fail-loud per the gate-spec; SKILL.md's "Any other
+#      non-zero exit" branch falls through to dispatch-select-target.
 #   2  invalid invocation (not in a git repo, bad --cleanup-unknown path).
 #   3  halted on an unknown-orphan worktree; stderr carries the directive.
 #
@@ -48,6 +51,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # shellcheck source=./lib-worktree-in-sync.sh
 source "$SCRIPT_DIR/lib-worktree-in-sync.sh"
+# shellcheck source=./lib.sh
+source "$SCRIPT_DIR/lib.sh"
 
 # Resolve project root + worktrees root from the git common dir. The parent of
 # --git-common-dir is the project root in both classic (.git) and bare (.bare)
@@ -314,6 +319,43 @@ while [[ $i -lt ${#ORPHAN_PATHS[@]} ]]; do
   # <branch>" directive. Log and skip — the operator has the log to investigate.
   if [[ -z "$issue_num" ]]; then
     log "SKIP_ORPHAN_NO_ISSUE_NUM: '$wt_path' branch=$wt_branch pr=#$open_pr"
+    continue
+  fi
+
+  # Closed-issue gate. Fetch state with one gh call; fail loud on error —
+  # no silent fallback to "open" (would cause stale-orphan adoption). Let gh's
+  # stderr surface to the operator (matches the blocker gate, whose
+  # count_open_blockers / gh_api_array writes to stderr too).
+  if ! issue_state=$(gh issue view "$issue_num" --json state -q .state); then
+    log "ERROR_ISSUE_STATE_FETCH: '$wt_path' branch=$wt_branch issue=$issue_num"
+    echo "ERROR: failed to fetch state for issue #$issue_num" >&2
+    exit 1
+  fi
+  # Default-deny on anything ≠ OPEN/CLOSED (case-insensitive — lib.sh's
+  # count_open_blockers accepts both casings for the same reason). Empty,
+  # whitespace, or future states fail loud rather than silently adopting.
+  case "$issue_state" in
+    OPEN|open) ;;
+    CLOSED|closed)
+      log "SKIP_ORPHAN_CLOSED_ISSUE: '$wt_path' branch=$wt_branch issue=$issue_num"
+      continue
+      ;;
+    *)
+      log "ERROR_ISSUE_STATE_INVALID: '$wt_path' branch=$wt_branch issue=$issue_num state='$issue_state'"
+      echo "ERROR: unexpected state for issue #$issue_num: '$issue_state'" >&2
+      exit 1
+      ;;
+  esac
+
+  # Open-blocker gate. count_open_blockers (lib.sh) returns the integer
+  # count and exits non-zero on gh failure (gh_api_array writes its own
+  # descriptive stderr). Fail loud — no silent fallback to "not blocked".
+  if ! n_blockers=$(count_open_blockers "$issue_num"); then
+    log "ERROR_BLOCKER_COUNT: '$wt_path' branch=$wt_branch issue=$issue_num"
+    exit 1
+  fi
+  if [[ "$n_blockers" -gt 0 ]]; then
+    log "SKIP_ORPHAN_BLOCKED: '$wt_path' branch=$wt_branch issue=$issue_num blockers=$n_blockers"
     continue
   fi
 
