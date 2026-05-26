@@ -38,8 +38,10 @@ Run this Bash call with **both** `dangerouslyDisableSandbox: true` and an
 elevated `timeout: 600000` (ms):
 
 - `dangerouslyDisableSandbox: true` — the script writes
-  `$PROJECT_ROOT/tmp/dispatch.lock`, which is outside the sandbox write-allowlist
-  (same reason `dispatch-sweep` runs that way; see `.claude/rules/sandbox.md`).
+  `$PROJECT_ROOT/tmp/dispatch.lock`, which is outside the sandbox write-allowlist,
+  and queries `claude agents --json` over a local Unix socket for foreign-holder
+  liveness, which sandbox network-namespace isolation blocks (see
+  `.claude/rules/sandbox.md`).
 - `timeout: 600000` — `--wait` blocks on contention until it acquires the lock
   or `DISPATCH_LOCK_WAIT_TIMEOUT` (default 300 s) elapses, which exceeds the
   default Bash-call timeout.
@@ -49,7 +51,7 @@ Route on `$LOCK`:
 - **`acquired`** → this `/dispatch` holds the lock; proceed to Step 1.
 - **`busy`** → the wait timeout elapsed without acquiring — a wedged selection
   in another `/dispatch`. The script's **stderr** carries a one-line diagnostic
-  naming the wait duration and the holding PID; report those and **stop** — run
+  naming the wait duration and the holding sessionId; report those and **stop** — run
   no sync, no health gate, no sweep, no selection, and no phase skill.
 
 ### Releasing the lock
@@ -81,12 +83,14 @@ stopped), and the selection scan skips worktree'd targets — no other tick can
 select the same issue. Later steps cross-reference *Releasing the lock* rather
 than repeating this command.
 
-The lock is scoped to selection and self-healing. The recorded PID is
-session-keyed: if a tick dies before its explicit release, the next tick detects
-the stale record and proceeds, and a `--wait` waiter re-checks holder liveness
-every poll, so it reclaims a dead holder's lock automatically. Same-session
-re-entry (e.g. after a context clear that re-invokes `/dispatch`) re-acquires
-cleanly because the recorded PID matches the re-entering session's own PID.
+The lock is scoped to selection and self-healing. The recorded sessionId
+(`CLAUDE_CODE_SESSION_ID`) outlives any single Bash call within a tick: if a
+tick dies before its explicit release, the next tick detects that the recorded
+sessionId no longer appears in `claude agents --json` and reclaims the lock,
+and a `--wait` waiter re-checks holder liveness every poll, so a dead holder's
+lock is reclaimed automatically. Same-session re-entry (e.g. after a context
+clear that re-invokes `/dispatch`) re-acquires cleanly because the recorded
+sessionId matches the re-entering session's own `CLAUDE_CODE_SESSION_ID`.
 
 ## 1. Sync local main with `origin/main`
 
