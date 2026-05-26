@@ -170,12 +170,14 @@ continue to target selection.
   HEALTH=$(.claude/skills/dispatch/scripts/dispatch-select-target --health-only)
   ```
 
-  - **`main-broken <sha>`** → see the **main-broken handler** at the end of
-    this step. Do **not** run the sweep or selection.
-  - **`jit-reminder <repo> <num> <project> <item-id>`** → see the
-    **jit-reminder handler** at the end of this step. Do **not** run the sweep
-    or selection — the JIT scan precedes the main-broken health gate, so a jit
-    reminder is surfaced even when `origin/main` is red.
+  - **`main-broken <sha>`** → invoke `/dispatch-diagnose-main <sha>`, then
+    proceed to Step 9 (early-stop). Do **not** run the sweep or selection.
+  - **`jit-reminder <repo> <num> <project> <item-id>`** → invoke
+    `/dispatch-jit-reminder <repo> <num> <project> <item-id>`, then stop the
+    tick directly (the skill is a Step 9 bypass — its user-visible summary
+    must stay open). Do **not** run the sweep or selection — the JIT scan
+    precedes the main-broken health gate, so a jit reminder is surfaced even
+    when `origin/main` is red.
   - **`ok`** → run the sweep (also needs `dangerouslyDisableSandbox: true` for
     the `/proc` walk):
 
@@ -193,13 +195,10 @@ continue to target selection.
       and open-blocker gates have already been enforced by `dispatch-sweep`
       itself before emitting this directive.)
     - **Non-zero exit, stderr `cleanup-unknown:<path>`** → the sweep found a
-      worktree with no open PR and no inferable issue number. Use
-      `AskUserQuestion` to ask whether to delete `<path>` — its history is
-      only local. This is the only sweep path that can destroy
-      potentially-unmerged code.
-      - **Yes** → run `dispatch-sweep --cleanup-unknown <path>`, then re-run
-        the default `dispatch-sweep`. Loop until it exits 0.
-      - **No** → fall through to `dispatch-select-target`.
+      worktree with no open PR and no inferable issue number. This is the
+      only sweep path that can destroy potentially-unmerged code. Invoke
+      `/dispatch-cleanup-unknown <path>`, then fall through to
+      `dispatch-select-target` either way.
     - **Any other non-zero exit** → log the stderr contents to the conversation
       as a diagnostic, then fall through to `dispatch-select-target` as
       defense-in-depth. The sweep is best-effort; a malformed invocation or
@@ -225,11 +224,14 @@ continue to target selection.
   - `empty` — nothing eligible
   - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check. The
     pre-sweep gate above normally catches this first; this is the same gate
-    re-run as defense-in-depth. See the **main-broken handler** below.
+    re-run as defense-in-depth. Invoke `/dispatch-diagnose-main <sha>`, then
+    proceed to Step 9 (early-stop).
   - `jit-reminder <repo> <num> <project> <item-id>` — a JIT issue due for a
     reminder. The `--health-only` call earlier in this step normally catches
-    this first (the JIT scan is deterministic); this is the same scan re-run as
-    defense-in-depth. See the **jit-reminder handler** below.
+    this first (the JIT scan is deterministic); this is the same scan re-run
+    as defense-in-depth. Invoke
+    `/dispatch-jit-reminder <repo> <num> <project> <item-id>`, then stop the
+    tick directly (Step 9 bypass — see the `/dispatch-jit-reminder` skill).
 
   An **explicit issue argument overrides current-worktree detection** — the selection
   script, and therefore its current-worktree detection, runs only when no argument is
@@ -262,66 +264,6 @@ continue to target selection.
 
   On `empty` → release the lock (see *Releasing the lock*), report that
   the queue is empty, then **proceed to Step 9** (early-stop).
-
-  **main-broken handler.** `origin/main` itself is red, so no new work is safe
-  to start. Do **not** run the sweep, create a worktree, branch, or phase skill.
-  Diagnose main instead: enumerate the failing checks on `<sha>` by aggregating
-  `gh run list --branch main` and
-  `gh api repos/{owner}/{repo}/commits/<sha>/check-runs`. For a failing workflow
-  run, fetch its logs with `gh run view <databaseId> --log-failed`; for a failing
-  CodeQL check-run (which has no workflow-run id), open its `details_url` from
-  the check-runs response. These diagnostic `gh` calls run before the stop —
-  keep them. Then, as the action immediately before the final report, release
-  the lock (see *Releasing the lock*); summarize the likely cause, report it,
-  then **proceed to Step 9** (early-stop). Once a PR that fixes main exists the
-  normal ladder picks it up
-  (verify/ready) — this gate only blocks starting new, unrelated work.
-
-  **jit-reminder handler.** The JIT scan selected `<num>` in `<repo>` as the
-  earliest-due open JIT issue. Claim it, summarize it for the user, and stop —
-  no worktree, no PR, no phase skill, no leaf trace. Steps 4, 5, and 6-7 are all
-  skipped.
-
-  1. **Claim the issue inside the scoped lock window.** The lock is still held
-     from Step 0 — the reminder path is a Step 3 stop path and never reaches
-     Step 5's proceed-path release, so the claim runs under the lock, exactly as
-     the JIT engine does. Resolve the project's In-Progress status value from
-     local config, then write it:
-
-     ```bash
-     IN_PROGRESS=$(.claude/skills/dispatch/scripts/dispatch-config-load projects \
-       | jq -r --arg key "<project>" \
-         '.projects[] | select(.key == $key) | .statusInProgress')
-     .claude/skills/dispatch/scripts/dispatch-project-status-write \
-       <project> "https://github.com/<repo>/issues/<num>" "$IN_PROGRESS"
-     ```
-
-     The `dispatch-project-status-write` call needs `dangerouslyDisableSandbox:
-     true` — it calls `gh` (see `.claude/rules/sandbox.md`).
-  2. **Release the lock.** This is a Steps 1-5 stop path — release the lock (see
-     *Releasing the lock*) immediately after the claim, before the summary.
-  3. **Summarize the issue for the user.** Fetch the issue
-     (`dangerouslyDisableSandbox: true` — `gh` needs network):
-
-     ```bash
-     gh issue view <num> --repo <repo> --json number,title,body
-     ```
-
-     Present its number, title, and body to the user as a human-readable
-     reminder, framed as the most-overdue / soonest-due JIT reminder the scan
-     surfaced. The `jit-reminder` line carries no due timestamp — do not state a
-     precise computed due time.
-  4. **Stop the tick — bypass Step 9.** The handler stops directly without
-     routing through Step 9: the summary just printed must stay open in the
-     transcript for a human to read, and Step 9's terminal disposition would
-     self-close the job and hide it. The `In Progress` status the claim wrote
-     stops a later `/dispatch` tick from re-selecting this issue.
-
-  A `jit-reminder` run is a **jit summary session** — an office-hours session
-  (#755): the summary is surfaced to the user for a human to read, not consumed
-  as autonomous dispatch-chain work. #755's two-queue infrastructure is not yet
-  built, so this handler is that documented intent plus the mechanical claim →
-  release → summarize → stop branch above.
 
 ## 4. Trace to an Open Leaf
 
@@ -601,10 +543,11 @@ job ends. A job that just finished a phase passes the baton to a fresh
 `/dispatch` job and self-closes; that self-perpetuating chain, re-seeded by the
 #725 heartbeat, is what advances the workflow.
 
-The one documented exception is the **jit-reminder handler** in Step 3: by
-design it bypasses Step 9 and stops directly, because its user-visible summary
-must stay open in the transcript for a human to read — self-closing the job
-would hide it. See the jit summary session note at the end of Step 3.
+The one documented exception is the **jit-reminder** outcome in Step 3,
+handled by the `/dispatch-jit-reminder` skill: by design it bypasses Step 9
+and stops directly, because its user-visible summary must stay open in the
+transcript for a human to read — self-closing the job would hide it. See the
+jit summary session note in the `/dispatch-jit-reminder` skill.
 
 Each termination reaches Step 9 with one of two dispositions, named by the step
 that routed here:
