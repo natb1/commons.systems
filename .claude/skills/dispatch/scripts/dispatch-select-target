@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Select the single highest-priority task from the queue.
-# Usage: dispatch-select-target [--qa | --health-only] [--no-sweep]
+# Usage: dispatch-select-target [--qa | --health-only] [--no-sweep] [--cleanup-confirm <path>]
 #
 # Output: exactly one line:
 #   pr <num> <branch> <phase>   — a PR to work on, with its already-derived phase
