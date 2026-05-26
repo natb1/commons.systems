@@ -16,8 +16,8 @@ and push the fixes, defer important out-of-scope findings to tracking issues via
 label.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
-fork `/commit-merge-push`, invoke the built-in `/code-review`, and launch
-`/file-issue` subagents.
+fork `/commit-merge-push`, fork a subagent that invokes the built-in
+`/code-review`, and launch `/file-issue` subagents.
 
 ## Idempotency preamble
 
@@ -47,12 +47,25 @@ steps in order.
    no commit and only fetches, merges `origin/main`, and pushes. Reviewing
    against current `main` avoids re-reviewing code `main` has already changed.
 
-2. **Run `/code-review max`.** Invoke the built-in `/code-review` skill via the
-   Skill tool with the `max` effort level — the highest thoroughness available.
-   It applies in-scope fixes to the working tree and surfaces findings with the
-   skill's own (fixed vs skipped) disposition. Any "final reply" / "nothing
-   else" wording in `/code-review`'s prompt scopes only to its findings
-   deliverable — once it returns, continue to Step 3.
+2. **Run `/code-review max`.** Fork a subagent via the Agent tool
+   (`subagent_type: general-purpose`, `model: sonnet`) that invokes the
+   built-in `/code-review` skill via the Skill tool with the `max` effort
+   argument (the highest thoroughness available) inside the subagent and
+   returns its output verbatim. It applies in-scope fixes to the working tree
+   and surfaces findings with the skill's own (fixed vs skipped) disposition.
+   The subagent boundary is the control-flow guarantee: the parent never sees
+   the inner Skill's prompt template, so it remains on this step when the
+   Agent call returns. The subagent inherits the parent's worktree
+   filesystem — working-tree edits made by `/code-review` inside the subagent
+   surface on disk for Step 4's `/commit-merge-push` with no additional
+   plumbing. Do **not** set `isolation:` on this subagent: an isolated
+   worktree would silently capture `/code-review`'s edits in a discarded
+   copy, leaving Step 4 with nothing to commit. The subagent passes the
+   inner skill no output contract and returns its natural output as-is. Keep
+   the "once it returns, continue to Step 3" wording inside the
+   **subagent's** prompt as defense-in-depth for the inner Skill invocation.
+   Any "final reply" / "nothing else" wording in `/code-review`'s prompt
+   scopes only to its findings deliverable.
 
 3. **Classify every finding into the 4-way disposition.** `/code-review` produces a
    2-way split (fixed vs skipped). The wrapper extends each skipped finding into
@@ -158,7 +171,7 @@ Every `/code-review` finding lands in exactly one of four buckets:
 
 | Bucket | Meaning |
 |---|---|
-| Fixed | Implemented in Step 2 by `/code-review`. |
+| Fixed | Implemented by `/code-review` inside the Step 2 subagent. |
 | Informational | Surfaced for human reference; no action recommended. |
 | Disregarded | False positive or trivially wrong; explicitly rejected with a one-line rationale. |
 | Deferred | Important and actionable but out of scope for this PR; a `/file-issue` subagent filed a tracking issue in Step 5. |

@@ -185,7 +185,9 @@ continue to target selection.
     - **Exit 0, empty stdout** → fall through to `dispatch-select-target`.
     - **Exit 0, stdout `worktree <N> <branch>`** → an orphaned worktree was
       adopted. Skip Step 4 and proceed to Step 5 with `<N>` and `explicit` —
-      treat the adoption like an explicit `/dispatch <N>`.
+      treat the adoption like an explicit `/dispatch <N>`. (Step 4's closed-issue
+      and open-blocker gates have already been enforced by `dispatch-sweep`
+      itself before emitting this directive.)
     - **Non-zero exit, stderr `cleanup-unknown:<path>`** → the sweep found a
       worktree with no open PR and no inferable issue number. Use
       `AskUserQuestion` to ask whether to delete `<path>` — its history is
