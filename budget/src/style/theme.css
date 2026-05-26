@@ -684,3 +684,22 @@ svg [aria-label="tip"] text { fill: #222; }
 .variance-neutral {
   opacity: 0.6;
 }
+
+/* --- Reconcile suggested-cleared hints --- */
+
+.reconcile-suggested-badge {
+  display: inline-block;
+  font-size: 0.7em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  color: var(--fg);
+  opacity: 0.7;
+  margin-left: 0.5em;
+  vertical-align: middle;
+}
+
+.reconcile-suggested .reconcile-cleared-checkbox {
+  outline: 2px dotted currentColor;
+  outline-offset: 2px;
+}
