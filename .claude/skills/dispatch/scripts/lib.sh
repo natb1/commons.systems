@@ -132,6 +132,7 @@ ensure_deps() {
         esac
         attempt=$((attempt + 1))
       done
+      echo "ensure_deps: npm ci failed after 3 attempts" >&2
       exit 1
     )
   fi
