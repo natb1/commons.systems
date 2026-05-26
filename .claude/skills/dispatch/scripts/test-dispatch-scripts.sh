@@ -2493,6 +2493,7 @@ sweep_setup() {
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
+  cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
   # Default empty gh output (each test may overwrite).
@@ -2509,6 +2510,25 @@ args="$*"
 case "$args" in
   "pr list --state all --json number,headRefName,state --limit 200")
     cat "$STUB_DIR/gh-pr-list-all.json"
+    ;;
+  issue\ view\ *\ --json\ state\ -q\ .state)
+    num=$(echo "$args" | awk '{print $3}')
+    f="$STUB_DIR/issue-state-${num}.txt"
+    if [[ -f "$f" ]]; then
+      cat "$f"
+    else
+      echo "OPEN"   # default: not closed (allows adoption)
+    fi
+    ;;
+  api\ */dependencies/blocked_by)
+    path=$(echo "$args" | awk '{print $2}')
+    num=$(echo "$path" | grep -oE '[0-9]+' | tail -1)
+    f="$STUB_DIR/blockers-${num}.json"
+    if [[ -f "$f" ]]; then
+      cat "$f"
+    else
+      echo "[]"     # default: no blockers (allows adoption)
+    fi
     ;;
   *)
     echo "gh sweep stub: unknown invocation: $args" >&2
@@ -2899,6 +2919,91 @@ if [[ "$err" == *"requires a path argument"* ]]; then
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: stderr explains missing path argument"
   echo "    stderr: $err"
+fi
+sweep_teardown
+
+# --- Test 9: open issue with no blockers → orphan is adopted ------------------
+
+echo "Test: open issue with no blockers is adopted (gates pass)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/60-open-no-blockers"
+sweep_register_wt "$WT_PATH" "60-open-no-blockers"
+KEY=$(sweep_path_key "$WT_PATH")
+echo "1500000001" > "$STUB_DIR/headct${KEY}.txt"
+# No per-test fixtures: gh shim defaults to OPEN state + [] blockers.
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "open-no-blockers sweep exits 0" "0" "$rc"
+assert_eq "open-no-blockers orphan adopted" "worktree 60 60-open-no-blockers" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "ADOPT_ORPHAN: '$WT_PATH' branch=60-open-no-blockers issue=60" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN log line for open-no-blockers"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN log line for open-no-blockers"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+sweep_teardown
+
+# --- Test 10: open issue with open blocker → orphan is skipped ----------------
+
+echo "Test: open issue with an open blocker is skipped"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/61-blocked"
+sweep_register_wt "$WT_PATH" "61-blocked"
+KEY=$(sweep_path_key "$WT_PATH")
+echo "1500000002" > "$STUB_DIR/headct${KEY}.txt"
+# Write a blockers fixture with one open-blocker entry.
+printf '[{"number":999,"state":"OPEN","title":"Blocking issue"}]\n' \
+  > "$STUB_DIR/blockers-61.json"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "blocked-orphan sweep exits 0" "0" "$rc"
+assert_eq "blocked-orphan stdout is empty" "" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_ORPHAN_BLOCKED: '$WT_PATH' branch=61-blocked issue=61 blockers=1" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_BLOCKED log line for 61-blocked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_BLOCKED log line for 61-blocked"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ADOPT_ORPHAN" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN must NOT appear when blocked"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN absent for blocked orphan"
+fi
+sweep_teardown
+
+# --- Test 11: closed issue → orphan is skipped --------------------------------
+
+echo "Test: closed issue orphan is skipped"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/62-closed"
+sweep_register_wt "$WT_PATH" "62-closed"
+KEY=$(sweep_path_key "$WT_PATH")
+echo "1500000003" > "$STUB_DIR/headct${KEY}.txt"
+# Write the issue-state fixture for issue #62.
+printf 'CLOSED\n' > "$STUB_DIR/issue-state-62.txt"
+# No blockers fixture needed: closed-issue gate runs first.
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "closed-issue sweep exits 0" "0" "$rc"
+assert_eq "closed-issue stdout is empty" "" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_ORPHAN_CLOSED_ISSUE: '$WT_PATH' branch=62-closed issue=62" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_CLOSED_ISSUE log line for 62-closed"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_CLOSED_ISSUE log line for 62-closed"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ADOPT_ORPHAN" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN must NOT appear when issue is closed"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN absent for closed-issue orphan"
 fi
 sweep_teardown
 
