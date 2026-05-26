@@ -2,8 +2,9 @@
 # WorktreeRemove hook: tear down a worktree created by worktree-create.sh.
 # Symmetric with WorktreeCreate (which performs creation); this performs removal.
 #
-# Removes the worktree ONLY if "in sync": clean working tree AND all commits
-# pushed. Otherwise the worktree is kept. No PR-state check.
+# Removes the worktree ONLY if "in sync" (clean working tree AND all commits
+# pushed) AND no live Claude session is running in it. Otherwise the worktree
+# is kept. No PR-state check.
 #
 # CONTRACT: WorktreeRemove has no decision control — exit code and stdout are
 # ignored, failures surface only in debug mode. A broken hook fails SILENTLY,
