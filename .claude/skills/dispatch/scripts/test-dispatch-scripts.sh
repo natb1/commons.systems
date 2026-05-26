@@ -1970,6 +1970,38 @@ assert_eq "second unknown orphan propagated to stdout" \
 assert_eq "halting on next unknown orphan exits 0" "0" "$rc"
 teardown
 
+# SR9. --cleanup-confirm <path> with a failing dispatch-sweep --cleanup-unknown
+#      call propagates the non-zero exit code (set -e) instead of silently
+#      falling through to the ladder. Proves cleanup failures are fail-loud per
+#      the contract documented at the top of the sweep+route block.
+echo "Test: --cleanup-confirm with failing cleanup propagates non-zero exit"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "dispatch-sweep: invalid cleanup path" >&2
+exit 2
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/bad" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "cleanup failure propagates exit 2" "2" "$rc"
+assert_eq "cleanup failure emits no stdout" "" "$result"
+teardown
+
+# SR10. --cleanup-confirm and --no-sweep are mutually exclusive: combining them
+#       would silently skip the post-cleanup sweep, violating the "resumes
+#       selection" contract.
+echo "Test: --cleanup-confirm + --no-sweep is rejected"
+setup
+if err=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm /tmp/x --no-sweep 2>&1 >/dev/null); then rc=0; else rc=$?; fi
+assert_eq "combining the flags exits 1" "1" "$rc"
+assert_eq "stderr names both flags" \
+  "error: --cleanup-confirm and --no-sweep are mutually exclusive" "$err"
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================
