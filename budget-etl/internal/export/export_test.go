@@ -800,6 +800,15 @@ func TestJournalLegRoundTrip(t *testing.T) {
 	if got2.StatementItemID != nil {
 		t.Errorf("statementItemId = %v, want nil", got2.StatementItemID)
 	}
+	if got2.Cleared {
+		t.Errorf("cleared = true, want false")
+	}
+	if got2.Debit != 0 {
+		t.Errorf("debit = %v, want 0", got2.Debit)
+	}
+	if got2.Credit != 100.00 {
+		t.Errorf("credit = %v, want 100.00", got2.Credit)
+	}
 }
 
 func TestAccountRoundTrip(t *testing.T) {
