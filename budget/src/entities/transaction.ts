@@ -39,6 +39,7 @@ export interface SeedTransaction {
   readonly timestampMs: number | null;
   readonly statementId: string | null;
   readonly statementItemId: string | null;
+  readonly journalEntryId: string | null;
   readonly normalizedId: string | null;
   readonly normalizedPrimary: boolean;
   readonly normalizedDescription: string | null;
@@ -290,6 +291,7 @@ export function serializeSeedTransaction(raw: TransactionSeedData, id: string): 
     timestampMs: toMs(raw.timestamp),
     statementId: raw.statementId ?? null,
     statementItemId: raw.statementItemId ?? null,
+    journalEntryId: raw.journalEntryId ?? null,
     normalizedId: raw.normalizedId,
     normalizedPrimary: raw.normalizedPrimary,
     normalizedDescription: raw.normalizedDescription,
