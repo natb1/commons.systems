@@ -1287,6 +1287,25 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
 assert_eq "--qa skips QA PR closing a blocked issue → newer QA PR" "pr 20 20-clear-qa" "$result"
 teardown
 
+# 34. A PR closing multiple issues where any one is blocked_by an open issue is
+#     skipped — the inner loop must check ALL closing issues, not just the first.
+echo "Test: multi-issue PR — any closing issue blocked → PR skipped"
+setup
+# PR 10 closes issues 100 (unblocked) and 101 (blocked by open 999); PR 20 closes 200 (unblocked).
+UNION='['
+UNION+="$(make_pr_union 10 "10-multi-blocked-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100},{"number":101}]')"','
+UNION+="$(make_pr_union 20 "20-clear-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+# Issue 100: no blockers. Issue 101: blocked by open 999.
+printf '[]\n' > "$STUB_DIR/blockers-100.json"
+printf '[{"number":999,"state":"open"}]\n' > "$STUB_DIR/blockers-101.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "multi-issue PR with later blocked issue → skipped → next PR chosen" "pr 20 20-clear-pr verify" "$result"
+teardown
+
 # --- help-wanted leaf reachability (issue #715) -----------------------------
 # dispatch-select-target runs dispatch-trace-leaf <N> queue for each help-wanted
 # candidate and skips any whose subtree is fully worktree-conflicted (trace
@@ -1294,7 +1313,7 @@ teardown
 # branch 5500-blocked, which does NOT prefix-match 55-, so issue 55 is never
 # falsely flagged as directly worktree'd.
 
-# 34. A help-wanted issue with a fully worktree-conflicted subtree is skipped;
+# 35. A help-wanted issue with a fully worktree-conflicted subtree is skipped;
 #     the next help-wanted issue is selected.
 echo "Test: subtree-blocked help-wanted issue skipped → next issue chosen"
 setup
@@ -1312,7 +1331,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55 skipped → issue 66 chosen" "issue 66" "$result"
 teardown
 
-# 35. Every help-wanted issue is subtree-blocked → falls through to a QA PR.
+# 36. Every help-wanted issue is subtree-blocked → falls through to a QA PR.
 echo "Test: all help-wanted issues subtree-blocked → QA PR selected"
 setup
 UNION='['"$(make_pr_union 20 "20-qa" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
@@ -1327,7 +1346,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55 → falls through to QA PR" "pr 20 20-qa qa" "$result"
 teardown
 
-# 36. Every help-wanted issue is subtree-blocked and no QA PR → empty.
+# 37. Every help-wanted issue is subtree-blocked and no QA PR → empty.
 echo "Test: all help-wanted issues subtree-blocked, no QA PR → empty"
 setup
 setup_union_pr_list '[]'
@@ -1341,7 +1360,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55, no QA PR → empty" "empty" "$result"
 teardown
 
-# 37. A help-wanted issue with a startable open leaf emits the resolved leaf
+# 38. A help-wanted issue with a startable open leaf emits the resolved leaf
 #     number (which differs from the top-level issue).
 echo "Test: help-wanted issue resolves to its startable leaf"
 setup
@@ -1356,7 +1375,7 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "help-wanted issue 55 resolves to leaf 5500" "issue 5500" "$result"
 teardown
 
-# 38. dispatch-trace-leaf exit 1 (usage error) is a hard failure, never a skip.
+# 39. dispatch-trace-leaf exit 1 (usage error) is a hard failure, never a skip.
 echo "Test: dispatch-trace-leaf exit 1 → dispatch-select-target hard-fails"
 setup
 setup_union_pr_list '[]'
