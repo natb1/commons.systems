@@ -194,6 +194,11 @@ export function hydrateAccountsReconcile(container: HTMLElement): void {
 }
 
 async function handleReconcileSubmit(container: HTMLElement, dialog: HTMLDialogElement): Promise<void> {
+  const submitButton = container.querySelector<HTMLButtonElement>("#reconcile-submit");
+  // Re-entrancy guard: drop a queued second click that arrived before the
+  // disable below took effect.
+  if (submitButton?.disabled) return;
+
   const bankInput = container.querySelector<HTMLInputElement>("#reconcile-bank-balance-input");
   const differenceDisplay = container.querySelector<HTMLElement>("#reconcile-difference-display");
   if (!bankInput) throw new Error("#reconcile-bank-balance-input not found");
@@ -211,7 +216,8 @@ async function handleReconcileSubmit(container: HTMLElement, dialog: HTMLDialogE
 
   if (!balancesMatch(bankBalance, cleared)) {
     // Mismatch: surface the signed difference (cleared − bank) and reveal the
-    // mismatch-resolution actions while keeping the dialog open.
+    // mismatch-resolution actions while keeping the dialog open. Do NOT disable
+    // the submit button — the user must be able to edit the input and resubmit.
     const difference = cleared - bankBalance;
     if (differenceDisplay) {
       differenceDisplay.textContent = `Difference: ${formatCurrency(difference)}`;
@@ -221,11 +227,16 @@ async function handleReconcileSubmit(container: HTMLElement, dialog: HTMLDialogE
     return;
   }
 
-  await finalizeReconciliation(container, dialog, {
-    adjustment: 0,
-    adjustmentEntryId: null,
-    extraLegIds: [],
-  });
+  if (submitButton) submitButton.disabled = true;
+  try {
+    await finalizeReconciliation(container, dialog, {
+      adjustment: 0,
+      adjustmentEntryId: null,
+      extraLegIds: [],
+    });
+  } finally {
+    if (submitButton) submitButton.disabled = false;
+  }
 }
 
 /**
@@ -283,6 +294,7 @@ async function handleCreateAdjustment(container: HTMLElement, dialog: HTMLDialog
   }
 
   if (createButton) createButton.disabled = true;
+  let entryCreated = false;
   try {
     const { entry, legs } = buildAdjustmentEntry({
       difference,
@@ -293,10 +305,14 @@ async function handleCreateAdjustment(container: HTMLElement, dialog: HTMLDialog
       throughDateMs: periodEndMs(query.period),
     });
     const { entryId, legIds } = await getActiveDataSource().createJournalEntry(entry, legs);
+    // Both legs (reconciling + suspense) must be stamped as reconciled. Once
+    // the entry exists, keep the button disabled regardless of what
+    // finalizeReconciliation does — preventing duplicate orphan entries on retry.
+    entryCreated = true;
     await finalizeReconciliation(container, dialog, {
       adjustment: difference,
       adjustmentEntryId: entryId,
-      extraLegIds: [legIds[0]],
+      extraLegIds: [...legIds],
     });
   } catch (error) {
     if (deferProgrammerError(error)) return;
@@ -305,7 +321,9 @@ async function handleCreateAdjustment(container: HTMLElement, dialog: HTMLDialog
     }
     logError(error, { operation: "reconcile-create-adjustment" });
   } finally {
-    if (createButton) createButton.disabled = false;
+    // Only re-enable if the journal entry was never written — once an entry
+    // exists, disallow retry to prevent orphan accumulation.
+    if (!entryCreated && createButton) createButton.disabled = false;
   }
 }
 
