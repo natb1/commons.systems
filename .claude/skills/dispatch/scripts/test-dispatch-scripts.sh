@@ -1679,6 +1679,32 @@ assert_eq "leading-zero duration is base-10 → earlier-due jit-y wins" \
   "jit-reminder natb1/household 20 household PVTI_020" "$result"
 teardown
 
+# JS10. parse_duration rejects an invalid duration string → dispatch-select-target
+#       exits non-zero before emitting any candidate.
+echo "Test: JIT scan — parse_duration rejects invalid duration"
+setup
+printf '%s\n' "$JIT_PROJECTS_JSON" > "$DISPATCH_CONFIG_DIR/projects.json"
+cat > "$DISPATCH_CONFIG_DIR/jit.json" <<'EOF'
+{ "jits": [
+  { "key": "bad-duration", "repo": "natb1/household", "label": "jit:bad-duration",
+    "title": "Bad duration", "body": "Has an invalid dueAfterClose.",
+    "project": "household", "remindAfterClose": "12h", "dueAfterClose": "24" }
+] }
+EOF
+# Open issue exists so the loop body runs; closed issue exists so max_closed is
+# non-empty and parse_duration is reached immediately (no cold-start branch).
+printf '[{"number":99,"createdAt":"2026-05-01T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-open-jit_bad-duration.json"
+printf '[{"closedAt":"2026-05-10T00:00:00Z"}]\n' \
+  > "$STUB_DIR/jit-issues-closed-jit_bad-duration.json"
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+[[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
+assert_eq "invalid duration → exits non-zero" "yes" "$rc_nonzero"
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================

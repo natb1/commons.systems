@@ -187,6 +187,8 @@ jit_scan() {
     local due
     if [[ -n "$due_after_close" ]]; then
       local closed_json max_closed offset anchor
+      # --limit 100 is safe: recurring JITs are single-instance, so the 100
+      # most-recently-created closed issues contain the most-recently-closed one.
       closed_json=$(gh issue list --repo "$repo" --label "$label" --state closed --limit 100 --json closedAt)
       max_closed=$(printf '%s' "$closed_json" | jq -r 'map(.closedAt) | max // empty')
       offset=$(parse_duration "$due_after_close")
@@ -226,6 +228,10 @@ jit_scan() {
     issue_url="https://github.com/$repo/issues/$open_num"
     status_json=$("$SCRIPT_DIR/dispatch-project-status-read" "$project" "$issue_url")
     item_id=$(printf '%s' "$status_json" | jq -r '.itemId')
+    if [[ -z "$item_id" || "$item_id" == "null" ]]; then
+      echo "error: jit '$key' issue #$open_num is not in project '$project'" >&2
+      exit 1
+    fi
     status=$(printf '%s' "$status_json" | jq -r '.status // ""')
     if [[ "$status" == "$status_in_progress" || "$status" == "$status_done" ]]; then
       continue
@@ -236,6 +242,9 @@ jit_scan() {
 
   [[ ${#candidates[@]} -eq 0 ]] && return 0
   local winner
+  # Earliest-due survivor wins regardless of whether due is in the past — JIT
+  # is a priority signal, not a gate. Cadence is set so issues are filed
+  # close to their due time; the scan orders, the operator decides.
   winner=$(printf '%s\n' "${candidates[@]}" | sort -n -k1,1 | head -1 | cut -f2-)
   echo "jit-reminder $winner"
 }
