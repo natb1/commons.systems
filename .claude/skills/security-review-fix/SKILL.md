@@ -17,8 +17,8 @@ This is the workflow's **terminal actionable phase** — it marks the PR ready
 itself, so there is no separate `ready` phase after it.
 
 This skill runs in the **caller's thread** — it has no `context:` key — so it can
-fork `/commit-merge-push`, invoke the built-in `/security-review`, and launch
-implementation subagents.
+fork `/commit-merge-push`, fork a subagent that invokes the built-in
+`/security-review`, and launch implementation subagents.
 
 ## Idempotency preamble
 
@@ -44,12 +44,21 @@ steps in order.
    current `main` avoids re-reviewing code `main` has already changed.
 
 2. **Gather findings from both sources.** The finding set carried into Step 3
-   combines two sources, gathered **independently**:
+   combines two sources, gathered **independently** — issue the (a) Agent
+   call and the (b) `gh api` fetch in the same message so they overlap:
 
-   **(a) `/security-review`.** Invoke the built-in `/security-review` skill via
-   the Skill tool — the generic security review. It produces findings; it applies
-   no fixes. Any "final reply" / "nothing else" wording in `/security-review`'s
-   prompt scopes only to its findings deliverable — once it returns, continue.
+   **(a) `/security-review`.** Fork a subagent via the Agent tool
+   (`subagent_type: general-purpose`, `model: sonnet`) that invokes the
+   built-in `/security-review` skill via the Skill tool inside the subagent
+   and returns its output verbatim — the generic security review. It produces
+   findings; it applies no fixes. The subagent boundary is the control-flow
+   guarantee: the parent never sees the inner Skill's prompt template, so it
+   remains on this step when the Agent call returns. The subagent passes the
+   inner skill no output contract and returns its natural output as-is. Keep
+   the "once it returns, continue" wording inside the **subagent's** prompt
+   as defense-in-depth for the inner Skill invocation. Any "final reply" /
+   "nothing else" wording in `/security-review`'s prompt scopes only to its
+   findings deliverable.
 
    **(b) CodeQL code-scanning alerts.** Fetch the PR ref's open code-scanning
    alerts from GitHub Advanced Security (use `dangerouslyDisableSandbox: true` —
