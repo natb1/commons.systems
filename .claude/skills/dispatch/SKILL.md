@@ -307,8 +307,11 @@ continue to target selection.
      reminder, framed as the most-overdue / soonest-due JIT reminder the scan
      surfaced. The `jit-reminder` line carries no due timestamp — do not state a
      precise computed due time.
-  4. **Stop the tick.** The `In Progress` status the claim just wrote stops a
-     later `/dispatch` tick from re-selecting this issue.
+  4. **Stop the tick — bypass Step 9.** The handler stops directly without
+     routing through Step 9: the summary just printed must stay open in the
+     transcript for a human to read, and Step 9's terminal disposition would
+     self-close the job and hide it. The `In Progress` status the claim wrote
+     stops a later `/dispatch` tick from re-selecting this issue.
 
   A `jit-reminder` run is a **jit summary session** — an office-hours session
   (#755): the summary is surfaced to the user for a human to read, not consumed
@@ -593,6 +596,11 @@ Every Step 0–8 termination routes here — Step 9 is the single way a `/dispat
 job ends. A job that just finished a phase passes the baton to a fresh
 `/dispatch` job and self-closes; that self-perpetuating chain, re-seeded by the
 #725 heartbeat, is what advances the workflow.
+
+The one documented exception is the **jit-reminder handler** in Step 3: by
+design it bypasses Step 9 and stops directly, because its user-visible summary
+must stay open in the transcript for a human to read — self-closing the job
+would hide it. See the jit summary session note at the end of Step 3.
 
 Each termination reaches Step 9 with one of two dispositions, named by the step
 that routed here:
