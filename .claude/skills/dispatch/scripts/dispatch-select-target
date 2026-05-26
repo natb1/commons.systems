@@ -9,19 +9,28 @@
 #   empty                       — nothing eligible
 #   worktree <N> <branch>       — the current worktree's own open issue (short-circuits the queue scan)
 #   worktree-closed <N> <branch>— the current worktree's issue is closed or unknown
+#   jit-reminder <repo> <num> <project> <item-id>
+#                               — a configured JIT issue due for a reminder.
+#                                 Emitted before the main-broken gate, ahead of
+#                                 every PR/issue tier; inert when no local
+#                                 dispatch.config/jit.json is present.
 #   main-broken <sha>           — origin/main's HEAD CI has a failing check; no task selected
 #
 # Default mode runs a top-priority origin/main CI health gate before the ladder:
 # every queueable task builds on origin/main, so a failing check on main's HEAD
 # short-circuits the scan to "main-broken <sha>" and selects no task.
 #
-# --health-only mode runs the pre-ladder bypasses (current-worktree continuation)
-# and the origin/main CI health gate, then exits — no queue scan, no PR/issue
-# fetches. /dispatch SKILL.md uses it to gate the sweep on main's CI health.
+# --health-only mode runs the pre-ladder bypasses (current-worktree continuation),
+# the JIT scan, and the origin/main CI health gate, then exits — no queue scan,
+# no PR/issue fetches. /dispatch SKILL.md uses it to gate the sweep on main's CI
+# health.
 # Output is exactly one line:
 #   ok                          — safe to proceed (either main is healthy or the
 #                                 current branch is an <N>-* worktree that
 #                                 bypasses the gate)
+#   jit-reminder <repo> <num> <project> <item-id>
+#                               — a configured JIT issue due for a reminder;
+#                                 emitted before the main-broken gate
 #   main-broken <sha>           — origin/main's HEAD CI has a failing check
 #
 # --qa mode omits the <phase> field — there it is always "qa":
@@ -119,9 +128,137 @@ on_worktree_branch() {
   [[ "$CURRENT_BRANCH" =~ ^([0-9]+)- ]]
 }
 
+# Convert a duration string ("12h", "7d", "30m") to whole seconds. Units:
+# s second, m minute, h hour, d day, w week. Any other form is a config error.
+parse_duration() {
+  local spec="$1"
+  if [[ ! "$spec" =~ ^([0-9]+)([smhdw])$ ]]; then
+    echo "error: invalid duration '$spec' (expected <integer><s|m|h|d|w>)" >&2
+    exit 1
+  fi
+  # 10# forces base-10: bash arithmetic reads a leading-zero literal as octal,
+  # so an unforced "010h" would compute as 8h and "08h"/"09d" would hard-error.
+  local n=$(( 10#${BASH_REMATCH[1]} )) unit="${BASH_REMATCH[2]}"
+  case "$unit" in
+    s) echo "$n" ;;
+    m) echo "$(( n * 60 ))" ;;
+    h) echo "$(( n * 3600 ))" ;;
+    d) echo "$(( n * 86400 ))" ;;
+    w) echo "$(( n * 604800 ))" ;;
+  esac
+}
+
+# Scan configured JITs and, if any open JIT issue is due, print the most
+# pressing one as: jit-reminder <repo> <num> <project> <item-id>. Prints
+# nothing when no config is present or no JIT is eligible. Emitted before the
+# main-broken health gate so a reminder surfaces even when origin/main is red.
+jit_scan() {
+  local jit_config projects_config jits_jsonl
+  jit_config=$("$SCRIPT_DIR/dispatch-config-load" jit)
+  [[ "$jit_config" == "no-config" ]] && return 0
+
+  projects_config=$("$SCRIPT_DIR/dispatch-config-load" projects)
+  if [[ "$projects_config" == "no-config" ]]; then
+    echo "error: jit.json is present but projects.json is absent; a JIT references a project key" >&2
+    exit 1
+  fi
+
+  # One compact JSON object per jit, one per line. A per-jit JSON object —
+  # rather than a @tsv projection — keeps empty timing fields distinct: bash
+  # `read` with a tab IFS collapses consecutive empty tab-separated fields.
+  jits_jsonl=$(printf '%s' "$jit_config" | jq -c '.jits[]')
+
+  local -a candidates=()
+  local jit_obj key repo label project due_after_close remind_after_close due_after_create
+  while IFS= read -r jit_obj; do
+    [[ -z "$jit_obj" ]] && continue
+    key=$(printf '%s' "$jit_obj" | jq -r '.key')
+    repo=$(printf '%s' "$jit_obj" | jq -r '.repo')
+    label=$(printf '%s' "$jit_obj" | jq -r '.label')
+    project=$(printf '%s' "$jit_obj" | jq -r '.project')
+    due_after_close=$(printf '%s' "$jit_obj" | jq -r '.dueAfterClose // ""')
+    remind_after_close=$(printf '%s' "$jit_obj" | jq -r '.remindAfterClose // ""')
+    due_after_create=$(printf '%s' "$jit_obj" | jq -r '.dueAfterCreate // ""')
+
+    local open_json open_num open_created
+    open_json=$(gh issue list --repo "$repo" --label "$label" --state open --json number,createdAt)
+    open_num=$(printf '%s' "$open_json" | jq -r '.[0].number // empty')
+    [[ -z "$open_num" ]] && continue
+    open_created=$(printf '%s' "$open_json" | jq -r '.[0].createdAt')
+
+    local due
+    if [[ -n "$due_after_close" ]]; then
+      local closed_json max_closed offset anchor
+      # --limit 100 is safe: recurring JITs are single-instance, so the 100
+      # most-recently-created closed issues contain the most-recently-closed one.
+      closed_json=$(gh issue list --repo "$repo" --label "$label" --state closed --limit 100 --json closedAt)
+      max_closed=$(printf '%s' "$closed_json" | jq -r 'map(.closedAt) | max // empty')
+      offset=$(parse_duration "$due_after_close")
+      if [[ -n "$max_closed" ]]; then
+        anchor=$(date -d "$max_closed" +%s)
+        due=$(( anchor + offset ))
+      else
+        if [[ -z "$remind_after_close" ]]; then
+          echo "error: jit '$key' is a cadence jit with no closed issue and no remindAfterClose; cold-start due cannot be computed" >&2
+          exit 1
+        fi
+        local remind_offset
+        remind_offset=$(parse_duration "$remind_after_close")
+        anchor=$(date -d "$open_created" +%s)
+        due=$(( anchor + offset - remind_offset ))
+      fi
+    elif [[ -n "$due_after_create" ]]; then
+      local offset anchor
+      offset=$(parse_duration "$due_after_create")
+      anchor=$(date -d "$open_created" +%s)
+      due=$(( anchor + offset ))
+    else
+      echo "error: jit '$key' has no due offset (neither dueAfterClose nor dueAfterCreate)" >&2
+      exit 1
+    fi
+
+    local project_obj status_in_progress status_done
+    project_obj=$(printf '%s' "$projects_config" | jq -c --arg k "$project" '.projects[] | select(.key == $k)')
+    if [[ -z "$project_obj" ]]; then
+      echo "error: jit '$key' references project '$project', which is not in projects.json" >&2
+      exit 1
+    fi
+    status_in_progress=$(printf '%s' "$project_obj" | jq -r '.statusInProgress')
+    status_done=$(printf '%s' "$project_obj" | jq -r '.statusDone')
+
+    local issue_url status_json item_id status
+    issue_url="https://github.com/$repo/issues/$open_num"
+    status_json=$("$SCRIPT_DIR/dispatch-project-status-read" "$project" "$issue_url")
+    item_id=$(printf '%s' "$status_json" | jq -r '.itemId')
+    if [[ -z "$item_id" || "$item_id" == "null" ]]; then
+      echo "error: jit '$key' issue #$open_num is not in project '$project'" >&2
+      exit 1
+    fi
+    status=$(printf '%s' "$status_json" | jq -r '.status // ""')
+    if [[ "$status" == "$status_in_progress" || "$status" == "$status_done" ]]; then
+      continue
+    fi
+
+    candidates+=("$due"$'\t'"$repo $open_num $project $item_id")
+  done <<< "$jits_jsonl"
+
+  [[ ${#candidates[@]} -eq 0 ]] && return 0
+  local winner
+  # Earliest-due survivor wins regardless of whether due is in the past — JIT
+  # is a priority signal, not a gate. Cadence is set so issues are filed
+  # close to their due time; the scan orders, the operator decides.
+  winner=$(printf '%s\n' "${candidates[@]}" | sort -n -k1,1 | head -1 | cut -f2-)
+  echo "jit-reminder $winner"
+}
+
 if [[ "$HEALTH_ONLY" == "true" ]]; then
   if on_worktree_branch; then
     echo "ok"
+    exit 0
+  fi
+  JIT_LINE=$(jit_scan)
+  if [[ -n "$JIT_LINE" ]]; then
+    echo "$JIT_LINE"
     exit 0
   fi
   MAIN_BROKEN_SHA=$(main_broken_sha)
@@ -149,6 +286,12 @@ if [[ "$QA_MODE" == "false" ]]; then
       # worktree-closed, and /dispatch reports and stops on either.
       echo "worktree-closed $N $CURRENT_BRANCH"
     fi
+    exit 0
+  fi
+
+  JIT_LINE=$(jit_scan)
+  if [[ -n "$JIT_LINE" ]]; then
+    echo "$JIT_LINE"
     exit 0
   fi
 
