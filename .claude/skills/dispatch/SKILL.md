@@ -677,8 +677,13 @@ priority:
   the user. Self-close (`dangerouslyDisableSandbox: true`):
 
   ```bash
-  claude stop "$CLAUDE_CODE_SESSION_ID"
+  .claude/skills/dispatch/scripts/dispatch-self-close
   ```
 
-  The job ends; the successor it spawned — or, for an early-stop, the #725
-  heartbeat — carries the workflow forward.
+  The script stops the managed background job by its job-id (the basename of
+  `$CLAUDE_JOB_DIR`, which is what `claude stop` expects — not the conversation
+  session UUID, not the registry's `.sessionId`). It is a no-op when
+  `CLAUDE_JOB_DIR` is unset (the session is interactive, not a managed
+  background job) — so an interactive `/dispatch` reaching Step 9 does not stop
+  the user's live conversation. The job ends; the successor it spawned — or,
+  for an early-stop, the #725 heartbeat — carries the workflow forward.

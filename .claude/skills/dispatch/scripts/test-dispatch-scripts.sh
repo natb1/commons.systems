@@ -3669,15 +3669,19 @@ echo "=== dispatch-spawn ==="
 #   $TMPDIR_TEST/worktrees/main/ the main worktree (the spawn subshell cd's here)
 #   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
+#   $TMPDIR_TEST/jobs/           the on-disk jobs ledger (DISPATCH_SPAWN_JOBS_DIR)
 #   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
-#   $TMPDIR_TEST/rm-log          recorded sessionIds of each `claude rm` call
+#   $TMPDIR_TEST/rm-log          recorded job-ids of each `claude rm` call
+#   $TMPDIR_TEST/stop-log        recorded job-ids of each `claude stop` call
 #
 # The test shell runs under `set -e`; dispatch-spawn can exit non-zero, so
 # every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
 
 SPAWN_REGISTRY=""
+SPAWN_JOBS_DIR=""
 SPAWN_BG_ARGV=""
 SPAWN_RM_LOG=""
+SPAWN_STOP_LOG=""
 
 # write_fake_spawn_claude — install the multi-subcommand fake `claude`.
 # Dispatches on $1:
@@ -3689,7 +3693,8 @@ SPAWN_RM_LOG=""
 #   --bg     — record full argv to bg-argv; when SPAWN_BG_REGISTERS=1 (default)
 #              parse --name and jq-append the new agent to the fixture so the
 #              verify step finds it.
-#   rm       — append $2 to rm-log.
+#   rm       — append $2 (the job-id) to rm-log.
+#   stop     — append $2 (the job-id) to stop-log.
 write_fake_spawn_claude() {
   cat > "$TMPDIR_TEST/fake-claude" <<FAKE
 #!/usr/bin/env bash
@@ -3715,6 +3720,9 @@ case "\${1:-}" in
   rm)
     printf '%s\n' "\${2:-}" >> "$SPAWN_RM_LOG"
     ;;
+  stop)
+    printf '%s\n' "\${2:-}" >> "$SPAWN_STOP_LOG"
+    ;;
 esac
 FAKE
   chmod +x "$TMPDIR_TEST/fake-claude"
@@ -3722,7 +3730,8 @@ FAKE
 
 spawn_setup() {
   TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main"
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main" \
+    "$TMPDIR_TEST/jobs"
 
   # dispatch-spawn sources lib-claude-agents.sh from its own directory, so the
   # helper must sit alongside the copy. It is sourced, not executed — no chmod.
@@ -3731,23 +3740,28 @@ spawn_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn"
 
   SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_JOBS_DIR="$TMPDIR_TEST/jobs"
   SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_RM_LOG="$TMPDIR_TEST/rm-log"
+  SPAWN_STOP_LOG="$TMPDIR_TEST/stop-log"
   printf '[]' > "$SPAWN_REGISTRY"
 
   export DISPATCH_SPAWN_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
   export DISPATCH_SPAWN_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
   export DISPATCH_SPAWN_SESSION_ID="sess-self"
+  export DISPATCH_SPAWN_JOBS_DIR="$SPAWN_JOBS_DIR"
 }
 
 spawn_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   SPAWN_REGISTRY=""
+  SPAWN_JOBS_DIR=""
   SPAWN_BG_ARGV=""
   SPAWN_RM_LOG=""
+  SPAWN_STOP_LOG=""
   unset DISPATCH_SPAWN_MAIN_WORKTREE DISPATCH_SPAWN_CLAUDE_CMD \
-    DISPATCH_SPAWN_SESSION_ID SPAWN_BG_REGISTERS
+    DISPATCH_SPAWN_SESSION_ID DISPATCH_SPAWN_JOBS_DIR SPAWN_BG_REGISTERS
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -3834,11 +3848,20 @@ spawn_teardown
 
 # --- Test 5: prune -----------------------------------------------------------
 
-echo "Test: a stopped dispatch-* agent is pruned via 'claude rm'"
+echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
 spawn_setup
-printf '%s' \
-  '[{"sessionId":"sess-stale","pid":111,"cwd":"/main","kind":"background","status":"stopped","name":"dispatch-dead0000"}]' \
-  > "$SPAWN_REGISTRY"
+# Seed the on-disk ledger with three entries:
+#   abcd1234  — stopped dispatch-* (the rm target)
+#   ef015678  — stopped non-dispatch (must NOT be pruned)
+#   9999cccc  — live (working) dispatch-* (must NOT be pruned)
+mkdir -p "$SPAWN_JOBS_DIR/abcd1234" "$SPAWN_JOBS_DIR/ef015678" \
+  "$SPAWN_JOBS_DIR/9999cccc"
+printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
+  > "$SPAWN_JOBS_DIR/abcd1234/state.json"
+printf '%s' '{"name":"manual-session","state":"stopped"}' \
+  > "$SPAWN_JOBS_DIR/ef015678/state.json"
+printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
+  > "$SPAWN_JOBS_DIR/9999cccc/state.json"
 write_fake_spawn_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "prune: dispatch-spawn exits 0" "0" "$rc"
@@ -3846,10 +3869,24 @@ assert_eq "prune: stdout is 'spawned' (stopped agent does not dedup)" \
   "spawned" "$out"
 rm_log=$(cat "$SPAWN_RM_LOG" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" == *"sess-stale"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm sess-stale' was invoked"
+if [[ "$rm_log" == *"abcd1234"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm abcd1234' (directory basename, not sessionId) was invoked"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm sess-stale' was invoked"
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm abcd1234' (directory basename) was invoked"
+  echo "    rm-log: $rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" != *"ef015678"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: non-dispatch agent 'ef015678' was not pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: non-dispatch agent 'ef015678' was not pruned"
+  echo "    rm-log: $rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" != *"9999cccc"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: live dispatch-* agent '9999cccc' was not pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: live dispatch-* agent '9999cccc' was not pruned"
   echo "    rm-log: $rm_log"
 fi
 spawn_teardown
@@ -3876,6 +3913,84 @@ else
   echo "    bg-argv: $(cat "$SPAWN_BG_ARGV")"
 fi
 spawn_teardown
+
+# ============================================================================
+# dispatch-self-close tests
+# ============================================================================
+echo "=== dispatch-self-close ==="
+#
+# dispatch-self-close runs `claude stop <job-id>` against the basename of
+# $CLAUDE_JOB_DIR. The fake `claude` records its argv in SPAWN_STOP_LOG (see
+# write_fake_spawn_claude). When CLAUDE_JOB_DIR is unset, the script is a no-op
+# — the foreground-safe gate that protects an interactive /dispatch from
+# stopping the user's live conversation.
+
+selfclose_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts"
+  cp "$SCRIPT_DIR/dispatch-self-close" "$TMPDIR_TEST/scripts/dispatch-self-close"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-self-close"
+
+  # Reuse the dispatch-spawn fake `claude` writer: it already dispatches on
+  # `stop` and appends $2 to SPAWN_STOP_LOG. The unused SPAWN_REGISTRY /
+  # SPAWN_BG_ARGV / SPAWN_RM_LOG paths still need to be set because the writer
+  # interpolates them into the fake-claude script body.
+  SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_RM_LOG="$TMPDIR_TEST/rm-log"
+  SPAWN_STOP_LOG="$TMPDIR_TEST/stop-log"
+  printf '[]' > "$SPAWN_REGISTRY"
+  write_fake_spawn_claude
+
+  export DISPATCH_SELF_CLOSE_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+}
+
+selfclose_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  SPAWN_REGISTRY=""
+  SPAWN_BG_ARGV=""
+  SPAWN_RM_LOG=""
+  SPAWN_STOP_LOG=""
+  unset DISPATCH_SELF_CLOSE_CLAUDE_CMD CLAUDE_JOB_DIR
+}
+
+# --- Test 1: managed-job → stops itself --------------------------------------
+
+echo "Test: a managed background job stops itself by job-id (basename of CLAUDE_JOB_DIR)"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+if out=$("$TMPDIR_TEST/scripts/dispatch-self-close" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "self-close: dispatch-self-close exits 0" "0" "$rc"
+stop_log=$(cat "$SPAWN_STOP_LOG" 2>/dev/null || true)
+assert_eq "self-close: 'claude stop abcd1234' was invoked (basename, not full path)" \
+  "abcd1234" "$stop_log"
+selfclose_teardown
+
+# --- Test 2: interactive → no-op ---------------------------------------------
+
+echo "Test: an interactive session (CLAUDE_JOB_DIR unset) is a no-op with a diagnostic"
+selfclose_setup
+unset CLAUDE_JOB_DIR
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-self-close" 2>&1 1>/dev/null) || rc=$?
+assert_eq "interactive: dispatch-self-close exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"not a managed background job"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: interactive: stderr reports 'not a managed background job'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: stderr reports 'not a managed background job'"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_STOP_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: interactive: no 'claude stop' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: no 'claude stop' invocation recorded"
+  echo "    stop-log: $(cat "$SPAWN_STOP_LOG")"
+fi
+selfclose_teardown
 
 # ============================================================================
 # dispatch-jit-engine tests
