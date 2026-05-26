@@ -1,9 +1,10 @@
 import { escapeHtml } from "@commons-systems/htmlutil";
 import { type RenderPageOptions, renderPageNotices, renderLoadError } from "./render-options.js";
-import type { Account, JournalEntry, JournalLeg, ReconciliationEvent, Statement } from "../firestore.js";
+import type { Account, JournalEntry, JournalLeg, ReconciliationEvent, Statement, StatementItem } from "../firestore.js";
 import { formatCurrency } from "../format.js";
 import { accountDocId } from "../entities/account.js";
 import { buildReconcileRows, clearedBalance, isAged } from "../reconciliation.js";
+import { suggestClearedLegs, SUGGESTION_TOLERANCE_DAYS } from "../reconcile-hints.js";
 
 interface ReconcileQuery {
   institution: string | null;
@@ -114,24 +115,30 @@ function statementEndingBalance(
   return mostRecent.balance;
 }
 
-function renderLegList(rows: ReturnType<typeof buildReconcileRows>): string {
+function renderLegList(rows: ReturnType<typeof buildReconcileRows>, suggestedIds: Set<string>): string {
   if (rows.length === 0) {
     return `<p class="reconcile-empty">No journal legs for this account and period.</p>`;
   }
   const items = rows.map((row) => {
     const { leg } = row;
     const reconciled = leg.reconciledEventId !== null || leg.reconciledAt !== null;
+    const suggested = !leg.cleared && !reconciled && suggestedIds.has(leg.id);
     const checkedAttr = leg.cleared ? " checked" : "";
     const disabledAttr = reconciled ? " disabled" : "";
     const aging = !leg.cleared && isAged(row.ageDays)
       ? ` <span class="reconcile-aging" data-age-days="${Math.floor(row.ageDays)}">${Math.floor(row.ageDays)}d</span>`
       : "";
-    return `<li class="reconcile-leg" data-leg-id="${escapeHtml(leg.id)}" data-signed-amount="${row.signedAmount}">
+    const suggestedBadge = suggested
+      ? ` <span class="reconcile-suggested-badge">Bank reported</span>`
+      : "";
+    const suggestedClass = suggested ? " reconcile-suggested" : "";
+    const suggestedAttr = suggested ? " data-suggested" : "";
+    return `<li class="reconcile-leg${suggestedClass}" data-leg-id="${escapeHtml(leg.id)}" data-signed-amount="${row.signedAmount}"${suggestedAttr}>
       <label class="reconcile-cleared">
         <input type="checkbox" class="reconcile-cleared-checkbox"${checkedAttr}${disabledAttr}>
       </label>
       <span class="reconcile-date">${escapeHtml(formatDateShort(leg.timestamp.toMillis()))}</span>
-      <span class="reconcile-description">${escapeHtml(row.description)}${aging}</span>
+      <span class="reconcile-description">${escapeHtml(row.description)}${aging}${suggestedBadge}</span>
       <span class="reconcile-amount">${escapeHtml(formatCurrency(row.signedAmount))}</span>
       <span class="reconcile-running-balance">${escapeHtml(formatCurrency(row.runningBalance))}</span>
     </li>`;
@@ -139,17 +146,21 @@ function renderLegList(rows: ReturnType<typeof buildReconcileRows>): string {
   return `<ul id="reconcile-leg-list" class="reconcile-list">${items}</ul>`;
 }
 
-function renderHeader(cleared: number, statementBalance: number | null): string {
+function renderHeader(cleared: number, statementBalance: number | null, hasSuggestions: boolean): string {
   const statementRow = statementBalance !== null
     ? `<span class="reconcile-statement-balance">Statement-ending balance: ${escapeHtml(formatCurrency(statementBalance))}</span>`
     : "";
   const difference = statementBalance !== null
     ? `<span class="reconcile-difference">Difference: ${escapeHtml(formatCurrency(cleared - statementBalance))}</span>`
     : "";
+  const confirmAllButton = hasSuggestions
+    ? `<button id="reconcile-confirm-all" type="button">Confirm all suggestions</button>`
+    : "";
   return `<div id="reconcile-header" class="reconcile-header">
     <span class="reconcile-cleared-balance">Cleared balance: ${escapeHtml(formatCurrency(cleared))}</span>
     ${statementRow}
     ${difference}
+    ${confirmAllButton}
     <button id="reconcile-open-dialog" type="button">Reconcile</button>
   </div>`;
 }
@@ -202,13 +213,14 @@ export interface RenderReconcileContext {
   reconciliationEvents: ReconciliationEvent[];
   accounts: Account[];
   statements: Statement[];
+  statementItems: StatementItem[];
   query: ReconcileQuery;
   nowMs?: number;
 }
 
 /** Pure HTML renderer, extracted for testability. */
 export function renderReconcileHtml(ctx: RenderReconcileContext): string {
-  const { journalLegs, journalEntries, reconciliationEvents, accounts, statements, query } = ctx;
+  const { journalLegs, journalEntries, reconciliationEvents, accounts, statements, statementItems, query } = ctx;
 
   const controls = renderControls(query, accounts, journalLegs);
 
@@ -232,6 +244,15 @@ export function renderReconcileHtml(ctx: RenderReconcileContext): string {
     return ms >= startMs && ms < endMs;
   });
 
+  const filteredStatementItems = statementItems.filter(
+    (item) =>
+      item.institution === query.institution &&
+      item.account === query.account &&
+      item.period === query.period,
+  );
+
+  const suggestedIds = suggestClearedLegs(filteredLegs, filteredStatementItems, SUGGESTION_TOLERANCE_DAYS);
+
   const entriesById = new Map<string, JournalEntry>();
   for (const entry of journalEntries) entriesById.set(entry.id, entry);
 
@@ -242,8 +263,8 @@ export function renderReconcileHtml(ctx: RenderReconcileContext): string {
 
   return `<div id="reconcile-container"${statementAttr}>
     ${controls}
-    ${renderHeader(cleared, statementBalance)}
-    ${renderLegList(rows)}
+    ${renderHeader(cleared, statementBalance, suggestedIds.size > 0)}
+    ${renderLegList(rows, suggestedIds)}
     ${renderDialog(statementBalance)}
     ${renderPastReconciliations(reconciliationEvents, query.institution, query.account)}
   </div>`;
@@ -255,12 +276,13 @@ export async function renderAccountsReconcile(options: RenderPageOptions): Promi
 
   let body: string;
   try {
-    const [journalLegs, journalEntries, reconciliationEvents, accounts, statements] = await Promise.all([
+    const [journalLegs, journalEntries, reconciliationEvents, accounts, statements, statementItems] = await Promise.all([
       dataSource.getJournalLegs(),
       dataSource.getJournalEntries(),
       dataSource.getReconciliationEvents(),
       dataSource.getAccounts(),
       dataSource.getStatements(),
+      dataSource.getStatementItems(),
     ]);
     body = renderReconcileHtml({
       journalLegs,
@@ -268,6 +290,7 @@ export async function renderAccountsReconcile(options: RenderPageOptions): Promi
       reconciliationEvents,
       accounts,
       statements,
+      statementItems,
       query,
     });
   } catch (error) {
