@@ -116,7 +116,8 @@ case "$args" in
   "pr list --state open --json number,headRefName")
     # dispatch-find-pr self-fetch: only the two correlation fields.
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
-    call_count=$(wc -l < "$STUB_DIR/gh-pr-list-calls.log")
+    echo "pr list" >> "$STUB_DIR/gh-find-pr-calls.log"
+    call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
     if [[ "$call_count" -ge 2 && -f "$STUB_DIR/pr-list-retry.json" ]]; then
       cat "$STUB_DIR/pr-list-retry.json"
     elif [[ -f "$STUB_DIR/pr-list-full.json" ]]; then

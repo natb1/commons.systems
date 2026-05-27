@@ -28,6 +28,8 @@
 #     a self-issued gh pr list. Must include at least number,headRefName; a
 #     superset list (e.g. the one dispatch-phase needs) is also accepted.
 #     The retry (step 1) is skipped when this is set — the caller owns the list.
+#     The cross-check (step 2) still runs regardless — it uses a different gh
+#     endpoint that the caller cannot pre-supply.
 #   DISPATCH_FIND_PR_RETRY_DELAY — delay in seconds before the retry fetch
 #     (default: 1). Set to 0 in tests to avoid sleeps.
 set -euo pipefail
@@ -63,8 +65,11 @@ if [[ -z "${DISPATCH_PR_LIST:-}" ]]; then
 fi
 
 # Cross-check via the issue's own closedByPullRequestsReferences.
-CLOSING=$(gh issue view "$ARG" --json closedByPullRequestsReferences)
-printf '%s' "$CLOSING" \
-  | jq -r '.closedByPullRequestsReferences
-           | map(select(.state == "OPEN"))
-           | .[0].number // empty'
+# gh issue view exits non-zero if the issue was deleted, transferred, or the
+# network failed — suppress that so the script returns empty instead of aborting.
+if CLOSING=$(gh issue view "$ARG" --json closedByPullRequestsReferences 2>/dev/null); then
+  printf '%s' "$CLOSING" \
+    | jq -r '.closedByPullRequestsReferences
+             | map(select(.state == "OPEN"))
+             | .[0].number // empty'
+fi
