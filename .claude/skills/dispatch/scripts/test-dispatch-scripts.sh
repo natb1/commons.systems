@@ -80,6 +80,7 @@ setup() {
   # dispatch-select-target test stays green.
   mkdir -p "$TMPDIR_TEST/config"
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+  export DISPATCH_FIND_PR_RETRY_DELAY=0
 
   # Default no-op dispatch-sweep stub: silent, exit 0 (no orphan to adopt).
   # dispatch-select-target invokes "$SCRIPT_DIR/dispatch-sweep" in default mode
@@ -115,7 +116,11 @@ case "$args" in
   "pr list --state open --json number,headRefName")
     # dispatch-find-pr self-fetch: only the two correlation fields.
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
-    if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
+    echo "pr list" >> "$STUB_DIR/gh-find-pr-calls.log"
+    call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
+    if [[ "$call_count" -ge 2 && -f "$STUB_DIR/pr-list-retry.json" ]]; then
+      cat "$STUB_DIR/pr-list-retry.json"
+    elif [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
       cat "$STUB_DIR/pr-list-full.json"
     else
       echo "[]"
@@ -161,6 +166,15 @@ case "$args" in
       cat "$STUB_DIR/issue-title-${num}.json"
     else
       echo "{\"title\":\"Issue $num\"}"
+    fi
+    ;;
+  issue\ view\ *\ --json\ closedByPullRequestsReferences)
+    # dispatch-find-pr cross-check fallback: gh issue view <num> --json closedByPullRequestsReferences
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-closing-prs-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-closing-prs-${num}.json"
+    else
+      echo '{"closedByPullRequestsReferences":[]}'
     fi
     ;;
   api\ */dependencies/blocked_by)
@@ -389,6 +403,7 @@ teardown() {
   STUB_DIR=""
   export PATH="$SAVED_PATH"
   unset DISPATCH_CONFIG_DIR
+  unset DISPATCH_FIND_PR_RETRY_DELAY
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
@@ -605,6 +620,72 @@ setup
 printf '[{"number":10,"headRefName":"60-foo"}]\n' > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-find-pr" "6")
 assert_eq "issue 6 does not match branch 60-foo → empty" "" "$result"
+teardown
+
+# 6. Flake recovery: first pr list call is empty, second returns the PR.
+# Models gh pr list flaking (exit 0 + []) on call 1 and returning the real list
+# on call 2. The retry-on-empty should produce the PR number.
+echo "Test: flake recovery — empty first call, PR on retry → PR number"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '[{"number":820,"headRefName":"820-x"}]\n' > "$STUB_DIR/pr-list-retry.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "820")
+assert_eq "flake recovery → PR number" "820" "$result"
+teardown
+
+# 7. Cross-check fallback: pr list yields empty on both attempts, but the
+# issue's closedByPullRequestsReferences lists an OPEN PR. This covers the
+# case where the branch was renamed away from the <issue>- convention.
+echo "Test: cross-check fallback — issue references an OPEN PR → PR number"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[{"number":830,"state":"OPEN"}]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "cross-check OPEN reference → PR number" "830" "$result"
+teardown
+
+# 8. Cross-check ignores non-OPEN references. The script's contract is "open
+# PR for issue N or empty"; a MERGED reference must not be reported.
+echo "Test: cross-check ignores MERGED reference → empty"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[{"number":840,"state":"MERGED"}]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "cross-check MERGED reference → empty" "" "$result"
+teardown
+
+# 9. Genuine empty: pr list empty on both attempts AND issue references no
+# PR. Output stays empty, exit 0 — the "no PR exists" answer.
+echo "Test: genuine empty (no PR, no references) → empty"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "genuine empty → empty" "" "$result"
+teardown
+
+# 10. DISPATCH_PR_LIST supplied without matching branch; cross-check resolves PR.
+# The retry (step 1) is skipped when DISPATCH_PR_LIST is set — the caller owns
+# the list. The cross-check (step 2) still runs regardless, using a different gh
+# endpoint that the caller cannot pre-supply.
+echo "Test: DISPATCH_PR_LIST no match + cross-check OPEN reference → PR number"
+setup
+printf '[{"number":850,"headRefName":"999-unrelated"}]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[{"number":851,"state":"OPEN"}]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$(DISPATCH_PR_LIST='[{"number":850,"headRefName":"999-unrelated"}]' \
+  "$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "DISPATCH_PR_LIST no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
+# Verify no self-fetch: gh pr list --state open --json number,headRefName was not called.
+if [[ -f "$STUB_DIR/gh-find-pr-calls.log" ]]; then
+  call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
+else
+  call_count=0
+fi
+assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
 teardown
 
 # ============================================================================
