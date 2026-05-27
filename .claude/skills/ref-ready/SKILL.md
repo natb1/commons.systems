@@ -168,8 +168,10 @@ When decomposition (Step 3f) creates new issues, establish relationships using t
 ## Step 6. Post-Processing
 
 Post-processing assigns the issue, applies `help wanted`, applies exactly one
-type label, and applies at most one topic label. Classification is identical
-in both input modes; only the `gh` command differs.
+type label, and applies at most one topic label. (Type is exhaustive —
+`enhancement` is the fallback when no `bug` signal matches — so every issue
+ends up with a type; topic is optional and may be omitted.) Classification
+is identical in both input modes; only the `gh` command differs.
 
 ### Type classification
 
@@ -179,7 +181,7 @@ Type and topic are orthogonal axes — apply one of each as warranted.
 - **`bug`** — something isn't working as intended: incorrect output, data
   loss, race conditions, crashes, silent failures, security holes,
   contradictory invariants, or leaked resources. Body typically describes
-  expected-vs-actual behavior or reproduction steps. Keyword signals: "fix",
+  expected-vs-actual behavior or reproduction steps. Keyword signals:
   "broken", "leak", "race", "drops", "TOCTOU", "data loss", "silent failure",
   "regression".
 
@@ -189,7 +191,10 @@ Type and topic are orthogonal axes — apply one of each as warranted.
   "extract", "refactor", "extend", "support", "improve".
 
 Apply exactly one of `bug` / `enhancement`. Record the matched label as
-`<type>` for the mode-specific command below.
+`<type>` for the mode-specific command below. If the issue already carries
+the *other* type label from a prior run or manual edit, remove it first
+(`gh issue edit <N> --remove-label "<other-type>"`) so the issue does not
+end up with both `bug` and `enhancement`.
 
 ### Topic classification
 
@@ -252,8 +257,9 @@ different label set.
 ### Description mode
 
 `/file-issue` (invoked in Step 5) assigns `@me` and applies `help wanted` to
-any issue it creates. Apply the matched type label and any matched topic
-label to the issue number it returned:
+any issue it creates — it does **not** apply a type label, so Step 6 owns
+the type label on both the `CREATED` and `EXISTING` paths. Apply the matched
+type label and any matched topic label to the issue number it returned:
 
 ```bash
 gh issue edit <N> --add-label "<type>" --add-label "<topic>"  # drop the trailing --add-label when no topic matched
