@@ -667,6 +667,27 @@ result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
 assert_eq "genuine empty → empty" "" "$result"
 teardown
 
+# 10. DISPATCH_PR_LIST supplied without matching branch; cross-check resolves PR.
+# The retry (step 1) is skipped when DISPATCH_PR_LIST is set — the caller owns
+# the list. The cross-check (step 2) still runs regardless, using a different gh
+# endpoint that the caller cannot pre-supply.
+echo "Test: DISPATCH_PR_LIST no match + cross-check OPEN reference → PR number"
+setup
+printf '[{"number":850,"headRefName":"999-unrelated"}]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[{"number":851,"state":"OPEN"}]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$(DISPATCH_PR_LIST='[{"number":850,"headRefName":"999-unrelated"}]' \
+  "$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "DISPATCH_PR_LIST no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
+# Verify no self-fetch: gh pr list --state open --json number,headRefName was not called.
+if [[ -f "$STUB_DIR/gh-find-pr-calls.log" ]]; then
+  call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
+else
+  call_count=0
+fi
+assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
+teardown
+
 # ============================================================================
 # dispatch-resolve-arg tests
 # ============================================================================
