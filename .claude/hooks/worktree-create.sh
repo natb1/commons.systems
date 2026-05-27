@@ -81,4 +81,7 @@ ISSUE_NUM="${BRANCH%%-*}"
 (cd "$NEW_PATH" && "$(cd "$(dirname "$0")" && pwd)/../skills/dispatch/scripts/sync-issue-context" "$ISSUE_NUM") >&3 2>&1 \
   || { echo "[worktree-create] ERROR: sync-issue-context failed for issue $ISSUE_NUM" >&2; exit 1; }
 
+mkdir -p "$NEW_PATH/tmp" && touch "$NEW_PATH/tmp/dispatch-worktree" \
+  || { echo "[worktree-create] ERROR: failed to write dispatch marker at $NEW_PATH/tmp/dispatch-worktree" >&2; exit 1; }
+
 echo "$NEW_PATH"
