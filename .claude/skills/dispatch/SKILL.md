@@ -195,9 +195,11 @@ continue to target selection.
     no inferable issue number. Invoke `/dispatch-cleanup-unknown <path>` — the
     skill owns the `AskUserQuestion` confirmation and the on-Yes/No actions, and
     returns the resumed `dispatch-select-target` output (`worktree-adopted`,
-    `pr`, `issue`, `empty`, …) for routing here. Treat the returned line as a
-    fresh `$SELECTED` and route on it as above. This is the only sweep path
-    that can destroy potentially-unmerged code.
+    `pr`, `issue`, `empty`, or another `cleanup-unknown <path2>` if a second
+    unknown orphan exists — re-invoke the skill with the new path to confirm)
+    for routing here. Treat the returned line as a fresh `$SELECTED` and route
+    on it as above. This is the only sweep path that can destroy
+    potentially-unmerged code.
   - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`, then
     **proceed to Step 9** (early-stop). The skill owns the failing-check
     enumeration, log-fetch, summary, lock-release, and stop.

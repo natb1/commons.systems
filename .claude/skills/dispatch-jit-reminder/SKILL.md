@@ -6,9 +6,8 @@ description: Claim the earliest-due JIT issue, release the dispatch lock, summar
 # Dispatch: JIT Reminder
 
 Invoked by `/dispatch` Step 3 when `dispatch-select-target` reports
-`jit-reminder <repo> <num> <project> <item-id>` — both the pre-sweep
-`--health-only` gate and the defense-in-depth selector outcome route here.
-The JIT scan selected `<num>` in `<repo>` as the earliest-due open JIT issue.
+`jit-reminder <repo> <num> <project> <item-id>` — the JIT scan selected
+`<num>` in `<repo>` as the earliest-due open JIT issue.
 
 Takes four arguments: `<repo> <num> <project> <item-id>`.
 

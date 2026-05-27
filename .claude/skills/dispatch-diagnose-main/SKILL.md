@@ -6,10 +6,8 @@ description: Diagnose origin/main's failing CI when /dispatch detects a red main
 # Dispatch: Diagnose Main
 
 Invoked by `/dispatch` Step 3 when `dispatch-select-target` reports
-`main-broken <sha>` — both the pre-sweep `--health-only` gate and the
-defense-in-depth selector outcome route here. `origin/main` itself is red, so
-no new work is safe to start. Diagnose main, release the dispatch lock, and
-stop the tick. On this skill's return, the caller (`/dispatch` Step 3)
+`main-broken <sha>` — `origin/main` itself is red, so no new work is safe to
+start. Diagnose main, release the dispatch lock, and stop the tick. On this skill's return, the caller (`/dispatch` Step 3)
 proceeds to Step 9 (early-stop). The skill does **not** run the sweep, create
 a worktree, branch, PR, or invoke any phase skill.
 
