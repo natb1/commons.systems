@@ -30,4 +30,4 @@ if [[ -z "$JOB_ID" || "$JOB_ID" == "." ]]; then
   exit 0
 fi
 
-exec "$CLAUDE_CMD" rm "$JOB_ID"
+exec "$CLAUDE_CMD" rm -- "$JOB_ID"

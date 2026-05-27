@@ -135,7 +135,7 @@ prune_stopped_dispatch_agents() {
       *) continue ;;
     esac
     job_id=$(basename "$dir")
-    if ! "$CLAUDE_CMD" rm "$job_id" >/dev/null 2>&1; then
+    if ! "$CLAUDE_CMD" rm -- "$job_id" >/dev/null 2>&1; then
       echo "dispatch-spawn-router: prune: 'claude rm $job_id' failed; continuing" >&2
     fi
   done

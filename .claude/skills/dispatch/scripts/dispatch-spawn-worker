@@ -95,6 +95,11 @@ fi
 ISSUE_NUM="$1"
 WORKTREE_PATH="$2"
 
+if [[ ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]]; then
+  echo "dispatch-spawn-worker: invalid issue number '$ISSUE_NUM' (expected a positive integer)" >&2
+  exit 2
+fi
+
 # ---- Step 1: resolve config -------------------------------------------------
 CLAUDE_CMD="${DISPATCH_SPAWN_WORKER_CLAUDE_CMD:-claude}"
 # The sourced helper reads CLAUDE_AGENTS_CMD for its own `claude agents --json`
@@ -139,7 +144,7 @@ prune_stopped_dispatch_agents() {
       *) continue ;;
     esac
     job_id=$(basename "$dir")
-    if ! "$CLAUDE_CMD" rm "$job_id" >/dev/null 2>&1; then
+    if ! "$CLAUDE_CMD" rm -- "$job_id" >/dev/null 2>&1; then
       echo "dispatch-spawn-worker: prune: 'claude rm $job_id' failed; continuing" >&2
     fi
   done

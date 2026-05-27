@@ -4383,7 +4383,9 @@ case "\${1:-}" in
     fi
     ;;
   rm)
-    printf '%s\n' "\${2:-}" >> "$SPAWN_ROUTER_RM_LOG"
+    shift
+    [[ "\${1:-}" == "--" ]] && shift
+    printf '%s\n' "\${1:-}" >> "$SPAWN_ROUTER_RM_LOG"
     ;;
   stop)
     printf '%s\n' "\${2:-}" >> "$SPAWN_ROUTER_STOP_LOG"
@@ -4649,7 +4651,9 @@ case "\${1:-}" in
     fi
     ;;
   rm)
-    printf '%s\n' "\${2:-}" >> "$SPAWN_WORKER_RM_LOG"
+    shift
+    [[ "\${1:-}" == "--" ]] && shift
+    printf '%s\n' "\${1:-}" >> "$SPAWN_WORKER_RM_LOG"
     ;;
 esac
 FAKE
@@ -4885,6 +4889,10 @@ assert_eq "missing-args-worker: only <N> given → exit 2" "2" "$sw_rc_b"
 # Sub-case C: three args given (extra argument)
 if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" extra 2>/dev/null; then sw_rc_c=0; else sw_rc_c=$?; fi
 assert_eq "missing-args-worker: three args → exit 2" "2" "$sw_rc_c"
+
+# Sub-case D: non-integer issue number rejected
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" "not-a-number" "$WORKER_TARGET_WORKTREE" 2>/dev/null; then sw_rc_d=0; else sw_rc_d=$?; fi
+assert_eq "missing-args-worker: non-integer <N> → exit 2" "2" "$sw_rc_d"
 
 spawn_worker_teardown
 
