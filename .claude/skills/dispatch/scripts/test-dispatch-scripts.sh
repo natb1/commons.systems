@@ -5508,8 +5508,9 @@ export PATH="$SAVED_PATH"
 #   WORKTREE_PATH="$PROJECT_ROOT/worktrees/<branch>"
 #   git worktree add -b <branch> "$WORKTREE_PATH" origin/main
 #   direnv allow "$WORKTREE_PATH"
+#   direnv exec "$WORKTREE_PATH" true
 #   (cd "$WORKTREE_PATH" && sync-issue-context <N>)
-#   mkdir -p tmp && touch tmp/dispatch-worktree
+#   (cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
 #   dispatch-spawn-worker <N> "$WORKTREE_PATH"
 echo ""
 echo "=== /dispatch router smoke (Step 5 create + Step 6 spawn) ==="
@@ -5587,11 +5588,14 @@ GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir)
 PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
 WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
 # The fake `git worktree add` does not actually create the directory, so make
-# it here so the subshell `cd "$WORKTREE_PATH"` for sync-issue-context succeeds.
+# it here so the subshell `cd "$WORKTREE_PATH"` for sync-issue-context and the
+# recovery marker creation succeed.
 mkdir -p "$WORKTREE_PATH"
 git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main
 direnv allow "$WORKTREE_PATH"
+direnv exec "$WORKTREE_PATH" true
 (cd "$WORKTREE_PATH" && sync-issue-context "$ISSUE_NUM")
+(cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
 dispatch-spawn-worker "$ISSUE_NUM" "$WORKTREE_PATH"
 
 # Assertions: each fake binary's log captures one expected invocation.
@@ -5600,7 +5604,12 @@ assert_eq "git worktree add args" \
   "$(grep '^worktree add' "$TMPDIR_TEST/logs/git.log")"
 assert_eq "direnv allow args" \
   "allow $WORKTREE_PATH" \
-  "$(cat "$TMPDIR_TEST/logs/direnv.log")"
+  "$(grep '^allow' "$TMPDIR_TEST/logs/direnv.log")"
+assert_eq "direnv exec args" \
+  "exec $WORKTREE_PATH true" \
+  "$(grep '^exec' "$TMPDIR_TEST/logs/direnv.log")"
+assert_eq "recovery marker created in target worktree" "1" \
+  "$([ -f "$WORKTREE_PATH/tmp/dispatch-worktree" ] && echo 1 || echo 0)"
 assert_eq "sync-issue-context cwd + arg" \
   "cwd=$WORKTREE_PATH argv=839" \
   "$(cat "$TMPDIR_TEST/logs/sync-issue-context.log")"
