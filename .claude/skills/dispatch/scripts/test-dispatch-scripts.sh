@@ -4480,6 +4480,315 @@ fi
 spawn_teardown
 
 # ============================================================================
+# dispatch-spawn-worker tests
+# ============================================================================
+echo "=== dispatch-spawn-worker ==="
+#
+# dispatch-spawn-worker is exercised against a fake `claude` — a multi-subcommand
+# temp script DISPATCH_SPAWN_WORKER_CLAUDE_CMD points at by absolute path, so
+# no real daemon is needed. The same fake also backs the sourced
+# lib-claude-agents.sh helper (dispatch-spawn-worker exports CLAUDE_AGENTS_CMD
+# to it).
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/dispatch-spawn-worker  copy of the script under test
+#   $TMPDIR_TEST/scripts/lib-claude-agents.sh   sourced helper (not chmod'd)
+#   $TMPDIR_TEST/worktrees/main/                backdrop only (not used by script)
+#   $TMPDIR_TEST/worktrees/839-test-worker/     the target worktree path (arg 2)
+#   $TMPDIR_TEST/fake-claude                    the multi-subcommand fake `claude`
+#   $TMPDIR_TEST/registry.json                  `claude agents --json` fixture
+#   $TMPDIR_TEST/jobs/                          on-disk jobs ledger
+#   $TMPDIR_TEST/bg-argv                        recorded argv of each `claude --bg` call
+#   $TMPDIR_TEST/pwd-log                        new: records the spawn subshell's $PWD
+#                                               so Test 2 can assert the script
+#                                               cd'd into the worktree path.
+#   $TMPDIR_TEST/rm-log                         recorded job-ids of each `claude rm` call
+#
+# The test shell runs under `set -e`; dispatch-spawn-worker can exit non-zero,
+# so every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
+
+SPAWN_WORKER_REGISTRY=""
+SPAWN_WORKER_JOBS_DIR=""
+SPAWN_WORKER_BG_ARGV=""
+SPAWN_WORKER_PWD_LOG=""
+SPAWN_WORKER_RM_LOG=""
+WORKER_TARGET_WORKTREE=""
+
+# write_fake_spawn_worker_claude — install the multi-subcommand fake `claude`.
+# Dispatches on $1:
+#   agents   — print the registry fixture verbatim. The fake ignores --cwd:
+#              claude_sessions_under does no client-side path filtering — it
+#              trusts server-side `--cwd` filtering — so every fixture session
+#              is returned. Fine here: each fixture holds only sessions a test
+#              means dispatch-spawn-worker to see.
+#   --bg     — record full argv to bg-argv AND record $PWD to pwd-log; when
+#              SPAWN_BG_REGISTERS=1 (default) parse --name and jq-append the
+#              new agent to the fixture so the verify step finds it.
+#   rm       — append $2 (the job-id) to rm-log.
+write_fake_spawn_worker_claude() {
+  cat > "$TMPDIR_TEST/fake-claude" <<FAKE
+#!/usr/bin/env bash
+set -uo pipefail
+case "\${1:-}" in
+  agents)
+    cat "$SPAWN_WORKER_REGISTRY"
+    ;;
+  --bg)
+    pwd >> "$SPAWN_WORKER_PWD_LOG"
+    printf '%s\n' "\$@" > "$SPAWN_WORKER_BG_ARGV"
+    if [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
+      name=""
+      while [[ \$# -gt 0 ]]; do
+        if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+        shift
+      done
+      tmp=\$(mktemp)
+      jq --arg name "\$name" \
+        '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/worker","kind":"background","status":"busy","name":\$name}]' \
+        "$SPAWN_WORKER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_WORKER_REGISTRY"
+    fi
+    ;;
+  rm)
+    printf '%s\n' "\${2:-}" >> "$SPAWN_WORKER_RM_LOG"
+    ;;
+esac
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-claude"
+}
+
+spawn_worker_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" \
+    "$TMPDIR_TEST/worktrees/main" \
+    "$TMPDIR_TEST/worktrees/839-test-worker" \
+    "$TMPDIR_TEST/jobs"
+
+  # dispatch-spawn-worker sources lib-claude-agents.sh from its own directory,
+  # so the helper must sit alongside the copy. It is sourced, not executed —
+  # no chmod.
+  cp "$SCRIPT_DIR/dispatch-spawn-worker" "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
+
+  SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_WORKER_JOBS_DIR="$TMPDIR_TEST/jobs"
+  SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
+  SPAWN_WORKER_RM_LOG="$TMPDIR_TEST/rm-log"
+  WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
+  printf '[]' > "$SPAWN_WORKER_REGISTRY"
+
+  export DISPATCH_SPAWN_WORKER_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+  export DISPATCH_SPAWN_WORKER_SESSION_ID="sess-self"
+  export DISPATCH_SPAWN_WORKER_JOBS_DIR="$SPAWN_WORKER_JOBS_DIR"
+}
+
+spawn_worker_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  SPAWN_WORKER_REGISTRY=""
+  SPAWN_WORKER_JOBS_DIR=""
+  SPAWN_WORKER_BG_ARGV=""
+  SPAWN_WORKER_PWD_LOG=""
+  SPAWN_WORKER_RM_LOG=""
+  WORKER_TARGET_WORKTREE=""
+  unset DISPATCH_SPAWN_WORKER_CLAUDE_CMD DISPATCH_SPAWN_WORKER_SESSION_ID \
+    DISPATCH_SPAWN_WORKER_JOBS_DIR SPAWN_BG_REGISTERS
+}
+
+# --- Test 1: spawn success ---------------------------------------------------
+
+echo "Test: an empty registry spawns one /dispatch-worker background job"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawn-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "spawn-worker: stdout is 'spawned'" "spawned" "$out"
+# The recorded argv must be exactly: --bg --name dispatch-839-<id>
+#   --permission-mode auto /dispatch-worker 839
+mapfile -t sw_bg_argv < "$SPAWN_WORKER_BG_ARGV"
+assert_eq "spawn-worker: argv[0] is --bg" "--bg" "${sw_bg_argv[0]:-}"
+assert_eq "spawn-worker: argv[1] is --name" "--name" "${sw_bg_argv[1]:-}"
+case "${sw_bg_argv[2]:-}" in
+  dispatch-839-*) sw_name_ok=yes ;;
+  *)              sw_name_ok="no: ${sw_bg_argv[2]:-}" ;;
+esac
+assert_eq "spawn-worker: argv[2] is a dispatch-839-* agent name" "yes" "$sw_name_ok"
+assert_eq "spawn-worker: argv[3] is --permission-mode" "--permission-mode" "${sw_bg_argv[3]:-}"
+assert_eq "spawn-worker: argv[4] is auto" "auto" "${sw_bg_argv[4]:-}"
+assert_eq "spawn-worker: argv[5] is /dispatch-worker 839" "/dispatch-worker 839" "${sw_bg_argv[5]:-}"
+spawn_worker_teardown
+
+# --- Test 2: cwd assertion ---------------------------------------------------
+
+echo "Test: the spawn subshell cd's into the target worktree path"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawn-worker-cwd: exits 0" "0" "$rc"
+# Read the first line of the pwd-log and compare it (via realpath) to the
+# target worktree. mktemp -d on Linux does not add a /private/ prefix, but
+# realpath is robust on all platforms.
+sw_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" == "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: spawn subshell ran in the target worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: spawn subshell ran in the target worktree"
+  echo "    pwd-log:  '$sw_pwd_line'"
+  echo "    expected: '$WORKER_TARGET_WORKTREE'"
+fi
+spawn_worker_teardown
+
+# --- Test 3: per-worktree dedup ----------------------------------------------
+
+echo "Test: another live dispatch-* session under the worktree deduplicates the spawn"
+spawn_worker_setup
+printf '%s' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"dispatch-839-aaaa1111"}]' \
+  > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "dedup-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "dedup-worker: stdout is 'deduped'" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: dedup-worker: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dedup-worker: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_worker_teardown
+
+# --- Test 4: self-exclusion --------------------------------------------------
+
+echo "Test: a dispatch-* session that is this session does not deduplicate"
+spawn_worker_setup
+# The only dispatch-* session in the registry IS this session (sess-self).
+printf '%s' \
+  '[{"sessionId":"sess-self","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"dispatch-839-self0000"}]' \
+  > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "self-exclude-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "self-exclude-worker: stdout is 'spawned' (own session is not 'another')" \
+  "spawned" "$out"
+spawn_worker_teardown
+
+# --- Test 5: spawn failure ---------------------------------------------------
+
+echo "Test: a spawned worker job that never registers exits non-zero with a diagnostic"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+export SPAWN_BG_REGISTERS=0
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>&1 1>/dev/null) || rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-fail: dispatch-spawn-worker exits non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-fail: dispatch-spawn-worker exits non-zero (rc=$rc)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"did not register"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-fail: stderr reports the unregistered agent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-fail: stderr reports the unregistered agent"
+  echo "    stderr: $err"
+fi
+spawn_worker_teardown
+
+# --- Test 6: prune -----------------------------------------------------------
+
+echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
+spawn_worker_setup
+# Seed the on-disk ledger with three entries:
+#   abcd1234  — stopped dispatch-* (the rm target)
+#   ef015678  — stopped non-dispatch (must NOT be pruned)
+#   9999cccc  — live (working) dispatch-* (must NOT be pruned)
+mkdir -p "$SPAWN_WORKER_JOBS_DIR/abcd1234" "$SPAWN_WORKER_JOBS_DIR/ef015678" \
+  "$SPAWN_WORKER_JOBS_DIR/9999cccc"
+printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
+  > "$SPAWN_WORKER_JOBS_DIR/abcd1234/state.json"
+printf '%s' '{"name":"manual-session","state":"stopped"}' \
+  > "$SPAWN_WORKER_JOBS_DIR/ef015678/state.json"
+printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
+  > "$SPAWN_WORKER_JOBS_DIR/9999cccc/state.json"
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "prune-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "prune-worker: stdout is 'spawned' (stopped agent does not dedup)" \
+  "spawned" "$out"
+sw_rm_log=$(cat "$SPAWN_WORKER_RM_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$sw_rm_log" == *"abcd1234"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
+  echo "    rm-log: $sw_rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$sw_rm_log" != *"ef015678"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune-worker: non-dispatch agent 'ef015678' was not pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: non-dispatch agent 'ef015678' was not pruned"
+  echo "    rm-log: $sw_rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$sw_rm_log" != *"9999cccc"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune-worker: live dispatch-* agent '9999cccc' was not pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: live dispatch-* agent '9999cccc' was not pruned"
+  echo "    rm-log: $sw_rm_log"
+fi
+spawn_worker_teardown
+
+# --- Test 7: unqueryable registry fails safe ---------------------------------
+
+echo "Test: an unparseable session registry fails safe — spawns nothing"
+spawn_worker_setup
+# A registry that is not a JSON array: lib-claude-agents.sh's
+# claude_sessions_under cannot parse it and returns 1 (unknown).
+# dispatch-spawn-worker must treat unknown as "a dispatch agent may be running"
+# and spawn nothing — the documented fail-safe in the script's Step 3 dedup
+# guard.
+printf '%s' 'not-a-json-array' > "$SPAWN_WORKER_REGISTRY"
+write_fake_spawn_worker_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "unknown-registry-worker: dispatch-spawn-worker exits 0" "0" "$rc"
+assert_eq "unknown-registry-worker: stdout is 'deduped'" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unknown-registry-worker: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unknown-registry-worker: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_WORKER_BG_ARGV")"
+fi
+spawn_worker_teardown
+
+# --- Test 8: missing args ----------------------------------------------------
+
+echo "Test: missing arguments exit 2"
+spawn_worker_setup
+write_fake_spawn_worker_claude
+
+# Sub-case A: no args at all
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 2>/dev/null; then sw_rc_a=0; else sw_rc_a=$?; fi
+assert_eq "missing-args-worker: no args → exit 2" "2" "$sw_rc_a"
+
+# Sub-case B: only <N> given (no <worktree-path>)
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 2>/dev/null; then sw_rc_b=0; else sw_rc_b=$?; fi
+assert_eq "missing-args-worker: only <N> given → exit 2" "2" "$sw_rc_b"
+
+# Sub-case C: three args given (extra argument)
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" extra 2>/dev/null; then sw_rc_c=0; else sw_rc_c=$?; fi
+assert_eq "missing-args-worker: three args → exit 2" "2" "$sw_rc_c"
+
+spawn_worker_teardown
+
+# ============================================================================
 # dispatch-self-close tests
 # ============================================================================
 echo "=== dispatch-self-close ==="
