@@ -2702,7 +2702,7 @@ sweep_setup() {
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  "pr list --state all --json number,headRefName,state --limit 200")
+  "pr list --state all --json number,headRefName,state,isDraft --limit 200")
     cat "$STUB_DIR/gh-pr-list-all.json"
     ;;
   issue\ view\ *\ --json\ state\ -q\ .state)
