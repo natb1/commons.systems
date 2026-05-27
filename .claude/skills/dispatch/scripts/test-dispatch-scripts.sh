@@ -1242,7 +1242,7 @@ assert_eq "issue 6 not masked by 60-foo worktree" "issue 6" "$result"
 teardown
 
 # --- topic-category prioritization (issue #707) -----------------------------
-# A topic category (bug → testing infrastructure → dispatch → other) nests
+# A topic category (priority → bug → testing infrastructure → dispatch → other) nests
 # outside the phase ladder. A PR's category is resolved from the labels of the
 # issues it closes; an issue's category from its own labels.
 
@@ -1292,6 +1292,26 @@ printf '[{"number":500,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"hel
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with no closing issue is 'other'; bug issue wins" "issue 500" "$result"
+teardown
+
+# 30b. A PR closing a `priority`-labelled issue outranks a PR closing a `bug`
+#      issue, even when the bug PR is older — `priority` is the new top of the
+#      category ladder. Mirrors test 28 with priority swapped in for bug.
+echo "Test: PR closing a priority issue beats PR closing a bug issue"
+setup
+# PR 20 (older) closes bug issue 200; PR 10 (newer) closes priority issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issues 100/200 are the closing issues — they carry the topic label that the
+# PRs inherit. No "help wanted" label, so they are not themselves queue items.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "priority-closing PR beats bug-closing PR" "pr 10 10-priority-pr verify" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------
