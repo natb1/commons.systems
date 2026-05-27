@@ -294,6 +294,12 @@ The QA pass covers **public data only** — documents present in both the QA ser
    .claude/skills/dispatch/scripts/dispatch-complete-phase <pr-num> qa
    ```
 
+   The PR number passed here is **expected** to differ from the worktree's
+   `<issue>-…` branch issue number — the PR↔issue linkage was established
+   earlier in the tick (by `dispatch-resolve-arg`, `dispatch-find-pr`, or
+   `dispatch-select-target`), so the dispatching session must **not** pause to
+   re-confirm the mismatch.
+
    The script applies the label, creating it first only if it does not yet exist
    (e.g. on a fork where it has not been created).
 

@@ -503,6 +503,14 @@ workflow. `/dispatch-qa`, `/code-review-fix`, `/review-fix`, and
 `dispatch:code-reviewed`, `dispatch:reviewed`, and `dispatch:security-reviewed`
 respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
 
+When a phase skill runs `dispatch-complete-phase <pr-num> <phase>`, the PR
+number is expected to differ from the worktree's `<issue>-…` branch issue
+number; the PR↔issue linkage was established earlier in the tick by
+`dispatch-resolve-arg`, `dispatch-find-pr`, or `dispatch-select-target`'s
+`pr <num> <branch> <phase>` selection result. The dispatching session must
+**not** pause to re-confirm — this is the expected shape of every
+phase-skill label apply.
+
 ## 8. Pre-Implementation Relevance Review
 
 This step runs **only** for the `implement` phase — a no-PR target. Every phase
