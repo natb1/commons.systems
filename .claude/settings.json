@@ -101,6 +101,10 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/productivity-tui/hooks/on-idle.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-title.sh"
           }
         ]
       },
@@ -110,6 +114,10 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/restore-dispatch-skill.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-title.sh"
           }
         ]
       }
