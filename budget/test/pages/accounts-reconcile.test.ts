@@ -10,6 +10,7 @@ import type {
   JournalLeg,
   ReconciliationEvent,
   Statement,
+  StatementItem,
 } from "../../src/firestore";
 
 function account(overrides: Partial<Account> = {}): Account {
@@ -88,6 +89,23 @@ function event(overrides: Partial<ReconciliationEvent> = {}): ReconciliationEven
   };
 }
 
+function statementItem(overrides: Partial<StatementItem> = {}): StatementItem {
+  return {
+    id: "si-1",
+    statementItemId: "si-1" as any,
+    statementId: "stmt-1" as any,
+    institution: "Bank",
+    account: "Checking",
+    period: "2025-02",
+    amount: -50,
+    timestamp: ts("2025-02-10"),
+    description: "Purchase",
+    fitid: "fitid-1",
+    groupId: null,
+    ...overrides,
+  };
+}
+
 function ctx(overrides: Partial<Parameters<typeof renderReconcileHtml>[0]> = {}) {
   return {
     journalLegs: [] as JournalLeg[],
@@ -95,6 +113,7 @@ function ctx(overrides: Partial<Parameters<typeof renderReconcileHtml>[0]> = {})
     reconciliationEvents: [] as ReconciliationEvent[],
     accounts: [account()],
     statements: [] as Statement[],
+    statementItems: [] as StatementItem[],
     query: { institution: "Bank", account: "Checking", period: "2025-02" },
     ...overrides,
   };
@@ -324,5 +343,87 @@ describe("renderReconcileHtml", () => {
     expect(html).not.toContain("reconcile-columns");
     expect(html).not.toContain("reconcile-column-");
     expect(html).not.toContain("reconcile-match-");
+  });
+
+  it("renders reconcile-suggested class and Bank reported badge for a leg with a non-null statementItemId", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-1" })],
+      journalLegs: [
+        leg({ id: "leg-a", entryId: "e-1", debit: 50, cleared: false, statementItemId: "si-1" as any, timestamp: ts("2025-02-10") }),
+      ],
+      statementItems: [],
+    }));
+    expect(html).toContain("reconcile-suggested");
+    expect(html).toContain("Bank reported");
+    expect(html).toContain("data-suggested");
+  });
+
+  it("does not render the suggested treatment for a leg with no statementItemId and no matching statement item", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-1" })],
+      journalLegs: [
+        leg({ id: "leg-a", entryId: "e-1", debit: 75, cleared: false, statementItemId: null, timestamp: ts("2025-02-10") }),
+      ],
+      statementItems: [],
+    }));
+    expect(html).not.toContain("reconcile-suggested");
+    expect(html).not.toContain("Bank reported");
+  });
+
+  it("renders the Confirm-all button when at least one leg is suggested", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-1" })],
+      journalLegs: [
+        leg({ id: "leg-a", entryId: "e-1", debit: 50, cleared: false, statementItemId: "si-1" as any, timestamp: ts("2025-02-10") }),
+      ],
+      statementItems: [],
+    }));
+    expect(html).toContain('id="reconcile-confirm-all"');
+  });
+
+  it("does not render the Confirm-all button when no legs are suggested", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-1" })],
+      journalLegs: [
+        leg({ id: "leg-a", entryId: "e-1", debit: 50, cleared: false, statementItemId: null, timestamp: ts("2025-02-10") }),
+      ],
+      statementItems: [],
+    }));
+    expect(html).not.toContain('id="reconcile-confirm-all"');
+  });
+
+  it("does not render the suggested treatment for a cleared leg even with a non-null statementItemId", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-1" })],
+      journalLegs: [
+        leg({ id: "leg-a", entryId: "e-1", debit: 50, cleared: true, statementItemId: "si-1" as any, timestamp: ts("2025-02-10") }),
+      ],
+      statementItems: [],
+    }));
+    expect(html).not.toContain("reconcile-suggested");
+    expect(html).not.toContain("Bank reported");
+    expect(html).not.toContain('id="reconcile-confirm-all"');
+  });
+
+  it("does not render the suggested treatment for a reconciled leg even with a non-null statementItemId", () => {
+    const html = renderReconcileHtml(ctx({
+      journalEntries: [entry({ id: "e-1" })],
+      journalLegs: [
+        leg({
+          id: "leg-a",
+          entryId: "e-1",
+          debit: 50,
+          cleared: true,
+          statementItemId: "si-1" as any,
+          reconciledEventId: "Bank_Checking_2025-02-28",
+          reconciledAt: ts("2025-02-28"),
+          timestamp: ts("2025-02-10"),
+        }),
+      ],
+      statementItems: [],
+    }));
+    expect(html).not.toContain("reconcile-suggested");
+    expect(html).not.toContain("Bank reported");
+    expect(html).not.toContain('id="reconcile-confirm-all"');
   });
 });

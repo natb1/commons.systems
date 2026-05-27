@@ -21,6 +21,21 @@ TOTAL=0
 # vars set per case, so no real repo or network is needed.
 
 STUB_BIN=$(mktemp -d)
+
+# Fake `claude` for the worktree_has_live_session helper.
+# Behaviour is driven by STUB_CLAUDE_JSON (printed on stdout) and
+# STUB_CLAUDE_RC (exit code). Defaults: empty JSON array (no sessions), rc=0.
+cat >"$STUB_BIN/claude" <<'STUB'
+#!/usr/bin/env bash
+set -uo pipefail
+# Accept any args (agents --json --cwd <path>) — just emit the canned response.
+printf '%s\n' "${STUB_CLAUDE_JSON:-[]}"
+exit "${STUB_CLAUDE_RC:-0}"
+STUB
+chmod +x "$STUB_BIN/claude"
+# Tell lib-claude-agents.sh to use our stub instead of the real `claude`.
+export CLAUDE_AGENTS_CMD="$STUB_BIN/claude"
+
 cat >"$STUB_BIN/git" <<'STUB'
 #!/usr/bin/env bash
 set -uo pipefail
@@ -81,6 +96,8 @@ worktree $WT"
   export STUB_REVLIST_RC=0
   export STUB_REMOVE_RC=0
   export STUB_REMOVED_LOG="$REMOVED_LOG"
+  export STUB_CLAUDE_JSON="[]"   # no live sessions by default
+  export STUB_CLAUDE_RC=0
 }
 
 # run_hook <payload> [cwd] — feed the payload on stdin, capture the exit code.
@@ -258,6 +275,34 @@ run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
 assert_exit0          "robustness: git worktree remove rc!=0: exit 0"
 assert_remove_called  "robustness: git worktree remove rc!=0: remove attempted"
 assert_log            "robustness: git worktree remove rc!=0: log shows failure" "git worktree remove failed"
+
+# --- Live-session guard cases -----------------------------------------------
+
+# (a) live session present + in sync → kept
+setup_root
+export STUB_CLAUDE_JSON='[{"sessionId":"s1","pid":1,"status":"running","name":"x"}]'
+run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
+assert_exit0              "live session: in-sync + occupied -> exit 0"
+assert_remove_not_called  "live session: in-sync + occupied -> not removed"
+assert_log                "live session: in-sync + occupied -> log shows KEEP" "KEEP:"
+assert_log                "live session: in-sync + occupied -> log names reason" "has a live Claude session"
+
+# (b) no live session + in sync → removed (existing happy path stays green)
+setup_root
+# STUB_CLAUDE_JSON defaults to "[]" via setup_root
+run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
+assert_exit0          "live session: in-sync + no session -> exit 0"
+assert_remove_called  "live session: in-sync + no session -> removed"
+assert_log            "live session: in-sync + no session -> log shows IN SYNC" "IN SYNC: removing"
+
+# (c) daemon unreachable / unknown → kept (fail-safe)
+setup_root
+export STUB_CLAUDE_RC=1
+run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
+assert_exit0              "live session: daemon unreachable -> exit 0"
+assert_remove_not_called  "live session: daemon unreachable -> not removed"
+assert_log                "live session: daemon unreachable -> log shows KEEP" "KEEP:"
+assert_log                "live session: daemon unreachable -> log names reason" "has a live Claude session"
 
 # --- Summary ----------------------------------------------------------------
 

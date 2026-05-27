@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# dispatch-self-close — stop this background job.
+#
+# /dispatch SKILL.md Step 9 invokes this as the last step on a clean
+# completion. `claude stop <id>` wants the *job-id* — the 8-hex-char basename
+# of $CLAUDE_JOB_DIR — not the conversation session UUID and not the
+# registry's .sessionId. CLAUDE_JOB_DIR is set only in managed background
+# jobs, so its presence doubles as the foreground-safe gate: an interactive
+# /dispatch reaching Step 9 must not stop the user's live conversation.
+#
+# Behavior:
+#   $CLAUDE_JOB_DIR set    → `claude stop $(basename "$CLAUDE_JOB_DIR")`,
+#                            exit with that command's status.
+#   $CLAUDE_JOB_DIR unset  → diagnostic to stderr, exit 0 (no-op).
+#
+# Environment override for testability (mirroring dispatch-spawn's
+# DISPATCH_SPAWN_CLAUDE_CMD):
+#   DISPATCH_SELF_CLOSE_CLAUDE_CMD  The `claude` command. Default: `claude`.
+#
+# Sandbox: `claude stop` reaches the local Claude daemon over a Unix socket;
+# callers must invoke this script with `dangerouslyDisableSandbox: true` —
+# see `.claude/rules/sandbox.md § claude agents --json`.
+set -uo pipefail
+
+CLAUDE_CMD="${DISPATCH_SELF_CLOSE_CLAUDE_CMD:-claude}"
+JOB_ID=$(basename "${CLAUDE_JOB_DIR:-}")
+
+if [[ -z "$JOB_ID" || "$JOB_ID" == "." ]]; then
+  echo "dispatch-self-close: not a managed background job (CLAUDE_JOB_DIR unset); skipping self-close" >&2
+  exit 0
+fi
+
+exec "$CLAUDE_CMD" stop "$JOB_ID"

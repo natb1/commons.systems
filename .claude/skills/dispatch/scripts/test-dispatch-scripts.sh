@@ -81,6 +81,18 @@ setup() {
   mkdir -p "$TMPDIR_TEST/config"
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
 
+  # Default no-op dispatch-sweep stub: silent, exit 0 (no orphan to adopt).
+  # dispatch-select-target invokes "$SCRIPT_DIR/dispatch-sweep" in default mode
+  # between the main-broken gate and the queue ladder; with this stub the call
+  # is inert and every existing default-mode test stays green. Tests that
+  # exercise sweep integration overwrite this stub before invoking
+  # dispatch-select-target.
+  cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/dispatch-sweep"
+
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
   # resolve to TMPDIR_TEST correctly.
@@ -882,6 +894,8 @@ assert_eq "lone waiting PR → empty" "empty" "$result"
 teardown
 
 # 16. Open issue worktree → worktree output, queue scan skipped.
+# The default no-op dispatch-sweep stub installed by setup() is in place but
+# unused — current-worktree continuation short-circuits before the sweep call.
 echo "Test: open issue worktree → worktree <N> <branch>, scan skipped"
 setup
 # Seed a verify PR that would normally be selected — proves the scan is skipped.
@@ -1776,6 +1790,216 @@ printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
 [[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
 assert_eq "invalid duration → exits non-zero" "yes" "$rc_nonzero"
+teardown
+
+# --- sweep routing (issue #803) ---------------------------------------------
+# dispatch-select-target invokes dispatch-sweep internally in default mode,
+# between the main-broken gate and the queue ladder. The sweep call comes
+# AFTER current-worktree continuation, so a session inside an <issue>-*
+# worktree always continues there even when an orphan exists elsewhere.
+# Tests below overwrite the default no-op sweep stub seeded by setup() to
+# exercise the routing branches.
+
+# SR1. (AC b) Inside an active <issue>-* worktree with an orphan elsewhere →
+#      still worktree <N> <branch>. The sweep stub would emit an adoption
+#      directive if invoked; the assert proves it never was.
+echo "Test: worktree continuation precedes sweep adoption (regression — #803)"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
+printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
+# Sweep stub would adopt an orphan at issue 725 if invoked — proves the sweep
+# never ran (current-worktree continuation short-circuited first).
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-some-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "worktree continuation beats sweep adoption" "worktree 42 42-some-slug" "$result"
+teardown
+
+# SR2. (AC c) Outside any worktree, orphan present → worktree-adopted.
+echo "Test: outside any worktree, orphan present → worktree-adopted"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "sweep adoption → worktree-adopted 725 725-orphan" "worktree-adopted 725 725-orphan" "$result"
+teardown
+
+# SR3. (AC d) Outside any worktree, no orphan → ladder result.
+echo "Test: outside any worktree, no orphan → ladder result"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Default no-op sweep stub from setup() is unchanged → sweep falls through.
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "no orphan → ladder picks verify PR" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# SR4. cleanup-unknown propagation: sweep exits 3 with stderr "cleanup-unknown:<path>".
+echo "Test: sweep exit 3 + cleanup-unknown stderr → cleanup-unknown <path>"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "cleanup-unknown:/tmp/some-orphan" >&2
+exit 3
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "cleanup-unknown propagated to stdout" "cleanup-unknown /tmp/some-orphan" "$result"
+assert_eq "cleanup-unknown route exits 0" "0" "$rc"
+teardown
+
+# SR5. --no-sweep bypasses the sweep call. A sweep stub that would adopt an
+#      orphan is installed; the flag must prove it was never invoked.
+echo "Test: --no-sweep bypasses the sweep call"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Stub would emit worktree-adopted-style adoption directive if invoked.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" --no-sweep)
+assert_eq "--no-sweep skips adoption → ladder result" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# SR6. A non-3 non-zero sweep exit logs a diagnostic but falls through to the
+#      ladder — defense-in-depth so a malformed sweep does not stall dispatch.
+echo "Test: sweep exit 2 (unrelated failure) → warning, fall through to ladder"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "some unrelated sweep error" >&2
+exit 2
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null)
+assert_eq "sweep exit 2 → falls through to ladder result" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# SR7. --cleanup-confirm <path> calls dispatch-sweep --cleanup-unknown <path>
+#      first, then re-runs the default sweep+route block. With a sweep stub
+#      that exits 0 / empty stdout on the second call, the script falls
+#      through to the ladder. Proves both calls happen and that routing after
+#      cleanup is identical to default mode.
+echo "Test: --cleanup-confirm <path> runs cleanup then resumes selection"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Sweep stub logs each invocation's args and is silent / exit 0 otherwise.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$STUB_DIR/dispatch-sweep-calls.log"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/some-orphan" 2>/dev/null)
+assert_eq "cleanup-confirm → falls through to ladder result" "pr 10 10-verify-me verify" "$result"
+assert_eq "dispatch-sweep called twice (cleanup + resume)" \
+  "2" "$(wc -l < "$STUB_DIR/dispatch-sweep-calls.log" | tr -d ' ')"
+assert_eq "first sweep call carries --cleanup-unknown <path>" \
+  "--cleanup-unknown /tmp/some-orphan" \
+  "$(sed -n '1p' "$STUB_DIR/dispatch-sweep-calls.log")"
+assert_eq "second sweep call carries no args" \
+  "" "$(sed -n '2p' "$STUB_DIR/dispatch-sweep-calls.log")"
+teardown
+
+# SR8. --cleanup-confirm <path> halts at the next unknown orphan: the
+#      post-cleanup sweep emits cleanup-unknown:<path2> on stderr and exits 3,
+#      and the script propagates cleanup-unknown <path2> on stdout. Proves
+#      multiple unknown orphans iterate one-at-a-time via repeated SKILL.md
+#      AskUserQuestion confirmations rather than being silently consumed.
+echo "Test: --cleanup-confirm <path> halts on the next unknown orphan"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Sweep stub: first call (cleanup) exits 0; second call (resume) emits a new
+# unknown orphan on stderr and exits 3.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$STUB_DIR/dispatch-sweep-calls.log"
+n=\$(wc -l < "$STUB_DIR/dispatch-sweep-calls.log" | tr -d ' ')
+if [[ "\$n" -eq 1 ]]; then
+  exit 0
+else
+  echo "cleanup-unknown:/tmp/second-orphan" >&2
+  exit 3
+fi
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/first-orphan" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "second unknown orphan propagated to stdout" \
+  "cleanup-unknown /tmp/second-orphan" "$result"
+assert_eq "halting on next unknown orphan exits 0" "0" "$rc"
+teardown
+
+# SR9. --cleanup-confirm <path> with a failing dispatch-sweep --cleanup-unknown
+#      call propagates the non-zero exit code (set -e) instead of silently
+#      falling through to the ladder. Proves cleanup failures are fail-loud per
+#      the contract documented at the top of the sweep+route block.
+echo "Test: --cleanup-confirm with failing cleanup propagates non-zero exit"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "dispatch-sweep: invalid cleanup path" >&2
+exit 2
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/bad" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "cleanup failure propagates exit 2" "2" "$rc"
+assert_eq "cleanup failure emits no stdout" "" "$result"
+teardown
+
+# SR10. --cleanup-confirm and --no-sweep are mutually exclusive: combining them
+#       would silently skip the post-cleanup sweep, violating the "resumes
+#       selection" contract.
+echo "Test: --cleanup-confirm + --no-sweep is rejected"
+setup
+if err=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm /tmp/x --no-sweep 2>&1 >/dev/null); then rc=0; else rc=$?; fi
+assert_eq "combining the flags exits 1" "1" "$rc"
+assert_eq "stderr names both flags" \
+  "error: --cleanup-confirm and --no-sweep are mutually exclusive" "$err"
 teardown
 
 # ============================================================================
@@ -2883,83 +3107,111 @@ sweep_teardown
 # Each test gets a fresh tmp tree:
 #   $TMPDIR_TEST/stub/         lock file + per-test output capture files
 #   $TMPDIR_TEST/scripts/      a copy of dispatch-acquire-lock
-#   $TMPDIR_TEST/proc/         synthetic /proc tree (comm + status files)
+#   $TMPDIR_TEST/fake/         fake `claude` script for the liveness check
 #
-# DISPATCH_LOCK_FILE and DISPATCH_LOCK_PROC_ROOT are exported so the script
-# never touches the real shared lock. Tests 1-6 set DISPATCH_LOCK_SESSION_PID
-# to bypass the /proc ancestry walk; Test 7 leaves it unset to exercise the
-# walk through a synthetic /proc tree.
+# DISPATCH_LOCK_FILE is exported so the script never touches the real shared
+# lock. Every test sets CLAUDE_CODE_SESSION_ID directly to identify the caller,
+# and uses lock_fake_claude_sessions to stub `claude agents --json` for the
+# foreign-holder liveness check via CLAUDE_AGENTS_CMD.
 
 lock_setup() {
   TMPDIR_TEST=$(mktemp -d)
   STUB_DIR="$TMPDIR_TEST/stub"
-  mkdir -p "$STUB_DIR" "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/proc"
+  mkdir -p "$STUB_DIR" "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/fake"
 
   cp "$SCRIPT_DIR/dispatch-acquire-lock" "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-acquire-lock"
 
   export DISPATCH_LOCK_FILE="$STUB_DIR/dispatch.lock"
-  export DISPATCH_LOCK_PROC_ROOT="$TMPDIR_TEST/proc"
 }
 
 lock_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   STUB_DIR=""
-  unset DISPATCH_LOCK_FILE DISPATCH_LOCK_SESSION_PID DISPATCH_LOCK_PROC_ROOT \
+  unset DISPATCH_LOCK_FILE CLAUDE_CODE_SESSION_ID CLAUDE_AGENTS_CMD \
     DISPATCH_LOCK_WAIT_INTERVAL DISPATCH_LOCK_WAIT_TIMEOUT
 }
 
-# Helper: write a synthetic <proc>/<pid>/comm file with the given comm string.
-lock_proc_pid() {
-  local pid="$1" comm="$2"
-  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
-  printf '%s\n' "$comm" > "$DISPATCH_LOCK_PROC_ROOT/$pid/comm"
+# Helper: install a fake `claude` whose `agents --json` invocation prints a
+# JSON array of session objects carrying the given sessionIds (and exits 0).
+# Points CLAUDE_AGENTS_CMD at the fake. Call with zero args to simulate an
+# empty registry (`[]`). Safe to re-invoke mid-test: regenerates the fake.
+lock_fake_claude_sessions() {
+  local fake="$TMPDIR_TEST/fake/claude"
+  local payload="[" sid first=1
+  for sid in "$@"; do
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"x\"}"
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/fake/payload.json"
+  cat > "$fake" <<FAKE
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/fake/payload.json"
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
 }
 
-# Helper: write a synthetic <proc>/<pid>/status file recording <ppid> as the
-# parent — the PPid line is all the ancestry walk reads from it.
-lock_proc_status() {
-  local pid="$1" ppid="$2"
-  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
-  printf 'Name:\tbash\nPPid:\t%s\n' "$ppid" > "$DISPATCH_LOCK_PROC_ROOT/$pid/status"
+# Helper: install a fake `claude` whose `agents --json` invocation exits with
+# the given non-zero code (and prints nothing). Used to exercise the
+# fail-safe "treat foreign holder as live when the daemon cannot be queried"
+# contract.
+lock_fake_claude_failure() {
+  local exit_code="${1:-1}"
+  local fake="$TMPDIR_TEST/fake/claude"
+  cat > "$fake" <<FAKE
+#!/usr/bin/env bash
+exit $exit_code
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
 }
 
-# Helper: write a synthetic <proc>/<pid>/cmdline file with NUL-separated argv,
-# matching the kernel's /proc cmdline format. Used to mark a process as a
-# non-session Claude daemon (e.g. argv carrying `--bg-spare`).
-lock_proc_cmdline() {
-  local pid="$1"; shift
-  mkdir -p "$DISPATCH_LOCK_PROC_ROOT/$pid"
-  printf '%s\0' "$@" > "$DISPATCH_LOCK_PROC_ROOT/$pid/cmdline"
+# Helper: install a fake `claude` that exits 0 with the given literal stdout
+# payload. Used to exercise is_live_session's fail-safe branches for output
+# that is not a parseable JSON array of sessions (whitespace-only, non-array
+# JSON like `{}`/`null`, malformed JSON).
+lock_fake_claude_payload() {
+  local payload="$1"
+  local fake="$TMPDIR_TEST/fake/claude"
+  printf '%s' "$payload" > "$TMPDIR_TEST/fake/payload.txt"
+  cat > "$fake" <<FAKE
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/fake/payload.txt"
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
 }
 
 # --- Test 1: first acquisition with an absent lock file ----------------------
 
-echo "Test: first acquisition writes the session PID and prints acquired"
+echo "Test: first acquisition writes the sessionId and prints acquired"
 lock_setup
-export DISPATCH_LOCK_SESSION_PID=100100
-lock_proc_pid 100100 ".claude-unwrapp"
+export CLAUDE_CODE_SESSION_ID="sess-100"
+lock_fake_claude_sessions "sess-100"
 # The lock file does not exist yet.
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
 assert_eq "first-acquisition exits 0" "0" "$rc"
 assert_eq "first-acquisition prints acquired" "acquired" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "lock file records the session PID" "100100" "$lock_contents"
+assert_eq "lock file records the sessionId" "sess-100" "$lock_contents"
 lock_teardown
 
 # --- Test 2: two parallel invocations, distinct sessions ---------------------
 
 echo "Test: two parallel invocations yield exactly one acquired, one busy"
 lock_setup
-# Both sessions are live .claude processes.
-lock_proc_pid 200200 ".claude-unwrapp"
-lock_proc_pid 200300 ".claude-unwrapp"
-# Launch both in the background, each with its own session PID, sharing the
-# one lock file + proc root. The blocking flock serializes them.
-( export DISPATCH_LOCK_SESSION_PID=200200
+# Both sessionIds are present in the registry — both are live.
+lock_fake_claude_sessions "sess-200a" "sess-200b"
+# Launch both in the background, each with its own sessionId, sharing the
+# one lock file. The blocking flock serializes them.
+( export CLAUDE_CODE_SESSION_ID="sess-200a"
   "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) >"$STUB_DIR/out-a" 2>&1 &
-( export DISPATCH_LOCK_SESSION_PID=200300
+( export CLAUDE_CODE_SESSION_ID="sess-200b"
   "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) >"$STUB_DIR/out-b" 2>&1 &
 wait
 out_a=$(cat "$STUB_DIR/out-a" 2>/dev/null || true)
@@ -2969,110 +3221,116 @@ assert_eq "parallel invocations: exactly one acquired, one busy" \
   "$(printf 'acquired\nbusy')" "$sorted"
 lock_teardown
 
-# --- Test 3: stale lock — recorded PID is dead -------------------------------
+# --- Test 3: stale lock — recorded sessionId not in the registry -------------
 
-echo "Test: stale lock with a dead recorded PID is reclaimed"
+echo "Test: stale lock with a recorded sessionId absent from the registry is reclaimed"
 lock_setup
-# Pre-write a recorded PID with no /proc entry — a dead process.
-printf '%s\n' 300300 > "$DISPATCH_LOCK_FILE"
-export DISPATCH_LOCK_SESSION_PID=300400
-lock_proc_pid 300400 ".claude-unwrapp"
+# Pre-write a recorded sessionId that no longer appears in the registry.
+printf '%s\n' "sess-300-gone" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-300-new"
+lock_fake_claude_sessions "sess-300-new"   # registry knows only our session
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
-assert_eq "stale-dead-PID exits 0" "0" "$rc"
-assert_eq "stale-dead-PID prints acquired" "acquired" "$out"
+assert_eq "stale-absent-sid exits 0" "0" "$rc"
+assert_eq "stale-absent-sid prints acquired" "acquired" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "stale-dead-PID lock file rewritten to new session PID" \
-  "300400" "$lock_contents"
+assert_eq "stale-absent-sid lock file rewritten to new sessionId" \
+  "sess-300-new" "$lock_contents"
 lock_teardown
 
-# --- Test 4: stale lock — recorded PID recycled by a non-.claude process -----
+# --- Test 4: stale lock — registry empty (no live sessions at all) -----------
 
-echo "Test: stale lock with a recycled non-.claude PID is reclaimed"
+echo "Test: stale lock with an empty registry is reclaimed"
 lock_setup
-printf '%s\n' 400400 > "$DISPATCH_LOCK_FILE"
-# The recorded PID is alive but is NOT a .claude process — PID recycled.
-lock_proc_pid 400400 "bash"
-export DISPATCH_LOCK_SESSION_PID=400500
-lock_proc_pid 400500 ".claude-unwrapp"
+printf '%s\n' "sess-400-gone" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-400-new"
+lock_fake_claude_sessions   # zero args → empty registry `[]`
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
-assert_eq "recycled-PID exits 0" "0" "$rc"
-assert_eq "recycled-PID prints acquired" "acquired" "$out"
+assert_eq "empty-registry exits 0" "0" "$rc"
+assert_eq "empty-registry prints acquired" "acquired" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "empty-registry lock file rewritten to new sessionId" \
+  "sess-400-new" "$lock_contents"
 lock_teardown
 
 # --- Test 5: same-session re-entry -------------------------------------------
 
 echo "Test: same-session re-entry proceeds (not busy)"
 lock_setup
-# The recorded PID is a live .claude process AND is our own session.
-printf '%s\n' 500500 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 500500 ".claude-unwrapp"
-export DISPATCH_LOCK_SESSION_PID=500500
+# The recorded sessionId is our own session and is in the registry.
+printf '%s\n' "sess-500" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-500"
+lock_fake_claude_sessions "sess-500"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
 assert_eq "re-entry exits 0" "0" "$rc"
 assert_eq "re-entry prints acquired" "acquired" "$out"
 lock_teardown
 
-# --- Test 6: misconfiguration — non-git dir, no DISPATCH_LOCK_FILE -----------
+# --- Test 6a: misconfiguration — non-git dir, no DISPATCH_LOCK_FILE ----------
 
 echo "Test: non-git dir with no DISPATCH_LOCK_FILE exits 2"
 lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-600"
+lock_fake_claude_sessions "sess-600"
 nongit=$(mktemp -d)
 # `set -e` is in effect: capture the exit code with an if/else. env -u strips
-# the lock-file + proc-root overrides for just this invocation.
-if ( cd "$nongit" && env -u DISPATCH_LOCK_FILE -u DISPATCH_LOCK_PROC_ROOT \
+# the lock-file override for just this invocation.
+if ( cd "$nongit" && env -u DISPATCH_LOCK_FILE \
        "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) 2>"$STUB_DIR/err6"; then
   rc=0
 else
   rc=$?
 fi
-assert_eq "misconfiguration exits 2" "2" "$rc"
+assert_eq "misconfiguration (non-git) exits 2" "2" "$rc"
 err6=$(cat "$STUB_DIR/err6" 2>/dev/null || true)
+# Assert the specific git-error message, not just non-empty stderr — this keeps
+# the test's intent ("the git-lookup guard fired") robust to guard reordering:
+# if Step 2 ever moved before Step 1, this assertion would fail rather than
+# silently passing for the wrong reason.
 TOTAL=$((TOTAL + 1))
-if [[ -n "$err6" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: misconfiguration writes an error to stderr"
+if [[ "$err6" == *"not in a git repo"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-git misconfiguration writes the git-error to stderr"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: misconfiguration writes an error to stderr"
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-git misconfiguration writes the git-error to stderr"
   echo "    stderr: '$err6'"
 fi
 rm -rf "$nongit"
 lock_teardown
 
-# --- Test 7: /proc ancestry walk resolves the nearest .claude ancestor -------
-#
-# The only lock test that exercises the /proc walk — DISPATCH_LOCK_SESSION_PID
-# is left unset. `( exec ... )` forks a subshell that exec-replaces itself with
-# the script, so the script's $PPID is this test process ($$). Synthetic
-# ancestry: $$ is a non-.claude shell whose PPid points at a .claude session,
-# so the walk must climb one level past $$ to reach the session PID.
+# --- Test 6b: misconfiguration — CLAUDE_CODE_SESSION_ID unset → exit 2 -------
 
-echo "Test: /proc ancestry walk resolves the nearest .claude ancestor"
+echo "Test: unset CLAUDE_CODE_SESSION_ID exits 2"
 lock_setup
-claude_pid=700700
-lock_proc_pid "$$" "bash"                  # script's $PPID — not a .claude proc
-lock_proc_status "$$" "$claude_pid"        # ... its parent is the .claude session
-lock_proc_pid "$claude_pid" ".claude-unwrapp"
-rc=0
-( exec "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) \
-  >"$STUB_DIR/out7" 2>/dev/null || rc=$?
-out=$(cat "$STUB_DIR/out7" 2>/dev/null || true)
-assert_eq "proc-walk exits 0" "0" "$rc"
-assert_eq "proc-walk prints acquired" "acquired" "$out"
-lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "proc-walk records the .claude ancestor PID, not \$PPID" \
-  "$claude_pid" "$lock_contents"
+lock_fake_claude_sessions   # not strictly needed; daemon is never queried
+# `set -e` is in effect: capture the exit code with an if/else. env -u strips
+# CLAUDE_CODE_SESSION_ID for just this invocation.
+if ( env -u CLAUDE_CODE_SESSION_ID \
+       "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) 2>"$STUB_DIR/err6b"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "missing CLAUDE_CODE_SESSION_ID exits 2" "2" "$rc"
+err6b=$(cat "$STUB_DIR/err6b" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$err6b" == *"CLAUDE_CODE_SESSION_ID is unset"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing CLAUDE_CODE_SESSION_ID writes the session-id error to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing CLAUDE_CODE_SESSION_ID writes the session-id error to stderr"
+  echo "    stderr: '$err6b'"
+fi
 lock_teardown
 
 # --- Test 8: --wait with an own-session record acquires immediately ----------
 #
-# An own-session PID is recorded. --wait must NOT poll — try_acquire claims it
-# on iteration 1. WAIT_TIMEOUT=0 proves no wait happened: a real wait would
-# have to time out, which 0 cannot survive.
+# Our sessionId is recorded. --wait must NOT poll — try_acquire claims it on
+# iteration 1. WAIT_TIMEOUT=0 proves no wait happened: a real wait would have
+# to time out, which 0 cannot survive.
 
 echo "Test: --wait with an own-session record acquires immediately"
 lock_setup
-printf '%s\n' 800800 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 800800 ".claude-unwrapp"
-export DISPATCH_LOCK_SESSION_PID=800800
+printf '%s\n' "sess-800" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-800"
+lock_fake_claude_sessions "sess-800"
 export DISPATCH_LOCK_WAIT_TIMEOUT=0
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --wait 2>/dev/null); rc=$?
 assert_eq "--wait own-session exits 0" "0" "$rc"
@@ -3081,15 +3339,15 @@ lock_teardown
 
 # --- Test 9: --wait against a live foreign holder times out → busy -----------
 #
-# The recorded PID is a live foreign .claude session that never goes away. The
-# --wait loop polls until WAIT_TIMEOUT elapses, then prints busy and exits 0.
+# The recorded sessionId is a live foreign session that never leaves the
+# registry. The --wait loop polls until WAIT_TIMEOUT elapses, then prints busy
+# and exits 0.
 
 echo "Test: --wait against a live foreign holder times out and prints busy"
 lock_setup
-printf '%s\n' 900900 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 900900 ".claude-unwrapp"          # live foreign holder
-export DISPATCH_LOCK_SESSION_PID=900901
-lock_proc_pid 900901 ".claude-unwrapp"          # our own session
+printf '%s\n' "sess-900-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-900-self"
+lock_fake_claude_sessions "sess-900-foreign" "sess-900-self"
 export DISPATCH_LOCK_WAIT_TIMEOUT=1
 export DISPATCH_LOCK_WAIT_INTERVAL=0.2
 # `set -e` is in effect: capture the exit code with an if/else.
@@ -3104,37 +3362,39 @@ lock_teardown
 
 # --- Test 10: --wait acquires once a contended holder goes stale -------------
 #
-# The recorded PID is a live foreign holder when --wait starts. Mid-wait its
-# synthetic /proc entry is removed, so the next poll's liveness check fails and
-# the waiter reclaims the lock — recording its own session PID.
+# The recorded sessionId is live when --wait starts. Mid-wait we regenerate
+# the fake `claude` to omit that sessionId, so the next poll's liveness check
+# fails and the waiter reclaims the lock — recording its own sessionId.
 
 echo "Test: --wait acquires once a contended holder goes stale"
 lock_setup
-printf '%s\n' 101010 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 101010 ".claude-unwrapp"          # live foreign holder
-export DISPATCH_LOCK_SESSION_PID=101011
-lock_proc_pid 101011 ".claude-unwrapp"          # our own session
+printf '%s\n' "sess-1010-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1010-self"
+lock_fake_claude_sessions "sess-1010-foreign" "sess-1010-self"
 export DISPATCH_LOCK_WAIT_INTERVAL=0.1
 export DISPATCH_LOCK_WAIT_TIMEOUT=10
 ( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --wait ) >"$STUB_DIR/out10" 2>&1 &
 wait_pid=$!
 sleep 0.5
-# Holder goes away — next poll's liveness check fails, waiter reclaims.
-rm -rf "$DISPATCH_LOCK_PROC_ROOT/101010"
+# Holder goes away — regenerate the registry without its sessionId. The
+# waiter has already exported CLAUDE_AGENTS_CMD; the fake script reads its
+# payload file at run time, so rewriting the payload (and overwriting the
+# script) is picked up by the next poll.
+lock_fake_claude_sessions "sess-1010-self"
 wait "$wait_pid"
 out=$(cat "$STUB_DIR/out10" 2>/dev/null || true)
 assert_eq "--wait reclaim prints acquired" "acquired" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "--wait reclaim records our session PID" "101011" "$lock_contents"
+assert_eq "--wait reclaim records our sessionId" "sess-1010-self" "$lock_contents"
 lock_teardown
 
 # --- Test 11: --release with an own-session record → released, file emptied --
 
 echo "Test: --release with an own-session record clears the lock file"
 lock_setup
-printf '%s\n' 111100 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 111100 ".claude-unwrapp"
-export DISPATCH_LOCK_SESSION_PID=111100
+printf '%s\n' "sess-1111" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1111"
+lock_fake_claude_sessions "sess-1111"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
 assert_eq "--release own-session exits 0" "0" "$rc"
 assert_eq "--release own-session prints released" "released" "$out"
@@ -3148,84 +3408,183 @@ else
 fi
 lock_teardown
 
-# --- Test 12: --release with a foreign PID recorded → noop, file unchanged ---
+# --- Test 12: --release with a foreign sessionId recorded → noop -------------
 
-echo "Test: --release with a foreign PID recorded is a no-op"
+echo "Test: --release with a foreign sessionId recorded is a no-op"
 lock_setup
-printf '%s\n' 121200 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 121200 ".claude-unwrapp"          # live foreign holder
-export DISPATCH_LOCK_SESSION_PID=121201
-lock_proc_pid 121201 ".claude-unwrapp"          # our own session
+printf '%s\n' "sess-1212-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1212-self"
+lock_fake_claude_sessions "sess-1212-foreign" "sess-1212-self"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
 assert_eq "--release foreign exits 0" "0" "$rc"
 assert_eq "--release foreign prints noop" "noop" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
 assert_eq "--release foreign leaves the lock file unchanged" \
-  "121200" "$lock_contents"
+  "sess-1212-foreign" "$lock_contents"
 lock_teardown
 
 # --- Test 13: unknown argument exits 2 ---------------------------------------
 
 echo "Test: an unknown argument exits 2"
 lock_setup
+# Set CLAUDE_CODE_SESSION_ID so the test exercises the arg-parse guard
+# specifically. Without this, the script also exits 2 on the session-id guard
+# (Step 2) — if Step 0 (arg parse) were ever moved after Step 2, this test
+# would silently keep passing for the wrong reason.
+export CLAUDE_CODE_SESSION_ID="sess-1300"
 # `set -e` is in effect: capture the exit code with an if/else.
-if ( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --bogus ) 2>/dev/null; then
+if ( "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --bogus ) 2>"$STUB_DIR/err13"; then
   rc=0
 else
   rc=$?
 fi
 assert_eq "unknown argument exits 2" "2" "$rc"
+err13=$(cat "$STUB_DIR/err13" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$err13" == *"unknown argument"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unknown argument writes the arg-parse error to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unknown argument writes the arg-parse error to stderr"
+  echo "    stderr: '$err13'"
+fi
 lock_teardown
 
-# --- Test 14: a recorded --bg-spare daemon PID is reclaimable (non-holder) ---
-#
-# The recorded PID is alive with comm ".claude-unwrapp" — identical to a real
-# session — but its cmdline carries `--bg-spare`, marking a background-spare
-# daemon, not a /dispatch session. is_live_claude must reject it, so the
-# calling session reclaims the lock. The comm-only predicate would wrongly
-# report busy and wedge the lock on the daemon.
+# --- Test 14: a recorded sessionId absent from a non-empty registry is reclaimable
 
-echo "Test: a recorded --bg-spare daemon PID is reclaimable, not a holder"
+echo "Test: a recorded sessionId absent from a non-empty registry is reclaimable"
 lock_setup
-printf '%s\n' 141400 > "$DISPATCH_LOCK_FILE"
-lock_proc_pid 141400 ".claude-unwrapp"                   # comm looks like a session
-lock_proc_cmdline 141400 ".claude-unwrapped" "--bg-spare"  # ... but cmdline marks a spare daemon
-export DISPATCH_LOCK_SESSION_PID=141401
-lock_proc_pid 141401 ".claude-unwrapp"                   # our own live session
+printf '%s\n' "sess-1414-gone" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1414-self"
+# Registry has live sessions, but not the recorded holder — its session ended.
+lock_fake_claude_sessions "sess-1414-other" "sess-1414-self"
 out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
-assert_eq "bg-spare-holder exits 0" "0" "$rc"
-assert_eq "bg-spare-holder prints acquired" "acquired" "$out"
+assert_eq "absent-from-registry exits 0" "0" "$rc"
+assert_eq "absent-from-registry prints acquired" "acquired" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "bg-spare-holder lock file rewritten to the caller's session PID" \
-  "141401" "$lock_contents"
+assert_eq "absent-from-registry lock file rewritten to caller's sessionId" \
+  "sess-1414-self" "$lock_contents"
 lock_teardown
 
-# --- Test 15: the ancestry walk skips a --bg-spare daemon ancestor -----------
+# --- Test 15: daemon-unreachable → foreign holder treated as live → busy -----
 #
-# Like Test 7, DISPATCH_LOCK_SESSION_PID is unset so the /proc walk runs. The
-# script's $PPID ($$) is a non-.claude shell; its parent is a --bg-spare
-# daemon (`.claude` comm, `--bg-spare` cmdline); the grandparent is a real
-# .claude session. The walk must skip the spare daemon and record the session.
+# `claude agents --json` exits non-zero (binary missing, daemon down, etc.).
+# The fail-safe contract says treat the recorded foreign holder as live — the
+# lock must NOT be stolen. The caller prints busy.
 
-echo "Test: the ancestry walk skips a --bg-spare daemon ancestor"
+echo "Test: daemon-unreachable treats a foreign holder as live (lock not stolen)"
 lock_setup
-spare_pid=151500
-session_pid=151501
-lock_proc_pid "$$" "bash"                       # script's $PPID — not a .claude proc
-lock_proc_status "$$" "$spare_pid"              # ... its parent is the spare daemon
-lock_proc_pid "$spare_pid" ".claude-unwrapp"    # spare daemon: comm looks like a session
-lock_proc_cmdline "$spare_pid" ".claude-unwrapped" "--bg-spare"  # ... but cmdline marks it
-lock_proc_status "$spare_pid" "$session_pid"    # ... its parent is the real session
-lock_proc_pid "$session_pid" ".claude-unwrapp"  # real session (no cmdline → comm-only verdict)
-rc=0
-( exec "$TMPDIR_TEST/scripts/dispatch-acquire-lock" ) \
-  >"$STUB_DIR/out15" 2>/dev/null || rc=$?
-out=$(cat "$STUB_DIR/out15" 2>/dev/null || true)
-assert_eq "spare-ancestor walk exits 0" "0" "$rc"
-assert_eq "spare-ancestor walk prints acquired" "acquired" "$out"
+printf '%s\n' "sess-1515-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1515-self"
+lock_fake_claude_failure 1
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "daemon-unreachable exits 0" "0" "$rc"
+assert_eq "daemon-unreachable prints busy" "busy" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-assert_eq "spare-ancestor walk records the session PID, not the spare daemon" \
-  "$session_pid" "$lock_contents"
+assert_eq "daemon-unreachable lock file is unchanged" \
+  "sess-1515-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 16: --release with no lock file → noop, no error -------------------
+#
+# Tests 11/12 always pre-write a sessionId before --release; this exercises the
+# absent-file branch that the script must treat as `noop` (nothing recorded to
+# clear).
+
+echo "Test: --release with no lock file prints noop"
+lock_setup
+export CLAUDE_CODE_SESSION_ID="sess-1616"
+lock_fake_claude_sessions "sess-1616"
+# Lock file deliberately not created.
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
+assert_eq "--release absent-file exits 0" "0" "$rc"
+assert_eq "--release absent-file prints noop" "noop" "$out"
+lock_teardown
+
+# --- Test 17: opaque-failure stdout (whitespace-only) → foreign holder live --
+#
+# `claude agents --json` exits 0 but prints only whitespace. is_live_session
+# must treat this as opaque/live (return 0) — the lock must not be stolen.
+
+echo "Test: whitespace-only daemon stdout treats a foreign holder as live"
+lock_setup
+printf '%s\n' "sess-1717-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1717-self"
+lock_fake_claude_payload $'   \n\t  \n'
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "whitespace-stdout exits 0" "0" "$rc"
+assert_eq "whitespace-stdout prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "whitespace-stdout lock file is unchanged" \
+  "sess-1717-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 18: non-array JSON stdout (object) → foreign holder live -----------
+#
+# `claude agents --json` exits 0 but prints a JSON object instead of an array
+# (a daemon bug or API change). is_live_session's jq guard hits `error("not a
+# JSON array")` and the function returns 0 (live). The lock must not be stolen.
+
+echo "Test: non-array JSON daemon stdout treats a foreign holder as live"
+lock_setup
+printf '%s\n' "sess-1818-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1818-self"
+lock_fake_claude_payload '{"error":"unexpected shape"}'
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "non-array-json exits 0" "0" "$rc"
+assert_eq "non-array-json prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "non-array-json lock file is unchanged" \
+  "sess-1818-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 19: malformed-JSON daemon stdout → foreign holder treated as live ---
+#
+# `claude agents --json` exits 0 but prints truncated/malformed JSON (a partial
+# array like `[{"sessionId":`). jq cannot parse this — it exits non-zero — and
+# is_live_session must treat the jq parse failure as opaque/live (return 0).
+# The lock must NOT be stolen.
+
+echo "Test: malformed-JSON daemon stdout treats a foreign holder as live"
+lock_setup
+printf '%s\n' "sess-1919-foreign" > "$DISPATCH_LOCK_FILE"
+export CLAUDE_CODE_SESSION_ID="sess-1919-self"
+lock_fake_claude_payload '[{"sessionId":'
+out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" 2>/dev/null); rc=$?
+assert_eq "malformed-json exits 0" "0" "$rc"
+assert_eq "malformed-json prints busy" "busy" "$out"
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "malformed-json lock file is unchanged" \
+  "sess-1919-foreign" "$lock_contents"
+lock_teardown
+
+# --- Test 6c: --release with CLAUDE_CODE_SESSION_ID unset → exit 2 ----------
+#
+# The Step 2 CLAUDE_CODE_SESSION_ID guard runs before the `case "$MODE"` dispatch
+# so `--release` fails the same way as a plain acquire when the session-id is
+# unset. The foreign lock holder must be left untouched.
+
+echo "Test: --release with unset CLAUDE_CODE_SESSION_ID exits 2, lock unchanged"
+lock_setup
+printf '%s\n' "sess-6c-foreign" > "$DISPATCH_LOCK_FILE"
+lock_fake_claude_sessions   # not queried; guard fires before the mode dispatch
+if ( env -u CLAUDE_CODE_SESSION_ID \
+       "$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release ) 2>"$STUB_DIR/err6c"; then
+  rc=0
+else
+  rc=$?
+fi
+assert_eq "--release missing CLAUDE_CODE_SESSION_ID exits 2" "2" "$rc"
+err6c=$(cat "$STUB_DIR/err6c" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$err6c" == *"CLAUDE_CODE_SESSION_ID is unset"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: --release missing-session-id writes the session-id error to stderr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: --release missing-session-id writes the session-id error to stderr"
+  echo "    stderr: '$err6c'"
+fi
+lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
+assert_eq "--release missing-session-id leaves the foreign lock intact" \
+  "sess-6c-foreign" "$lock_contents"
 lock_teardown
 
 # ============================================================================
@@ -3760,6 +4119,344 @@ assert_eq "writer change is visible via the reader" "In Progress" "$status"
 proj_teardown
 
 # ============================================================================
+# dispatch-spawn tests
+# ============================================================================
+echo "=== dispatch-spawn ==="
+#
+# dispatch-spawn is exercised against a fake `claude` — a multi-subcommand
+# temp script DISPATCH_SPAWN_CLAUDE_CMD points at by absolute path, so no real
+# daemon is needed. The same fake also backs the sourced lib-claude-agents.sh
+# helper (dispatch-spawn exports CLAUDE_AGENTS_CMD to it).
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/        copies of dispatch-spawn + lib-claude-agents.sh
+#   $TMPDIR_TEST/worktrees/main/ the main worktree (the spawn subshell cd's here)
+#   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
+#   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
+#   $TMPDIR_TEST/jobs/           the on-disk jobs ledger (DISPATCH_SPAWN_JOBS_DIR)
+#   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
+#   $TMPDIR_TEST/rm-log          recorded job-ids of each `claude rm` call
+#   $TMPDIR_TEST/stop-log        recorded job-ids of each `claude stop` call
+#
+# The test shell runs under `set -e`; dispatch-spawn can exit non-zero, so
+# every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
+
+SPAWN_REGISTRY=""
+SPAWN_JOBS_DIR=""
+SPAWN_BG_ARGV=""
+SPAWN_RM_LOG=""
+SPAWN_STOP_LOG=""
+
+# write_fake_spawn_claude — install the multi-subcommand fake `claude`.
+# Dispatches on $1:
+#   agents   — print the registry fixture verbatim. The fake ignores --cwd:
+#              claude_sessions_under does no client-side path filtering — it
+#              trusts server-side `--cwd` filtering — so every fixture session
+#              is returned. Fine here: each fixture holds only sessions a test
+#              means dispatch-spawn to see.
+#   --bg     — record full argv to bg-argv; when SPAWN_BG_REGISTERS=1 (default)
+#              parse --name and jq-append the new agent to the fixture so the
+#              verify step finds it.
+#   rm       — append $2 (the job-id) to rm-log.
+#   stop     — append $2 (the job-id) to stop-log.
+write_fake_spawn_claude() {
+  cat > "$TMPDIR_TEST/fake-claude" <<FAKE
+#!/usr/bin/env bash
+set -uo pipefail
+case "\${1:-}" in
+  agents)
+    cat "$SPAWN_REGISTRY"
+    ;;
+  --bg)
+    printf '%s\n' "\$@" > "$SPAWN_BG_ARGV"
+    if [[ "\${SPAWN_BG_REGISTERS:-1}" == "1" ]]; then
+      name=""
+      while [[ \$# -gt 0 ]]; do
+        if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+        shift
+      done
+      tmp=\$(mktemp)
+      jq --arg name "\$name" \
+        '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":"/main","kind":"background","status":"busy","name":\$name}]' \
+        "$SPAWN_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_REGISTRY"
+    fi
+    ;;
+  rm)
+    printf '%s\n' "\${2:-}" >> "$SPAWN_RM_LOG"
+    ;;
+  stop)
+    printf '%s\n' "\${2:-}" >> "$SPAWN_STOP_LOG"
+    ;;
+esac
+FAKE
+  chmod +x "$TMPDIR_TEST/fake-claude"
+}
+
+spawn_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main" \
+    "$TMPDIR_TEST/jobs"
+
+  # dispatch-spawn sources lib-claude-agents.sh from its own directory, so the
+  # helper must sit alongside the copy. It is sourced, not executed — no chmod.
+  cp "$SCRIPT_DIR/dispatch-spawn" "$TMPDIR_TEST/scripts/dispatch-spawn"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn"
+
+  SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_JOBS_DIR="$TMPDIR_TEST/jobs"
+  SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_RM_LOG="$TMPDIR_TEST/rm-log"
+  SPAWN_STOP_LOG="$TMPDIR_TEST/stop-log"
+  printf '[]' > "$SPAWN_REGISTRY"
+
+  export DISPATCH_SPAWN_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+  export DISPATCH_SPAWN_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+  export DISPATCH_SPAWN_SESSION_ID="sess-self"
+  export DISPATCH_SPAWN_JOBS_DIR="$SPAWN_JOBS_DIR"
+}
+
+spawn_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  SPAWN_REGISTRY=""
+  SPAWN_JOBS_DIR=""
+  SPAWN_BG_ARGV=""
+  SPAWN_RM_LOG=""
+  SPAWN_STOP_LOG=""
+  unset DISPATCH_SPAWN_MAIN_WORKTREE DISPATCH_SPAWN_CLAUDE_CMD \
+    DISPATCH_SPAWN_SESSION_ID DISPATCH_SPAWN_JOBS_DIR SPAWN_BG_REGISTERS
+}
+
+# --- Test 1: spawn success ---------------------------------------------------
+
+echo "Test: an empty registry spawns one /dispatch background job"
+spawn_setup
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "spawn: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "spawn: stdout is 'spawned'" "spawned" "$out"
+# The recorded argv must be exactly: --bg --name dispatch-<id> \
+#   --permission-mode auto /dispatch
+mapfile -t bg_argv < "$SPAWN_BG_ARGV"
+assert_eq "spawn: argv[0] is --bg" "--bg" "${bg_argv[0]:-}"
+assert_eq "spawn: argv[1] is --name" "--name" "${bg_argv[1]:-}"
+case "${bg_argv[2]:-}" in
+  dispatch-*) name_ok=yes ;;
+  *)          name_ok="no: ${bg_argv[2]:-}" ;;
+esac
+assert_eq "spawn: argv[2] is a dispatch-* agent name" "yes" "$name_ok"
+assert_eq "spawn: argv[3] is --permission-mode" "--permission-mode" "${bg_argv[3]:-}"
+assert_eq "spawn: argv[4] is auto" "auto" "${bg_argv[4]:-}"
+assert_eq "spawn: argv[5] is /dispatch" "/dispatch" "${bg_argv[5]:-}"
+spawn_teardown
+
+# --- Test 2: dedup -----------------------------------------------------------
+
+echo "Test: another live dispatch-* session deduplicates the spawn"
+spawn_setup
+printf '%s' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/main","kind":"background","status":"busy","name":"dispatch-aaaa1111"}]' \
+  > "$SPAWN_REGISTRY"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "dedup: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "dedup: stdout is 'deduped'" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: dedup: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: dedup: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_BG_ARGV")"
+fi
+spawn_teardown
+
+# --- Test 3: self-exclusion --------------------------------------------------
+
+echo "Test: a dispatch-* session that is this session does not deduplicate"
+spawn_setup
+# The only dispatch-* session in the registry IS this session (sess-self).
+printf '%s' \
+  '[{"sessionId":"sess-self","pid":4242,"cwd":"/main","kind":"background","status":"busy","name":"dispatch-self0000"}]' \
+  > "$SPAWN_REGISTRY"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "self-exclude: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "self-exclude: stdout is 'spawned' (own session is not 'another')" \
+  "spawned" "$out"
+spawn_teardown
+
+# --- Test 4: spawn failure ---------------------------------------------------
+
+echo "Test: a spawned job that never registers exits non-zero with a diagnostic"
+spawn_setup
+write_fake_spawn_claude
+export SPAWN_BG_REGISTERS=0
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>&1 1>/dev/null) || rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: dispatch-spawn exits non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: dispatch-spawn exits non-zero (rc=$rc)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"did not register"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: stderr reports the unregistered agent"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: stderr reports the unregistered agent"
+  echo "    stderr: $err"
+fi
+spawn_teardown
+
+# --- Test 5: prune -----------------------------------------------------------
+
+echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
+spawn_setup
+# Seed the on-disk ledger with three entries:
+#   abcd1234  — stopped dispatch-* (the rm target)
+#   ef015678  — stopped non-dispatch (must NOT be pruned)
+#   9999cccc  — live (working) dispatch-* (must NOT be pruned)
+mkdir -p "$SPAWN_JOBS_DIR/abcd1234" "$SPAWN_JOBS_DIR/ef015678" \
+  "$SPAWN_JOBS_DIR/9999cccc"
+printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
+  > "$SPAWN_JOBS_DIR/abcd1234/state.json"
+printf '%s' '{"name":"manual-session","state":"stopped"}' \
+  > "$SPAWN_JOBS_DIR/ef015678/state.json"
+printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
+  > "$SPAWN_JOBS_DIR/9999cccc/state.json"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "prune: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "prune: stdout is 'spawned' (stopped agent does not dedup)" \
+  "spawned" "$out"
+rm_log=$(cat "$SPAWN_RM_LOG" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" == *"abcd1234"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm abcd1234' (directory basename, not sessionId) was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm abcd1234' (directory basename) was invoked"
+  echo "    rm-log: $rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" != *"ef015678"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: non-dispatch agent 'ef015678' was not pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: non-dispatch agent 'ef015678' was not pruned"
+  echo "    rm-log: $rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" != *"9999cccc"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: live dispatch-* agent '9999cccc' was not pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: live dispatch-* agent '9999cccc' was not pruned"
+  echo "    rm-log: $rm_log"
+fi
+spawn_teardown
+
+# --- Test 6: unqueryable registry fails safe ---------------------------------
+
+echo "Test: an unparseable session registry fails safe — spawns nothing"
+spawn_setup
+# A registry that is not a JSON array: lib-claude-agents.sh's
+# claude_sessions_under cannot parse it and returns 1 (unknown). dispatch-spawn
+# must treat unknown as "a dispatch agent may be running" and spawn nothing —
+# the documented fail-safe in the script's Step 3 dedup guard.
+printf '%s' 'not-a-json-array' > "$SPAWN_REGISTRY"
+write_fake_spawn_claude
+if out=$("$TMPDIR_TEST/scripts/dispatch-spawn" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "unknown-registry: dispatch-spawn exits 0" "0" "$rc"
+assert_eq "unknown-registry: stdout is 'deduped'" "deduped" "$out"
+# No --bg invocation was recorded — nothing was spawned.
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: unknown-registry: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unknown-registry: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_BG_ARGV")"
+fi
+spawn_teardown
+
+# ============================================================================
+# dispatch-self-close tests
+# ============================================================================
+echo "=== dispatch-self-close ==="
+#
+# dispatch-self-close runs `claude stop <job-id>` against the basename of
+# $CLAUDE_JOB_DIR. The fake `claude` records its argv in SPAWN_STOP_LOG (see
+# write_fake_spawn_claude). When CLAUDE_JOB_DIR is unset, the script is a no-op
+# — the foreground-safe gate that protects an interactive /dispatch from
+# stopping the user's live conversation.
+
+selfclose_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts"
+  cp "$SCRIPT_DIR/dispatch-self-close" "$TMPDIR_TEST/scripts/dispatch-self-close"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-self-close"
+
+  # Reuse the dispatch-spawn fake `claude` writer: it already dispatches on
+  # `stop` and appends $2 to SPAWN_STOP_LOG. The unused SPAWN_REGISTRY /
+  # SPAWN_BG_ARGV / SPAWN_RM_LOG paths still need to be set because the writer
+  # interpolates them into the fake-claude script body.
+  SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_RM_LOG="$TMPDIR_TEST/rm-log"
+  SPAWN_STOP_LOG="$TMPDIR_TEST/stop-log"
+  printf '[]' > "$SPAWN_REGISTRY"
+  write_fake_spawn_claude
+
+  export DISPATCH_SELF_CLOSE_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+}
+
+selfclose_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  SPAWN_REGISTRY=""
+  SPAWN_BG_ARGV=""
+  SPAWN_RM_LOG=""
+  SPAWN_STOP_LOG=""
+  unset DISPATCH_SELF_CLOSE_CLAUDE_CMD CLAUDE_JOB_DIR
+}
+
+# --- Test 1: managed-job → stops itself --------------------------------------
+
+echo "Test: a managed background job stops itself by job-id (basename of CLAUDE_JOB_DIR)"
+selfclose_setup
+mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+if out=$("$TMPDIR_TEST/scripts/dispatch-self-close" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "self-close: dispatch-self-close exits 0" "0" "$rc"
+stop_log=$(cat "$SPAWN_STOP_LOG" 2>/dev/null || true)
+assert_eq "self-close: 'claude stop abcd1234' was invoked (basename, not full path)" \
+  "abcd1234" "$stop_log"
+selfclose_teardown
+
+# --- Test 2: interactive → no-op ---------------------------------------------
+
+echo "Test: an interactive session (CLAUDE_JOB_DIR unset) is a no-op with a diagnostic"
+selfclose_setup
+unset CLAUDE_JOB_DIR
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-self-close" 2>&1 1>/dev/null) || rc=$?
+assert_eq "interactive: dispatch-self-close exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"not a managed background job"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: interactive: stderr reports 'not a managed background job'"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: stderr reports 'not a managed background job'"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_STOP_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: interactive: no 'claude stop' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: no 'claude stop' invocation recorded"
+  echo "    stop-log: $(cat "$SPAWN_STOP_LOG")"
+fi
+selfclose_teardown
+
+# ============================================================================
 # dispatch-jit-engine tests
 # ============================================================================
 #
@@ -4281,6 +4978,108 @@ creates_after=0
 assert_eq "idempotency run 2 made no second issue create" \
   "$creates_before" "$creates_after"
 jit_teardown
+
+# ============================================================================
+# ensure_deps (lib.sh) retry tests
+# ============================================================================
+echo ""
+echo "=== ensure_deps retry ==="
+
+# These tests use a fresh TMPDIR_TEST with a STUB_DIR holding npm and sleep
+# shims on PATH. lib.sh is sourced from SCRIPT_DIR (not the TMPDIR_TEST copy)
+# so ensure_deps resolves directly. REPO_ROOT is a fresh tmpdir with no
+# node_modules — forcing the install branch every time.
+
+# 1. ensure_deps retries and succeeds on attempt 3.
+echo "Test: ensure_deps retries and succeeds on attempt 3"
+TMPDIR_TEST=$(mktemp -d)
+STUB_DIR="$TMPDIR_TEST/stub"
+mkdir -p "$STUB_DIR"
+REPO_ROOT_TEST=$(mktemp -d)
+
+# npm stub: fail on calls 1 and 2; succeed on call 3.
+cat > "$STUB_DIR/npm" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)"
+count_file="$STUB_DIR/npm-count"
+count=0
+[ -f "$count_file" ] && count=$(cat "$count_file")
+count=$((count + 1))
+echo "$count" > "$count_file"
+if [ "$count" -lt 3 ]; then
+  exit 1
+fi
+exit 0
+STUB
+chmod +x "$STUB_DIR/npm"
+
+# sleep stub: no-op.
+cat > "$STUB_DIR/sleep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$STUB_DIR/sleep"
+
+export PATH="$STUB_DIR:$SAVED_PATH"
+rc=0
+( export REPO_ROOT="$REPO_ROOT_TEST"; source "$SCRIPT_DIR/lib.sh"; ensure_deps ) || rc=$?
+assert_eq "ensure_deps succeeds on attempt 3 (exit code)" "0" "$rc"
+npm_count=0
+[ -f "$STUB_DIR/npm-count" ] && npm_count=$(cat "$STUB_DIR/npm-count")
+assert_eq "ensure_deps called npm exactly 3 times" "3" "$npm_count"
+
+rm -rf "$TMPDIR_TEST" "$REPO_ROOT_TEST"
+TMPDIR_TEST=""
+STUB_DIR=""
+export PATH="$SAVED_PATH"
+
+# 2. ensure_deps fails after exhausting all 3 attempts.
+echo "Test: ensure_deps fails after exhausting all 3 attempts"
+TMPDIR_TEST=$(mktemp -d)
+STUB_DIR="$TMPDIR_TEST/stub"
+mkdir -p "$STUB_DIR"
+REPO_ROOT_TEST=$(mktemp -d)
+
+# npm stub: always fails.
+cat > "$STUB_DIR/npm" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)"
+count_file="$STUB_DIR/npm-count"
+count=0
+[ -f "$count_file" ] && count=$(cat "$count_file")
+count=$((count + 1))
+echo "$count" > "$count_file"
+exit 1
+STUB
+chmod +x "$STUB_DIR/npm"
+
+# sleep stub: no-op.
+cat > "$STUB_DIR/sleep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$STUB_DIR/sleep"
+
+export PATH="$STUB_DIR:$SAVED_PATH"
+rc=0
+( export REPO_ROOT="$REPO_ROOT_TEST"; source "$SCRIPT_DIR/lib.sh"; ensure_deps ) || rc=$?
+TOTAL=$((TOTAL + 1))
+if [ "$rc" -ne 0 ]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: ensure_deps returns non-zero after 3 failed attempts"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: ensure_deps returns non-zero after 3 failed attempts"
+  echo "    expected non-zero, got 0"
+fi
+npm_count=0
+[ -f "$STUB_DIR/npm-count" ] && npm_count=$(cat "$STUB_DIR/npm-count")
+assert_eq "ensure_deps tried npm exactly 3 times before giving up" "3" "$npm_count"
+
+rm -rf "$TMPDIR_TEST" "$REPO_ROOT_TEST"
+TMPDIR_TEST=""
+STUB_DIR=""
+export PATH="$SAVED_PATH"
 
 # ============================================================================
 # summary
