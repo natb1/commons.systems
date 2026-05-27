@@ -5611,6 +5611,51 @@ assert_eq "dispatch-spawn-worker args" \
 router_smoke_teardown
 
 # ============================================================================
+# dispatch chain: no EnterWorktree/ExitWorktree mid-session (ratchet for #839)
+# ============================================================================
+echo "=== dispatch chain: no EnterWorktree/ExitWorktree mid-session ==="
+#
+# Regression guard for #839: the dispatch chain — router /dispatch and the
+# skills the worker (/dispatch-worker) invokes — must not call EnterWorktree
+# or ExitWorktree. The worker is born in its target worktree (cwd set by
+# dispatch-spawn-worker); any mid-session worktree switch is at best a no-op
+# and at worst an error. The router runs in worktrees/main and materializes
+# the target worktree explicitly (git worktree add).
+#
+# Allowed exception: dispatch-worker/SKILL.md mentions the words in its
+# preamble contract: "It never calls EnterWorktree or ExitWorktree."
+
+PROJECT_ROOT_FOR_GUARD=$(cd "$SCRIPT_DIR/../../../.." && pwd)
+
+# Map of chain-skill SKILL.md → allowed count of EnterWorktree+ExitWorktree
+# substring mentions (grep -oE counts each occurrence, not each line).
+declare -A CHAIN_GUARD_EXPECTED=(
+  [".claude/skills/dispatch/SKILL.md"]=0
+  [".claude/skills/dispatch-worker/SKILL.md"]=2
+  [".claude/skills/dispatch-qa/SKILL.md"]=0
+  [".claude/skills/plan-implement/SKILL.md"]=0
+  [".claude/skills/code-review-fix/SKILL.md"]=0
+  [".claude/skills/review-fix/SKILL.md"]=0
+  [".claude/skills/security-review-fix/SKILL.md"]=0
+  [".claude/skills/verify-pr/SKILL.md"]=0
+  [".claude/skills/implement-unit/SKILL.md"]=0
+  [".claude/skills/commit-merge-push/SKILL.md"]=0
+)
+
+for relpath in "${!CHAIN_GUARD_EXPECTED[@]}"; do
+  abspath="$PROJECT_ROOT_FOR_GUARD/$relpath"
+  expected="${CHAIN_GUARD_EXPECTED[$relpath]}"
+  if [[ ! -f "$abspath" ]]; then
+    TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1))
+    echo "  FAIL: chain-guard: file missing: $relpath"
+    continue
+  fi
+  actual=$({ grep -oE 'EnterWorktree|ExitWorktree' "$abspath" || true; } | wc -l | tr -d ' ')
+  assert_eq "chain-guard: $relpath: EnterWorktree/ExitWorktree count" \
+    "$expected" "$actual"
+done
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
