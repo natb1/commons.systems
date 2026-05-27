@@ -479,10 +479,12 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 - **`review`** — invoke `/review-fix`. It runs `/review`, applies the recommended
   fixes, posts a PR comment, and applies the `dispatch:reviewed` label itself —
   `/dispatch` applies no label.
-- **`security`** — invoke `/security-review-fix`. It runs `/security-review` and
-  gathers the PR's CodeQL code-scanning alerts, applies the recommended fixes,
-  posts a PR comment, applies the `dispatch:security-reviewed` label, and marks
-  the PR ready. It is idempotent on re-entry — `/dispatch` applies no label.
+- **`security`** — invoke `/security-review-fix`. Its Step 2 directly fans out
+  9 parallel subagents — 6 security domains, a red team, the built-in
+  `/security-review` scan (subagent-wrapped Skill invocation), and the PR's
+  CodeQL alerts — then applies the required fixes, posts a PR comment, applies
+  the `dispatch:security-reviewed` label, and marks the PR ready. It is
+  idempotent on re-entry — `/dispatch` applies no label.
 - **`done`** — report that the PR is already ready, then **proceed to Step 9**
   (early-stop). No phase skill ran, so Step 9 spawns no successor and
   self-closes.
