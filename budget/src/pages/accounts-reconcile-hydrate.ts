@@ -1,9 +1,11 @@
 import { getActiveDataSource } from "../active-data-source.js";
 import type { ReconciliationEventFields } from "../data-source.js";
-import { balancesMatch } from "../reconciliation.js";
+import { balancesMatch, buildAdjustmentEntry } from "../reconciliation.js";
 import { formatCurrency } from "../format.js";
 import { deferProgrammerError } from "@commons-systems/errorutil/defer";
 import { logError } from "@commons-systems/errorutil/log";
+import { accountDocId } from "../entities/account.js";
+import type { AccountType } from "../schema/enums.js";
 import { parseReconcileQuery, parseReconcilePeriod } from "./accounts-reconcile.js";
 
 function replaceQueryParam(name: string, value: string | null): void {
@@ -130,6 +132,13 @@ export function hydrateAccountsReconcile(container: HTMLElement): void {
       .then(() => {
         // Signal a settled write — lets tests wait for persistence deterministically.
         row.dataset.clearedSaved = String(nextChecked);
+        // Any explicit toggle dismisses the suggestion — checking confirms it,
+        // unchecking rejects it. Either way the row leaves the suggested pool
+        // so a later Confirm-all click cannot re-clear a rejection.
+        if (row.classList.contains("reconcile-suggested")) {
+          row.classList.remove("reconcile-suggested");
+          row.querySelector(".reconcile-suggested-badge")?.remove();
+        }
       })
       .catch((error: unknown) => {
         target.checked = !nextChecked;
@@ -139,12 +148,25 @@ export function hydrateAccountsReconcile(container: HTMLElement): void {
       });
   });
 
+  // Confirm-all button: bulk-promote every suggested row to user-confirmed cleared.
+  const confirmAllButton = container.querySelector<HTMLButtonElement>("#reconcile-confirm-all");
+  if (confirmAllButton) {
+    confirmAllButton.addEventListener("click", () => {
+      void handleConfirmAll(container);
+    });
+  }
+
   const dialog = container.querySelector<HTMLDialogElement>("#reconcile-dialog");
 
-  // Reconcile button opens the dialog.
+  // Reconcile button opens the dialog. Reset the mismatch state so a reopened
+  // dialog starts clean.
   const openButton = container.querySelector<HTMLButtonElement>("#reconcile-open-dialog");
   if (openButton && dialog) {
     openButton.addEventListener("click", () => {
+      const mismatchActions = container.querySelector<HTMLElement>("#reconcile-mismatch-actions");
+      if (mismatchActions) mismatchActions.hidden = true;
+      const differenceDisplay = container.querySelector<HTMLElement>("#reconcile-difference-display");
+      if (differenceDisplay) differenceDisplay.textContent = "";
       dialog.showModal();
     });
   }
@@ -154,6 +176,23 @@ export function hydrateAccountsReconcile(container: HTMLElement): void {
   if (cancelButton && dialog) {
     cancelButton.addEventListener("click", () => {
       dialog.close();
+    });
+  }
+
+  // Mismatch primary action: close the dialog and return the user to the leg
+  // list. The container-level change listener keeps handling further toggles.
+  const adjustSelectionsButton = container.querySelector<HTMLButtonElement>("#reconcile-adjust-selections");
+  if (adjustSelectionsButton && dialog) {
+    adjustSelectionsButton.addEventListener("click", () => {
+      dialog.close();
+    });
+  }
+
+  // Mismatch escape-hatch action: generate a balanced adjustment entry.
+  const createAdjustmentButton = container.querySelector<HTMLButtonElement>("#reconcile-create-adjustment");
+  if (createAdjustmentButton && dialog) {
+    createAdjustmentButton.addEventListener("click", () => {
+      void handleCreateAdjustment(container, dialog);
     });
   }
 
@@ -169,7 +208,54 @@ export function hydrateAccountsReconcile(container: HTMLElement): void {
   }
 }
 
+/**
+ * Bulk-confirm all suggested legs: check each checkbox, persist via the data
+ * source, and remove the suggestion styling. On any persist failure, revert
+ * that row's visual state and log the error.
+ */
+async function handleConfirmAll(container: HTMLElement): Promise<void> {
+  const suggestedRows = Array.from(
+    container.querySelectorAll<HTMLElement>(".reconcile-leg.reconcile-suggested"),
+  );
+  if (suggestedRows.length === 0) return;
+
+  // Optimistically mark all rows checked and update the header before any
+  // async work, matching the pattern used by the per-row change handler.
+  for (const row of suggestedRows) {
+    const checkbox = row.querySelector<HTMLInputElement>(".reconcile-cleared-checkbox");
+    if (checkbox) checkbox.checked = true;
+  }
+  updateHeaderTotals(container);
+
+  // Persist each leg. Run all in parallel; revert individual rows that fail.
+  await Promise.all(
+    suggestedRows.map(async (row) => {
+      const legId = row.dataset.legId;
+      if (!legId) return;
+      const checkbox = row.querySelector<HTMLInputElement>(".reconcile-cleared-checkbox");
+      try {
+        await getActiveDataSource().updateJournalLegCleared(legId, true);
+        // Promote: remove suggestion styling from successfully-persisted rows.
+        row.classList.remove("reconcile-suggested");
+        row.querySelector(".reconcile-suggested-badge")?.remove();
+        if (checkbox) row.dataset.clearedSaved = "true";
+      } catch (error: unknown) {
+        // Revert this row on failure.
+        if (checkbox) checkbox.checked = false;
+        updateHeaderTotals(container);
+        if (deferProgrammerError(error)) return;
+        logError(error, { operation: "reconcile-confirm-all" });
+      }
+    }),
+  );
+}
+
 async function handleReconcileSubmit(container: HTMLElement, dialog: HTMLDialogElement): Promise<void> {
+  const submitButton = container.querySelector<HTMLButtonElement>("#reconcile-submit");
+  // Re-entrancy guard: drop a queued second click that arrived before the
+  // disable below took effect.
+  if (submitButton?.disabled) return;
+
   const bankInput = container.querySelector<HTMLInputElement>("#reconcile-bank-balance-input");
   const differenceDisplay = container.querySelector<HTMLElement>("#reconcile-difference-display");
   if (!bankInput) throw new Error("#reconcile-bank-balance-input not found");
@@ -186,11 +272,62 @@ async function handleReconcileSubmit(container: HTMLElement, dialog: HTMLDialogE
   const cleared = clearedBalanceFromDom(container);
 
   if (!balancesMatch(bankBalance, cleared)) {
-    // Mismatch: surface the signed difference (cleared − bank) and keep the
-    // dialog open. Mismatch-resolution UX is sibling issue #554.
+    // Mismatch: surface the signed difference (cleared − bank) and reveal the
+    // mismatch-resolution actions while keeping the dialog open. Do NOT disable
+    // the submit button — the user must be able to edit the input and resubmit.
     const difference = cleared - bankBalance;
     if (differenceDisplay) {
       differenceDisplay.textContent = `Difference: ${formatCurrency(difference)}`;
+    }
+    const mismatchActions = container.querySelector<HTMLElement>("#reconcile-mismatch-actions");
+    if (mismatchActions) mismatchActions.hidden = false;
+    return;
+  }
+
+  if (submitButton) submitButton.disabled = true;
+  try {
+    await finalizeReconciliation(container, dialog, {
+      adjustment: 0,
+      adjustmentEntryId: null,
+      extraLegIds: [],
+    });
+  } finally {
+    if (submitButton) submitButton.disabled = false;
+  }
+}
+
+/**
+ * Escape-hatch path: generate a balanced two-leg adjustment entry that closes
+ * the reconciliation difference, then finalize the reconciliation with the
+ * signed difference recorded as the event's `adjustment`.
+ */
+async function handleCreateAdjustment(container: HTMLElement, dialog: HTMLDialogElement): Promise<void> {
+  const createButton = container.querySelector<HTMLButtonElement>("#reconcile-create-adjustment");
+  // Re-entrancy guard. Once the button is disabled below, the browser stops
+  // dispatching its click events — this catches a second click that was
+  // already queued before the disable took effect.
+  if (createButton?.disabled) return;
+
+  const bankInput = container.querySelector<HTMLInputElement>("#reconcile-bank-balance-input");
+  const differenceDisplay = container.querySelector<HTMLElement>("#reconcile-difference-display");
+  if (!bankInput) throw new Error("#reconcile-bank-balance-input not found");
+
+  const bankInputRaw = bankInput.value.trim();
+  const bankBalance = Number(bankInputRaw);
+  if (bankInputRaw === "" || !Number.isFinite(bankBalance)) {
+    if (differenceDisplay) differenceDisplay.textContent = "Enter a valid bank balance.";
+    return;
+  }
+
+  const cleared = clearedBalanceFromDom(container);
+  const difference = cleared - bankBalance;
+
+  // The user can edit the bank balance to match the cleared total after the
+  // mismatch actions appear. Refuse to write a zero-amount adjustment entry —
+  // the user should submit the dialog instead.
+  if (balancesMatch(bankBalance, cleared)) {
+    if (differenceDisplay) {
+      differenceDisplay.textContent = "Balances match — submit to reconcile without an adjustment.";
     }
     return;
   }
@@ -200,17 +337,93 @@ async function handleReconcileSubmit(container: HTMLElement, dialog: HTMLDialogE
     throw new Error("Reconcile submit requires institution, account, and period query params");
   }
 
-  const legIds = clearedLegIds(container);
+  const accountType = container.dataset.accountType;
+  if (!accountType) {
+    throw new Error("Reconcile container is missing data-account-type");
+  }
+  const suspenseAccountId = container.dataset.suspenseAccountId;
+  if (!suspenseAccountId) {
+    if (differenceDisplay) {
+      differenceDisplay.textContent =
+        "No Adjustment Suspense account is available — cannot create an adjustment entry.";
+    }
+    return;
+  }
+
+  if (createButton) createButton.disabled = true;
+  let entryCreated = false;
+  try {
+    const { entry, legs } = buildAdjustmentEntry({
+      difference,
+      reconcilingAccountId: accountDocId(query.institution, query.account),
+      reconcilingAccountType: accountType as AccountType,
+      suspenseAccountId,
+      accountLabel: query.account,
+      throughDateMs: periodEndMs(query.period),
+    });
+    const { entryId, legIds } = await getActiveDataSource().createJournalEntry(entry, legs);
+    // Both legs (reconciling + suspense) must be stamped as reconciled. Once
+    // the entry exists, keep the button disabled regardless of what
+    // finalizeReconciliation does — preventing duplicate orphan entries on retry.
+    entryCreated = true;
+    await finalizeReconciliation(container, dialog, {
+      adjustment: difference,
+      adjustmentEntryId: entryId,
+      extraLegIds: [...legIds],
+    });
+  } catch (error) {
+    if (deferProgrammerError(error)) return;
+    if (differenceDisplay) {
+      differenceDisplay.textContent = "Adjustment entry failed — please try again.";
+    }
+    logError(error, { operation: "reconcile-create-adjustment" });
+  } finally {
+    // Only re-enable if the journal entry was never written — once an entry
+    // exists, disallow retry to prevent orphan accumulation.
+    if (!entryCreated && createButton) createButton.disabled = false;
+  }
+}
+
+/**
+ * Writes the `reconciliation-events` record and stamps the cleared legs as
+ * reconciled. `clearedBalance` is the pre-adjustment cleared total; the design
+ * guarantees `clearedBalance − adjustment === bankBalance`.
+ */
+async function finalizeReconciliation(
+  container: HTMLElement,
+  dialog: HTMLDialogElement,
+  options: { adjustment: number; adjustmentEntryId: string | null; extraLegIds: string[] },
+): Promise<void> {
+  const bankInput = container.querySelector<HTMLInputElement>("#reconcile-bank-balance-input");
+  const differenceDisplay = container.querySelector<HTMLElement>("#reconcile-difference-display");
+  if (!bankInput) throw new Error("#reconcile-bank-balance-input not found");
+
+  // The caller has already validated the input is non-empty and finite; this
+  // is a defensive guard for a clear error rather than a silent fallback.
+  const bankBalance = Number(bankInput.value.trim());
+  if (!Number.isFinite(bankBalance)) {
+    throw new Error("finalizeReconciliation requires a finite bank balance");
+  }
+
+  // Pre-adjustment cleared total — the value the match path records.
+  const cleared = clearedBalanceFromDom(container);
+
+  const query = parseReconcileQuery(location.search);
+  if (!query.institution || !query.account || !query.period) {
+    throw new Error("Reconcile submit requires institution, account, and period query params");
+  }
+
+  const legIds = [...clearedLegIds(container), ...options.extraLegIds];
   const fields: ReconciliationEventFields = {
     institution: query.institution,
     account: query.account,
     reconciledThroughDateMs: periodEndMs(query.period),
     bankBalance,
     clearedBalance: cleared,
-    adjustment: 0,
+    adjustment: options.adjustment,
     reconciledBy: "local",
     reconciledAtMs: Date.now(),
-    adjustmentEntryId: null,
+    adjustmentEntryId: options.adjustmentEntryId,
   };
 
   try {

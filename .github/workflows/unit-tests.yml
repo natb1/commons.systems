@@ -30,6 +30,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - name: Run unit tests
         run: .claude/skills/dispatch/scripts/run-unit-tests.sh
 
@@ -54,6 +55,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - name: Run lint
         run: .claude/skills/dispatch/scripts/run-lint.sh
 
@@ -66,6 +68,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - name: Run typecheck
         run: .claude/skills/dispatch/scripts/run-typecheck.sh
 
@@ -98,6 +101,7 @@ jobs:
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
         with:
           node-version-file: .node-version
+          cache: 'npm'
       - name: Install workspace dependencies
         if: steps.changes.outputs.nix == 'true' || steps.changes.outputs.playwright == 'true'
         run: npm ci
