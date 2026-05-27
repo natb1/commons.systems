@@ -5492,6 +5492,125 @@ STUB_DIR=""
 export PATH="$SAVED_PATH"
 
 # ============================================================================
+# /dispatch router smoke (Step 5 create + Step 6 spawn)
+# ============================================================================
+# Pin the shell sequence documented in /dispatch SKILL.md Step 5's `create`
+# branch and Step 6, by faking every external binary the sequence calls and
+# asserting each fake was invoked with the expected arguments. This is a
+# documentation-pinning test, not a behaviour test of the router itself: it
+# catches the case where someone edits Step 5/6 in SKILL.md and forgets to
+# update the spawn call, or where the documented shell sequence drifts from
+# what the script expects.
+#
+# Tested sequence (matches /dispatch SKILL.md Step 5 create + Step 6):
+#   GIT_COMMON_DIR=...                                       # faked git
+#   PROJECT_ROOT=...
+#   WORKTREE_PATH="$PROJECT_ROOT/worktrees/<branch>"
+#   git worktree add -b <branch> "$WORKTREE_PATH" origin/main
+#   direnv allow "$WORKTREE_PATH"
+#   (cd "$WORKTREE_PATH" && sync-issue-context <N>)
+#   mkdir -p tmp && touch tmp/dispatch-worktree
+#   dispatch-spawn-worker <N> "$WORKTREE_PATH"
+echo ""
+echo "=== /dispatch router smoke (Step 5 create + Step 6 spawn) ==="
+
+router_smoke_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/bin" "$TMPDIR_TEST/logs"
+
+  # Faked PROJECT_ROOT — mock the layout `git rev-parse --git-common-dir`
+  # would return (parent is the project root by the same idiom dispatch-spawn /
+  # dispatch-acquire-lock use).
+  mkdir -p "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees"
+
+  # Fake `git` — only supports the two subcommands the Step 5 create sequence
+  # calls: `rev-parse --git-common-dir` (used for resolving PROJECT_ROOT) and
+  # `worktree add -b <branch> <path> origin/main`. Each invocation appends its
+  # full argv to a per-binary log. The rev-parse path returns the faked
+  # .bare/ absolute path.
+  cat > "$TMPDIR_TEST/bin/git" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/git.log"
+case "\$*" in
+  "rev-parse --path-format=absolute --git-common-dir")
+    echo "$TMPDIR_TEST/project/.bare"
+    ;;
+  "worktree add -b "*)
+    # No-op; the smoke test does not need a real worktree on disk.
+    ;;
+  *)
+    echo "fake git: unexpected invocation: \$*" >&2
+    exit 99
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git"
+
+  # Fake `direnv` — record its argv only.
+  cat > "$TMPDIR_TEST/bin/direnv" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/direnv.log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/direnv"
+
+  # Fake `sync-issue-context` — record cwd + argv.
+  cat > "$TMPDIR_TEST/bin/sync-issue-context" <<STUB
+#!/usr/bin/env bash
+echo "cwd=\$PWD argv=\$*" >> "$TMPDIR_TEST/logs/sync-issue-context.log"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/sync-issue-context"
+
+  # Fake `dispatch-spawn-worker` — record argv only.
+  cat > "$TMPDIR_TEST/bin/dispatch-spawn-worker" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/dispatch-spawn-worker.log"
+echo spawned
+STUB
+  chmod +x "$TMPDIR_TEST/bin/dispatch-spawn-worker"
+
+  export PATH="$TMPDIR_TEST/bin:$SAVED_PATH"
+}
+
+router_smoke_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  export PATH="$SAVED_PATH"
+}
+
+echo "Test: Step 5 create + Step 6 sequence invokes git, direnv, sync, and spawn-worker with the right args"
+router_smoke_setup
+
+# Run the documented shell sequence inline. The variable names match SKILL.md.
+BRANCH="839-test"
+ISSUE_NUM="839"
+GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir)
+PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
+WORKTREE_PATH="$PROJECT_ROOT/worktrees/$BRANCH"
+# The fake `git worktree add` does not actually create the directory, so make
+# it here so the subshell `cd "$WORKTREE_PATH"` for sync-issue-context succeeds.
+mkdir -p "$WORKTREE_PATH"
+git worktree add -b "$BRANCH" "$WORKTREE_PATH" origin/main
+direnv allow "$WORKTREE_PATH"
+(cd "$WORKTREE_PATH" && sync-issue-context "$ISSUE_NUM")
+dispatch-spawn-worker "$ISSUE_NUM" "$WORKTREE_PATH"
+
+# Assertions: each fake binary's log captures one expected invocation.
+assert_eq "git worktree add args" \
+  "worktree add -b 839-test $WORKTREE_PATH origin/main" \
+  "$(grep '^worktree add' "$TMPDIR_TEST/logs/git.log")"
+assert_eq "direnv allow args" \
+  "allow $WORKTREE_PATH" \
+  "$(cat "$TMPDIR_TEST/logs/direnv.log")"
+assert_eq "sync-issue-context cwd + arg" \
+  "cwd=$WORKTREE_PATH argv=839" \
+  "$(cat "$TMPDIR_TEST/logs/sync-issue-context.log")"
+assert_eq "dispatch-spawn-worker args" \
+  "839 $WORKTREE_PATH" \
+  "$(cat "$TMPDIR_TEST/logs/dispatch-spawn-worker.log")"
+
+router_smoke_teardown
+
+# ============================================================================
 # summary
 # ============================================================================
 report_results
