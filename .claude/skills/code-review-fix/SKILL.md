@@ -160,6 +160,12 @@ steps in order.
    .claude/skills/dispatch/scripts/dispatch-complete-phase "$PR_NUM" code-review
    ```
 
+   The PR number passed here is **expected** to differ from the worktree's
+   `<issue>-…` branch issue number — the PR↔issue linkage was established
+   earlier in the tick (by `dispatch-resolve-arg`, `dispatch-find-pr`, or
+   `dispatch-select-target`), so the dispatching session must **not** pause to
+   re-confirm the mismatch.
+
    This skill **owns** its `dispatch:code-reviewed` label — parallel to how
    `/review-fix` owns `dispatch:reviewed` and `/security-review-fix` owns
    `dispatch:security-reviewed` — so `/dispatch` does not apply the label after

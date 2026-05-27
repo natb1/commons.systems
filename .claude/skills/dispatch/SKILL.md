@@ -223,12 +223,14 @@ continue to target selection.
   `<issue>-*` worktree always continues there.
 
   The topic-category × phase ladder is two-tier: a topic **category** nests
-  outside the phase **ladder**. Categories, highest priority first: `bug` →
-  `testing infrastructure` → `dispatch` → `other`. A PR's category is the
-  highest-priority topic among the labels of every issue it closes; an issue's
-  category is the highest-priority topic among its own labels; anything with no
-  topic label is `other`. The selector exhausts one category's whole ladder
-  before moving to the next.
+  outside the phase **ladder**. Categories, highest priority first:
+  `priority` → `bug` → `testing infrastructure` → `dispatch` → `other`. A
+  `priority`-labelled issue (or a PR closing one) outranks every other
+  category; the label is human-applied — `/ready` never applies it
+  automatically. A PR's category is the highest-priority topic among the
+  labels of every issue it closes; an issue's category is the highest-priority
+  topic among its own labels; anything with no topic label is `other`. The
+  selector exhausts one category's whole ladder before moving to the next.
 
   Within each category the ladder is (highest first; within a tier, oldest PR
   wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
@@ -477,10 +479,12 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 - **`review`** — invoke `/review-fix`. It runs `/review`, applies the recommended
   fixes, posts a PR comment, and applies the `dispatch:reviewed` label itself —
   `/dispatch` applies no label.
-- **`security`** — invoke `/security-review-fix`. It runs `/security-review` and
-  gathers the PR's CodeQL code-scanning alerts, applies the recommended fixes,
-  posts a PR comment, applies the `dispatch:security-reviewed` label, and marks
-  the PR ready. It is idempotent on re-entry — `/dispatch` applies no label.
+- **`security`** — invoke `/security-review-fix`. Its Step 2 directly fans out
+  9 parallel subagents — 6 security domains, a red team, the built-in
+  `/security-review` scan (subagent-wrapped Skill invocation), and the PR's
+  CodeQL alerts — then applies the required fixes, posts a PR comment, applies
+  the `dispatch:security-reviewed` label, and marks the PR ready. It is
+  idempotent on re-entry — `/dispatch` applies no label.
 - **`done`** — report that the PR is already ready, then **proceed to Step 9**
   (early-stop). No phase skill ran, so Step 9 spawns no successor and
   self-closes.
@@ -502,6 +506,14 @@ workflow. `/dispatch-qa`, `/code-review-fix`, `/review-fix`, and
 `/security-review-fix` each own and apply their own label — `dispatch:qa-done`,
 `dispatch:code-reviewed`, `dispatch:reviewed`, and `dispatch:security-reviewed`
 respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
+
+When a phase skill runs `dispatch-complete-phase <pr-num> <phase>`, the PR
+number is expected to differ from the worktree's `<issue>-…` branch issue
+number; the PR↔issue linkage was established earlier in the tick by
+`dispatch-resolve-arg`, `dispatch-find-pr`, or `dispatch-select-target`'s
+`pr <num> <branch> <phase>` selection result. The dispatching session must
+**not** pause to re-confirm — this is the expected shape of every
+phase-skill label apply.
 
 ## 8. Pre-Implementation Relevance Review
 
