@@ -326,6 +326,22 @@ while [[ $i -lt ${#ORPHAN_PATHS[@]} ]]; do
     continue
   fi
 
+  # Ready-PR gate. A `done`-phase orphan whose PR has been flipped to ready
+  # (e.g. by /security-review-fix) is awaiting human merge — adopting it
+  # short-circuits the queue-ladder and the chain drains on the early-stop in
+  # /dispatch Step 9. Skip so the ladder gets to pick real queued work.
+  # No-PR orphans and open-draft-PR orphans still fall through to adoption.
+  #
+  # Runs BEFORE the gh-dependent closed-issue/blocker gates so a transient
+  # `gh issue view` failure cannot exit 1 on a ready-PR orphan that needs no
+  # adoption anyway — the gate uses the already-fetched DRAFT_BY_BRANCH map
+  # (populated from the single `gh pr list` at the top of the script, which
+  # degrades to an empty map on failure rather than exiting).
+  if [[ -n "$open_pr" && "${DRAFT_BY_BRANCH[$wt_branch]:-}" == "false" ]]; then
+    log "SKIP_ORPHAN_READY_PR: '$wt_path' branch=$wt_branch issue=$issue_num pr=#$open_pr"
+    continue
+  fi
+
   # Closed-issue gate. Fetch state with one gh call; fail loud on error —
   # no silent fallback to "open" (would cause stale-orphan adoption). Let gh's
   # stderr surface to the operator (matches the blocker gate, whose
@@ -360,16 +376,6 @@ while [[ $i -lt ${#ORPHAN_PATHS[@]} ]]; do
   fi
   if [[ "$n_blockers" -gt 0 ]]; then
     log "SKIP_ORPHAN_BLOCKED: '$wt_path' branch=$wt_branch issue=$issue_num blockers=$n_blockers"
-    continue
-  fi
-
-  # Ready-PR gate. A `done`-phase orphan whose PR has been flipped to ready
-  # (e.g. by /security-review-fix) is awaiting human merge — adopting it
-  # short-circuits the queue-ladder and the chain drains on the early-stop in
-  # /dispatch Step 9. Skip so the ladder gets to pick real queued work.
-  # No-PR orphans and open-draft-PR orphans still fall through to adoption.
-  if [[ -n "$open_pr" && "${DRAFT_BY_BRANCH[$wt_branch]:-}" == "false" ]]; then
-    log "SKIP_ORPHAN_READY_PR: '$wt_path' branch=$wt_branch issue=$issue_num pr=#$open_pr"
     continue
   fi
 
