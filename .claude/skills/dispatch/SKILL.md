@@ -223,12 +223,14 @@ continue to target selection.
   `<issue>-*` worktree always continues there.
 
   The topic-category × phase ladder is two-tier: a topic **category** nests
-  outside the phase **ladder**. Categories, highest priority first: `bug` →
-  `testing infrastructure` → `dispatch` → `other`. A PR's category is the
-  highest-priority topic among the labels of every issue it closes; an issue's
-  category is the highest-priority topic among its own labels; anything with no
-  topic label is `other`. The selector exhausts one category's whole ladder
-  before moving to the next.
+  outside the phase **ladder**. Categories, highest priority first:
+  `priority` → `bug` → `testing infrastructure` → `dispatch` → `other`. A
+  `priority`-labelled issue (or a PR closing one) outranks every other
+  category; the label is human-applied — `/ready` never applies it
+  automatically. A PR's category is the highest-priority topic among the
+  labels of every issue it closes; an issue's category is the highest-priority
+  topic among its own labels; anything with no topic label is `other`. The
+  selector exhausts one category's whole ladder before moving to the next.
 
   Within each category the ladder is (highest first; within a tier, oldest PR
   wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
