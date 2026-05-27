@@ -9,5 +9,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-mkdir -p tmp && touch tmp/dispatch-worktree
+mkdir -p tmp
+touch tmp/dispatch-worktree
 exec "$SCRIPT_DIR/dispatch-acquire-lock" --release

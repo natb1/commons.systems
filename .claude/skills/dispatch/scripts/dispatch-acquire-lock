@@ -148,10 +148,13 @@ resolve_holder_state() {
     end' <<<"$out" 2>/dev/null); then
     return 0
   fi
-  # grep -F to keep the sessionId literal; the trailing tab anchors the match
-  # to the sessionId field exclusively, so a sessionId that happens to appear
-  # inside another row's cwd cannot match.
-  if ! match=$(printf '%s\n' "$rows" | grep -F -- "${sid}"$'\t' | head -n1); then
+  # Exact-match $1 against sid via awk: a true field equality (not a literal-
+  # substring match), so a sessionId that prefixes or suffixes another row's
+  # sessionId cannot cross-match. Also avoids `grep -F | head -n1`, whose
+  # pipefail+SIGPIPE interaction can collapse a contended-but-live match into
+  # a non-zero exit and trigger a wrong reclaim.
+  match=$(printf '%s\n' "$rows" | awk -F'\t' -v sid="$sid" '$1 == sid {print; exit}')
+  if [[ -z "$match" ]]; then
     # Definitely not live: registry parsed cleanly and our sid isn't in it.
     return 1
   fi
