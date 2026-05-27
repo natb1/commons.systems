@@ -63,7 +63,7 @@
 #
 # Selection is two-tier: a topic *category* nests outside the phase *ladder*.
 # Categories, highest priority first:
-#   bug → testing infrastructure → dispatch → other
+#   priority → bug → testing infrastructure → dispatch → other
 # The selector exhausts every tier of one category before moving to the next.
 #
 # A PR's category is the highest-priority topic among the labels of every issue

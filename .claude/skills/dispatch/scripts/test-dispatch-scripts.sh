@@ -1240,7 +1240,7 @@ assert_eq "issue 6 not masked by 60-foo worktree" "issue 6" "$result"
 teardown
 
 # --- topic-category prioritization (issue #707) -----------------------------
-# A topic category (bug → testing infrastructure → dispatch → other) nests
+# A topic category (priority → bug → testing infrastructure → dispatch → other) nests
 # outside the phase ladder. A PR's category is resolved from the labels of the
 # issues it closes; an issue's category from its own labels.
 
