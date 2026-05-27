@@ -9,7 +9,7 @@ Selects the single most pressing task, resolves its worktree, derives the curren
 workflow phase from PR/issue status, and dispatches **exactly one phase skill** —
 then stops. Each `/dispatch` is a `claude --bg` background job (#725): a job
 advances one phase, passes the baton to a fresh `/dispatch` job, then
-self-closes (`claude stop`). That self-perpetuating chain advances the
+self-deletes (`claude rm`). That self-perpetuating chain advances the
 workflow; the #725 heartbeat re-seeds it when no job is running.
 
 `/dispatch` takes an **optional issue-or-PR-number argument** (leading `#`
@@ -159,91 +159,78 @@ continue to target selection.
     that is neither an issue nor a PR — consistent with the other Steps 1-5 stop
     paths.
 
-- **No argument** → run the `origin/main` CI health gate first, then the
-  worktree sweep, then target selection. Both gh-calling scripts need
-  `dangerouslyDisableSandbox: true`.
-
-  The health gate must run **before** the sweep: a red main means no new work
-  is safe to start, and the sweep's gh calls are wasted in that case.
+- **No argument** → run target selection. A single invocation decides every
+  Step 3 outcome: current-worktree continuation, JIT, main-broken gate, sweep
+  orphan adoption, and the queue ladder are all internal to the script and
+  emitted on its one output line.
 
   ```bash
-  HEALTH=$(.claude/skills/dispatch/scripts/dispatch-select-target --health-only)
+  SELECTED=$(.claude/skills/dispatch/scripts/dispatch-select-target)
   ```
 
-  - **`main-broken <sha>`** → invoke `/dispatch-diagnose-main <sha>`, then
-    proceed to Step 9 (early-stop). Do **not** run the sweep or selection.
-  - **`jit-reminder <repo> <num> <project> <item-id>`** → invoke
-    `/dispatch-jit-reminder <repo> <num> <project> <item-id>`, then stop the
-    tick directly (the skill is a Step 9 bypass — its user-visible summary
-    must stay open). Do **not** run the sweep or selection — the JIT scan
-    precedes the main-broken health gate, so a jit reminder is surfaced even
-    when `origin/main` is red.
-  - **`ok`** → run the sweep (also needs `dangerouslyDisableSandbox: true` for
-    the `/proc` walk):
+  (`dangerouslyDisableSandbox: true` — it calls `gh` and walks `/proc`.)
 
-    ```bash
-    SWEEP_OUT=$(.claude/skills/dispatch/scripts/dispatch-sweep 2>tmp/dispatch-sweep-stderr)
-    SWEEP_EXIT=$?
-    ```
+  Route on `$SELECTED`:
 
-    Route on the sweep outcome:
-
-    - **Exit 0, empty stdout** → fall through to `dispatch-select-target`.
-    - **Exit 0, stdout `worktree <N> <branch>`** → an orphaned worktree was
-      adopted. Skip Step 4 and proceed to Step 5 with `<N>` and `explicit` —
-      treat the adoption like an explicit `/dispatch <N>`. (Step 4's closed-issue
-      and open-blocker gates have already been enforced by `dispatch-sweep`
-      itself before emitting this directive.)
-    - **Non-zero exit, stderr `cleanup-unknown:<path>`** → the sweep found a
-      worktree with no open PR and no inferable issue number. This is the
-      only sweep path that can destroy potentially-unmerged code. Invoke
-      `/dispatch-cleanup-unknown <path>`, then fall through to
-      `dispatch-select-target` either way.
-    - **Any other non-zero exit** → log the stderr contents to the conversation
-      as a diagnostic, then fall through to `dispatch-select-target` as
-      defense-in-depth. The sweep is best-effort; a malformed invocation or
-      transient `gh`/`git` failure should not stall the workflow.
-
-  ```bash
-  .claude/skills/dispatch/scripts/dispatch-select-target
-  ```
-
-  It prints exactly one line:
-  - `pr <num> <branch> <phase>` — a PR to work on; `<phase>` is pre-derived by the
-    selection scan, so Step 6 reuses it instead of re-deriving
+  - `worktree <N> <branch>` — the current branch is `<N>-…` and issue `<N>` is
+    open. Continue here; skip Step 4 and proceed to Step 5 with mode `queue`
+    (worktree resolution will print `here`).
+  - `worktree-closed <N> <branch>` — the current branch is `<N>-…` and issue
+    `<N>` is closed or unrecognized. Release the lock (see *Releasing the
+    lock*), report that the current worktree belongs to closed/unrecognized
+    issue `<N>`, then **proceed to Step 9** (early-stop) (consistent with the
+    named-target "closed → report and stop" rule in Step 4).
+  - `worktree-adopted <N> <branch>` — `dispatch-sweep` adopted an orphaned
+    worktree elsewhere on disk. Skip Step 4 and proceed to Step 5 with `<N>` and
+    mode `explicit` — treat the adoption like an explicit `/dispatch <N>`.
+    (Step 4's closed-issue and open-blocker gates have already been enforced by
+    `dispatch-sweep` itself before emitting this directive.)
+  - `pr <num> <branch> <phase>` — a PR to work on; `<phase>` is pre-derived by
+    the selection scan, so Step 6 reuses it instead of re-deriving. Proceed to
+    Step 5 with mode `queue`.
   - `issue <num>` — a `help wanted` issue to implement, pre-resolved by the
     selection scan to a startable open leaf (not necessarily the top-level
-    `help wanted` issue)
-  - `worktree <N> <branch>` — run from inside an issue worktree; target is `<N>`,
-    queue scan already skipped
-  - `worktree-closed <N> <branch>` — run from inside a worktree whose issue is
-    closed or unrecognized → release the lock (see *Releasing the lock*), then
-    report that the current worktree belongs to closed/unrecognized issue `<N>`
-    and **proceed to Step 9** (early-stop) (consistent with the named-target
-    "closed → report and stop" rule in Step 4)
-  - `empty` — nothing eligible
-  - `main-broken <sha>` — `origin/main`'s HEAD CI has a failing check. The
-    pre-sweep gate above normally catches this first; this is the same gate
-    re-run as defense-in-depth. Invoke `/dispatch-diagnose-main <sha>`, then
-    proceed to Step 9 (early-stop).
-  - `jit-reminder <repo> <num> <project> <item-id>` — a JIT issue due for a
-    reminder. The `--health-only` call earlier in this step normally catches
-    this first (the JIT scan is deterministic); this is the same scan re-run
-    as defense-in-depth. Invoke
+    `help wanted` issue). Proceed to Step 5 with mode `queue`.
+  - `cleanup-unknown <path>` — the sweep found a worktree with no open PR and
+    no inferable issue number. Invoke `/dispatch-cleanup-unknown <path>` — the
+    skill owns the `AskUserQuestion` confirmation and the on-Yes/No actions, and
+    returns the resumed `dispatch-select-target` output (`worktree-adopted`,
+    `pr`, `issue`, `empty`, …) for routing here. Treat the returned line as a
+    fresh `$SELECTED` and route on it as above. This is the only sweep path
+    that can destroy potentially-unmerged code.
+  - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`, then
+    **proceed to Step 9** (early-stop). The skill owns the failing-check
+    enumeration, log-fetch, summary, lock-release, and stop.
+  - `jit-reminder <repo> <num> <project> <item-id>` — invoke
     `/dispatch-jit-reminder <repo> <num> <project> <item-id>`, then stop the
-    tick directly (Step 9 bypass — see the `/dispatch-jit-reminder` skill).
+    tick directly (the skill is a Step 9 bypass — its user-visible summary must
+    stay open in the transcript for a human to read). The skill owns the claim
+    + lock-release + summarize + stop sequence; Steps 4, 5, and 6-7 are all
+    skipped.
+  - `empty` — nothing eligible. Release the lock (see *Releasing the lock*),
+    report that the queue is empty, then **proceed to Step 9** (early-stop).
 
-  An **explicit issue argument overrides current-worktree detection** — the selection
-  script, and therefore its current-worktree detection, runs only when no argument is
-  given. `/dispatch #123` run from inside worktree-456 still targets 123.
+  An **explicit issue argument overrides current-worktree detection** — the
+  selection script, and therefore its current-worktree detection, runs only
+  when no argument is given. `/dispatch #123` run from inside worktree-456
+  still targets 123.
 
-  Priority order it implements is two-tier: a topic **category** nests outside
-  the phase **ladder**. Categories, highest priority first: `bug` → `testing
-  infrastructure` → `dispatch` → `other`. A PR's category is the highest-priority
-  topic among the labels of every issue it closes; an issue's category is the
-  highest-priority topic among its own labels; anything with no topic label is
-  `other`. The selector exhausts one category's whole ladder before moving to
-  the next.
+  Priority order the script implements, top to bottom: current-worktree
+  continuation → JIT scan → `origin/main` CI health gate → sweep orphan
+  adoption → topic-category × phase ladder. A jit-reminder surfaces even when
+  `origin/main` is red because the JIT scan precedes the main-broken gate;
+  current-worktree continuation surfaces before either, so a session inside an
+  `<issue>-*` worktree always continues there.
+
+  The topic-category × phase ladder is two-tier: a topic **category** nests
+  outside the phase **ladder**. Categories, highest priority first:
+  `priority` → `bug` → `testing infrastructure` → `dispatch` → `other`. A
+  `priority`-labelled issue (or a PR closing one) outranks every other
+  category; the label is human-applied — `/ready` never applies it
+  automatically. A PR's category is the highest-priority topic among the
+  labels of every issue it closes; an issue's category is the highest-priority
+  topic among its own labels; anything with no topic label is `other`. The
+  selector exhausts one category's whole ladder before moving to the next.
 
   Within each category the ladder is (highest first; within a tier, oldest PR
   wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
@@ -261,9 +248,6 @@ continue to target selection.
   another session — exactly as a directly-worktree'd issue is skipped; selection
   falls through to the next tier. The tier emits the resolved startable leaf, so
   a queue-selected `issue <num>` is always a directly-startable target.
-
-  On `empty` → release the lock (see *Releasing the lock*), report that
-  the queue is empty, then **proceed to Step 9** (early-stop).
 
 ## 4. Trace to an Open Leaf
 
@@ -299,8 +283,9 @@ Skip leaf tracing when:
 
 If the resolved target issue `<N>` has any **open** blocker — run
 `issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
-lock (see *Releasing the lock*), report the open blocker, and **stop**. This
-guard applies even when a PR exists; closed blockers do not gate.
+lock (see *Releasing the lock*), report the open blocker, then **proceed to
+Step 9** (early-stop). This guard applies even when a PR exists; closed blockers
+do not gate.
 
 If a named target issue is **closed**, release the lock (see *Releasing the
 lock*), report it, then **proceed to Step 9** (early-stop).
@@ -434,10 +419,12 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 - **`review`** — invoke `/review-fix`. It runs `/review`, applies the recommended
   fixes, posts a PR comment, and applies the `dispatch:reviewed` label itself —
   `/dispatch` applies no label.
-- **`security`** — invoke `/security-review-fix`. It runs `/security-review` and
-  gathers the PR's CodeQL code-scanning alerts, applies the recommended fixes,
-  posts a PR comment, applies the `dispatch:security-reviewed` label, and marks
-  the PR ready. It is idempotent on re-entry — `/dispatch` applies no label.
+- **`security`** — invoke `/security-review-fix`. Its Step 2 directly fans out
+  9 parallel subagents — 6 security domains, a red team, the built-in
+  `/security-review` scan (subagent-wrapped Skill invocation), and the PR's
+  CodeQL alerts — then applies the required fixes, posts a PR comment, applies
+  the `dispatch:security-reviewed` label, and marks the PR ready. It is
+  idempotent on re-entry — `/dispatch` applies no label.
 - **`done`** — report that the PR is already ready, then **proceed to Step 9**
   (early-stop). No phase skill ran, so Step 9 spawns no successor and
   self-closes.
@@ -459,6 +446,14 @@ workflow. `/dispatch-qa`, `/code-review-fix`, `/review-fix`, and
 `/security-review-fix` each own and apply their own label — `dispatch:qa-done`,
 `dispatch:code-reviewed`, `dispatch:reviewed`, and `dispatch:security-reviewed`
 respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
+
+When a phase skill runs `dispatch-complete-phase <pr-num> <phase>`, the PR
+number is expected to differ from the worktree's `<issue>-…` branch issue
+number; the PR↔issue linkage was established earlier in the tick by
+`dispatch-resolve-arg`, `dispatch-find-pr`, or `dispatch-select-target`'s
+`pr <num> <branch> <phase>` selection result. The dispatching session must
+**not** pause to re-confirm — this is the expected shape of every
+phase-skill label apply.
 
 ## 8. Pre-Implementation Relevance Review
 
@@ -631,16 +626,16 @@ priority:
 
 - **Clean completion or early-stop** — an early-stop, or a phase-completed run
   whose `dispatch-spawn` succeeded and whose report surfaces nothing that needs
-  the user. Self-close (`dangerouslyDisableSandbox: true`):
+  the user. Self-delete (`dangerouslyDisableSandbox: true`):
 
   ```bash
   .claude/skills/dispatch/scripts/dispatch-self-close
   ```
 
-  The script stops the managed background job by its job-id (the basename of
-  `$CLAUDE_JOB_DIR`, which is what `claude stop` expects — not the conversation
+  The script deletes the managed background job by its job-id (the basename of
+  `$CLAUDE_JOB_DIR`, which is what `claude rm` expects — not the conversation
   session UUID, not the registry's `.sessionId`). It is a no-op when
   `CLAUDE_JOB_DIR` is unset (the session is interactive, not a managed
-  background job) — so an interactive `/dispatch` reaching Step 9 does not stop
+  background job) — so an interactive `/dispatch` reaching Step 9 does not delete
   the user's live conversation. The job ends; the successor it spawned — or,
   for an early-stop, the #725 heartbeat — carries the workflow forward.

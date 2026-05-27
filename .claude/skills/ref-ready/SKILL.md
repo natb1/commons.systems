@@ -175,7 +175,10 @@ one topic label. Classification is identical in both input modes; only the
 
 Classify the issue's topic from its title and body. Topic labels mark subject
 area and are orthogonal to the `dispatch:*` phase labels, which mark workflow
-progress. Apply **at most one** topic label.
+progress. Apply **at most one** topic label. The 'at most one' rule applies
+only to the topic axis — `dispatch` and `testing infrastructure`. `priority`
+is a separate axis (an escalation marker) and may be applied alongside a
+topic label.
 
 - **`dispatch`** — concerns the `/dispatch` workflow, one of its phase skills
   (`/plan-implement`, `/verify-pr`, `/dispatch-qa`, `/code-review-fix`,
@@ -194,6 +197,12 @@ progress. Apply **at most one** topic label.
   `run-acceptance-tests.sh`, `run-lint.sh`, `run-typecheck.sh`). Keyword
   signals: "CI", "unit test", "acceptance test", "Vitest", "Playwright",
   "fixture", "seed data", "test runner".
+
+- **`priority`** — a separate axis from the topic labels above. A
+  human-applied escalation marker that routes the issue (or any PR closing it)
+  ahead of every topic category in `/dispatch` queue selection. Apply only
+  when a human explicitly asks to escalate; `/ready` never applies it
+  automatically. May be combined with any topic label.
 
 - **Neither** — apply no topic label. Most product and
   landing/budget/print/fellspiral feature work matches neither topic. There is
