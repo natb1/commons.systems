@@ -4383,11 +4383,11 @@ spawn_teardown
 # ============================================================================
 echo "=== dispatch-self-close ==="
 #
-# dispatch-self-close runs `claude stop <job-id>` against the basename of
-# $CLAUDE_JOB_DIR. The fake `claude` records its argv in SPAWN_STOP_LOG (see
+# dispatch-self-close runs `claude rm <job-id>` against the basename of
+# $CLAUDE_JOB_DIR. The fake `claude` records its argv in SPAWN_RM_LOG (see
 # write_fake_spawn_claude). When CLAUDE_JOB_DIR is unset, the script is a no-op
 # — the foreground-safe gate that protects an interactive /dispatch from
-# stopping the user's live conversation.
+# deleting the user's live conversation.
 
 selfclose_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -4396,8 +4396,8 @@ selfclose_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-self-close"
 
   # Reuse the dispatch-spawn fake `claude` writer: it already dispatches on
-  # `stop` and appends $2 to SPAWN_STOP_LOG. The unused SPAWN_REGISTRY /
-  # SPAWN_BG_ARGV / SPAWN_RM_LOG paths still need to be set because the writer
+  # `rm` and appends $2 to SPAWN_RM_LOG. The unused SPAWN_REGISTRY /
+  # SPAWN_BG_ARGV / SPAWN_STOP_LOG paths still need to be set because the writer
   # interpolates them into the fake-claude script body.
   SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
   SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
@@ -4419,17 +4419,17 @@ selfclose_teardown() {
   unset DISPATCH_SELF_CLOSE_CLAUDE_CMD CLAUDE_JOB_DIR
 }
 
-# --- Test 1: managed-job → stops itself --------------------------------------
+# --- Test 1: managed-job → deletes itself -------------------------------------
 
-echo "Test: a managed background job stops itself by job-id (basename of CLAUDE_JOB_DIR)"
+echo "Test: a managed background job deletes itself by job-id (basename of CLAUDE_JOB_DIR)"
 selfclose_setup
 mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 if out=$("$TMPDIR_TEST/scripts/dispatch-self-close" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "self-close: dispatch-self-close exits 0" "0" "$rc"
-stop_log=$(cat "$SPAWN_STOP_LOG" 2>/dev/null || true)
-assert_eq "self-close: 'claude stop abcd1234' was invoked (basename, not full path)" \
-  "abcd1234" "$stop_log"
+rm_log=$(cat "$SPAWN_RM_LOG" 2>/dev/null || true)
+assert_eq "self-close: 'claude rm abcd1234' was invoked (basename, not full path)" \
+  "abcd1234" "$rm_log"
 selfclose_teardown
 
 # --- Test 2: interactive → no-op ---------------------------------------------
@@ -4448,11 +4448,11 @@ else
   echo "    stderr: $err"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_STOP_LOG" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: interactive: no 'claude stop' invocation recorded"
+if [[ ! -e "$SPAWN_RM_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: interactive: no 'claude rm' invocation recorded"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: no 'claude stop' invocation recorded"
-  echo "    stop-log: $(cat "$SPAWN_STOP_LOG")"
+  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: no 'claude rm' invocation recorded"
+  echo "    rm-log: $(cat "$SPAWN_RM_LOG")"
 fi
 selfclose_teardown
 

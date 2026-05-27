@@ -9,7 +9,7 @@ Selects the single most pressing task, resolves its worktree, derives the curren
 workflow phase from PR/issue status, and dispatches **exactly one phase skill** —
 then stops. Each `/dispatch` is a `claude --bg` background job (#725): a job
 advances one phase, passes the baton to a fresh `/dispatch` job, then
-self-closes (`claude stop`). That self-perpetuating chain advances the
+self-deletes (`claude rm`). That self-perpetuating chain advances the
 workflow; the #725 heartbeat re-seeds it when no job is running.
 
 `/dispatch` takes an **optional issue-or-PR-number argument** (leading `#`
@@ -673,16 +673,16 @@ priority:
 
 - **Clean completion or early-stop** — an early-stop, or a phase-completed run
   whose `dispatch-spawn` succeeded and whose report surfaces nothing that needs
-  the user. Self-close (`dangerouslyDisableSandbox: true`):
+  the user. Self-delete (`dangerouslyDisableSandbox: true`):
 
   ```bash
   .claude/skills/dispatch/scripts/dispatch-self-close
   ```
 
-  The script stops the managed background job by its job-id (the basename of
-  `$CLAUDE_JOB_DIR`, which is what `claude stop` expects — not the conversation
+  The script deletes the managed background job by its job-id (the basename of
+  `$CLAUDE_JOB_DIR`, which is what `claude rm` expects — not the conversation
   session UUID, not the registry's `.sessionId`). It is a no-op when
   `CLAUDE_JOB_DIR` is unset (the session is interactive, not a managed
-  background job) — so an interactive `/dispatch` reaching Step 9 does not stop
+  background job) — so an interactive `/dispatch` reaching Step 9 does not delete
   the user's live conversation. The job ends; the successor it spawned — or,
   for an early-stop, the #725 heartbeat — carries the workflow forward.
