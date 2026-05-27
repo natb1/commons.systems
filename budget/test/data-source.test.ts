@@ -178,6 +178,86 @@ describe("IdbDataSource", () => {
     expect(rules).toHaveLength(0);
   });
 
+  describe("createJournalEntry", () => {
+    it("writes the entry and legs, returns parallel legIds", async () => {
+      await storeParsedData(makeParsedData());
+      const ds = new IdbDataSource();
+      const result = await ds.createJournalEntry(
+        { timestampMs: 1700000000000, description: "Test entry", note: null },
+        [
+          { accountId: "acct-a", debit: 50, credit: 0, cleared: true },
+          { accountId: "acct-b", debit: 0, credit: 50, cleared: true },
+        ],
+      );
+      expect(typeof result.entryId).toBe("string");
+      expect(result.legIds).toHaveLength(2);
+
+      const entries = await ds.getJournalEntries();
+      expect(entries).toHaveLength(1);
+      const entry = entries.find((e) => e.id === result.entryId);
+      expect(entry).toBeDefined();
+      expect(entry!.description).toBe("Test entry");
+      expect(entry!.legCount).toBe(2);
+
+      const legs = await ds.getJournalLegs();
+      expect(legs).toHaveLength(2);
+
+      const leg0 = legs.find((l) => l.id === result.legIds[0]);
+      expect(leg0).toBeDefined();
+      expect(leg0!.accountId).toBe("acct-a");
+      expect(leg0!.debit).toBe(50);
+      expect(leg0!.cleared).toBe(true);
+      expect(leg0!.entryId).toBe(result.entryId);
+      expect(leg0!.reconciledAt).toBeNull();
+
+      const leg1 = legs.find((l) => l.id === result.legIds[1]);
+      expect(leg1).toBeDefined();
+      expect(leg1!.accountId).toBe("acct-b");
+      expect(leg1!.credit).toBe(50);
+      expect(leg1!.entryId).toBe(result.entryId);
+      expect(leg1!.reconciledAt).toBeNull();
+    });
+
+    it("rejects fewer than 2 legs", async () => {
+      await storeParsedData(makeParsedData());
+      const ds = new IdbDataSource();
+      await expect(
+        ds.createJournalEntry(
+          { timestampMs: 1, description: "x" },
+          [{ accountId: "a", debit: 10, credit: 0, cleared: false }],
+        ),
+      ).rejects.toThrow(/at least 2 legs/);
+    });
+
+    it("rejects unbalanced legs", async () => {
+      await storeParsedData(makeParsedData());
+      const ds = new IdbDataSource();
+      await expect(
+        ds.createJournalEntry(
+          { timestampMs: 1, description: "x" },
+          [
+            { accountId: "a", debit: 50, credit: 0, cleared: false },
+            { accountId: "b", debit: 0, credit: 40, cleared: false },
+          ],
+        ),
+      ).rejects.toThrow(/[Uu]nbalanced/);
+    });
+
+    it("accepts a balanced entry within 0.005 tolerance", async () => {
+      await storeParsedData(makeParsedData());
+      const ds = new IdbDataSource();
+      const result = await ds.createJournalEntry(
+        { timestampMs: 1700000000000, description: "Near-balanced" },
+        [
+          { accountId: "a", debit: 50.004, credit: 0, cleared: false },
+          { accountId: "b", debit: 0, credit: 50, cleared: false },
+        ],
+      );
+      expect(result.entryId).toBeTruthy();
+      expect(result.legIds).toHaveLength(2);
+    });
+  });
+
   describe("getTransactions with query params", () => {
     const T1 = 1000;
     const T2 = 2000;
@@ -284,6 +364,7 @@ describe("SeedDataSource", () => {
     await expect(ds.createNormalizationRule()).rejects.toThrow("Seed data is read-only");
     await expect(ds.updateNormalizationRule()).rejects.toThrow("Seed data is read-only");
     await expect(ds.deleteNormalizationRule()).rejects.toThrow("Seed data is read-only");
+    await expect(ds.createJournalEntry()).rejects.toThrow("Seed data is read-only");
   });
 
   it("getTransactions returns all seed transactions with Timestamp objects", async () => {
