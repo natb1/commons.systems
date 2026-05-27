@@ -4457,6 +4457,274 @@ fi
 selfclose_teardown
 
 # ============================================================================
+# dispatch-handoff tests
+# ============================================================================
+echo "=== dispatch-handoff ==="
+#
+# dispatch-handoff is the scripted Step 9 terminal disposition (#824). The
+# setup copies dispatch-handoff alongside dispatch-spawn, dispatch-self-close,
+# dispatch-find-pr, and lib-claude-agents.sh; reuses the multi-subcommand fake
+# `claude` from write_fake_spawn_claude (which already handles --bg / stop /
+# rm / agents); and installs a fake `gh` that serves the PR fixtures
+# dispatch-find-pr and dispatch-handoff query.
+#
+# Test-level controls:
+#   HANDOFF_PR_LIST_JSON    JSON array consumed by `gh pr list` (drives
+#                           dispatch-find-pr).
+#   HANDOFF_PR_LABELS       Newline-separated label names returned by
+#                           `gh pr view --json labels --jq '.labels[].name'`.
+
+handoff_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main" \
+    "$TMPDIR_TEST/jobs" "$TMPDIR_TEST/bin"
+
+  # dispatch-handoff resolves its sibling scripts via SCRIPT_DIR, so the
+  # whole script set must be co-located. dispatch-spawn additionally sources
+  # lib-claude-agents.sh from its own directory.
+  cp "$SCRIPT_DIR/dispatch-handoff"    "$TMPDIR_TEST/scripts/dispatch-handoff"
+  cp "$SCRIPT_DIR/dispatch-spawn"      "$TMPDIR_TEST/scripts/dispatch-spawn"
+  cp "$SCRIPT_DIR/dispatch-self-close" "$TMPDIR_TEST/scripts/dispatch-self-close"
+  cp "$SCRIPT_DIR/dispatch-find-pr"    "$TMPDIR_TEST/scripts/dispatch-find-pr"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-handoff" \
+           "$TMPDIR_TEST/scripts/dispatch-spawn" \
+           "$TMPDIR_TEST/scripts/dispatch-self-close" \
+           "$TMPDIR_TEST/scripts/dispatch-find-pr"
+
+  # Reuse the spawn-test fake `claude` writer: it dispatches on --bg / stop /
+  # rm / agents and records argv to the SPAWN_* log files used by the assertions
+  # below.
+  SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
+  SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
+  SPAWN_RM_LOG="$TMPDIR_TEST/rm-log"
+  SPAWN_STOP_LOG="$TMPDIR_TEST/stop-log"
+  printf '[]' > "$SPAWN_REGISTRY"
+  write_fake_spawn_claude
+
+  # Fake gh. `pr list` returns HANDOFF_PR_LIST_JSON; `pr view <N> --json labels
+  # --jq '.labels[].name'` returns the contents of HANDOFF_PR_LABELS (one label
+  # per line). Both fall back to safe empty defaults.
+  cat > "$TMPDIR_TEST/bin/gh" <<'GH'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "pr list")
+    printf '%s' "${HANDOFF_PR_LIST_JSON:-[]}"
+    ;;
+  "pr view")
+    # The handoff invocation is: gh pr view <N> --json labels --jq '.labels[].name'
+    printf '%s' "${HANDOFF_PR_LABELS:-}"
+    ;;
+esac
+GH
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  export DISPATCH_HANDOFF_SPAWN_CMD="$TMPDIR_TEST/scripts/dispatch-spawn"
+  export DISPATCH_HANDOFF_SELF_CLOSE_CMD="$TMPDIR_TEST/scripts/dispatch-self-close"
+  export DISPATCH_HANDOFF_FIND_PR_CMD="$TMPDIR_TEST/scripts/dispatch-find-pr"
+  export DISPATCH_HANDOFF_GH_CMD="$TMPDIR_TEST/bin/gh"
+
+  # dispatch-find-pr resolves `gh` from PATH (it predates the handoff and has
+  # no GH_CMD override). Prepend the fake-gh bin so it picks up the stub here
+  # too. Saved on entry and restored in teardown.
+  HANDOFF_SAVED_PATH="$PATH"
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+
+  # dispatch-spawn needs its own env wiring (the handoff doesn't pass any
+  # through — each child script reads its own DISPATCH_*_CMD overrides).
+  export DISPATCH_SPAWN_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
+  export DISPATCH_SPAWN_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+  export DISPATCH_SPAWN_SESSION_ID="sess-self"
+  export DISPATCH_SPAWN_JOBS_DIR="$TMPDIR_TEST/jobs"
+  export DISPATCH_SELF_CLOSE_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
+
+  # The default CLAUDE_JOB_DIR is set: tests that want the "interactive" path
+  # explicitly unset it.
+  mkdir -p "$TMPDIR_TEST/jobs/handoff01"
+  export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/handoff01"
+}
+
+handoff_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  SPAWN_REGISTRY=""
+  SPAWN_BG_ARGV=""
+  SPAWN_RM_LOG=""
+  SPAWN_STOP_LOG=""
+  unset DISPATCH_HANDOFF_SPAWN_CMD DISPATCH_HANDOFF_SELF_CLOSE_CMD \
+    DISPATCH_HANDOFF_FIND_PR_CMD DISPATCH_HANDOFF_GH_CMD \
+    DISPATCH_SPAWN_MAIN_WORKTREE DISPATCH_SPAWN_CLAUDE_CMD \
+    DISPATCH_SPAWN_SESSION_ID DISPATCH_SPAWN_JOBS_DIR SPAWN_BG_REGISTERS \
+    DISPATCH_SELF_CLOSE_CLAUDE_CMD CLAUDE_JOB_DIR \
+    HANDOFF_PR_LIST_JSON HANDOFF_PR_LABELS
+  if [[ -n "${HANDOFF_SAVED_PATH:-}" ]]; then
+    export PATH="$HANDOFF_SAVED_PATH"
+    unset HANDOFF_SAVED_PATH
+  fi
+}
+
+# --- Test 1: happy path ------------------------------------------------------
+
+echo "Test: --phase-completed with no office-hours label spawns and self-closes"
+handoff_setup
+export HANDOFF_PR_LIST_JSON='[{"number":501,"headRefName":"824-dispatch-scripted-step-9-han"}]'
+export HANDOFF_PR_LABELS=$'dispatch:code-reviewed\ndispatch:reviewed'
+if out=$("$TMPDIR_TEST/scripts/dispatch-handoff" 824 --phase-completed 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "happy: dispatch-handoff exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ -e "$SPAWN_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: happy: 'claude --bg' was invoked (spawn ran)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: happy: 'claude --bg' was invoked (spawn ran)"
+fi
+stop_log=$(cat "$SPAWN_STOP_LOG" 2>/dev/null || true)
+assert_eq "happy: 'claude stop handoff01' was invoked (self-close fired)" \
+  "handoff01" "$stop_log"
+handoff_teardown
+
+# --- Test 2: spawn failure ---------------------------------------------------
+
+echo "Test: --phase-completed with a spawn that fails exits non-zero, does not self-close"
+handoff_setup
+export HANDOFF_PR_LIST_JSON='[{"number":501,"headRefName":"824-dispatch-scripted-step-9-han"}]'
+export SPAWN_BG_REGISTERS=0
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-handoff" 824 --phase-completed 2>&1 1>/dev/null) || rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: dispatch-handoff exits non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: dispatch-handoff exits non-zero (rc=$rc)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"did not register"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: stderr surfaces dispatch-spawn's failure"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: stderr surfaces dispatch-spawn's failure"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_STOP_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-fail: no 'claude stop' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-fail: no 'claude stop' invocation recorded"
+  echo "    stop-log: $(cat "$SPAWN_STOP_LOG")"
+fi
+handoff_teardown
+
+# --- Test 3: deviation branch ------------------------------------------------
+
+echo "Test: --phase-completed with dispatch:office-hours on the PR skips self-close"
+handoff_setup
+export HANDOFF_PR_LIST_JSON='[{"number":501,"headRefName":"824-dispatch-scripted-step-9-han"}]'
+export HANDOFF_PR_LABELS=$'dispatch:code-reviewed\ndispatch:office-hours'
+if out=$("$TMPDIR_TEST/scripts/dispatch-handoff" 824 --phase-completed 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "deviation: dispatch-handoff exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ -e "$SPAWN_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deviation: spawn still fired (baton passed)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deviation: spawn still fired (baton passed)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_STOP_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: deviation: no 'claude stop' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: deviation: no 'claude stop' invocation recorded"
+  echo "    stop-log: $(cat "$SPAWN_STOP_LOG")"
+fi
+handoff_teardown
+
+# --- Test 4: early stop ------------------------------------------------------
+
+echo "Test: --early-stop skips spawn and calls self-close"
+handoff_setup
+if out=$("$TMPDIR_TEST/scripts/dispatch-handoff" --early-stop 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "early-stop: dispatch-handoff exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_BG_ARGV" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: early-stop: no 'claude --bg' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: early-stop: no 'claude --bg' invocation recorded"
+  echo "    bg-argv: $(cat "$SPAWN_BG_ARGV")"
+fi
+stop_log=$(cat "$SPAWN_STOP_LOG" 2>/dev/null || true)
+assert_eq "early-stop: 'claude stop handoff01' was invoked" \
+  "handoff01" "$stop_log"
+handoff_teardown
+
+# --- Test 5: missing arg -----------------------------------------------------
+
+echo "Test: --phase-completed with no issue number exits 2 with a diagnostic"
+handoff_setup
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-handoff" --phase-completed 2>&1 1>/dev/null) || rc=$?
+assert_eq "missing-arg: dispatch-handoff exits 2" "2" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"requires an issue number"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing-arg: stderr names the missing argument"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing-arg: stderr names the missing argument"
+  echo "    stderr: $err"
+fi
+handoff_teardown
+
+# --- Test 6: interactive (CLAUDE_JOB_DIR unset) + --early-stop ---------------
+
+echo "Test: --early-stop in an interactive session is a no-op with diagnostic"
+handoff_setup
+unset CLAUDE_JOB_DIR
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-handoff" --early-stop 2>&1 1>/dev/null) || rc=$?
+assert_eq "interactive: dispatch-handoff exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"not a managed background job"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: interactive: dispatch-self-close diagnostic preserved"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: dispatch-self-close diagnostic preserved"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_STOP_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: interactive: no 'claude stop' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: no 'claude stop' invocation recorded"
+  echo "    stop-log: $(cat "$SPAWN_STOP_LOG")"
+fi
+handoff_teardown
+
+# --- Test 7: missing PR for --phase-completed --------------------------------
+
+echo "Test: --phase-completed with no PR for the issue exits non-zero, does not self-close"
+handoff_setup
+# Empty PR list — dispatch-find-pr returns no match. The spawn still runs (it
+# does not depend on the issue number); the missing PR is detected after.
+export HANDOFF_PR_LIST_JSON='[]'
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-handoff" 824 --phase-completed 2>&1 1>/dev/null) || rc=$?
+TOTAL=$((TOTAL + 1))
+if [[ "$rc" -ne 0 ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing-pr: dispatch-handoff exits non-zero"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing-pr: dispatch-handoff exits non-zero (rc=$rc)"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"no PR found"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing-pr: stderr names the missing PR"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing-pr: stderr names the missing PR"
+  echo "    stderr: $err"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$SPAWN_STOP_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing-pr: no 'claude stop' invocation recorded"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing-pr: no 'claude stop' invocation recorded"
+  echo "    stop-log: $(cat "$SPAWN_STOP_LOG")"
+fi
+handoff_teardown
+
+# ============================================================================
 # dispatch-jit-engine tests
 # ============================================================================
 #
