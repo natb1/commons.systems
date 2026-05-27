@@ -83,10 +83,12 @@ Release happens at exactly two kinds of point:
 - **Every Steps 1-5 stop path** — immediately before reporting the stop reason
   and proceeding to Step 7 (early-stop).
 
-Releasing after Step 5 is safe because the session then owns a worktree (or has
-stopped), and the selection scan skips worktree'd targets — no other tick can
-select the same issue. Later steps cross-reference *Releasing the lock* rather
-than repeating this command.
+Releasing after Step 5 is safe because (a) the session then owns a worktree
+(or has stopped) and the selection scan skips worktree'd targets, so no other
+router can select the same issue; and (b) Step 6's `dispatch-spawn-worker`
+enforces per-worktree dedup at the spawn boundary, so even if a race let two
+routers reach Step 6 with the same target, only one worker would start. Later
+steps cross-reference *Releasing the lock* rather than repeating this command.
 
 The lock is scoped to selection and self-healing. The recorded sessionId
 (`CLAUDE_CODE_SESSION_ID`) outlives any single Bash call within a tick: if a
@@ -96,6 +98,34 @@ and a `--wait` waiter re-checks holder liveness every poll, so a dead holder's
 lock is reclaimed automatically. Same-session re-entry (e.g. after a context
 clear that re-invokes `/dispatch`) re-acquires cleanly because the recorded
 sessionId matches the re-entering session's own `CLAUDE_CODE_SESSION_ID`.
+
+### Per-worktree invariant
+
+The selection lock above is **per-repo** and serializes the router's selection
+step (so two routers cannot race on the same target). It is one of two
+mechanisms; the other is per-worktree and enforced elsewhere.
+
+The **per-worktree invariant**: at most one live `dispatch-*` agent per issue
+worktree. The router's Step 6 spawn primitive (`dispatch-spawn-worker`)
+enforces this at the spawn boundary by querying
+`claude agents --json --cwd <worktree-path>` (the `claude_sessions_under`
+helper in `lib-claude-agents.sh`). If any live `dispatch-*` agent is already
+under `<worktree-path>`, the spawn is `deduped` and no new worker starts. The
+worker is born in the target worktree and dies there; per-worktree dedup
+naturally serializes per-issue work without the selection lock having to.
+
+The two mechanisms have orthogonal scopes:
+
+- **Selection lock** (this section) — per-repo, held by the router for the
+  duration of Steps 1–5. Prevents two routers from selecting the same target.
+- **Per-worktree dedup** (`dispatch-spawn-worker`) — per-worktree-path,
+  enforced at every router-to-worker spawn. Prevents two workers from racing
+  on the same issue.
+
+N concurrent issues in flight = N concurrent workers, each in its own
+worktree, each advancing its own issue's phase without contention. Only the
+router selection step is serialized; the worker execution path is per-
+worktree-parallel.
 
 ## 1. Sync local main with `origin/main`
 
