@@ -1,11 +1,12 @@
 # Dispatch Timer
 #
 # Declares a systemd.user oneshot service + timer that fires the
-# `dispatch-spawn` script every 30 minutes from the main worktree.
-# `dispatch-spawn` is the shared primitive (#756) that prunes stale agents,
-# dedup-guards, and spawns `claude --bg --name dispatch-<id> "/dispatch"` in
-# the "auto mode" permission posture. This timer acts as the heartbeat that
-# re-seeds the baton-pass chain after a cold start, crash, or missed tick.
+# `dispatch-spawn` script once a day at 9 AM (system local time) from the
+# main worktree. `dispatch-spawn` is the shared primitive (#756) that prunes
+# stale agents, dedup-guards, and spawns
+# `claude --bg --name dispatch-<id> "/dispatch"` in the "auto mode" permission
+# posture. This timer acts as the daily heartbeat that re-seeds the baton-pass
+# chain after a cold start, crash, or missed tick.
 #
 # How the background session survives the oneshot unit deactivating:
 #   `dispatch-spawn` invokes `claude --bg`, which starts a detached background
@@ -53,7 +54,7 @@ let
 in
 {
   systemd.user.services.dispatch = {
-    Unit.Description = "Run dispatch-spawn to seed the dispatch baton-pass chain";
+    Unit.Description = "Run dispatch-spawn (daily at 9 AM) to seed the dispatch baton-pass chain";
     Service = {
       Type = "oneshot";
       WorkingDirectory = mainWorktree;
@@ -64,10 +65,10 @@ in
   };
 
   systemd.user.timers.dispatch = {
-    Unit.Description = "Fire the dispatch service every 30 minutes";
+    Unit.Description = "Fire the dispatch service daily at 9 AM local time";
     Timer = {
-      OnCalendar = "*:0/30"; # wall-clock, every hour at :00 and :30
-      Persistent = true;     # a tick missed while WSL was down runs on next start
+      OnCalendar = "*-*-* 09:00:00"; # daily at 09:00 system local time
+      Persistent = true;             # a tick missed while WSL was down runs on next start
     };
     Install.WantedBy = [ "timers.target" ];
   };
