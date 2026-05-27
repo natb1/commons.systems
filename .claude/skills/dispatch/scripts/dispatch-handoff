@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# dispatch-handoff — terminal disposition for a /dispatch background job.
+#
+# /dispatch SKILL.md Step 9 invokes this as the single scripted entrypoint for
+# ending a job. It replaces the model-driven multi-step terminal disposition
+# (chat completion report + three-way branch logic) with one deterministic
+# decision computed from observable state — spawn exit code and PR labels —
+# rather than free-text interpretation. See #824 for the structural rationale
+# (the previous shape leaked the predecessor session when the model treated
+# `dispatch-spawn` as terminal and dropped the closing self-close).
+#
+# Behavior:
+#   --phase-completed <N>   1. Run dispatch-spawn (the baton pass).
+#                              - If spawn exits non-zero → print spawn's stderr
+#                                to this script's stderr, exit non-zero, do NOT
+#                                self-close (the session stays open so the
+#                                spawn failure is visible).
+#                           2. Resolve the PR via dispatch-find-pr <N>.
+#                              - If no PR is found → exit non-zero with a clear
+#                                diagnostic; do NOT self-close (a phase ran but
+#                                no PR exists is anomalous — fail safe).
+#                           3. Read the PR's labels via `gh pr view`.
+#                              - If `dispatch:office-hours` is on the PR → exit
+#                                0 without self-closing (a phase skill flagged
+#                                a deviation; session stays open for review).
+#                           4. Otherwise → exec dispatch-self-close.
+#
+#   --early-stop            No spawn (the #725 heartbeat re-seeds the chain).
+#                           exec dispatch-self-close.
+#
+# Argument order for --phase-completed is flexible: the numeric <N> may come
+# before or after the flag (`dispatch-handoff 824 --phase-completed` and
+# `dispatch-handoff --phase-completed 824` are equivalent). --early-stop takes
+# no other argument.
+#
+# Exit codes:
+#   0  clean disposition — happy path, deviation branch, or --early-stop.
+#   1  spawn failure surfaced, or no PR found for <N> on --phase-completed.
+#   2  usage error — missing/extra argument, or unrecognized flag.
+#
+# Environment overrides for testability (mirroring DISPATCH_SPAWN_* and
+# DISPATCH_SELF_CLOSE_CLAUDE_CMD):
+#   DISPATCH_HANDOFF_SPAWN_CMD       Path to dispatch-spawn. Default:
+#                                    <script-dir>/dispatch-spawn.
+#   DISPATCH_HANDOFF_SELF_CLOSE_CMD  Path to dispatch-self-close. Default:
+#                                    <script-dir>/dispatch-self-close.
+#   DISPATCH_HANDOFF_FIND_PR_CMD     Path to dispatch-find-pr. Default:
+#                                    <script-dir>/dispatch-find-pr.
+#   DISPATCH_HANDOFF_GH_CMD          The `gh` command. Default: `gh`.
+#
+# Sandbox: dispatch-spawn, dispatch-self-close, and `gh` all require
+# `dangerouslyDisableSandbox: true` (claude daemon socket + gh TLS). Callers
+# must invoke this script with `dangerouslyDisableSandbox: true` — see
+# `.claude/rules/sandbox.md`.
+#
+# NOT set -e: exits are handled explicitly (matching dispatch-spawn /
+# dispatch-self-close / dispatch-acquire-lock).
+set -uo pipefail
+
+# ---- Step 0: parse arguments ------------------------------------------------
+MODE=""
+ISSUE_NUM=""
+for arg in "$@"; do
+  case "$arg" in
+    --phase-completed)
+      [[ -n "$MODE" ]] && { echo "dispatch-handoff: conflicting modes ('$MODE' and '--phase-completed')" >&2; exit 2; }
+      MODE="phase-completed"
+      ;;
+    --early-stop)
+      [[ -n "$MODE" ]] && { echo "dispatch-handoff: conflicting modes ('$MODE' and '--early-stop')" >&2; exit 2; }
+      MODE="early-stop"
+      ;;
+    [0-9]*)
+      if [[ "$arg" =~ ^[0-9]+$ ]]; then
+        [[ -n "$ISSUE_NUM" ]] && { echo "dispatch-handoff: extra issue number '$arg' (already have '$ISSUE_NUM')" >&2; exit 2; }
+        ISSUE_NUM="$arg"
+      else
+        echo "dispatch-handoff: unknown argument '$arg'" >&2; exit 2
+      fi
+      ;;
+    *)
+      echo "dispatch-handoff: unknown argument '$arg'" >&2; exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$MODE" ]]; then
+  echo "dispatch-handoff: missing mode (--phase-completed <N> or --early-stop)" >&2
+  exit 2
+fi
+
+case "$MODE" in
+  phase-completed)
+    if [[ -z "$ISSUE_NUM" ]]; then
+      echo "dispatch-handoff: --phase-completed requires an issue number argument" >&2
+      exit 2
+    fi
+    ;;
+  early-stop)
+    if [[ -n "$ISSUE_NUM" ]]; then
+      echo "dispatch-handoff: --early-stop takes no issue number (got '$ISSUE_NUM')" >&2
+      exit 2
+    fi
+    ;;
+esac
+
+# ---- Step 1: resolve commands -----------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPAWN_CMD="${DISPATCH_HANDOFF_SPAWN_CMD:-$SCRIPT_DIR/dispatch-spawn}"
+SELF_CLOSE_CMD="${DISPATCH_HANDOFF_SELF_CLOSE_CMD:-$SCRIPT_DIR/dispatch-self-close}"
+FIND_PR_CMD="${DISPATCH_HANDOFF_FIND_PR_CMD:-$SCRIPT_DIR/dispatch-find-pr}"
+GH_CMD="${DISPATCH_HANDOFF_GH_CMD:-gh}"
+
+# ---- Step 2: --early-stop is a direct hand-off to self-close ----------------
+if [[ "$MODE" == "early-stop" ]]; then
+  exec "$SELF_CLOSE_CMD"
+fi
+
+# ---- Step 3: --phase-completed — spawn the successor ------------------------
+# Capture spawn's stderr so a failure can be surfaced; let stdout go through
+# (it carries the `spawned` / `deduped` protocol word, harmless if seen). On
+# spawn failure: print stderr to this script's stderr, exit non-zero, do NOT
+# call self-close. Keeping the session open makes the failure visible.
+spawn_stderr_file=$(mktemp)
+# shellcheck disable=SC2064  # expand spawn_stderr_file now, not on signal
+trap "rm -f '$spawn_stderr_file'" EXIT
+if ! "$SPAWN_CMD" 2>"$spawn_stderr_file"; then
+  spawn_rc=$?
+  cat "$spawn_stderr_file" >&2
+  echo "dispatch-handoff: dispatch-spawn failed (exit $spawn_rc); leaving session open for visibility" >&2
+  exit 1
+fi
+
+# ---- Step 4: resolve the PR for the issue -----------------------------------
+PR_NUM=$("$FIND_PR_CMD" "$ISSUE_NUM")
+if [[ -z "$PR_NUM" ]]; then
+  echo "dispatch-handoff: no PR found for issue #$ISSUE_NUM (phase ran but PR is missing — refusing to self-close)" >&2
+  exit 1
+fi
+
+# ---- Step 5: deviation check — skip self-close if office-hours is set -------
+# `gh pr view --json labels --jq '.labels[].name'` prints one label per line.
+# An exact-match grep avoids partial-match false positives.
+labels=$("$GH_CMD" pr view "$PR_NUM" --json labels --jq '.labels[].name' 2>/dev/null || true)
+if printf '%s\n' "$labels" | grep -qxF -- "dispatch:office-hours"; then
+  # Phase skill flagged a deviation — leave this session open for human review.
+  exit 0
+fi
+
+# ---- Step 6: clean exit — hand off to self-close ----------------------------
+exec "$SELF_CLOSE_CMD"
