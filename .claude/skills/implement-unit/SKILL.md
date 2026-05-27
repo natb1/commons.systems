@@ -57,3 +57,10 @@ The caller supplies:
      **not** force-push.
 
 4. **Return** once the unit is committed, merged, and pushed.
+
+## Post-condition
+
+On return, the unit is committed, merged, and pushed — but **no PR is opened**.
+PR creation is the caller's responsibility. `/plan-implement` opens the draft
+PR after all units land (see `/plan-implement` §3); when invoking this skill
+directly with a one-unit plan, open the PR yourself after it returns.

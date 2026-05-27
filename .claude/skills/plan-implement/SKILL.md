@@ -54,10 +54,15 @@ tool, passing:
 and recovers from merge / pre-commit / push errors. This is a normal in-session loop
 — **do not clear context between units**.
 
-### 3. Open the draft PR
+`/implement-unit` commits, merges `origin/main`, and pushes each unit; it does
+**not** open a PR. PR creation belongs to `/plan-implement` (Step 3 below), after
+every unit has landed.
 
-After every unit is committed and pushed, create the draft PR (use
-`dangerouslyDisableSandbox: true` — `gh` needs network):
+### 3. `/plan-implement` opens the draft PR
+
+After every unit is committed and pushed, `/plan-implement` (this skill — not
+`/implement-unit`) creates the draft PR (use `dangerouslyDisableSandbox: true` —
+`gh` needs network):
 
 ```bash
 gh pr create --draft --title "<short summary>" --body "$(cat <<'EOF'
