@@ -27,8 +27,8 @@ planning and `/implement-unit`'s build procedure.
 **Idempotency guard — check this first.** If an approved bug-fix plan for this
 dispatch is already present in context (typical after
 `showClearContextOnPlanAccept` fires — the user accepted the bug-fix plan and the
-context was cleared, causing `restore-dispatch-skill.sh` to re-enter `/dispatch`
-→ `/dispatch-qa`), **skip the QA walkthrough** — Step 0.5 and Steps 1–4 — and
+context was cleared, causing `restore-dispatch-skill.sh` to re-enter
+`/dispatch-worker` → `/dispatch-qa`), **skip the QA walkthrough** — Step 0.5 and Steps 1–4 — and
 resume directly at the build loop (Step 5, sub-step 3: build each unit via
 `/implement-unit`). Step 0 (target resolution) still runs: it re-establishes the
 issue number `<N>` and confirms the worktree from the current branch. The plan

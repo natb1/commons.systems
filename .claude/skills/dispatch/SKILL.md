@@ -429,12 +429,18 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
      ```
      This is sandbox-allowed under `worktrees/` and `.bare/worktrees/` — see
      `.claude/rules/sandbox.md`.
-  3. Authorize `.envrc` for the new tree
+  3. Authorize and pre-evaluate `.envrc` for the new tree
      (`dangerouslyDisableSandbox: true` — direnv writes to its on-disk cache
      outside the sandbox-allowlist):
      ```bash
      direnv allow "$WORKTREE_PATH"
+     direnv exec "$WORKTREE_PATH" true
      ```
+     `direnv allow` whitelists the `.envrc`; `direnv exec` pre-evaluates it so
+     direnv's on-disk cache is populated. Without this cache-warming step,
+     non-interactive subshells in the worker session (Bash tool calls) cannot
+     pick up the flake environment — `node`, `npm`, `npx`, and the TypeScript
+     compiler are missing from `PATH`.
   4. Populate `CLAUDE.local.md` with full issue context
      (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls `gh`):
      ```bash
@@ -450,17 +456,20 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
   (early-stop); do not spawn a worker.
 
 On every non-`conflict` path, before the worker is spawned, create the recovery
-marker:
+marker **inside the target worktree** (`$WORKTREE_PATH`):
 
 ```bash
-mkdir -p tmp && touch tmp/dispatch-worktree
+(cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
 ```
 
 `restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
-recovery on this marker — when present, it re-invokes `/dispatch` so the phase is
-re-derived from PR/CI ground truth. The marker is an empty boolean flag with no
-payload; it persists for the worktree's life and needs no cleanup — `tmp/` is
-git-ignored, and removing the worktree removes it.
+recovery on this marker — when present, it re-invokes `/dispatch-worker <N>`
+so the worker re-derives the phase from PR/CI ground truth. The router never
+writes this marker, so a `SessionStart:clear` in `worktrees/main` is a no-op —
+correct, since the router is short-lived and re-seeded by the #725 heartbeat.
+The marker is an empty boolean flag with no payload; it persists for the
+worktree's life and needs no cleanup — `tmp/` is git-ignored, and removing the
+worktree removes it.
 
 As the **final action of this step on every non-`conflict` (proceed) path** —
 after the marker is written, before Step 6 — release the lock (see *Releasing
