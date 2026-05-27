@@ -51,5 +51,13 @@ As the action immediately before the final report:
 Summarize the likely cause from the logs and check-run details, report it,
 and return. The caller proceeds to Step 9 (early-stop).
 
+Include only the failing check/step name and a high-level error category
+(e.g. "test assertion failed", "lint error", "type error"). Do not reproduce
+raw log lines, environment-variable values, file paths beyond the immediate
+failing module, or any string that looks like a token, credential, or other
+secret — even if GitHub Actions has already partially masked it. The
+`--log-failed` output may inadvertently surface CI internals; the summary is
+for the user, not a copy of the log.
+
 Once a PR that fixes main exists, the normal ladder picks it up
 (verify/ready) — this gate only blocks starting new, unrelated work.
