@@ -31,6 +31,21 @@
 # the recorded sessionId without waiting for self-healing to notice the
 # session has moved on.
 #
+# Marker-based reclaim. The dispatch lock covers Steps 0–5 of /dispatch only
+# (target selection + worktree resolution); phase skills run lock-free. The
+# marker file `tmp/dispatch-worktree` is written in the selected worktree at
+# the end of Step 5 on every proceed path, so its presence in the recorded
+# holder's cwd authoritatively means "Step 5 completed — past the lock-
+# covered region". Both acquire and `--release` honor this signal:
+#   - Acquire reclaims a marker-bearing foreign holder regardless of session
+#     liveness (the holder is past Step 5; the lock no longer serves it).
+#   - `--release` succeeds for any caller when the recorded holder's cwd
+#     carries the marker, in addition to the strict self-release branch.
+# This closes the silent-noop leak when a child context's
+# CLAUDE_CODE_SESSION_ID differs from the recorded holder. Pre-marker stop
+# paths (Steps 1–4 stop, Step 5 `conflict`) fire before the marker exists, so
+# the lenient branch correctly does not engage and strict semantics apply.
+#
 # Usage:
 #   dispatch-acquire-lock            — single-shot: print "acquired" or "busy".
 #   dispatch-acquire-lock --wait     — poll until acquired or the wait timeout
@@ -92,16 +107,23 @@ fi
 WAIT_TIMEOUT="${DISPATCH_LOCK_WAIT_TIMEOUT:-300}"
 WAIT_INTERVAL="${DISPATCH_LOCK_WAIT_INTERVAL:-5}"
 
-# is_live_session <sessionId> — true if <sessionId> appears in the daemon's
-# live-session registry. Covers the same failure modes that
-# lib-claude-agents.sh::claude_sessions_under treats as UNKNOWN (binary
-# missing, non-zero exit, whitespace-only output, non-array JSON, jq failure),
-# but inverts the return convention: this function returns 0 (LIVE — keep the
-# lock) instead of 1 (unknown — caller folds to occupied). The helper's
-# question is "is anything running under this path?"; ours is "is THIS
-# sessionId still alive?", and the global registry has no --cwd filter. A
-# zero-exit, valid `[]` is a definite "no live sessions anywhere" and returns
-# 1 (reclaim); only opaque failures fail safe to LIVE.
+# resolve_holder_state <sessionId> — query the daemon's live-session registry
+# for <sessionId> and report both liveness and cwd. Covers the same failure
+# modes that lib-claude-agents.sh::claude_sessions_under treats as UNKNOWN
+# (binary missing, non-zero exit, whitespace-only output, non-array JSON, jq
+# failure), but inverts the return convention: this function returns 0 (LIVE
+# — keep the lock) instead of 1 (unknown — caller folds to occupied). The
+# helper's question is "is anything running under this path?"; ours is "is
+# THIS sessionId still alive, and where?", and the global registry has no
+# --cwd filter. A zero-exit, valid `[]` is a definite "no live sessions
+# anywhere" and returns 1 (reclaim); only opaque failures fail safe to LIVE.
+#
+# Stdout: the holder's cwd on a single line if the registry exposed it.
+#         Empty if either the holder is not live OR the daemon query was
+#         opaque (failed/non-array/parse error). Callers treat an empty cwd
+#         on a "live" return as "marker check cannot proceed → stay strict."
+# Return: 0 = live (or opaque failure → fail-safe live)
+#         1 = definitely not live (reclaim)
 #
 # The `9>&-` redirection closes fd 9 (the flock fd, opened by the caller's
 # subshell) in the `claude` child. flock is on the open file description and
@@ -109,22 +131,36 @@ WAIT_INTERVAL="${DISPATCH_LOCK_WAIT_INTERVAL:-5}"
 # any background helper `claude` ever spawns would inherit fd 9 and hold the
 # flock past our subshell's exit. Today `claude agents --json` is a query-and-
 # exit client, but the cost of defending against a future fork is one redir.
-is_live_session() {
-  local sid="$1" out sids
+resolve_holder_state() {
+  local sid="$1" out rows match
   if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null 9>&-); then
     return 0
   fi
   if [[ -z "${out//[[:space:]]/}" ]]; then
     return 0
   fi
-  if ! sids=$(jq -r '
+  # One TSV row per session: <sessionId>\t<cwd>. `// ""` keeps both fields as
+  # strings even when absent, so the tab-split below always has two slots.
+  if ! rows=$(jq -r '
     if type == "array"
-    then .[] | .sessionId // empty
+    then .[] | "\(.sessionId // "")\t\(.cwd // "")"
     else error("not a JSON array")
     end' <<<"$out" 2>/dev/null); then
     return 0
   fi
-  printf '%s\n' "$sids" | grep -qxF -- "$sid"
+  # Exact-match $1 against sid via awk: a true field equality (not a literal-
+  # substring match), so a sessionId that prefixes or suffixes another row's
+  # sessionId cannot cross-match. Also avoids `grep -F | head -n1`, whose
+  # pipefail+SIGPIPE interaction can collapse a contended-but-live match into
+  # a non-zero exit and trigger a wrong reclaim.
+  match=$(printf '%s\n' "$rows" | awk -F'\t' -v sid="$sid" '$1 == sid {print; exit}')
+  if [[ -z "$match" ]]; then
+    # Definitely not live: registry parsed cleanly and our sid isn't in it.
+    return 1
+  fi
+  # Strip the leading "<sid>\t" prefix to leave the cwd on stdout.
+  printf '%s\n' "${match#*$'\t'}"
+  return 0
 }
 
 # ---- Step 1: resolve the lock file ------------------------------------------
@@ -169,15 +205,25 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
   result=$(
     exec 9>>"$LOCK_FILE"
     flock 9                # blocking — a short mutex over the read-check-write
-    local recorded=""
+    local recorded="" cwd="" live=0
     IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
     # Busy iff a different sessionId is recorded AND it is still a live
-    # session per `claude agents --json`. Otherwise — no record, a stale
-    # record (sessionId not in the registry), or our own session re-entering —
-    # we claim the lock.
-    if [[ -n "$recorded" && "$recorded" != "$SESSION_ID" ]] \
-         && is_live_session "$recorded"; then
-      printf 'BUSY %s' "$recorded"
+    # session per `claude agents --json` AND its cwd does NOT carry the
+    # tmp/dispatch-worktree marker (i.e. it is still in the lock-covered
+    # Steps 0–5 region). Otherwise — no record, a stale record (sessionId
+    # not in the registry), our own session re-entering, or a marker-bearing
+    # foreign holder past Step 5 — we claim the lock. An empty cwd on a
+    # live return (opaque-failure path) skips the marker check → stay strict.
+    if [[ -n "$recorded" && "$recorded" != "$SESSION_ID" ]]; then
+      if cwd=$(resolve_holder_state "$recorded"); then
+        live=1
+      fi
+      if (( live )) && [[ -z "$cwd" || ! -e "$cwd/tmp/dispatch-worktree" ]]; then
+        printf 'BUSY %s' "$recorded"
+      else
+        printf '%s\n' "$SESSION_ID" >"$LOCK_FILE"
+        printf 'OK'
+      fi
     else
       printf '%s\n' "$SESSION_ID" >"$LOCK_FILE"
       printf 'OK'
@@ -215,16 +261,35 @@ case "$MODE" in
     ;;
 
   release)
-    # Re-read the recorded sessionId under flock and clear it ONLY if it is
-    # our own session. Truncate with `:` rather than `rm` — `rm` would orphan
-    # a concurrent acquire's already-open fd. A no-op when the lock is unheld
-    # or held by another session.
+    # Re-read the recorded sessionId under flock and clear it when EITHER
+    # (a) it is our own session (strict self-release), OR (b) the recorded
+    # holder's cwd carries the tmp/dispatch-worktree marker (lenient post-
+    # Step-5 release — closes the silent-noop leak when a child context's
+    # CLAUDE_CODE_SESSION_ID differs from the recorded holder). A not-live
+    # foreign holder without a marker stays a noop; its lock will be
+    # reclaimed by the next acquire anyway. Truncate with `:` rather than
+    # `rm` — `rm` would orphan a concurrent acquire's already-open fd.
     result=$(
       exec 9>>"$LOCK_FILE"
       flock 9
       recorded=""    # plain var: this subshell runs at script top level
+      cwd=""
+      should_release=0
       IFS= read -r recorded <"$LOCK_FILE" 2>/dev/null || true
       if [[ -n "$recorded" && "$recorded" == "$SESSION_ID" ]]; then
+        should_release=1
+      elif [[ -n "$recorded" && "$recorded" != "$SESSION_ID" ]]; then
+        # Foreign holder: lenient release iff its cwd carries the marker.
+        # A not-live holder (resolve_holder_state returns 1, empty cwd) or
+        # an opaque-failure holder (returns 0 with empty cwd) stays strict —
+        # the marker check fails on empty cwd, so should_release stays 0.
+        if cwd=$(resolve_holder_state "$recorded"); then
+          if [[ -n "$cwd" && -e "$cwd/tmp/dispatch-worktree" ]]; then
+            should_release=1
+          fi
+        fi
+      fi
+      if (( should_release )); then
         : >"$LOCK_FILE"
         printf 'RELEASED'
       else
