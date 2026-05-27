@@ -394,6 +394,40 @@ teardown() {
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
+# install_fake_claude_sessions <sessionId> <name> [...more (sid,name) pairs]
+# Install a fake `claude` script that prints a JSON array of the given
+# (sessionId, name) pairs and exits 0, and point CLAUDE_AGENTS_CMD at it.
+# Call with zero args for an empty registry (`[]`).
+install_fake_claude_sessions() {
+  local fake="$TMPDIR_TEST/bin/fake-claude"
+  local payload="[" first=1
+  while [[ $# -ge 2 ]]; do
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"$1\",\"pid\":1,\"status\":\"busy\",\"name\":\"$2\"}"
+    shift 2
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/fake-claude-payload.json"
+  cat > "$fake" <<FAKE
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/fake-claude-payload.json"
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
+}
+
+# Install a fake `claude` that exits non-zero (daemon unknown).
+install_fake_claude_failure() {
+  local fake="$TMPDIR_TEST/bin/fake-claude"
+  cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
+}
+
 # Helper to build a PR JSON entry for the full PR list (dispatch-phase).
 make_pr() {
   local num="$1" branch="$2" is_draft="$3" labels_json="$4" rollup_json="$5"
@@ -1405,9 +1439,11 @@ printf '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help
 printf '[{"number":5500}]\n' > "$STUB_DIR/subissues-55.json"
 printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-5500.json"
-# Sub-issue 5500's worktree exists (owned by another session) → trace 55 exits 2.
+# Sub-issue 5500's worktree exists AND has a live session (owned by another
+# session) → trace 55 exits 2 under the live-session-aware CONFLICTED gate (#741).
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+install_fake_claude_sessions "sess-5500-live" "owner-task"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55 skipped → issue 66 chosen" "issue 66" "$result"
 teardown
@@ -1423,6 +1459,7 @@ printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPE
   > "$STUB_DIR/issue-5500.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+install_fake_claude_sessions "sess-5500-live" "owner-task"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55 → falls through to QA PR" "pr 20 20-qa qa" "$result"
 teardown
@@ -1437,6 +1474,7 @@ printf '{"title":"Issue 5500","body":"","comments":[],"number":5500,"state":"OPE
   > "$STUB_DIR/issue-5500.json"
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/5500-blocked\nHEAD def456\nbranch refs/heads/5500-blocked\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+install_fake_claude_sessions "sess-5500-live" "owner-task"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "subtree-blocked issue 55, no QA PR → empty" "empty" "$result"
 teardown
@@ -2114,10 +2152,10 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "600" "explicit")
 assert_eq "sub-issues chain 600→601 → leaf 601" "601" "$result"
 teardown
 
-# 8. Queue mode: conflicted child is skipped → sibling is returned.
-echo "Test: queue mode → skips conflicted child, returns sibling"
+# 8. Queue mode: a child with a live-session worktree is skipped → sibling is returned.
+echo "Test: queue mode → skips live-session child, returns sibling"
 setup
-# 700 has two open sub-issues: 701 (worktree-owned) and 702 (clean).
+# 700 has two open sub-issues: 701 (worktree-owned by a live session) and 702 (clean).
 printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
 printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
   > "$STUB_DIR/issue-701.json"
@@ -2126,8 +2164,25 @@ printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"
 # Pretend another session owns 701's worktree on branch 701-feature.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+install_fake_claude_sessions "sess-701-live" "live-task"
 result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
-assert_eq "queue: conflicted child 701 skipped → sibling 702" "702" "$result"
+assert_eq "queue: live-session child 701 skipped → sibling 702" "702" "$result"
+teardown
+
+# 8a. Queue mode: a sessionless <N>-* worktree no longer conflicts. The descent
+#     treats 701 as a normal open child, so the lowest-numbered leaf (701) wins.
+echo "Test: queue mode → sessionless worktree is a normal child"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+install_fake_claude_sessions   # empty registry — no live session under 701
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: sessionless 701 is a normal child → 701" "701" "$result"
 teardown
 
 # 9. Explicit mode: conflicted child returned unchanged (no worktree filtering).
@@ -2145,8 +2200,8 @@ result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "explicit")
 assert_eq "explicit: lowest leaf 701 unchanged" "701" "$result"
 teardown
 
-# 10. Queue mode: every child is worktree-conflicted → non-zero exit.
-echo "Test: queue mode → all leaves conflicted, exits non-zero"
+# 10. Queue mode: every child's worktree has a live session → non-zero exit.
+echo "Test: queue mode → all leaves live-session-owned, exits non-zero"
 setup
 printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
 printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
@@ -2156,12 +2211,72 @@ printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"
 # Both children's worktrees exist.
 printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\nworktree /worktrees/702-feature\nHEAD ghi789\nbranch refs/heads/702-feature\n\n' \
   > "$STUB_DIR/worktree-list.txt"
+# A live session under each — the fake ignores --cwd and returns the same
+# payload for every query, so both 701 and 702 enter CONFLICTED.
+install_fake_claude_sessions "sess-x" "live-task"
 err_out=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue" 2>&1 1>/dev/null && echo "EXIT=0" || echo "EXIT=$?")
 case "$err_out" in
-  *"worktree-conflicted"*"EXIT="[1-9]*) status="ok" ;;
+  *"have worktrees with live sessions"*"EXIT="[1-9]*) status="ok" ;;
   *) status="bad: $err_out" ;;
 esac
-assert_eq "queue: all blocked → non-zero with stderr message" "ok" "$status"
+assert_eq "queue: all live-session-owned → non-zero with stderr message" "ok" "$status"
+teardown
+
+# 10a. Queue mode: both children have worktrees but neither has a live session.
+#      No conflict; descent treats them as normal children and returns the
+#      lowest-numbered leaf (701).
+echo "Test: queue mode → both worktrees sessionless, returns 701"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\nworktree /worktrees/702-feature\nHEAD ghi789\nbranch refs/heads/702-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+install_fake_claude_sessions   # empty registry — neither worktree is live
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: both worktrees sessionless → lowest leaf 701" "701" "$result"
+teardown
+
+# 10b. Queue mode: 701's worktree has a live session, 702's does not. The
+#      live-session-aware filter skips 701; 702 is a normal child and wins.
+#      This test needs a per-path fake `claude` — install_fake_claude_sessions
+#      returns the same payload for every --cwd query.
+echo "Test: queue mode → mixed liveness, returns sessionless sibling"
+setup
+printf '[{"number":701},{"number":702}]\n' > "$STUB_DIR/subissues-700.json"
+printf '{"title":"Issue 701","body":"","comments":[],"number":701,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-701.json"
+printf '{"title":"Issue 702","body":"","comments":[],"number":702,"state":"OPEN"}\n' \
+  > "$STUB_DIR/issue-702.json"
+printf 'worktree /repo\nHEAD abc123\n\nworktree /worktrees/701-feature\nHEAD def456\nbranch refs/heads/701-feature\n\nworktree /worktrees/702-feature\nHEAD ghi789\nbranch refs/heads/702-feature\n\n' \
+  > "$STUB_DIR/worktree-list.txt"
+# Per-path fake: a live session under 701-feature only.
+cat > "$TMPDIR_TEST/bin/fake-claude-mixed" <<'FAKE'
+#!/usr/bin/env bash
+# Args look like: agents --json --cwd <path>
+cwd=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cwd) cwd="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+case "$cwd" in
+  */701-feature)
+    echo '[{"sessionId":"sess-701","pid":1,"status":"busy","name":"live"}]'
+    ;;
+  *)
+    echo '[]'
+    ;;
+esac
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/bin/fake-claude-mixed"
+export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/bin/fake-claude-mixed"
+result=$("$TMPDIR_TEST/dispatch-trace-leaf" "700" "queue")
+assert_eq "queue: 701 live + 702 sessionless → 702" "702" "$result"
 teardown
 
 # 11. Missing mode → arity error on stderr, exit 1.
@@ -2346,40 +2461,6 @@ HEAD def456
 branch refs/heads/42-my-feature
 
 '
-
-# install_fake_claude_sessions <sessionId> <name> [...more (sid,name) pairs]
-# Install a fake `claude` script that prints a JSON array of the given
-# (sessionId, name) pairs and exits 0, and point CLAUDE_AGENTS_CMD at it.
-# Call with zero args for an empty registry (`[]`).
-install_fake_claude_sessions() {
-  local fake="$TMPDIR_TEST/bin/fake-claude"
-  local payload="[" first=1
-  while [[ $# -ge 2 ]]; do
-    if (( first )); then first=0; else payload+=","; fi
-    payload+="{\"sessionId\":\"$1\",\"pid\":1,\"status\":\"busy\",\"name\":\"$2\"}"
-    shift 2
-  done
-  payload+="]"
-  printf '%s' "$payload" > "$TMPDIR_TEST/fake-claude-payload.json"
-  cat > "$fake" <<FAKE
-#!/usr/bin/env bash
-cat "$TMPDIR_TEST/fake-claude-payload.json"
-exit 0
-FAKE
-  chmod +x "$fake"
-  export CLAUDE_AGENTS_CMD="$fake"
-}
-
-# Install a fake `claude` that exits non-zero (daemon unknown).
-install_fake_claude_failure() {
-  local fake="$TMPDIR_TEST/bin/fake-claude"
-  cat > "$fake" <<'FAKE'
-#!/usr/bin/env bash
-exit 1
-FAKE
-  chmod +x "$fake"
-  export CLAUDE_AGENTS_CMD="$fake"
-}
 
 # 1. Current branch is <N>-* → here (mode-independent).
 echo "Test: current branch <N>-* → here (both modes)"

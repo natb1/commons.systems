@@ -244,10 +244,11 @@ continue to target selection.
   yields a task.
 
   A `help wanted` issue is also skipped when its entire open-leaf subtree is
-  worktree-conflicted — every reachable open leaf already has a worktree owned by
-  another session — exactly as a directly-worktree'd issue is skipped; selection
-  falls through to the next tier. The tier emits the resolved startable leaf, so
-  a queue-selected `issue <num>` is always a directly-startable target.
+  worktree-conflicted — every reachable open leaf already has a worktree with a
+  live Claude session — exactly as a directly-worktree'd issue is skipped;
+  selection falls through to the next tier. The tier emits the resolved
+  startable leaf, so a queue-selected `issue <num>` is always a directly-
+  startable target.
 
   **main-broken handler.** `origin/main` itself is red, so no new work is safe
   to start. Do **not** run the sweep, create a worktree, branch, or phase skill.

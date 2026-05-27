@@ -11,13 +11,16 @@
 #              child is fine (the dispatch caller resolves it via
 #              dispatch-resolve-worktree's explicit mode, which yields `enter`
 #              for the recycle-after-completion case).
-#   queue    — descent filters out children whose <N>-* branch is an existing
-#              local worktree (owned by another session). If a node has open
+#   queue    — descent filters out children whose <N>-* branch has an existing
+#              local worktree with a live Claude session (owned by another
+#              session). A sessionless <N>-* worktree is a potentially
+#              interrupted implementation task to be resumed and is treated as
+#              a normal open child, not a conflict. If a node has open
 #              children but every one is filtered out, the descent bubbles up
 #              too — that subtree has no ready work. If every reachable open
-#              leaf in the subtree is conflicted, the script exits non-zero
-#              with a clear message on stderr so the /dispatch caller can stop
-#              instead of dispatching on a conflict.
+#              leaf in the subtree has a live-session worktree, the script
+#              exits non-zero with a clear message on stderr so the /dispatch
+#              caller can stop instead of dispatching on a conflict.
 #
 # Falls back to printing N in `explicit` mode if cycles block every path to a
 # leaf (preserves historical behavior).
@@ -35,6 +38,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+source "$SCRIPT_DIR/lib-claude-agents.sh"
 
 ISSUE_NUM="${1:-}"
 MODE="${2:-}"
@@ -44,16 +48,26 @@ if [[ -z "$ISSUE_NUM" || ! "$ISSUE_NUM" =~ ^[1-9][0-9]*$ ]] \
   exit 1
 fi
 
-# In queue mode, build the set of issue-number prefixes that own a local
-# worktree. list_worktree_records (lib.sh) does the shared porcelain parse;
-# split_worktree_record splits each line into WT_NUM / WT_PATH / WT_BRANCH —
-# WT_NUM is the branch's issue-number prefix, empty for non-issue / branchless
-# worktrees.
+# In queue mode, build the set of issue-number prefixes that own a worktree
+# with a *live* Claude session. list_worktree_records (lib.sh) does the shared
+# porcelain parse; split_worktree_record splits each line into WT_NUM /
+# WT_PATH / WT_BRANCH — WT_NUM is the branch's issue-number prefix, empty for
+# non-issue / branchless worktrees.
+#
+# Liveness gate (#741): worktree_has_live_session returns 0 when the daemon
+# reports a live session under <WT_PATH> OR when the daemon cannot be queried
+# (unknown, fail-safe); returns 1 only when the daemon definitively reports
+# zero sessions. A sessionless <issue>-* worktree is a potentially interrupted
+# implementation task — not a conflict — so the descent treats that child as a
+# normal open child.
 declare -A CONFLICTED=()
 if [[ "$MODE" == "queue" ]]; then
   while IFS= read -r line; do
     split_worktree_record "$line"
-    [[ -n "$WT_NUM" ]] && CONFLICTED["$WT_NUM"]=1
+    [[ -z "$WT_NUM" ]] && continue
+    if worktree_has_live_session "$WT_PATH"; then
+      CONFLICTED["$WT_NUM"]=1
+    fi
   done < <(list_worktree_records)
 fi
 
@@ -124,9 +138,9 @@ find_leaf() {
   fi
 
   if [[ -z "$kids" ]]; then
-    # Topological leaf — a valid leaf. Worktree-conflicted children are filtered
-    # before recursion (see the descent loop below), so a queue-mode leaf
-    # reached here is never itself worktree-conflicted.
+    # Topological leaf — a valid leaf. Live-session-worktree children are
+    # filtered before recursion (see the descent loop below), so a queue-mode
+    # leaf reached here never itself has a live-session worktree.
     echo "$n"
     return 0
   fi
@@ -170,11 +184,11 @@ if [[ "$trace_rc" -eq 3 ]]; then
   exit 1
 fi
 
-# In queue mode, no valid leaf is reachable — every leaf is worktree-conflicted
-# (or cycles block every path). Surface this so /dispatch can stop with a clear
-# message instead of dispatching on a conflict.
+# In queue mode, no valid leaf is reachable — every leaf has a live-session
+# worktree (or cycles block every path). Surface this so /dispatch can stop
+# with a clear message instead of dispatching on a conflict.
 if [[ "$MODE" == "queue" ]]; then
-  echo "error: all open leaves reachable from $ISSUE_NUM are worktree-conflicted (owned by other sessions)" >&2
+  echo "error: all open leaves reachable from $ISSUE_NUM have worktrees with live sessions (owned by other sessions)" >&2
   exit 2
 fi
 
