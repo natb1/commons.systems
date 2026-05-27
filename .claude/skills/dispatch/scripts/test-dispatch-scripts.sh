@@ -81,6 +81,18 @@ setup() {
   mkdir -p "$TMPDIR_TEST/config"
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
 
+  # Default no-op dispatch-sweep stub: silent, exit 0 (no orphan to adopt).
+  # dispatch-select-target invokes "$SCRIPT_DIR/dispatch-sweep" in default mode
+  # between the main-broken gate and the queue ladder; with this stub the call
+  # is inert and every existing default-mode test stays green. Tests that
+  # exercise sweep integration overwrite this stub before invoking
+  # dispatch-select-target.
+  cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$TMPDIR_TEST/dispatch-sweep"
+
   # dispatch-select-target calls dispatch-phase as "$SCRIPT_DIR/dispatch-phase".
   # Since we copied them all to TMPDIR_TEST, SCRIPT_DIR inside each copy will
   # resolve to TMPDIR_TEST correctly.
@@ -882,6 +894,8 @@ assert_eq "lone waiting PR → empty" "empty" "$result"
 teardown
 
 # 16. Open issue worktree → worktree output, queue scan skipped.
+# The default no-op dispatch-sweep stub installed by setup() is in place but
+# unused — current-worktree continuation short-circuits before the sweep call.
 echo "Test: open issue worktree → worktree <N> <branch>, scan skipped"
 setup
 # Seed a verify PR that would normally be selected — proves the scan is skipped.
@@ -1776,6 +1790,216 @@ printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
 [[ "$rc" -ne 0 ]] && rc_nonzero=yes || rc_nonzero=no
 assert_eq "invalid duration → exits non-zero" "yes" "$rc_nonzero"
+teardown
+
+# --- sweep routing (issue #803) ---------------------------------------------
+# dispatch-select-target invokes dispatch-sweep internally in default mode,
+# between the main-broken gate and the queue ladder. The sweep call comes
+# AFTER current-worktree continuation, so a session inside an <issue>-*
+# worktree always continues there even when an orphan exists elsewhere.
+# Tests below overwrite the default no-op sweep stub seeded by setup() to
+# exercise the routing branches.
+
+# SR1. (AC b) Inside an active <issue>-* worktree with an orphan elsewhere →
+#      still worktree <N> <branch>. The sweep stub would emit an adoption
+#      directive if invoked; the assert proves it never was.
+echo "Test: worktree continuation precedes sweep adoption (regression — #803)"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
+printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
+# Sweep stub would adopt an orphan at issue 725 if invoked — proves the sweep
+# never ran (current-worktree continuation short-circuited first).
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-some-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "worktree continuation beats sweep adoption" "worktree 42 42-some-slug" "$result"
+teardown
+
+# SR2. (AC c) Outside any worktree, orphan present → worktree-adopted.
+echo "Test: outside any worktree, orphan present → worktree-adopted"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "sweep adoption → worktree-adopted 725 725-orphan" "worktree-adopted 725 725-orphan" "$result"
+teardown
+
+# SR3. (AC d) Outside any worktree, no orphan → ladder result.
+echo "Test: outside any worktree, no orphan → ladder result"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Default no-op sweep stub from setup() is unchanged → sweep falls through.
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "no orphan → ladder picks verify PR" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# SR4. cleanup-unknown propagation: sweep exits 3 with stderr "cleanup-unknown:<path>".
+echo "Test: sweep exit 3 + cleanup-unknown stderr → cleanup-unknown <path>"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "cleanup-unknown:/tmp/some-orphan" >&2
+exit 3
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "cleanup-unknown propagated to stdout" "cleanup-unknown /tmp/some-orphan" "$result"
+assert_eq "cleanup-unknown route exits 0" "0" "$rc"
+teardown
+
+# SR5. --no-sweep bypasses the sweep call. A sweep stub that would adopt an
+#      orphan is installed; the flag must prove it was never invoked.
+echo "Test: --no-sweep bypasses the sweep call"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Stub would emit worktree-adopted-style adoption directive if invoked.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "worktree 725 725-orphan"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" --no-sweep)
+assert_eq "--no-sweep skips adoption → ladder result" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# SR6. A non-3 non-zero sweep exit logs a diagnostic but falls through to the
+#      ladder — defense-in-depth so a malformed sweep does not stall dispatch.
+echo "Test: sweep exit 2 (unrelated failure) → warning, fall through to ladder"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "some unrelated sweep error" >&2
+exit 2
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null)
+assert_eq "sweep exit 2 → falls through to ladder result" "pr 10 10-verify-me verify" "$result"
+teardown
+
+# SR7. --cleanup-confirm <path> calls dispatch-sweep --cleanup-unknown <path>
+#      first, then re-runs the default sweep+route block. With a sweep stub
+#      that exits 0 / empty stdout on the second call, the script falls
+#      through to the ladder. Proves both calls happen and that routing after
+#      cleanup is identical to default mode.
+echo "Test: --cleanup-confirm <path> runs cleanup then resumes selection"
+setup
+UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Sweep stub logs each invocation's args and is silent / exit 0 otherwise.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$STUB_DIR/dispatch-sweep-calls.log"
+exit 0
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/some-orphan" 2>/dev/null)
+assert_eq "cleanup-confirm → falls through to ladder result" "pr 10 10-verify-me verify" "$result"
+assert_eq "dispatch-sweep called twice (cleanup + resume)" \
+  "2" "$(wc -l < "$STUB_DIR/dispatch-sweep-calls.log" | tr -d ' ')"
+assert_eq "first sweep call carries --cleanup-unknown <path>" \
+  "--cleanup-unknown /tmp/some-orphan" \
+  "$(sed -n '1p' "$STUB_DIR/dispatch-sweep-calls.log")"
+assert_eq "second sweep call carries no args" \
+  "" "$(sed -n '2p' "$STUB_DIR/dispatch-sweep-calls.log")"
+teardown
+
+# SR8. --cleanup-confirm <path> halts at the next unknown orphan: the
+#      post-cleanup sweep emits cleanup-unknown:<path2> on stderr and exits 3,
+#      and the script propagates cleanup-unknown <path2> on stdout. Proves
+#      multiple unknown orphans iterate one-at-a-time via repeated SKILL.md
+#      AskUserQuestion confirmations rather than being silently consumed.
+echo "Test: --cleanup-confirm <path> halts on the next unknown orphan"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+# Sweep stub: first call (cleanup) exits 0; second call (resume) emits a new
+# unknown orphan on stderr and exits 3.
+cat > "$TMPDIR_TEST/dispatch-sweep" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$STUB_DIR/dispatch-sweep-calls.log"
+n=\$(wc -l < "$STUB_DIR/dispatch-sweep-calls.log" | tr -d ' ')
+if [[ "\$n" -eq 1 ]]; then
+  exit 0
+else
+  echo "cleanup-unknown:/tmp/second-orphan" >&2
+  exit 3
+fi
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/first-orphan" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "second unknown orphan propagated to stdout" \
+  "cleanup-unknown /tmp/second-orphan" "$result"
+assert_eq "halting on next unknown orphan exits 0" "0" "$rc"
+teardown
+
+# SR9. --cleanup-confirm <path> with a failing dispatch-sweep --cleanup-unknown
+#      call propagates the non-zero exit code (set -e) instead of silently
+#      falling through to the ladder. Proves cleanup failures are fail-loud per
+#      the contract documented at the top of the sweep+route block.
+echo "Test: --cleanup-confirm with failing cleanup propagates non-zero exit"
+setup
+setup_union_pr_list '[]'
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+printf 'main' > "$STUB_DIR/current-branch.txt"
+cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
+#!/usr/bin/env bash
+echo "dispatch-sweep: invalid cleanup path" >&2
+exit 2
+STUB
+chmod +x "$TMPDIR_TEST/dispatch-sweep"
+if result=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm "/tmp/bad" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "cleanup failure propagates exit 2" "2" "$rc"
+assert_eq "cleanup failure emits no stdout" "" "$result"
+teardown
+
+# SR10. --cleanup-confirm and --no-sweep are mutually exclusive: combining them
+#       would silently skip the post-cleanup sweep, violating the "resumes
+#       selection" contract.
+echo "Test: --cleanup-confirm + --no-sweep is rejected"
+setup
+if err=$("$TMPDIR_TEST/dispatch-select-target" --cleanup-confirm /tmp/x --no-sweep 2>&1 >/dev/null); then rc=0; else rc=$?; fi
+assert_eq "combining the flags exits 1" "1" "$rc"
+assert_eq "stderr names both flags" \
+  "error: --cleanup-confirm and --no-sweep are mutually exclusive" "$err"
 teardown
 
 # ============================================================================
@@ -4860,6 +5084,108 @@ creates_after=0
 assert_eq "idempotency run 2 made no second issue create" \
   "$creates_before" "$creates_after"
 jit_teardown
+
+# ============================================================================
+# ensure_deps (lib.sh) retry tests
+# ============================================================================
+echo ""
+echo "=== ensure_deps retry ==="
+
+# These tests use a fresh TMPDIR_TEST with a STUB_DIR holding npm and sleep
+# shims on PATH. lib.sh is sourced from SCRIPT_DIR (not the TMPDIR_TEST copy)
+# so ensure_deps resolves directly. REPO_ROOT is a fresh tmpdir with no
+# node_modules — forcing the install branch every time.
+
+# 1. ensure_deps retries and succeeds on attempt 3.
+echo "Test: ensure_deps retries and succeeds on attempt 3"
+TMPDIR_TEST=$(mktemp -d)
+STUB_DIR="$TMPDIR_TEST/stub"
+mkdir -p "$STUB_DIR"
+REPO_ROOT_TEST=$(mktemp -d)
+
+# npm stub: fail on calls 1 and 2; succeed on call 3.
+cat > "$STUB_DIR/npm" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)"
+count_file="$STUB_DIR/npm-count"
+count=0
+[ -f "$count_file" ] && count=$(cat "$count_file")
+count=$((count + 1))
+echo "$count" > "$count_file"
+if [ "$count" -lt 3 ]; then
+  exit 1
+fi
+exit 0
+STUB
+chmod +x "$STUB_DIR/npm"
+
+# sleep stub: no-op.
+cat > "$STUB_DIR/sleep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$STUB_DIR/sleep"
+
+export PATH="$STUB_DIR:$SAVED_PATH"
+rc=0
+( export REPO_ROOT="$REPO_ROOT_TEST"; source "$SCRIPT_DIR/lib.sh"; ensure_deps ) || rc=$?
+assert_eq "ensure_deps succeeds on attempt 3 (exit code)" "0" "$rc"
+npm_count=0
+[ -f "$STUB_DIR/npm-count" ] && npm_count=$(cat "$STUB_DIR/npm-count")
+assert_eq "ensure_deps called npm exactly 3 times" "3" "$npm_count"
+
+rm -rf "$TMPDIR_TEST" "$REPO_ROOT_TEST"
+TMPDIR_TEST=""
+STUB_DIR=""
+export PATH="$SAVED_PATH"
+
+# 2. ensure_deps fails after exhausting all 3 attempts.
+echo "Test: ensure_deps fails after exhausting all 3 attempts"
+TMPDIR_TEST=$(mktemp -d)
+STUB_DIR="$TMPDIR_TEST/stub"
+mkdir -p "$STUB_DIR"
+REPO_ROOT_TEST=$(mktemp -d)
+
+# npm stub: always fails.
+cat > "$STUB_DIR/npm" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")" && pwd)"
+count_file="$STUB_DIR/npm-count"
+count=0
+[ -f "$count_file" ] && count=$(cat "$count_file")
+count=$((count + 1))
+echo "$count" > "$count_file"
+exit 1
+STUB
+chmod +x "$STUB_DIR/npm"
+
+# sleep stub: no-op.
+cat > "$STUB_DIR/sleep" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+chmod +x "$STUB_DIR/sleep"
+
+export PATH="$STUB_DIR:$SAVED_PATH"
+rc=0
+( export REPO_ROOT="$REPO_ROOT_TEST"; source "$SCRIPT_DIR/lib.sh"; ensure_deps ) || rc=$?
+TOTAL=$((TOTAL + 1))
+if [ "$rc" -ne 0 ]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: ensure_deps returns non-zero after 3 failed attempts"
+else
+  FAIL=$((FAIL + 1))
+  echo "  FAIL: ensure_deps returns non-zero after 3 failed attempts"
+  echo "    expected non-zero, got 0"
+fi
+npm_count=0
+[ -f "$STUB_DIR/npm-count" ] && npm_count=$(cat "$STUB_DIR/npm-count")
+assert_eq "ensure_deps tried npm exactly 3 times before giving up" "3" "$npm_count"
+
+rm -rf "$TMPDIR_TEST" "$REPO_ROOT_TEST"
+TMPDIR_TEST=""
+STUB_DIR=""
+export PATH="$SAVED_PATH"
 
 # ============================================================================
 # summary
