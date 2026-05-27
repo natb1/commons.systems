@@ -167,9 +167,29 @@ When decomposition (Step 3f) creates new issues, establish relationships using t
 
 ## Step 6. Post-Processing
 
-Post-processing assigns the issue, applies `help wanted`, and applies at most
-one topic label. Classification is identical in both input modes; only the
-`gh` command differs.
+Post-processing assigns the issue, applies `help wanted`, applies exactly one
+type label, and applies at most one topic label. Classification is identical
+in both input modes; only the `gh` command differs.
+
+### Type classification
+
+Classify the issue's type from its title, body, and Step 3b compliance check.
+Type and topic are orthogonal axes — apply one of each as warranted.
+
+- **`bug`** — something isn't working as intended: incorrect output, data
+  loss, race conditions, crashes, silent failures, security holes,
+  contradictory invariants, or leaked resources. Body typically describes
+  expected-vs-actual behavior or reproduction steps. Keyword signals: "fix",
+  "broken", "leak", "race", "drops", "TOCTOU", "data loss", "silent failure",
+  "regression".
+
+- **`enhancement`** — new feature, refinement, refactor, or hardening that
+  adds capability or improves a working surface without fixing a defect.
+  This is the default when the issue is not a bug. Keyword signals: "add",
+  "extract", "refactor", "extend", "support", "improve".
+
+Apply exactly one of `bug` / `enhancement`. Record the matched label as
+`<type>` for the mode-specific command below.
 
 ### Topic classification
 
@@ -218,22 +238,23 @@ leave `<topic>` empty when no topic matched.
 
 ### Issue number mode
 
-Assign the issue and apply `help wanted` plus any matched topic label in one
-call:
+Assign the issue and apply `help wanted`, the matched type label, and any
+matched topic label in one call:
 
 ```bash
-gh issue edit <N> --add-assignee @me --add-label "help wanted" --add-label "<topic>"  # drop the trailing --add-label when no topic matched
+gh issue edit <N> --add-assignee @me --add-label "help wanted" --add-label "<type>" --add-label "<topic>"  # drop the trailing --add-label when no topic matched
 ```
 
-Apply `help wanted` by default; drop both `--add-label` arguments only when the
-user explicitly asked not to label the issue or named a different label set.
+Apply `help wanted` and `<type>` by default; drop all `--add-label` arguments
+only when the user explicitly asked not to label the issue or named a
+different label set.
 
 ### Description mode
 
 `/file-issue` (invoked in Step 5) assigns `@me` and applies `help wanted` to
-any issue it creates. Apply only the matched topic label to the issue number
-it returned:
+any issue it creates. Apply the matched type label and any matched topic
+label to the issue number it returned:
 
 ```bash
-gh issue edit <N> --add-label "<topic>"  # run nothing when no topic matched
+gh issue edit <N> --add-label "<type>" --add-label "<topic>"  # drop the trailing --add-label when no topic matched
 ```
