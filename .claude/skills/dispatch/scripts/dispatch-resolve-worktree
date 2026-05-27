@@ -9,14 +9,25 @@
 #                     EnterWorktree with path: <path>.
 #   create <branch> — no worktree exists; <branch> is the sanitized name,
 #                     EnterWorktree with name: <branch>.
-#   conflict <path> — a queue-selected target already has a worktree (another
-#                     session owns it); /dispatch reports <path> and stops.
+#   conflict <path>\t<sessionId>\t<name>
+#                   — a queue-selected target already has a worktree owned by
+#                     another live Claude session; /dispatch reports the path
+#                     and the owning session's id/name, then stops. The
+#                     sessionId and name fields are TAB-separated from <path>
+#                     because the name may contain spaces. When the session
+#                     daemon cannot be queried the helper signals unknown;
+#                     the script fails safe (treats unknown as occupied) and
+#                     emits the literal `unknown\tunknown` as the diagnostic
+#                     fields.
 #
 # The mode argument decides what an existing <issue>-* worktree means:
 #   explicit — the target was named by an explicit /dispatch argument
 #              (recycle-after-completion); an existing worktree yields `enter`.
-#   queue    — the target was queue-selected; an existing worktree belongs to
-#              another session and yields `conflict`.
+#   queue    — the target was queue-selected; an existing worktree with a
+#              live Claude session belongs to another session and yields
+#              `conflict`; an existing worktree with no live session is a
+#              potentially interrupted implementation task to be resumed and
+#              yields `enter` (same as explicit mode).
 # The `here` check is mode-independent and fires before the worktree scan.
 #
 # The branch name printed by `create` matches the WorktreeCreate hook's
@@ -35,6 +46,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+source "$SCRIPT_DIR/lib-claude-agents.sh"
 
 # `here` — the current branch already is the target's branch. Mode-independent,
 # checked before the worktree scan.
@@ -52,9 +64,29 @@ while IFS= read -r line; do
   if [[ "$WT_NUM" == "$ISSUE" ]]; then
     if [[ "$MODE" == "explicit" ]]; then
       echo "enter $WT_PATH"
-    else
-      echo "conflict $WT_PATH"
+      exit 0
     fi
+    # Queue mode: gate conflict on session liveness. A sessionless <issue>-*
+    # worktree is a potentially interrupted implementation task to be resumed,
+    # not a conflict — fall through to `enter $WT_PATH` (the recycle behavior
+    # explicit mode already uses). claude_sessions_under returns 0 with TSV
+    # session rows when occupied, 0 with empty output when definitely free, and
+    # 1 (unknown) when the daemon cannot be queried — fold unknown into the
+    # conflict branch, matching worktree_has_live_session's fail-safe contract.
+    if sessions=$(claude_sessions_under "$WT_PATH"); then
+      if [[ -z "$sessions" ]]; then
+        echo "enter $WT_PATH"
+        exit 0
+      fi
+      # Pick the first session row for diagnostics.
+      IFS=$'\t' read -r sid _pid _status name <<<"$(printf '%s\n' "$sessions" | head -n1)"
+    else
+      # Unknown: daemon could not be queried. Fail safe (treat as occupied) and
+      # surface the unknown identity in the diagnostic fields.
+      sid="unknown"
+      name="unknown"
+    fi
+    printf 'conflict %s\t%s\t%s\n' "$WT_PATH" "$sid" "$name"
     exit 0
   fi
 done < <(list_worktree_records)

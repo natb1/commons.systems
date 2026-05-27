@@ -377,13 +377,16 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
 - **`create <branch>`** → no worktree exists. `EnterWorktree` with `name:` set to
   `<branch>`. This fires the `WorktreeCreate` hook, which runs `sync-issue-context`
   and populates `CLAUDE.local.md` with full issue context.
-- **`conflict <path>`** → a queue-selected target already has a worktree, so
-  another session owns it. (`dispatch-select-target` resolves the `help wanted`
-  tier to a leaf with no worktree, so for a queue selection this arises only from
-  a race — another session created the worktree between selection and worktree
+- **`conflict <path>\t<sessionId>\t<name>`** → a queue-selected target already
+  has a worktree with a live Claude session, so another session owns it. The
+  fields after `<path>` are TAB-separated and identify the owning session
+  (`unknown\tunknown` when the session daemon could not be queried — fail-safe).
+  (`dispatch-select-target` resolves the `help wanted` tier to a leaf with no
+  live-session worktree, so for a queue selection this arises only from a race
+  — another session occupied the worktree between selection and worktree
   resolution.) Release the lock (see *Releasing the lock*), then report the
-  conflict (name `<path>` and issue `<N>`), then **proceed to Step 9**
-  (early-stop); do not `EnterWorktree`.
+  conflict (name `<path>`, the owning session's `<sessionId>` and `<name>`, and
+  issue `<N>`), then **proceed to Step 9** (early-stop); do not `EnterWorktree`.
 
 On every non-`conflict` path, before any phase skill runs, create the recovery
 marker:

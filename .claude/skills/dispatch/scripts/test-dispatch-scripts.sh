@@ -65,6 +65,7 @@ setup() {
   # SCRIPT_DIR, which resolves to TMPDIR_TEST for these copies — so lib.sh must
   # sit alongside them. It is sourced, not executed, so it needs no chmod +x.
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
@@ -387,6 +388,7 @@ teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   STUB_DIR=""
+  unset CLAUDE_AGENTS_CMD
   export PATH="$SAVED_PATH"
   unset DISPATCH_CONFIG_DIR
 }
@@ -2325,6 +2327,40 @@ branch refs/heads/42-my-feature
 
 '
 
+# install_fake_claude_sessions <sessionId> <name> [...more (sid,name) pairs]
+# Install a fake `claude` script that prints a JSON array of the given
+# (sessionId, name) pairs and exits 0, and point CLAUDE_AGENTS_CMD at it.
+# Call with zero args for an empty registry (`[]`).
+install_fake_claude_sessions() {
+  local fake="$TMPDIR_TEST/bin/fake-claude"
+  local payload="[" first=1
+  while [[ $# -ge 2 ]]; do
+    if (( first )); then first=0; else payload+=","; fi
+    payload+="{\"sessionId\":\"$1\",\"pid\":1,\"status\":\"busy\",\"name\":\"$2\"}"
+    shift 2
+  done
+  payload+="]"
+  printf '%s' "$payload" > "$TMPDIR_TEST/fake-claude-payload.json"
+  cat > "$fake" <<FAKE
+#!/usr/bin/env bash
+cat "$TMPDIR_TEST/fake-claude-payload.json"
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
+}
+
+# Install a fake `claude` that exits non-zero (daemon unknown).
+install_fake_claude_failure() {
+  local fake="$TMPDIR_TEST/bin/fake-claude"
+  cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
+}
+
 # 1. Current branch is <N>-* → here (mode-independent).
 echo "Test: current branch <N>-* → here (both modes)"
 setup
@@ -2344,14 +2380,42 @@ assert_eq "explicit + existing worktree → enter <path>" \
   "enter /worktrees/42-my-feature" "$result"
 teardown
 
-# 3. queue mode + the same worktree setup → conflict <path>. Acceptance
-#    criterion 3: same target, explicit → enter, queue → conflict.
-echo "Test: queue + existing <N>-* worktree → conflict"
+# 3. queue mode + the same worktree setup, with a live session present →
+#    conflict <path>\t<sessionId>\t<name>. The new TAB-separated format carries
+#    the owning session's diagnostic fields.
+echo "Test: queue + live-session <N>-* worktree → conflict with sid/name"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+install_fake_claude_sessions "sess-742-live" "owner-task"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
-assert_eq "queue + existing worktree → conflict <path>" \
-  "conflict /worktrees/42-my-feature" "$result"
+assert_eq "queue + live worktree → conflict TSV" \
+  "$(printf 'conflict /worktrees/42-my-feature\tsess-742-live\towner-task')" \
+  "$result"
+teardown
+
+# 3a. queue mode + sessionless <N>-* worktree → enter <path>. A worktree with
+#     no live Claude session is a potentially interrupted implementation task
+#     to be resumed, not a conflict — same recycle path explicit mode uses.
+echo "Test: queue + sessionless <N>-* worktree → enter"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+install_fake_claude_sessions   # empty registry `[]`
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "queue + sessionless worktree → enter" \
+  "enter /worktrees/42-my-feature" "$result"
+teardown
+
+# 3b. queue mode + daemon unknown (claude exits non-zero) → conflict with
+#     unknown/unknown diagnostics. Fail safe: an unknown daemon must not
+#     green-light entering a worktree that may be live.
+echo "Test: queue + daemon unknown → conflict (fail safe)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+install_fake_claude_failure
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "queue + unknown daemon → conflict with unknown/unknown" \
+  "$(printf 'conflict /worktrees/42-my-feature\tunknown\tunknown')" \
+  "$result"
 teardown
 
 # 4. No matching worktree → create <N>-<slug> from the issue title.
