@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# dispatch-spawn — spawn the next /dispatch background job (the baton pass).
+# dispatch-spawn-router — spawn the next /dispatch (router) background job (the worker→router baton pass).
 #
-# /dispatch runs one workflow phase per invocation and then stops. The
-# background-job chain (#755) is what keeps the workflow moving: a job that
-# finishes a phase spawns the next /dispatch job, then self-closes. This script
-# is that spawn primitive — /dispatch SKILL.md Step 9 invokes it on the
-# phase-completed path.
+# /dispatch-worker runs one workflow phase per invocation and then stops. The
+# background-job chain (#755) is what keeps the workflow moving: a worker that
+# finishes a phase spawns the next /dispatch (router) job, then self-closes.
+# This script is the worker → router spawn primitive — /dispatch-worker SKILL.md
+# Step 4 invokes it on the phase-completed path. Its sibling primitive,
+# dispatch-spawn-worker, spawns a worker into a specific issue worktree (the
+# router → worker direction).
 #
 # Behavior, in order:
 #   1. Prune    — remove stale stopped dispatch-* agents (`claude rm`).
@@ -34,23 +36,23 @@
 #   0  deduped or spawned (stdout disambiguates).
 #   1  the successor never registered in 'claude agents --json' — see stderr.
 #   2  the script cannot operate — an unexpected command-line argument, or not
-#      in a git repo with DISPATCH_SPAWN_MAIN_WORKTREE unset.
+#      in a git repo with DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE unset.
 #
 # Environment overrides for testability (mirroring dispatch-acquire-lock's
 # DISPATCH_LOCK_* and lib-claude-agents.sh's CLAUDE_AGENTS_CMD):
-#   DISPATCH_SPAWN_CLAUDE_CMD     The `claude` command. The script's own
-#                                 `claude --bg` / `claude rm` / `claude agents`
-#                                 calls use it, and it is exported as
-#                                 CLAUDE_AGENTS_CMD so the sourced
-#                                 lib-claude-agents.sh helper is faked
-#                                 consistently. Default: `claude`.
-#   DISPATCH_SPAWN_SESSION_ID     This session's id, for the dedup self-
-#                                 exclusion. Default: $CLAUDE_CODE_SESSION_ID.
-#   DISPATCH_SPAWN_MAIN_WORKTREE  The main worktree path. When set, the script
-#                                 does NOT require a git repo. Default:
-#                                 <project-root>/worktrees/main.
-#   DISPATCH_SPAWN_JOBS_DIR       The Claude jobs ledger directory walked for
-#                                 the prune step. Default: ~/.claude/jobs.
+#   DISPATCH_SPAWN_ROUTER_CLAUDE_CMD     The `claude` command. The script's own
+#                                        `claude --bg` / `claude rm` / `claude agents`
+#                                        calls use it, and it is exported as
+#                                        CLAUDE_AGENTS_CMD so the sourced
+#                                        lib-claude-agents.sh helper is faked
+#                                        consistently. Default: `claude`.
+#   DISPATCH_SPAWN_ROUTER_SESSION_ID     This session's id, for the dedup self-
+#                                        exclusion. Default: $CLAUDE_CODE_SESSION_ID.
+#   DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE  The main worktree path. When set, the script
+#                                        does NOT require a git repo. Default:
+#                                        <project-root>/worktrees/main.
+#   DISPATCH_SPAWN_ROUTER_JOBS_DIR       The Claude jobs ledger directory walked for
+#                                        the prune step. Default: ~/.claude/jobs.
 #
 # Sandbox: every `claude` call here reaches the local Claude daemon over a Unix
 # socket; callers must invoke this script with `dangerouslyDisableSandbox:
@@ -70,17 +72,17 @@ set -uo pipefail
 
 # ---- Step 0: reject unexpected arguments ------------------------------------
 if [[ $# -gt 0 ]]; then
-  echo "dispatch-spawn: unknown argument '$1'" >&2
+  echo "dispatch-spawn-router: unknown argument '$1'" >&2
   exit 2
 fi
 
 # ---- Step 1: resolve config -------------------------------------------------
-CLAUDE_CMD="${DISPATCH_SPAWN_CLAUDE_CMD:-claude}"
+CLAUDE_CMD="${DISPATCH_SPAWN_ROUTER_CLAUDE_CMD:-claude}"
 # The sourced helper reads CLAUDE_AGENTS_CMD for its own `claude agents --json`
 # call; point it at the same command so a faked `claude` fakes every path.
 export CLAUDE_AGENTS_CMD="$CLAUDE_CMD"
 
-SESSION_ID="${DISPATCH_SPAWN_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"
+SESSION_ID="${DISPATCH_SPAWN_ROUTER_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -88,15 +90,15 @@ source "$SCRIPT_DIR/lib-claude-agents.sh"
 
 # Every /dispatch job is started from the main worktree, so that is the cwd of
 # a spawned successor and the path the dedup/verify queries filter on. An
-# explicit DISPATCH_SPAWN_MAIN_WORKTREE is authoritative and bypasses the git
+# explicit DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE is authoritative and bypasses the git
 # lookup — tests rely on this. Otherwise the parent of --git-common-dir is the
 # project root in both classic (.git) and bare (.bare) layouts, same idiom as
 # dispatch-acquire-lock / dispatch-sweep.
-if [[ -n "${DISPATCH_SPAWN_MAIN_WORKTREE:-}" ]]; then
-  MAIN_WORKTREE="$DISPATCH_SPAWN_MAIN_WORKTREE"
+if [[ -n "${DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE:-}" ]]; then
+  MAIN_WORKTREE="$DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE"
 else
   GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
-    || { echo "dispatch-spawn: not in a git repo and DISPATCH_SPAWN_MAIN_WORKTREE is unset" >&2; exit 2; }
+    || { echo "dispatch-spawn-router: not in a git repo and DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE is unset" >&2; exit 2; }
   PROJECT_ROOT=$(dirname "$GIT_COMMON_DIR")
   MAIN_WORKTREE="$PROJECT_ROOT/worktrees/main"
 fi
@@ -115,7 +117,7 @@ fi
 #     it expects — not the registry's `.sessionId`.
 # A stat / parse / rm failure logs to stderr and continues — pruning must
 # never abort the spawn.
-JOBS_DIR="${DISPATCH_SPAWN_JOBS_DIR:-$HOME/.claude/jobs}"
+JOBS_DIR="${DISPATCH_SPAWN_ROUTER_JOBS_DIR:-$HOME/.claude/jobs}"
 prune_stopped_dispatch_agents() {
   local dir job_id state name
   [[ -d "$JOBS_DIR" ]] || return 0
@@ -124,7 +126,7 @@ prune_stopped_dispatch_agents() {
     [[ -f "$dir/state.json" ]] || continue
     if ! IFS=$'\t' read -r state name < <(jq -r \
         '"\(.state // "")\t\(.name // "")"' "$dir/state.json" 2>/dev/null); then
-      echo "dispatch-spawn: prune: '${dir}state.json' not parseable; continuing" >&2
+      echo "dispatch-spawn-router: prune: '${dir}state.json' not parseable; continuing" >&2
       continue
     fi
     [[ "$name" == dispatch-* ]] || continue
@@ -134,7 +136,7 @@ prune_stopped_dispatch_agents() {
     esac
     job_id=$(basename "$dir")
     if ! "$CLAUDE_CMD" rm "$job_id" >/dev/null 2>&1; then
-      echo "dispatch-spawn: prune: 'claude rm $job_id' failed; continuing" >&2
+      echo "dispatch-spawn-router: prune: 'claude rm $job_id' failed; continuing" >&2
     fi
   done
 }
@@ -195,8 +197,8 @@ if [[ -n "$registered" ]]; then
   exit 0
 fi
 if [[ -n "${spawn_output//[[:space:]]/}" ]]; then
-  echo "dispatch-spawn: '$AGENT_NAME' did not register in 'claude agents --json' after 'claude --bg'; output: $spawn_output" >&2
+  echo "dispatch-spawn-router: '$AGENT_NAME' did not register in 'claude agents --json' after 'claude --bg'; output: $spawn_output" >&2
 else
-  echo "dispatch-spawn: '$AGENT_NAME' did not register in 'claude agents --json' after 'claude --bg'" >&2
+  echo "dispatch-spawn-router: '$AGENT_NAME' did not register in 'claude agents --json' after 'claude --bg'" >&2
 fi
 exit 1

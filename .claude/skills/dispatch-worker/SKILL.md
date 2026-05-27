@@ -254,7 +254,7 @@ fresh `/dispatch` (router) job back in `worktrees/main` (run with
 over a socket; see `.claude/rules/sandbox.md`):
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-spawn
+.claude/skills/dispatch/scripts/dispatch-spawn-router
 ```
 
 The worker spawns a `/dispatch` router, not another worker — the router will
@@ -271,7 +271,7 @@ ran and its outcome, or the reason it stopped early.
 **4. Terminal disposition.** Take exactly one of the following, in this
 priority:
 
-- **`dispatch-spawn` failed** — a phase-completed run whose step-2 spawn
+- **`dispatch-spawn-router` failed** — a phase-completed run whose step-2 spawn
   exited non-zero. Do **not** self-close. Report the failed baton-pass and
   stop, leaving this job open so the failure is visible and the spawn can be
   retried.
@@ -309,7 +309,7 @@ priority:
   the office-hours queue for human review.
 
 - **Clean completion or early-stop** — an early-stop, or a phase-completed run
-  whose `dispatch-spawn` succeeded and whose report surfaces nothing that needs
+  whose `dispatch-spawn-router` succeeded and whose report surfaces nothing that needs
   the user. Self-close (`dangerouslyDisableSandbox: true`):
 
   ```bash

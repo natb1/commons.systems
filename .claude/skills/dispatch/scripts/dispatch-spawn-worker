@@ -9,9 +9,8 @@
 # worktree basename — resolving #825 as a natural consequence of the split.
 #
 # The sibling primitive for the reverse direction (worker → router) is
-# dispatch-spawn, which spawns `/dispatch` back in worktrees/main. Unit 5 of
-# issue #839 will rename dispatch-spawn to dispatch-spawn-router; until then
-# call it by its current name.
+# dispatch-spawn-router, spawned with cwd at `worktrees/main` (not the target
+# worktree, which is where this script spawns the worker).
 #
 # Usage: dispatch-spawn-worker <issue-num> <worktree-path>
 #
@@ -51,8 +50,8 @@
 #   1  the successor never registered in 'claude agents --json' — see stderr.
 #   2  the script cannot operate — wrong number of command-line arguments.
 #
-# Environment overrides for testability (mirroring dispatch-spawn's
-# DISPATCH_SPAWN_* pattern):
+# Environment overrides for testability (mirroring dispatch-spawn-router's
+# DISPATCH_SPAWN_ROUTER_* pattern):
 #   DISPATCH_SPAWN_WORKER_CLAUDE_CMD    The `claude` command. The script's own
 #                                       `claude --bg` / `claude rm` / `claude
 #                                       agents` calls use it, and it is exported
