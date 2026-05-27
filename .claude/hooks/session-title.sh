@@ -15,6 +15,6 @@ name=$(basename "$top")
 
 # The basename is a git branch slug — characters are restricted to
 # [A-Za-z0-9._-], so JSON-inlining without escaping is safe.
-printf '{"hookSpecificOutput":{"sessionTitle":"%s"}}\n' "$name"
+printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","sessionTitle":"%s"}}\n' "$name"
 
 exit 0
