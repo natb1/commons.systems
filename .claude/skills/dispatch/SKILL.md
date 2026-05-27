@@ -183,8 +183,10 @@ continue to target selection.
   - `worktree-adopted <N> <branch>` — `dispatch-sweep` adopted an orphaned
     worktree elsewhere on disk. Skip Step 4 and proceed to Step 5 with `<N>` and
     mode `explicit` — treat the adoption like an explicit `/dispatch <N>`.
-    (Step 4's closed-issue and open-blocker gates have already been enforced by
-    `dispatch-sweep` itself before emitting this directive.)
+    (Step 4's closed-issue, open-blocker, and ready-PR gates have already been
+    enforced by `dispatch-sweep` itself before emitting this directive — a
+    `done`-phase orphan whose PR is non-draft and awaiting human merge is not
+    adopted and instead falls through to the queue-ladder on the next tick.)
   - `pr <num> <branch> <phase>` — a PR to work on; `<phase>` is pre-derived by
     the selection scan, so Step 6 reuses it instead of re-deriving. Proceed to
     Step 5 with mode `queue`.
