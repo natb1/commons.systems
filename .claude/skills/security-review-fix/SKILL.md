@@ -226,7 +226,7 @@ ready. Otherwise run all steps in order.
    `dangerouslyDisableSandbox: true` — `gh` needs network):
 
    ```bash
-   gh pr ready <pr-num>
+   gh pr ready "$PR_NUM"
    ```
 
    This is the workflow's terminal action.
