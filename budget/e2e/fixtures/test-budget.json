@@ -87,7 +87,8 @@
   "accounts": [
     {"id": "Test Bank_Checking", "institution": "Test Bank", "account": "Checking", "accountType": "asset", "openingBalance": 0, "openingBalanceDate": "2025-03-01T00:00:00Z"},
     {"id": "Budget_Uncategorized Income", "institution": "Budget", "account": "Uncategorized Income", "accountType": "income"},
-    {"id": "Budget_Uncategorized Expense", "institution": "Budget", "account": "Uncategorized Expense", "accountType": "expense"}
+    {"id": "Budget_Uncategorized Expense", "institution": "Budget", "account": "Uncategorized Expense", "accountType": "expense"},
+    {"id": "Budget_Adjustment Suspense", "institution": "Budget", "account": "Adjustment Suspense", "accountType": "equity"}
   ],
   "journalEntries": [
     {"id": "fixture-je-deposit-1", "timestamp": "2025-03-05T00:00:00Z", "description": "Opening Deposit", "legCount": 2},

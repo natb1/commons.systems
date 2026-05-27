@@ -157,6 +157,37 @@ describe("accounts-reconcile page smoke", () => {
     expect(html).toContain('data-event-id="Example Bank_Checking_2025-02-28"');
   });
 
+  it("renders the mismatch actions and the account type attribute", async () => {
+    const html = await renderAccountsReconcile(seedOptions({
+      getAccounts: vi.fn().mockResolvedValue([account()]),
+      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
+      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
+      getReconciliationEvents: vi.fn().mockResolvedValue([]),
+      getStatements: vi.fn().mockResolvedValue([stmt()]),
+    }));
+    expect(html).toContain('id="reconcile-mismatch-actions"');
+    expect(html).toContain('data-account-type="asset"');
+  });
+
+  it("carries the suspense account id when a suspense account is present", async () => {
+    const html = await renderAccountsReconcile(seedOptions({
+      getAccounts: vi.fn().mockResolvedValue([
+        account(),
+        account({
+          id: "Budget_Adjustment Suspense",
+          institution: "Budget",
+          account: "Adjustment Suspense",
+          accountType: "equity",
+        }),
+      ]),
+      getJournalEntries: vi.fn().mockResolvedValue([entry()]),
+      getJournalLegs: vi.fn().mockResolvedValue([leg()]),
+      getReconciliationEvents: vi.fn().mockResolvedValue([]),
+      getStatements: vi.fn().mockResolvedValue([stmt()]),
+    }));
+    expect(html).toContain('data-suspense-account-id="Budget_Adjustment Suspense"');
+  });
+
   it("renders seed-data notice when not authorized", async () => {
     const html = await renderAccountsReconcile(seedOptions({
       getAccounts: vi.fn().mockResolvedValue([account()]),

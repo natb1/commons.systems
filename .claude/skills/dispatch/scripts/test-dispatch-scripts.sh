@@ -80,6 +80,7 @@ setup() {
   # dispatch-select-target test stays green.
   mkdir -p "$TMPDIR_TEST/config"
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+  export DISPATCH_FIND_PR_RETRY_DELAY=0
 
   # Default no-op dispatch-sweep stub: silent, exit 0 (no orphan to adopt).
   # dispatch-select-target invokes "$SCRIPT_DIR/dispatch-sweep" in default mode
@@ -115,7 +116,11 @@ case "$args" in
   "pr list --state open --json number,headRefName")
     # dispatch-find-pr self-fetch: only the two correlation fields.
     echo "pr list" >> "$STUB_DIR/gh-pr-list-calls.log"
-    if [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
+    echo "pr list" >> "$STUB_DIR/gh-find-pr-calls.log"
+    call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
+    if [[ "$call_count" -ge 2 && -f "$STUB_DIR/pr-list-retry.json" ]]; then
+      cat "$STUB_DIR/pr-list-retry.json"
+    elif [[ -f "$STUB_DIR/pr-list-full.json" ]]; then
       cat "$STUB_DIR/pr-list-full.json"
     else
       echo "[]"
@@ -161,6 +166,15 @@ case "$args" in
       cat "$STUB_DIR/issue-title-${num}.json"
     else
       echo "{\"title\":\"Issue $num\"}"
+    fi
+    ;;
+  issue\ view\ *\ --json\ closedByPullRequestsReferences)
+    # dispatch-find-pr cross-check fallback: gh issue view <num> --json closedByPullRequestsReferences
+    num=$(echo "$args" | awk '{print $3}')
+    if [[ -f "$STUB_DIR/issue-closing-prs-${num}.json" ]]; then
+      cat "$STUB_DIR/issue-closing-prs-${num}.json"
+    else
+      echo '{"closedByPullRequestsReferences":[]}'
     fi
     ;;
   api\ */dependencies/blocked_by)
@@ -389,6 +403,7 @@ teardown() {
   STUB_DIR=""
   export PATH="$SAVED_PATH"
   unset DISPATCH_CONFIG_DIR
+  unset DISPATCH_FIND_PR_RETRY_DELAY
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
@@ -605,6 +620,72 @@ setup
 printf '[{"number":10,"headRefName":"60-foo"}]\n' > "$STUB_DIR/pr-list-full.json"
 result=$("$TMPDIR_TEST/dispatch-find-pr" "6")
 assert_eq "issue 6 does not match branch 60-foo → empty" "" "$result"
+teardown
+
+# 6. Flake recovery: first pr list call is empty, second returns the PR.
+# Models gh pr list flaking (exit 0 + []) on call 1 and returning the real list
+# on call 2. The retry-on-empty should produce the PR number.
+echo "Test: flake recovery — empty first call, PR on retry → PR number"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '[{"number":820,"headRefName":"820-x"}]\n' > "$STUB_DIR/pr-list-retry.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "820")
+assert_eq "flake recovery → PR number" "820" "$result"
+teardown
+
+# 7. Cross-check fallback: pr list yields empty on both attempts, but the
+# issue's closedByPullRequestsReferences lists an OPEN PR. This covers the
+# case where the branch was renamed away from the <issue>- convention.
+echo "Test: cross-check fallback — issue references an OPEN PR → PR number"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[{"number":830,"state":"OPEN"}]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "cross-check OPEN reference → PR number" "830" "$result"
+teardown
+
+# 8. Cross-check ignores non-OPEN references. The script's contract is "open
+# PR for issue N or empty"; a MERGED reference must not be reported.
+echo "Test: cross-check ignores MERGED reference → empty"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[{"number":840,"state":"MERGED"}]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "cross-check MERGED reference → empty" "" "$result"
+teardown
+
+# 9. Genuine empty: pr list empty on both attempts AND issue references no
+# PR. Output stays empty, exit 0 — the "no PR exists" answer.
+echo "Test: genuine empty (no PR, no references) → empty"
+setup
+printf '[]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$("$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "genuine empty → empty" "" "$result"
+teardown
+
+# 10. DISPATCH_PR_LIST supplied without matching branch; cross-check resolves PR.
+# The retry (step 1) is skipped when DISPATCH_PR_LIST is set — the caller owns
+# the list. The cross-check (step 2) still runs regardless, using a different gh
+# endpoint that the caller cannot pre-supply.
+echo "Test: DISPATCH_PR_LIST no match + cross-check OPEN reference → PR number"
+setup
+printf '[{"number":850,"headRefName":"999-unrelated"}]\n' > "$STUB_DIR/pr-list-full.json"
+printf '{"closedByPullRequestsReferences":[{"number":851,"state":"OPEN"}]}\n' \
+  > "$STUB_DIR/issue-closing-prs-822.json"
+result=$(DISPATCH_PR_LIST='[{"number":850,"headRefName":"999-unrelated"}]' \
+  "$TMPDIR_TEST/dispatch-find-pr" "822")
+assert_eq "DISPATCH_PR_LIST no prefix match; cross-check finds OPEN PR → PR number" "851" "$result"
+# Verify no self-fetch: gh pr list --state open --json number,headRefName was not called.
+if [[ -f "$STUB_DIR/gh-find-pr-calls.log" ]]; then
+  call_count=$(wc -l < "$STUB_DIR/gh-find-pr-calls.log")
+else
+  call_count=0
+fi
+assert_eq "no self-fetch gh pr list calls when DISPATCH_PR_LIST set" "0" "$call_count"
 teardown
 
 # ============================================================================
@@ -1240,7 +1321,7 @@ assert_eq "issue 6 not masked by 60-foo worktree" "issue 6" "$result"
 teardown
 
 # --- topic-category prioritization (issue #707) -----------------------------
-# A topic category (bug → testing infrastructure → dispatch → other) nests
+# A topic category (priority → bug → testing infrastructure → dispatch → other) nests
 # outside the phase ladder. A PR's category is resolved from the labels of the
 # issues it closes; an issue's category from its own labels.
 
@@ -1290,6 +1371,26 @@ printf '[{"number":500,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"hel
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with no closing issue is 'other'; bug issue wins" "issue 500" "$result"
+teardown
+
+# 30b. A PR closing a `priority`-labelled issue outranks a PR closing a `bug`
+#      issue, even when the bug PR is older — `priority` is the new top of the
+#      category ladder. Mirrors test 28 with priority swapped in for bug.
+echo "Test: PR closing a priority issue beats PR closing a bug issue"
+setup
+# PR 20 (older) closes bug issue 200; PR 10 (newer) closes priority issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issues 100/200 are the closing issues — they carry the topic label that the
+# PRs inherit. No "help wanted" label, so they are not themselves queue items.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "priority-closing PR beats bug-closing PR" "pr 10 10-priority-pr verify" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------
@@ -4489,11 +4590,11 @@ spawn_teardown
 # ============================================================================
 echo "=== dispatch-self-close ==="
 #
-# dispatch-self-close runs `claude stop <job-id>` against the basename of
-# $CLAUDE_JOB_DIR. The fake `claude` records its argv in SPAWN_STOP_LOG (see
+# dispatch-self-close runs `claude rm <job-id>` against the basename of
+# $CLAUDE_JOB_DIR. The fake `claude` records its argv in SPAWN_RM_LOG (see
 # write_fake_spawn_claude). When CLAUDE_JOB_DIR is unset, the script is a no-op
 # — the foreground-safe gate that protects an interactive /dispatch from
-# stopping the user's live conversation.
+# deleting the user's live conversation.
 
 selfclose_setup() {
   TMPDIR_TEST=$(mktemp -d)
@@ -4502,8 +4603,8 @@ selfclose_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-self-close"
 
   # Reuse the dispatch-spawn fake `claude` writer: it already dispatches on
-  # `stop` and appends $2 to SPAWN_STOP_LOG. The unused SPAWN_REGISTRY /
-  # SPAWN_BG_ARGV / SPAWN_RM_LOG paths still need to be set because the writer
+  # `rm` and appends $2 to SPAWN_RM_LOG. The unused SPAWN_REGISTRY /
+  # SPAWN_BG_ARGV / SPAWN_STOP_LOG paths still need to be set because the writer
   # interpolates them into the fake-claude script body.
   SPAWN_REGISTRY="$TMPDIR_TEST/registry.json"
   SPAWN_BG_ARGV="$TMPDIR_TEST/bg-argv"
@@ -4525,17 +4626,17 @@ selfclose_teardown() {
   unset DISPATCH_SELF_CLOSE_CLAUDE_CMD CLAUDE_JOB_DIR
 }
 
-# --- Test 1: managed-job → stops itself --------------------------------------
+# --- Test 1: managed-job → deletes itself -------------------------------------
 
-echo "Test: a managed background job stops itself by job-id (basename of CLAUDE_JOB_DIR)"
+echo "Test: a managed background job deletes itself by job-id (basename of CLAUDE_JOB_DIR)"
 selfclose_setup
 mkdir -p "$TMPDIR_TEST/jobs/abcd1234"
 export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
 if out=$("$TMPDIR_TEST/scripts/dispatch-self-close" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "self-close: dispatch-self-close exits 0" "0" "$rc"
-stop_log=$(cat "$SPAWN_STOP_LOG" 2>/dev/null || true)
-assert_eq "self-close: 'claude stop abcd1234' was invoked (basename, not full path)" \
-  "abcd1234" "$stop_log"
+rm_log=$(cat "$SPAWN_RM_LOG" 2>/dev/null || true)
+assert_eq "self-close: 'claude rm abcd1234' was invoked (basename, not full path)" \
+  "abcd1234" "$rm_log"
 selfclose_teardown
 
 # --- Test 2: interactive → no-op ---------------------------------------------
@@ -4554,11 +4655,11 @@ else
   echo "    stderr: $err"
 fi
 TOTAL=$((TOTAL + 1))
-if [[ ! -e "$SPAWN_STOP_LOG" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: interactive: no 'claude stop' invocation recorded"
+if [[ ! -e "$SPAWN_RM_LOG" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: interactive: no 'claude rm' invocation recorded"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: no 'claude stop' invocation recorded"
-  echo "    stop-log: $(cat "$SPAWN_STOP_LOG")"
+  FAIL=$((FAIL + 1)); echo "  FAIL: interactive: no 'claude rm' invocation recorded"
+  echo "    rm-log: $(cat "$SPAWN_RM_LOG")"
 fi
 selfclose_teardown
 
