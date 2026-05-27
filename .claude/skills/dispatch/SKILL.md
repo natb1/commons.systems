@@ -51,9 +51,9 @@ Route on `$LOCK`:
 - **`acquired`** → this `/dispatch` holds the lock; proceed to Step 1.
 - **`busy`** → the wait timeout elapsed without acquiring — a wedged selection
   in another `/dispatch`. The script's **stderr** carries a one-line diagnostic
-  naming the wait duration and the holding sessionId; report those then **proceed
-  to Step 9** (early-stop) — run no sync, no health gate, no sweep, no selection,
-  and no phase skill.
+  naming the wait duration and the holding sessionId; report those then **exit
+  via Step 9** (early-stop — `dispatch-handoff --early-stop`) — run no sync, no
+  health gate, no sweep, no selection, and no phase skill.
 
 ### Releasing the lock
 
@@ -109,8 +109,8 @@ It is a no-op when local `main` already equals `origin/main`.
 
 - If `git fetch` fails, or `git merge --ff-only` rejects a non-fast-forward (local
   `main` has diverged with unexpected commits), release the lock (see *Releasing
-  the lock*), surface the error, then **proceed to Step 9** (early-stop) — do
-  not proceed to target selection.
+  the lock*), surface the error, then **exit via Step 9** (early-stop —
+  `dispatch-handoff --early-stop`) — do not proceed to target selection.
 
 ## 2. Run the JIT Engine
 
@@ -153,8 +153,8 @@ continue to target selection.
   - **Exit 0** → `$TARGET` is the target issue number; that issue is the target.
     Skip the queue scan.
   - **Non-zero exit** → release the lock (see *Releasing the lock*), report the
-    script's stderr message, then **proceed to Step 9** (early-stop); create no
-    worktree. This covers a PR
+    script's stderr message, then **exit via Step 9** (early-stop —
+    `dispatch-handoff --early-stop`); create no worktree. This covers a PR
     that closes no issue, a PR that closes more than one issue, and an argument
     that is neither an issue nor a PR — consistent with the other Steps 1-5 stop
     paths.
@@ -178,8 +178,9 @@ continue to target selection.
   - `worktree-closed <N> <branch>` — the current branch is `<N>-…` and issue
     `<N>` is closed or unrecognized. Release the lock (see *Releasing the
     lock*), report that the current worktree belongs to closed/unrecognized
-    issue `<N>`, then **proceed to Step 9** (early-stop) (consistent with the
-    named-target "closed → report and stop" rule in Step 4).
+    issue `<N>`, then **exit via Step 9** (early-stop — `dispatch-handoff
+    --early-stop`) (consistent with the named-target "closed → report and stop"
+    rule in Step 4).
   - `worktree-adopted <N> <branch>` — `dispatch-sweep` adopted an orphaned
     worktree elsewhere on disk. Skip Step 4 and proceed to Step 5 with `<N>` and
     mode `explicit` — treat the adoption like an explicit `/dispatch <N>`.
@@ -208,7 +209,8 @@ continue to target selection.
   - `jit-reminder <repo> <num> <project> <item-id>` — see the **jit-reminder
     handler** at the end of this step.
   - `empty` — nothing eligible. Release the lock (see *Releasing the lock*),
-    report that the queue is empty, then **proceed to Step 9** (early-stop).
+    report that the queue is empty, then **exit via Step 9** (early-stop —
+    `dispatch-handoff --early-stop`).
 
   An **explicit issue argument overrides current-worktree detection** — the
   selection script, and therefore its current-worktree detection, runs only
@@ -257,7 +259,8 @@ continue to target selection.
   the check-runs response. These diagnostic `gh` calls run before the stop —
   keep them. Then, as the action immediately before the final report, release
   the lock (see *Releasing the lock*); summarize the likely cause, report it,
-  then **proceed to Step 9** (early-stop). Once a PR that fixes main exists the
+  then **exit via Step 9** (early-stop — `dispatch-handoff --early-stop`). Once
+  a PR that fixes main exists the
   normal ladder picks it up
   (verify/ready) — this gate only blocks starting new, unrelated work.
 
@@ -341,12 +344,13 @@ Skip leaf tracing when:
 
 If the resolved target issue `<N>` has any **open** blocker — run
 `issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
-lock (see *Releasing the lock*), report the open blocker, then **proceed to
-Step 9** (early-stop). This guard applies even when a PR exists; closed blockers
-do not gate.
+lock (see *Releasing the lock*), report the open blocker, then **exit via
+Step 9** (early-stop — `dispatch-handoff --early-stop`). This guard applies
+even when a PR exists; closed blockers do not gate.
 
 If a named target issue is **closed**, release the lock (see *Releasing the
-lock*), report it, then **proceed to Step 9** (early-stop).
+lock*), report it, then **exit via Step 9** (early-stop — `dispatch-handoff
+--early-stop`).
 
 ## 5. Resolve the Worktree
 
@@ -382,8 +386,8 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
   tier to a leaf with no worktree, so for a queue selection this arises only from
   a race — another session created the worktree between selection and worktree
   resolution.) Release the lock (see *Releasing the lock*), then report the
-  conflict (name `<path>` and issue `<N>`), then **proceed to Step 9**
-  (early-stop); do not `EnterWorktree`.
+  conflict (name `<path>` and issue `<N>`), then **exit via Step 9**
+  (early-stop — `dispatch-handoff --early-stop`); do not `EnterWorktree`.
 
 On every non-`conflict` path, before any phase skill runs, create the recovery
 marker:
@@ -467,7 +471,8 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
      this step — `/verify-pr` if any check failed, otherwise the green-CI
      phases (`qa` / `code-review` / `review` / `security` / `ready`).
   4. If the re-derived phase is still `waiting` (CI never registered any check),
-     report it, then **proceed to Step 9** (early-stop) — do not loop.
+     report it, then **exit via Step 9** (early-stop — `dispatch-handoff
+     --early-stop`) — do not loop.
 - **`qa`** — invoke `/dispatch-qa`. It owns and applies `dispatch:qa-done` itself on
   a clean pass; `/dispatch` applies no label.
 - **`code-review`** — invoke `/code-review-fix`. It runs `/code-review max`, applies the
@@ -481,16 +486,16 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
   gathers the PR's CodeQL code-scanning alerts, applies the recommended fixes,
   posts a PR comment, applies the `dispatch:security-reviewed` label, and marks
   the PR ready. It is idempotent on re-entry — `/dispatch` applies no label.
-- **`done`** — report that the PR is already ready, then **proceed to Step 9**
-  (early-stop). No phase skill ran, so Step 9 spawns no successor and
-  self-closes.
+- **`done`** — report that the PR is already ready, then **exit via Step 9**
+  (early-stop — `dispatch-handoff --early-stop`). No phase skill ran, so Step 9
+  spawns no successor and self-closes.
 
 The PR stays a **draft** through every phase; the `security` phase's
 `/security-review-fix` flips it to ready as the workflow's terminal action.
 
-After the one phase skill has run to completion, **proceed to Step 9**
-(phase-completed) — do not advance to the next phase here; Step 9 hands off and
-ends the job.
+After the one phase skill has run to completion, **exit via Step 9**
+(phase-completed — `dispatch-handoff <N> --phase-completed`) — do not advance
+to the next phase here; Step 9 hands off and ends the job.
 
 `/ultrareview` is intentionally **never** invoked: it is user-triggered and billed,
 so `/dispatch` cannot launch it.
@@ -577,7 +582,7 @@ always owns the verdict.
   understanding, then `/plan-implement`.
 - **`stop`** — codebase has moved past the need; report what changed and recommend
   closing the issue or re-running `/ready`. Do **not** invoke `/plan-implement`;
-  **proceed to Step 9** (early-stop).
+  **exit via Step 9** (early-stop — `dispatch-handoff --early-stop`).
 
 ## 9. Hand off and self-close
 
@@ -603,86 +608,46 @@ that routed here:
   `waiting` phase that stayed `waiting`, a `done` PR, or an `implement`
   relevance verdict of `stop`.
 
-Run these in order.
+Step 9 is two tool calls in fixed order. Both Bash calls run with
+`dangerouslyDisableSandbox: true` (the handoff script invokes `gh`,
+`dispatch-spawn`, and `dispatch-self-close`, all of which reach `gh` over the
+network or the Claude daemon over a Unix socket — see
+`.claude/rules/sandbox.md`).
 
 **1. Return to the main worktree.** If this job entered an issue worktree via
 `EnterWorktree` in Step 5 (the `enter` and `create` outcomes), call
 `ExitWorktree` with `action: "keep"`: return to the main worktree and leave the
 issue worktree on disk as an adoptable orphan. This must run **before** the
-step-2 spawn, so the successor's selection scan does not misread this
+hand-off below, so the successor's selection scan does not misread this
 still-finishing job as a live session owning the issue worktree. `ExitWorktree`
 is a no-op when `EnterWorktree` was not called this session, so it is harmless
 on the early stops that never reached a worktree.
 
-**2. Pass the baton.** On the **phase-completed** disposition only, spawn the
-successor `/dispatch` job (run with `dangerouslyDisableSandbox: true` — the
-script reaches the local Claude daemon over a socket; see
-`.claude/rules/sandbox.md`):
+**2. Hand off via the scripted entrypoint.** On a phase-completed disposition,
+pass the target issue number:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-spawn
+.claude/skills/dispatch/scripts/dispatch-handoff <N> --phase-completed
 ```
 
-It prints `spawned` (a successor was started) or `deduped` (another `dispatch-*`
-job is already running, so none was needed) and exits 0; it exits non-zero when
-a job was spawned but did not register. **early-stop** dispositions skip this
-step — they spawn no successor; the #725 heartbeat re-seeds the chain if it has
-drained.
+On an early-stop disposition, pass no issue number:
 
-**3. Print the completion report.** State what this job did: the phase that ran
-and its outcome, or the reason it stopped early.
+```bash
+.claude/skills/dispatch/scripts/dispatch-handoff --early-stop
+```
 
-**4. Terminal disposition.** Take exactly one of the following, in this
-priority:
-
-- **`dispatch-spawn` failed** — a phase-completed run whose step-2 spawn exited
-  non-zero. Do **not** self-close. Report the failed baton-pass and stop,
-  leaving this job open so the failure is visible and the spawn can be retried.
-
-- **The report surfaces a deviation** — a phase-completed run whose step-2
-  spawn succeeded, but whose completion report surfaces a deviation from the
-  approved plan, or a result that does not fully satisfy the issue's acceptance
-  criteria. Do **not** self-close — self-closing would bury the deviation in a
-  closed job's transcript. The baton was already passed in step 2, so the chain
-  keeps moving; route this item to the office-hours queue for human review.
-  Resolve the PR for the target with
-  `.claude/skills/dispatch/scripts/dispatch-find-pr <N>` and apply the
-  `dispatch:office-hours` label to it (`gh`, `dangerouslyDisableSandbox: true`):
-
-  ```bash
-  gh pr edit <pr-num> --add-label dispatch:office-hours
-  ```
-
-  If that fails because the label does not exist yet, create it and retry —
-  the same apply-first / create-on-"not found" idiom `dispatch-complete-phase`
-  uses:
-
-  ```bash
-  gh label create dispatch:office-hours \
-    --description "dispatch workflow: blocked on a human — awaiting input or review"
-  gh pr edit <pr-num> --add-label dispatch:office-hours
-  ```
-
-  Pass no `--color`: `dispatch-complete-phase` is the single source of the
-  `dispatch:*` label-colour metadata, and #757 owns `dispatch:office-hours`'s
-  canonical definition — Step 9 only needs the label to exist.
-  `dispatch:office-hours` is the office-hours queue's marker, shared with #757,
-  whose input-block detection hooks are the label's other writer; whichever
-  writer runs first creates it. Then stop — report that the item is parked in
-  the office-hours queue for human review.
-
-- **Clean completion or early-stop** — an early-stop, or a phase-completed run
-  whose `dispatch-spawn` succeeded and whose report surfaces nothing that needs
-  the user. Self-close (`dangerouslyDisableSandbox: true`):
-
-  ```bash
-  .claude/skills/dispatch/scripts/dispatch-self-close
-  ```
-
-  The script stops the managed background job by its job-id (the basename of
-  `$CLAUDE_JOB_DIR`, which is what `claude stop` expects — not the conversation
-  session UUID, not the registry's `.sessionId`). It is a no-op when
-  `CLAUDE_JOB_DIR` is unset (the session is interactive, not a managed
-  background job) — so an interactive `/dispatch` reaching Step 9 does not stop
-  the user's live conversation. The job ends; the successor it spawned — or,
-  for an early-stop, the #725 heartbeat — carries the workflow forward.
+`dispatch-handoff` is the scripted terminal disposition. Its decision is
+computed from observable state — spawn exit code and PR labels — rather than
+free-text interpretation; the script's header carries the full behavior
+table. In summary: on `--phase-completed` it spawns the successor
+(`dispatch-spawn` — the baton pass), reads the PR's labels via
+`dispatch-find-pr` and `gh pr view`, and either self-closes via
+`dispatch-self-close` (the happy path) or — when `dispatch:office-hours` is on
+the PR — exits without self-closing so the deviation stays visible for human
+review. A spawn failure surfaces stderr and exits non-zero without
+self-closing, so a failed baton-pass is visible too. On `--early-stop` the
+script skips the spawn (the #725 heartbeat re-seeds the chain) and hands off
+directly to `dispatch-self-close`. The self-close primitive is a no-op when
+`CLAUDE_JOB_DIR` is unset (the session is interactive, not a managed
+background job) — so an interactive `/dispatch` reaching Step 9 does not stop
+the user's live conversation.
