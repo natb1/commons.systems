@@ -9,7 +9,7 @@ Selects the single most pressing task, resolves its worktree, derives the curren
 workflow phase from PR/issue status, and dispatches **exactly one phase skill** —
 then stops. Each `/dispatch` is a `claude --bg` background job (#725): a job
 advances one phase, passes the baton to a fresh `/dispatch` job, then
-self-closes (`claude stop`). That self-perpetuating chain advances the
+self-deletes (`claude rm`). That self-perpetuating chain advances the
 workflow; the #725 heartbeat re-seeds it when no job is running.
 
 `/dispatch` takes an **optional issue-or-PR-number argument** (leading `#`
@@ -61,28 +61,41 @@ The lock covers **Steps 0-5 only** — target selection and worktree resolution.
 Steps 6-9 (the phase skill, the pre-implementation relevance review, and the
 hand-off) run with the lock **released**.
 
-Release the lock by running:
+Release happens at exactly two kinds of point, each with its own canonical
+command:
 
-```bash
-.claude/skills/dispatch/scripts/dispatch-acquire-lock --release
-```
-
-This needs `dangerouslyDisableSandbox: true` (same reason as Step 0); no
-elevated timeout is needed — `--release` returns immediately. It prints
-`released` or `noop`; both are fine — it is a no-op when the lock is already
-released or held by another session, so the skill does not branch on its output.
-
-Release happens at exactly two kinds of point:
-
-- **Proceed path** — as the final action of Step 5, after the
-  `tmp/dispatch-worktree` marker is written, before Step 6.
+- **Proceed path** — as the final action of Step 5, run
+  `dispatch-finalize-selection`. The wrapper writes the
+  `tmp/dispatch-worktree` marker (see *Step 5* and the marker paragraph below)
+  and execs `dispatch-acquire-lock --release` in one step.
 - **Every Steps 1-5 stop path** — immediately before reporting the stop reason
-  and proceeding to Step 9 (early-stop).
+  and proceeding to Step 9 (early-stop), run
+  `.claude/skills/dispatch/scripts/dispatch-acquire-lock --release` directly.
+  Stop paths fire before the marker is written, so the strict
+  `CLAUDE_CODE_SESSION_ID`-match branch applies.
+
+Both calls need `dangerouslyDisableSandbox: true` (same reason as Step 0); no
+elevated timeout is needed — `--release` returns immediately. They print
+`released` or `noop`; both are fine — `noop` is a no-op when the lock is
+already released or recorded against a different session whose worktree has no
+marker, so the skill does not branch on the output.
 
 Releasing after Step 5 is safe because the session then owns a worktree (or has
 stopped), and the selection scan skips worktree'd targets — no other tick can
 select the same issue. Later steps cross-reference *Releasing the lock* rather
-than repeating this command.
+than repeating these commands.
+
+The `tmp/dispatch-worktree` marker is the canonical post-Step-5 reclaim signal:
+a recorded holder whose worktree carries the marker is past Step 5, so its
+lock is reclaimable by any subsequent tick regardless of session-id provenance.
+The acquire path skips the busy branch when the foreign holder's cwd has the
+marker, and `--release` succeeds (truncates and prints `released`) when EITHER
+the caller's sessionId matches the holder OR the holder's cwd has the marker.
+This closes the silent-`noop` failure mode for any post-Step-5 caller whose
+`CLAUDE_CODE_SESSION_ID` was re-derived from a different context (a subagent
+or hook). Pre-marker callers — Steps 1-4 stop paths and the Step 5 `conflict`
+stop — keep strict sessionId-match semantics by construction because the
+marker is absent.
 
 The lock is scoped to selection and self-healing. The recorded sessionId
 (`CLAUDE_CODE_SESSION_ID`) outlives any single Bash call within a tick: if a
@@ -225,12 +238,14 @@ continue to target selection.
   `<issue>-*` worktree always continues there.
 
   The topic-category × phase ladder is two-tier: a topic **category** nests
-  outside the phase **ladder**. Categories, highest priority first: `bug` →
-  `testing infrastructure` → `dispatch` → `other`. A PR's category is the
-  highest-priority topic among the labels of every issue it closes; an issue's
-  category is the highest-priority topic among its own labels; anything with no
-  topic label is `other`. The selector exhausts one category's whole ladder
-  before moving to the next.
+  outside the phase **ladder**. Categories, highest priority first:
+  `priority` → `bug` → `testing infrastructure` → `dispatch` → `other`. A
+  `priority`-labelled issue (or a PR closing one) outranks every other
+  category; the label is human-applied — `/ready` never applies it
+  automatically. A PR's category is the highest-priority topic among the
+  labels of every issue it closes; an issue's category is the highest-priority
+  topic among its own labels; anything with no topic label is `other`. The
+  selector exhausts one category's whole ladder before moving to the next.
 
   Within each category the ladder is (highest first; within a tier, oldest PR
   wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
@@ -389,22 +404,30 @@ one of `path` (switch to an existing worktree) or `name` (create a new one).
   conflict (name `<path>` and issue `<N>`), then **exit via Step 9**
   (early-stop — `dispatch-handoff --early-stop`); do not `EnterWorktree`.
 
-On every non-`conflict` path, before any phase skill runs, create the recovery
-marker:
+As the **final action of this step on every non-`conflict` (proceed) path** —
+before Step 6 — run:
 
 ```bash
-mkdir -p tmp && touch tmp/dispatch-worktree
+.claude/skills/dispatch/scripts/dispatch-finalize-selection
 ```
 
-`restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
-recovery on this marker — when present, it re-invokes `/dispatch` so the phase is
-re-derived from PR/CI ground truth. The marker is an empty boolean flag with no
-payload; it persists for the worktree's life and needs no cleanup — `tmp/` is
-git-ignored, and removing the worktree removes it.
+The wrapper writes the `tmp/dispatch-worktree` marker and releases the lock
+(see *Releasing the lock*) in one step. The phase skill in Step 6 onward runs
+lock-free. The wrapper needs `dangerouslyDisableSandbox: true` (same reason as
+the underlying `dispatch-acquire-lock --release` — see *Releasing the lock*).
 
-As the **final action of this step on every non-`conflict` (proceed) path** —
-after the marker is written, before Step 6 — release the lock (see *Releasing
-the lock*). The phase skill in Step 6 onward runs lock-free.
+The marker is the canonical "Step 5 completed" signal. Two consumers read it:
+`restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
+recovery on it — when present, it re-invokes `/dispatch` so the phase is
+re-derived from PR/CI ground truth — and the lock script keys post-Step-5
+reclaim on it (see *Releasing the lock*). `.claude/hooks/worktree-create.sh`
+also writes the marker as its final action on every successful WorktreeCreate,
+so a fresh (or re-entered) worktree is marker-bearing the moment
+`EnterWorktree` returns — `dispatch-finalize-selection`'s marker write is the
+in-skill defense for the `here` path and for any code path that bypasses the
+hook. The marker is an empty boolean flag with no payload; it persists for the
+worktree's life and needs no cleanup — `tmp/` is git-ignored, and removing the
+worktree removes it.
 
 ## 6. Derive the Phase
 
@@ -482,10 +505,12 @@ Invoke the one mapped phase skill via the Skill tool. Run exactly one phase per
 - **`review`** — invoke `/review-fix`. It runs `/review`, applies the recommended
   fixes, posts a PR comment, and applies the `dispatch:reviewed` label itself —
   `/dispatch` applies no label.
-- **`security`** — invoke `/security-review-fix`. It runs `/security-review` and
-  gathers the PR's CodeQL code-scanning alerts, applies the recommended fixes,
-  posts a PR comment, applies the `dispatch:security-reviewed` label, and marks
-  the PR ready. It is idempotent on re-entry — `/dispatch` applies no label.
+- **`security`** — invoke `/security-review-fix`. Its Step 2 directly fans out
+  9 parallel subagents — 6 security domains, a red team, the built-in
+  `/security-review` scan (subagent-wrapped Skill invocation), and the PR's
+  CodeQL alerts — then applies the required fixes, posts a PR comment, applies
+  the `dispatch:security-reviewed` label, and marks the PR ready. It is
+  idempotent on re-entry — `/dispatch` applies no label.
 - **`done`** — report that the PR is already ready, then **exit via Step 9**
   (early-stop — `dispatch-handoff --early-stop`). No phase skill ran, so Step 9
   spawns no successor and self-closes.
@@ -507,6 +532,14 @@ workflow. `/dispatch-qa`, `/code-review-fix`, `/review-fix`, and
 `/security-review-fix` each own and apply their own label — `dispatch:qa-done`,
 `dispatch:code-reviewed`, `dispatch:reviewed`, and `dispatch:security-reviewed`
 respectively — so `/dispatch` applies no `dispatch:*` label after any phase.
+
+When a phase skill runs `dispatch-complete-phase <pr-num> <phase>`, the PR
+number is expected to differ from the worktree's `<issue>-…` branch issue
+number; the PR↔issue linkage was established earlier in the tick by
+`dispatch-resolve-arg`, `dispatch-find-pr`, or `dispatch-select-target`'s
+`pr <num> <branch> <phase>` selection result. The dispatching session must
+**not** pause to re-confirm — this is the expected shape of every
+phase-skill label apply.
 
 ## 8. Pre-Implementation Relevance Review
 

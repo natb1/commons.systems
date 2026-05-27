@@ -143,6 +143,7 @@ export function createMockDataSource(overrides: Partial<DataSource> = {}): DataS
     deleteReconciliationNote: vi.fn(),
     updateJournalLegCleared: vi.fn(),
     createReconciliationEvent: vi.fn(),
+    createJournalEntry: vi.fn(),
     updateBudget: vi.fn(),
     updateBudgetOverrides: vi.fn(),
     adjustBudgetPeriodTotal: vi.fn(),

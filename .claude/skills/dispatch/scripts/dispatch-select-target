@@ -63,7 +63,7 @@
 #
 # Selection is two-tier: a topic *category* nests outside the phase *ladder*.
 # Categories, highest priority first:
-#   bug → testing infrastructure → dispatch → other
+#   priority → bug → testing infrastructure → dispatch → other
 # The selector exhausts every tier of one category before moving to the next.
 #
 # A PR's category is the highest-priority topic among the labels of every issue
@@ -452,12 +452,15 @@ ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
 
 # Topic categories in priority order; "other" is the implicit fallback for any
 # label set with no topic label. A category tier nests *outside* the phase
-# ladder: the selector exhausts every phase of "bug" before considering
-# "testing infrastructure", and so on. TOPIC_CATEGORIES is the single source of
-# the ordering — category_of_labels resolves against it and the default-mode
-# loop iterates CATEGORIES. The companion classifier that *applies* these
-# labels is ref-ready SKILL.md Step 6; keep the two label sets in sync.
-TOPIC_CATEGORIES=(bug "testing infrastructure" dispatch)
+# ladder: the selector exhausts every phase of "priority" before considering
+# "bug", and so on. TOPIC_CATEGORIES is the single source of the ordering —
+# category_of_labels resolves against it and the default-mode loop iterates
+# CATEGORIES. "priority" is an orthogonal escalation axis applied alongside a
+# topic label; the first-match resolution in category_of_labels means an issue
+# carrying both `priority` and `bug` resolves to `priority`. The companion
+# classifier that *applies* these labels is ref-ready SKILL.md Step 6; keep
+# the two label sets in sync.
+TOPIC_CATEGORIES=(priority bug "testing infrastructure" dispatch)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
 TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[inputs]')
