@@ -3764,13 +3764,7 @@ out=$("$TMPDIR_TEST/scripts/dispatch-acquire-lock" --release 2>/dev/null); rc=$?
 assert_eq "lenient --release exits 0" "0" "$rc"
 assert_eq "lenient --release prints released" "released" "$out"
 lock_contents=$(cat "$DISPATCH_LOCK_FILE" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ -z "$lock_contents" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: lenient --release empties the lock file"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: lenient --release empties the lock file"
-  echo "    lock file: '$lock_contents'"
-fi
+assert_eq "lenient --release empties the lock file" "" "$lock_contents"
 lock_teardown
 
 # --- Test 23: --release with NO marker → noop (strict pre-marker) -----------

@@ -218,7 +218,7 @@ try_acquire() {            # 0 = acquired, 1 = contended; sets CONTENDED_SID
       if cwd=$(resolve_holder_state "$recorded"); then
         live=1
       fi
-      if (( live )) && ! { [[ -n "$cwd" && -e "$cwd/tmp/dispatch-worktree" ]]; }; then
+      if (( live )) && [[ -z "$cwd" || ! -e "$cwd/tmp/dispatch-worktree" ]]; then
         printf 'BUSY %s' "$recorded"
       else
         printf '%s\n' "$SESSION_ID" >"$LOCK_FILE"
