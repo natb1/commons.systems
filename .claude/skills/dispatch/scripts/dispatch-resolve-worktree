@@ -3,12 +3,12 @@
 # Usage: dispatch-resolve-worktree <issue-num> <explicit|queue>
 #
 # Prints exactly one decision line to stdout:
-#   here            — the current branch already is <issue>-*; no EnterWorktree
-#                     is needed.
-#   enter <path>    — an existing <issue>-* worktree should be re-used;
-#                     EnterWorktree with path: <path>.
-#   create <branch> — no worktree exists; <branch> is the sanitized name,
-#                     EnterWorktree with name: <branch>.
+#   here            — the current branch already is <issue>-*; the caller
+#                     uses the current worktree path.
+#   enter <path>    — an existing <issue>-* worktree exists; the caller
+#                     uses <path>.
+#   create <branch> — no <issue>-* worktree exists; the caller materializes
+#                     <branch> and uses its path.
 #   conflict <path> — a queue-selected target already has a worktree (another
 #                     session owns it); /dispatch reports <path> and stops.
 #

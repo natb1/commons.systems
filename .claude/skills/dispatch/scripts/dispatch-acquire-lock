@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 # dispatch-acquire-lock — acquire/release the process-level /dispatch lock.
 #
-# /dispatch mutates shared state (fetches origin/main, creates/removes
-# worktrees, flips gh labels and PR draft status). Its per-target guards assume
-# serial execution within a tick; two concurrent invocations can race. This
-# script serializes them with a session-id-stamped lock file.
+# This lock is the dispatch ROUTER's selection lock — held only across the
+# router's selection step (origin/main sync, JIT engine, dispatch-select-
+# target, leaf trace, worktree resolution). The worker (`/dispatch-worker`)
+# holds no selection lock; its phase skill runs lock-free and concurrent
+# workers advance their own issues' phases without contention. See
+# `.claude/skills/dispatch/SKILL.md` Step 0 (Acquire / Releasing / Per-
+# worktree invariant) for the full scoping story.
+#
+# The lock serializes two routers racing on the same target selection — two
+# concurrent routers can pick the same `help wanted` issue or the same PR if
+# selection isn't serialized. It does not (and should not) cover phase
+# execution: per-worktree dedup at `dispatch-spawn-worker` is what serializes
+# per-issue work.
 #
 # An fd-based `flock` cannot serialize /dispatch: the skill runs as many
 # separate Bash tool calls, each a fresh shell, so an fd flock would release

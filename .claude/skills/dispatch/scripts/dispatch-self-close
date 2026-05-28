@@ -13,8 +13,8 @@
 #                            exit with that command's status.
 #   $CLAUDE_JOB_DIR unset  → diagnostic to stderr, exit 0 (no-op).
 #
-# Environment override for testability (mirroring dispatch-spawn's
-# DISPATCH_SPAWN_CLAUDE_CMD):
+# Environment override for testability (mirroring dispatch-spawn-router's
+# DISPATCH_SPAWN_ROUTER_CLAUDE_CMD):
 #   DISPATCH_SELF_CLOSE_CLAUDE_CMD  The `claude` command. Default: `claude`.
 #
 # Sandbox: `claude rm` reaches the local Claude daemon over a Unix socket;
@@ -30,4 +30,4 @@ if [[ -z "$JOB_ID" || "$JOB_ID" == "." ]]; then
   exit 0
 fi
 
-exec "$CLAUDE_CMD" rm "$JOB_ID"
+exec "$CLAUDE_CMD" rm -- "$JOB_ID"
