@@ -2991,7 +2991,12 @@ while [[ $# -gt 0 ]]; do
 done
 payload_file="$(cd "$(dirname "$0")" && pwd)/payload.json"
 if [[ -n "$requested_cwd" ]]; then
-  jq --arg cwd "$requested_cwd" '[.[] | select(.cwd | startswith($cwd))]' "$payload_file"
+  # Directory-boundary match: cwd == path OR cwd starts with path + "/".
+  # `startswith` alone would mis-attribute /foo/worktrees/500-other to a query
+  # for /foo/worktrees/50, which the real daemon's --cwd filter does not.
+  jq --arg cwd "$requested_cwd" \
+    '[.[] | select(.cwd == $cwd or (.cwd | startswith($cwd + "/")))]' \
+    "$payload_file"
 else
   cat "$payload_file"
 fi

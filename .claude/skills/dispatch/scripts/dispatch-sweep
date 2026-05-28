@@ -191,7 +191,7 @@ flush_record
 # in sync remove the worktree + delete the local branch. Not-in-sync merged
 # worktrees stay on the surviving list with a SKIP log line so the user can
 # investigate; they're explicitly NOT auto-adoption candidates (the unpushed
-# work may belong to a live session whose comm we missed).
+# work may belong to a live session the daemon did not report).
 SURVIVING_PATHS=()
 SURVIVING_BRANCHES=()
 
@@ -250,8 +250,8 @@ while [[ $i -lt ${#SURVIVING_PATHS[@]} ]]; do
     if [[ -n "$sessions" ]]; then
       # At least one live session — extract the first line for diagnostics.
       first_line=$(printf '%s\n' "$sessions" | head -n1)
-      sid="" pid="" status="" name=""
-      IFS=$'\t' read -r sid pid status name <<< "$first_line"
+      sid="" status="" name=""
+      IFS=$'\t' read -r sid _ status name <<< "$first_line"
       log "ACTIVE: '$wt_path' branch=$wt_branch sessionId=$sid name=$name status=$status"
     else
       # Zero sessions — eligible orphan.
