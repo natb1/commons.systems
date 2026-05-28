@@ -6018,6 +6018,8 @@ else
   FAIL=$((FAIL + 1)); echo "  FAIL: label-missing: PR apply retried after label create"
   echo "    pr-edit-log: $pr_edit_log"
 fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "label-missing: dispatch-spawn invoked exactly once after recovery" "1" "$spawn_calls"
 ib_teardown
 
 # --- Test 4: CLAUDE_JOB_DIR unset → no-op (no label, no spawn) ---------------
@@ -6086,6 +6088,30 @@ if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
   PASS=$((PASS + 1)); echo "  PASS: non-permission-prompt: no gh label apply was invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: non-permission-prompt: no gh label apply was invoked"
+fi
+ib_teardown
+
+# --- Test 7: non-issue branch with dispatch job → no-op ----------------------
+
+echo "Test: non-issue branch (main) + dispatch-* job → no-op (no label, no spawn)"
+ib_setup
+echo "main" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "non-issue-branch: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: no gh label apply was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: no gh label apply was invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: dispatch-spawn was not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: dispatch-spawn was not invoked"
 fi
 ib_teardown
 

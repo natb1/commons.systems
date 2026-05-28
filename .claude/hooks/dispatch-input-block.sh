@@ -29,23 +29,6 @@
 set -uo pipefail
 trap 'echo "[dispatch-input-block] WARNING: unexpected error on line $LINENO" >&2; exit 0' ERR
 
-# Consume the payload (defensive — some events pass JSON on stdin). We do not
-# branch on its contents for PreToolUse / Elicitation; for Notification we
-# self-filter on notification_type below. Read with a timeout so a wired event
-# that delivers no stdin doesn't hang the session.
-PAYLOAD=""
-if read -t 1 -d '' PAYLOAD; then :; fi
-
-# Notification self-filter: only act on permission_prompt notifications.
-# Other notification_type values (e.g. session_complete) reach this hook and
-# must pass through silently. Empty payload (other events) skips the filter.
-if [ -n "$PAYLOAD" ]; then
-  NOTIFICATION_TYPE=$(printf '%s' "$PAYLOAD" | jq -r '.notification_type // empty' 2>/dev/null) || NOTIFICATION_TYPE=""
-  if [ -n "$NOTIFICATION_TYPE" ] && [ "$NOTIFICATION_TYPE" != "permission_prompt" ]; then
-    exit 0
-  fi
-fi
-
 # Discriminator 1: managed background job.
 if [ -z "${CLAUDE_JOB_DIR:-}" ]; then
   exit 0
@@ -62,6 +45,22 @@ case "$JOB_NAME" in
   dispatch-*) ;;
   *) exit 0 ;;
 esac
+
+# Consume the payload (defensive — some events pass JSON on stdin). Only
+# dispatch-* jobs reach this point; we read so the Notification filter below
+# can act. Read with a timeout so a wired event without stdin doesn't hang.
+PAYLOAD=""
+if read -t 1 -d '' PAYLOAD; then :; fi
+
+# Notification self-filter: only act on permission_prompt notifications.
+# Other notification_type values (e.g. session_complete) reach this hook and
+# must pass through silently. Empty payload (other events) skips the filter.
+if [ -n "$PAYLOAD" ]; then
+  NOTIFICATION_TYPE=$(printf '%s' "$PAYLOAD" | jq -r '.notification_type // empty' 2>/dev/null) || NOTIFICATION_TYPE=""
+  if [ -n "$NOTIFICATION_TYPE" ] && [ "$NOTIFICATION_TYPE" != "permission_prompt" ]; then
+    exit 0
+  fi
+fi
 
 # Resolve issue number from the current branch (<N>-<slug>).
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
