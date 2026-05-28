@@ -472,9 +472,9 @@ PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number
 ISSUE_LIST=$(gh issue list --state open --limit 300 --json number,createdAt,labels)
 
 # number → labels-array map as a JSON object, built once from the open-issue
-# list above. pr_category indexes it to resolve each PR's closing issues'
-# labels. Assigned to a variable first so a jq failure aborts here (set -e +
-# pipefail); mirrors PR_SORTED.
+# list above. pr_combined_labels indexes it to resolve each PR's closing
+# issues' labels. Assigned to a variable first so a jq failure aborts here
+# (set -e + pipefail); mirrors PR_SORTED.
 ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
   | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
 
@@ -504,28 +504,18 @@ category_of_labels() {
     | first($cats[] | select(. as $c | $names | index($c))) // "other"'
 }
 
-# Topic category of a PR: the union of its closing issues' labels, resolved by
-# category_of_labels. A PR that closes no issue — or whose closing issues carry
-# no topic label — resolves to "other".
-pr_category() {
-  local combined
-  combined=$(printf '%s' "$1" | jq -c --argjson map "$ISSUE_LABELS_JSON" \
-    '[.[].number | tostring as $n | $map[$n] // [] | .[]]')
-  category_of_labels "$combined"
+# Union of a PR's closing issues' labels into a JSON array of {name:...} label
+# objects, looked up in ISSUE_LABELS_JSON. A PR that closes no issue — or whose
+# closing issues are absent from the map — yields an empty array, which
+# category_of_labels resolves to "other" and has_priority_in_labels to 0.
+pr_combined_labels() {
+  printf '%s' "$1" | jq -c --argjson map "$ISSUE_LABELS_JSON" \
+    '[.[].number | tostring as $n | $map[$n] // [] | .[]]'
 }
 
 # 1 if the label set contains an exact "priority" label, else 0.
 has_priority_in_labels() {
   printf '%s' "$1" | jq -r '[.[].name] | if index("priority") then 1 else 0 end'
-}
-
-# priority bit of a PR: 1 if the union of its closing issues' labels carries
-# "priority", else 0. Combined-labels construction mirrors pr_category.
-pr_has_priority() {
-  local combined
-  combined=$(printf '%s' "$1" | jq -c --argjson map "$ISSUE_LABELS_JSON" \
-    '[.[].number | tostring as $n | $map[$n] // [] | .[]]')
-  has_priority_in_labels "$combined"
 }
 
 # First-seen PR per (category, priority-bit, phase): key =
@@ -577,8 +567,9 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
 
   # Record the oldest PR seen in this category+priority+phase. The :- guard
   # keeps the unset-key read from aborting under set -u.
-  pr_cat=$(pr_category "$pr_closing")
-  pr_pri=$(pr_has_priority "$pr_closing")
+  pr_combined=$(pr_combined_labels "$pr_closing")
+  pr_cat=$(category_of_labels "$pr_combined")
+  pr_pri=$(has_priority_in_labels "$pr_combined")
   pr_key="$pr_cat|$pr_pri|$phase"
   [[ -z "${FIRST_PR[$pr_key]:-}" ]] && FIRST_PR[$pr_key]="$pr_num $pr_branch"
 done <<< "$PR_SORTED"
