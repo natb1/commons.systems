@@ -87,13 +87,8 @@ setup() {
 
   # Default fake `claude`: emits an empty JSON array on stdout, exits 0.
   # lib-claude-agents.sh `claude_sessions_under` reads `[]` as a successful
-  # "zero sessions" response; `other_live_sessions_under` then returns 1
-  # (definite "no other sessions"). This keeps every existing
-  # dispatch-select-target test (including the on-worktree #16/17/18/27 cases)
-  # transparent to the priority-1 liveness gate. Per-test overrides — written
-  # to this same path — make the new gate tests assert against a non-empty
-  # registry. Installed in $TMPDIR_TEST/bin so it sits on PATH alongside the
-  # gh and git stubs.
+  # "zero sessions" response. Installed in $TMPDIR_TEST/bin so it sits on PATH
+  # alongside the gh and git stubs.
   cat > "$TMPDIR_TEST/bin/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "[]"
@@ -345,9 +340,6 @@ case "$args" in
     fi
     ;;
   "rev-parse --show-toplevel")
-    # dispatch-select-target's priority-1 branch passes this path to
-    # other_live_sessions_under. Default to /repo so it matches the default
-    # worktree-list.txt entry; per-test overrides may write a different path.
     if [[ -f "$STUB_DIR/worktree-toplevel.txt" ]]; then
       cat "$STUB_DIR/worktree-toplevel.txt"
     else
@@ -1005,122 +997,6 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "lone waiting PR → empty" "empty" "$result"
 teardown
 
-# 16. Open issue worktree → worktree output, queue scan skipped.
-# The default no-op dispatch-sweep stub installed by setup() is in place but
-# unused — current-worktree continuation short-circuits before the sweep call.
-echo "Test: open issue worktree → worktree <N> <branch>, scan skipped"
-setup
-# Seed a verify PR that would normally be selected — proves the scan is skipped.
-UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "open issue worktree → worktree 42 42-some-slug" "worktree 42 42-some-slug" "$result"
-teardown
-
-# 17. Closed issue worktree → worktree-closed.
-echo "Test: closed issue worktree → worktree-closed <N> <branch>"
-setup
-setup_union_pr_list '[]'
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"CLOSED"}' > "$STUB_DIR/issue-state-42.json"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "closed issue worktree → worktree-closed 42 42-some-slug" "worktree-closed 42 42-some-slug" "$result"
-teardown
-
-# 18. Unknown issue worktree (no state file → gh fails) → worktree-closed.
-echo "Test: unknown issue worktree → worktree-closed <N> <branch>"
-setup
-setup_union_pr_list '[]'
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '999-gone' > "$STUB_DIR/current-branch.txt"
-# No issue-state-999.json — gh stub exits 1, models a nonexistent issue.
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "unknown issue worktree → worktree-closed 999 999-gone" "worktree-closed 999 999-gone" "$result"
-teardown
-
-# --- Priority-1 liveness gate (issue #866) ----------------------------------
-# The priority-1 branch (current-worktree continuation) emits worktree / worktree-closed
-# only when no OTHER live Claude session is under the worktree. When the
-# dispatching router itself is a background job or hook-spawned inside an
-# <N>-* worktree that already has a live session, the gate must fall through
-# to the rest of the priority ladder instead of mis-claiming the worktree.
-# `other_live_sessions_under` filters out the dispatching session by
-# $CLAUDE_CODE_SESSION_ID; the per-test fake `claude` injects the registry.
-
-# 18a. open issue worktree + only the dispatching session is live → worktree <N> emitted.
-echo "Test: open issue worktree + self-only session → worktree <N> <branch>"
-setup
-# Seed a verify PR that the ladder would otherwise pick — proves priority-1 fired.
-UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
-# Fake `claude` reports one live session whose sessionId matches the
-# dispatching session — `other_live_sessions_under` filters it out and
-# returns "no other sessions".
-cat > "$TMPDIR_TEST/bin/claude" <<'STUB'
-#!/usr/bin/env bash
-echo '[{"sessionId":"sess-self","pid":1234,"status":"active","name":"x"}]'
-STUB
-chmod +x "$TMPDIR_TEST/bin/claude"
-export CLAUDE_CODE_SESSION_ID=sess-self
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "self-only session → worktree 42 42-some-slug emitted" "worktree 42 42-some-slug" "$result"
-teardown
-
-# 18b. open issue worktree + another live session under it → fall-through to queue ladder.
-echo "Test: open issue worktree + foreign session → fall-through to queue"
-setup
-# A selectable verify PR proves the script fell through to the queue ladder.
-UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
-# Fake `claude` reports a foreign session that does NOT match
-# $CLAUDE_CODE_SESSION_ID — `other_live_sessions_under` returns "occupied"
-# and the priority-1 emission is skipped.
-cat > "$TMPDIR_TEST/bin/claude" <<'STUB'
-#!/usr/bin/env bash
-echo '[{"sessionId":"sess-foreign","pid":1234,"status":"active","name":"x"}]'
-STUB
-chmod +x "$TMPDIR_TEST/bin/claude"
-export CLAUDE_CODE_SESSION_ID=sess-self
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "foreign session → fall through to verify PR" "pr 10 10-verify-me verify" "$result"
-teardown
-
-# 18c. closed issue worktree + another live session → fall-through, NOT worktree-closed.
-# Both `worktree` and `worktree-closed` are gated: when a foreign session owns
-# the worktree, the router must not preempt it by reporting "closed and stop".
-echo "Test: closed issue worktree + foreign session → fall-through, not worktree-closed"
-setup
-UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"CLOSED"}' > "$STUB_DIR/issue-state-42.json"
-cat > "$TMPDIR_TEST/bin/claude" <<'STUB'
-#!/usr/bin/env bash
-echo '[{"sessionId":"sess-foreign","pid":1234,"status":"active","name":"x"}]'
-STUB
-chmod +x "$TMPDIR_TEST/bin/claude"
-export CLAUDE_CODE_SESSION_ID=sess-self
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "closed issue + foreign session → fall through to verify PR" "pr 10 10-verify-me verify" "$result"
-teardown
-
 # 19. main branch → queue scan unchanged, normal result returned.
 echo "Test: main branch → queue scan runs normally"
 setup
@@ -1133,25 +1009,25 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "main branch → normal scan result (verify PR)" "pr 10 10-verify-me verify" "$result"
 teardown
 
-# 20. --qa mode from an issue worktree → detection skipped, QA PR returned.
-echo "Test: --qa mode from issue worktree → detection skipped, QA PR returned"
+# 20. --qa mode with a non-main current branch → normal QA PR returned.
+echo "Test: --qa mode with non-main current branch → QA PR returned"
 setup
 # QA-phase PR: draft + green + no label.
 UNION='['"$(make_pr_union 20 "20-qa-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-# Current branch looks like an issue worktree, but --qa skips detection.
+# Non-main current branch: cwd does not affect --qa selection.
 printf '42-x' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
 result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
-assert_eq "--qa mode from issue worktree → normal QA scan (pr 20 20-qa-me)" "pr 20 20-qa-me" "$result"
+assert_eq "--qa mode with non-main current branch → QA PR returned" "pr 20 20-qa-me" "$result"
 teardown
 
 # --- origin/main CI health gate (issue #660) --------------------------------
 # The gate runs before the priority ladder in default mode. It aggregates main's
 # HEAD CI from check-runs (CodeQL) and Actions workflow runs; a failing
-# conclusion short-circuits to "main-broken <sha>".
+# conclusion short-circuits to "main-broken <sha>". The gate is uniform —
+# there is no cwd-based bypass.
 #
 # The explicit-`/dispatch <issue|pr>` bypass is structural and not script-
 # testable here: an explicit argument skips the queue scan entirely (SKILL.md
@@ -1250,26 +1126,10 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
 assert_eq "--qa mode bypasses gate → QA PR returned" "pr 20 20-qa-me" "$result"
 teardown
 
-# 27. Current-worktree continuation bypasses the gate even when main is broken.
-echo "Test: worktree continuation bypasses the main-CI gate"
-setup
-setup_union_pr_list '[]'
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
-printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
-printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
-  > "$STUB_DIR/main-check-runs.json"
-printf '[]' > "$STUB_DIR/main-run-list.json"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "worktree continuation bypasses gate → worktree 42 42-some-slug" "worktree 42 42-some-slug" "$result"
-teardown
-
 # --- --health-only mode (issue #683 AC: gate before sweep) ------------------
-# --health-only runs the pre-ladder bypasses and the gate, then exits without
-# the queue scan. /dispatch SKILL.md calls it before dispatch-sweep so the
-# sweep does not run while main is red.
+# --health-only runs the JIT scan and the gate, then exits without the queue
+# scan. /dispatch SKILL.md calls it before dispatch-sweep so the sweep does
+# not run while main is red.
 
 # 27a. --health-only, main green, not in a worktree → "ok", exit 0.
 echo "Test: --health-only + main green → ok"
@@ -1304,22 +1164,20 @@ assert_eq "--health-only main red → main-broken mainhead0" "main-broken mainhe
 assert_eq "--health-only main red → exit 0" "0" "$rc"
 teardown
 
-# 27c. --health-only, main red, current branch is <N>-foo with open issue <N>
-#      → "ok" (current-worktree bypass preserved).
-echo "Test: --health-only + worktree branch bypasses red main"
+# 27c. --health-only + <N>-* current branch + red main → main-broken (no bypass).
+echo "Test: --health-only + issue-branch cwd + red main → main-broken (cwd ignored)"
 setup
 echo '[]' > "$STUB_DIR/pr-list-union.json"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
 printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
   > "$STUB_DIR/main-check-runs.json"
 printf '[]' > "$STUB_DIR/main-run-list.json"
 if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
-assert_eq "--health-only worktree branch bypasses red main → ok" "ok" "$result"
-assert_eq "--health-only worktree branch → exit 0" "0" "$rc"
+assert_eq "--health-only issue-branch cwd, red main → main-broken mainhead0" "main-broken mainhead0" "$result"
+assert_eq "--health-only issue-branch cwd, red main → exit 0" "0" "$rc"
 teardown
 
 # 27d. --health-only --qa is mutually exclusive → exit non-zero, error on stderr.
@@ -1664,8 +1522,8 @@ teardown
 
 # ============================================================================
 # --- JIT scan ---
-# dispatch-select-target's JIT scan runs after current-worktree continuation
-# and before the main-broken health gate. It is inert with no jit.json.
+# dispatch-select-target's JIT scan runs before the main-broken health gate.
+# It is inert with no jit.json.
 # A JIT test seeds:
 #   $DISPATCH_CONFIG_DIR/jit.json       — the jit definitions
 #   $DISPATCH_CONFIG_DIR/projects.json  — the project catalog
@@ -2002,32 +1860,27 @@ teardown
 
 # --- sweep routing (issue #803) ---------------------------------------------
 # dispatch-select-target invokes dispatch-sweep internally in default mode,
-# between the main-broken gate and the queue ladder. The sweep call comes
-# AFTER current-worktree continuation, so a session inside an <issue>-*
-# worktree always continues there even when an orphan exists elsewhere.
+# between the main-broken gate and the queue ladder. Selection is a pure
+# function of GitHub state plus local-worktree existence — cwd is not consulted.
 # Tests below overwrite the default no-op sweep stub seeded by setup() to
 # exercise the routing branches.
 
-# SR1. (AC b) Inside an active <issue>-* worktree with an orphan elsewhere →
-#      still worktree <N> <branch>. The sweep stub would emit an adoption
-#      directive if invoked; the assert proves it never was.
-echo "Test: worktree continuation precedes sweep adoption (regression — #803)"
+# SR1. Selector invoked from an <issue>-* worktree returns the same queue-ladder
+#      result it would from main. The default no-op sweep stub is in place so the
+#      ladder runs; the assert proves a queue-ladder result (pr 999), not a
+#      cwd-derived line that old code would have emitted.
+echo "Test: selector from issue-branch cwd returns queue-ladder line (cwd ignored)"
 setup
-setup_union_pr_list '[]'
+# Seed a verify PR as the expected queue-ladder output.
+UNION='['"$(make_pr_union 999 "999-foo" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
+setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+# Current branch is an issue branch — but cwd must not affect selection.
 printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
-# Sweep stub would adopt an orphan at issue 725 if invoked — proves the sweep
-# never ran (current-worktree continuation short-circuited first).
-cat > "$TMPDIR_TEST/dispatch-sweep" <<'STUB'
-#!/usr/bin/env bash
-echo "worktree 725 725-some-orphan"
-exit 0
-STUB
-chmod +x "$TMPDIR_TEST/dispatch-sweep"
+# Sweep is a no-op so the ladder runs.
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "worktree continuation beats sweep adoption" "worktree 42 42-some-slug" "$result"
+assert_eq "selector from issue-branch cwd → queue-ladder result (pr 999)" "pr 999 999-foo verify" "$result"
 teardown
 
 # SR2. (AC c) Outside any worktree, orphan present → worktree-adopted.
@@ -2533,17 +2386,7 @@ branch refs/heads/42-my-feature
 
 '
 
-# 1. Current branch is <N>-* → here (mode-independent).
-echo "Test: current branch <N>-* → here (both modes)"
-setup
-echo "42-my-feature" > "$STUB_DIR/current-branch.txt"
-result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
-assert_eq "current branch <N>-* → here (explicit)" "here" "$result"
-result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
-assert_eq "current branch <N>-* → here (queue)" "here" "$result"
-teardown
-
-# 2. explicit mode + an existing <N>-* worktree → enter <path>.
+# 1. explicit mode + an existing <N>-* worktree → enter <path>.
 echo "Test: explicit + existing <N>-* worktree → enter"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
@@ -2603,14 +2446,26 @@ else
 fi
 teardown
 
-# 7. here precedence: current branch <N>-* wins even when a matching worktree
-#    also exists — the here check fires before the worktree scan.
-echo "Test: here precedence over a matching worktree"
+# 7. explicit mode invoked from within <N>-* worktree (current-branch = <N>-*)
+#    AND matching worktree entry → enter <path> (no special-case `here`).
+#    current-branch.txt is not read by dispatch-resolve-worktree (the `here`
+#    check was removed); it is seeded here only to document the scenario intent.
+echo "Test: explicit from issue-branch cwd with matching worktree → enter (not here)"
 setup
-echo "42-my-feature" > "$STUB_DIR/current-branch.txt"
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
-assert_eq "here wins over a matching worktree" "here" "$result"
+assert_eq "explicit from issue-branch cwd, matching worktree → enter (not here)" \
+  "enter /worktrees/42-my-feature" "$result"
+teardown
+
+# 7b. queue mode invoked from within <N>-* worktree (current-branch = <N>-*)
+#     AND matching worktree entry → conflict <path> (worktree scan runs normally).
+echo "Test: queue from issue-branch cwd with matching worktree → conflict (not here)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "queue from issue-branch cwd, matching worktree → conflict (not here)" \
+  "conflict /worktrees/42-my-feature" "$result"
 teardown
 
 # 8. A non-matching worktree (different issue) → create.
@@ -2773,7 +2628,7 @@ echo "=== dispatch-sweep ==="
 #   project/.bare/                fake git common dir (parent = project/)
 #   project/worktrees/<n>-<slug>/ fake worktrees
 #   project/tmp/                  sweep log default dir
-#   proc/                         synthetic /proc tree (overridden per test)
+#   fake/                         fake `claude` script (CLAUDE_AGENTS_CMD target)
 #   stub/                         per-test JSON + record files (calls, gh out)
 #
 # Shims:
@@ -2793,10 +2648,11 @@ sweep_setup() {
   STUB_DIR="$TMPDIR_TEST/stub"
   mkdir -p "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/scripts" \
            "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees" \
-           "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/proc"
+           "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
@@ -2914,8 +2770,18 @@ STUB
 
   export PATH="$TMPDIR_TEST/bin:$PATH"
 
+  # Default fake `claude` — prints `[]` and exits 0 (no live sessions).
+  # All tests that do not override this get "everything orphaned" semantics.
+  local default_fake="$TMPDIR_TEST/fake/claude"
+  cat > "$default_fake" <<'FAKE'
+#!/usr/bin/env bash
+printf '[]'
+exit 0
+FAKE
+  chmod +x "$default_fake"
+
   # Defaults for dispatch-sweep env overrides.
-  export DISPATCH_SWEEP_PROC_ROOT="$TMPDIR_TEST/proc"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake/claude"
   export DISPATCH_SWEEP_LOG_FILE="$STUB_DIR/sweep.log"
   export DISPATCH_SWEEP_NOW="2026-01-01T00:00:00Z"
 }
@@ -2925,7 +2791,7 @@ sweep_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   export PATH="$SAVED_PATH"
-  unset DISPATCH_SWEEP_PROC_ROOT DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW
+  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -2943,14 +2809,56 @@ sweep_register_main() {
     "$TMPDIR_TEST/project/worktrees/main" >> "$STUB_DIR/worktree-list.txt"
 }
 
-# Helper: write a synthetic /proc/<pid> entry with comm and cwd symlink.
-sweep_proc_pid() {
-  local pid="$1" comm="$2" cwd="$3"
-  local pid_dir="$DISPATCH_SWEEP_PROC_ROOT/$pid"
-  mkdir -p "$pid_dir"
-  printf '%s\n' "$comm" > "$pid_dir/comm"
-  # cwd is a symlink; readlink -f resolves it.
-  ln -s "$cwd" "$pid_dir/cwd"
+# Helper: install a fake `claude` whose `agents --json --cwd <path>` invocation
+# returns only the sessions whose cwd starts with the requested <path>.
+# Overwrites $TMPDIR_TEST/fake/claude and re-exports CLAUDE_AGENTS_CMD.
+# Each argument must be in `sid=cwd` form; the name, status, and pid fields are
+# fixed (name=x, status=busy, pid=1) since sweep tests only care about cwd
+# for session-detection and sessionId/name/status for the ACTIVE log line.
+# The fake honours the --cwd filter (matching how the real daemon filters
+# server-side) so each worktree's query only sees its own sessions.
+sweep_fake_claude_sessions() {
+  local fake="$TMPDIR_TEST/fake/claude"
+  # Write the full session list as a JSON array to payload.json.
+  local all_payload="[" entry sid cwd first=1
+  for entry in "$@"; do
+    sid="${entry%%=*}"
+    cwd="${entry#*=}"
+    if (( first )); then first=0; else all_payload+=","; fi
+    all_payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"x\",\"cwd\":\"$cwd\"}"
+  done
+  all_payload+="]"
+  printf '%s' "$all_payload" > "$TMPDIR_TEST/fake/payload.json"
+  # The fake script filters the full payload by the --cwd argument using jq,
+  # matching sessions whose cwd starts with the requested path (same as the
+  # real daemon's server-side filter). This ensures each worktree query only
+  # returns sessions that are actually in that worktree.
+  cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+# Parse `agents --json --cwd <path>` args; find --cwd value.
+requested_cwd=""
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "--cwd" && -n "${2:-}" ]]; then
+    requested_cwd="$2"; shift 2
+  else
+    shift
+  fi
+done
+payload_file="$(cd "$(dirname "$0")" && pwd)/payload.json"
+if [[ -n "$requested_cwd" ]]; then
+  # Directory-boundary match: cwd == path OR cwd starts with path + "/".
+  # `startswith` alone would mis-attribute /foo/worktrees/500-other to a query
+  # for /foo/worktrees/50, which the real daemon's --cwd filter does not.
+  jq --arg cwd "$requested_cwd" \
+    '[.[] | select(.cwd == $cwd or (.cwd | startswith($cwd + "/")))]' \
+    "$payload_file"
+else
+  cat "$payload_file"
+fi
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
 }
 
 # Convenience: convert an absolute path to the status/revlist/headct key
@@ -3004,9 +2912,9 @@ else
 fi
 sweep_teardown
 
-# --- Test 2: active vs orphaned via synthetic /proc --------------------------
+# --- Test 2: active vs orphaned via claude agents --json ---------------------
 
-echo "Test: /proc walk distinguishes active vs orphaned worktrees"
+echo "Test: claude agents --json distinguishes active vs orphaned worktrees"
 sweep_setup
 ACTIVE_WT="$TMPDIR_TEST/project/worktrees/50-active"
 ORPHAN_WT="$TMPDIR_TEST/project/worktrees/51-orphan"
@@ -3018,25 +2926,19 @@ sweep_register_wt "$ORPHAN_WT" "51-orphan"
 ORPHAN_KEY=$(sweep_path_key "$ORPHAN_WT")
 echo "1700000000" > "$STUB_DIR/headct${ORPHAN_KEY}.txt"
 
-# Synthetic /proc:
-#   pid 1001: .claude-unwrapp cwd inside ACTIVE_WT → marks 50-active active.
-#   pid 1002: bash (non-claude comm) — proves comm filter is required.
-#   pid 1003: .claude with cwd elsewhere — proves cwd check classifies, not comm.
-sweep_proc_pid 1001 ".claude-unwrapp" "$ACTIVE_WT"
-sweep_proc_pid 1002 "bash" "$ACTIVE_WT"
-mkdir -p "$TMPDIR_TEST/elsewhere"
-sweep_proc_pid 1003 ".claude" "$TMPDIR_TEST/elsewhere"
+# One live session in ACTIVE_WT, none in ORPHAN_WT.
+sweep_fake_claude_sessions "abc=$ACTIVE_WT"
 
 out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
 assert_eq "active/orphan sweep exits 0" "0" "$rc"
 assert_eq "only orphan adopted" "worktree 51 51-orphan" "$out"
 
-# Log: ACTIVE for 50, ORPHANED for 51, ADOPT for 51.
+# Log: ACTIVE for 50 with session fields, ORPHANED for 51, ADOPT for 51.
 TOTAL=$((TOTAL + 1))
-if grep -q "ACTIVE: '$ACTIVE_WT' branch=50-active pid=1001" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ACTIVE log line for 50-active with pid 1001"
+if grep -q "ACTIVE: '$ACTIVE_WT' branch=50-active sessionId=abc name=x status=busy" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ACTIVE log line for 50-active with sessionId=abc name=x status=busy"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE log line for 50-active with pid 1001"
+  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE log line for 50-active with sessionId=abc name=x status=busy"
   sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
 fi
 TOTAL=$((TOTAL + 1))
@@ -3053,6 +2955,51 @@ else
 fi
 sweep_teardown
 
+# --- Test 2b: daemon-query failure classifies all surviving as active ---------
+
+echo "Test: daemon-query failure classifies all surviving worktrees as active"
+sweep_setup
+WT_A="$TMPDIR_TEST/project/worktrees/54-alpha"
+WT_B="$TMPDIR_TEST/project/worktrees/55-beta"
+sweep_register_wt "$WT_A" "54-alpha"
+sweep_register_wt "$WT_B" "55-beta"
+
+# Install a failing fake `claude` (exits non-zero, prints nothing).
+cat > "$TMPDIR_TEST/fake/claude" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/fake/claude"
+# CLAUDE_AGENTS_CMD is already pointing at $TMPDIR_TEST/fake/claude from sweep_setup.
+
+err_file="$TMPDIR_TEST/stderr-daemon-fail.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>"$err_file"); rc=$?
+assert_eq "daemon-failure sweep exits 0" "0" "$rc"
+assert_eq "daemon-failure emits no stdout (no adoption)" "" "$out"
+
+# Each worktree must log ACTIVE with liveness=unknown.
+TOTAL=$((TOTAL + 1))
+if grep -q "ACTIVE: '$WT_A' branch=54-alpha liveness=unknown" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ACTIVE liveness=unknown for 54-alpha"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE liveness=unknown for 54-alpha"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ACTIVE: '$WT_B' branch=55-beta liveness=unknown" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ACTIVE liveness=unknown for 55-beta"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE liveness=unknown for 55-beta"
+fi
+# No ADOPT_ORPHAN line should be present.
+TOTAL=$((TOTAL + 1))
+if ! grep -q "ADOPT_ORPHAN" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: no ADOPT_ORPHAN on daemon failure"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unexpected ADOPT_ORPHAN on daemon failure"
+fi
+sweep_teardown
+
 # --- Test 3: oldest-orphan tiebreaker ----------------------------------------
 
 echo "Test: oldest orphan wins by HEAD commit time"
@@ -3065,7 +3012,7 @@ OLD_KEY=$(sweep_path_key "$OLD_WT")
 NEW_KEY=$(sweep_path_key "$NEW_WT")
 echo "1000" > "$STUB_DIR/headct${OLD_KEY}.txt"
 echo "2000" > "$STUB_DIR/headct${NEW_KEY}.txt"
-# Empty /proc → both orphans.
+# Default fake claude (no live sessions) → both orphans.
 
 out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
 assert_eq "oldest-orphan sweep exits 0" "0" "$rc"
@@ -4268,78 +4215,6 @@ fi
 assert_eq "router-gate: daemon UNKNOWN → spawn-failopen" "spawn-failopen" "$ROUTE"
 ca_teardown
 
-# --- Test 17: other_live_sessions_under — self only → free ------------------
-
-echo "Test: other_live_sessions_under — self only → free (return 1)"
-ca_setup
-write_fake_claude '[{"sessionId":"sess-self","pid":1234,"status":"active","name":"x"}]' 0
-export CLAUDE_CODE_SESSION_ID=sess-self
-if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
-assert_eq "other_live_sessions_under: self only → return 1 (free)" "1" "$rc"
-unset CLAUDE_CODE_SESSION_ID
-ca_teardown
-
-# --- Test 18: other_live_sessions_under — self plus other → occupied --------
-
-echo "Test: other_live_sessions_under — self plus other → occupied (return 0)"
-ca_setup
-write_fake_claude '[{"sessionId":"sess-self","pid":1234,"status":"active","name":"x"},{"sessionId":"sess-other","pid":5678,"status":"active","name":"y"}]' 0
-export CLAUDE_CODE_SESSION_ID=sess-self
-if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
-assert_eq "other_live_sessions_under: self + other → return 0 (occupied)" "0" "$rc"
-unset CLAUDE_CODE_SESSION_ID
-ca_teardown
-
-# --- Test 19: other_live_sessions_under — other only → occupied -------------
-
-echo "Test: other_live_sessions_under — other only → occupied (return 0)"
-ca_setup
-write_fake_claude '[{"sessionId":"sess-other","pid":5678,"status":"active","name":"y"}]' 0
-export CLAUDE_CODE_SESSION_ID=sess-self
-if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
-assert_eq "other_live_sessions_under: other only → return 0 (occupied)" "0" "$rc"
-unset CLAUDE_CODE_SESSION_ID
-ca_teardown
-
-# --- Test 20: other_live_sessions_under — empty registry → free -------------
-
-echo "Test: other_live_sessions_under — empty registry → free (return 1)"
-ca_setup
-write_fake_claude '[]' 0
-export CLAUDE_CODE_SESSION_ID=sess-self
-if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
-assert_eq "other_live_sessions_under: empty registry → return 1 (free)" "1" "$rc"
-unset CLAUDE_CODE_SESSION_ID
-ca_teardown
-
-# --- Test 21: other_live_sessions_under — daemon failure → occupied ----------
-
-echo "Test: other_live_sessions_under — daemon failure → occupied (return 0)"
-ca_setup
-# Inline fake that exits 1 to model a daemon unreachable scenario.
-cat > "$CA_FAKE" <<'FAKE'
-#!/usr/bin/env bash
-exit 1
-FAKE
-chmod +x "$CA_FAKE"
-CLAUDE_AGENTS_CMD="$CA_FAKE"
-export CLAUDE_CODE_SESSION_ID=sess-self
-if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
-assert_eq "other_live_sessions_under: daemon failure → return 0 (fail-safe occupied)" "0" "$rc"
-unset CLAUDE_CODE_SESSION_ID
-ca_teardown
-
-# --- Test 22: other_live_sessions_under — CLAUDE_CODE_SESSION_ID unset → occupied
-
-echo "Test: other_live_sessions_under — CLAUDE_CODE_SESSION_ID unset → occupied (return 0)"
-ca_setup
-write_fake_claude '[{"sessionId":"sess-other","pid":5678,"status":"active","name":"y"}]' 0
-unset CLAUDE_CODE_SESSION_ID
-if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
-assert_eq "other_live_sessions_under: CLAUDE_CODE_SESSION_ID unset → return 0 (fail-safe occupied)" "0" "$rc"
-unset CLAUDE_CODE_SESSION_ID
-ca_teardown
-
 # ============================================================================
 # dispatch-config-load tests
 # ============================================================================
@@ -5286,14 +5161,17 @@ spawn_router_teardown
 
 echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
 spawn_router_setup
-# Seed the on-disk ledger with three entries:
-#   abcd1234  — stopped dispatch-* (the rm target)
+# Seed the on-disk ledger with four entries:
+#   abcd1234  — stopped dispatch-* router name (the rm target)
+#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
 #   ef015678  — stopped non-dispatch (must NOT be pruned)
 #   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_ROUTER_JOBS_DIR/abcd1234" "$SPAWN_ROUTER_JOBS_DIR/ef015678" \
-  "$SPAWN_ROUTER_JOBS_DIR/9999cccc"
+mkdir -p "$SPAWN_ROUTER_JOBS_DIR/abcd1234" "$SPAWN_ROUTER_JOBS_DIR/feed5678" \
+  "$SPAWN_ROUTER_JOBS_DIR/ef015678" "$SPAWN_ROUTER_JOBS_DIR/9999cccc"
 printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
   > "$SPAWN_ROUTER_JOBS_DIR/abcd1234/state.json"
+printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
+  > "$SPAWN_ROUTER_JOBS_DIR/feed5678/state.json"
 printf '%s' '{"name":"manual-session","state":"stopped"}' \
   > "$SPAWN_ROUTER_JOBS_DIR/ef015678/state.json"
 printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
@@ -5309,6 +5187,13 @@ if [[ "$rm_log" == *"abcd1234"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm abcd1234' (directory basename, not sessionId) was invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm abcd1234' (directory basename) was invoked"
+  echo "    rm-log: $rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" == *"feed5678"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
   echo "    rm-log: $rm_log"
 fi
 TOTAL=$((TOTAL + 1))
@@ -5473,56 +5358,73 @@ spawn_worker_teardown() {
 echo "Test: an empty registry spawns one /dispatch-worker background job"
 spawn_worker_setup
 write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+# Run from a stable known cwd so Test 2 (and 1's name/positional-arg
+# assertions) can compare against it. The spawn must NOT cd into the target
+# worktree — it runs from the caller's cwd.
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-worker: dispatch-spawn-worker exits 0" "0" "$rc"
 assert_eq "spawn-worker: stdout is 'spawned'" "spawned" "$out"
-# The recorded argv must be exactly: --bg --name dispatch-839-<id>
-#   --permission-mode auto /dispatch-worker 839
+# The recorded argv must be exactly:
+#   --bg --name <worktree-basename> --permission-mode auto
+#   "/dispatch-worker 839 <worktree-path>"
 mapfile -t sw_bg_argv < "$SPAWN_WORKER_BG_ARGV"
 assert_eq "spawn-worker: argv[0] is --bg" "--bg" "${sw_bg_argv[0]:-}"
 assert_eq "spawn-worker: argv[1] is --name" "--name" "${sw_bg_argv[1]:-}"
-case "${sw_bg_argv[2]:-}" in
-  dispatch-839-*) sw_name_ok=yes ;;
-  *)              sw_name_ok="no: ${sw_bg_argv[2]:-}" ;;
-esac
-assert_eq "spawn-worker: argv[2] is a dispatch-839-* agent name" "yes" "$sw_name_ok"
+assert_eq "spawn-worker: argv[2] is the worktree basename" \
+  "839-test-worker" "${sw_bg_argv[2]:-}"
 assert_eq "spawn-worker: argv[3] is --permission-mode" "--permission-mode" "${sw_bg_argv[3]:-}"
 assert_eq "spawn-worker: argv[4] is auto" "auto" "${sw_bg_argv[4]:-}"
-assert_eq "spawn-worker: argv[5] is /dispatch-worker 839" "/dispatch-worker 839" "${sw_bg_argv[5]:-}"
+assert_eq "spawn-worker: argv[5] is '/dispatch-worker 839 <worktree-path>'" \
+  "/dispatch-worker 839 $WORKER_TARGET_WORKTREE" "${sw_bg_argv[5]:-}"
 spawn_worker_teardown
 
-# --- Test 2: cwd assertion ---------------------------------------------------
+# --- Test 2: spawn cwd stays at caller's cwd --------------------------------
 
-echo "Test: the spawn subshell cd's into the target worktree path"
+echo "Test: dispatch-spawn-worker invokes 'claude --bg' from the caller's cwd, NOT the target worktree"
 spawn_worker_setup
 write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-worker-cwd: exits 0" "0" "$rc"
 # Read the first line of the pwd-log and compare it (via realpath) to the
-# target worktree. mktemp -d on Linux does not add a /private/ prefix, but
-# realpath is robust on all platforms.
+# caller's cwd. realpath is used to normalize platform-specific path
+# differences (e.g. macOS /private/ prefix on /tmp).
 sw_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" == "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: spawn subshell ran in the target worktree"
+if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" == "$(realpath "$SPAWN_CALLER_CWD")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' ran with cwd = caller's cwd (worktrees/main)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: spawn subshell ran in the target worktree"
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' ran with cwd = caller's cwd (worktrees/main)"
   echo "    pwd-log:  '$sw_pwd_line'"
-  echo "    expected: '$WORKER_TARGET_WORKTREE'"
+  echo "    expected: '$SPAWN_CALLER_CWD'"
+fi
+# Independently assert the cwd is NOT the target worktree — that is the
+# regression the issue prevents (cwd-pollution of the daemon's launcher
+# default).
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" != "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' did NOT cd into the target worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' did NOT cd into the target worktree"
+  echo "    pwd-log: '$sw_pwd_line'"
 fi
 spawn_worker_teardown
 
 # --- Test 3: per-worktree dedup ----------------------------------------------
 
-echo "Test: another live dispatch-* session under the worktree deduplicates the spawn"
+echo "Test: another live same-name (worktree-basename) session deduplicates the spawn"
 spawn_worker_setup
+# The dedup is keyed on `name == <worktree-basename>` — i.e. `839-test-worker`
+# in this test fixture. Prime the registry with a different sessionId whose
+# name matches the worktree-basename the spawn would use.
 printf '%s' \
-  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"dispatch-839-aaaa1111"}]' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
   > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "dedup-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "dedup-worker: stdout is 'deduped'" "deduped" "$out"
+assert_eq "dedup-worker: stdout is 'deduped' (name-keyed dedup hit)" "deduped" "$out"
 # No --bg invocation was recorded — nothing was spawned.
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
@@ -5535,11 +5437,12 @@ spawn_worker_teardown
 
 # --- Test 4: self-exclusion --------------------------------------------------
 
-echo "Test: a dispatch-* session that is this session does not deduplicate"
+echo "Test: a same-name session that is this session does not deduplicate"
 spawn_worker_setup
-# The only dispatch-* session in the registry IS this session (sess-self).
+# The only worker-named session in the registry IS this session (sess-self).
+# Self-exclusion makes name-keyed dedup ignore sessionId == DISPATCH_SPAWN_WORKER_SESSION_ID.
 printf '%s' \
-  '[{"sessionId":"sess-self","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"dispatch-839-self0000"}]' \
+  '[{"sessionId":"sess-self","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
   > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
@@ -5575,14 +5478,17 @@ spawn_worker_teardown
 
 echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
 spawn_worker_setup
-# Seed the on-disk ledger with three entries:
-#   abcd1234  — stopped dispatch-* (the rm target)
+# Seed the on-disk ledger with four entries:
+#   abcd1234  — stopped dispatch-* router name (the rm target)
+#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
 #   ef015678  — stopped non-dispatch (must NOT be pruned)
 #   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_WORKER_JOBS_DIR/abcd1234" "$SPAWN_WORKER_JOBS_DIR/ef015678" \
-  "$SPAWN_WORKER_JOBS_DIR/9999cccc"
+mkdir -p "$SPAWN_WORKER_JOBS_DIR/abcd1234" "$SPAWN_WORKER_JOBS_DIR/feed5678" \
+  "$SPAWN_WORKER_JOBS_DIR/ef015678" "$SPAWN_WORKER_JOBS_DIR/9999cccc"
 printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
   > "$SPAWN_WORKER_JOBS_DIR/abcd1234/state.json"
+printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
+  > "$SPAWN_WORKER_JOBS_DIR/feed5678/state.json"
 printf '%s' '{"name":"manual-session","state":"stopped"}' \
   > "$SPAWN_WORKER_JOBS_DIR/ef015678/state.json"
 printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
@@ -5598,6 +5504,13 @@ if [[ "$sw_rm_log" == *"abcd1234"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
+  echo "    rm-log: $sw_rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$sw_rm_log" == *"feed5678"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
   echo "    rm-log: $sw_rm_log"
 fi
 TOTAL=$((TOTAL + 1))
@@ -5662,6 +5575,83 @@ assert_eq "missing-args-worker: three args → exit 2" "2" "$sw_rc_c"
 if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" "not-a-number" "$WORKER_TARGET_WORKTREE" 2>/dev/null; then sw_rc_d=0; else sw_rc_d=$?; fi
 assert_eq "missing-args-worker: non-integer <N> → exit 2" "2" "$sw_rc_d"
 
+# Sub-case E: non-existent worktree path rejected at the spawner edge
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$TMPDIR_TEST/worktrees/does-not-exist" 2>/dev/null; then sw_rc_e=0; else sw_rc_e=$?; fi
+assert_eq "missing-args-worker: non-existent <worktree-path> → exit 2" "2" "$sw_rc_e"
+
+# Sub-case F: unsafe characters in <worktree-path> rejected (defense-in-depth
+# against shell-metacharacter / whitespace injection into the prompt string
+# passed to `claude --bg`). Path must exist so the `-d` check passes first,
+# isolating the new char-validation step.
+unsafe_path="$TMPDIR_TEST/worktrees/839 unsafe"
+mkdir -p "$unsafe_path"
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$unsafe_path" 2>/dev/null; then sw_rc_f=0; else sw_rc_f=$?; fi
+assert_eq "missing-args-worker: unsafe chars in <worktree-path> → exit 2" "2" "$sw_rc_f"
+
+spawn_worker_teardown
+
+# --- Test 9: dedup + verify query the spawner cwd, NOT the worktree path ----
+#
+# Regression guard: in production the daemon server-side-filters `agents
+# --json --cwd <path>` to sessions started under <path>. Since
+# dispatch-spawn-worker does NOT `cd` into the target worktree before
+# `claude --bg`, the new worker registers under the spawner cwd
+# (worktrees/main), not under WORKTREE_PATH. If Step 5 verify queries under
+# WORKTREE_PATH, the daemon excludes the new worker, `registered` stays
+# empty, and the script exits 1 — on every spawn in production.
+#
+# The default fake `claude` (write_fake_spawn_worker_claude) ignores --cwd,
+# so the existing Tests 1–8 do not exercise this filter and would not catch
+# the regression. This test installs a cwd-aware fake: its `agents` handler
+# filters its registry-emit by --cwd, and its --bg handler records the new
+# worker with cwd = $(pwd) at spawn time. With the fix, both queries pass
+# the spawner cwd and the worker is found. Without it, verify returns no
+# session and the script exits 1.
+echo "Test: dedup + verify query the spawner cwd, not the worktree path"
+spawn_worker_setup
+cat > "$TMPDIR_TEST/fake-claude" <<FAKE
+#!/usr/bin/env bash
+set -uo pipefail
+case "\${1:-}" in
+  agents)
+    shift
+    requested_cwd=""
+    while [[ \$# -gt 0 ]]; do
+      case "\$1" in
+        --cwd) requested_cwd="\${2:-}"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    if [[ -n "\$requested_cwd" ]]; then
+      jq --arg cwd "\$requested_cwd" '[.[] | select(.cwd == \$cwd)]' \
+        "$SPAWN_WORKER_REGISTRY"
+    else
+      cat "$SPAWN_WORKER_REGISTRY"
+    fi
+    ;;
+  --bg)
+    bg_cwd="\$(pwd)"
+    pwd >> "$SPAWN_WORKER_PWD_LOG"
+    printf '%s\n' "\$@" > "$SPAWN_WORKER_BG_ARGV"
+    name=""
+    while [[ \$# -gt 0 ]]; do
+      if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+      shift
+    done
+    tmp=\$(mktemp)
+    jq --arg name "\$name" --arg cwd "\$bg_cwd" \
+      '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":\$cwd,"kind":"background","status":"busy","name":\$name}]' \
+      "$SPAWN_WORKER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_WORKER_REGISTRY"
+    ;;
+  rm) ;;
+esac
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude"
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "cwd-aware-spawn: exits 0" "0" "$rc"
+assert_eq "cwd-aware-spawn: stdout is 'spawned' (verify queried under spawner cwd, found the new worker)" \
+  "spawned" "$out"
 spawn_worker_teardown
 
 # ============================================================================
