@@ -4503,7 +4503,6 @@ case "\${1:-}" in
     ;;
   rm)
     shift
-    [[ "\${1:-}" == "--" ]] && shift
     printf '%s\n' "\${1:-}" >> "$SPAWN_ROUTER_RM_LOG"
     ;;
   stop)
@@ -4771,7 +4770,6 @@ case "\${1:-}" in
     ;;
   rm)
     shift
-    [[ "\${1:-}" == "--" ]] && shift
     printf '%s\n' "\${1:-}" >> "$SPAWN_WORKER_RM_LOG"
     ;;
 esac
