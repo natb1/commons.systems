@@ -1,14 +1,9 @@
 # commons.systems: Nate's Agentic Coding Workflow
 
-This repository serves as a monorepo for Nate's agentic coding workflows and proof-of-concept (POC) applications. This is built to my own specification and it is not intended to be a platform or a distributed library. This can be used as a reference for bootstrapping your own agentic coding workflow.
-
-- [commons.systems](https://commons.systems): More info about this project.
-- [budget.commons.systems](https://budget.commons.systems): Personal finance demo.
-- [print.commons.systems](https://print.commons.systems): Print media reader and library.
+A reference workflow for individual practitioners who want to fork and adapt an agentic coding setup for their own projects. Built to Nate's own specification — not a platform, not a library. The dispatch queue runs autonomously; the office hours queue handles human-driven work. Fork it, argue with it, discard the parts that don't serve you.
 
 ## Table of Contents
 
-- [Pre-requisites](#pre-requisites)
 - [Design Principles](#design-principles)
 - [Agentic Coding Workflow](#agentic-coding-workflow)
   - [PR Control Flow](#pr-control-flow)
@@ -17,22 +12,15 @@ This repository serves as a monorepo for Nate's agentic coding workflows and pro
   - [Office Hours Queue](#office-hours-queue)
   - [Key design decisions for adopters](#key-design-decisions-for-adopters)
 - [CI/CD](#cicd)
+- [Pre-requisites](#pre-requisites)
+- [Where to go next](#where-to-go-next)
 - [Usage and Contributing](#usage-and-contributing)
-
-## Pre-requisites
-
-- **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
-- **Version Control** (git): Created a repo.
-- **Agentic Coding Tools** (Claude Code): `nix flake update && home-manager switch --flake .#default --impure`
-- **Infrastructure** (Firebase): Hosting and storage.
 
 ## Design Principles
 
-- Agentic patterns for both augmented and delegated coding workflows.
-- Augmented workflows focus on requirements management and design, while delegated workflows focus on implementation.
-- Delegated workflows have well defined break points for human quality control (QC).
+- Work flows through two queues: the **dispatch queue** (autonomous, runs unattended) and the **office hours queue** (human-driven, for requirement changes and judgment calls).
+- Delegated workflows have well-defined break points for human quality control (QC).
 - Prefer [skills](https://code.claude.com/docs/en/skills) over other agentic artifacts (system instructions, hooks, sub-agents, agent teams, etc.) due to portability and ease of maintenance.
-- Keep [focused context windows](.claude/skills/ref-memory-management/SKILL.md) with frequent planning and QC steps.
 - Workflow state is derived from PR/CI ground truth — no external state machine required.
 
 ## Agentic Coding Workflow
@@ -178,6 +166,19 @@ run-all-cleanup-preview.sh <pr-number>
   get-changed-apps.sh --base HEAD~1
   run-cleanup-preview.sh <app> <pr-number>
 ```
+
+## Pre-requisites
+
+- **Project Management** (github): Created a [project](https://github.com/users/natb1/projects/2).
+- **Version Control** (git): Created a repo.
+- **Agentic Coding Tools** (Claude Code): `nix flake update && home-manager switch --flake .#default --impure`
+- **Infrastructure** (Firebase): Hosting and storage.
+
+## Where to go next
+
+- **Landing page** — [commons.systems](https://commons.systems): the deployed apps and project overview.
+- **Charter** — [CHARTER.md](CHARTER.md): audiences, principles, and the philosophy behind the workflow.
+- **License** — CC-BY-SA; forking is encouraged.
 
 ## Usage and Contributing
 <a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://mirrors.creativecommons.org/presskit/buttons/88x31/png/by-sa.png" alt="CC-BY-SA" width="117" height="41"></a>
