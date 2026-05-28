@@ -4056,6 +4056,78 @@ assert_eq "cwd-arg: claude invoked as 'agents --json --cwd <path>'" \
   "$(printf 'agents\n--json\n--cwd\n%s' "$CA_DIR")" "$(cat "$CA_DIR/argv")"
 ca_teardown
 
+# --- Test 10: other_live_sessions_under — self only → free ------------------
+
+echo "Test: other_live_sessions_under — self only → free (return 1)"
+ca_setup
+write_fake_claude '[{"sessionId":"sess-self","pid":1234,"status":"active","name":"x"}]' 0
+export CLAUDE_CODE_SESSION_ID=sess-self
+if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "other_live_sessions_under: self only → return 1 (free)" "1" "$rc"
+unset CLAUDE_CODE_SESSION_ID
+ca_teardown
+
+# --- Test 11: other_live_sessions_under — self plus other → occupied --------
+
+echo "Test: other_live_sessions_under — self plus other → occupied (return 0)"
+ca_setup
+write_fake_claude '[{"sessionId":"sess-self","pid":1234,"status":"active","name":"x"},{"sessionId":"sess-other","pid":5678,"status":"active","name":"y"}]' 0
+export CLAUDE_CODE_SESSION_ID=sess-self
+if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "other_live_sessions_under: self + other → return 0 (occupied)" "0" "$rc"
+unset CLAUDE_CODE_SESSION_ID
+ca_teardown
+
+# --- Test 12: other_live_sessions_under — other only → occupied -------------
+
+echo "Test: other_live_sessions_under — other only → occupied (return 0)"
+ca_setup
+write_fake_claude '[{"sessionId":"sess-other","pid":5678,"status":"active","name":"y"}]' 0
+export CLAUDE_CODE_SESSION_ID=sess-self
+if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "other_live_sessions_under: other only → return 0 (occupied)" "0" "$rc"
+unset CLAUDE_CODE_SESSION_ID
+ca_teardown
+
+# --- Test 13: other_live_sessions_under — empty registry → free -------------
+
+echo "Test: other_live_sessions_under — empty registry → free (return 1)"
+ca_setup
+write_fake_claude '[]' 0
+export CLAUDE_CODE_SESSION_ID=sess-self
+if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "other_live_sessions_under: empty registry → return 1 (free)" "1" "$rc"
+unset CLAUDE_CODE_SESSION_ID
+ca_teardown
+
+# --- Test 14: other_live_sessions_under — daemon failure → occupied ----------
+
+echo "Test: other_live_sessions_under — daemon failure → occupied (return 0)"
+ca_setup
+# Inline fake that exits 1 to model a daemon unreachable scenario.
+cat > "$CA_FAKE" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+chmod +x "$CA_FAKE"
+CLAUDE_AGENTS_CMD="$CA_FAKE"
+export CLAUDE_CODE_SESSION_ID=sess-self
+if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "other_live_sessions_under: daemon failure → return 0 (fail-safe occupied)" "0" "$rc"
+unset CLAUDE_CODE_SESSION_ID
+ca_teardown
+
+# --- Test 15: other_live_sessions_under — CLAUDE_CODE_SESSION_ID unset → occupied
+
+echo "Test: other_live_sessions_under — CLAUDE_CODE_SESSION_ID unset → occupied (return 0)"
+ca_setup
+write_fake_claude '[{"sessionId":"sess-other","pid":5678,"status":"active","name":"y"}]' 0
+unset CLAUDE_CODE_SESSION_ID
+if other_live_sessions_under "$CA_DIR"; then rc=0; else rc=$?; fi
+assert_eq "other_live_sessions_under: CLAUDE_CODE_SESSION_ID unset → return 0 (fail-safe occupied)" "0" "$rc"
+unset CLAUDE_CODE_SESSION_ID
+ca_teardown
+
 # ============================================================================
 # dispatch-config-load tests
 # ============================================================================
