@@ -2671,8 +2671,11 @@ echo "=== dispatch-sweep ==="
 #
 # Shims:
 #   gh   — gh-pr-list-all.json drives `pr list --state all`; each entry carries
-#          {state, headRefName, number}, partitioned by the script into
-#          MERGED_BY_BRANCH / OPEN_BY_BRANCH.
+#          {state, headRefName, number, isDraft}, partitioned by the script into
+#          MERGED_BY_BRANCH / OPEN_BY_BRANCH / DRAFT_BY_BRANCH (the last for
+#          OPEN entries only). isDraft is required on OPEN entries — the
+#          SKIP_ORPHAN_READY_PR gate reads DRAFT_BY_BRANCH and an OPEN stub
+#          missing isDraft will silently bypass the gate.
 #   git  — knows worktree list/remove/prune, branch -D, -C <p> status,
 #          -C <p> rev-list --count, -C <p> log -1 --format=%ct, and
 #          rev-parse --path-format=absolute --git-common-dir.
@@ -2702,7 +2705,7 @@ sweep_setup() {
 STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
 args="$*"
 case "$args" in
-  "pr list --state all --json number,headRefName,state --limit 200")
+  "pr list --state all --json number,headRefName,state,isDraft --limit 200")
     cat "$STUB_DIR/gh-pr-list-all.json"
     ;;
   issue\ view\ *\ --json\ state\ -q\ .state)
@@ -3198,6 +3201,122 @@ if grep -q "ADOPT_ORPHAN" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
   FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN must NOT appear when issue is closed"
 else
   PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN absent for closed-issue orphan"
+fi
+sweep_teardown
+
+# --- Test 12: open non-draft (ready) PR → orphan is skipped -------------------
+
+echo "Test: open non-draft (ready) PR orphan is skipped"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/63-ready-pr"
+sweep_register_wt "$WT_PATH" "63-ready-pr"
+KEY=$(sweep_path_key "$WT_PATH")
+echo "1500000004" > "$STUB_DIR/headct${KEY}.txt"
+# Register an open, non-draft PR for this branch.
+echo '[{"number":200,"headRefName":"63-ready-pr","state":"OPEN","isDraft":false}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "ready-pr sweep exits 0" "0" "$rc"
+assert_eq "ready-pr stdout is empty" "" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_ORPHAN_READY_PR: '$WT_PATH' branch=63-ready-pr issue=63 pr=#200" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_READY_PR log line for 63-ready-pr"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_READY_PR log line for 63-ready-pr"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ADOPT_ORPHAN" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ADOPT_ORPHAN must NOT appear for ready-PR orphan"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ADOPT_ORPHAN absent for ready-PR orphan"
+fi
+sweep_teardown
+
+# --- Test 13: open draft PR → orphan still adopts -----------------------------
+
+echo "Test: open draft PR orphan still adopts (gate only skips non-draft)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/64-draft-pr"
+sweep_register_wt "$WT_PATH" "64-draft-pr"
+KEY=$(sweep_path_key "$WT_PATH")
+echo "1500000005" > "$STUB_DIR/headct${KEY}.txt"
+echo '[{"number":201,"headRefName":"64-draft-pr","state":"OPEN","isDraft":true}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "draft-pr sweep exits 0" "0" "$rc"
+assert_eq "draft-pr orphan adopted" "worktree 64 64-draft-pr" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_ORPHAN_READY_PR" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_READY_PR must NOT fire for draft PR"
+else
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_READY_PR absent for draft-PR orphan"
+fi
+sweep_teardown
+
+# --- Test 14: ready-PR gate fires even when gh issue view fails ---------------
+#
+# Regression guard for the ordering of the orphan-classification gates: the
+# ready-PR gate uses the already-fetched DRAFT_BY_BRANCH map and must run
+# BEFORE the gh-dependent closed-issue gate. Otherwise a transient
+# `gh issue view` failure on a ready-PR orphan would exit 1 instead of
+# logging SKIP_ORPHAN_READY_PR — adoption was never warranted anyway, since
+# the PR is awaiting human merge.
+
+echo "Test: ready-PR gate fires even when gh issue view fails"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/65-ready-pr-gh-fail"
+sweep_register_wt "$WT_PATH" "65-ready-pr-gh-fail"
+KEY=$(sweep_path_key "$WT_PATH")
+echo "1500000006" > "$STUB_DIR/headct${KEY}.txt"
+echo '[{"number":202,"headRefName":"65-ready-pr-gh-fail","state":"OPEN","isDraft":false}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Replace the gh shim so `issue view ... --json state -q .state` exits 1 —
+# simulating a transient gh failure for the issue-state fetch. `pr list` still
+# succeeds (uses the gh-pr-list-all.json fixture above).
+cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  "pr list --state all --json number,headRefName,state,isDraft --limit 200")
+    cat "$STUB_DIR/gh-pr-list-all.json"
+    ;;
+  issue\ view\ *\ --json\ state\ -q\ .state)
+    echo "gh: simulated transient failure" >&2
+    exit 1
+    ;;
+  api\ */dependencies/blocked_by)
+    echo "[]"
+    ;;
+  *)
+    echo "gh sweep stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+chmod +x "$TMPDIR_TEST/bin/gh"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "ready-pr-gh-fail sweep exits 0" "0" "$rc"
+assert_eq "ready-pr-gh-fail stdout is empty" "" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_ORPHAN_READY_PR: '$WT_PATH' branch=65-ready-pr-gh-fail issue=65 pr=#202" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_ORPHAN_READY_PR fires before failing issue-state gh call"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_ORPHAN_READY_PR fires before failing issue-state gh call"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ERROR_ISSUE_STATE_FETCH" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ERROR_ISSUE_STATE_FETCH must NOT appear (ready-PR gate ran first)"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ERROR_ISSUE_STATE_FETCH absent (closed-issue gate skipped)"
 fi
 sweep_teardown
 
