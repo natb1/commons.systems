@@ -54,8 +54,8 @@ fi
 
 # ---- Step 1: branch -> PR maps ----------------------------------------------
 # One gh call covers both states. Failure (network, sandbox, missing creds)
-# collapses to an empty map so the rest of the sweep still runs (classification
-# + adoption of issue-number-prefixed orphans still works without PR data).
+# collapses to an empty map so the merged-cleanup pass still runs (it just
+# finds no merged branches to remove).
 PRS_JSON=$(gh pr list --state all --json number,headRefName,state,isDraft --limit 200 2>/dev/null) \
   || PRS_JSON='[]'
 
@@ -115,8 +115,7 @@ flush_record
 # For each worktree whose branch was squash-merged (per gh pr list), if it is
 # in sync remove the worktree + delete the local branch. Not-in-sync merged
 # worktrees stay on the surviving list with a SKIP log line so the user can
-# investigate; they're explicitly NOT auto-adoption candidates (the unpushed
-# work may belong to a live session whose comm we missed).
+# investigate — the unpushed work may belong to a live session.
 SURVIVING_PATHS=()
 SURVIVING_BRANCHES=()
 

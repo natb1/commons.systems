@@ -65,6 +65,9 @@ setup() {
   # SCRIPT_DIR, which resolves to TMPDIR_TEST for these copies — so lib.sh must
   # sit alongside them. It is sourced, not executed, so it needs no chmod +x.
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
+  # dispatch-select-target sources lib-claude-agents.sh via its SCRIPT_DIR
+  # (TMPDIR_TEST under test). Sourced, not executed — no chmod +x needed.
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
@@ -314,6 +317,13 @@ case "$args" in
       echo "main"
     fi
     ;;
+  "rev-parse --show-toplevel")
+    if [[ -f "$STUB_DIR/worktree-toplevel.txt" ]]; then
+      cat "$STUB_DIR/worktree-toplevel.txt"
+    else
+      echo "/repo"
+    fi
+    ;;
   *)
     echo "git stub: unknown invocation: $args" >&2
     exit 1
@@ -392,6 +402,9 @@ teardown() {
   export PATH="$SAVED_PATH"
   unset DISPATCH_CONFIG_DIR
   unset DISPATCH_FIND_PR_RETRY_DELAY
+  # Per-test exports for the liveness gate must not leak across tests.
+  unset CLAUDE_AGENTS_CMD
+  unset CLAUDE_CODE_SESSION_ID
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
@@ -962,46 +975,6 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "lone waiting PR → empty" "empty" "$result"
 teardown
 
-# 16. Open issue worktree → worktree output, queue scan skipped.
-# The default no-op dispatch-sweep stub installed by setup() is in place but
-# unused — current-worktree continuation short-circuits before the sweep call.
-echo "Test: open issue worktree → worktree <N> <branch>, scan skipped"
-setup
-# Seed a verify PR that would normally be selected — proves the scan is skipped.
-UNION='['"$(make_pr_union 10 "10-verify-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"']'
-setup_union_pr_list "$UNION"
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "open issue worktree → worktree 42 42-some-slug" "worktree 42 42-some-slug" "$result"
-teardown
-
-# 17. Closed issue worktree → worktree-closed.
-echo "Test: closed issue worktree → worktree-closed <N> <branch>"
-setup
-setup_union_pr_list '[]'
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"CLOSED"}' > "$STUB_DIR/issue-state-42.json"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "closed issue worktree → worktree-closed 42 42-some-slug" "worktree-closed 42 42-some-slug" "$result"
-teardown
-
-# 18. Unknown issue worktree (no state file → gh fails) → worktree-closed.
-echo "Test: unknown issue worktree → worktree-closed <N> <branch>"
-setup
-setup_union_pr_list '[]'
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '999-gone' > "$STUB_DIR/current-branch.txt"
-# No issue-state-999.json — gh stub exits 1, models a nonexistent issue.
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "unknown issue worktree → worktree-closed 999 999-gone" "worktree-closed 999 999-gone" "$result"
-teardown
-
 # 19. main branch → queue scan unchanged, normal result returned.
 echo "Test: main branch → queue scan runs normally"
 setup
@@ -1014,25 +987,25 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "main branch → normal scan result (verify PR)" "pr 10 10-verify-me verify" "$result"
 teardown
 
-# 20. --qa mode from an issue worktree → detection skipped, QA PR returned.
-echo "Test: --qa mode from issue worktree → detection skipped, QA PR returned"
+# 20. --qa mode with a non-main current branch → normal QA PR returned.
+echo "Test: --qa mode with non-main current branch → QA PR returned"
 setup
 # QA-phase PR: draft + green + no label.
 UNION='['"$(make_pr_union 20 "20-qa-me" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$GREEN_ROLLUP")"']'
 setup_union_pr_list "$UNION"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-# Current branch looks like an issue worktree, but --qa skips detection.
+# Non-main current branch: cwd does not affect --qa selection.
 printf '42-x' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
 result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
-assert_eq "--qa mode from issue worktree → normal QA scan (pr 20 20-qa-me)" "pr 20 20-qa-me" "$result"
+assert_eq "--qa mode with non-main current branch → QA PR returned" "pr 20 20-qa-me" "$result"
 teardown
 
 # --- origin/main CI health gate (issue #660) --------------------------------
 # The gate runs before the priority ladder in default mode. It aggregates main's
 # HEAD CI from check-runs (CodeQL) and Actions workflow runs; a failing
-# conclusion short-circuits to "main-broken <sha>".
+# conclusion short-circuits to "main-broken <sha>". The gate is uniform —
+# there is no cwd-based bypass.
 #
 # The explicit-`/dispatch <issue|pr>` bypass is structural and not script-
 # testable here: an explicit argument skips the queue scan entirely (SKILL.md
@@ -1131,26 +1104,10 @@ result=$("$TMPDIR_TEST/dispatch-select-target" --qa)
 assert_eq "--qa mode bypasses gate → QA PR returned" "pr 20 20-qa-me" "$result"
 teardown
 
-# 27. Current-worktree continuation bypasses the gate even when main is broken.
-echo "Test: worktree continuation bypasses the main-CI gate"
-setup
-setup_union_pr_list '[]'
-echo '[]' > "$STUB_DIR/issue-list.json"
-printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
-printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
-printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
-printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
-  > "$STUB_DIR/main-check-runs.json"
-printf '[]' > "$STUB_DIR/main-run-list.json"
-result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "worktree continuation bypasses gate → worktree 42 42-some-slug" "worktree 42 42-some-slug" "$result"
-teardown
-
 # --- --health-only mode (issue #683 AC: gate before sweep) ------------------
-# --health-only runs the pre-ladder bypasses and the gate, then exits without
-# the queue scan. /dispatch SKILL.md calls it before dispatch-sweep so the
-# sweep does not run while main is red.
+# --health-only runs the JIT scan and the gate, then exits without the queue
+# scan. /dispatch SKILL.md calls it before dispatch-sweep so the sweep does
+# not run while main is red.
 
 # 27a. --health-only, main green, not in a worktree → "ok", exit 0.
 echo "Test: --health-only + main green → ok"
@@ -1185,22 +1142,20 @@ assert_eq "--health-only main red → main-broken mainhead0" "main-broken mainhe
 assert_eq "--health-only main red → exit 0" "0" "$rc"
 teardown
 
-# 27c. --health-only, main red, current branch is <N>-foo with open issue <N>
-#      → "ok" (current-worktree bypass preserved).
-echo "Test: --health-only + worktree branch bypasses red main"
+# 27c. --health-only + <N>-* current branch + red main → main-broken (no bypass).
+echo "Test: --health-only + issue-branch cwd + red main → main-broken (cwd ignored)"
 setup
 echo '[]' > "$STUB_DIR/pr-list-union.json"
 echo '[]' > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 printf '42-some-slug' > "$STUB_DIR/current-branch.txt"
-printf '{"state":"OPEN"}' > "$STUB_DIR/issue-state-42.json"
 printf '{"sha":"mainhead0"}' > "$STUB_DIR/main-commit.json"
 printf '{"check_runs":[{"status":"completed","conclusion":"failure"}]}' \
   > "$STUB_DIR/main-check-runs.json"
 printf '[]' > "$STUB_DIR/main-run-list.json"
 if result=$("$TMPDIR_TEST/dispatch-select-target" --health-only); then rc=0; else rc=$?; fi
-assert_eq "--health-only worktree branch bypasses red main → ok" "ok" "$result"
-assert_eq "--health-only worktree branch → exit 0" "0" "$rc"
+assert_eq "--health-only issue-branch cwd, red main → main-broken mainhead0" "main-broken mainhead0" "$result"
+assert_eq "--health-only issue-branch cwd, red main → exit 0" "0" "$rc"
 teardown
 
 # 27d. --health-only --qa is mutually exclusive → exit non-zero, error on stderr.
@@ -1361,12 +1316,13 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with no closing issue is 'other'; bug issue wins" "issue 500" "$result"
 teardown
 
-# 30b. A PR closing a `priority`-labelled issue outranks a PR closing a `bug`
-#      issue, even when the bug PR is older — `priority` is the new top of the
-#      category ladder. Mirrors test 28 with priority swapped in for bug.
-echo "Test: PR closing a priority issue beats PR closing a bug issue"
+# 30b. A PR closing a plain `bug` issue outranks a PR closing a `priority`-only
+#      issue — `priority` is a sub-axis nested inside each topic category, not
+#      a top-level category. A `priority`-only issue resolves to topic `other`,
+#      which ranks below `bug`. The older bug-closing PR wins.
+echo "Test: PR closing a bug issue beats PR closing a priority-only issue"
 setup
-# PR 20 (older) closes bug issue 200; PR 10 (newer) closes priority issue 100.
+# PR 20 (older) closes bug issue 200; PR 10 (newer) closes priority-only issue 100.
 UNION='['
 UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
 UNION+="$(make_pr_union 10 "10-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
@@ -1378,7 +1334,45 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"pri
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "priority-closing PR beats bug-closing PR" "pr 10 10-priority-pr verify" "$result"
+assert_eq "bug-closing PR beats priority-only-closing PR" "pr 20 20-bug-pr verify" "$result"
+teardown
+
+# 30c. A PR closing a `(bug, priority)` issue outranks a PR closing a plain
+#      `bug` issue, even when the plain-bug PR is older — within the `bug`
+#      topic category, `priority` items rank above non-`priority` items.
+echo "Test: PR closing a (bug, priority) issue beats PR closing a plain bug issue"
+setup
+# PR 20 (older) closes plain bug issue 200; PR 10 (newer) closes (bug, priority) issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-bug-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issue 100 carries both `bug` and `priority`; issue 200 carries only `bug`.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "(bug, priority)-closing PR beats plain-bug-closing PR" "pr 10 10-bug-priority-pr verify" "$result"
+teardown
+
+# 30d. A PR closing a `(dispatch, priority)` issue ranks below every PR closing
+#      a plain `bug` issue — `priority` is a sub-axis nested inside each topic
+#      category, so it does not cross topic boundaries. The bug-closing PR wins.
+echo "Test: PR closing a plain bug issue beats PR closing a (dispatch, priority) issue"
+setup
+# PR 10 (older) closes (dispatch, priority) issue 100; PR 20 (newer) closes plain bug issue 200.
+UNION='['
+UNION+="$(make_pr_union 10 "10-dispatch-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"','
+UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issue 100 carries both `dispatch` and `priority`; issue 200 carries only `bug`.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "plain-bug PR beats (dispatch, priority) PR — priority does not cross topics" "pr 20 20-bug-pr verify" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------
@@ -1545,8 +1539,8 @@ teardown
 
 # ============================================================================
 # --- JIT scan ---
-# dispatch-select-target's JIT scan runs after current-worktree continuation
-# and before the main-broken health gate. It is inert with no jit.json.
+# dispatch-select-target's JIT scan runs before the main-broken health gate.
+# It is inert with no jit.json.
 # A JIT test seeds:
 #   $DISPATCH_CONFIG_DIR/jit.json       — the jit definitions
 #   $DISPATCH_CONFIG_DIR/projects.json  — the project catalog
@@ -1881,6 +1875,35 @@ if result=$("$TMPDIR_TEST/dispatch-select-target" 2>/dev/null); then rc=0; else 
 assert_eq "invalid duration → exits non-zero" "yes" "$rc_nonzero"
 teardown
 
+# OH1. A PR carrying dispatch:office-hours is skipped (parked for human review).
+echo "Test: PR with dispatch:office-hours is skipped"
+setup
+# Two verify PRs; the older one (PR 10) is parked.
+OFFICE_HOURS_LABELS='[{"name":"dispatch:office-hours"}]'
+UNION='['
+UNION+="$(make_pr_union 10 "10-parked" "2024-01-01T00:00:00Z" "true" "$OFFICE_HOURS_LABELS" "$FAILING_ROLLUP")"','
+UNION+="$(make_pr_union 20 "20-active" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP")"
+UNION+=']'
+setup_union_pr_list "$UNION"
+echo '[]' > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "parked PR skipped; next PR returned" "pr 20 20-active verify" "$result"
+teardown
+
+# OH2. A help-wanted issue carrying dispatch:office-hours is skipped.
+echo "Test: help-wanted issue with dispatch:office-hours is skipped"
+setup
+echo '[]' > "$STUB_DIR/pr-list-union.json"
+# Issue 55 is parked; issue 66 is the next eligible help-wanted issue.
+printf '%s\n' \
+  '[{"number":55,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"help wanted"},{"name":"dispatch:office-hours"}]},{"number":66,"createdAt":"2024-01-02T00:00:00Z","labels":[{"name":"help wanted"}]}]' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "parked issue skipped; next help-wanted issue returned" "issue 66" "$result"
+teardown
+
 # ============================================================================
 # dispatch-trace-leaf tests
 # ============================================================================
@@ -2204,17 +2227,7 @@ branch refs/heads/42-my-feature
 
 '
 
-# 1. Current branch is <N>-* → here (mode-independent).
-echo "Test: current branch <N>-* → here (both modes)"
-setup
-echo "42-my-feature" > "$STUB_DIR/current-branch.txt"
-result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
-assert_eq "current branch <N>-* → here (explicit)" "here" "$result"
-result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
-assert_eq "current branch <N>-* → here (queue)" "here" "$result"
-teardown
-
-# 2. explicit mode + an existing <N>-* worktree → enter <path>.
+# 1. explicit mode + an existing <N>-* worktree → enter <path>.
 echo "Test: explicit + existing <N>-* worktree → enter"
 setup
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
@@ -2274,14 +2287,26 @@ else
 fi
 teardown
 
-# 7. here precedence: current branch <N>-* wins even when a matching worktree
-#    also exists — the here check fires before the worktree scan.
-echo "Test: here precedence over a matching worktree"
+# 7. explicit mode invoked from within <N>-* worktree (current-branch = <N>-*)
+#    AND matching worktree entry → enter <path> (no special-case `here`).
+#    current-branch.txt is not read by dispatch-resolve-worktree (the `here`
+#    check was removed); it is seeded here only to document the scenario intent.
+echo "Test: explicit from issue-branch cwd with matching worktree → enter (not here)"
 setup
-echo "42-my-feature" > "$STUB_DIR/current-branch.txt"
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
-assert_eq "here wins over a matching worktree" "here" "$result"
+assert_eq "explicit from issue-branch cwd, matching worktree → enter (not here)" \
+  "enter /worktrees/42-my-feature" "$result"
+teardown
+
+# 7b. queue mode invoked from within <N>-* worktree (current-branch = <N>-*)
+#     AND matching worktree entry → conflict <path> (worktree scan runs normally).
+echo "Test: queue from issue-branch cwd with matching worktree → conflict (not here)"
+setup
+printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
+assert_eq "queue from issue-branch cwd, matching worktree → conflict (not here)" \
+  "conflict /worktrees/42-my-feature" "$result"
 teardown
 
 # 8. A non-matching worktree (different issue) → create.
@@ -2444,7 +2469,6 @@ echo "=== dispatch-sweep ==="
 #   project/.bare/                fake git common dir (parent = project/)
 #   project/worktrees/<n>-<slug>/ fake worktrees
 #   project/tmp/                  sweep log default dir
-#   proc/                         synthetic /proc tree (overridden per test)
 #   stub/                         per-test JSON + record files (calls, gh out)
 #
 # Shims:
@@ -3374,6 +3398,111 @@ assert_eq "cwd-arg: claude invoked as 'agents --json --cwd <path>'" \
   "$(printf 'agents\n--json\n--cwd\n%s' "$CA_DIR")" "$(cat "$CA_DIR/argv")"
 ca_teardown
 
+# --- Test 10: claude_agents_count_by_name_prefix counts prefix-matching ----
+
+echo "Test: claude_agents_count_by_name_prefix matches 2 of 3 sessions"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"a","pid":1,"status":"busy","name":"dispatch-worker-845-foo"},
+  {"sessionId":"b","pid":2,"status":"busy","name":"dispatch-worker-720-bar"},
+  {"sessionId":"c","pid":3,"status":"idle","name":"dispatch-router-baz"}
+]' 0
+if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+assert_eq "count: exits 0" "0" "$rc"
+assert_eq "count: 2 of 3 match dispatch-worker-" "2" "$out"
+ca_teardown
+
+# --- Test 11: claude_agents_count_by_name_prefix returns 0 for no matches --
+
+echo "Test: claude_agents_count_by_name_prefix returns 0 for no matches"
+ca_setup
+write_fake_claude '[{"sessionId":"a","pid":1,"status":"busy","name":"other-thing"}]' 0
+if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+assert_eq "no-match: exits 0" "0" "$rc"
+assert_eq "no-match: prints 0" "0" "$out"
+ca_teardown
+
+# --- Test 12: claude_agents_count_by_name_prefix reports UNKNOWN on failure-
+
+echo "Test: claude_agents_count_by_name_prefix returns rc 1 on daemon failure"
+ca_setup
+write_fake_claude '' 1
+if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+assert_eq "daemon-fail: exits non-zero (UNKNOWN)" "1" "$rc"
+assert_eq "daemon-fail: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 13: claude_agents_count_by_name_prefix rejects non-array output --
+
+echo "Test: claude_agents_count_by_name_prefix returns rc 1 on non-array output"
+ca_setup
+write_fake_claude '{}' 0
+if out=$(claude_agents_count_by_name_prefix dispatch-worker-); then rc=0; else rc=$?; fi
+assert_eq "non-array: exits non-zero (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+# --- Test 14: router concurrency gate — skip when live >= target ----------
+
+echo "Test: router gate skips spawn when live_count >= target_N"
+ca_setup
+# Three live dispatch-worker-* agents, target = 2 → skip branch.
+write_fake_claude '[
+  {"sessionId":"a","pid":1,"status":"busy","name":"dispatch-worker-1"},
+  {"sessionId":"b","pid":2,"status":"busy","name":"dispatch-worker-2"},
+  {"sessionId":"c","pid":3,"status":"busy","name":"dispatch-worker-3"}
+]' 0
+TARGET_N=2
+ROUTE=""
+if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+  if (( LIVE_COUNT >= TARGET_N )); then
+    ROUTE="skip"
+  else
+    ROUTE="spawn"
+  fi
+else
+  ROUTE="spawn-failopen"
+fi
+assert_eq "router-gate: 3 live >= target 2 → skip" "skip" "$ROUTE"
+ca_teardown
+
+# --- Test 15: router concurrency gate — spawn when live < target ----------
+
+echo "Test: router gate spawns when live_count < target_N"
+ca_setup
+write_fake_claude '[{"sessionId":"a","pid":1,"status":"busy","name":"dispatch-worker-1"}]' 0
+TARGET_N=2
+ROUTE=""
+if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+  if (( LIVE_COUNT >= TARGET_N )); then
+    ROUTE="skip"
+  else
+    ROUTE="spawn"
+  fi
+else
+  ROUTE="spawn-failopen"
+fi
+assert_eq "router-gate: 1 live < target 2 → spawn" "spawn" "$ROUTE"
+ca_teardown
+
+# --- Test 16: router concurrency gate — fail open when daemon UNKNOWN -----
+
+echo "Test: router gate fails open to spawn when daemon UNKNOWN"
+ca_setup
+write_fake_claude '' 1
+TARGET_N=2
+ROUTE=""
+if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+  if (( LIVE_COUNT >= TARGET_N )); then
+    ROUTE="skip"
+  else
+    ROUTE="spawn"
+  fi
+else
+  ROUTE="spawn-failopen"
+fi
+assert_eq "router-gate: daemon UNKNOWN → spawn-failopen" "spawn-failopen" "$ROUTE"
+ca_teardown
+
 # ============================================================================
 # dispatch-config-load tests
 # ============================================================================
@@ -3543,6 +3672,373 @@ else
   echo "    stderr: $err"
 fi
 config_teardown
+
+# --- Test 8: valid target-workers.json prints normalized JSON ---------------
+
+echo "Test: valid target-workers.json prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{
+  "target_weekly_usage_pct": 85,
+  "ramp_tau_seconds": 172800,
+  "ramp_shape_k": 1
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "valid target-workers.json exits 0" "0" "$rc"
+tw_target=$(printf '%s' "$out" | jq -r '.target_weekly_usage_pct')
+assert_eq "valid target-workers.json target_weekly_usage_pct" "85" "$tw_target"
+tw_tau=$(printf '%s' "$out" | jq -r '.ramp_tau_seconds')
+assert_eq "valid target-workers.json ramp_tau_seconds" "172800" "$tw_tau"
+config_teardown
+
+# --- Test 9: absent target-workers.json prints no-config and exits 0 --------
+
+echo "Test: absent target-workers.json prints no-config and exits 0"
+config_setup
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "absent target-workers.json exits 0" "0" "$rc"
+assert_eq "absent target-workers.json prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 10: target-workers.json with a non-number field exits 1 -----------
+
+echo "Test: target-workers.json with non-number field exits 1 and stderr names it"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"target_weekly_usage_pct": "ninety"}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "non-number tunable exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"target_weekly_usage_pct"* && "$err" == *"number"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-number tunable stderr names the field and type"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-number tunable stderr names the field and type"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 11: empty object is accepted (every tunable is optional) ----------
+
+echo "Test: empty object target-workers.json is accepted"
+config_setup
+echo '{}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "empty object exits 0" "0" "$rc"
+# jq normalizes "{}" to "{}".
+out_compact=$(printf '%s' "$out" | jq -c '.')
+assert_eq "empty object prints {}" "{}" "$out_compact"
+config_teardown
+
+# --- Test 12: five_hour_window_seconds: 0 is rejected (must be > 0) ----------
+
+echo "Test: five_hour_window_seconds: 0 exits 1 and stderr says must be > 0"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"five_hour_window_seconds": 0}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "five_hour_window_seconds 0 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"five_hour_window_seconds"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: five_hour_window_seconds 0 stderr says must be > 0"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: five_hour_window_seconds 0 stderr says must be > 0"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 13: max_concurrent_workers: -1 is rejected (must be > 0) -----------
+
+echo "Test: max_concurrent_workers: -1 exits 1 and stderr says must be > 0"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"max_concurrent_workers": -1}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "max_concurrent_workers -1 exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"max_concurrent_workers"* && "$err" == *"must be > 0"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: max_concurrent_workers -1 stderr says must be > 0"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: max_concurrent_workers -1 stderr says must be > 0"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# ============================================================================
+# dispatch-target-workers tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copies of dispatch-target-workers + dispatch-config-load
+#   $TMPDIR_TEST/config/    synthetic config directory (DISPATCH_CONFIG_DIR)
+#   $TMPDIR_TEST/rl/        synthetic rate_limits.json directory
+#
+# All telemetry inputs are env-overridable; tests rely on the overrides rather
+# than fixture files when shape matters more than the file path. The script
+# defaults are baked in (target_weekly=90, target_5h=50, max_workers=8,
+# tau=86400, k=2, five_hour_window=18000); tests that vary tunables write a
+# target-workers.json into the config dir.
+echo ""
+echo "=== dispatch-target-workers ==="
+
+tw_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/config" "$TMPDIR_TEST/rl"
+
+  cp "$SCRIPT_DIR/dispatch-target-workers" "$TMPDIR_TEST/scripts/dispatch-target-workers"
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-target-workers" \
+           "$TMPDIR_TEST/scripts/dispatch-config-load"
+
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+  # Default: point at an absent file so tests without explicit telemetry get
+  # the missing-telemetry fallback unless they override env vars.
+  export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/missing.json"
+}
+
+tw_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_CONFIG_DIR
+  unset DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH
+  unset DISPATCH_TARGET_WORKERS_NOW
+  unset DISPATCH_TARGET_WORKERS_USED_WEEKLY
+  unset DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY
+  unset DISPATCH_TARGET_WORKERS_USED_5H
+  unset DISPATCH_TARGET_WORKERS_RESETS_AT_5H
+}
+
+# write_rl <file-name> <used_weekly> <resets_weekly> <used_5h> <resets_5h>
+#   Write a rate_limits.json with the four telemetry fields. Set any of the
+#   four to the literal string "absent" to omit the surrounding block.
+write_rl() {
+  local name="$1" uw="$2" rw="$3" u5="$4" r5="$5"
+  local path="$TMPDIR_TEST/rl/$name"
+  local seven=""
+  local five=""
+  if [[ "$uw" != "absent" && "$rw" != "absent" ]]; then
+    seven="\"seven_day\":{\"used_percentage\":$uw,\"resets_at\":$rw}"
+  fi
+  if [[ "$u5" != "absent" && "$r5" != "absent" ]]; then
+    five="\"five_hour\":{\"used_percentage\":$u5,\"resets_at\":$r5}"
+  fi
+  local parts=()
+  [[ -n "$five" ]] && parts+=("$five")
+  [[ -n "$seven" ]] && parts+=("$seven")
+  local joined
+  joined=$(IFS=,; printf '%s' "${parts[*]}")
+  printf '{%s}\n' "$joined" > "$path"
+  export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$path"
+}
+
+# --- Test 1: weekly target reached → 0 --------------------------------------
+
+echo "Test: weekly-target-reached pause prints 0"
+tw_setup
+# used_weekly=90 == target_weekly=90 → trip step 1.
+export DISPATCH_TARGET_WORKERS_NOW=1000
+write_rl "rl.json" 90 2000 0 2000
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "weekly target reached → 0" "0" "$out"
+tw_teardown
+
+# --- Test 2: weekly refresh already passed → 0 ------------------------------
+
+echo "Test: weekly-refresh-passed pause prints 0"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW=5000
+# resets_at_weekly already passed (= 4000 < now).
+write_rl "rl.json" 10 4000 0 9000
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "weekly refresh passed → 0" "0" "$out"
+tw_teardown
+
+# --- Test 3: 5h cap tripped pauses spawning ---------------------------------
+
+echo "Test: 5h-cap-tripped pause prints 0 despite positive weekly ramp"
+tw_setup
+# Late-week regime: remaining_weekly = 1h, ramp ~= 0.92, otherwise → 7 workers.
+# Force the 5h gate: remaining_5h = 1h, elapsed_5h_frac = 0.8, cap_5h = 40.
+# used_5h = 45 → trips. Expect 0.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+write_rl "rl.json" 50 13600 45 13600
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "5h cap tripped → 0" "0" "$out"
+tw_teardown
+
+# --- Test 4: both gates clear → positive ramp value -------------------------
+
+echo "Test: both-clear-spawn prints the rounded ramp value"
+tw_setup
+# Same late-week regime, but used_5h=30 < cap_5h=40 → gate passes.
+# ramp_weekly = (86400/(3600+86400))^2 ≈ 0.9216, target_N = round(8*0.9216) = 7.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+write_rl "rl.json" 50 13600 30 13600
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "both gates clear; late-week ramp → 7" "7" "$out"
+tw_teardown
+
+# --- Test 5: missing rate_limits.json file → 1 + stderr note ----------------
+
+echo "Test: missing-telemetry-fallback prints 1 with a stderr note"
+tw_setup
+# Default rate-limits path points at a non-existent file.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "missing rate_limits.json → 1" "1" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"dispatch-target-workers"* && "$err" == *"fallback"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing rate_limits.json stderr has fallback note"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing rate_limits.json stderr has fallback note"
+  echo "    stderr: $err"
+fi
+tw_teardown
+
+# --- Test 6: only five_hour present → fallback (no weekly anchor) -----------
+
+echo "Test: missing-seven-day-fallback prints 1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW=10000
+# seven_day omitted.
+write_rl "rl.json" absent absent 30 13600
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "seven_day absent → fallback 1" "1" "$out"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"seven_day"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: seven_day-absent stderr names seven_day"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: seven_day-absent stderr names seven_day"
+  echo "    stderr: $err"
+fi
+tw_teardown
+
+# --- Test 7: only seven_day present → 5h gate skipped, weekly ramp applies --
+
+echo "Test: missing-five-hour-skips-cap applies the weekly ramp"
+tw_setup
+# Late-week regime (remaining_weekly=1h) but no 5h gate input — would otherwise
+# trip on cap_5h=0 if the 5h block were treated as present-with-zero. Expect
+# the ramp-only result (7), proving the 5h gate is skipped when its block is
+# absent.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+write_rl "rl.json" 50 13600 absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "five_hour absent; weekly ramp → 7" "7" "$out"
+tw_teardown
+
+# --- Test 8: absolute cap clamps to max_workers -----------------------------
+
+echo "Test: absolute-cap clamps to max_workers"
+tw_setup
+# remaining_weekly = 1 second → ramp ≈ 1.0 → target = max_workers (default 8).
+export DISPATCH_TARGET_WORKERS_NOW=10000
+write_rl "rl.json" 10 10001 0 13500
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "ramp saturates → clamped to 8" "8" "$out"
+tw_teardown
+
+# --- Test 9: weekly ramp sweep is non-decreasing as remaining_weekly drops --
+
+echo "Test: weekly-ramp-sweep is non-decreasing as remaining_weekly drops"
+tw_setup
+# Hold the 5h gate open (remaining_5h mid-window, used_5h=0). Walk
+# remaining_weekly through the issue body's example table values:
+#   7d→0, 3d→1, 1d→2, 6h→5, 1h→7, 0→0 (window expired).
+# The 0 endpoint trips Step 2 (weekly-refresh-passed), so the sweep covers the
+# strictly-positive tail and asserts monotonic non-decreasing.
+NOW=10000
+export DISPATCH_TARGET_WORKERS_NOW="$NOW"
+prev=-1
+for remaining in 604800 259200 86400 21600 3600 1; do
+  resets=$((NOW + remaining))
+  # Mid-window 5h gate with cap_5h=25 and used_5h=0 so the gate never trips.
+  write_rl "sweep.json" 10 "$resets" 0 $((NOW + 9000))
+  result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+  TOTAL=$((TOTAL + 1))
+  if (( result >= prev )); then
+    PASS=$((PASS + 1)); echo "  PASS: weekly-ramp-sweep remaining=$remaining → $result (>= prev $prev)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: weekly-ramp-sweep remaining=$remaining → $result < prev $prev"
+  fi
+  prev="$result"
+done
+tw_teardown
+
+# --- Test 10: 5h-cap sweep drops to 0 once used_5h crosses cap_5h -----------
+
+echo "Test: 5h-cap-sweep drops to 0 once used_5h crosses cap_5h"
+tw_setup
+# Hold remaining_weekly in the late-week ramp regime (1h → ramp 0.922 → 7).
+# Fix elapsed_5h_frac = 0.8 (remaining_5h = 3600), so cap_5h = 40.
+# Walk used_5h from 0 → 50; assert target_N is 7 below the cap and 0 at/above.
+NOW=10000
+export DISPATCH_TARGET_WORKERS_NOW="$NOW"
+RESETS_WEEKLY=$((NOW + 3600))
+RESETS_5H=$((NOW + 3600))   # remaining_5h = 3600 → elapsed = 0.8 → cap = 40
+for used in 0 20 39 40 41 50; do
+  write_rl "cap-sweep.json" 50 "$RESETS_WEEKLY" "$used" "$RESETS_5H"
+  result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+  if (( used < 40 )); then
+    assert_eq "5h-cap-sweep used=$used (< cap 40) → 7" "7" "$result"
+  else
+    assert_eq "5h-cap-sweep used=$used (>= cap 40) → 0" "0" "$result"
+  fi
+done
+tw_teardown
+
+# --- Test 11: config tunable max_concurrent_workers raises the cap ---------
+
+echo "Test: config max_concurrent_workers tunable raises the absolute cap"
+tw_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"max_concurrent_workers": 16}
+EOF
+# Saturate the ramp so target tracks the cap.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+write_rl "rl.json" 10 10001 0 13500
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "config max_concurrent_workers=16 → 16" "16" "$out"
+tw_teardown
+
+# --- Test 12: per-field env override wins over file ------------------------
+
+echo "Test: per-field env override wins over rate_limits.json"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW=10000
+# File says 5h gate already tripped; env override says used_5h=0 → gate clears.
+write_rl "rl.json" 50 13600 99 13600
+export DISPATCH_TARGET_WORKERS_USED_5H=0
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "env override clears 5h gate; late-week ramp → 7" "7" "$out"
+tw_teardown
+
+# --- Test 13: ramp_tau_seconds=0 is rejected; dispatch-target-workers uses defaults ----
+
+echo "Test: ramp_tau_seconds=0 rejected by config validator; dispatch-target-workers uses defaults"
+tw_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"ramp_tau_seconds": 0}
+EOF
+# ramp_tau_seconds=0 is rejected by dispatch-config-load (must be > 0).
+# dispatch-target-workers silently ignores a failed config-load and uses
+# the baked-in default tau=86400. Late-week regime (remaining_weekly=3600)
+# with 5h gate clear (used_5h=0, elapsed_5h_frac=0.8 → cap=40 > 0) yields
+# target_N=7.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+# remaining_weekly=3600s (1h), remaining_5h=3600s (mid-window 5h gate clear)
+write_rl "rl.json" 50 13600 0 13600
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "ramp_tau_seconds=0 rejected; defaults used → 7" "7" "$out"
+tw_teardown
 
 # ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
@@ -3953,14 +4449,17 @@ spawn_router_teardown
 
 echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
 spawn_router_setup
-# Seed the on-disk ledger with three entries:
-#   abcd1234  — stopped dispatch-* (the rm target)
+# Seed the on-disk ledger with four entries:
+#   abcd1234  — stopped dispatch-* router name (the rm target)
+#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
 #   ef015678  — stopped non-dispatch (must NOT be pruned)
 #   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_ROUTER_JOBS_DIR/abcd1234" "$SPAWN_ROUTER_JOBS_DIR/ef015678" \
-  "$SPAWN_ROUTER_JOBS_DIR/9999cccc"
+mkdir -p "$SPAWN_ROUTER_JOBS_DIR/abcd1234" "$SPAWN_ROUTER_JOBS_DIR/feed5678" \
+  "$SPAWN_ROUTER_JOBS_DIR/ef015678" "$SPAWN_ROUTER_JOBS_DIR/9999cccc"
 printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
   > "$SPAWN_ROUTER_JOBS_DIR/abcd1234/state.json"
+printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
+  > "$SPAWN_ROUTER_JOBS_DIR/feed5678/state.json"
 printf '%s' '{"name":"manual-session","state":"stopped"}' \
   > "$SPAWN_ROUTER_JOBS_DIR/ef015678/state.json"
 printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
@@ -3976,6 +4475,13 @@ if [[ "$rm_log" == *"abcd1234"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm abcd1234' (directory basename, not sessionId) was invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm abcd1234' (directory basename) was invoked"
+  echo "    rm-log: $rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$rm_log" == *"feed5678"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
   echo "    rm-log: $rm_log"
 fi
 TOTAL=$((TOTAL + 1))
@@ -4140,56 +4646,73 @@ spawn_worker_teardown() {
 echo "Test: an empty registry spawns one /dispatch-worker background job"
 spawn_worker_setup
 write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+# Run from a stable known cwd so Test 2 (and 1's name/positional-arg
+# assertions) can compare against it. The spawn must NOT cd into the target
+# worktree — it runs from the caller's cwd.
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-worker: dispatch-spawn-worker exits 0" "0" "$rc"
 assert_eq "spawn-worker: stdout is 'spawned'" "spawned" "$out"
-# The recorded argv must be exactly: --bg --name dispatch-839-<id>
-#   --permission-mode auto /dispatch-worker 839
+# The recorded argv must be exactly:
+#   --bg --name <worktree-basename> --permission-mode auto
+#   "/dispatch-worker 839 <worktree-path>"
 mapfile -t sw_bg_argv < "$SPAWN_WORKER_BG_ARGV"
 assert_eq "spawn-worker: argv[0] is --bg" "--bg" "${sw_bg_argv[0]:-}"
 assert_eq "spawn-worker: argv[1] is --name" "--name" "${sw_bg_argv[1]:-}"
-case "${sw_bg_argv[2]:-}" in
-  dispatch-839-*) sw_name_ok=yes ;;
-  *)              sw_name_ok="no: ${sw_bg_argv[2]:-}" ;;
-esac
-assert_eq "spawn-worker: argv[2] is a dispatch-839-* agent name" "yes" "$sw_name_ok"
+assert_eq "spawn-worker: argv[2] is the worktree basename" \
+  "839-test-worker" "${sw_bg_argv[2]:-}"
 assert_eq "spawn-worker: argv[3] is --permission-mode" "--permission-mode" "${sw_bg_argv[3]:-}"
 assert_eq "spawn-worker: argv[4] is auto" "auto" "${sw_bg_argv[4]:-}"
-assert_eq "spawn-worker: argv[5] is /dispatch-worker 839" "/dispatch-worker 839" "${sw_bg_argv[5]:-}"
+assert_eq "spawn-worker: argv[5] is '/dispatch-worker 839 <worktree-path>'" \
+  "/dispatch-worker 839 $WORKER_TARGET_WORKTREE" "${sw_bg_argv[5]:-}"
 spawn_worker_teardown
 
-# --- Test 2: cwd assertion ---------------------------------------------------
+# --- Test 2: spawn cwd stays at caller's cwd --------------------------------
 
-echo "Test: the spawn subshell cd's into the target worktree path"
+echo "Test: dispatch-spawn-worker invokes 'claude --bg' from the caller's cwd, NOT the target worktree"
 spawn_worker_setup
 write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
 assert_eq "spawn-worker-cwd: exits 0" "0" "$rc"
 # Read the first line of the pwd-log and compare it (via realpath) to the
-# target worktree. mktemp -d on Linux does not add a /private/ prefix, but
-# realpath is robust on all platforms.
+# caller's cwd. realpath is used to normalize platform-specific path
+# differences (e.g. macOS /private/ prefix on /tmp).
 sw_pwd_line=$(head -1 "$SPAWN_WORKER_PWD_LOG" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
-if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" == "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: spawn subshell ran in the target worktree"
+if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" == "$(realpath "$SPAWN_CALLER_CWD")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' ran with cwd = caller's cwd (worktrees/main)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: spawn subshell ran in the target worktree"
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' ran with cwd = caller's cwd (worktrees/main)"
   echo "    pwd-log:  '$sw_pwd_line'"
-  echo "    expected: '$WORKER_TARGET_WORKTREE'"
+  echo "    expected: '$SPAWN_CALLER_CWD'"
+fi
+# Independently assert the cwd is NOT the target worktree — that is the
+# regression the issue prevents (cwd-pollution of the daemon's launcher
+# default).
+TOTAL=$((TOTAL + 1))
+if [[ "$(realpath "$sw_pwd_line" 2>/dev/null)" != "$(realpath "$WORKER_TARGET_WORKTREE")" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: spawn-worker-cwd: 'claude --bg' did NOT cd into the target worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: spawn-worker-cwd: 'claude --bg' did NOT cd into the target worktree"
+  echo "    pwd-log: '$sw_pwd_line'"
 fi
 spawn_worker_teardown
 
 # --- Test 3: per-worktree dedup ----------------------------------------------
 
-echo "Test: another live dispatch-* session under the worktree deduplicates the spawn"
+echo "Test: another live same-name (worktree-basename) session deduplicates the spawn"
 spawn_worker_setup
+# The dedup is keyed on `name == <worktree-basename>` — i.e. `839-test-worker`
+# in this test fixture. Prime the registry with a different sessionId whose
+# name matches the worktree-basename the spawn would use.
 printf '%s' \
-  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"dispatch-839-aaaa1111"}]' \
+  '[{"sessionId":"sess-other","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
   > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
 assert_eq "dedup-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "dedup-worker: stdout is 'deduped'" "deduped" "$out"
+assert_eq "dedup-worker: stdout is 'deduped' (name-keyed dedup hit)" "deduped" "$out"
 # No --bg invocation was recorded — nothing was spawned.
 TOTAL=$((TOTAL + 1))
 if [[ ! -e "$SPAWN_WORKER_BG_ARGV" ]]; then
@@ -4202,11 +4725,12 @@ spawn_worker_teardown
 
 # --- Test 4: self-exclusion --------------------------------------------------
 
-echo "Test: a dispatch-* session that is this session does not deduplicate"
+echo "Test: a same-name session that is this session does not deduplicate"
 spawn_worker_setup
-# The only dispatch-* session in the registry IS this session (sess-self).
+# The only worker-named session in the registry IS this session (sess-self).
+# Self-exclusion makes name-keyed dedup ignore sessionId == DISPATCH_SPAWN_WORKER_SESSION_ID.
 printf '%s' \
-  '[{"sessionId":"sess-self","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"dispatch-839-self0000"}]' \
+  '[{"sessionId":"sess-self","pid":4242,"cwd":"/worker","kind":"background","status":"busy","name":"839-test-worker"}]' \
   > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
@@ -4242,14 +4766,17 @@ spawn_worker_teardown
 
 echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
 spawn_worker_setup
-# Seed the on-disk ledger with three entries:
-#   abcd1234  — stopped dispatch-* (the rm target)
+# Seed the on-disk ledger with four entries:
+#   abcd1234  — stopped dispatch-* router name (the rm target)
+#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
 #   ef015678  — stopped non-dispatch (must NOT be pruned)
 #   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_WORKER_JOBS_DIR/abcd1234" "$SPAWN_WORKER_JOBS_DIR/ef015678" \
-  "$SPAWN_WORKER_JOBS_DIR/9999cccc"
+mkdir -p "$SPAWN_WORKER_JOBS_DIR/abcd1234" "$SPAWN_WORKER_JOBS_DIR/feed5678" \
+  "$SPAWN_WORKER_JOBS_DIR/ef015678" "$SPAWN_WORKER_JOBS_DIR/9999cccc"
 printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
   > "$SPAWN_WORKER_JOBS_DIR/abcd1234/state.json"
+printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
+  > "$SPAWN_WORKER_JOBS_DIR/feed5678/state.json"
 printf '%s' '{"name":"manual-session","state":"stopped"}' \
   > "$SPAWN_WORKER_JOBS_DIR/ef015678/state.json"
 printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
@@ -4265,6 +4792,13 @@ if [[ "$sw_rm_log" == *"abcd1234"* ]]; then
   PASS=$((PASS + 1)); echo "  PASS: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
+  echo "    rm-log: $sw_rm_log"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ "$sw_rm_log" == *"feed5678"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
   echo "    rm-log: $sw_rm_log"
 fi
 TOTAL=$((TOTAL + 1))
@@ -4329,6 +4863,83 @@ assert_eq "missing-args-worker: three args → exit 2" "2" "$sw_rc_c"
 if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" "not-a-number" "$WORKER_TARGET_WORKTREE" 2>/dev/null; then sw_rc_d=0; else sw_rc_d=$?; fi
 assert_eq "missing-args-worker: non-integer <N> → exit 2" "2" "$sw_rc_d"
 
+# Sub-case E: non-existent worktree path rejected at the spawner edge
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$TMPDIR_TEST/worktrees/does-not-exist" 2>/dev/null; then sw_rc_e=0; else sw_rc_e=$?; fi
+assert_eq "missing-args-worker: non-existent <worktree-path> → exit 2" "2" "$sw_rc_e"
+
+# Sub-case F: unsafe characters in <worktree-path> rejected (defense-in-depth
+# against shell-metacharacter / whitespace injection into the prompt string
+# passed to `claude --bg`). Path must exist so the `-d` check passes first,
+# isolating the new char-validation step.
+unsafe_path="$TMPDIR_TEST/worktrees/839 unsafe"
+mkdir -p "$unsafe_path"
+if "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$unsafe_path" 2>/dev/null; then sw_rc_f=0; else sw_rc_f=$?; fi
+assert_eq "missing-args-worker: unsafe chars in <worktree-path> → exit 2" "2" "$sw_rc_f"
+
+spawn_worker_teardown
+
+# --- Test 9: dedup + verify query the spawner cwd, NOT the worktree path ----
+#
+# Regression guard: in production the daemon server-side-filters `agents
+# --json --cwd <path>` to sessions started under <path>. Since
+# dispatch-spawn-worker does NOT `cd` into the target worktree before
+# `claude --bg`, the new worker registers under the spawner cwd
+# (worktrees/main), not under WORKTREE_PATH. If Step 5 verify queries under
+# WORKTREE_PATH, the daemon excludes the new worker, `registered` stays
+# empty, and the script exits 1 — on every spawn in production.
+#
+# The default fake `claude` (write_fake_spawn_worker_claude) ignores --cwd,
+# so the existing Tests 1–8 do not exercise this filter and would not catch
+# the regression. This test installs a cwd-aware fake: its `agents` handler
+# filters its registry-emit by --cwd, and its --bg handler records the new
+# worker with cwd = $(pwd) at spawn time. With the fix, both queries pass
+# the spawner cwd and the worker is found. Without it, verify returns no
+# session and the script exits 1.
+echo "Test: dedup + verify query the spawner cwd, not the worktree path"
+spawn_worker_setup
+cat > "$TMPDIR_TEST/fake-claude" <<FAKE
+#!/usr/bin/env bash
+set -uo pipefail
+case "\${1:-}" in
+  agents)
+    shift
+    requested_cwd=""
+    while [[ \$# -gt 0 ]]; do
+      case "\$1" in
+        --cwd) requested_cwd="\${2:-}"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    if [[ -n "\$requested_cwd" ]]; then
+      jq --arg cwd "\$requested_cwd" '[.[] | select(.cwd == \$cwd)]' \
+        "$SPAWN_WORKER_REGISTRY"
+    else
+      cat "$SPAWN_WORKER_REGISTRY"
+    fi
+    ;;
+  --bg)
+    bg_cwd="\$(pwd)"
+    pwd >> "$SPAWN_WORKER_PWD_LOG"
+    printf '%s\n' "\$@" > "$SPAWN_WORKER_BG_ARGV"
+    name=""
+    while [[ \$# -gt 0 ]]; do
+      if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+      shift
+    done
+    tmp=\$(mktemp)
+    jq --arg name "\$name" --arg cwd "\$bg_cwd" \
+      '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":\$cwd,"kind":"background","status":"busy","name":\$name}]' \
+      "$SPAWN_WORKER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_WORKER_REGISTRY"
+    ;;
+  rm) ;;
+esac
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude"
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "cwd-aware-spawn: exits 0" "0" "$rc"
+assert_eq "cwd-aware-spawn: stdout is 'spawned' (verify queried under spawner cwd, found the new worker)" \
+  "spawned" "$out"
 spawn_worker_teardown
 
 # ============================================================================
@@ -4931,6 +5542,430 @@ creates_after=0
 assert_eq "idempotency run 2 made no second issue create" \
   "$creates_before" "$creates_after"
 jit_teardown
+
+# ============================================================================
+# dispatch-input-block hook tests
+# ============================================================================
+echo ""
+echo "=== dispatch-input-block ==="
+#
+# The hook discriminates on CLAUDE_JOB_DIR/state.json {.name} starting with
+# "dispatch-"; resolves the issue number from the current branch (the <N>-*
+# prefix); resolves a PR via dispatch-find-pr; applies dispatch:office-hours
+# with the apply-first / create-on-"not found" idiom; runs dispatch-spawn.
+# Always exits 0.
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/hooks/dispatch-input-block.sh     — the hook under test
+#   $TMPDIR_TEST/skills/dispatch/scripts/          — fakes for dispatch-find-pr,
+#                                                    dispatch-spawn
+#   $TMPDIR_TEST/bin/{gh,git}                      — PATH shims
+#   $TMPDIR_TEST/jobs/<id>/state.json              — fake CLAUDE_JOB_DIR ledger
+#   $TMPDIR_TEST/stub/{gh,git,spawn}-calls.log     — recorded invocations
+#
+# HOOK_SCRIPT_DIR — the project hooks directory the test copies from. SCRIPT_DIR
+# here is .claude/skills/dispatch/scripts; the hooks live at .claude/hooks.
+HOOK_SCRIPT_DIR="$SCRIPT_DIR/../../../hooks"
+
+ib_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch/scripts" \
+    "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/jobs/abcd1234"
+
+  cp "$HOOK_SCRIPT_DIR/dispatch-input-block.sh" \
+    "$TMPDIR_TEST/hooks/dispatch-input-block.sh"
+  chmod +x "$TMPDIR_TEST/hooks/dispatch-input-block.sh"
+
+  # Fake dispatch-find-pr: prints contents of $STUB_DIR/find-pr-output if
+  # present, else nothing (no PR exists).
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr" <<'FAKE'
+#!/usr/bin/env bash
+[[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr"
+
+  # Fake dispatch-spawn-router: log invocations to spawn-calls.log.
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router" <<'FAKE'
+#!/usr/bin/env bash
+echo "spawn" >> "$STUB_DIR/spawn-calls.log"
+echo "spawned"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router"
+
+  # gh PATH stub. pr-edit-mode/issue-edit-mode select behavior (default: ok and
+  # log args). "label-missing" models the first apply failing with a missing-
+  # label error; the create-then-retry idiom then succeeds on the second call.
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  pr\ edit\ *)
+    mode="ok"
+    [[ -f "$STUB_DIR/pr-edit-mode" ]] && mode=$(cat "$STUB_DIR/pr-edit-mode")
+    case "$mode" in
+      label-missing)
+        if [[ -f "$STUB_DIR/gh-label-create.log" ]]; then
+          echo "$args" >> "$STUB_DIR/gh-pr-edit.log"
+        else
+          echo "failed to update: 'dispatch:office-hours' not found" >&2
+          exit 1
+        fi
+        ;;
+      *)
+        echo "$args" >> "$STUB_DIR/gh-pr-edit.log"
+        ;;
+    esac
+    ;;
+  issue\ edit\ *)
+    echo "$args" >> "$STUB_DIR/gh-issue-edit.log"
+    ;;
+  label\ create\ *)
+    echo "$args" >> "$STUB_DIR/gh-label-create.log"
+    ;;
+  *)
+    echo "gh stub: unknown invocation: $args" >&2
+    exit 1
+    ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  # git PATH stub. The hook reads `rev-parse --abbrev-ref HEAD` to derive the
+  # issue number. current-branch.txt is the per-test fixture.
+  cat > "$TMPDIR_TEST/bin/git" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  "rev-parse --abbrev-ref HEAD")
+    if [[ -f "$STUB_DIR/current-branch.txt" ]]; then
+      cat "$STUB_DIR/current-branch.txt"
+    else
+      echo "main"
+    fi
+    ;;
+  *) echo "git stub: unknown invocation: $args" >&2; exit 1 ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git"
+
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+  export STUB_DIR  # fakes resolve STUB_DIR from env
+}
+
+ib_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  STUB_DIR=""
+  export PATH="$SAVED_PATH"
+  unset CLAUDE_JOB_DIR
+}
+
+# --- Test 1: dispatch-* job + PR exists → label PR, spawn baton --------------
+
+echo "Test: dispatch-* job + branch <N>-* + PR exists → label PR, spawn baton"
+ib_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "input-block: hook exits 0" "0" "$rc"
+pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$pr_edit_log" == *"pr edit 456 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: input-block: 'gh pr edit 456 --add-label dispatch:office-hours' was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: input-block: 'gh pr edit 456 --add-label dispatch:office-hours' was invoked"
+  echo "    pr-edit-log: $pr_edit_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "input-block: dispatch-spawn invoked exactly once" "1" "$spawn_calls"
+ib_teardown
+
+# --- Test 2: dispatch-* job + no PR → label issue, spawn baton ---------------
+
+echo "Test: dispatch-* job + branch <N>-* + no PR → label issue (implement phase)"
+ib_setup
+echo "789-bare" > "$STUB_DIR/current-branch.txt"
+# No find-pr-output → dispatch-find-pr prints nothing → fall back to issue.
+echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "input-block (no PR): hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 789 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: input-block (no PR): 'gh issue edit 789 --add-label dispatch:office-hours' was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: input-block (no PR): 'gh issue edit 789 --add-label dispatch:office-hours' was invoked"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+ib_teardown
+
+# --- Test 3: label missing → create + retry, canonical color/description -----
+
+echo "Test: label-missing → 'gh label create dispatch:office-hours' (canonical color/description) then retry"
+ib_setup
+echo "123-foo" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo "label-missing" > "$STUB_DIR/pr-edit-mode"
+echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "label-missing: hook exits 0" "0" "$rc"
+label_create_log=$(cat "$STUB_DIR/gh-label-create.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$label_create_log" == *"--color FBCA04"* ]] \
+   && [[ "$label_create_log" == *"dispatch:office-hours"* ]] \
+   && [[ "$label_create_log" == *"blocked on a human"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: label-missing: label created with canonical color (FBCA04) and description"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: label-missing: label created with canonical color (FBCA04) and description"
+  echo "    label-create-log: $label_create_log"
+fi
+pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$pr_edit_log" == *"pr edit 456 --add-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: label-missing: PR apply retried after label create"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: label-missing: PR apply retried after label create"
+  echo "    pr-edit-log: $pr_edit_log"
+fi
+spawn_calls=$(wc -l < "$STUB_DIR/spawn-calls.log" 2>/dev/null || echo 0)
+assert_eq "label-missing: dispatch-spawn invoked exactly once after recovery" "1" "$spawn_calls"
+ib_teardown
+
+# --- Test 4: CLAUDE_JOB_DIR unset → no-op (no label, no spawn) ---------------
+
+echo "Test: CLAUDE_JOB_DIR unset → no-op (interactive session is excluded)"
+ib_setup
+echo "123-foo" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+unset CLAUDE_JOB_DIR
+"$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "no-job-dir: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no-job-dir: no gh label apply was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-job-dir: no gh label apply was invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: no-job-dir: dispatch-spawn was not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: no-job-dir: dispatch-spawn was not invoked"
+fi
+ib_teardown
+
+# --- Test 5: non-dispatch job name → no-op -----------------------------------
+
+echo "Test: state.json name is not 'dispatch-*' → no-op (other background jobs excluded)"
+ib_setup
+echo "123-foo" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo '{"name":"manual-session"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "non-dispatch: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-dispatch: no gh label apply was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-dispatch: no gh label apply was invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-dispatch: dispatch-spawn was not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-dispatch: dispatch-spawn was not invoked"
+fi
+ib_teardown
+
+# --- Test 6: non-permission-prompt notification → silent pass-through --------
+
+echo "Test: Notification with non-permission-prompt type → no-op (passes through silently)"
+ib_setup
+echo "123-foo" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+printf '%s' '{"notification_type":"session_complete"}' \
+  | "$TMPDIR_TEST/hooks/dispatch-input-block.sh" >/dev/null 2>&1
+rc=$?
+assert_eq "non-permission-prompt: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-permission-prompt: no gh label apply was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-permission-prompt: no gh label apply was invoked"
+fi
+ib_teardown
+
+# --- Test 7: non-issue branch with dispatch job → no-op ----------------------
+
+echo "Test: non-issue branch (main) + dispatch-* job → no-op (no label, no spawn)"
+ib_setup
+echo "main" > "$STUB_DIR/current-branch.txt"
+echo '{"name":"dispatch-test001"}' > "$TMPDIR_TEST/jobs/abcd1234/state.json"
+export CLAUDE_JOB_DIR="$TMPDIR_TEST/jobs/abcd1234"
+"$TMPDIR_TEST/hooks/dispatch-input-block.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "non-issue-branch: hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: no gh label apply was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: no gh label apply was invoked"
+fi
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/spawn-calls.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-issue-branch: dispatch-spawn was not invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-issue-branch: dispatch-spawn was not invoked"
+fi
+ib_teardown
+
+# ============================================================================
+# dispatch-office-hours-strip hook tests
+# ============================================================================
+echo ""
+echo "=== dispatch-office-hours-strip ==="
+#
+# UserPromptSubmit hook that removes dispatch:office-hours from the worktree's
+# PR (or issue if no PR exists). No CLAUDE_JOB_DIR discriminator — a human
+# submitting a prompt is the engagement signal regardless of session type.
+
+ohs_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  STUB_DIR="$TMPDIR_TEST/stub"
+  mkdir -p "$TMPDIR_TEST/hooks" "$TMPDIR_TEST/skills/dispatch/scripts" \
+    "$TMPDIR_TEST/bin" "$STUB_DIR"
+
+  cp "$HOOK_SCRIPT_DIR/dispatch-office-hours-strip.sh" \
+    "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh"
+  chmod +x "$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh"
+
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr" <<'FAKE'
+#!/usr/bin/env bash
+[[ -f "$STUB_DIR/find-pr-output" ]] && cat "$STUB_DIR/find-pr-output"
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr"
+
+  cat > "$TMPDIR_TEST/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  pr\ edit\ *) echo "$args" >> "$STUB_DIR/gh-pr-edit.log" ;;
+  issue\ edit\ *) echo "$args" >> "$STUB_DIR/gh-issue-edit.log" ;;
+  *) echo "gh stub: unknown invocation: $args" >&2; exit 1 ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/gh"
+
+  cat > "$TMPDIR_TEST/bin/git" <<'STUB'
+#!/usr/bin/env bash
+STUB_DIR="$(cd "$(dirname "$0")/.." && pwd)/stub"
+args="$*"
+case "$args" in
+  "rev-parse --abbrev-ref HEAD")
+    if [[ -f "$STUB_DIR/current-branch.txt" ]]; then
+      cat "$STUB_DIR/current-branch.txt"
+    else
+      echo "main"
+    fi
+    ;;
+  *) echo "git stub: unknown invocation: $args" >&2; exit 1 ;;
+esac
+STUB
+  chmod +x "$TMPDIR_TEST/bin/git"
+
+  export PATH="$TMPDIR_TEST/bin:$PATH"
+  export STUB_DIR
+}
+
+ohs_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  STUB_DIR=""
+  export PATH="$SAVED_PATH"
+}
+
+# --- Test 1: branch <N>-* + PR exists → strip from both PR and issue ----------
+# The hook strips from both targets so a stale issue label (applied before the PR
+# was opened) is also cleared. gh --remove-label is a no-op when the label is absent.
+
+echo "Test: strip hook on <N>-* branch with PR → strips from both PR and issue"
+ohs_setup
+echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
+echo "456" > "$STUB_DIR/find-pr-output"
+"$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "strip: hook exits 0" "0" "$rc"
+pr_edit_log=$(cat "$STUB_DIR/gh-pr-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$pr_edit_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip: 'gh pr edit 456 --remove-label dispatch:office-hours' was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip: 'gh pr edit 456 --remove-label dispatch:office-hours' was invoked"
+  echo "    pr-edit-log: $pr_edit_log"
+fi
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip: 'gh issue edit 123 --remove-label dispatch:office-hours' also invoked (clears stale issue label)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip: 'gh issue edit 123 --remove-label dispatch:office-hours' also invoked (clears stale issue label)"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+ohs_teardown
+
+# --- Test 2: branch <N>-* + no PR → strip from issue -------------------------
+
+echo "Test: strip hook on <N>-* branch with no PR → 'gh issue edit --remove-label dispatch:office-hours'"
+ohs_setup
+echo "789-bare" > "$STUB_DIR/current-branch.txt"
+# No find-pr-output → fall back to issue.
+"$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "strip (no PR): hook exits 0" "0" "$rc"
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 789 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip (no PR): 'gh issue edit 789 --remove-label dispatch:office-hours' was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip (no PR): 'gh issue edit 789 --remove-label dispatch:office-hours' was invoked"
+  echo "    issue-edit-log: $issue_edit_log"
+fi
+ohs_teardown
+
+# --- Test 3: branch is not <N>-* → no-op -------------------------------------
+
+echo "Test: strip hook on non-issue branch (main) → no-op (no gh call)"
+ohs_setup
+echo "main" > "$STUB_DIR/current-branch.txt"
+"$TMPDIR_TEST/hooks/dispatch-office-hours-strip.sh" < /dev/null >/dev/null 2>&1
+rc=$?
+assert_eq "strip (non-issue): hook exits 0" "0" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ ! -e "$STUB_DIR/gh-pr-edit.log" && ! -e "$STUB_DIR/gh-issue-edit.log" ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip (non-issue): no gh call was invoked"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip (non-issue): no gh call was invoked"
+fi
+ohs_teardown
 
 # ============================================================================
 # ensure_deps (lib.sh) retry tests
