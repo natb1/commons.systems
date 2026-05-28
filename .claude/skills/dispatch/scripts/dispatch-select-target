@@ -30,7 +30,8 @@
 #   1. JIT scan (jit-reminder)
 #   2. origin/main CI health gate (main-broken)
 #   3. dispatch-sweep (worktree-adopted / cleanup-unknown), unless --no-sweep
-#   4. the topic-category × phase ladder over open PRs and help-wanted issues
+#   4. the topic-category × priority × phase ladder over open PRs and
+#      help-wanted issues
 #
 # --health-only mode runs the JIT scan and the origin/main CI health gate, then
 # exits — no sweep, no queue scan, no PR/issue fetches. /dispatch SKILL.md uses
@@ -57,17 +58,25 @@
 # second unknown orphan exists it halts again with cleanup-unknown <path2>,
 # letting SKILL.md re-confirm with the user.
 #
-# Selection is two-tier: a topic *category* nests outside the phase *ladder*.
-# Categories, highest priority first:
-#   priority → bug → testing infrastructure → dispatch → other
-# The selector exhausts every tier of one category before moving to the next.
+# Selection is three-tier: topic *category* nests outside a *priority* sub-axis,
+# which nests outside the phase *ladder*. Topic categories, highest priority
+# first:
+#   bug → testing infrastructure → dispatch → other
+# Within each topic category, items carrying the `priority` label rank above
+# items without it; the phase ladder runs innermost. The selector exhausts the
+# `(priority=1, phase ladder)` sub-tier of one topic category, then the
+# `(priority=0, phase ladder)` sub-tier of the same topic, before moving to the
+# next topic category.
 #
 # A PR's category is the highest-priority topic among the labels of every issue
 # it closes (closingIssuesReferences); a PR that closes no issue, or whose
 # closing issues carry no topic label, is "other". An issue's category is the
-# highest-priority topic among its own labels, else "other".
+# highest-priority topic among its own labels, else "other". A PR's priority
+# bit is 1 if the union of its closing issues' labels carries `priority`, else
+# 0; an issue's priority bit is 1 if its own labels carry `priority`, else 0.
 #
-# Within each category, default-mode priority (oldest PR wins within a tier):
+# Within each (topic, priority) bucket, default-mode priority (oldest PR wins
+# within a tier):
 #   1. Oldest "security"    PR (draft + dispatch:reviewed or dispatch:security-reviewed)
 #   2. Oldest "review"      PR (draft + dispatch:code-reviewed)
 #   3. Oldest "code-review" PR (draft + dispatch:qa-done)
@@ -86,7 +95,9 @@
 # the flat ladder exactly.
 #
 # --qa mode priority:
-#   1. Oldest QA PR in the highest-priority category that has one
+#   1. Oldest QA PR in the highest-priority (topic, priority) bucket that has
+#      one — same outer iteration as default mode (topic category, then
+#      priority sub-axis), restricted to the qa phase
 #   2. empty
 set -euo pipefail
 
@@ -415,23 +426,24 @@ PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r '
 ISSUE_LIST=$(gh issue list --state open --limit 300 --json number,createdAt,labels)
 
 # number → labels-array map as a JSON object, built once from the open-issue
-# list above. pr_category indexes it to resolve each PR's closing issues'
-# labels. Assigned to a variable first so a jq failure aborts here (set -e +
-# pipefail); mirrors PR_SORTED.
+# list above. pr_combined_labels indexes it to resolve each PR's closing
+# issues' labels. Assigned to a variable first so a jq failure aborts here
+# (set -e + pipefail); mirrors PR_SORTED.
 ISSUE_LABELS_JSON=$(printf '%s' "$ISSUE_LIST" \
   | jq -c 'reduce .[] as $i ({}; .[$i.number | tostring] = ($i.labels // []))')
 
 # Topic categories in priority order; "other" is the implicit fallback for any
-# label set with no topic label. A category tier nests *outside* the phase
-# ladder: the selector exhausts every phase of "priority" before considering
-# "bug", and so on. TOPIC_CATEGORIES is the single source of the ordering —
-# category_of_labels resolves against it and the default-mode loop iterates
-# CATEGORIES. "priority" is an orthogonal escalation axis applied alongside a
-# topic label; the first-match resolution in category_of_labels means an issue
-# carrying both `priority` and `bug` resolves to `priority`. The companion
-# classifier that *applies* these labels is ref-ready SKILL.md Step 6; keep
-# the two label sets in sync.
-TOPIC_CATEGORIES=(priority bug "testing infrastructure" dispatch)
+# label set with no topic label. A topic-category tier nests *outside* the
+# phase ladder, and a `priority` sub-axis nests *between* them: within each
+# topic category, items carrying `priority` rank above items without it, and
+# the phase ladder runs innermost. TOPIC_CATEGORIES is the single source of the
+# topic ordering — category_of_labels resolves against it and the default-mode
+# loop iterates CATEGORIES. `priority` is an orthogonal escalation sub-axis
+# nested inside each topic category, derived alongside the category via the
+# has_priority_in_labels helper rather than competing with it for the top
+# slot. The companion classifier that *applies* these labels is ref-ready
+# SKILL.md Step 6; keep the two label sets in sync.
+TOPIC_CATEGORIES=(bug "testing infrastructure" dispatch)
 CATEGORIES=("${TOPIC_CATEGORIES[@]}" other)
 # Same priority list as a JSON array, for category_of_labels' jq filter.
 TOPIC_CATEGORIES_JSON=$(printf '%s\n' "${TOPIC_CATEGORIES[@]}" | jq -Rcn '[inputs]')
@@ -446,23 +458,29 @@ category_of_labels() {
     | first($cats[] | select(. as $c | $names | index($c))) // "other"'
 }
 
-# Topic category of a PR: the union of its closing issues' labels, resolved by
-# category_of_labels. A PR that closes no issue — or whose closing issues carry
-# no topic label — resolves to "other".
-pr_category() {
-  local combined
-  combined=$(printf '%s' "$1" | jq -c --argjson map "$ISSUE_LABELS_JSON" \
-    '[.[].number | tostring as $n | $map[$n] // [] | .[]]')
-  category_of_labels "$combined"
+# Union of a PR's closing issues' labels into a JSON array of {name:...} label
+# objects, looked up in ISSUE_LABELS_JSON. A PR that closes no issue — or whose
+# closing issues are absent from the map — yields an empty array, which
+# category_of_labels resolves to "other" and has_priority_in_labels to 0.
+pr_combined_labels() {
+  printf '%s' "$1" | jq -c --argjson map "$ISSUE_LABELS_JSON" \
+    '[.[].number | tostring as $n | $map[$n] // [] | .[]]'
 }
 
-# First-seen PR per (category, phase): key = "<category>|<phase>", value =
-# "<num> <branch>". The "|" separator is collision-free — phase names are fixed
-# identifiers and no TOPIC_CATEGORIES name contains "|". Both lists are
-# pre-sorted oldest-first, so the first PR captured for a key is the oldest in
-# that category+phase.
+# 1 if the label set contains an exact "priority" label, else 0.
+has_priority_in_labels() {
+  printf '%s' "$1" | jq -r '[.[].name] | if index("priority") then 1 else 0 end'
+}
+
+# First-seen PR per (category, priority-bit, phase): key =
+# "<category>|<priority-bit>|<phase>", value = "<num> <branch>". The "|"
+# separator is collision-free — priority bits are literal `0`/`1`, phase names
+# are fixed identifiers, and no TOPIC_CATEGORIES name contains "|". Both lists
+# are pre-sorted oldest-first, so the first PR captured for a key is the oldest
+# in that bucket.
 declare -A FIRST_PR
-# First-seen help-wanted issue per category: key = category, value = "<num>".
+# First-seen help-wanted issue per (category, priority-bit): key =
+# "<category>|<priority-bit>", value = "<num>".
 declare -A FIRST_ISSUE
 
 # Within-category phase ladder, highest priority first.
@@ -501,23 +519,27 @@ while IFS=$'\t' read -r pr_num _created pr_branch pr_closing; do
   done < <(printf '%s' "$pr_closing" | jq -r '.[].number')
   [[ "$pr_blocked" == "true" ]] && continue
 
-  # Record the oldest PR seen in this category+phase. The :- guard keeps the
-  # unset-key read from aborting under set -u.
-  pr_cat=$(pr_category "$pr_closing")
-  pr_key="$pr_cat|$phase"
+  # Record the oldest PR seen in this category+priority+phase. The :- guard
+  # keeps the unset-key read from aborting under set -u.
+  pr_combined=$(pr_combined_labels "$pr_closing")
+  pr_cat=$(category_of_labels "$pr_combined")
+  pr_pri=$(has_priority_in_labels "$pr_combined")
+  pr_key="$pr_cat|$pr_pri|$phase"
   [[ -z "${FIRST_PR[$pr_key]:-}" ]] && FIRST_PR[$pr_key]="$pr_num $pr_branch"
 done <<< "$PR_SORTED"
 
 if [[ "$QA_MODE" == "true" ]]; then
-  # --qa mode: oldest QA PR in the highest-priority category that has one,
-  # without the <phase> field. The issue queue is irrelevant here, so the
-  # leaf-resolution loop below is skipped entirely.
+  # --qa mode: oldest QA PR in the highest-priority (topic, priority) bucket
+  # that has one, without the <phase> field. The issue queue is irrelevant
+  # here, so the leaf-resolution loop below is skipped entirely.
   for category in "${CATEGORIES[@]}"; do
-    qa_key="$category|qa"
-    if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
-      echo "pr ${FIRST_PR[$qa_key]}"
-      exit 0
-    fi
+    for pri in 1 0; do
+      qa_key="$category|$pri|qa"
+      if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
+        echo "pr ${FIRST_PR[$qa_key]}"
+        exit 0
+      fi
+    done
   done
   echo "empty"
   exit 0
@@ -540,21 +562,23 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   if issue_has_worktree "$issue_num"; then
     continue
   fi
-  # Category is the top-level help-wanted issue's own labels. Once a category
-  # has a winner the remaining issues in it are skipped — including the
-  # expensive leaf trace.
+  # Category is the top-level help-wanted issue's own labels. Priority bit is
+  # derived alongside it. Once a (category, priority) bucket has a winner the
+  # remaining issues in it are skipped — including the expensive leaf trace.
   issue_cat=$(category_of_labels "$issue_labels")
-  [[ -n "${FIRST_ISSUE[$issue_cat]:-}" ]] && continue
+  issue_pri=$(has_priority_in_labels "$issue_labels")
+  issue_bucket="$issue_cat|$issue_pri"
+  [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]] && continue
   # Resolve a startable open leaf within the issue's subtree. dispatch-trace-leaf
   # in queue mode descends open blockers and sub-issues, skipping any child whose
   # <N>-* branch is an existing local worktree (owned by another session):
-  #   exit 0 — a startable open leaf was found; record it for this category.
+  #   exit 0 — a startable open leaf was found; record it for this bucket.
   #   exit 2 — every reachable open leaf is worktree-conflicted. Skip this issue
   #            exactly as a direct worktree is skipped; a later issue in the
-  #            same category may still fill the slot.
+  #            same bucket may still fill the slot.
   #   exit 1 — usage error; propagate as a hard failure, never swallow as a skip.
   if leaf=$("$SCRIPT_DIR/dispatch-trace-leaf" "$issue_num" queue); then
-    FIRST_ISSUE[$issue_cat]="$leaf"
+    FIRST_ISSUE[$issue_bucket]="$leaf"
   else
     trace_status=$?
     [[ "$trace_status" -eq 2 ]] && continue
@@ -563,27 +587,33 @@ while IFS=$'\t' read -r issue_num issue_labels; do
   fi
 done <<< "$ISSUE_SORTED"
 
-# Default mode: the first category with an eligible task wins (see the header
-# for the full two-tier order).
+# Default mode: the first (topic-category, priority-bit) bucket with an
+# eligible task wins (see the header for the full three-tier order). Within
+# each topic category, the priority sub-axis (1 then 0) runs above the phase
+# ladder; within each (category, priority) bucket, the phase ladder runs
+# innermost.
 for category in "${CATEGORIES[@]}"; do
-  for phase in "${PHASE_PRIORITY[@]}"; do
-    pr_key="$category|$phase"
-    if [[ -n "${FIRST_PR[$pr_key]:-}" ]]; then
-      echo "pr ${FIRST_PR[$pr_key]} $phase"
+  for pri in 1 0; do
+    for phase in "${PHASE_PRIORITY[@]}"; do
+      pr_key="$category|$pri|$phase"
+      if [[ -n "${FIRST_PR[$pr_key]:-}" ]]; then
+        echo "pr ${FIRST_PR[$pr_key]} $phase"
+        exit 0
+      fi
+    done
+
+    issue_bucket="$category|$pri"
+    if [[ -n "${FIRST_ISSUE[$issue_bucket]:-}" ]]; then
+      echo "issue ${FIRST_ISSUE[$issue_bucket]}"
+      exit 0
+    fi
+
+    qa_key="$category|$pri|qa"
+    if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
+      echo "pr ${FIRST_PR[$qa_key]} qa"
       exit 0
     fi
   done
-
-  if [[ -n "${FIRST_ISSUE[$category]:-}" ]]; then
-    echo "issue ${FIRST_ISSUE[$category]}"
-    exit 0
-  fi
-
-  qa_key="$category|qa"
-  if [[ -n "${FIRST_PR[$qa_key]:-}" ]]; then
-    echo "pr ${FIRST_PR[$qa_key]} qa"
-    exit 0
-  fi
 done
 
 echo "empty"
