@@ -69,7 +69,7 @@ This section describes the **target** dispatch model. The current implementation
 
 #### 1. Entry points
 
-- [`/dispatch`](.claude/skills/dispatch/SKILL.md) — the router. Runs in `worktrees/main`. Selects the next target, spawns a worker, releases the selection lock, and exits.
+- [`/dispatch`](.claude/skills/dispatch/SKILL.md) — the router. Runs in `worktrees/main`. Selects the next target, resolves its worktree, releases the selection lock, spawns a worker, and exits.
 - [`/dispatch-worker <N>`](.claude/skills/dispatch-worker/SKILL.md) — the worker. Runs in `worktrees/<N>-…`, one per in-flight issue. Runs exactly one phase skill, then hands off.
 
 See #839 for the router/worker split.
@@ -82,8 +82,8 @@ Each router tick:
 2. Runs the JIT engine (see Section 4) and the `origin/main` health gate.
 3. Selects a target via the selection ladder (Section 3).
 4. Resolves the target's worktree (creating one for an `implement`-phase issue).
-5. Spawns a `/dispatch-worker <N>` background job (`claude --bg`) with `cwd` set to that worktree.
-6. Releases the lock and exits.
+5. Releases the lock.
+6. Spawns a `/dispatch-worker <N>` background job (`claude --bg`) with `cwd` set to that worktree, and exits.
 
 The worker, inside its worktree:
 
