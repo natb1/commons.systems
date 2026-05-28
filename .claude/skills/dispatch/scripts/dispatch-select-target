@@ -27,7 +27,9 @@
 # Default-mode priority, top to bottom — current-worktree continuation runs
 # first so a session inside an <issue>-* worktree always continues there, even
 # when the sweep finds an orphan elsewhere on disk:
-#   1. current-worktree continuation (worktree / worktree-closed)
+#   1. current-worktree continuation (worktree / worktree-closed), gated on no
+#      *other* live session under the worktree; when another session owns the
+#      worktree the selector falls through rather than mis-claim it
 #   2. JIT scan (jit-reminder)
 #   3. origin/main CI health gate (main-broken)
 #   4. dispatch-sweep (worktree-adopted / cleanup-unknown), unless --no-sweep
@@ -107,6 +109,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
+source "$SCRIPT_DIR/lib-claude-agents.sh"
 QA_MODE=false
 HEALTH_ONLY=false
 NO_SWEEP=false
@@ -361,19 +364,33 @@ fi
 if [[ "$QA_MODE" == "false" ]]; then
   if on_worktree_branch; then
     N="${BASH_REMATCH[1]}"
-    if STATE=$(gh issue view "$N" --json state 2>/dev/null | jq -r '.state'); then
-      if [[ "$STATE" == "OPEN" ]]; then
-        echo "worktree $N $CURRENT_BRANCH"
+    WT_PATH=$(git rev-parse --show-toplevel)
+    # Gate the priority-1 emission on liveness. When another live Claude
+    # session is already under this worktree (the dispatching router is a
+    # background job, hook-spawned, or a sibling of an interactive session),
+    # current-worktree continuation should NOT fire — the spawn-side dedup
+    # would catch the race, but the upstream selection was wrong and the tick
+    # would be wasted. Fall through to the rest of the ladder instead.
+    # Fail-safe: `other_live_sessions_under` returns "occupied" on any
+    # uncertainty (daemon unreachable, missing $CLAUDE_CODE_SESSION_ID), so
+    # ambiguous environments fall through rather than mis-claim.
+    if ! other_live_sessions_under "$WT_PATH"; then
+      if STATE=$(gh issue view "$N" --json state 2>/dev/null | jq -r '.state'); then
+        if [[ "$STATE" == "OPEN" ]]; then
+          echo "worktree $N $CURRENT_BRANCH"
+        else
+          echo "worktree-closed $N $CURRENT_BRANCH"
+        fi
       else
+        # A failed `gh issue view` (nonexistent issue, transient API/auth error)
+        # is intentionally conflated with a genuinely closed issue: both yield
+        # worktree-closed, and /dispatch reports and stops on either.
         echo "worktree-closed $N $CURRENT_BRANCH"
       fi
-    else
-      # A failed `gh issue view` (nonexistent issue, transient API/auth error)
-      # is intentionally conflated with a genuinely closed issue: both yield
-      # worktree-closed, and /dispatch reports and stops on either.
-      echo "worktree-closed $N $CURRENT_BRANCH"
+      exit 0
     fi
-    exit 0
+    # Another live session owns this worktree; fall through to the rest of
+    # the ladder so the router picks up real work elsewhere.
   fi
 
   JIT_LINE=$(jit_scan)
