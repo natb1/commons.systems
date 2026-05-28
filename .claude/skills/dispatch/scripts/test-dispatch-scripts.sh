@@ -4226,6 +4226,316 @@ else
 fi
 config_teardown
 
+# --- Test 8: valid target-workers.json prints normalized JSON ---------------
+
+echo "Test: valid target-workers.json prints normalized JSON"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{
+  "target_weekly_usage_pct": 85,
+  "ramp_tau_seconds": 172800,
+  "ramp_shape_k": 1
+}
+EOF
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "valid target-workers.json exits 0" "0" "$rc"
+tw_target=$(printf '%s' "$out" | jq -r '.target_weekly_usage_pct')
+assert_eq "valid target-workers.json target_weekly_usage_pct" "85" "$tw_target"
+tw_tau=$(printf '%s' "$out" | jq -r '.ramp_tau_seconds')
+assert_eq "valid target-workers.json ramp_tau_seconds" "172800" "$tw_tau"
+config_teardown
+
+# --- Test 9: absent target-workers.json prints no-config and exits 0 --------
+
+echo "Test: absent target-workers.json prints no-config and exits 0"
+config_setup
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "absent target-workers.json exits 0" "0" "$rc"
+assert_eq "absent target-workers.json prints no-config" "no-config" "$out"
+config_teardown
+
+# --- Test 10: target-workers.json with a non-number field exits 1 -----------
+
+echo "Test: target-workers.json with non-number field exits 1 and stderr names it"
+config_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"target_weekly_usage_pct": "ninety"}
+EOF
+rc=0
+err=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>&1 1>/dev/null) || rc=$?
+assert_eq "non-number tunable exits 1" "1" "$rc"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"target_weekly_usage_pct"* && "$err" == *"number"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: non-number tunable stderr names the field and type"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: non-number tunable stderr names the field and type"
+  echo "    stderr: $err"
+fi
+config_teardown
+
+# --- Test 11: empty object is accepted (every tunable is optional) ----------
+
+echo "Test: empty object target-workers.json is accepted"
+config_setup
+echo '{}' > "$DISPATCH_CONFIG_DIR/target-workers.json"
+out=$("$TMPDIR_TEST/scripts/dispatch-config-load" target-workers 2>/dev/null); rc=$?
+assert_eq "empty object exits 0" "0" "$rc"
+# jq normalizes "{}" to "{}".
+out_compact=$(printf '%s' "$out" | jq -c '.')
+assert_eq "empty object prints {}" "{}" "$out_compact"
+config_teardown
+
+# ============================================================================
+# dispatch-target-workers tests
+# ============================================================================
+#
+# Each test gets a fresh tmp tree:
+#   $TMPDIR_TEST/scripts/   copies of dispatch-target-workers + dispatch-config-load
+#   $TMPDIR_TEST/config/    synthetic config directory (DISPATCH_CONFIG_DIR)
+#   $TMPDIR_TEST/rl/        synthetic rate_limits.json directory
+#
+# All telemetry inputs are env-overridable; tests rely on the overrides rather
+# than fixture files when shape matters more than the file path. The script
+# defaults are baked in (target_weekly=90, target_5h=50, max_workers=8,
+# tau=86400, k=2, five_hour_window=18000); tests that vary tunables write a
+# target-workers.json into the config dir.
+echo ""
+echo "=== dispatch-target-workers ==="
+
+tw_setup() {
+  TMPDIR_TEST=$(mktemp -d)
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/config" "$TMPDIR_TEST/rl"
+
+  cp "$SCRIPT_DIR/dispatch-target-workers" "$TMPDIR_TEST/scripts/dispatch-target-workers"
+  cp "$SCRIPT_DIR/dispatch-config-load" "$TMPDIR_TEST/scripts/dispatch-config-load"
+  chmod +x "$TMPDIR_TEST/scripts/dispatch-target-workers" \
+           "$TMPDIR_TEST/scripts/dispatch-config-load"
+
+  export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
+  # Default: point at an absent file so tests without explicit telemetry get
+  # the missing-telemetry fallback unless they override env vars.
+  export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$TMPDIR_TEST/rl/missing.json"
+}
+
+tw_teardown() {
+  rm -rf "$TMPDIR_TEST"
+  TMPDIR_TEST=""
+  unset DISPATCH_CONFIG_DIR
+  unset DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH
+  unset DISPATCH_TARGET_WORKERS_NOW
+  unset DISPATCH_TARGET_WORKERS_USED_WEEKLY
+  unset DISPATCH_TARGET_WORKERS_RESETS_AT_WEEKLY
+  unset DISPATCH_TARGET_WORKERS_USED_5H
+  unset DISPATCH_TARGET_WORKERS_RESETS_AT_5H
+}
+
+# write_rl <file-name> <used_weekly> <resets_weekly> <used_5h> <resets_5h>
+#   Write a rate_limits.json with the four telemetry fields. Set any of the
+#   four to the literal string "absent" to omit the surrounding block.
+write_rl() {
+  local name="$1" uw="$2" rw="$3" u5="$4" r5="$5"
+  local path="$TMPDIR_TEST/rl/$name"
+  local seven=""
+  local five=""
+  if [[ "$uw" != "absent" && "$rw" != "absent" ]]; then
+    seven="\"seven_day\":{\"used_percentage\":$uw,\"resets_at\":$rw}"
+  fi
+  if [[ "$u5" != "absent" && "$r5" != "absent" ]]; then
+    five="\"five_hour\":{\"used_percentage\":$u5,\"resets_at\":$r5}"
+  fi
+  local parts=()
+  [[ -n "$five" ]] && parts+=("$five")
+  [[ -n "$seven" ]] && parts+=("$seven")
+  local joined
+  joined=$(IFS=,; printf '%s' "${parts[*]}")
+  printf '{%s}\n' "$joined" > "$path"
+  export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$path"
+}
+
+# --- Test 1: weekly target reached → 0 --------------------------------------
+
+echo "Test: weekly-target-reached pause prints 0"
+tw_setup
+# used_weekly=90 == target_weekly=90 → trip step 1.
+export DISPATCH_TARGET_WORKERS_NOW=1000
+write_rl "rl.json" 90 2000 0 2000
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "weekly target reached → 0" "0" "$out"
+tw_teardown
+
+# --- Test 2: weekly refresh already passed → 0 ------------------------------
+
+echo "Test: weekly-refresh-passed pause prints 0"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW=5000
+# resets_at_weekly already passed (= 4000 < now).
+write_rl "rl.json" 10 4000 0 9000
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "weekly refresh passed → 0" "0" "$out"
+tw_teardown
+
+# --- Test 3: 5h cap tripped pauses spawning ---------------------------------
+
+echo "Test: 5h-cap-tripped pause prints 0 despite positive weekly ramp"
+tw_setup
+# Late-week regime: remaining_weekly = 1h, ramp ~= 0.92, otherwise → 7 workers.
+# Force the 5h gate: remaining_5h = 1h, elapsed_5h_frac = 0.8, cap_5h = 40.
+# used_5h = 45 → trips. Expect 0.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+write_rl "rl.json" 50 13600 45 13600
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "5h cap tripped → 0" "0" "$out"
+tw_teardown
+
+# --- Test 4: both gates clear → positive ramp value -------------------------
+
+echo "Test: both-clear-spawn prints the rounded ramp value"
+tw_setup
+# Same late-week regime, but used_5h=30 < cap_5h=40 → gate passes.
+# ramp_weekly = (86400/(3600+86400))^2 ≈ 0.9216, target_N = round(8*0.9216) = 7.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+write_rl "rl.json" 50 13600 30 13600
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "both gates clear; late-week ramp → 7" "7" "$out"
+tw_teardown
+
+# --- Test 5: missing rate_limits.json file → 1 + stderr note ----------------
+
+echo "Test: missing-telemetry-fallback prints 1 with a stderr note"
+tw_setup
+# Default rate-limits path points at a non-existent file.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+err=$(cat "$TMPDIR_TEST/stderr")
+assert_eq "missing rate_limits.json → 1" "1" "$out"
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"dispatch-target-workers"* && "$err" == *"fallback"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: missing rate_limits.json stderr has fallback note"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: missing rate_limits.json stderr has fallback note"
+  echo "    stderr: $err"
+fi
+tw_teardown
+
+# --- Test 6: only five_hour present → fallback (no weekly anchor) -----------
+
+echo "Test: missing-seven-day-fallback prints 1"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW=10000
+# seven_day omitted.
+write_rl "rl.json" absent absent 30 13600
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>"$TMPDIR_TEST/stderr")
+assert_eq "seven_day absent → fallback 1" "1" "$out"
+err=$(cat "$TMPDIR_TEST/stderr")
+TOTAL=$((TOTAL + 1))
+if [[ "$err" == *"seven_day"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: seven_day-absent stderr names seven_day"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: seven_day-absent stderr names seven_day"
+  echo "    stderr: $err"
+fi
+tw_teardown
+
+# --- Test 7: only seven_day present → 5h gate skipped, weekly ramp applies --
+
+echo "Test: missing-five-hour-skips-cap applies the weekly ramp"
+tw_setup
+# Late-week regime (remaining_weekly=1h) but no 5h gate input — would otherwise
+# trip on cap_5h=0 if the 5h block were treated as present-with-zero. Expect
+# the ramp-only result (7), proving the 5h gate is skipped when its block is
+# absent.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+write_rl "rl.json" 50 13600 absent absent
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "five_hour absent; weekly ramp → 7" "7" "$out"
+tw_teardown
+
+# --- Test 8: absolute cap clamps to max_workers -----------------------------
+
+echo "Test: absolute-cap clamps to max_workers"
+tw_setup
+# remaining_weekly = 1 second → ramp ≈ 1.0 → target = max_workers (default 8).
+export DISPATCH_TARGET_WORKERS_NOW=10000
+write_rl "rl.json" 10 10001 0 13500
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "ramp saturates → clamped to 8" "8" "$out"
+tw_teardown
+
+# --- Test 9: weekly ramp sweep is non-decreasing as remaining_weekly drops --
+
+echo "Test: weekly-ramp-sweep is non-decreasing as remaining_weekly drops"
+tw_setup
+# Hold the 5h gate open (remaining_5h mid-window, used_5h=0). Walk
+# remaining_weekly through the issue body's example table values:
+#   7d→0, 3d→1, 1d→2, 6h→5, 1h→7, 0→0 (window expired).
+# The 0 endpoint trips Step 2 (weekly-refresh-passed), so the sweep covers the
+# strictly-positive tail and asserts monotonic non-decreasing.
+NOW=10000
+export DISPATCH_TARGET_WORKERS_NOW="$NOW"
+prev=-1
+for remaining in 604800 259200 86400 21600 3600 1; do
+  resets=$((NOW + remaining))
+  # Mid-window 5h gate with cap_5h=25 and used_5h=0 so the gate never trips.
+  write_rl "sweep.json" 10 "$resets" 0 $((NOW + 9000))
+  result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+  TOTAL=$((TOTAL + 1))
+  if (( result >= prev )); then
+    PASS=$((PASS + 1)); echo "  PASS: weekly-ramp-sweep remaining=$remaining → $result (>= prev $prev)"
+  else
+    FAIL=$((FAIL + 1)); echo "  FAIL: weekly-ramp-sweep remaining=$remaining → $result < prev $prev"
+  fi
+  prev="$result"
+done
+tw_teardown
+
+# --- Test 10: 5h-cap sweep drops to 0 once used_5h crosses cap_5h -----------
+
+echo "Test: 5h-cap-sweep drops to 0 once used_5h crosses cap_5h"
+tw_setup
+# Hold remaining_weekly in the late-week ramp regime (1h → ramp 0.922 → 7).
+# Fix elapsed_5h_frac = 0.8 (remaining_5h = 3600), so cap_5h = 40.
+# Walk used_5h from 0 → 50; assert target_N is 7 below the cap and 0 at/above.
+NOW=10000
+export DISPATCH_TARGET_WORKERS_NOW="$NOW"
+RESETS_WEEKLY=$((NOW + 3600))
+RESETS_5H=$((NOW + 3600))   # remaining_5h = 3600 → elapsed = 0.8 → cap = 40
+for used in 0 20 39 40 41 50; do
+  write_rl "cap-sweep.json" 50 "$RESETS_WEEKLY" "$used" "$RESETS_5H"
+  result=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+  if (( used < 40 )); then
+    assert_eq "5h-cap-sweep used=$used (< cap 40) → 7" "7" "$result"
+  else
+    assert_eq "5h-cap-sweep used=$used (>= cap 40) → 0" "0" "$result"
+  fi
+done
+tw_teardown
+
+# --- Test 11: config tunable max_concurrent_workers raises the cap ---------
+
+echo "Test: config max_concurrent_workers tunable raises the absolute cap"
+tw_setup
+cat > "$DISPATCH_CONFIG_DIR/target-workers.json" <<'EOF'
+{"max_concurrent_workers": 16}
+EOF
+# Saturate the ramp so target tracks the cap.
+export DISPATCH_TARGET_WORKERS_NOW=10000
+write_rl "rl.json" 10 10001 0 13500
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "config max_concurrent_workers=16 → 16" "16" "$out"
+tw_teardown
+
+# --- Test 12: per-field env override wins over file ------------------------
+
+echo "Test: per-field env override wins over rate_limits.json"
+tw_setup
+export DISPATCH_TARGET_WORKERS_NOW=10000
+# File says 5h gate already tripped; env override says used_5h=0 → gate clears.
+write_rl "rl.json" 50 13600 99 13600
+export DISPATCH_TARGET_WORKERS_USED_5H=0
+out=$("$TMPDIR_TEST/scripts/dispatch-target-workers" 2>/dev/null)
+assert_eq "env override clears 5h gate; late-week ramp → 7" "7" "$out"
+tw_teardown
+
 # ============================================================================
 # dispatch project-helper tests (item-add / status-read / status-write)
 # ============================================================================
