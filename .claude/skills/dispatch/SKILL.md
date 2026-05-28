@@ -22,9 +22,9 @@ it when the prior day ended without an in-flight worker (see Step 7's
 optional). With an argument, it targets that issue and skips the queue scan; a
 PR number is resolved to the issue that PR closes (see Step 3).
 
-Run `/dispatch` from the **main worktree**, or from inside an issue worktree to
-continue that issue. The router never enters a worktree; it materializes the
-target worktree (if needed) and spawns the worker into it.
+Run `/dispatch` from any worktree; selection ignores cwd. The router never
+enters a worktree; it materializes the target worktree (if needed) and spawns
+the worker into it.
 
 Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 `gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
@@ -216,9 +216,8 @@ continue to target selection.
     consistent with the other Steps 1-5 stop paths.
 
 - **No argument** → run target selection. A single invocation decides every
-  Step 3 outcome: current-worktree continuation, JIT, main-broken gate, sweep
-  orphan adoption, and the queue ladder are all internal to the script and
-  emitted on its one output line.
+  Step 3 outcome: JIT, main-broken gate, sweep orphan adoption, and the queue
+  ladder are all internal to the script and emitted on its one output line.
 
   ```bash
   SELECTED=$(.claude/skills/dispatch/scripts/dispatch-select-target)
@@ -228,15 +227,6 @@ continue to target selection.
 
   Route on `$SELECTED`:
 
-  - `worktree <N> <branch>` — the current branch is `<N>-…` and issue `<N>` is
-    open. Continue here; skip Step 4 and proceed to Step 5 with mode `queue`
-    (worktree resolution will print `here`).
-  - `worktree-closed <N> <branch>` — the current branch is `<N>-…` and issue
-    `<N>` is closed or unrecognized. Release the lock (see *Releasing the
-    lock*), report that the current worktree belongs to closed/unrecognized
-    issue `<N>`, then proceed to Step 7 with `notify worktree-closed`
-    (consistent with the named-target "closed → report and stop" rule in
-    Step 4).
   - `worktree-adopted <N> <branch>` — `dispatch-sweep` adopted an orphaned
     worktree elsewhere on disk. Skip Step 4 and proceed to Step 5 with `<N>` and
     mode `explicit` — treat the adoption like an explicit `/dispatch <N>`.
@@ -276,21 +266,10 @@ continue to target selection.
     is mandatory there ("queue empty — closing; #725 restart will re-check at
     9 AM"), not optional.
 
-  An **explicit issue argument overrides current-worktree detection** — the
-  selection script, and therefore its current-worktree detection, runs only
-  when no argument is given. `/dispatch #123` run from inside worktree-456
-  still targets 123.
-
-  Priority order the script implements, top to bottom: current-worktree
-  continuation → JIT scan → `origin/main` CI health gate → sweep orphan
-  adoption → topic-category × phase ladder. A jit-reminder surfaces even when
-  `origin/main` is red because the JIT scan precedes the main-broken gate;
-  current-worktree continuation surfaces before either, so a session inside an
-  `<issue>-*` worktree always continues there. Current-worktree continuation
-  requires the worktree to have no *other* live Claude session — consistent
-  with the queue-mode liveness dedup landed in #741 and the explicit-mode case
-  tracked in #837; when another session owns the worktree, the selector falls
-  through to the rest of the ladder.
+  Priority order the script implements, top to bottom: JIT scan →
+  `origin/main` CI health gate → sweep orphan adoption → topic-category ×
+  phase ladder. A jit-reminder surfaces even when `origin/main` is red because
+  the JIT scan precedes the main-broken gate.
 
   The topic-category × phase ladder is two-tier: a topic **category** nests
   outside the phase **ladder**. Categories, highest priority first:
@@ -347,9 +326,6 @@ Skip leaf tracing when:
   result or as an explicit issue argument. **Do not infer PR existence from title
   search or other ad-hoc `gh` queries** — `dispatch-find-pr` is the only correct
   check (see Step 5).
-- The target was current-worktree detected (`worktree <N>` result) — the worktree
-  is the already-committed unit of work; retargeting to a sub-issue or blocker
-  would be wrong.
 
 If the resolved target issue `<N>` has any **open** blocker — run
 `issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
@@ -404,14 +380,6 @@ an explicit `/dispatch` argument, otherwise `queue`:
 
 It prints exactly one decision line — act on it. Each branch resolves to a
 worktree path that Step 6 will pass to `dispatch-spawn-worker`.
-
-- **`here`** → the current branch already is the target's worktree. Set
-  `WORKTREE_PATH="$(git rev-parse --show-toplevel)"` for Step 6. Re-sync issue
-  context (`dangerouslyDisableSandbox: true` — `sync-issue-context` calls
-  `gh`):
-  ```bash
-  .claude/skills/dispatch/scripts/sync-issue-context <N>
-  ```
 
 - **`enter <path>`** → re-use an existing `<issue>-*` worktree (the
   recycle-after-completion case, reached only for an explicit argument). Set
@@ -482,13 +450,12 @@ re-derives the phase from PR/CI ground truth.
 `.claude/hooks/worktree-create.sh` also writes the marker as its final action
 on every successful worktree creation, so a fresh worktree is marker-bearing
 the moment the hook returns — the router's explicit marker write here is the
-in-skill defense for the `here` path and for any code path that bypasses the
-hook. The router itself never writes the marker
-into its own cwd (`worktrees/main`), so a `SessionStart:clear` there is a
-no-op — correct, since the router is short-lived and re-seeded by the #725
-daily restart. The marker is an empty boolean flag with no payload; it persists
-for the worktree's life and needs no cleanup — `tmp/` is git-ignored, and
-removing the worktree removes it.
+in-skill defense for any code path that bypasses the hook. The router itself
+never writes the marker into its own cwd (`worktrees/main`), so a
+`SessionStart:clear` there is a no-op — correct, since the router is
+short-lived and re-seeded by the #725 daily restart. The marker is an empty
+boolean flag with no payload; it persists for the worktree's life and needs no
+cleanup — `tmp/` is git-ignored, and removing the worktree removes it.
 
 As the **final action of this step on every non-`conflict` (proceed) path** —
 after the marker is written, before Step 6 — release the lock (see *Releasing
@@ -556,7 +523,6 @@ The three dispositions:
   | `notify busy-lock-timeout` | Step 0 — wait timeout while another router holds the lock (subsumes #850) |
   | `notify sync-failed` | Step 1 — `git fetch` failed or `git merge --ff-only` rejected a non-fast-forward |
   | `notify resolver-failed` | Step 3 — `dispatch-resolve-arg` non-zero (PR closes ≠1 issue, bad argument) |
-  | `notify worktree-closed` | Step 3 — current worktree belongs to a closed or unrecognized issue |
   | `notify main-broken` | Step 3 — `/dispatch-diagnose-main` ran and returned (`origin/main` is red) |
   | `notify target-blocked` | Step 4 — named target is closed or has an open blocker |
 

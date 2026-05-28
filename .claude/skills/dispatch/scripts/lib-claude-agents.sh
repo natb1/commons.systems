@@ -10,7 +10,6 @@
 # Usage: source this file, then call:
 #   claude_sessions_under        <worktree-path>
 #   worktree_has_live_session    <worktree-path>
-#   other_live_sessions_under    <worktree-path>
 #
 # claude_sessions_under <path>
 #   The low-level primitive. Runs `claude agents --json --cwd <path>`, which
@@ -31,20 +30,6 @@
 #     return 0 — occupied OR unknown: do NOT start a session under <path>.
 #     return 1 — definitely no live session under <path>.
 #   `if worktree_has_live_session <path>` is fail-safe by construction.
-#
-# other_live_sessions_under <path>
-#   Self-filtering predicate: answers "are there live sessions under <path>
-#   besides the current session?" Filters rows whose sessionId matches
-#   $CLAUDE_CODE_SESSION_ID before deciding. Fail-safe semantics match
-#   worktree_has_live_session — any uncertainty returns "occupied" so the
-#   caller falls through rather than mis-claiming the worktree:
-#     return 0 — another session is present, OR unknown (daemon unreachable),
-#               OR $CLAUDE_CODE_SESSION_ID is empty (cannot filter self, so
-#               the rows might include foreign sessions misattributed to "me").
-#               In all three cases the worktree should be treated as occupied.
-#     return 1 — the daemon was queried successfully AND the only session(s)
-#               present belong to the current session (or there are none).
-#   `if other_live_sessions_under <path>` is fail-safe by construction.
 #
 # Test override: CLAUDE_AGENTS_CMD replaces the `claude` invocation with an
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is
@@ -124,27 +109,6 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     fi
     # The daemon was queried successfully and reported zero sessions.
     return 1
-  }
-
-  # other_live_sessions_under <path> — self-filtering fail-safe predicate.
-  # See the header comment for the return-code contract.
-  other_live_sessions_under() {
-    local path="${1:-}"
-    local sessions
-    if ! sessions=$(claude_sessions_under "$path"); then
-      return 0   # unknown → fail-safe occupied
-    fi
-    if [[ -z "$sessions" ]]; then
-      return 1   # daemon confirmed zero sessions
-    fi
-    local self="${CLAUDE_CODE_SESSION_ID:-}"
-    if [[ -z "$self" ]]; then
-      return 0   # cannot filter self → fail-safe occupied
-    fi
-    # claude_sessions_under emits sessionId<TAB>pid<TAB>status<TAB>name.
-    local other
-    other=$(printf '%s\n' "$sessions" | awk -F'\t' -v self="$self" '$1 != self')
-    [[ -n "$other" ]]
   }
 
 fi
