@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Select the single highest-priority task from the queue.
-# Usage: dispatch-select-target [--qa | --health-only] [--no-sweep] [--cleanup-confirm <path>]
+# Usage: dispatch-select-target [--qa | --health-only]
 #
 # Output: exactly one line:
 #   pr <num> <branch> <phase>   — a PR to work on, with its already-derived phase
@@ -9,14 +9,6 @@
 #   empty                       — nothing eligible
 #   worktree <N> <branch>       — the current worktree's own open issue (short-circuits the queue scan)
 #   worktree-closed <N> <branch>— the current worktree's issue is closed or unknown
-#   worktree-adopted <N> <branch>
-#                               — dispatch-sweep adopted an orphaned worktree
-#                                 elsewhere on disk; SKILL.md routes this exactly
-#                                 like an explicit /dispatch <N>
-#   cleanup-unknown <path>      — dispatch-sweep halted on an orphan worktree
-#                                 with no open PR and no inferable issue number;
-#                                 SKILL.md confirms with the user before destroying
-#                                 potentially-unmerged work
 #   jit-reminder <repo> <num> <project> <item-id>
 #                               — a configured JIT issue due for a reminder.
 #                                 Emitted before the main-broken gate, ahead of
@@ -24,19 +16,16 @@
 #                                 dispatch.config/jit.json is present.
 #   main-broken <sha>           — origin/main's HEAD CI has a failing check; no task selected
 #
-# Default-mode priority, top to bottom — current-worktree continuation runs
-# first so a session inside an <issue>-* worktree always continues there, even
-# when the sweep finds an orphan elsewhere on disk:
+# Default-mode priority, top to bottom:
 #   1. current-worktree continuation (worktree / worktree-closed)
 #   2. JIT scan (jit-reminder)
 #   3. origin/main CI health gate (main-broken)
-#   4. dispatch-sweep (worktree-adopted / cleanup-unknown), unless --no-sweep
-#   5. the topic-category × phase ladder over open PRs and help-wanted issues
+#   4. the topic-category × phase ladder over open PRs and help-wanted issues
 #
 # --health-only mode runs the pre-ladder bypasses (current-worktree continuation),
-# the JIT scan, and the origin/main CI health gate, then exits — no sweep,
-# no queue scan, no PR/issue fetches. /dispatch SKILL.md uses it to re-seed the
-# dispatch chain heartbeat cheaply.
+# the JIT scan, and the origin/main CI health gate, then exits — no queue scan,
+# no PR/issue fetches. /dispatch SKILL.md uses it to re-seed the dispatch chain
+# heartbeat cheaply.
 # Output is exactly one line:
 #   ok                          — safe to proceed (either main is healthy or the
 #                                 current branch is an <N>-* worktree that
@@ -48,18 +37,6 @@
 #
 # --qa mode omits the <phase> field — there it is always "qa":
 #   pr <num> <branch>           — the QA PR to work on
-#
-# --no-sweep (default mode only) skips the internal dispatch-sweep invocation.
-# SKILL.md uses this after the user declines a cleanup-unknown confirmation,
-# so the next call doesn't immediately re-halt on the same unknown orphan.
-#
-# --cleanup-confirm <path> (default mode only) executes the user-confirmed
-# cleanup of an unknown orphan, then resumes selection in the same call —
-# replacing the SKILL.md chain of "dispatch-sweep --cleanup-unknown <path>"
-# followed by a re-invocation of this script. On a successful cleanup the
-# script re-runs the internal sweep+route exactly as default mode does; if a
-# second unknown orphan exists it halts again with cleanup-unknown <path2>,
-# letting SKILL.md re-confirm with the user.
 #
 # Selection is two-tier: a topic *category* nests outside the phase *ladder*.
 # Categories, highest priority first:
@@ -98,34 +75,17 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 QA_MODE=false
 HEALTH_ONLY=false
-NO_SWEEP=false
-CLEANUP_CONFIRM_PATH=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --qa) QA_MODE=true; shift ;;
     --health-only) HEALTH_ONLY=true; shift ;;
-    --no-sweep) NO_SWEEP=true; shift ;;
-    --cleanup-confirm)
-      if [[ -z "${2:-}" ]]; then
-        echo "error: --cleanup-confirm requires a <path> argument" >&2
-        exit 1
-      fi
-      CLEANUP_CONFIRM_PATH="$2"; shift 2 ;;
     *) echo "error: unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 
 if [[ "$QA_MODE" == "true" && "$HEALTH_ONLY" == "true" ]]; then
   echo "error: --qa and --health-only are mutually exclusive" >&2
-  exit 1
-fi
-if [[ -n "$CLEANUP_CONFIRM_PATH" ]] && [[ "$QA_MODE" == "true" || "$HEALTH_ONLY" == "true" ]]; then
-  echo "error: --cleanup-confirm is only valid in default mode" >&2
-  exit 1
-fi
-if [[ -n "$CLEANUP_CONFIRM_PATH" ]] && [[ "$NO_SWEEP" == "true" ]]; then
-  echo "error: --cleanup-confirm and --no-sweep are mutually exclusive" >&2
   exit 1
 fi
 
@@ -293,40 +253,6 @@ jit_scan() {
   echo "jit-reminder $winner"
 }
 
-# Run dispatch-sweep once and route its outcome. On a routed outcome
-# (worktree-adopted or cleanup-unknown) this exits the script directly; on a
-# fall-through outcome (empty stdout or a non-3 non-zero exit) it returns so
-# the caller can proceed to the topic-category × phase ladder. Used by both
-# default mode and --cleanup-confirm — they diverge only in whether they run
-# dispatch-sweep --cleanup-unknown first.
-sweep_and_route() {
-  local sweep_err sweep_out sweep_rc path
-  sweep_err=$(mktemp)
-  if sweep_out=$("$SCRIPT_DIR/dispatch-sweep" 2>"$sweep_err"); then
-    # Exit 0: empty stdout → fall through to the ladder; "worktree <N> <branch>"
-    # → adopted.
-    if [[ "$sweep_out" =~ ^worktree[[:space:]]+([0-9]+)[[:space:]]+(.+)$ ]]; then
-      echo "worktree-adopted ${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
-      rm -f "$sweep_err"
-      exit 0
-    fi
-  else
-    sweep_rc=$?
-    if [[ "$sweep_rc" -eq 3 ]] && grep -q '^cleanup-unknown:' "$sweep_err"; then
-      path=$(grep -m1 '^cleanup-unknown:' "$sweep_err" | sed 's/^cleanup-unknown://')
-      echo "cleanup-unknown $path"
-      rm -f "$sweep_err"
-      exit 0
-    fi
-    # Other non-zero exits: log diagnostic, fall through to the ladder.
-    # The sweep is best-effort; a malformed invocation or transient gh/git
-    # failure should not stall the workflow.
-    echo "warning: dispatch-sweep exited $sweep_rc; falling through to ladder" >&2
-    [[ -s "$sweep_err" ]] && cat "$sweep_err" >&2
-  fi
-  rm -f "$sweep_err"
-}
-
 if [[ "$HEALTH_ONLY" == "true" ]]; then
   if on_worktree_branch; then
     echo "ok"
@@ -377,23 +303,6 @@ if [[ "$QA_MODE" == "false" ]]; then
     exit 0
   fi
 
-  # Internal sweep: adopt an orphaned worktree elsewhere on disk, or halt on
-  # an unknown orphan. Runs after current-worktree continuation (above) so a
-  # session inside an <issue>-* worktree always continues there. --no-sweep
-  # skips this so a re-call after a declined cleanup-unknown doesn't re-halt
-  # on the same unknown orphan. --cleanup-confirm runs the user-confirmed
-  # cleanup first, then re-enters this same sweep+route block (so a second
-  # unknown orphan, if any, halts the script the same way).
-  if [[ -n "$CLEANUP_CONFIRM_PATH" ]]; then
-    # Cleanup itself is fail-loud: a non-zero exit (invalid path, registration
-    # race) propagates with stderr intact, matching the cleanup-unknown
-    # detection path's posture. SKILL.md prose stops and reports just like any
-    # other dispatch-script error.
-    "$SCRIPT_DIR/dispatch-sweep" --cleanup-unknown "$CLEANUP_CONFIRM_PATH"
-  fi
-  if [[ "$NO_SWEEP" == "false" ]]; then
-    sweep_and_route
-  fi
 fi
 
 # Collect branches that already have a local worktree (a session is working them).

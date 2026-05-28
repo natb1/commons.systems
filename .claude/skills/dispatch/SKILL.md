@@ -208,15 +208,15 @@ continue to target selection.
     paths.
 
 - **No argument** → run target selection. A single invocation decides every
-  Step 3 outcome: current-worktree continuation, JIT, main-broken gate, sweep
-  orphan adoption, and the queue ladder are all internal to the script and
-  emitted on its one output line.
+  Step 3 outcome: current-worktree continuation, JIT, main-broken gate, and
+  the queue ladder are all internal to the script and emitted on its one
+  output line.
 
   ```bash
   SELECTED=$(.claude/skills/dispatch/scripts/dispatch-select-target)
   ```
 
-  (`dangerouslyDisableSandbox: true` — it calls `gh` and walks `/proc`.)
+  (`dangerouslyDisableSandbox: true` — it calls `gh`.)
 
   Route on `$SELECTED`:
 
@@ -228,28 +228,12 @@ continue to target selection.
     lock*), report that the current worktree belongs to closed/unrecognized
     issue `<N>`, then **proceed to Step 7** (early-stop) (consistent with the
     named-target "closed → report and stop" rule in Step 4).
-  - `worktree-adopted <N> <branch>` — `dispatch-sweep` adopted an orphaned
-    worktree elsewhere on disk. Skip Step 4 and proceed to Step 5 with `<N>` and
-    mode `explicit` — treat the adoption like an explicit `/dispatch <N>`.
-    (Step 4's closed-issue, open-blocker, and ready-PR gates have already been
-    enforced by `dispatch-sweep` itself before emitting this directive — a
-    `done`-phase orphan whose PR is non-draft and awaiting human merge is not
-    adopted and instead falls through to the queue-ladder on the next tick.)
   - `pr <num> <branch> <phase>` — a PR to work on; `<phase>` is pre-derived by
     the selection scan, so Step 6 reuses it instead of re-deriving. Proceed to
     Step 5 with mode `queue`.
   - `issue <num>` — a `help wanted` issue to implement, pre-resolved by the
     selection scan to a startable open leaf (not necessarily the top-level
     `help wanted` issue). Proceed to Step 5 with mode `queue`.
-  - `cleanup-unknown <path>` — the sweep found a worktree with no open PR and
-    no inferable issue number. Invoke `/dispatch-cleanup-unknown <path>` — the
-    skill owns the `AskUserQuestion` confirmation and the on-Yes/No actions, and
-    returns the resumed `dispatch-select-target` output (`worktree-adopted`,
-    `pr`, `issue`, `empty`, or another `cleanup-unknown <path2>` if a second
-    unknown orphan exists — re-invoke the skill with the new path to confirm)
-    for routing here. Treat the returned line as a fresh `$SELECTED` and route
-    on it as above. This is the only sweep path that can destroy
-    potentially-unmerged code.
   - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`, then
     **proceed to Step 7** (early-stop). The skill owns the failing-check
     enumeration, log-fetch, summary, lock-release, and stop.
@@ -268,11 +252,11 @@ continue to target selection.
   still targets 123.
 
   Priority order the script implements, top to bottom: current-worktree
-  continuation → JIT scan → `origin/main` CI health gate → sweep orphan
-  adoption → topic-category × phase ladder. A jit-reminder surfaces even when
-  `origin/main` is red because the JIT scan precedes the main-broken gate;
-  current-worktree continuation surfaces before either, so a session inside an
-  `<issue>-*` worktree always continues there.
+  continuation → JIT scan → `origin/main` CI health gate → topic-category ×
+  phase ladder. A jit-reminder surfaces even when `origin/main` is red because
+  the JIT scan precedes the main-broken gate; current-worktree continuation
+  surfaces before either, so a session inside an `<issue>-*` worktree always
+  continues there.
 
   The topic-category × phase ladder is two-tier: a topic **category** nests
   outside the phase **ladder**. Categories, highest priority first:
