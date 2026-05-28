@@ -278,15 +278,16 @@ continue to target selection.
   phase ladder. A jit-reminder surfaces even when `origin/main` is red because
   the JIT scan precedes the main-broken gate.
 
-  The topic-category × phase ladder is two-tier: a topic **category** nests
-  outside the phase **ladder**. Categories, highest priority first:
-  `priority` → `bug` → `testing infrastructure` → `dispatch` → `other`. A
-  `priority`-labelled issue (or a PR closing one) outranks every other
-  category; the label is human-applied — `/ready` never applies it
-  automatically. A PR's category is the highest-priority topic among the
-  labels of every issue it closes; an issue's category is the highest-priority
-  topic among its own labels; anything with no topic label is `other`. The
-  selector exhausts one category's whole ladder before moving to the next.
+  The topic-category × phase ladder is three-tier: a topic **category** nests
+  outside a **priority bit**, which nests outside the phase **ladder**.
+  Categories, highest first: `bug` → `testing infrastructure` → `dispatch` →
+  `other`. Within each category, items carrying the `priority` label rank above
+  items without it; the label is human-applied — `/ready` never applies it
+  automatically. A PR's category is the highest-priority topic among the labels
+  of every issue it closes; an issue's category is the highest-priority topic
+  among its own labels; anything with no topic label is `other`. The selector
+  exhausts one `(category, priority)` bucket's whole ladder before moving to
+  the next.
 
   Within each category the ladder is (highest first; within a tier, oldest PR
   wins; PRs and `help wanted` issues with a local worktree are skipped; a PR
@@ -474,23 +475,109 @@ Spawn a `/dispatch-worker <N> <worktree-path>` background job. The spawn runs
 from the router's own cwd (`worktrees/main`) — `dispatch-spawn-worker` does
 **not** `cd` into the target worktree, so the daemon's launcher-default cwd
 stays anchored at the main worktree; the worker `cd`s into its target worktree
-as its own Step 0. Run with `dangerouslyDisableSandbox: true` — the script
-reaches the local Claude daemon over a socket; see `.claude/rules/sandbox.md`:
+as its own Step 0. Before spawning, consult the concurrency budgeter (see
+*Concurrency budgeting* below). If the live worker count already meets the
+target, **skip the spawn** for this tick — the chain re-seeds on the next
+router tick when budget reopens. Run with `dangerouslyDisableSandbox: true` —
+both the budgeter and `lib-claude-agents.sh` reach the local Claude daemon over
+a socket; see `.claude/rules/sandbox.md`:
 
 ```bash
-.claude/skills/dispatch/scripts/dispatch-spawn-worker <N> "$WORKTREE_PATH"
+source .claude/skills/dispatch/scripts/lib-claude-agents.sh
+TARGET_N=$(.claude/skills/dispatch/scripts/dispatch-target-workers)
+if LIVE_COUNT=$(claude_agents_count_by_name_prefix dispatch-worker-); then
+  if (( LIVE_COUNT >= TARGET_N )); then
+    echo "router: skipping spawn — $LIVE_COUNT live worker(s) >= target $TARGET_N (drain concurrency-cap)"
+    # Skip-over-cap is `drain concurrency-cap`; proceed to Step 7.
+  else
+    .claude/skills/dispatch/scripts/dispatch-spawn-worker <N> "$WORKTREE_PATH"
+  fi
+else
+  # UNKNOWN — daemon query failed. Fail open and proceed to spawn; the
+  # per-worktree dedup inside dispatch-spawn-worker is the last-line
+  # defense if a worker is already there.
+  .claude/skills/dispatch/scripts/dispatch-spawn-worker <N> "$WORKTREE_PATH"
+fi
 ```
 
-It prints `spawned` (a worker was started) or `deduped` (another live worker
-already has the worktree-basename `--name` — the per-worktree invariant
-prevents two workers from racing on the same worktree) and exits 0; it exits
-non-zero when a worker was spawned but did not register.
+`dispatch-spawn-worker` prints `spawned` (a worker was started) or `deduped`
+(another live worker already has the worktree-basename `--name` — the
+per-worktree invariant prevents two workers from racing on the same worktree)
+and exits 0; it exits non-zero when a worker was spawned but did not register.
 
 The router never derives the phase, runs a phase skill, or invokes the
 pre-implementation relevance review — those are the worker's responsibilities
 (`/dispatch-worker` Steps 1–3).
 
-After the spawn returns, **proceed to Step 7** (terminal disposition).
+After the spawn (or skip) returns, **proceed to Step 7** (terminal disposition).
+
+### Concurrency budgeting
+
+`dispatch-target-workers` composes two open-loop schedules that decide how
+many concurrent `dispatch-worker-*` sessions should run:
+
+- **Weekly ramp** (sets the magnitude) — drives target_N
+  conservative-early/aggressive-late toward `target_weekly_usage_pct` by the
+  weekly window's `resets_at`. The shape is
+  `(tau / (remaining_weekly + tau)) ^ k`; smaller `tau` and larger `k` mean
+  more deferred consumption.
+
+  | remaining_weekly | ramp_weekly | candidate target_N |
+  |------------------|------------:|-------------------:|
+  | 7 days (604800s) | 0.0156      | 0                  |
+  | 3 days (259200s) | 0.0625      | 1                  |
+  | 1 day (86400s)   | 0.25        | 2                  |
+  | 6 hours (21600s) | 0.64        | 5                  |
+  | 1 hour (3600s)   | 0.922       | 7                  |
+  | 0                | 1.0         | 8                  |
+
+- **5-hour linear cap** (binary gate) — over each 5-hour window, the cap on
+  `used_5h` rises linearly from `0` at window-start to
+  `target_five_hour_usage_pct` at window-end. When `used_5h >= cap_5h`, the
+  budgeter prints `0` regardless of the weekly ramp's otherwise-positive
+  output, pausing spawning until either the window resets or the cap rises
+  enough to clear it.
+
+  | remaining_5h   | elapsed_5h_frac | cap_5h |
+  |----------------|----------------:|-------:|
+  | 5h (18000s)    | 0.0             | 0%     |
+  | 4h (14400s)    | 0.2             | 10%    |
+  | 2.5h (9000s)   | 0.5             | 25%    |
+  | 1h (3600s)     | 0.8             | 40%    |
+  | 0              | 1.0             | 50%    |
+
+  At window-start, `cap_5h = 0` and the gate condition `used_5h >= cap_5h`
+  evaluates as `0 >= 0`, so spawning is briefly paused for the first slice of
+  every 5h window. This is intentional — the linear schedule enforces the
+  per-window ceiling from second zero. The blackout clears as soon as `cap_5h`
+  rises above the current `used_5h`; if `used_5h` was 0 at refresh, this
+  happens within seconds.
+
+Tunables (each optional in `dispatch.config/target-workers.json`; defaults
+baked into the script):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `target_weekly_usage_pct` | 90 | Weekly ramp's terminal target. |
+| `target_five_hour_usage_pct` | 50 | 5-hour cap's terminal ceiling. |
+| `max_concurrent_workers` | 8 | Absolute cap on `target_N`. |
+| `ramp_tau_seconds` | 86400 | Weekly ramp time-constant. |
+| `ramp_shape_k` | 2 | Weekly ramp concavity. |
+| `five_hour_window_seconds` | 18000 | 5-hour window length (for cap-slope only). |
+
+Recalibration: if mid-week idleness is too long, try `ramp_tau_seconds=172800`
+(2 days) or `ramp_shape_k=1` (less concave). If the 5-hour cap is too tight,
+raise `target_five_hour_usage_pct`. If you need more headroom for parallel
+work, raise `max_concurrent_workers`.
+
+**Missing-telemetry fallback.** When
+`~/.local/share/productivity-tui/rate_limits.json` is missing or unreadable,
+`dispatch-target-workers` prints `1` and writes a one-line note to stderr —
+the gate's first comparison (`0 >= 1` is false on a typical fresh router
+tick) is a no-op, so the chain degrades to today's "spawn one per tick"
+behavior. The same fallback applies when the `seven_day` block is absent
+(no weekly ramp anchor); a missing `five_hour` block alone disables the
+5-hour gate but the weekly ramp still applies.
 
 ## 7. Terminal Disposition
 
@@ -533,11 +620,13 @@ The three dispositions:
   | `notify main-broken` | Step 3 — `/dispatch-diagnose-main` ran and returned (`origin/main` is red) |
   | `notify target-blocked` | Step 4 — named target is closed or has an open blocker |
 
-- **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty) or
+- **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty),
   `drain worktree-conflict` (Step 5, target's worktree is owned by another
-  live session). The call site has already printed a **mandatory**
-  user-visible report stating the reason and the recovery path (templates
-  live at the Step 3 and Step 5 call sites). Then self-close
+  live session), or `drain concurrency-cap` (Step 6, `live_count >=
+  target_N` — the chain re-seeds on the next router tick when budget
+  reopens). The call site has already printed a **mandatory** user-visible
+  report stating the reason and the recovery path (templates live at the
+  Step 3, Step 5, and Step 6 call sites). Then self-close
   (`dangerouslyDisableSandbox: true`):
 
   ```bash

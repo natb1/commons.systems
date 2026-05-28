@@ -8,8 +8,9 @@
 # the brittle /proc-walk previously duplicated across dispatch scripts.
 #
 # Usage: source this file, then call:
-#   claude_sessions_under        <worktree-path>
-#   worktree_has_live_session    <worktree-path>
+#   claude_sessions_under              <worktree-path>
+#   worktree_has_live_session          <worktree-path>
+#   claude_agents_count_by_name_prefix <name-prefix>
 #
 # claude_sessions_under <path>
 #   The low-level primitive. Runs `claude agents --json --cwd <path>`, which
@@ -30,6 +31,22 @@
 #     return 0 — occupied OR unknown: do NOT start a session under <path>.
 #     return 1 — definitely no live session under <path>.
 #   `if worktree_has_live_session <path>` is fail-safe by construction.
+#
+# claude_agents_count_by_name_prefix <prefix>
+#   Counts live sessions whose `name` starts with `<prefix>`, machine-wide (no
+#   `--cwd` filter). On a single dev machine this is acceptable; if two separate
+#   checkouts run in parallel, their `dispatch-worker-*` sessions are counted
+#   together, inflating the count and gating spawning too aggressively —
+#   fail-safe (errs toward fewer workers). Used by the dispatch router's
+#   concurrency gate to count live `dispatch-worker-*` sessions before deciding
+#   whether to spawn one more. Same UNKNOWN contract as `claude_sessions_under`:
+#   a count of `0` is a definite "no matches", non-zero return is "could not
+#   determine".
+#     return 0 — daemon queried successfully. Stdout is a single integer (>=0)
+#               line: the count of matching sessions.
+#     return 1 — UNKNOWN. Stdout is empty. Callers that gate on the count
+#               should fail open (proceed to spawn) — the per-worktree dedup
+#               inside `dispatch-spawn-worker` is the last-line defense.
 #
 # Test override: CLAUDE_AGENTS_CMD replaces the `claude` invocation with an
 # arbitrary command (e.g. an absolute path to a fake script), so the helper is
@@ -109,6 +126,41 @@ if [[ -z "${_LIB_CLAUDE_AGENTS_LOADED:-}" ]]; then
     fi
     # The daemon was queried successfully and reported zero sessions.
     return 1
+  }
+
+  # claude_agents_count_by_name_prefix <prefix> — emit the count of live
+  # sessions whose `name` starts with <prefix>. See the header comment.
+  claude_agents_count_by_name_prefix() {
+    local prefix="${1:-}"
+    if [[ -z "$prefix" ]]; then
+      printf 'lib-claude-agents: claude_agents_count_by_name_prefix requires a <prefix> argument\n' >&2
+      return 1
+    fi
+
+    # No --cwd here: the router needs a machine-wide count of live workers, not
+    # a per-path filter. Two checkouts on the same machine share this count —
+    # cross-repo inflation is fail-safe (gates spawning conservatively).
+    # 2>/dev/null drops daemon noise.
+    local out
+    if ! out=$("${CLAUDE_AGENTS_CMD:-claude}" agents --json 2>/dev/null); then
+      return 1
+    fi
+    if [[ -z "${out//[[:space:]]/}" ]]; then
+      return 1
+    fi
+
+    # One jq pass validates the array shape and counts matches. Non-array
+    # input errors out and the result is UNKNOWN.
+    local count
+    if ! count=$(jq -r --arg prefix "$prefix" '
+      if type == "array"
+      then [ .[] | select(.name | type == "string" and startswith($prefix)) ] | length
+      else error("claude agents --json output is not a JSON array")
+      end' <<<"$out" 2>/dev/null); then
+      return 1
+    fi
+    printf '%s\n' "$count"
+    return 0
   }
 
 fi
