@@ -14,8 +14,9 @@ Each `/dispatch` is a `claude --bg` background job (#725) rooted in
 `worktrees/main`. The router selects, spawns a worker, and exits. The worker
 runs one phase in its target worktree, then spawns a fresh `/dispatch` router
 back in `worktrees/main` and self-deletes. That router → worker → router
-chain advances the workflow; the #725 heartbeat re-seeds it when no job is
-running.
+chain advances the workflow; the #725 daily 9 AM restart-from-zero re-seeds
+it when the prior day ended without an in-flight worker (see Step 7's
+*The #725 daily restart* subsection).
 
 `/dispatch` takes an **optional issue-or-PR-number argument** (leading `#`
 optional). With an argument, it targets that issue and skips the queue scan; a
@@ -56,9 +57,9 @@ Route on `$LOCK`:
 - **`acquired`** → this `/dispatch` holds the lock; proceed to Step 1.
 - **`busy`** → the wait timeout elapsed without acquiring — a wedged selection
   in another `/dispatch`. The script's **stderr** carries a one-line diagnostic
-  naming the wait duration and the holding sessionId; report those then **proceed
-  to Step 7** (early-stop) — run no sync, no health gate, no sweep, no selection,
-  and no phase skill.
+  naming the wait duration and the holding sessionId; report those, then proceed
+  to Step 7 with `notify busy-lock-timeout` (subsumes #850) — run no sync, no
+  health gate, no sweep, no selection, and no phase skill.
 
 ### Releasing the lock
 
@@ -73,10 +74,14 @@ command:
   `tmp/dispatch-worktree` marker (see *Step 5* and the marker paragraph below)
   and execs `dispatch-acquire-lock --release` in one step.
 - **Every Steps 1-5 stop path** — immediately before reporting the stop reason
-  and proceeding to Step 7 (early-stop), run
+  and proceeding to Step 7, run
   `.claude/skills/dispatch/scripts/dispatch-acquire-lock --release` directly.
   Stop paths fire before the marker is written, so the strict
   `CLAUDE_CODE_SESSION_ID`-match branch applies.
+
+The `main-broken` stop path is the one exception: `/dispatch-diagnose-main`
+runs `--release` itself as its Step 3, so `/dispatch` Step 3's `main-broken`
+branch must not call `--release` again.
 
 Both calls need `dangerouslyDisableSandbox: true` (same reason as Step 0); no
 elevated timeout is needed — `--release` returns immediately. They print
@@ -157,8 +162,8 @@ It is a no-op when local `main` already equals `origin/main`.
 
 - If `git fetch` fails, or `git merge --ff-only` rejects a non-fast-forward (local
   `main` has diverged with unexpected commits), release the lock (see *Releasing
-  the lock*), surface the error, then **proceed to Step 7** (early-stop) — do
-  not proceed to target selection.
+  the lock*), surface the error, then proceed to Step 7 with `notify sync-failed`
+  — do not proceed to target selection.
 
 ## 2. Run the JIT Engine
 
@@ -201,11 +206,10 @@ continue to target selection.
   - **Exit 0** → `$TARGET` is the target issue number; that issue is the target.
     Skip the queue scan.
   - **Non-zero exit** → release the lock (see *Releasing the lock*), report the
-    script's stderr message, then **proceed to Step 7** (early-stop); create no
-    worktree. This covers a PR
-    that closes no issue, a PR that closes more than one issue, and an argument
-    that is neither an issue nor a PR — consistent with the other Steps 1-5 stop
-    paths.
+    script's stderr message, then proceed to Step 7 with `notify resolver-failed`;
+    create no worktree. This covers a PR that closes no issue, a PR that closes
+    more than one issue, and an argument that is neither an issue nor a PR —
+    consistent with the other Steps 1-5 stop paths.
 
 - **No argument** → run target selection. A single invocation decides every
   Step 3 outcome: current-worktree continuation, JIT, main-broken gate, sweep
@@ -226,8 +230,9 @@ continue to target selection.
   - `worktree-closed <N> <branch>` — the current branch is `<N>-…` and issue
     `<N>` is closed or unrecognized. Release the lock (see *Releasing the
     lock*), report that the current worktree belongs to closed/unrecognized
-    issue `<N>`, then **proceed to Step 7** (early-stop) (consistent with the
-    named-target "closed → report and stop" rule in Step 4).
+    issue `<N>`, then proceed to Step 7 with `notify worktree-closed`
+    (consistent with the named-target "closed → report and stop" rule in
+    Step 4).
   - `worktree-adopted <N> <branch>` — `dispatch-sweep` adopted an orphaned
     worktree elsewhere on disk. Skip Step 4 and proceed to Step 5 with `<N>` and
     mode `explicit` — treat the adoption like an explicit `/dispatch <N>`.
@@ -250,9 +255,12 @@ continue to target selection.
     for routing here. Treat the returned line as a fresh `$SELECTED` and route
     on it as above. This is the only sweep path that can destroy
     potentially-unmerged code.
-  - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`, then
-    **proceed to Step 7** (early-stop). The skill owns the failing-check
-    enumeration, log-fetch, summary, lock-release, and stop.
+  - `main-broken <sha>` — invoke `/dispatch-diagnose-main <sha>`, then proceed
+    to Step 7 with `notify main-broken`. The skill owns the failing-check
+    enumeration, log-fetch, summary, and lock-release; the caller-side
+    `notify main-broken` disposition keeps the session in `claude agents`
+    until the user closes it, so the diagnosis stays visible rather than
+    being buried in a closed transcript.
   - `jit-reminder <repo> <num> <project> <item-id>` — invoke
     `/dispatch-jit-reminder <repo> <num> <project> <item-id>`, then stop the
     tick directly (the skill is a Step 7 bypass — its user-visible summary must
@@ -260,7 +268,9 @@ continue to target selection.
     + lock-release + summarize + stop sequence; Steps 4, 5, and 6 are all
     skipped.
   - `empty` — nothing eligible. Release the lock (see *Releasing the lock*),
-    report that the queue is empty, then **proceed to Step 7** (early-stop).
+    then proceed to Step 7 with `drain empty-queue` — the user-visible report
+    is mandatory there ("queue empty — closing; #725 restart will re-check at
+    9 AM"), not optional.
 
   An **explicit issue argument overrides current-worktree detection** — the
   selection script, and therefore its current-worktree detection, runs only
@@ -340,12 +350,45 @@ Skip leaf tracing when:
 
 If the resolved target issue `<N>` has any **open** blocker — run
 `issue-blocking <N>` and check for any entry with `state` `OPEN` — release the
-lock (see *Releasing the lock*), report the open blocker, then **proceed to
-Step 7** (early-stop). This guard applies even when a PR exists; closed blockers
-do not gate.
+lock (see *Releasing the lock*), report the open blocker, apply
+`dispatch:office-hours` to the target's PR if one exists (see *Applying
+`dispatch:office-hours`* below), then proceed to Step 7 with
+`notify target-blocked`. This guard applies even when a PR exists; closed
+blockers do not gate.
 
 If a named target issue is **closed**, release the lock (see *Releasing the
-lock*), report it, then **proceed to Step 7** (early-stop).
+lock*), report it, apply `dispatch:office-hours` to the target's PR if one
+exists (see *Applying `dispatch:office-hours`* below), then proceed to Step 7
+with `notify target-blocked`.
+
+### Applying `dispatch:office-hours`
+
+`notify target-blocked` queues the target for human review by applying
+`dispatch:office-hours` to its PR when one exists. Resolve the PR with
+`.claude/skills/dispatch/scripts/dispatch-find-pr <N>`; if it prints a PR
+number, apply the label with the apply-first / create-on-"not found" idiom
+(`gh`, `dangerouslyDisableSandbox: true`):
+
+```bash
+gh pr edit <pr-num> --add-label dispatch:office-hours
+```
+
+If the first call fails because the label does not exist yet, create it and
+retry — the same idiom `dispatch-complete-phase` uses:
+
+```bash
+gh label create dispatch:office-hours \
+  --description "dispatch workflow: blocked on a human — awaiting input or review"
+gh pr edit <pr-num> --add-label dispatch:office-hours
+```
+
+Pass no `--color`: `dispatch-complete-phase` is the single source of the
+`dispatch:*` label-colour metadata, and #757 owns `dispatch:office-hours`'s
+canonical definition — this call site only needs the label to exist.
+
+If `dispatch-find-pr` prints nothing, print a clear diagnostic to stderr
+without applying the label; the disposition still proceeds to Step 7 as
+`notify target-blocked` and the session stays open in `claude agents`.
 
 ## 5. Resolve the Worktree
 
@@ -414,9 +457,11 @@ worktree path that Step 6 will pass to `dispatch-spawn-worker`.
   another session owns it. (`dispatch-select-target` resolves the `help wanted`
   tier to a leaf with no worktree, so for a queue selection this arises only from
   a race — another session created the worktree between selection and worktree
-  resolution.) Release the lock (see *Releasing the lock*), then report the
-  conflict (name `<path>` and issue `<N>`), then **proceed to Step 7**
-  (early-stop); do not spawn a worker.
+  resolution.) Release the lock (see *Releasing the lock*), then proceed to
+  Step 7 with `drain worktree-conflict` — the user-visible report is mandatory
+  there ("worktree at `<path>` owned by another live session for issue `<N>`;
+  closing — #725 restart will re-check at 9 AM"), not optional. Do not spawn a
+  worker.
 
 On every non-`conflict` path, before the worker is spawned, create the recovery
 marker **inside the target worktree** (`$WORKTREE_PATH`):
@@ -437,7 +482,7 @@ in-skill defense for the `here` path and for any code path that bypasses the
 hook. The router itself never writes the marker
 into its own cwd (`worktrees/main`), so a `SessionStart:clear` there is a
 no-op — correct, since the router is short-lived and re-seeded by the #725
-heartbeat. The marker is an empty boolean flag with no payload; it persists
+daily restart. The marker is an empty boolean flag with no payload; it persists
 for the worktree's life and needs no cleanup — `tmp/` is git-ignored, and
 removing the worktree removes it.
 
@@ -469,33 +514,78 @@ After the spawn returns, **proceed to Step 7** (terminal disposition).
 
 ## 7. Terminal Disposition
 
-The router's tick ends here. There are two dispositions:
+The router's tick ends here. The disposition that routed it here determines
+the action.
 
-- **spawn-failed** — the Step 6 `dispatch-spawn-worker` call exited non-zero
-  (a worker was spawned but did not register). Do **not** self-close. Report
-  the failed spawn and stop, leaving this router job open so the failure is
-  visible and the spawn can be retried.
+**Invariant**: the only silent terminal path is `propagate` on success.
+Every other terminal disposition — `propagate` falling through to `notify
+spawn-failed` on a failed spawn, every `notify <reason>` variance, every
+`drain <reason>` no-work case — emits a user-visible report before the
+session ends (before `dispatch-self-close` for `drain` and `propagate`;
+before this turn's text output completes for `notify`, which does not
+self-close). A silent `notify` or silent `drain` is a defect.
 
-- **clean completion or early-stop** — every other terminal path:
-  - Step 6 returned `spawned` or `deduped` (clean completion).
-  - A Steps 0–5 stop path (busy lock, sync failure, empty queue, `main-broken`,
-    resolver failure, `worktree-closed`, closed-issue target, open-blocker
-    gate, `worktree` conflict, jit-reminder summary). The jit-reminder
-    summary is an exception that **does not self-close** — it bypasses Step 7
-    entirely, per the jit-reminder handler in Step 3.
+The three dispositions:
 
-  Self-close (`dangerouslyDisableSandbox: true`):
+- **`propagate`** — Step 6's `dispatch-spawn-worker` returned `spawned` or
+  `deduped`. The chain moved forward. Self-close
+  (`dangerouslyDisableSandbox: true`):
 
   ```bash
   .claude/skills/dispatch/scripts/dispatch-self-close
   ```
 
-  The script removes the managed background job by its job-id (the basename of
-  `$CLAUDE_JOB_DIR`). It is a no-op when `CLAUDE_JOB_DIR` is unset (the
-  session is interactive, not a managed background job) — so an interactive
-  `/dispatch` reaching Step 7 does not stop the user's live conversation.
+- **`notify <reason>`** — `notify spawn-failed` (Step 6's spawn exited
+  non-zero) or any Steps 0–5 variance. The call site has already printed a
+  user-visible report; for `notify target-blocked` it has also applied
+  `dispatch:office-hours` to the target's PR when one is resolvable (see
+  Step 4's *Applying `dispatch:office-hours`* subsection). Do **not**
+  self-close — the session stays in `claude agents` until the user closes
+  it, so the variance is visible rather than buried in a closed transcript.
+
+  The Steps 0–5 `notify` variances and their sources:
+
+  | Disposition | Source |
+  |---|---|
+  | `notify busy-lock-timeout` | Step 0 — wait timeout while another router holds the lock (subsumes #850) |
+  | `notify sync-failed` | Step 1 — `git fetch` failed or `git merge --ff-only` rejected a non-fast-forward |
+  | `notify resolver-failed` | Step 3 — `dispatch-resolve-arg` non-zero (PR closes ≠1 issue, bad argument) |
+  | `notify worktree-closed` | Step 3 — current worktree belongs to a closed or unrecognized issue |
+  | `notify main-broken` | Step 3 — `/dispatch-diagnose-main` ran and returned (`origin/main` is red) |
+  | `notify target-blocked` | Step 4 — named target is closed or has an open blocker |
+
+- **`drain <reason>`** — `drain empty-queue` (Step 3, queue empty) or
+  `drain worktree-conflict` (Step 5, target's worktree is owned by another
+  live session). The call site has already printed a **mandatory**
+  user-visible report stating the reason and the recovery path (templates
+  live at the Step 3 and Step 5 call sites). Then self-close
+  (`dangerouslyDisableSandbox: true`):
+
+  ```bash
+  .claude/skills/dispatch/scripts/dispatch-self-close
+  ```
+
+`dispatch-self-close` removes the managed background job by its job-id (the
+basename of `$CLAUDE_JOB_DIR`). It is a no-op when `CLAUDE_JOB_DIR` is unset
+(the session is interactive, not a managed background job) — so an
+interactive `/dispatch` reaching Step 7 does not stop the user's live
+conversation.
+
+Step 3's `jit-reminder` and `cleanup-unknown` outcomes do not reach Step 7.
+`jit-reminder` is a deliberate bypass — its user-visible summary must stay
+open in the transcript for a human to read, so the skill stops the tick
+directly. `cleanup-unknown` returns to Step 3's routing.
 
 The router does **not** spawn a successor `/dispatch` itself — the worker
-spawned in Step 6 will spawn a fresh router back in `worktrees/main` when its
-phase completes (`/dispatch-worker` Step 4). For early-stop dispositions, no
-worker was spawned; the #725 heartbeat re-seeds the chain if it has drained.
+spawned in Step 6 spawns a fresh router back in `worktrees/main` when its
+phase completes (`/dispatch-worker` Step 4).
+
+### The #725 daily restart
+
+The #725 daily 9 AM dispatch restart is the workflow's restart-from-zero
+mechanism. It re-seeds the chain when the prior day ended without an
+in-flight worker — covering the cumulative end-of-day drain (every `drain`
+disposition that ended a tick), rate-limit cap reached (#845), predecessor
+crash, and missed ticks (e.g. a WSL shutdown). It is not tied to any one
+disposition; every terminal state, including `notify` paths whose sessions
+the user closes without manual restart, falls within its scope.
