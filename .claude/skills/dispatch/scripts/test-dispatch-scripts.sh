@@ -5225,62 +5225,7 @@ else
 fi
 spawn_router_teardown
 
-# --- Test 5: prune -----------------------------------------------------------
-
-echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
-spawn_router_setup
-# Seed the on-disk ledger with four entries:
-#   abcd1234  — stopped dispatch-* router name (the rm target)
-#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
-#   ef015678  — stopped non-dispatch (must NOT be pruned)
-#   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_ROUTER_JOBS_DIR/abcd1234" "$SPAWN_ROUTER_JOBS_DIR/feed5678" \
-  "$SPAWN_ROUTER_JOBS_DIR/ef015678" "$SPAWN_ROUTER_JOBS_DIR/9999cccc"
-printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/abcd1234/state.json"
-printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/feed5678/state.json"
-printf '%s' '{"name":"manual-session","state":"stopped"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/ef015678/state.json"
-printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
-  > "$SPAWN_ROUTER_JOBS_DIR/9999cccc/state.json"
-write_fake_spawn_router_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "prune: dispatch-spawn-router exits 0" "0" "$rc"
-assert_eq "prune: stdout is 'spawned' (stopped agent does not dedup)" \
-  "spawned" "$out"
-rm_log=$(cat "$SPAWN_ROUTER_RM_LOG" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" == *"abcd1234"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: 'claude rm abcd1234' (directory basename, not sessionId) was invoked"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: 'claude rm abcd1234' (directory basename) was invoked"
-  echo "    rm-log: $rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" == *"feed5678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-  echo "    rm-log: $rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" != *"ef015678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: non-dispatch agent 'ef015678' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: non-dispatch agent 'ef015678' was not pruned"
-  echo "    rm-log: $rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$rm_log" != *"9999cccc"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune: live dispatch-* agent '9999cccc' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune: live dispatch-* agent '9999cccc' was not pruned"
-  echo "    rm-log: $rm_log"
-fi
-spawn_router_teardown
-
-# --- Test 6: unqueryable registry fails safe ---------------------------------
+# --- Test 5: unqueryable registry fails safe ---------------------------------
 
 echo "Test: an unparseable session registry fails safe — spawns nothing"
 spawn_router_setup
@@ -5542,62 +5487,7 @@ else
 fi
 spawn_worker_teardown
 
-# --- Test 6: prune -----------------------------------------------------------
-
-echo "Test: stopped dispatch-* agents in the jobs ledger are pruned via 'claude rm'"
-spawn_worker_setup
-# Seed the on-disk ledger with four entries:
-#   abcd1234  — stopped dispatch-* router name (the rm target)
-#   feed5678  — stopped <N>-<slug> worker name (also an rm target)
-#   ef015678  — stopped non-dispatch (must NOT be pruned)
-#   9999cccc  — live (working) dispatch-* (must NOT be pruned)
-mkdir -p "$SPAWN_WORKER_JOBS_DIR/abcd1234" "$SPAWN_WORKER_JOBS_DIR/feed5678" \
-  "$SPAWN_WORKER_JOBS_DIR/ef015678" "$SPAWN_WORKER_JOBS_DIR/9999cccc"
-printf '%s' '{"name":"dispatch-dead0000","state":"stopped"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/abcd1234/state.json"
-printf '%s' '{"name":"999-some-worker","state":"stopped"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/feed5678/state.json"
-printf '%s' '{"name":"manual-session","state":"stopped"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/ef015678/state.json"
-printf '%s' '{"name":"dispatch-live0000","state":"working"}' \
-  > "$SPAWN_WORKER_JOBS_DIR/9999cccc/state.json"
-write_fake_spawn_worker_claude
-if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null); then rc=0; else rc=$?; fi
-assert_eq "prune-worker: dispatch-spawn-worker exits 0" "0" "$rc"
-assert_eq "prune-worker: stdout is 'spawned' (stopped agent does not dedup)" \
-  "spawned" "$out"
-sw_rm_log=$(cat "$SPAWN_WORKER_RM_LOG" 2>/dev/null || true)
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" == *"abcd1234"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: 'claude rm abcd1234' (directory basename) was invoked"
-  echo "    rm-log: $sw_rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" == *"feed5678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: stopped worker-name agent 'feed5678' (999-some-worker) was pruned"
-  echo "    rm-log: $sw_rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" != *"ef015678"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: non-dispatch agent 'ef015678' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: non-dispatch agent 'ef015678' was not pruned"
-  echo "    rm-log: $sw_rm_log"
-fi
-TOTAL=$((TOTAL + 1))
-if [[ "$sw_rm_log" != *"9999cccc"* ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: prune-worker: live dispatch-* agent '9999cccc' was not pruned"
-else
-  FAIL=$((FAIL + 1)); echo "  FAIL: prune-worker: live dispatch-* agent '9999cccc' was not pruned"
-  echo "    rm-log: $sw_rm_log"
-fi
-spawn_worker_teardown
-
-# --- Test 7: unqueryable registry fails safe ---------------------------------
+# --- Test 6: unqueryable registry fails safe ---------------------------------
 
 echo "Test: an unparseable session registry fails safe — spawns nothing"
 spawn_worker_setup
@@ -5621,7 +5511,7 @@ else
 fi
 spawn_worker_teardown
 
-# --- Test 8: missing args ----------------------------------------------------
+# --- Test 7: missing args ----------------------------------------------------
 
 echo "Test: missing arguments exit 2"
 spawn_worker_setup
@@ -5658,7 +5548,7 @@ assert_eq "missing-args-worker: unsafe chars in <worktree-path> → exit 2" "2" 
 
 spawn_worker_teardown
 
-# --- Test 9: dedup + verify query the spawner cwd, NOT the worktree path ----
+# --- Test 8: dedup + verify query the spawner cwd, NOT the worktree path ----
 #
 # Regression guard: in production the daemon server-side-filters `agents
 # --json --cwd <path>` to sessions started under <path>. Since
