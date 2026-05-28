@@ -39,8 +39,8 @@
 # Environment overrides for testability (mirroring dispatch-acquire-lock's
 # DISPATCH_LOCK_* and lib-claude-agents.sh's CLAUDE_AGENTS_CMD):
 #   DISPATCH_SPAWN_ROUTER_CLAUDE_CMD     The `claude` command. The script's own
-#                                        `claude --bg` / `claude rm` / `claude agents`
-#                                        calls use it, and it is exported as
+#                                        `claude --bg` / `claude agents` calls use
+#                                        it, and it is exported as
 #                                        CLAUDE_AGENTS_CMD so the sourced
 #                                        lib-claude-agents.sh helper is faked
 #                                        consistently. Default: `claude`.

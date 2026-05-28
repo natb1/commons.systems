@@ -5047,7 +5047,6 @@ echo "=== dispatch-spawn-router ==="
 #   $TMPDIR_TEST/worktrees/main/ the main worktree (the spawn subshell cd's here)
 #   $TMPDIR_TEST/fake-claude     the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json   the `claude agents --json` fixture
-#   $TMPDIR_TEST/jobs/           the on-disk jobs ledger (DISPATCH_SPAWN_ROUTER_JOBS_DIR)
 #   $TMPDIR_TEST/bg-argv         recorded argv of each `claude --bg` call
 #   $TMPDIR_TEST/rm-log          recorded job-ids of each `claude rm` call
 #   $TMPDIR_TEST/stop-log        recorded job-ids of each `claude stop` call
@@ -5056,7 +5055,6 @@ echo "=== dispatch-spawn-router ==="
 # every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
 
 SPAWN_ROUTER_REGISTRY=""
-SPAWN_ROUTER_JOBS_DIR=""
 SPAWN_ROUTER_BG_ARGV=""
 SPAWN_ROUTER_RM_LOG=""
 SPAWN_ROUTER_STOP_LOG=""
@@ -5109,8 +5107,7 @@ FAKE
 
 spawn_router_setup() {
   TMPDIR_TEST=$(mktemp -d)
-  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main" \
-    "$TMPDIR_TEST/jobs"
+  mkdir -p "$TMPDIR_TEST/scripts" "$TMPDIR_TEST/worktrees/main"
 
   # dispatch-spawn-router sources lib-claude-agents.sh from its own directory, so the
   # helper must sit alongside the copy. It is sourced, not executed — no chmod.
@@ -5119,7 +5116,6 @@ spawn_router_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-router"
 
   SPAWN_ROUTER_REGISTRY="$TMPDIR_TEST/registry.json"
-  SPAWN_ROUTER_JOBS_DIR="$TMPDIR_TEST/jobs"
   SPAWN_ROUTER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_ROUTER_RM_LOG="$TMPDIR_TEST/rm-log"
   SPAWN_ROUTER_STOP_LOG="$TMPDIR_TEST/stop-log"
@@ -5128,19 +5124,17 @@ spawn_router_setup() {
   export DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE="$TMPDIR_TEST/worktrees/main"
   export DISPATCH_SPAWN_ROUTER_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
   export DISPATCH_SPAWN_ROUTER_SESSION_ID="sess-self"
-  export DISPATCH_SPAWN_ROUTER_JOBS_DIR="$SPAWN_ROUTER_JOBS_DIR"
 }
 
 spawn_router_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   SPAWN_ROUTER_REGISTRY=""
-  SPAWN_ROUTER_JOBS_DIR=""
   SPAWN_ROUTER_BG_ARGV=""
   SPAWN_ROUTER_RM_LOG=""
   SPAWN_ROUTER_STOP_LOG=""
   unset DISPATCH_SPAWN_ROUTER_MAIN_WORKTREE DISPATCH_SPAWN_ROUTER_CLAUDE_CMD \
-    DISPATCH_SPAWN_ROUTER_SESSION_ID DISPATCH_SPAWN_ROUTER_JOBS_DIR SPAWN_BG_REGISTERS
+    DISPATCH_SPAWN_ROUTER_SESSION_ID SPAWN_BG_REGISTERS
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -5232,7 +5226,7 @@ spawn_router_setup
 # A registry that is not a JSON array: lib-claude-agents.sh's
 # claude_sessions_under cannot parse it and returns 1 (unknown). dispatch-spawn-router
 # must treat unknown as "a dispatch agent may be running" and spawn nothing —
-# the documented fail-safe in the script's Step 3 dedup guard.
+# the documented fail-safe in the script's Step 2 dedup guard.
 printf '%s' 'not-a-json-array' > "$SPAWN_ROUTER_REGISTRY"
 write_fake_spawn_router_claude
 if out=$("$TMPDIR_TEST/scripts/dispatch-spawn-router" 2>/dev/null); then rc=0; else rc=$?; fi
@@ -5266,21 +5260,17 @@ echo "=== dispatch-spawn-worker ==="
 #   $TMPDIR_TEST/worktrees/839-test-worker/     the target worktree path (arg 2)
 #   $TMPDIR_TEST/fake-claude                    the multi-subcommand fake `claude`
 #   $TMPDIR_TEST/registry.json                  `claude agents --json` fixture
-#   $TMPDIR_TEST/jobs/                          on-disk jobs ledger
 #   $TMPDIR_TEST/bg-argv                        recorded argv of each `claude --bg` call
 #   $TMPDIR_TEST/pwd-log                        new: records the spawn subshell's $PWD
 #                                               so Test 2 can assert the script
 #                                               cd'd into the worktree path.
-#   $TMPDIR_TEST/rm-log                         recorded job-ids of each `claude rm` call
 #
 # The test shell runs under `set -e`; dispatch-spawn-worker can exit non-zero,
 # so every invocation is wrapped in an `if`/`|| rc=$?` to capture the code.
 
 SPAWN_WORKER_REGISTRY=""
-SPAWN_WORKER_JOBS_DIR=""
 SPAWN_WORKER_BG_ARGV=""
 SPAWN_WORKER_PWD_LOG=""
-SPAWN_WORKER_RM_LOG=""
 WORKER_TARGET_WORKTREE=""
 
 # write_fake_spawn_worker_claude — install the multi-subcommand fake `claude`.
@@ -5293,7 +5283,6 @@ WORKER_TARGET_WORKTREE=""
 #   --bg     — record full argv to bg-argv AND record $PWD to pwd-log; when
 #              SPAWN_BG_REGISTERS=1 (default) parse --name and jq-append the
 #              new agent to the fixture so the verify step finds it.
-#   rm       — append $2 (the job-id) to rm-log.
 write_fake_spawn_worker_claude() {
   cat > "$TMPDIR_TEST/fake-claude" <<FAKE
 #!/usr/bin/env bash
@@ -5317,10 +5306,6 @@ case "\${1:-}" in
         "$SPAWN_WORKER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_WORKER_REGISTRY"
     fi
     ;;
-  rm)
-    shift
-    printf '%s\n' "\${1:-}" >> "$SPAWN_WORKER_RM_LOG"
-    ;;
 esac
 FAKE
   chmod +x "$TMPDIR_TEST/fake-claude"
@@ -5330,8 +5315,7 @@ spawn_worker_setup() {
   TMPDIR_TEST=$(mktemp -d)
   mkdir -p "$TMPDIR_TEST/scripts" \
     "$TMPDIR_TEST/worktrees/main" \
-    "$TMPDIR_TEST/worktrees/839-test-worker" \
-    "$TMPDIR_TEST/jobs"
+    "$TMPDIR_TEST/worktrees/839-test-worker"
 
   # dispatch-spawn-worker sources lib-claude-agents.sh from its own directory,
   # so the helper must sit alongside the copy. It is sourced, not executed —
@@ -5341,29 +5325,24 @@ spawn_worker_setup() {
   chmod +x "$TMPDIR_TEST/scripts/dispatch-spawn-worker"
 
   SPAWN_WORKER_REGISTRY="$TMPDIR_TEST/registry.json"
-  SPAWN_WORKER_JOBS_DIR="$TMPDIR_TEST/jobs"
   SPAWN_WORKER_BG_ARGV="$TMPDIR_TEST/bg-argv"
   SPAWN_WORKER_PWD_LOG="$TMPDIR_TEST/pwd-log"
-  SPAWN_WORKER_RM_LOG="$TMPDIR_TEST/rm-log"
   WORKER_TARGET_WORKTREE="$TMPDIR_TEST/worktrees/839-test-worker"
   printf '[]' > "$SPAWN_WORKER_REGISTRY"
 
   export DISPATCH_SPAWN_WORKER_CLAUDE_CMD="$TMPDIR_TEST/fake-claude"
   export DISPATCH_SPAWN_WORKER_SESSION_ID="sess-self"
-  export DISPATCH_SPAWN_WORKER_JOBS_DIR="$SPAWN_WORKER_JOBS_DIR"
 }
 
 spawn_worker_teardown() {
   rm -rf "$TMPDIR_TEST"
   TMPDIR_TEST=""
   SPAWN_WORKER_REGISTRY=""
-  SPAWN_WORKER_JOBS_DIR=""
   SPAWN_WORKER_BG_ARGV=""
   SPAWN_WORKER_PWD_LOG=""
-  SPAWN_WORKER_RM_LOG=""
   WORKER_TARGET_WORKTREE=""
   unset DISPATCH_SPAWN_WORKER_CLAUDE_CMD DISPATCH_SPAWN_WORKER_SESSION_ID \
-    DISPATCH_SPAWN_WORKER_JOBS_DIR SPAWN_BG_REGISTERS
+    SPAWN_BG_REGISTERS
 }
 
 # --- Test 1: spawn success ---------------------------------------------------
@@ -5494,7 +5473,7 @@ spawn_worker_setup
 # A registry that is not a JSON array: lib-claude-agents.sh's
 # claude_sessions_under cannot parse it and returns 1 (unknown).
 # dispatch-spawn-worker must treat unknown as "a dispatch agent may be running"
-# and spawn nothing — the documented fail-safe in the script's Step 3 dedup
+# and spawn nothing — the documented fail-safe in the script's Step 2 dedup
 # guard.
 printf '%s' 'not-a-json-array' > "$SPAWN_WORKER_REGISTRY"
 write_fake_spawn_worker_claude
@@ -5554,7 +5533,7 @@ spawn_worker_teardown
 # --json --cwd <path>` to sessions started under <path>. Since
 # dispatch-spawn-worker does NOT `cd` into the target worktree before
 # `claude --bg`, the new worker registers under the spawner cwd
-# (worktrees/main), not under WORKTREE_PATH. If Step 5 verify queries under
+# (worktrees/main), not under WORKTREE_PATH. If Step 4 verify queries under
 # WORKTREE_PATH, the daemon excludes the new worker, `registered` stays
 # empty, and the script exits 1 — on every spawn in production.
 #

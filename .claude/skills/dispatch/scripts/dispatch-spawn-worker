@@ -64,9 +64,9 @@
 # Environment overrides for testability (mirroring dispatch-spawn-router's
 # DISPATCH_SPAWN_ROUTER_* pattern):
 #   DISPATCH_SPAWN_WORKER_CLAUDE_CMD    The `claude` command. The script's own
-#                                       `claude --bg` / `claude rm` / `claude
-#                                       agents` calls use it, and it is exported
-#                                       as CLAUDE_AGENTS_CMD so the sourced
+#                                       `claude --bg` / `claude agents` calls use
+#                                       it, and it is exported as
+#                                       CLAUDE_AGENTS_CMD so the sourced
 #                                       lib-claude-agents.sh helper is faked
 #                                       consistently. Default: `claude`.
 #   DISPATCH_SPAWN_WORKER_SESSION_ID    This session's id, for the dedup self-
