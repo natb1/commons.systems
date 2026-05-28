@@ -7,44 +7,62 @@ description: Worker for the dispatch chain — runs one phase skill in its targe
 
 The worker is the per-worktree execution half of the dispatch chain. The other
 half — `/dispatch` — is the router: it selects a target, resolves its worktree,
-and spawns this worker with `cwd=<worktree-path>`. The worker then derives the
-phase, runs exactly one phase skill, and hands off.
+and spawns this worker. The worker then enters the target worktree, derives
+the phase, runs exactly one phase skill, and hands off.
 
-The worker is born in the target worktree. It never calls `EnterWorktree` or
-`ExitWorktree`. Its cwd is anchored to the target worktree for its entire
-lifetime. That means `SessionStart`-derived attributes (title, restored skill
-set) and per-worktree sandbox concerns all naturally key on the right worktree
-— no mid-session cwd switch is needed.
+The worker is spawned from `worktrees/main` (the router's cwd) — not from the
+target worktree. Spawning from the target worktree would pollute the Claude
+daemon's "+ new session" launcher default cwd; spawning from `worktrees/main`
+keeps that default anchored at the router's worktree. The worker enters its
+target worktree as the first action of Step 0 by `cd`-ing into the
+`<worktree-path>` it receives as a positional argument. After that initial
+entry, the worker's cwd is anchored to the target worktree for its entire
+lifetime — it never calls `EnterWorktree` or `ExitWorktree`. That means
+`SessionStart`-derived attributes (title, restored skill set) and per-worktree
+sandbox concerns all naturally key on the right worktree once Step 0 runs.
 
-The worker takes an `<N>` argument — the issue number — and ends after one
-phase. The router is the one who decides what to work on next; the worker just
-executes.
+The worker takes `<N> <worktree-path>` arguments — the issue number and the
+absolute path to its target worktree — and ends after one phase. The router
+is the one who decides what to work on next; the worker just executes.
 
 Run `gh` commands (`gh label create`, `gh pr edit`, and the scripts that invoke
 `gh`) with `dangerouslyDisableSandbox: true` — see `.claude/rules/sandbox.md`.
 
-## 0. Verify the Worker's Worktree
+## 0. Enter the Worker's Worktree
 
-The worker must be born in the target worktree. The spawn primitive
-(`dispatch-spawn-worker`) sets the worker's cwd at spawn time; this step is the
-worker's contract enforcement.
+The worker is spawned from `worktrees/main` and `cd`s into its target
+worktree itself as the first action. `ARGUMENTS` has the shape
+`<N> <worktree-path>` (e.g. `860 /home/n8/natb1/commons.systems/worktrees/860-dispatch-spawn-worker-from-m`).
+Parse both, `cd` into the worktree, then run the branch-name sanity check —
+the assertion is the contract enforcement that the spawner passed a coherent
+worktree path for the named issue.
 
 ```bash
-EXPECTED="<N>-"
+read -r ISSUE_NUM WORKTREE_PATH <<<"$ARGUMENTS"
+if [[ -z "${ISSUE_NUM:-}" || -z "${WORKTREE_PATH:-}" ]]; then
+  echo "dispatch-worker: expected ARGUMENTS '<N> <worktree-path>', got '$ARGUMENTS'" >&2
+  exit 1
+fi
+if ! cd "$WORKTREE_PATH"; then
+  echo "dispatch-worker: cd to '$WORKTREE_PATH' failed" >&2
+  exit 1
+fi
+EXPECTED="${ISSUE_NUM}-"
 ACTUAL_BRANCH=$(basename "$(git rev-parse --show-toplevel)")
 case "$ACTUAL_BRANCH" in
   ${EXPECTED}*) ;;
   *)
-    echo "dispatch-worker invoked with wrong cwd: expected branch '${EXPECTED}…' under worktrees/, got '${ACTUAL_BRANCH}'" >&2
-    echo "The worker must be spawned with cwd already set to the target worktree." >&2
+    echo "dispatch-worker invoked with wrong worktree: expected branch '${EXPECTED}…' under worktrees/, got '${ACTUAL_BRANCH}'" >&2
+    echo "The spawner must pass <worktree-path> matching the issue number <N>." >&2
     exit 1
     ;;
 esac
 ```
 
-The bash above exits 1 to signal the wrong-cwd disposition. When that exit
-fires, proceed to Step 4 with `notify worker-wrong-cwd` — do not derive a
-phase or run a phase skill.
+The bash above exits 1 to signal the wrong-worktree disposition — either the
+`cd` to `<worktree-path>` failed, or the branch-name sanity check rejected the
+resulting worktree. When that exit fires, proceed to Step 4 with
+`notify worker-wrong-cwd` — do not derive a phase or run a phase skill.
 
 ## 1. Derive the Phase
 
@@ -243,15 +261,15 @@ The worker reaches Step 4 with one of these dispositions:
 | Disposition | Source |
 |---|---|
 | `propagate` (silent on success; may fall through to `notify spawn-failed` / `notify deviation` / `notify phase-non-advancement` per the priority below) | Step 2 — phase skill ran to completion |
-| `notify worker-wrong-cwd` | Step 0 — cwd verification failed |
+| `notify worker-wrong-cwd` | Step 0 — `cd` to `<worktree-path>` or branch-name sanity check failed |
 | `notify already-done` | Step 2 — `done` phase (non-draft PR slipped past sweep) |
 | `notify implement-stop` | Step 3 — relevance verdict `stop` |
 | `drain waiting` | Step 2 — re-derived phase is still `waiting` after the CI subagent returned (CI registered no checks) |
 
-The worker was born in its target worktree and never entered another
-worktree mid-session — there is nothing to exit. The router (`/dispatch`)
-is what runs in `worktrees/main`; this worker's lifetime ends here, in its
-target worktree.
+The worker `cd`'d into its target worktree in Step 0 and never entered
+another worktree mid-session — there is nothing to exit. The router
+(`/dispatch`) is what runs in `worktrees/main`; this worker's lifetime ends
+here, in its target worktree.
 
 ### `propagate`
 

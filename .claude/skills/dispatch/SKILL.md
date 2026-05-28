@@ -124,14 +124,18 @@ The selection lock above is **per-repo** and serializes the router's selection
 step (so two routers cannot race on the same target). It is one of two
 mechanisms; the other is per-worktree and enforced elsewhere.
 
-The **per-worktree invariant**: at most one live `dispatch-*` agent per issue
+The **per-worktree invariant**: at most one live worker agent per issue
 worktree. The router's Step 6 spawn primitive (`dispatch-spawn-worker`)
-enforces this at the spawn boundary by querying
-`claude agents --json --cwd <worktree-path>` (the `claude_sessions_under`
-helper in `lib-claude-agents.sh`). If any live `dispatch-*` agent is already
-under `<worktree-path>`, the spawn is `deduped` and no new worker starts. The
-worker is born in the target worktree and dies there; per-worktree dedup
-naturally serializes per-issue work without the selection lock having to.
+enforces this at the spawn boundary. Every worker is born with the target
+worktree's basename as its `--name` (the dispatch-spawn-worker script does not
+`cd` into the target worktree — it stays at the spawner's cwd, `worktrees/main`,
+to keep the daemon's launcher-default cwd anchored there), so per-worktree name
+uniqueness is automatic. The dedup query lists live sessions under the spawner
+cwd (where every worker registers) and checks for `name == <worktree-basename>`;
+if any other live worker matches, the spawn is `deduped` and no new worker
+starts. The worker `cd`s into its target worktree as its own Step 0 and dies
+there; per-worktree dedup naturally serializes per-issue work without the
+selection lock having to.
 
 The two mechanisms have orthogonal scopes:
 
@@ -469,11 +473,12 @@ marker **inside the target worktree** (`$WORKTREE_PATH`):
 (cd "$WORKTREE_PATH" && mkdir -p tmp && touch tmp/dispatch-worktree)
 ```
 
-The marker is the canonical "Step 5 completed" signal. Two consumers read it:
-`restore-dispatch-skill.sh` (bound to `SessionStart:clear`) keys context-clear
-recovery on it — when present, it re-invokes `/dispatch-worker <N>` so the
-worker re-derives the phase from PR/CI ground truth — and the lock script
-keys post-Step-5 reclaim on it (see *Releasing the lock*).
+The marker is the canonical "Step 5 completed" signal, read by the lock script
+as the post-Step-5 reclaim signal (see *Releasing the lock*). Context-clear
+recovery does **not** read it: `restore-dispatch-skill.sh` (bound to
+`SessionStart:clear`) keys on the session's `--name` shape (`<N>-<slug>` for
+workers) and emits `/dispatch-worker <N> <worktree-path>` so the worker
+re-derives the phase from PR/CI ground truth.
 `.claude/hooks/worktree-create.sh` also writes the marker as its final action
 on every successful worktree creation, so a fresh worktree is marker-bearing
 the moment the hook returns — the router's explicit marker write here is the
@@ -491,17 +496,19 @@ the lock*). The worker in Step 6 onward runs lock-free.
 
 ## 6. Spawn the Worker
 
-Spawn a `/dispatch-worker <N>` background job with `cwd=$WORKTREE_PATH` (the
-path resolved in Step 5). Run with `dangerouslyDisableSandbox: true` — the
-script reaches the local Claude daemon over a socket; see
-`.claude/rules/sandbox.md`:
+Spawn a `/dispatch-worker <N> <worktree-path>` background job. The spawn runs
+from the router's own cwd (`worktrees/main`) — `dispatch-spawn-worker` does
+**not** `cd` into the target worktree, so the daemon's launcher-default cwd
+stays anchored at the main worktree; the worker `cd`s into its target worktree
+as its own Step 0. Run with `dangerouslyDisableSandbox: true` — the script
+reaches the local Claude daemon over a socket; see `.claude/rules/sandbox.md`:
 
 ```bash
 .claude/skills/dispatch/scripts/dispatch-spawn-worker <N> "$WORKTREE_PATH"
 ```
 
-It prints `spawned` (a worker was started) or `deduped` (another `dispatch-*`
-session is already live at `$WORKTREE_PATH` — the per-worktree invariant
+It prints `spawned` (a worker was started) or `deduped` (another live worker
+already has the worktree-basename `--name` — the per-worktree invariant
 prevents two workers from racing on the same worktree) and exits 0; it exits
 non-zero when a worker was spawned but did not register.
 
