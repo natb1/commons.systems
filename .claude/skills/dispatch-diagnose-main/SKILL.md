@@ -1,15 +1,18 @@
 ---
 name: dispatch-diagnose-main
-description: Diagnose origin/main's failing CI when /dispatch detects a red main; enumerates failing checks, fetches logs, summarizes likely cause, releases the dispatch lock, and stops.
+description: Diagnose origin/main's failing CI when /dispatch detects a red main; enumerates failing checks, fetches logs, summarizes likely cause, releases the dispatch lock, and returns so the caller can apply notify main-broken.
 ---
 
 # Dispatch: Diagnose Main
 
 Invoked by `/dispatch` Step 3 when `dispatch-select-target` reports
 `main-broken <sha>` — `origin/main` itself is red, so no new work is safe to
-start. Diagnose main, release the dispatch lock, and stop the tick. On this skill's return, the caller (`/dispatch` Step 3)
-proceeds to Step 9 (early-stop). The skill does **not** run the sweep, create
-a worktree, branch, PR, or invoke any phase skill.
+start. Diagnose main, release the dispatch lock, and return. On this skill's
+return, the caller (`/dispatch` Step 3) proceeds to Step 7 with `notify
+main-broken` — the session stays in `claude agents` until the user closes it,
+so the diagnosis remains visible rather than buried in a closed transcript.
+The skill does **not** run the sweep, create a worktree, branch, PR, or
+invoke any phase skill.
 
 Takes `<sha>` as its single argument — the broken `origin/main` HEAD commit.
 
@@ -49,7 +52,7 @@ As the action immediately before the final report:
 ## 4. Summarize and stop
 
 Summarize the likely cause from the logs and check-run details, report it,
-and return. The caller proceeds to Step 9 (early-stop).
+and return. The caller proceeds to Step 7 with `notify main-broken`.
 
 Include only the failing check/step name and a high-level error category
 (e.g. "test assertion failed", "lint error", "type error"). Do not reproduce
