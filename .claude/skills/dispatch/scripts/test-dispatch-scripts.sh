@@ -5051,6 +5051,70 @@ assert_eq "missing-args-worker: non-integer <N> → exit 2" "2" "$sw_rc_d"
 
 spawn_worker_teardown
 
+# --- Test 9: dedup + verify query the spawner cwd, NOT the worktree path ----
+#
+# Regression guard: in production the daemon server-side-filters `agents
+# --json --cwd <path>` to sessions started under <path>. Since
+# dispatch-spawn-worker does NOT `cd` into the target worktree before
+# `claude --bg`, the new worker registers under the spawner cwd
+# (worktrees/main), not under WORKTREE_PATH. If Step 5 verify queries under
+# WORKTREE_PATH, the daemon excludes the new worker, `registered` stays
+# empty, and the script exits 1 — on every spawn in production.
+#
+# The default fake `claude` (write_fake_spawn_worker_claude) ignores --cwd,
+# so the existing Tests 1–8 do not exercise this filter and would not catch
+# the regression. This test installs a cwd-aware fake: its `agents` handler
+# filters its registry-emit by --cwd, and its --bg handler records the new
+# worker with cwd = $(pwd) at spawn time. With the fix, both queries pass
+# the spawner cwd and the worker is found. Without it, verify returns no
+# session and the script exits 1.
+echo "Test: dedup + verify query the spawner cwd, not the worktree path"
+spawn_worker_setup
+cat > "$TMPDIR_TEST/fake-claude" <<FAKE
+#!/usr/bin/env bash
+set -uo pipefail
+case "\${1:-}" in
+  agents)
+    shift
+    requested_cwd=""
+    while [[ \$# -gt 0 ]]; do
+      case "\$1" in
+        --cwd) requested_cwd="\${2:-}"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    if [[ -n "\$requested_cwd" ]]; then
+      jq --arg cwd "\$requested_cwd" '[.[] | select(.cwd == \$cwd)]' \
+        "$SPAWN_WORKER_REGISTRY"
+    else
+      cat "$SPAWN_WORKER_REGISTRY"
+    fi
+    ;;
+  --bg)
+    bg_cwd="\$(pwd)"
+    pwd >> "$SPAWN_WORKER_PWD_LOG"
+    printf '%s\n' "\$@" > "$SPAWN_WORKER_BG_ARGV"
+    name=""
+    while [[ \$# -gt 0 ]]; do
+      if [[ "\$1" == "--name" ]]; then name="\${2:-}"; shift 2; continue; fi
+      shift
+    done
+    tmp=\$(mktemp)
+    jq --arg name "\$name" --arg cwd "\$bg_cwd" \
+      '. + [{"sessionId":("sess-"+\$name),"pid":9999,"cwd":\$cwd,"kind":"background","status":"busy","name":\$name}]' \
+      "$SPAWN_WORKER_REGISTRY" > "\$tmp" && mv "\$tmp" "$SPAWN_WORKER_REGISTRY"
+    ;;
+  rm) ;;
+esac
+FAKE
+chmod +x "$TMPDIR_TEST/fake-claude"
+SPAWN_CALLER_CWD="$TMPDIR_TEST/worktrees/main"
+if out=$( cd "$SPAWN_CALLER_CWD" && "$TMPDIR_TEST/scripts/dispatch-spawn-worker" 839 "$WORKER_TARGET_WORKTREE" 2>/dev/null ); then rc=0; else rc=$?; fi
+assert_eq "cwd-aware-spawn: exits 0" "0" "$rc"
+assert_eq "cwd-aware-spawn: stdout is 'spawned' (verify queried under spawner cwd, found the new worker)" \
+  "spawned" "$out"
+spawn_worker_teardown
+
 # ============================================================================
 # dispatch-self-close tests
 # ============================================================================

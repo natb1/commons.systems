@@ -31,26 +31,28 @@
 #   1. Prune    — remove stale stopped dispatch-* agents (`claude rm`).
 #                 Best-effort: a prune failure logs to stderr and continues.
 #   2. Dedup    — if another live session with the same name (the worktree
-#                 basename) is already running under <worktree-path>, spawn
-#                 nothing. Per-worktree name uniqueness keys the dedup on
-#                 `name == basename "$WORKTREE_PATH"`. Fail-safe: if the
-#                 session registry cannot be queried, also spawn nothing — a
-#                 dispatch agent may be running; the #725 heartbeat re-seeds
-#                 the chain if it actually dropped.
+#                 basename) is already running, spawn nothing. Per-worktree
+#                 name uniqueness keys the dedup on
+#                 `name == basename "$WORKTREE_PATH"`. The query is filtered
+#                 to the script's spawner cwd — every worker registers there
+#                 (Step 3 does not `cd`), so the filter is a scoping no-op
+#                 that still surfaces every worker. Fail-safe: if the session
+#                 registry cannot be queried, also spawn nothing — a dispatch
+#                 agent may be running; the #725 heartbeat re-seeds the chain
+#                 if it actually dropped.
 #   3. Spawn    — `claude --bg --name <worktree-basename> --permission-mode
 #                 auto "/dispatch-worker <N> <worktree-path>"`, run from the
 #                 script's inherited cwd (worktrees/main) — no `cd` into the
 #                 target worktree.
-#   4. Verify   — re-query the registry under <worktree-path> and confirm the
-#                 new agent registered.
+#   4. Verify   — re-query the registry under the spawner cwd (where the new
+#                 worker registers) and confirm the new agent appears.
 #
 # (In-script `# ---- Step N: ... ----` markers offset by 2 — arg validation
 # and config resolution come first as Steps 0 and 1.)
 #
 # Stdout protocol (exactly one word):
-#   deduped   another agent with the same worktree-basename name is running
-#             under <worktree-path>, or the registry could not be queried —
-#             nothing was spawned.
+#   deduped   another agent with the same worktree-basename name is running,
+#             or the registry could not be queried — nothing was spawned.
 #   spawned   a new /dispatch-worker job was spawned and verified.
 # A spawn that does not verify prints nothing to stdout, writes a diagnostic to
 # stderr, and exits non-zero.
@@ -122,6 +124,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-claude-agents.sh"
 
+# The spawner's cwd at script entry is where Step 4's `claude --bg` will run
+# (no `cd` happens between here and there), so it is the cwd the daemon
+# registers the new worker under. Dedup (Step 3) and verify (Step 5) must
+# query the registry under THIS path — `claude agents --json --cwd <path>`
+# filters server-side to sessions started under <path>, and the new worker's
+# start cwd is here, not <worktree-path>.
+SPAWN_CWD="$(pwd)"
+
 # ---- Step 2: prune stale stopped dispatch-* agents --------------------------
 # Best-effort. A stopped dispatch-* agent left behind by a crashed or
 # self-closed job is removed with `claude rm`. `claude agents --json` lists
@@ -165,15 +175,18 @@ prune_stopped_dispatch_agents
 # ---- Step 3: dedup guard ----------------------------------------------------
 # The worker's --name is the target worktree's basename, so per-worktree name
 # uniqueness reduces the dedup to a single name-equality check: if another
-# live session under <worktree-path> already has name == <worktree-basename>,
-# spawn nothing. Fail safe: an unknown (unqueryable) registry is treated as
-# "a dispatch agent may be running", so nothing is spawned. A TOCTOU window
-# exists between this query and the spawn below — two concurrent router
-# invocations could each pass the guard and each spawn a worker. The
-# per-worktree invariant and #755 absorb this: the next selection scan will
-# detect the duplicate, so the extra cost is one wasted tick, not lost work.
+# live session already has name == <worktree-basename>, spawn nothing. The
+# registry query filters by SPAWN_CWD because that is where every worker
+# registers (Step 4 does not `cd`); a query under <worktree-path> would miss
+# the just-spawned worker entirely. Fail safe: an unknown (unqueryable)
+# registry is treated as "a dispatch agent may be running", so nothing is
+# spawned. A TOCTOU window exists between this query and the spawn below —
+# two concurrent router invocations could each pass the guard and each spawn
+# a worker. The per-worktree invariant and #755 absorb this: the next
+# selection scan will detect the duplicate, so the extra cost is one wasted
+# tick, not lost work.
 AGENT_NAME="$(basename "$WORKTREE_PATH")"
-if ! sessions=$(claude_sessions_under "$WORKTREE_PATH"); then
+if ! sessions=$(claude_sessions_under "$SPAWN_CWD"); then
   echo deduped
   exit 0
 fi
@@ -207,8 +220,11 @@ spawn_output=$("$CLAUDE_CMD" --bg --name "$AGENT_NAME" \
     --permission-mode auto "/dispatch-worker $ISSUE_NUM $WORKTREE_PATH" 2>&1) || true
 
 # ---- Step 5: verify the new agent registered --------------------------------
+# Query under SPAWN_CWD — the new worker's registered cwd. A query under
+# <worktree-path> would never find it because the daemon's --cwd filter
+# excludes sessions that started elsewhere.
 registered=""
-if sessions=$(claude_sessions_under "$WORKTREE_PATH"); then
+if sessions=$(claude_sessions_under "$SPAWN_CWD"); then
   while IFS=$'\t' read -r _ _ _ name; do
     if [[ "$name" == "$AGENT_NAME" ]]; then
       registered=1
