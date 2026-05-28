@@ -398,7 +398,14 @@ issue_has_worktree() {
 # closingIssuesReferences drives topic-category resolution: a PR inherits the
 # highest-priority topic among the labels of every issue it closes.
 PR_LIST=$(gh pr list --state open --json number,createdAt,headRefName,isDraft,statusCheckRollup,labels,closingIssuesReferences)
-PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r 'sort_by(.createdAt) | .[] | [.number, .createdAt, .headRefName, (.closingIssuesReferences // [] | tojson)] | @tsv')
+# Skip PRs carrying dispatch:office-hours — the item is parked for human review
+# (either an input-block recorded by dispatch-input-block.sh, or a phase that
+# completed but surfaced a deviation, recorded by /dispatch Step 9). A later
+# UserPromptSubmit clears the label and the item re-enters the queue.
+PR_SORTED=$(printf '%s' "$PR_LIST" | jq -r '
+  sort_by(.createdAt) | .[]
+  | select((.labels // []) | any(.name == "dispatch:office-hours") | not)
+  | [.number, .createdAt, .headRefName, (.closingIssuesReferences // [] | tojson)] | @tsv')
 
 # Fetch every open issue once, carrying labels. This single list serves two
 # roles: filtered client-side to "help wanted" it is the issue queue; indexed
@@ -525,6 +532,7 @@ fi
 ISSUE_SORTED=$(printf '%s' "$ISSUE_LIST" | jq -r '
   sort_by(.createdAt) | .[]
   | select((.labels // []) | any(.name == "help wanted"))
+  | select((.labels // []) | any(.name == "dispatch:office-hours") | not)
   | [.number, ((.labels // []) | tojson)] | @tsv')
 while IFS=$'\t' read -r issue_num issue_labels; do
   [[ -z "$issue_num" ]] && continue
