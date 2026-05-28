@@ -235,7 +235,24 @@ ready. Otherwise run all steps in order.
    gh pr ready "$PR_NUM"
    ```
 
-   This is the workflow's terminal action.
+   This is the workflow's terminal PR-state action.
+
+8. **Write the phase-completed marker, then stop.** The Stop hook
+   (`.claude/hooks/dispatch-stop.sh`) reads this to decide propagate vs park.
+   Atomic via tempfile + mv. `CLAUDE_JOB_DIR` unset = interactive run; skip.
+
+   ```bash
+   if [[ -n "${CLAUDE_JOB_DIR:-}" && -d "$CLAUDE_JOB_DIR" ]]; then
+     printf 'phase=security\npr=%s\n' "$PR_NUM" \
+       > "$CLAUDE_JOB_DIR/phase-completed.tmp"
+     mv "$CLAUDE_JOB_DIR/phase-completed.tmp" \
+        "$CLAUDE_JOB_DIR/phase-completed"
+   fi
+   ```
+
+   Then **stop**. The Stop hook reads the marker and advances the chain.
+   `gh pr ready` (Step 7) is still the workflow's terminal *PR-state* action,
+   but the marker write is the dispatch chain's hand-off cue.
 
 ## Per-finding schema
 
@@ -272,10 +289,11 @@ classified set — has these fields:
 
 ## Notes
 
-Marking the PR ready is the workflow's terminal action. After this change the
-dispatch workflow has no human checkpoint before a PR goes ready — the per-phase
-PR-comment summaries are the audit trail. This is an intentional trade-off for an
-autonomous `/dispatch` background-job run.
+Marking the PR ready (Step 7) is the workflow's terminal PR-state action;
+writing the phase-completed marker (Step 8) is the dispatch chain's hand-off
+cue. After this change the dispatch workflow has no human checkpoint before a PR
+goes ready — the per-phase PR-comment summaries are the audit trail. This is an
+intentional trade-off for an autonomous `/dispatch` background-job run.
 
 The skill is idempotent: a re-invocation with `dispatch:security-reviewed` already
 on the PR skips Steps 1–6 and only ensures the PR is ready (Step 7).
