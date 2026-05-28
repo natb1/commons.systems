@@ -272,7 +272,11 @@ continue to target selection.
   adoption → topic-category × phase ladder. A jit-reminder surfaces even when
   `origin/main` is red because the JIT scan precedes the main-broken gate;
   current-worktree continuation surfaces before either, so a session inside an
-  `<issue>-*` worktree always continues there.
+  `<issue>-*` worktree always continues there. Current-worktree continuation
+  requires the worktree to have no *other* live Claude session — consistent
+  with the queue-mode liveness dedup landed in #741 and the explicit-mode case
+  tracked in #837; when another session owns the worktree, the selector falls
+  through to the rest of the ladder.
 
   The topic-category × phase ladder is two-tier: a topic **category** nests
   outside the phase **ladder**. Categories, highest priority first:
