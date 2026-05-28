@@ -2935,6 +2935,37 @@ sweep_path_key() {
   echo "$1" | tr '/' '_'
 }
 
+# Helper: install a fake `claude` whose `agents --json` invocation (NO --cwd)
+# returns sessions keyed by name — matching how claude_sessions_with_name
+# queries the daemon after the #882 Unit 2 name-keyed rewrite.
+# Each argument must be in `name=sid` form; name is the worktree basename
+# (as passed via --name=<basename> by dispatch-spawn-worker). The cwd field is
+# set to "" since name-keyed classification ignores it.
+# The fake ignores any --cwd argument and always returns the full payload; the
+# client-side jq select(.name == $name) in claude_sessions_with_name does the
+# filtering, exactly as in production.
+sweep_fake_claude_sessions_by_name() {
+  local fake="$TMPDIR_TEST/fake/claude"
+  local all_payload="[" entry name sid first=1
+  for entry in "$@"; do
+    name="${entry%%=*}"
+    sid="${entry#*=}"
+    if (( first )); then first=0; else all_payload+=","; fi
+    all_payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"$name\",\"cwd\":\"\"}"
+  done
+  all_payload+="]"
+  printf '%s' "$all_payload" > "$TMPDIR_TEST/fake/payload.json"
+  cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+# Ignore any args (including --cwd) — return the full payload unconditionally.
+# claude_sessions_with_name applies its own jq name filter client-side.
+cat "$(cd "$(dirname "$0")" && pwd)/payload.json"
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
+}
+
 # --- Test 1: merged classification triggers cleanup --------------------------
 
 echo "Test: merged worktree (in-sync) is removed + branch deleted"
@@ -2980,9 +3011,9 @@ else
 fi
 sweep_teardown
 
-# --- Test 2: active vs orphaned via claude agents --json ---------------------
+# --- Test 2: active vs orphaned via claude agents --json (name-keyed) --------
 
-echo "Test: claude agents --json distinguishes active vs orphaned worktrees"
+echo "Test: claude agents --json (name-keyed) distinguishes active vs orphaned worktrees"
 sweep_setup
 ACTIVE_WT="$TMPDIR_TEST/project/worktrees/50-active"
 ORPHAN_WT="$TMPDIR_TEST/project/worktrees/51-orphan"
@@ -2994,19 +3025,20 @@ sweep_register_wt "$ORPHAN_WT" "51-orphan"
 ORPHAN_KEY=$(sweep_path_key "$ORPHAN_WT")
 echo "1700000000" > "$STUB_DIR/headct${ORPHAN_KEY}.txt"
 
-# One live session in ACTIVE_WT, none in ORPHAN_WT.
-sweep_fake_claude_sessions "abc=$ACTIVE_WT"
+# One live session registered under name "50-active" (the basename), none for "51-orphan".
+# Step 4 uses claude_sessions_with_name("50-active") — name must match the basename.
+sweep_fake_claude_sessions_by_name "50-active=abc"
 
 out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
 assert_eq "active/orphan sweep exits 0" "0" "$rc"
 assert_eq "only orphan adopted" "worktree 51 51-orphan" "$out"
 
-# Log: ACTIVE for 50 with session fields, ORPHANED for 51, ADOPT for 51.
+# Log: ACTIVE for 50 with session fields (name=50-active from the session), ORPHANED for 51, ADOPT for 51.
 TOTAL=$((TOTAL + 1))
-if grep -q "ACTIVE: '$ACTIVE_WT' branch=50-active sessionId=abc name=x status=busy" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ACTIVE log line for 50-active with sessionId=abc name=x status=busy"
+if grep -q "ACTIVE: '$ACTIVE_WT' branch=50-active sessionId=abc name=50-active status=busy" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ACTIVE log line for 50-active with sessionId=abc name=50-active status=busy"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE log line for 50-active with sessionId=abc name=x status=busy"
+  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE log line for 50-active with sessionId=abc name=50-active status=busy"
   sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
 fi
 TOTAL=$((TOTAL + 1))
@@ -3439,6 +3471,165 @@ if grep -q "ERROR_ISSUE_STATE_FETCH" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; the
   FAIL=$((FAIL + 1)); echo "  FAIL: ERROR_ISSUE_STATE_FETCH must NOT appear (ready-PR gate ran first)"
 else
   PASS=$((PASS + 1)); echo "  PASS: ERROR_ISSUE_STATE_FETCH absent (closed-issue gate skipped)"
+fi
+sweep_teardown
+
+# --- Test 15: Step 3 with live name-match — merged+in-sync worktree is kept --
+#
+# A merged + in-sync worktree whose basename matches a live session in the
+# fake-claude registry must NOT be removed; the script must log
+# SKIP_MERGED_LIVE_SESSION and add it to the surviving list.
+
+echo "Test: Step 3 skips merged+in-sync worktree when a live session matches its basename"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/70-live-merged"
+sweep_register_wt "$WT_PATH" "70-live-merged"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+echo '[{"number":300,"headRefName":"70-live-merged","state":"MERGED"}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Register a live session whose name matches the worktree's basename.
+sweep_fake_claude_sessions_by_name "70-live-merged=sess-live-70"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "Step3-live-merged sweep exits 0" "0" "$rc"
+
+# The worktree must NOT have been removed.
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -q "worktree-remove:$WT_PATH"; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: Step 3 must NOT remove a worktree with a live session"
+  echo "    calls: $calls"
+else
+  PASS=$((PASS + 1)); echo "  PASS: Step 3 did not remove the live-session worktree"
+fi
+
+# The log must carry SKIP_MERGED_LIVE_SESSION.
+TOTAL=$((TOTAL + 1))
+if grep -q "SKIP_MERGED_LIVE_SESSION: '$WT_PATH' branch=70-live-merged pr=#300" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: SKIP_MERGED_LIVE_SESSION log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: SKIP_MERGED_LIVE_SESSION log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test 16: Step 3 happy path — merged+in-sync with no live session is removed
+
+echo "Test: Step 3 removes merged+in-sync worktree when no live session matches its basename"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/71-no-live-merged"
+sweep_register_wt "$WT_PATH" "71-no-live-merged"
+key=$(sweep_path_key "$WT_PATH")
+: > "$STUB_DIR/status${key}.txt"
+echo "0" > "$STUB_DIR/revlist${key}.txt"
+echo '[{"number":301,"headRefName":"71-no-live-merged","state":"MERGED"}]' \
+  > "$STUB_DIR/gh-pr-list-all.json"
+# Default fake (no live sessions) — the worktree is free to remove.
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "Step3-no-live-merged sweep exits 0" "0" "$rc"
+
+calls=$(cat "$STUB_DIR/calls" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$calls" | grep -qx "worktree-remove:$WT_PATH"; then
+  PASS=$((PASS + 1)); echo "  PASS: Step 3 removed the unoccupied merged worktree"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: Step 3 removed the unoccupied merged worktree"
+  echo "    calls: $calls"
+fi
+
+TOTAL=$((TOTAL + 1))
+if grep -q "REMOVE_MERGED: '$WT_PATH' branch=71-no-live-merged pr=#301" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: REMOVE_MERGED log line present"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: REMOVE_MERGED log line present"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+sweep_teardown
+
+# --- Test 17: Step 4 ACTIVE — basename matches a live session ----------------
+#
+# A surviving (non-merged) worktree whose basename matches a live session must
+# be classified ACTIVE; the log line must carry the session's sid and name.
+
+echo "Test: Step 4 classifies a worktree ACTIVE when its basename matches a live session"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/72-worker"
+sweep_register_wt "$WT_PATH" "72-worker"
+# Register a live session whose name matches the worktree's basename.
+sweep_fake_claude_sessions_by_name "72-worker=sess-w72"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "Step4-active sweep exits 0" "0" "$rc"
+assert_eq "Step4-active emits no stdout (nothing to adopt)" "" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "ACTIVE: '$WT_PATH' branch=72-worker sessionId=sess-w72 name=72-worker status=busy" \
+   "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ACTIVE log line carries sid=sess-w72 name=72-worker"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE log line carries sid=sess-w72 name=72-worker"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ORPHANED" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ORPHANED must NOT appear for an ACTIVE worktree"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ORPHANED absent for active worktree"
+fi
+sweep_teardown
+
+# --- Test 18: Step 4 ORPHANED — cwd match is not enough (name-keyed regression guard)
+#
+# A surviving worktree with NO name-matched session must be classified ORPHANED,
+# even if some live session's cwd happens to equal the worktree path.
+# This guards against regressing to cwd-based semantics.
+
+echo "Test: Step 4 classifies ORPHANED when cwd matches but name does not (regression guard)"
+sweep_setup
+WT_PATH="$TMPDIR_TEST/project/worktrees/73-cwd-ghost"
+sweep_register_wt "$WT_PATH" "73-cwd-ghost"
+KEY=$(sweep_path_key "$WT_PATH")
+echo "1500009999" > "$STUB_DIR/headct${KEY}.txt"
+# Install a session whose cwd points at the worktree but whose name is a
+# different string — so a cwd-based query would find it, but a name-based
+# query must not.
+local_fake="$TMPDIR_TEST/fake/claude"
+# Build the payload manually: name="wrong-name", cwd="$WT_PATH".
+cat > "$TMPDIR_TEST/fake/payload.json" \
+  <<EOF
+[{"sessionId":"sess-cwd-only","pid":1,"status":"busy","name":"wrong-name","cwd":"$WT_PATH"}]
+EOF
+cat > "$local_fake" <<'FAKE'
+#!/usr/bin/env bash
+cat "$(cd "$(dirname "$0")" && pwd)/payload.json"
+exit 0
+FAKE
+chmod +x "$local_fake"
+export CLAUDE_AGENTS_CMD="$local_fake"
+
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
+assert_eq "Step4-cwd-ghost sweep exits 0" "0" "$rc"
+# The worktree should be adopted (ORPHANED → ADOPT) since it has no name match.
+assert_eq "Step4-cwd-ghost worktree is adopted (classified ORPHANED)" \
+  "worktree 73 73-cwd-ghost" "$out"
+
+TOTAL=$((TOTAL + 1))
+if grep -q "ORPHANED: '$WT_PATH' branch=73-cwd-ghost" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ORPHANED log line present (cwd match ignored)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ORPHANED log line present (cwd match ignored)"
+  echo "    log:"; sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ACTIVE" "$DISPATCH_SWEEP_LOG_FILE" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE must NOT appear (cwd-ghost session should not classify as active)"
+else
+  PASS=$((PASS + 1)); echo "  PASS: ACTIVE absent (name-keyed, not cwd-keyed)"
 fi
 sweep_teardown
 

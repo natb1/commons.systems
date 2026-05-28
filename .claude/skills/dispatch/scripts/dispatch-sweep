@@ -17,11 +17,12 @@
 #   3. For each worktree whose branch is in the merged map and which is in sync
 #      (clean tree + zero unpushed commits), remove it and its branch.
 #   4. Classify the remaining worktrees as active vs orphaned by calling
-#      claude_sessions_under (from lib-claude-agents.sh) per surviving worktree.
-#      A worktree with at least one live session is ACTIVE; one with zero live
-#      sessions is ORPHANED. If the daemon cannot be queried (UNKNOWN), the
-#      worktree is classified ACTIVE so nothing is adopted or cleaned on an
-#      unknown signal (fail-safe).
+#      claude_sessions_with_name (from lib-claude-agents.sh) per surviving
+#      worktree, keyed on the worktree's basename (matching the --name flag
+#      dispatch-spawn-worker passes to `claude --bg`). A worktree with at least
+#      one live session is ACTIVE; one with zero live sessions is ORPHANED. If
+#      the daemon cannot be queried (UNKNOWN), the worktree is classified ACTIVE
+#      so nothing is adopted or cleaned on an unknown signal (fail-safe).
 #   5. Among orphans, separate those eligible for adoption (an open PR OR an
 #      inferable issue number ^[0-9]+-) from "unknown" orphans (no PR + no
 #      inferable issue number) — the latter halt the sweep with exit 3 and a
@@ -192,6 +193,9 @@ flush_record
 # worktrees stay on the surviving list with a SKIP log line so the user can
 # investigate; they're explicitly NOT auto-adoption candidates (the unpushed
 # work may belong to a live session the daemon did not report).
+# Liveness gate: even a merged + in-sync worktree is skipped when a live
+# session is registered under its basename (worktree_has_live_session) — the
+# worker owns it and will clean up on its own tick.
 SURVIVING_PATHS=()
 SURVIVING_BRANCHES=()
 
@@ -208,7 +212,15 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
     continue
   fi
 
-  # Branch is merged. Check in-sync; the helper logs its own KEEP/ERROR reason.
+  # Branch is merged. Guard against removing a worktree a live worker owns.
+  if worktree_has_live_session "$wt_path"; then
+    log "SKIP_MERGED_LIVE_SESSION: '$wt_path' branch=$wt_branch pr=#$pr_num"
+    SURVIVING_PATHS+=("$wt_path")
+    SURVIVING_BRANCHES+=("$wt_branch")
+    continue
+  fi
+
+  # Check in-sync; the helper logs its own KEEP/ERROR reason.
   if worktree_in_sync "$wt_path" "$LOG_FILE" "dispatch-sweep"; then
     if git worktree remove "$wt_path" 2>>"$LOG_FILE"; then
       git worktree prune 2>/dev/null || true
@@ -229,8 +241,10 @@ while [[ $i -lt ${#WT_PATHS[@]} ]]; do
 done
 
 # ---- Step 4: classify remaining worktrees as active vs orphaned -------------
-# For each surviving worktree, call claude_sessions_under (lib-claude-agents.sh)
-# to ask the daemon whether any live session is running there.
+# For each surviving worktree, call claude_sessions_with_name (lib-claude-agents.sh)
+# keyed on the worktree's basename, to ask the daemon whether a worker session
+# registered under that name is still live (dispatch-spawn-worker spawns workers
+# with --name=<worktree-basename>, running from cwd=worktrees/main).
 #   Exit 0 + non-empty output → at least one live session → ACTIVE.
 #   Exit 0 + empty output    → daemon queried, zero sessions → ORPHANED.
 #   Exit non-zero (UNKNOWN)  → daemon unreachable → classify ACTIVE (fail-safe).
@@ -245,7 +259,7 @@ while [[ $i -lt ${#SURVIVING_PATHS[@]} ]]; do
   i=$((i + 1))
 
   sessions=""
-  if sessions=$(claude_sessions_under "$wt_path"); then
+  if sessions=$(claude_sessions_with_name "$(basename "$wt_path")"); then
     # Daemon queried successfully.
     if [[ -n "$sessions" ]]; then
       # At least one live session — extract the first line for diagnostics.
