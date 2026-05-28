@@ -1843,9 +1843,9 @@ teardown
 # exercise the routing branches.
 
 # SR1. Selector invoked from an <issue>-* worktree returns the same queue-ladder
-#      result it would from main. A sweep stub that would adopt an orphan is
-#      installed; the assert proves it ran and produced worktree-adopted, not a
-#      cwd-derived line.
+#      result it would from main. The default no-op sweep stub is in place so the
+#      ladder runs; the assert proves a queue-ladder result (pr 999), not a
+#      cwd-derived line that old code would have emitted.
 echo "Test: selector from issue-branch cwd returns queue-ladder line (cwd ignored)"
 setup
 # Seed a verify PR as the expected queue-ladder output.
@@ -2425,9 +2425,10 @@ teardown
 
 # 7. explicit mode invoked from within <N>-* worktree (current-branch = <N>-*)
 #    AND matching worktree entry → enter <path> (no special-case `here`).
+#    current-branch.txt is not read by dispatch-resolve-worktree (the `here`
+#    check was removed); it is seeded here only to document the scenario intent.
 echo "Test: explicit from issue-branch cwd with matching worktree → enter (not here)"
 setup
-echo "42-my-feature" > "$STUB_DIR/current-branch.txt"
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 explicit)
 assert_eq "explicit from issue-branch cwd, matching worktree → enter (not here)" \
@@ -2438,7 +2439,6 @@ teardown
 #     AND matching worktree entry → conflict <path> (worktree scan runs normally).
 echo "Test: queue from issue-branch cwd with matching worktree → conflict (not here)"
 setup
-echo "42-my-feature" > "$STUB_DIR/current-branch.txt"
 printf '%s' "$WORKTREE_LIST_42" > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-resolve-worktree" 42 queue)
 assert_eq "queue from issue-branch cwd, matching worktree → conflict (not here)" \
