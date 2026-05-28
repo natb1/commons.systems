@@ -1338,12 +1338,13 @@ result=$("$TMPDIR_TEST/dispatch-select-target")
 assert_eq "PR with no closing issue is 'other'; bug issue wins" "issue 500" "$result"
 teardown
 
-# 30b. A PR closing a `priority`-labelled issue outranks a PR closing a `bug`
-#      issue, even when the bug PR is older — `priority` is the new top of the
-#      category ladder. Mirrors test 28 with priority swapped in for bug.
-echo "Test: PR closing a priority issue beats PR closing a bug issue"
+# 30b. A PR closing a plain `bug` issue outranks a PR closing a `priority`-only
+#      issue — `priority` is a sub-axis nested inside each topic category, not
+#      a top-level category. A `priority`-only issue resolves to topic `other`,
+#      which ranks below `bug`. The older bug-closing PR wins.
+echo "Test: PR closing a bug issue beats PR closing a priority-only issue"
 setup
-# PR 20 (older) closes bug issue 200; PR 10 (newer) closes priority issue 100.
+# PR 20 (older) closes bug issue 200; PR 10 (newer) closes priority-only issue 100.
 UNION='['
 UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
 UNION+="$(make_pr_union 10 "10-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
@@ -1355,7 +1356,45 @@ printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"pri
   > "$STUB_DIR/issue-list.json"
 printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
 result=$("$TMPDIR_TEST/dispatch-select-target")
-assert_eq "priority-closing PR beats bug-closing PR" "pr 10 10-priority-pr verify" "$result"
+assert_eq "bug-closing PR beats priority-only-closing PR" "pr 20 20-bug-pr verify" "$result"
+teardown
+
+# 30c. A PR closing a `(bug, priority)` issue outranks a PR closing a plain
+#      `bug` issue, even when the plain-bug PR is older — within the `bug`
+#      topic category, `priority` items rank above non-`priority` items.
+echo "Test: PR closing a (bug, priority) issue beats PR closing a plain bug issue"
+setup
+# PR 20 (older) closes plain bug issue 200; PR 10 (newer) closes (bug, priority) issue 100.
+UNION='['
+UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"','
+UNION+="$(make_pr_union 10 "10-bug-priority-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issue 100 carries both `bug` and `priority`; issue 200 carries only `bug`.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "(bug, priority)-closing PR beats plain-bug-closing PR" "pr 10 10-bug-priority-pr verify" "$result"
+teardown
+
+# 30d. A PR closing a `(dispatch, priority)` issue ranks below every PR closing
+#      a plain `bug` issue — `priority` is a sub-axis nested inside each topic
+#      category, so it does not cross topic boundaries. The bug-closing PR wins.
+echo "Test: PR closing a plain bug issue beats PR closing a (dispatch, priority) issue"
+setup
+# PR 10 (older) closes (dispatch, priority) issue 100; PR 20 (newer) closes plain bug issue 200.
+UNION='['
+UNION+="$(make_pr_union 10 "10-dispatch-priority-pr" "2024-01-01T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":100}]')"','
+UNION+="$(make_pr_union 20 "20-bug-pr" "2024-01-02T00:00:00Z" "true" "$NO_LABELS" "$FAILING_ROLLUP" '[{"number":200}]')"
+UNION+=']'
+setup_union_pr_list "$UNION"
+# Issue 100 carries both `dispatch` and `priority`; issue 200 carries only `bug`.
+printf '[{"number":100,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"dispatch"},{"name":"priority"}]},{"number":200,"createdAt":"2024-01-01T00:00:00Z","labels":[{"name":"bug"}]}]\n' \
+  > "$STUB_DIR/issue-list.json"
+printf 'worktree /repo\nHEAD abc123\n\n' > "$STUB_DIR/worktree-list.txt"
+result=$("$TMPDIR_TEST/dispatch-select-target")
+assert_eq "plain-bug PR beats (dispatch, priority) PR — priority does not cross topics" "pr 20 20-bug-pr verify" "$result"
 teardown
 
 # --- blocked-issue PR skip (issue #786) -------------------------------------
