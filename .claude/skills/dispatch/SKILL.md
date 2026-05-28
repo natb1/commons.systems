@@ -445,12 +445,12 @@ keys post-Step-5 reclaim on it (see *Releasing the lock*).
 `.claude/hooks/worktree-create.sh` also writes the marker as its final action
 on every successful worktree creation, so a fresh worktree is marker-bearing
 the moment the hook returns — the router's explicit marker write here is the
-in-skill defense for any code path that bypasses the hook. The router itself never writes the marker
-into its own cwd (`worktrees/main`), so a `SessionStart:clear` there is a
-no-op — correct, since the router is short-lived and re-seeded by the #725
-daily restart. The marker is an empty boolean flag with no payload; it persists
-for the worktree's life and needs no cleanup — `tmp/` is git-ignored, and
-removing the worktree removes it.
+in-skill defense for any code path that bypasses the hook. The router itself
+never writes the marker into its own cwd (`worktrees/main`), so a
+`SessionStart:clear` there is a no-op — correct, since the router is
+short-lived and re-seeded by the #725 daily restart. The marker is an empty
+boolean flag with no payload; it persists for the worktree's life and needs no
+cleanup — `tmp/` is git-ignored, and removing the worktree removes it.
 
 As the **final action of this step on every non-`conflict` (proceed) path** —
 after the marker is written, before Step 6 — release the lock (see *Releasing
