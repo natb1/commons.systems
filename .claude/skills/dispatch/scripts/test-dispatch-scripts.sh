@@ -2686,10 +2686,11 @@ sweep_setup() {
   STUB_DIR="$TMPDIR_TEST/stub"
   mkdir -p "$TMPDIR_TEST/bin" "$STUB_DIR" "$TMPDIR_TEST/scripts" \
            "$TMPDIR_TEST/project/.bare" "$TMPDIR_TEST/project/worktrees" \
-           "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/proc"
+           "$TMPDIR_TEST/project/tmp" "$TMPDIR_TEST/fake"
 
   cp "$SCRIPT_DIR/dispatch-sweep" "$TMPDIR_TEST/scripts/dispatch-sweep"
   cp "$SCRIPT_DIR/lib-worktree-in-sync.sh" "$TMPDIR_TEST/scripts/lib-worktree-in-sync.sh"
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/scripts/lib-claude-agents.sh"
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/scripts/lib.sh"
   chmod +x "$TMPDIR_TEST/scripts/dispatch-sweep"
 
@@ -2807,8 +2808,18 @@ STUB
 
   export PATH="$TMPDIR_TEST/bin:$PATH"
 
+  # Default fake `claude` — prints `[]` and exits 0 (no live sessions).
+  # All tests that do not override this get "everything orphaned" semantics.
+  local default_fake="$TMPDIR_TEST/fake/claude"
+  cat > "$default_fake" <<'FAKE'
+#!/usr/bin/env bash
+printf '[]'
+exit 0
+FAKE
+  chmod +x "$default_fake"
+
   # Defaults for dispatch-sweep env overrides.
-  export DISPATCH_SWEEP_PROC_ROOT="$TMPDIR_TEST/proc"
+  export CLAUDE_AGENTS_CMD="$TMPDIR_TEST/fake/claude"
   export DISPATCH_SWEEP_LOG_FILE="$STUB_DIR/sweep.log"
   export DISPATCH_SWEEP_NOW="2026-01-01T00:00:00Z"
 }
@@ -2818,7 +2829,7 @@ sweep_teardown() {
   TMPDIR_TEST=""
   STUB_DIR=""
   export PATH="$SAVED_PATH"
-  unset DISPATCH_SWEEP_PROC_ROOT DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW
+  unset CLAUDE_AGENTS_CMD DISPATCH_SWEEP_LOG_FILE DISPATCH_SWEEP_NOW
 }
 
 # Helper: register a worktree in the porcelain list AND create its directory.
@@ -2836,14 +2847,51 @@ sweep_register_main() {
     "$TMPDIR_TEST/project/worktrees/main" >> "$STUB_DIR/worktree-list.txt"
 }
 
-# Helper: write a synthetic /proc/<pid> entry with comm and cwd symlink.
-sweep_proc_pid() {
-  local pid="$1" comm="$2" cwd="$3"
-  local pid_dir="$DISPATCH_SWEEP_PROC_ROOT/$pid"
-  mkdir -p "$pid_dir"
-  printf '%s\n' "$comm" > "$pid_dir/comm"
-  # cwd is a symlink; readlink -f resolves it.
-  ln -s "$cwd" "$pid_dir/cwd"
+# Helper: install a fake `claude` whose `agents --json --cwd <path>` invocation
+# returns only the sessions whose cwd starts with the requested <path>.
+# Overwrites $TMPDIR_TEST/fake/claude and re-exports CLAUDE_AGENTS_CMD.
+# Each argument must be in `sid=cwd` form; the name, status, and pid fields are
+# fixed (name=x, status=busy, pid=1) since sweep tests only care about cwd
+# for session-detection and sessionId/name/status for the ACTIVE log line.
+# The fake honours the --cwd filter (matching how the real daemon filters
+# server-side) so each worktree's query only sees its own sessions.
+sweep_fake_claude_sessions() {
+  local fake="$TMPDIR_TEST/fake/claude"
+  # Write the full session list as a JSON array to payload.json.
+  local all_payload="[" entry sid cwd first=1
+  for entry in "$@"; do
+    sid="${entry%%=*}"
+    cwd="${entry#*=}"
+    if (( first )); then first=0; else all_payload+=","; fi
+    all_payload+="{\"sessionId\":\"$sid\",\"pid\":1,\"status\":\"busy\",\"name\":\"x\",\"cwd\":\"$cwd\"}"
+  done
+  all_payload+="]"
+  printf '%s' "$all_payload" > "$TMPDIR_TEST/fake/payload.json"
+  # The fake script filters the full payload by the --cwd argument using jq,
+  # matching sessions whose cwd starts with the requested path (same as the
+  # real daemon's server-side filter). This ensures each worktree query only
+  # returns sessions that are actually in that worktree.
+  cat > "$fake" <<'FAKE'
+#!/usr/bin/env bash
+# Parse `agents --json --cwd <path>` args; find --cwd value.
+requested_cwd=""
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "--cwd" && -n "${2:-}" ]]; then
+    requested_cwd="$2"; shift 2
+  else
+    shift
+  fi
+done
+payload_file="$(cd "$(dirname "$0")" && pwd)/payload.json"
+if [[ -n "$requested_cwd" ]]; then
+  jq --arg cwd "$requested_cwd" '[.[] | select(.cwd | startswith($cwd))]' "$payload_file"
+else
+  cat "$payload_file"
+fi
+exit 0
+FAKE
+  chmod +x "$fake"
+  export CLAUDE_AGENTS_CMD="$fake"
 }
 
 # Convenience: convert an absolute path to the status/revlist/headct key
@@ -2897,9 +2945,9 @@ else
 fi
 sweep_teardown
 
-# --- Test 2: active vs orphaned via synthetic /proc --------------------------
+# --- Test 2: active vs orphaned via claude agents --json ---------------------
 
-echo "Test: /proc walk distinguishes active vs orphaned worktrees"
+echo "Test: claude agents --json distinguishes active vs orphaned worktrees"
 sweep_setup
 ACTIVE_WT="$TMPDIR_TEST/project/worktrees/50-active"
 ORPHAN_WT="$TMPDIR_TEST/project/worktrees/51-orphan"
@@ -2911,25 +2959,19 @@ sweep_register_wt "$ORPHAN_WT" "51-orphan"
 ORPHAN_KEY=$(sweep_path_key "$ORPHAN_WT")
 echo "1700000000" > "$STUB_DIR/headct${ORPHAN_KEY}.txt"
 
-# Synthetic /proc:
-#   pid 1001: .claude-unwrapp cwd inside ACTIVE_WT → marks 50-active active.
-#   pid 1002: bash (non-claude comm) — proves comm filter is required.
-#   pid 1003: .claude with cwd elsewhere — proves cwd check classifies, not comm.
-sweep_proc_pid 1001 ".claude-unwrapp" "$ACTIVE_WT"
-sweep_proc_pid 1002 "bash" "$ACTIVE_WT"
-mkdir -p "$TMPDIR_TEST/elsewhere"
-sweep_proc_pid 1003 ".claude" "$TMPDIR_TEST/elsewhere"
+# One live session in ACTIVE_WT, none in ORPHAN_WT.
+sweep_fake_claude_sessions "abc=$ACTIVE_WT"
 
 out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
 assert_eq "active/orphan sweep exits 0" "0" "$rc"
 assert_eq "only orphan adopted" "worktree 51 51-orphan" "$out"
 
-# Log: ACTIVE for 50, ORPHANED for 51, ADOPT for 51.
+# Log: ACTIVE for 50 with session fields, ORPHANED for 51, ADOPT for 51.
 TOTAL=$((TOTAL + 1))
-if grep -q "ACTIVE: '$ACTIVE_WT' branch=50-active pid=1001" "$DISPATCH_SWEEP_LOG_FILE"; then
-  PASS=$((PASS + 1)); echo "  PASS: ACTIVE log line for 50-active with pid 1001"
+if grep -q "ACTIVE: '$ACTIVE_WT' branch=50-active sessionId=abc name=x status=busy" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ACTIVE log line for 50-active with sessionId=abc name=x status=busy"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE log line for 50-active with pid 1001"
+  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE log line for 50-active with sessionId=abc name=x status=busy"
   sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
 fi
 TOTAL=$((TOTAL + 1))
@@ -2946,6 +2988,51 @@ else
 fi
 sweep_teardown
 
+# --- Test 2b: daemon-query failure classifies all surviving as active ---------
+
+echo "Test: daemon-query failure classifies all surviving worktrees as active"
+sweep_setup
+WT_A="$TMPDIR_TEST/project/worktrees/54-alpha"
+WT_B="$TMPDIR_TEST/project/worktrees/55-beta"
+sweep_register_wt "$WT_A" "54-alpha"
+sweep_register_wt "$WT_B" "55-beta"
+
+# Install a failing fake `claude` (exits non-zero, prints nothing).
+cat > "$TMPDIR_TEST/fake/claude" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+chmod +x "$TMPDIR_TEST/fake/claude"
+# CLAUDE_AGENTS_CMD is already pointing at $TMPDIR_TEST/fake/claude from sweep_setup.
+
+err_file="$TMPDIR_TEST/stderr-daemon-fail.txt"
+out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>"$err_file"); rc=$?
+assert_eq "daemon-failure sweep exits 0" "0" "$rc"
+assert_eq "daemon-failure emits no stdout (no adoption)" "" "$out"
+
+# Each worktree must log ACTIVE with liveness=unknown.
+TOTAL=$((TOTAL + 1))
+if grep -q "ACTIVE: '$WT_A' branch=54-alpha liveness=unknown" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ACTIVE liveness=unknown for 54-alpha"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE liveness=unknown for 54-alpha"
+  sed 's/^/      /' "$DISPATCH_SWEEP_LOG_FILE"
+fi
+TOTAL=$((TOTAL + 1))
+if grep -q "ACTIVE: '$WT_B' branch=55-beta liveness=unknown" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: ACTIVE liveness=unknown for 55-beta"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: ACTIVE liveness=unknown for 55-beta"
+fi
+# No ADOPT_ORPHAN line should be present.
+TOTAL=$((TOTAL + 1))
+if ! grep -q "ADOPT_ORPHAN" "$DISPATCH_SWEEP_LOG_FILE"; then
+  PASS=$((PASS + 1)); echo "  PASS: no ADOPT_ORPHAN on daemon failure"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: unexpected ADOPT_ORPHAN on daemon failure"
+fi
+sweep_teardown
+
 # --- Test 3: oldest-orphan tiebreaker ----------------------------------------
 
 echo "Test: oldest orphan wins by HEAD commit time"
@@ -2958,7 +3045,7 @@ OLD_KEY=$(sweep_path_key "$OLD_WT")
 NEW_KEY=$(sweep_path_key "$NEW_WT")
 echo "1000" > "$STUB_DIR/headct${OLD_KEY}.txt"
 echo "2000" > "$STUB_DIR/headct${NEW_KEY}.txt"
-# Empty /proc → both orphans.
+# Default fake claude (no live sessions) → both orphans.
 
 out=$("$TMPDIR_TEST/scripts/dispatch-sweep" 2>/dev/null); rc=$?
 assert_eq "oldest-orphan sweep exits 0" "0" "$rc"

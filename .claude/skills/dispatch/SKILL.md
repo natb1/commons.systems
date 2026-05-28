@@ -216,7 +216,7 @@ continue to target selection.
   SELECTED=$(.claude/skills/dispatch/scripts/dispatch-select-target)
   ```
 
-  (`dangerouslyDisableSandbox: true` — it calls `gh` and walks `/proc`.)
+  (`dangerouslyDisableSandbox: true` — it calls `gh` and queries the local Claude daemon over a Unix socket.)
 
   Route on `$SELECTED`:
 
