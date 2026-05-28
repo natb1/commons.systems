@@ -14,7 +14,7 @@
 #   3. applies dispatch:office-hours, creating the label on first use with the
 #      canonical color/description (this script is the single source of those
 #      defaults);
-#   4. spawns the next /dispatch via dispatch-spawn, so the chain keeps moving
+#   4. spawns the next /dispatch via dispatch-spawn-router, so the chain keeps moving
 #      around the blocked item.
 #
 # Never blocks the session — every failure logs to stderr and the script exits
@@ -97,9 +97,9 @@ else
   echo "[dispatch-input-block] WARNING: gh apply dispatch:office-hours failed: $apply_output" >&2
 fi
 
-# Pass the baton so the chain keeps moving. dispatch-spawn is dedup-guarded —
+# Pass the baton so the chain keeps moving. dispatch-spawn-router is dedup-guarded —
 # safe whether or not another dispatch-* session is live.
-"$SCRIPTS/dispatch-spawn" >/dev/null 2>&1 \
-  || echo "[dispatch-input-block] WARNING: dispatch-spawn failed" >&2
+"$SCRIPTS/dispatch-spawn-router" >/dev/null 2>&1 \
+  || echo "[dispatch-input-block] WARNING: dispatch-spawn-router failed" >&2
 
 exit 0

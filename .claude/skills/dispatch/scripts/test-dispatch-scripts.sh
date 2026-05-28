@@ -5865,14 +5865,14 @@ exit 0
 FAKE
   chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-find-pr"
 
-  # Fake dispatch-spawn: log invocations to spawn-calls.log.
-  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn" <<'FAKE'
+  # Fake dispatch-spawn-router: log invocations to spawn-calls.log.
+  cat > "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router" <<'FAKE'
 #!/usr/bin/env bash
 echo "spawn" >> "$STUB_DIR/spawn-calls.log"
 echo "spawned"
 exit 0
 FAKE
-  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn"
+  chmod +x "$TMPDIR_TEST/skills/dispatch/scripts/dispatch-spawn-router"
 
   # gh PATH stub. pr-edit-mode/issue-edit-mode select behavior (default: ok and
   # log args). "label-missing" models the first apply failing with a missing-
@@ -6156,9 +6156,11 @@ ohs_teardown() {
   export PATH="$SAVED_PATH"
 }
 
-# --- Test 1: branch <N>-* + PR exists → strip from PR ------------------------
+# --- Test 1: branch <N>-* + PR exists → strip from both PR and issue ----------
+# The hook strips from both targets so a stale issue label (applied before the PR
+# was opened) is also cleared. gh --remove-label is a no-op when the label is absent.
 
-echo "Test: strip hook on <N>-* branch with PR → 'gh pr edit --remove-label dispatch:office-hours'"
+echo "Test: strip hook on <N>-* branch with PR → strips from both PR and issue"
 ohs_setup
 echo "123-foo-bar" > "$STUB_DIR/current-branch.txt"
 echo "456" > "$STUB_DIR/find-pr-output"
@@ -6172,6 +6174,14 @@ if [[ "$pr_edit_log" == *"pr edit 456 --remove-label dispatch:office-hours"* ]];
 else
   FAIL=$((FAIL + 1)); echo "  FAIL: strip: 'gh pr edit 456 --remove-label dispatch:office-hours' was invoked"
   echo "    pr-edit-log: $pr_edit_log"
+fi
+issue_edit_log=$(cat "$STUB_DIR/gh-issue-edit.log" 2>/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if [[ "$issue_edit_log" == *"issue edit 123 --remove-label dispatch:office-hours"* ]]; then
+  PASS=$((PASS + 1)); echo "  PASS: strip: 'gh issue edit 123 --remove-label dispatch:office-hours' also invoked (clears stale issue label)"
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: strip: 'gh issue edit 123 --remove-label dispatch:office-hours' also invoked (clears stale issue label)"
+  echo "    issue-edit-log: $issue_edit_log"
 fi
 ohs_teardown
 

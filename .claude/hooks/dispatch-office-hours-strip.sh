@@ -29,12 +29,16 @@ SCRIPTS="$SCRIPT_DIR/../skills/dispatch/scripts"
 
 PR_NUM=$("$SCRIPTS/dispatch-find-pr" "$ISSUE_NUM" 2>/dev/null) || PR_NUM=""
 
+# Strip from both the PR and the issue. The resolution rule guarantees only one
+# carries the label at a time, so the call to the unlabeled target is a no-op.
+# Stripping from both prevents a stale label when the PR was opened between the
+# input-block (which labeled the issue) and the user's engagement (which now
+# sees the PR). gh --remove-label is a no-op when the label is absent.
 if [ -n "$PR_NUM" ]; then
   gh pr edit "$PR_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
     || echo "[dispatch-office-hours-strip] WARNING: gh pr edit --remove-label failed for PR #$PR_NUM" >&2
-else
-  gh issue edit "$ISSUE_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
-    || echo "[dispatch-office-hours-strip] WARNING: gh issue edit --remove-label failed for issue #$ISSUE_NUM" >&2
 fi
+gh issue edit "$ISSUE_NUM" --remove-label dispatch:office-hours >/dev/null 2>&1 \
+  || echo "[dispatch-office-hours-strip] WARNING: gh issue edit --remove-label failed for issue #$ISSUE_NUM" >&2
 
 exit 0
