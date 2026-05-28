@@ -8,8 +8,8 @@
 # the brittle /proc-walk previously duplicated across dispatch scripts.
 #
 # Usage: source this file, then call:
-#   claude_sessions_under   <worktree-path>
-#   worktree_has_live_session <worktree-path>
+#   claude_sessions_under        <worktree-path>
+#   worktree_has_live_session    <worktree-path>
 #
 # claude_sessions_under <path>
 #   The low-level primitive. Runs `claude agents --json --cwd <path>`, which

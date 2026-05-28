@@ -65,6 +65,9 @@ setup() {
   # SCRIPT_DIR, which resolves to TMPDIR_TEST for these copies — so lib.sh must
   # sit alongside them. It is sourced, not executed, so it needs no chmod +x.
   cp "$SCRIPT_DIR/lib.sh" "$TMPDIR_TEST/lib.sh"
+  # dispatch-select-target sources lib-claude-agents.sh via its SCRIPT_DIR
+  # (TMPDIR_TEST under test). Sourced, not executed — no chmod +x needed.
+  cp "$SCRIPT_DIR/lib-claude-agents.sh" "$TMPDIR_TEST/lib-claude-agents.sh"
   chmod +x "$TMPDIR_TEST/dispatch-phase" \
            "$TMPDIR_TEST/dispatch-find-pr" \
            "$TMPDIR_TEST/dispatch-resolve-arg" \
@@ -81,6 +84,16 @@ setup() {
   mkdir -p "$TMPDIR_TEST/config"
   export DISPATCH_CONFIG_DIR="$TMPDIR_TEST/config"
   export DISPATCH_FIND_PR_RETRY_DELAY=0
+
+  # Default fake `claude`: emits an empty JSON array on stdout, exits 0.
+  # lib-claude-agents.sh `claude_sessions_under` reads `[]` as a successful
+  # "zero sessions" response. Installed in $TMPDIR_TEST/bin so it sits on PATH
+  # alongside the gh and git stubs.
+  cat > "$TMPDIR_TEST/bin/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "[]"
+STUB
+  chmod +x "$TMPDIR_TEST/bin/claude"
 
   # Default no-op dispatch-sweep stub: silent, exit 0 (no orphan to adopt).
   # dispatch-select-target invokes "$SCRIPT_DIR/dispatch-sweep" in default mode
@@ -326,6 +339,13 @@ case "$args" in
       echo "main"
     fi
     ;;
+  "rev-parse --show-toplevel")
+    if [[ -f "$STUB_DIR/worktree-toplevel.txt" ]]; then
+      cat "$STUB_DIR/worktree-toplevel.txt"
+    else
+      echo "/repo"
+    fi
+    ;;
   *)
     echo "git stub: unknown invocation: $args" >&2
     exit 1
@@ -404,6 +424,9 @@ teardown() {
   export PATH="$SAVED_PATH"
   unset DISPATCH_CONFIG_DIR
   unset DISPATCH_FIND_PR_RETRY_DELAY
+  # Per-test exports for the liveness gate must not leak across tests.
+  unset CLAUDE_AGENTS_CMD
+  unset CLAUDE_CODE_SESSION_ID
 }
 trap '[ -n "${TMPDIR_TEST:-}" ] && rm -rf "$TMPDIR_TEST"' EXIT
 
