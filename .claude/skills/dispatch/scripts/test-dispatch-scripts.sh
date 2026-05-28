@@ -4077,11 +4077,14 @@ FAKE
 
 echo "Test: a live session is reported by both helpers"
 ca_setup
-write_fake_claude '[{"sessionId":"sess-1","pid":4242,"status":"busy","name":"task-one"}]' 0
+# worktree_has_live_session is now name-keyed: the session name must match
+# basename "$CA_DIR" for the predicate to report occupied.
+ca_basename=$(basename "$CA_DIR")
+write_fake_claude "[{\"sessionId\":\"sess-1\",\"pid\":4242,\"status\":\"busy\",\"name\":\"$ca_basename\"}]" 0
 if out=$(claude_sessions_under "$CA_DIR"); then rc=0; else rc=$?; fi
 assert_eq "live: claude_sessions_under exits 0" "0" "$rc"
 assert_eq "live: claude_sessions_under prints the session TSV line" \
-  "$(printf 'sess-1\t4242\tbusy\ttask-one')" "$out"
+  "$(printf 'sess-1\t4242\tbusy\t%s' "$ca_basename")" "$out"
 if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
 assert_eq "live: worktree_has_live_session reports occupied" "occupied" "$live"
 ca_teardown
@@ -4281,6 +4284,112 @@ else
   ROUTE="spawn-failopen"
 fi
 assert_eq "router-gate: daemon UNKNOWN → spawn-failopen" "spawn-failopen" "$ROUTE"
+ca_teardown
+
+# --- Test 17: claude_sessions_with_name — matched name exits 0 with TSV -----
+
+echo "Test: claude_sessions_with_name exits 0 and emits TSV for matched name"
+ca_setup
+write_fake_claude '[{"sessionId":"sess-a","pid":111,"status":"busy","name":"my-worktree"}]' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-match: exits 0" "0" "$rc"
+assert_eq "name-match: prints the TSV line" \
+  "$(printf 'sess-a\t111\tbusy\tmy-worktree')" "$out"
+ca_teardown
+
+# --- Test 18: claude_sessions_with_name — no match exits 0 with no output ---
+
+echo "Test: claude_sessions_with_name exits 0 and emits nothing when name not found"
+ca_setup
+write_fake_claude '[{"sessionId":"sess-a","pid":111,"status":"busy","name":"other-worktree"}]' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-no-match: exits 0" "0" "$rc"
+assert_eq "name-no-match: prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 19: claude_sessions_with_name — multi-session, only matching names -
+
+echo "Test: claude_sessions_with_name emits only the matching sessions from a mixed array"
+ca_setup
+write_fake_claude '[
+  {"sessionId":"s-1","pid":10,"status":"busy","name":"target-wt"},
+  {"sessionId":"s-2","pid":20,"status":"idle","name":"other-wt"},
+  {"sessionId":"s-3","pid":30,"status":"busy","name":"target-wt"}
+]' 0
+if out=$(claude_sessions_with_name "target-wt"); then rc=0; else rc=$?; fi
+assert_eq "name-multi: exits 0" "0" "$rc"
+assert_eq "name-multi: prints only the two matching lines" \
+  "$(printf 's-1\t10\tbusy\ttarget-wt\ns-3\t30\tbusy\ttarget-wt')" "$out"
+ca_teardown
+
+# --- Test 20: claude_sessions_with_name UNKNOWN cases ------------------------
+
+echo "Test: claude_sessions_with_name returns rc 1 on daemon failure (non-zero exit)"
+ca_setup
+write_fake_claude '' 1
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-daemon-fail: exits 1 (UNKNOWN)" "1" "$rc"
+assert_eq "name-daemon-fail: prints nothing" "" "$out"
+ca_teardown
+
+echo "Test: claude_sessions_with_name returns rc 1 when claude binary is missing"
+ca_setup
+CLAUDE_AGENTS_CMD="$CA_DIR/no-such-claude"
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-missing-claude: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+echo "Test: claude_sessions_with_name returns rc 1 on non-array JSON output"
+ca_setup
+write_fake_claude '{}' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-non-array: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+echo "Test: claude_sessions_with_name returns rc 1 on zero exit with empty output"
+ca_setup
+write_fake_claude '' 0
+if out=$(claude_sessions_with_name "my-worktree"); then rc=0; else rc=$?; fi
+assert_eq "name-empty-output: exits 1 (UNKNOWN)" "1" "$rc"
+ca_teardown
+
+# --- Test 21: claude_sessions_with_name — invoked WITHOUT --cwd arg ----------
+
+echo "Test: claude_sessions_with_name invokes claude without a --cwd argument"
+ca_setup
+cat > "$CA_FAKE" <<FAKE
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$CA_DIR/argv"
+echo '[]'
+FAKE
+chmod +x "$CA_FAKE"
+CLAUDE_AGENTS_CMD="$CA_FAKE"
+if claude_sessions_with_name "any-name" >/dev/null; then rc=0; else rc=$?; fi
+assert_eq "name-no-cwd: exits 0" "0" "$rc"
+assert_eq "name-no-cwd: claude invoked as 'agents --json' (no --cwd)" \
+  "$(printf 'agents\n--json')" "$(cat "$CA_DIR/argv")"
+ca_teardown
+
+# --- Test 22: claude_sessions_with_name — empty name arg exits 1 -------------
+
+echo "Test: claude_sessions_with_name rejects empty name argument"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_sessions_with_name "" 2>/dev/null); then rc=0; else rc=$?; fi
+assert_eq "name-empty-arg: exits 1" "1" "$rc"
+ca_teardown
+
+# --- Test 23 (updated worktree_has_live_session): cwd-match but wrong name → FREE
+
+echo "Test: worktree_has_live_session reports free when session cwd matches but name differs from basename"
+ca_setup
+# The session's cwd could match CA_DIR, but its name does NOT match basename "$CA_DIR".
+# Under the old cwd-based semantics this would have reported occupied (via
+# claude_sessions_under). Under the new name-based semantics it must report free.
+# The fake returns a session whose name is 'wrong-name', not basename "$CA_DIR".
+write_fake_claude '[{"sessionId":"s-x","pid":99,"status":"busy","name":"wrong-name"}]' 0
+if worktree_has_live_session "$CA_DIR"; then live=occupied; else live=free; fi
+assert_eq "regression-guard: cwd-match wrong-name → free" "free" "$live"
 ca_teardown
 
 # ============================================================================
